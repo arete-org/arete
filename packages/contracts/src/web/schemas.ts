@@ -9,6 +9,9 @@
 import { z } from 'zod';
 import {
     BOUNDED_REVIEW_ASSESS_DECISIONS,
+    TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS,
+    TRACE_TEMPERAMENT_AXIS_KEYS,
+    isTraceTemperamentEqual,
     WORKFLOW_LIMIT_KEYS,
     WORKFLOW_LIMIT_STATES,
     REVIEW_RUNTIME_LABELS,
@@ -161,6 +164,7 @@ const ResponseTemperamentSchema = z
 const PartialResponseTemperamentSchema = ResponseTemperamentSchema.partial();
 const TraceFinalizationReasonCodeSchema = z.enum([
     'runtime_posture_adjustment',
+    'assess_trace_misalignment',
 ]);
 const ExecutionStatusSchema = z.enum(WORKFLOW_STEP_STATUSES);
 const ExecutionReasonCodeSchema = z.enum([
@@ -457,8 +461,89 @@ const StepRecordSchema = z
                     'executed assess steps must include non-empty revisionInstruction when reviewDecision is "revise".',
             });
         }
+
+        validateAssessTraceSignals(assessSignals, context);
     })
     .strict();
+
+const validateAssessTraceSignals = (
+    assessSignals: Record<string, string | number | boolean | null> | undefined,
+    context: z.RefinementCtx
+): void => {
+    const traceAlignment =
+        assessSignals !== undefined ? assessSignals.traceAlignment : undefined;
+    const traceAlignmentReason =
+        assessSignals !== undefined
+            ? assessSignals.traceAlignmentReason
+            : undefined;
+    const finalTemperamentAxisEntries = TRACE_TEMPERAMENT_AXIS_KEYS.map(
+        (axisKey) => {
+            const signalKey =
+                TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS[axisKey];
+            return {
+                key: signalKey,
+                value: assessSignals?.[signalKey],
+            };
+        }
+    );
+    const hasAnyFinalTemperamentAxis = finalTemperamentAxisEntries.some(
+        (entry) => entry.value !== undefined
+    );
+
+    for (const axisEntry of finalTemperamentAxisEntries) {
+        if (axisEntry.value === undefined) {
+            continue;
+        }
+        if (
+            typeof axisEntry.value !== 'number' ||
+            !Number.isInteger(axisEntry.value) ||
+            axisEntry.value < 1 ||
+            axisEntry.value > 5
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['outcome', 'signals', axisEntry.key],
+                message:
+                    'executed assess steps finalTemperament axis values must be integers from 1 to 5.',
+            });
+        }
+    }
+
+    if (
+        traceAlignment !== undefined &&
+        traceAlignment !== 'aligned' &&
+        traceAlignment !== 'misaligned'
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['outcome', 'signals', 'traceAlignment'],
+            message:
+                'executed assess steps traceAlignment must be "aligned" or "misaligned" when present.',
+        });
+    }
+
+    if (
+        traceAlignment === 'misaligned' &&
+        (typeof traceAlignmentReason !== 'string' ||
+            traceAlignmentReason.trim().length === 0)
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['outcome', 'signals', 'traceAlignmentReason'],
+            message:
+                'executed assess steps must include non-empty traceAlignmentReason when traceAlignment is "misaligned".',
+        });
+    }
+
+    if (traceAlignment === 'misaligned' && !hasAnyFinalTemperamentAxis) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['outcome', 'signals'],
+            message:
+                'executed assess steps must include at least one finalTemperament axis when traceAlignment is "misaligned".',
+        });
+    }
+};
 
 const WorkflowRecordSchema = z
     .object({
@@ -861,28 +946,6 @@ const responseMetadataShape = {
     imageGeneration: ImageGenerationMetadataSchema.optional(),
 } as const;
 
-const hasDifferentTracePosture = (
-    target: z.infer<typeof PartialResponseTemperamentSchema>,
-    final: z.infer<typeof PartialResponseTemperamentSchema>
-): boolean => {
-    const normalizedTarget = {
-        tightness: target.tightness,
-        rationale: target.rationale,
-        attribution: target.attribution,
-        caution: target.caution,
-        extent: target.extent,
-    };
-    const normalizedFinal = {
-        tightness: final.tightness,
-        rationale: final.rationale,
-        attribution: final.attribution,
-        caution: final.caution,
-        extent: final.extent,
-    };
-
-    return JSON.stringify(normalizedTarget) !== JSON.stringify(normalizedFinal);
-};
-
 const requireTraceFinalReasonWhenChanged = (
     value: {
         trace_target: z.infer<typeof PartialResponseTemperamentSchema>;
@@ -897,7 +960,7 @@ const requireTraceFinalReasonWhenChanged = (
     // If TRACE later becomes multi-step, keep one canonical lifecycle/history
     // shape and derive these summary fields instead of treating the pair as
     // the conceptual source of truth.
-    const traceChanged = hasDifferentTracePosture(
+    const traceChanged = !isTraceTemperamentEqual(
         value.trace_target,
         value.trace_final
     );

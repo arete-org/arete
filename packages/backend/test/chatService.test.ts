@@ -207,6 +207,175 @@ test('runChatMessages passes planner temperament into response metadata runtime 
     });
 });
 
+test('runChatMessages derives finalTemperament and assess TRACE divergence reason from assess lineage signals', async () => {
+    let capturedFinalTemperament:
+        | import('@footnote/contracts/policy').PartialResponseTemperament
+        | undefined;
+    let capturedReasonCode:
+        | import('@footnote/contracts/policy').ResponseMetadata['trace_final_reason_code']
+        | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            usage: {
+                promptTokens: 12,
+                completionTokens: 8,
+                totalTokens: 20,
+            },
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedFinalTemperament = runtimeContext.finalTemperament;
+            capturedReasonCode =
+                runtimeContext.temperamentFinalizationReasonCode;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'generated',
+                generationResult: {
+                    text: 'final',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 12,
+                        completionTokens: 8,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_trace_misalignment',
+                    workflowName: 'message_reviewed',
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 2,
+                    maxSteps: 8,
+                    maxDurationMs: 15000,
+                    steps: [
+                        {
+                            stepId: 'step_generate_1',
+                            attempt: 1,
+                            stepKind: 'generate',
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Generated draft',
+                            },
+                        },
+                        {
+                            stepId: 'step_assess_1',
+                            attempt: 1,
+                            stepKind: 'assess',
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'assessed',
+                                signals: {
+                                    reviewDecision: 'finalize',
+                                    reviewReason: 'ready',
+                                    traceAlignment: 'misaligned',
+                                    traceAlignmentReason:
+                                        'Broader than target.',
+                                    finalTemperamentTightness: 5,
+                                    finalTemperamentAttribution: 4,
+                                },
+                            },
+                        },
+                    ],
+                },
+            }) as RunBoundedReviewWorkflowResult,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What changed?' }],
+        conversationSnapshot: 'What changed?',
+        plannerTemperament: {
+            tightness: 2,
+            attribution: 2,
+        },
+    });
+
+    assert.deepEqual(capturedFinalTemperament, {
+        tightness: 5,
+        attribution: 4,
+    });
+    assert.equal(capturedReasonCode, 'assess_trace_misalignment');
+});
+
+test('runChatMessages omits assess TRACE divergence reason when final posture matches planner posture', async () => {
+    let capturedReasonCode:
+        | import('@footnote/contracts/policy').ResponseMetadata['trace_final_reason_code']
+        | undefined;
+
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            capturedReasonCode =
+                runtimeContext.temperamentFinalizationReasonCode;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'generated',
+                generationResult: {
+                    text: 'final',
+                    model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_trace_aligned',
+                    workflowName: 'message_reviewed',
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 8,
+                    maxDurationMs: 15000,
+                    steps: [
+                        {
+                            stepId: 'step_assess_1',
+                            attempt: 1,
+                            stepKind: 'assess',
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'assessed',
+                                signals: {
+                                    reviewDecision: 'finalize',
+                                    reviewReason: 'ready',
+                                    traceAlignment: 'aligned',
+                                    finalTemperamentTightness: 4,
+                                },
+                            },
+                        },
+                    ],
+                },
+            }) as RunBoundedReviewWorkflowResult,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What changed?' }],
+        conversationSnapshot: 'What changed?',
+        plannerTemperament: {
+            tightness: 4,
+        },
+    });
+
+    assert.equal(capturedReasonCode, undefined);
+});
+
 test('runChatMessages preserves planner temperament for context-step short-circuit message metadata', async () => {
     let capturedPlannerTemperament:
         | import('@footnote/contracts/policy').PartialResponseTemperament

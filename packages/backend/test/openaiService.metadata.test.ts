@@ -303,6 +303,23 @@ test('buildResponseMetadata emits trace_final_reason_code when final posture dif
     );
 });
 
+test('buildResponseMetadata accepts assess_trace_misalignment as explicit divergence reason', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            plannerTemperament: {
+                tightness: 2,
+            },
+            finalTemperament: {
+                tightness: 4,
+            },
+            temperamentFinalizationReasonCode: 'assess_trace_misalignment',
+        })
+    );
+
+    assert.equal(metadata.trace_final_reason_code, 'assess_trace_misalignment');
+});
+
 test('buildResponseMetadata defaults trace_final_reason_code when final posture differs without explicit code', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
