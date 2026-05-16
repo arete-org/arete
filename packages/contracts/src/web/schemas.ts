@@ -490,6 +490,19 @@ const validateAssessTraceSignals = (
         (entry) => entry.value !== undefined
     );
 
+    if (
+        assessSignals !== undefined &&
+        traceAlignment !== 'aligned' &&
+        traceAlignment !== 'misaligned'
+    ) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['outcome', 'signals', 'traceAlignment'],
+            message:
+                'executed assess steps must include traceAlignment: "aligned" | "misaligned".',
+        });
+    }
+
     for (const axisEntry of finalTemperamentAxisEntries) {
         if (axisEntry.value === undefined) {
             continue;

@@ -315,14 +315,14 @@ chat:
                       "reviewDecision": "finalize" | "revise",
                       "reviewReason": "one short sentence",
                       "revisionInstruction"?: "required when reviewDecision is revise; concise instruction for follow-up generation",
-                      "traceAlignment"?: "aligned" | "misaligned",
+                      "traceAlignment": "aligned" | "misaligned",
                       "traceAlignmentReason"?: "required when traceAlignment is misaligned",
-                      "finalTemperament"?: {
-                        "tightness"?: 1 | 2 | 3 | 4 | 5,
-                        "rationale"?: 1 | 2 | 3 | 4 | 5,
-                        "attribution"?: 1 | 2 | 3 | 4 | 5,
-                        "caution"?: 1 | 2 | 3 | 4 | 5,
-                        "extent"?: 1 | 2 | 3 | 4 | 5
+                      "finalTemperament": {
+                        "tightness": 1 | 2 | 3 | 4 | 5,
+                        "rationale": 1 | 2 | 3 | 4 | 5,
+                        "attribution": 1 | 2 | 3 | 4 | 5,
+                        "caution": 1 | 2 | 3 | 4 | 5,
+                        "extent": 1 | 2 | 3 | 4 | 5
                       },
                       "moduleHints"?: ["optional review module ids"],
                       "concerns"?: {
@@ -331,7 +331,7 @@ chat:
                         "evidence"?: "needs_caution" | "ok"
                       }
                     }
-                    If reviewDecision is "revise" due to TRACE mismatch, set traceAlignment to "misaligned", include traceAlignmentReason, and include finalTemperament with the delivered 1..5 axes that should be recorded.
+                    Always include traceAlignment and finalTemperament. Include traceAlignmentReason only when traceAlignment is "misaligned". Keep finalTemperament axis values bounded to 1..5 and representative of delivered posture.
                     Keep all strings concise and specific.
                     Choose "finalize" only when the draft is ready to send as-is.
                     Choose "revise" only when one additional refinement pass would materially improve the answer.
