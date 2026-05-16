@@ -389,8 +389,8 @@ test('runBoundedReviewWorkflow enforces legality before initial generate executi
         reviewDecisionPrompt: 'json',
         revisionPromptPrefix: 'revise',
         parseReviewDecision: () => ({
-            decision: 'finalize',
-            reason: 'done',
+            reviewDecision: 'finalize',
+            reviewReason: 'done',
         }),
         captureUsage: () => {
             usageCaptures += 1;
@@ -622,8 +622,9 @@ test('runBoundedReviewWorkflow records explicit limit stop attribution for exhau
             },
         }),
         parseReviewDecision: () => ({
-            decision: 'revise',
-            reason: 'One revision pass is required.',
+            reviewDecision: 'revise',
+            reviewReason: 'One revision pass is required.',
+            revisionInstruction: 'Tighten wording and remove redundancy.',
         }),
     });
 
@@ -733,7 +734,7 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
 
             if (generationCalls === 2) {
                 return {
-                    text: '{"decision":"finalize","reason":"Draft is complete and clear."}',
+                    text: '{"reviewDecision":"finalize","reviewReason":"Draft is complete and clear."}',
                     model: 'gpt-5-mini',
                     usage: {
                         promptTokens: 8,
@@ -796,6 +797,515 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         'Draft is complete and clear.'
     );
     assert.equal(generationCalls, 2);
+});
+
+test('runBoundedReviewWorkflow executes engine-bounded refinement path without revise step kind', async () => {
+    let generationCalls = 0;
+    const generationInputs: Parameters<GenerationRuntime['generate']>[0][] = [];
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            generationInputs.push(input);
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            if (generationCalls === 2) {
+                return {
+                    text: '{"reviewDecision":"revise","reviewReason":"Need tighter wording.","revisionInstruction":"Trim and soften the phrasing.","moduleHints":["natural_human_style","unknown_module"],"concerns":{"style":"too_stiff","length":"too_long"}}',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 5,
+                        completionTokens: 5,
+                        totalTokens: 10,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            if (generationCalls === 3) {
+                return {
+                    text: 'refined draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 8,
+                        completionTokens: 8,
+                        totalTokens: 16,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: '{"reviewDecision":"finalize","reviewReason":"Now complete."}',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 3,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+        reviewModuleIds: ['concise_answer', 'natural_human_style'],
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.workflowLineage.status, 'completed');
+    assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
+    assert.equal(
+        result.workflowLineage.steps.some((step) => step.stepKind === 'revise'),
+        false
+    );
+    const assessReviseStep = result.workflowLineage.steps.find(
+        (step) =>
+            step.stepKind === 'assess' &&
+            step.outcome.signals?.reviewDecision === 'revise'
+    );
+    assert.ok(assessReviseStep);
+    assert.equal(assessReviseStep.outcome.signals?.refinementRequested, true);
+    assert.equal(assessReviseStep.outcome.signals?.moduleHintCount, 1);
+    assert.equal(
+        assessReviseStep.outcome.signals?.moduleHintIdsCsv,
+        'natural_human_style'
+    );
+    assert.equal(assessReviseStep.outcome.signals?.styleConcern, 'too_stiff');
+    assert.equal(assessReviseStep.outcome.signals?.lengthConcern, 'too_long');
+    const refinementGenerateStep = result.workflowLineage.steps.find(
+        (step) =>
+            step.stepKind === 'generate' &&
+            step.outcome.signals?.refinementApplied === true
+    );
+    assert.ok(refinementGenerateStep);
+    assert.equal(
+        refinementGenerateStep.outcome.signals?.refinementSourceStepId,
+        assessReviseStep.stepId
+    );
+    assert.equal(refinementGenerateStep.outcome.signals?.appliedModuleCount, 2);
+    assert.equal(
+        refinementGenerateStep.outcome.signals?.appliedModuleIdsCsv,
+        'natural_human_style,concise_answer'
+    );
+    const refineInput = generationInputs[2];
+    assert.ok(refineInput);
+    const refineSystemMessage = refineInput.messages
+        .filter((message) => message.role === 'system')
+        .at(-1);
+    assert.ok(refineSystemMessage);
+    assert.match(refineSystemMessage.content, /Revision instruction:/);
+    assert.match(refineSystemMessage.content, /Trim and soften the phrasing\./);
+    assert.equal(refineSystemMessage.content.includes('unknown_module'), false);
+});
+
+test('runBoundedReviewWorkflow marks requested-but-blocked refinement without refinementApplied signals', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: '{"reviewDecision":"revise","reviewReason":"Need one refinement.","revisionInstruction":"Shorten and clarify."}',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 8,
+                maxToolCalls: 0,
+                maxPlanCycles: 2,
+                maxReviewCycles: 2,
+                maxDeliberationCalls: 6,
+                maxTokensTotal: Number.MAX_SAFE_INTEGER,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: false,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'transition_blocked_by_policy'
+    );
+    assert.equal(
+        result.workflowLineage.steps.some(
+            (step) => step.outcome.signals?.refinementApplied === true
+        ),
+        false
+    );
+});
+
+test('runBoundedReviewWorkflow fail-opens when assess revise omits required revisionInstruction', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: '{"reviewDecision":"revise","reviewReason":"Need one refinement."}',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.generationResult.text, 'initial draft');
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'executor_error_fail_open'
+    );
+    assert.equal(
+        result.workflowLineage.steps.some(
+            (step) => step.outcome.signals?.refinementApplied === true
+        ),
+        false
+    );
+});
+
+test('runBoundedReviewWorkflow returns latest safe draft when planner re-entry fails after assess revise', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'safe initial draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: '{"reviewDecision":"revise","reviewReason":"Ask planner to refine wording.","revisionInstruction":"Refine wording for clarity."}',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 8,
+                maxToolCalls: 0,
+                maxPlanCycles: 2,
+                maxReviewCycles: 2,
+                maxDeliberationCalls: 6,
+                maxTokensTotal: Number.MAX_SAFE_INTEGER,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: true,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        plannerStepRequest: {
+            workflowId: 'wf_test',
+            workflowName: 'message_reviewed',
+            attempt: 1,
+            request: {
+                surface: 'web',
+                trigger: { kind: 'submit' },
+                latestUserInput: 'Draft answer',
+                conversation: [{ role: 'user', content: 'Draft answer' }],
+            },
+            invocationContext: {
+                owner: 'workflow',
+                workflowName: 'message_reviewed',
+                stepKind: 'plan',
+                purpose: 'chat_orchestrator_action_selection',
+            },
+            capabilityProfiles: [],
+        },
+        plannerStepExecutor: async (input) => {
+            if (input.attempt > 1) {
+                throw new Error('planner re-entry failed');
+            }
+            return {
+                plan: {
+                    action: 'message',
+                    modality: 'text',
+                    safetyTier: 'Low',
+                    reasoning: 'Continue message flow.',
+                    generation: { reasoningEffort: 'low', verbosity: 'low' },
+                },
+                execution: {
+                    status: 'executed',
+                    purpose: 'chat_orchestrator_action_selection',
+                    contractType: 'structured',
+                    durationMs: 1,
+                },
+                ingestion: {
+                    outputApplyOutcome: 'accepted',
+                    fallbackTier: 'none',
+                    correctionCodes: [],
+                    outOfContractFields: [],
+                    authorityFieldAttempts: [],
+                },
+                diagnostics: {
+                    rawToolIntentPresent: false,
+                    normalizedToolIntentPresent: false,
+                    toolIntentRejected: false,
+                    toolIntentRejectionReasons: [],
+                },
+            };
+        },
+        planContinuationBuilder: ({
+            plannerStepResult,
+            baseGenerationRequest,
+            baseMessagesWithHints,
+            contextEnvelope,
+        }) => ({
+            continuation: 'continue_message',
+            messagesWithHints: baseMessagesWithHints,
+            generationRequest: baseGenerationRequest,
+            conversationSnapshot: 'planner continuation snapshot',
+            contextEnvelope,
+            plannerSummary: {
+                executionPlan: plannerStepResult.plan,
+                generationForExecution: plannerStepResult.plan.generation,
+                selectedResponseProfile: {
+                    id: 'openai-text-fast',
+                    provider: 'openai',
+                    providerModel: 'gpt-5-mini',
+                    capabilities: {
+                        supportsReasoningEffort: true,
+                        supportsVerbosity: true,
+                        canUseSearch: false,
+                        canGenerateImage: false,
+                        canUseVision: false,
+                        canUseAudio: false,
+                        canUseStreaming: true,
+                    },
+                },
+                originalSelectedProfileId: 'openai-text-fast',
+                effectiveSelectedProfileId: 'openai-text-fast',
+                toolRequestContext: {
+                    toolName: 'web_search',
+                    requested: false,
+                    eligible: false,
+                    reasonCode: 'tool_not_requested',
+                },
+                plannerDiagnostics: {
+                    rawToolIntentPresent: false,
+                    normalizedToolIntentPresent: false,
+                    toolIntentRejected: false,
+                    toolIntentRejectionReasons: [],
+                },
+                plannerApplyOutcome: 'applied',
+                plannerMattered: true,
+                plannerMatteredControlIds: ['provider_preference'],
+                fallbackReasons: [],
+                fallbackRollupSelectionSource: 'default',
+                modality: plannerStepResult.plan.modality,
+                safetyTier: plannerStepResult.plan.safetyTier,
+                searchRequested: false,
+            },
+        }),
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.generationResult.text, 'safe initial draft');
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'executor_error_fail_open'
+    );
+    assert.equal(
+        result.workflowLineage.steps.some(
+            (step) => step.outcome.signals?.refinementApplied === true
+        ),
+        false
+    );
 });
 
 test('runBoundedReviewWorkflow attaches planner plan step to lineage and links initial generate step to planner root', async () => {
@@ -1241,7 +1751,7 @@ test('runBoundedReviewWorkflow does not emit concrete tool steps in current engi
 
             return isAssessmentCall
                 ? {
-                      text: '{"decision":"finalize","reason":"done"}',
+                      text: '{"reviewDecision":"finalize","reviewReason":"done"}',
                       model: 'gpt-5-mini',
                       usage: {
                           promptTokens: 8,

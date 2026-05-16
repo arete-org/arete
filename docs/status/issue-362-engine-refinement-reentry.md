@@ -1,0 +1,49 @@
+# Issue 362 Status
+
+- Branch/work item: Issue #362, engine-bounded refinement re-entry
+- Scope: replace runtime dependence on executed `stepKind: 'revise'` and derive revised metadata from canonical assess/generate signals
+  plus narrow hybrid review-prompting slice (YAML prompt fragments + backend typed module mapping).
+- Files touched:
+    - `packages/backend/src/services/workflowEngine.ts`
+    - `packages/contracts/src/policy/types.ts`
+    - `packages/contracts/src/policy/reviewRuntime.ts`
+    - `packages/backend/test/workflowEngine.test.ts`
+    - `packages/backend/test/openaiService.metadata.test.ts`
+    - `packages/backend/src/services/workflowProfileContract.ts`
+    - `packages/backend/src/services/workflowProfileRegistry.ts`
+    - `packages/backend/src/services/chatService.ts`
+    - `packages/backend/src/services/reviewModules.ts`
+    - `packages/backend/src/services/prompts/reviewPromptComposer.ts`
+    - `packages/prompts/src/types.ts`
+    - `packages/prompts/src/defaults.yaml`
+    - `packages/prompts/test/promptRegistry.test.ts`
+    - `packages/backend/test/reviewPromptComposer.test.ts`
+    - `packages/backend/test/chatService.test.ts`
+    - `docs/architecture/workflow.md`
+    - `docs/architecture/footnote-and-common-agentic-patterns.md`
+- Decisions:
+    - Engine now applies refinement through follow-up `generate` after `assess(reviewDecision=revise)`.
+    - Planner re-entry is advisory and only used when planner seam is present.
+    - `assess` emits canonical `reviewDecision`, `reviewReason`, and `refinementRequested` on revise.
+    - Refined `generate` emits `refinementApplied` and `refinementSourceStepId`.
+    - `reviewRuntime.revised` now requires executed `generate` with `signals.refinementApplied=true`.
+    - Review prompt wording now comes from shared prompts YAML fragments.
+    - Backend owns typed allowed review module IDs, caps, and prompt-key mapping.
+    - Initial module selection is profile/backend defaults only.
+    - Assess parser requires `revisionInstruction` when `reviewDecision=revise` and sanitizes optional hints/concerns.
+- Tests added/updated:
+    - Engine refinement path, blocked refinement path, planner re-entry failure fail-open path.
+    - Metadata revised-vs-reviewed truth tests.
+    - Prompt registry coverage for review prompt keys.
+    - Review prompt composer deterministic assembly tests.
+    - ChatService wiring test for profile review prompt/module forwarding.
+    - Engine fail-open test when revise lacks required revisionInstruction.
+- Validation run:
+    - `pnpm exec tsx --test packages/prompts/test/promptRegistry.test.ts packages/backend/test/reviewPromptComposer.test.ts packages/backend/test/workflowEngine.test.ts` passed
+    - `pnpm exec tsx --test --test-name-pattern "forwards profile-owned review prompt config and module ids|derives reviewRuntime.revised from refinement-applied generate lineage only" packages/backend/test/chatService.test.ts` passed
+    - `pnpm exec tsx --test packages/backend/test/openaiService.metadata.test.ts` passed
+    - `pnpm lint` passed
+    - `pnpm validate-footnote-tags` passed
+    - `pnpm review` passed
+- Follow-up work:
+    - trim any remaining stale `revise` terminology in non-critical docs/comments if found.

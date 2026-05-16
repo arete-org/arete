@@ -28,6 +28,16 @@ test('loads shared conversational prompts plus surface supplements', () => {
     );
     assert.equal(registry.hasPrompt('chat.web.system'), true);
     assert.equal(registry.hasPrompt('chat.web.persona.footnote'), true);
+    assert.equal(registry.hasPrompt('chat.review.assess.system'), true);
+    assert.equal(registry.hasPrompt('chat.review.refine.system'), true);
+    assert.equal(
+        registry.hasPrompt('chat.review.module.concise_answer.assess'),
+        true
+    );
+    assert.equal(
+        registry.hasPrompt('chat.review.module.natural_human_style.refine'),
+        true
+    );
     assert.equal(registry.hasPrompt('discord.image.persona.footnote'), true);
     assert.equal(registry.hasPrompt('discord.realtime.persona.footnote'), true);
     assert.match(
@@ -48,6 +58,24 @@ test('loads shared conversational prompts plus surface supplements', () => {
         }).content,
         /You are Footnote, part of the Footnote project\./
     );
+});
+
+test('loads all review prompt keys and each key renders non-empty content', () => {
+    const registry = createPromptRegistry();
+    const reviewPromptKeys = [
+        'chat.review.assess.system',
+        'chat.review.refine.system',
+        'chat.review.module.concise_answer.assess',
+        'chat.review.module.concise_answer.refine',
+        'chat.review.module.natural_human_style.assess',
+        'chat.review.module.natural_human_style.refine',
+    ] as const;
+
+    for (const key of reviewPromptKeys) {
+        assert.equal(registry.hasPrompt(key), true);
+        const rendered = registry.renderPrompt(key).content.trim();
+        assert.equal(rendered.length > 0, true);
+    }
 });
 
 test('merges override files over the canonical defaults', () => {

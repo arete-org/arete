@@ -3,7 +3,7 @@
  * no-generation handling taxonomy.
  *
  * A workflow is one bounded backend execution loop: generate, optionally assess,
- * optionally revise, then terminate with lineage metadata. A workflow profile is
+ * optionally refine via planner re-entry + generate, then terminate with lineage metadata. A workflow profile is
  * the config and hook bundle that selects which of those steps are allowed and
  * how "no generation happened" should be classified.
  * @footnote-scope: interface
@@ -265,6 +265,8 @@ export type WorkflowProfileContract = {
         reviewDecisionPrompt?: string;
         /** Optional revision prefix injected before rewrite attempts. */
         revisionPromptPrefix?: string;
+        /** Optional backend-owned review module ids for assess/refinement guidance. */
+        reviewModuleIds?: string[];
         /** Extensible serialized metadata for profile-specific diagnostics. */
         metadata?: Record<string, string | number | boolean | null>;
     };
@@ -287,8 +289,15 @@ type WorkflowProfileRuntimeHooks = {
         ) => WorkflowNoGenerationReasonCode;
     };
     parseReviewDecision?: (text: string) => {
-        decision: 'finalize' | 'revise';
-        reason: string;
+        reviewDecision: 'finalize' | 'revise';
+        reviewReason: string;
+        revisionInstruction?: string;
+        moduleHints?: string[];
+        concerns?: {
+            length?: 'too_long' | 'ok';
+            style?: 'too_stiff' | 'ok';
+            evidence?: 'needs_caution' | 'ok';
+        };
     } | null;
 };
 

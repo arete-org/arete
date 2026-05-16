@@ -43,6 +43,14 @@ import type {
     PlannerStepResult,
 } from './plannerWorkflowSeams.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
+import {
+    sanitizeReviewModuleIds,
+    type ReviewModuleId,
+} from './reviewModules.js';
+import {
+    composeAssessPrompt,
+    composeRefinementPrompt,
+} from './prompts/reviewPromptComposer.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -73,18 +81,33 @@ export type WorkflowState = {
 };
 
 export type ReviewDecision = {
-    decision: 'finalize' | 'revise';
-    reason: string;
+    reviewDecision: 'finalize' | 'revise';
+    reviewReason: string;
+    revisionInstruction?: string;
+    moduleHints?: string[];
+    concerns?: {
+        length?: 'too_long' | 'ok';
+        style?: 'too_stiff' | 'ok';
+        evidence?: 'needs_caution' | 'ok';
+    };
 };
 
 export const DEFAULT_REVIEW_DECISION_PROMPT = `Return plain JSON only.
 Schema:
 {
-  "decision": "finalize" | "revise",
-  "reason": "one short sentence"
+  "reviewDecision": "finalize" | "revise",
+  "reviewReason": "one short sentence",
+  "revisionInstruction": "required when reviewDecision is revise",
+  "moduleHints": ["optional review module ids"],
+  "concerns": {
+    "length": "too_long" | "ok",
+    "style": "too_stiff" | "ok",
+    "evidence": "needs_caution" | "ok"
+  }
 }
 Choose "finalize" when the draft is complete, accurate, and ready.
 Choose "revise" only when one additional revision would materially improve quality.
+Provide concise fields and keep revisionInstruction specific and short.
 Do not include markdown or extra keys.`;
 
 export const DEFAULT_REVISION_PROMPT_PREFIX =
@@ -100,20 +123,70 @@ export const parseReviewDecisionText = (
 
     try {
         const parsed = JSON.parse(trimmed) as {
-            decision?: unknown;
-            reason?: unknown;
+            reviewDecision?: unknown;
+            reviewReason?: unknown;
+            revisionInstruction?: unknown;
+            moduleHints?: unknown;
+            concerns?: unknown;
         };
         if (
-            (parsed.decision !== 'finalize' && parsed.decision !== 'revise') ||
-            typeof parsed.reason !== 'string' ||
-            parsed.reason.trim().length === 0
+            parsed.reviewDecision !== 'finalize' &&
+            parsed.reviewDecision !== 'revise'
         ) {
             return null;
         }
+        if (
+            typeof parsed.reviewReason !== 'string' ||
+            parsed.reviewReason.trim().length === 0
+        ) {
+            return null;
+        }
+        const rawRevisionInstruction =
+            typeof parsed.revisionInstruction === 'string'
+                ? parsed.revisionInstruction.trim()
+                : undefined;
+        if (
+            parsed.reviewDecision === 'revise' &&
+            (!rawRevisionInstruction || rawRevisionInstruction.length === 0)
+        ) {
+            return null;
+        }
+        const moduleHints = Array.isArray(parsed.moduleHints)
+            ? sanitizeReviewModuleIds(
+                  parsed.moduleHints.filter(
+                      (hint): hint is string => typeof hint === 'string'
+                  )
+              )
+            : undefined;
+        const concerns =
+            parsed.concerns && typeof parsed.concerns === 'object'
+                ? (parsed.concerns as Record<string, unknown>)
+                : undefined;
+        const normalizedConcerns: NonNullable<ReviewDecision['concerns']> = {
+            ...(concerns?.length === 'too_long' || concerns?.length === 'ok'
+                ? { length: concerns.length as 'too_long' | 'ok' }
+                : {}),
+            ...(concerns?.style === 'too_stiff' || concerns?.style === 'ok'
+                ? { style: concerns.style as 'too_stiff' | 'ok' }
+                : {}),
+            ...(concerns?.evidence === 'needs_caution' ||
+            concerns?.evidence === 'ok'
+                ? {
+                      evidence: concerns.evidence as 'needs_caution' | 'ok',
+                  }
+                : {}),
+        };
 
         return {
-            decision: parsed.decision,
-            reason: parsed.reason.trim(),
+            reviewDecision: parsed.reviewDecision,
+            reviewReason: parsed.reviewReason.trim(),
+            ...(rawRevisionInstruction !== undefined && {
+                revisionInstruction: rawRevisionInstruction,
+            }),
+            ...(moduleHints !== undefined && { moduleHints }),
+            ...(Object.keys(normalizedConcerns).length > 0 && {
+                concerns: normalizedConcerns,
+            }),
         };
     } catch {
         return null;
@@ -162,6 +235,7 @@ export type RunBoundedReviewWorkflowInput = {
     profileStrategy?: BoundedReviewProfileStrategy;
     reviewDecisionPrompt?: string;
     revisionPromptPrefix?: string;
+    reviewModuleIds?: ReviewModuleId[];
     parseReviewDecision?: (text: string) => ReviewDecision | null;
     captureUsage: (
         result: GenerationResult,
@@ -246,8 +320,8 @@ const LEGAL_TRANSITIONS: Record<
 > = {
     plan: new Set(['tool', 'generate', 'assess', 'finalize']),
     tool: new Set(['tool', 'generate', 'assess', 'finalize']),
-    generate: new Set(['assess', 'revise', 'finalize']),
-    assess: new Set(['tool', 'generate', 'revise', 'finalize']),
+    generate: new Set(['assess', 'finalize']),
+    assess: new Set(['plan', 'tool', 'generate', 'finalize']),
     revise: new Set(['assess', 'generate', 'finalize']),
     finalize: new Set([]),
 };
@@ -348,8 +422,7 @@ export const applyStepExecutionToState = (
         toolCallCount: state.toolCallCount + sanitizedToolCallsExecuted,
         planCallCount: state.planCallCount + (stepKind === 'plan' ? 1 : 0),
         reviewCallCount:
-            state.reviewCallCount +
-            (stepKind === 'assess' || stepKind === 'revise' ? 1 : 0),
+            state.reviewCallCount + (stepKind === 'assess' ? 1 : 0),
         deliberationCallCount:
             state.deliberationCallCount + sanitizedDeliberationCallsExecuted,
         totalTokens: state.totalTokens + sanitizedUsageTokens,
@@ -381,9 +454,7 @@ export const isWithinExecutionLimits = (
     }
 
     const isNextStepDeliberative =
-        nextStepKind === 'plan' ||
-        nextStepKind === 'assess' ||
-        nextStepKind === 'revise';
+        nextStepKind === 'plan' || nextStepKind === 'assess';
     const maxPlanCycles =
         limits.maxPlanCycles ?? Math.max(0, limits.maxDeliberationCalls);
     const maxReviewCycles =
@@ -395,10 +466,7 @@ export const isWithinExecutionLimits = (
             exhaustedBy: 'maxDeliberationCalls',
         };
     }
-    if (
-        (nextStepKind === 'assess' || nextStepKind === 'revise') &&
-        state.reviewCallCount >= maxReviewCycles
-    ) {
+    if (nextStepKind === 'assess' && state.reviewCallCount >= maxReviewCycles) {
         return {
             withinLimits: false,
             exhaustedBy: 'maxDeliberationCalls',
@@ -725,6 +793,7 @@ export const runBoundedReviewWorkflow = async ({
     profileStrategy = BOUNDED_REVIEW_PROFILE_STRATEGY,
     reviewDecisionPrompt,
     revisionPromptPrefix,
+    reviewModuleIds,
     parseReviewDecision,
     captureUsage,
     plannerStepRecord,
@@ -787,7 +856,7 @@ export const runBoundedReviewWorkflow = async ({
     let workflowStatus: WorkflowRecord['status'] = 'degraded';
     let draftResult: GenerationResult | null = null;
     let draftParentStepId: string | undefined;
-    let latestReviewReason: string | undefined;
+    let latestRevisionInstruction: string | undefined;
     let shouldStop = false;
     let exhaustedLimitKey: WorkflowLimitKey | undefined;
     let executedContextStepResult: ContextStepResult | undefined;
@@ -799,12 +868,12 @@ export const runBoundedReviewWorkflow = async ({
     let effectiveContextStepRequests = contextStepRequests;
     let workflowTerminalAction: PlanTerminalAction | undefined;
     let planContinuation: PlanContinuation | undefined;
-    const effectiveReviewDecisionPrompt =
-        reviewDecisionPrompt ?? profileStrategy.reviewDecisionPrompt;
+    const effectiveReviewDecisionPrompt = reviewDecisionPrompt?.trim();
     const effectiveRevisionPromptPrefix =
         revisionPromptPrefix ?? profileStrategy.revisionPromptPrefix;
     const effectiveParseReviewDecision =
         parseReviewDecision ?? profileStrategy.parseReviewDecision;
+    const selectedReviewModuleIds = sanitizeReviewModuleIds(reviewModuleIds);
 
     const executionLimits: ExecutionLimits = {
         maxWorkflowSteps: sanitizePositiveInteger(
@@ -1546,6 +1615,10 @@ export const runBoundedReviewWorkflow = async ({
 
         const reviewStartedAt = Date.now();
         try {
+            const assessPrompt = composeAssessPrompt({
+                moduleIds: selectedReviewModuleIds,
+                basePromptOverride: effectiveReviewDecisionPrompt,
+            });
             const reviewResult = await generationRuntime.generate({
                 messages: [
                     ...messagesWithContext,
@@ -1555,7 +1628,7 @@ export const runBoundedReviewWorkflow = async ({
                     },
                     {
                         role: 'system',
-                        content: effectiveReviewDecisionPrompt,
+                        content: assessPrompt.prompt,
                     },
                 ],
                 model: effectiveGenerationRequest.model,
@@ -1604,8 +1677,27 @@ export const runBoundedReviewWorkflow = async ({
             }
 
             const assessSignals: BoundedReviewAssessSignals = {
-                reviewDecision: decision.decision,
-                reviewReason: decision.reason,
+                reviewDecision: decision.reviewDecision,
+                reviewReason: decision.reviewReason,
+                ...(decision.reviewDecision === 'revise' && {
+                    refinementRequested: true,
+                }),
+                ...(decision.concerns?.length !== undefined && {
+                    lengthConcern: decision.concerns.length,
+                }),
+                ...(decision.concerns?.style !== undefined && {
+                    styleConcern: decision.concerns.style,
+                }),
+                ...(decision.concerns?.evidence !== undefined && {
+                    evidenceConcern: decision.concerns.evidence,
+                }),
+                ...(decision.moduleHints !== undefined && {
+                    moduleHintCount: decision.moduleHints.length,
+                }),
+                ...(decision.moduleHints !== undefined &&
+                    decision.moduleHints.length > 0 && {
+                        moduleHintIdsCsv: decision.moduleHints.join(','),
+                    }),
             };
             const reviewStepId = captureStep({
                 stepKind: 'assess',
@@ -1621,8 +1713,8 @@ export const runBoundedReviewWorkflow = async ({
                 attempt: iteration,
                 signals: assessSignals,
             });
-            latestReviewReason = decision.reason;
-            if (decision.decision === 'finalize') {
+            latestRevisionInstruction = decision.revisionInstruction;
+            if (decision.reviewDecision === 'finalize') {
                 terminationReason = 'goal_satisfied';
                 workflowStatus = 'completed';
                 shouldStop = true;
@@ -1637,10 +1729,17 @@ export const runBoundedReviewWorkflow = async ({
                 break;
             }
 
+            if (!workflowPolicy.enableRevision) {
+                terminationReason = 'transition_blocked_by_policy';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+                break;
+            }
+
             if (
                 !isTransitionAllowed(
                     workflowState.currentStepKind,
-                    'revise',
+                    'generate',
                     workflowPolicy
                 )
             ) {
@@ -1650,23 +1749,127 @@ export const runBoundedReviewWorkflow = async ({
                 break;
             }
 
-            if (stopIfOverLimits('revise')) {
+            if (stopIfOverLimits('generate')) {
                 break;
+            }
+
+            let reentryAttempt = 0;
+            if (
+                plannerStepRequest !== undefined &&
+                plannerStepExecutor !== undefined &&
+                planContinuationBuilder !== undefined
+            ) {
+                if (
+                    !isTransitionAllowed(
+                        workflowState.currentStepKind,
+                        'plan',
+                        workflowPolicy
+                    )
+                ) {
+                    terminationReason = 'transition_blocked_by_policy';
+                    workflowStatus = 'degraded';
+                    shouldStop = true;
+                    break;
+                }
+                if (stopIfOverLimits('plan')) {
+                    break;
+                }
+                const plannerReentryStartedAt = Date.now();
+                try {
+                    const plannerReentryResult = await plannerStepExecutor({
+                        ...plannerStepRequest,
+                        workflowId,
+                        workflowName: workflowConfig.workflowName,
+                        attempt: iteration + 1,
+                    });
+                    const plannerReentryFinishedAt = Date.now();
+                    const plannerReentryStep = buildPlannerStepRecord({
+                        stepId: `step_${stepCounter + 1}`,
+                        attempt: iteration + 1,
+                        parentStepId: reviewStepId,
+                        startedAtMs: plannerReentryStartedAt,
+                        finishedAtMs: plannerReentryFinishedAt,
+                        summary: {
+                            status: plannerReentryResult.execution.status,
+                            ...(plannerReentryResult.execution.reasonCode !==
+                                undefined && {
+                                reasonCode:
+                                    plannerReentryResult.execution.reasonCode,
+                            }),
+                            purpose: plannerReentryResult.execution.purpose,
+                            contractType:
+                                plannerReentryResult.execution.contractType,
+                            applyOutcome:
+                                plannerReentryResult.execution.status ===
+                                'executed'
+                                    ? 'applied'
+                                    : 'not_applied',
+                            durationMs:
+                                plannerReentryResult.execution.durationMs,
+                            action: plannerReentryResult.plan.action,
+                            modality: plannerReentryResult.plan.modality,
+                            requestedCapabilityProfile:
+                                plannerReentryResult.plan
+                                    .requestedCapabilityProfile,
+                        },
+                    });
+                    workflowSteps.push(plannerReentryStep);
+                    stepCounter += 1;
+                    workflowState = applyStepExecutionToState(
+                        workflowState,
+                        'plan',
+                        0,
+                        0,
+                        1
+                    );
+                    planContinuation = planContinuationBuilder({
+                        plannerStepResult: plannerReentryResult,
+                        workflowId,
+                        workflowName: workflowConfig.workflowName,
+                        attempt: iteration + 1,
+                        baseMessagesWithHints: effectiveMessagesWithHints,
+                        baseGenerationRequest: effectiveGenerationRequest,
+                        contextEnvelope: effectiveContextEnvelope,
+                    });
+                    if (planContinuation.continuation !== 'continue_message') {
+                        terminationReason = 'executor_error_fail_open';
+                        workflowStatus = 'degraded';
+                        shouldStop = true;
+                        break;
+                    }
+                    reentryAttempt = iteration;
+                    effectiveGenerationRequest =
+                        planContinuation.generationRequest;
+                    effectiveMessagesWithHints =
+                        planContinuation.messagesWithHints;
+                    effectiveContextEnvelope = planContinuation.contextEnvelope;
+                    messagesWithContext = effectiveMessagesWithHints;
+                } catch {
+                    terminationReason = 'executor_error_fail_open';
+                    workflowStatus = 'degraded';
+                    shouldStop = true;
+                    break;
+                }
             }
 
             const revisionStartedAt = Date.now();
             try {
+                const refinementPrompt = composeRefinementPrompt({
+                    revisionPromptPrefix: effectiveRevisionPromptPrefix,
+                    revisionInstruction: latestRevisionInstruction,
+                    moduleIds: selectedReviewModuleIds,
+                });
                 const revisionResult = await generationRuntime.generate({
                     ...effectiveGenerationRequest,
                     messages: [
-                        ...messagesWithContext,
+                        ...effectiveMessagesWithHints,
                         {
                             role: 'assistant',
                             content: draftResult?.text ?? '',
                         },
                         {
                             role: 'system',
-                            content: `${effectiveRevisionPromptPrefix}\nReview guidance: ${latestReviewReason ?? 'No additional guidance provided.'}`,
+                            content: refinementPrompt.prompt,
                         },
                     ],
                 });
@@ -1676,10 +1879,10 @@ export const runBoundedReviewWorkflow = async ({
                     effectiveGenerationRequest.model
                 );
                 const revisionStepId = captureStep({
-                    stepKind: 'revise',
+                    stepKind: 'generate',
                     status: 'executed',
                     summary:
-                        'Revision step produced improved draft from assessment guidance.',
+                        'Generated refinement draft from assessment guidance.',
                     startedAtMs: revisionStartedAt,
                     finishedAtMs: revisionFinishedAt,
                     model: revisionUsage.model,
@@ -1688,27 +1891,34 @@ export const runBoundedReviewWorkflow = async ({
                     parentStepId: reviewStepId,
                     attempt: iteration,
                     signals: {
-                        reviewReason:
-                            latestReviewReason ??
-                            'No additional guidance provided.',
+                        refinementApplied: true,
+                        refinementSourceStepId: reviewStepId,
+                        appliedModuleCount: selectedReviewModuleIds.length,
+                        ...(selectedReviewModuleIds.length > 0 && {
+                            appliedModuleIdsCsv:
+                                selectedReviewModuleIds.join(','),
+                        }),
+                        ...(reentryAttempt > 0 && {
+                            reentryAttempt,
+                        }),
                     },
                 });
                 workflowState = applyStepExecutionToState(
                     workflowState,
-                    'revise',
+                    'generate',
                     revisionUsage.totalTokens,
                     0,
-                    1
+                    0
                 );
                 draftResult = revisionResult;
                 draftParentStepId = revisionStepId;
             } catch {
                 const revisionFinishedAt = Date.now();
                 captureStep({
-                    stepKind: 'revise',
+                    stepKind: 'generate',
                     status: 'failed',
                     summary:
-                        'Revision step failed; fail-open returned latest successful draft.',
+                        'Refinement generation failed; fail-open returned latest successful draft.',
                     reasonCode: 'generation_runtime_error',
                     startedAtMs: revisionStartedAt,
                     finishedAtMs: revisionFinishedAt,
@@ -1717,10 +1927,10 @@ export const runBoundedReviewWorkflow = async ({
                 });
                 workflowState = applyStepExecutionToState(
                     workflowState,
-                    'revise',
+                    'generate',
                     0,
                     0,
-                    1
+                    0
                 );
                 terminationReason = 'executor_error_fail_open';
                 workflowStatus = 'degraded';

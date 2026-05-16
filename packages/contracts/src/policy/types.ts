@@ -447,6 +447,12 @@ export type BoundedReviewAssessDecision =
 export type BoundedReviewAssessSignals = {
     reviewDecision: BoundedReviewAssessDecision;
     reviewReason: string;
+    refinementRequested?: boolean;
+    moduleHintCount?: number;
+    moduleHintIdsCsv?: string;
+    lengthConcern?: 'too_long' | 'ok';
+    styleConcern?: 'too_stiff' | 'ok';
+    evidenceConcern?: 'needs_caution' | 'ok';
 };
 
 export type StepOutcome = {
