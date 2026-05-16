@@ -857,7 +857,7 @@ test('buildResponseMetadata defaults reviewRuntime to not_reviewed when no revie
     });
 });
 
-test('buildResponseMetadata sets reviewRuntime to reviewed_no_revision when assess executed without revise', () => {
+test('buildResponseMetadata sets reviewRuntime to reviewed_no_revision when assess executed without refinement-applied generate', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -909,7 +909,7 @@ test('buildResponseMetadata sets reviewRuntime to reviewed_no_revision when asse
     });
 });
 
-test('buildResponseMetadata sets reviewRuntime to revised when revise step executed', () => {
+test('buildResponseMetadata sets reviewRuntime to revised when refinement-applied generate step executed', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata(),
         baseRuntimeContext({
@@ -952,15 +952,19 @@ test('buildResponseMetadata sets reviewRuntime to revised when revise step execu
                         },
                     },
                     {
-                        stepId: 'step_revise_1',
+                        stepId: 'step_generate_2',
                         attempt: 1,
-                        stepKind: 'revise',
+                        stepKind: 'generate',
                         startedAt: '2026-04-22T00:00:00.022Z',
                         finishedAt: '2026-04-22T00:00:00.032Z',
                         durationMs: 10,
                         outcome: {
                             status: 'executed',
-                            summary: 'Revision step produced improved draft.',
+                            summary: 'Generated refinement draft.',
+                            signals: {
+                                refinementApplied: true,
+                                refinementSourceStepId: 'step_assess_1',
+                            },
                         },
                     },
                 ],
@@ -970,6 +974,59 @@ test('buildResponseMetadata sets reviewRuntime to revised when revise step execu
 
     assert.deepEqual(metadata.reviewRuntime, {
         label: 'revised',
+    });
+});
+
+test('buildResponseMetadata does not mark revised when assess requested refinement without refinement-applied generate', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            workflow: {
+                workflowId: 'wf_2b',
+                workflowName: 'message_reviewed',
+                status: 'degraded',
+                terminationReason: 'transition_blocked_by_policy',
+                stepCount: 2,
+                maxSteps: 6,
+                maxDurationMs: 15000,
+                steps: [
+                    {
+                        stepId: 'step_generate_1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: '2026-04-22T00:00:00.000Z',
+                        finishedAt: '2026-04-22T00:00:00.010Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated initial draft response.',
+                        },
+                    },
+                    {
+                        stepId: 'step_assess_1',
+                        attempt: 1,
+                        stepKind: 'assess',
+                        startedAt: '2026-04-22T00:00:00.011Z',
+                        finishedAt: '2026-04-22T00:00:00.021Z',
+                        durationMs: 10,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Assessment step evaluated draft quality.',
+                            signals: {
+                                reviewDecision: 'revise',
+                                reviewReason:
+                                    'One revision improves specificity.',
+                                refinementRequested: true,
+                            },
+                        },
+                    },
+                ],
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.reviewRuntime, {
+        label: 'reviewed_no_revision',
     });
 });
 

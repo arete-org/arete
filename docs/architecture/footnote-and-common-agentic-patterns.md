@@ -15,7 +15,7 @@ Use it like this:
 
 - Routing -> workflow behavior preset selection and workflow resolution
 - Planning -> bounded planner step
-- Reflection -> review / revise path, plus future bounded TRACE refinement
+- Reflection -> review / refinement path, plus future bounded TRACE refinement
 - Tool use -> Execution Contract-limited tool execution
 - Memory -> planned, bounded by provenance and governance
 - MCP -> protocol boundary for capability access, not policy authority
@@ -35,7 +35,7 @@ shared reviewed workflow shape for concrete execution.
 Current examples:
 
 - behavior preset: `balanced`, `grounded`
-- workflow shape: reviewed (`generate -> assess -> revise`)
+- workflow shape: reviewed (`generate -> assess -> planner re-entry -> generate`)
 
 **What constraints Footnote adds**
 
@@ -84,7 +84,7 @@ systems.
 
 **What Footnote calls it**
 
-Today Footnote has a review / revise path in the shared reviewed workflow.
+Today Footnote has an engine-bounded review / refinement path in the shared reviewed workflow.
 Future TRACE refinement may add another bounded refinement seam, but still under
 Footnote control.
 

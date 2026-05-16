@@ -302,3 +302,59 @@ chat:
                   - Low: everyday or low-stakes requests with low safety concern.
                   - Medium: sensitive or ambiguous topics that need elevated safety care.
                   - High: disallowed, harmful, or extremely sensitive content requiring refusal or escalation.
+    review:
+        assess:
+            system:
+                description: >-
+                    Structured assess prompt for bounded review decisions in
+                    reviewed workflow runs.
+                template: |-
+                    Return plain JSON only.
+                    Required JSON shape:
+                    {
+                      "reviewDecision": "finalize" | "revise",
+                      "reviewReason": "one short sentence",
+                      "revisionInstruction"?: "required when reviewDecision is revise; concise instruction for follow-up generation",
+                      "moduleHints"?: ["optional review module ids"],
+                      "concerns"?: {
+                        "length"?: "too_long" | "ok",
+                        "style"?: "too_stiff" | "ok",
+                        "evidence"?: "needs_caution" | "ok"
+                      }
+                    }
+                    Keep all strings concise and specific.
+                    Choose "finalize" only when the draft is ready to send as-is.
+                    Choose "revise" only when one additional refinement pass would materially improve the answer.
+                    Do not include markdown or extra top-level keys.
+        refine:
+            system:
+                description: >-
+                    Base guidance for refinement generation after assess
+                    requests revision.
+                template: |-
+                    Revise the prior draft using the assessment guidance while preserving factual grounding, provenance boundaries, and user intent.
+                    Make only the changes needed to address the revision instruction.
+        module:
+            concise_answer:
+                assess:
+                    description: >-
+                        Review module focused on verbosity and unnecessary
+                        repetition.
+                    template: |-
+                        Check whether the draft is longer than needed for the user request. Favor concise wording when clarity is preserved.
+                refine:
+                    description: >-
+                        Refinement module for shortening overlong responses.
+                    template: |-
+                        Trim unnecessary framing, repetition, and filler. Preserve the key answer, constraints, and citations.
+            natural_human_style:
+                assess:
+                    description: >-
+                        Review module focused on avoiding stiff AI-like prose.
+                    template: |-
+                        Check for repetitive contrast patterns, stiff summary language, over-polished phrasing, or unnatural cadence.
+                refine:
+                    description: >-
+                        Refinement module for natural direct writing style.
+                    template: |-
+                        Prefer direct natural wording. Avoid repetitive contrast patterns, stiff summary phrasing, and over-polished tone.

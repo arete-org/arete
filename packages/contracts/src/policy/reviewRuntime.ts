@@ -65,8 +65,8 @@ const hasInternalGenerationFallbackSignal = (
  *
  * Label semantics:
  * - not_reviewed: no Reviewed pass was observed.
- * - reviewed_no_revision: assess step executed and no revise step executed.
- * - revised: review pass executed and at least one revise step executed.
+ * - reviewed_no_revision: assess step executed and no refinement-applied generate step executed.
+ * - revised: review pass executed and at least one refinement-applied generate step executed.
  * - skipped: review pass was expected but did not execute.
  * - fallback: fail-open/fallback path was explicitly recorded.
  */
@@ -83,10 +83,12 @@ export const deriveReviewRuntimeSummary = (
             (step) =>
                 step.stepKind === 'assess' && step.outcome.status === 'skipped'
         ) ?? false;
-    const reviseExecuted =
+    const refinementGenerateExecuted =
         metadata.workflow?.steps?.some(
             (step) =>
-                step.stepKind === 'revise' && step.outcome.status === 'executed'
+                step.stepKind === 'generate' &&
+                step.outcome.status === 'executed' &&
+                step.outcome.signals?.refinementApplied === true
         ) ?? false;
     const fallbackObserved =
         metadata.workflow?.terminationReason === 'executor_error_fail_open' ||
@@ -97,7 +99,7 @@ export const deriveReviewRuntimeSummary = (
         return { label: 'fallback' };
     }
 
-    if (reviseExecuted) {
+    if (refinementGenerateExecuted) {
         return { label: 'revised' };
     }
 

@@ -33,7 +33,7 @@ type BuiltinWorkflowModeId = WorkflowModeId;
 
 /**
  * Workflow profiles are concrete executable shapes:
- * - reviewed (`reviewed`): generate + assess + revise
+ * - reviewed (`reviewed`): generate + assess + refinement re-entry + generate
  *
  * Registry ownership here is assembly glue only:
  * - Mode resolution decides run kind and default posture.
@@ -74,6 +74,7 @@ const REVIEWED_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
     optionalExtensions: {
         reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
         revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
+        reviewModuleIds: ['natural_human_style', 'concise_answer'],
     },
     requiredHooks: {
         initialStep: 'generate',

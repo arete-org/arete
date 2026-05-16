@@ -8,7 +8,7 @@ detail once you have the main runtime shape in mind.
 ## Important Concepts
 
 1. [Workflow](./workflow.md): read this next for the
-   current workflow and planner model, including mode, profile, review/revise,
+   current workflow and planner model, including mode, profile, review/refinement,
    planner boundaries, workflow-facing wording, placement, and provenance
    presentation boundaries.
 2. [Answer Posture And Control Influence](./answer-posture-and-control-influence.md):

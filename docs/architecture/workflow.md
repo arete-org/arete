@@ -61,9 +61,9 @@ After that, the backend resolves a behavior preset:
 
 Both presets use the same reviewed workflow step pattern:
 
-| Workflow shape | Purpose                     | Main steps                     |
-| -------------- | --------------------------- | ------------------------------ |
-| `reviewed`     | reviewed message generation | `generate -> assess -> revise` |
+| Workflow shape | Purpose                     | Main steps                                           |
+| -------------- | --------------------------- | ---------------------------------------------------- |
+| `reviewed`     | reviewed message generation | `generate -> assess -> planner re-entry -> generate` |
 
 The difference between `balanced` and `grounded` is not the step pattern. The
 difference is the contract preset, limits, and evidence posture selected for
@@ -123,7 +123,7 @@ The current chat path looks like this:
     - workflow runs `plan` first through the injected planner executor
     - workflow calls `PlanContinuationBuilder` to choose `terminal_action` or `continue_message`
     - context-step and generation run only after planner application
-    - `balanced` and `grounded` both use `generate -> assess -> revise`
+    - `balanced` and `grounded` both use engine-bounded refinement after `assess`
 6. Response metadata records preset outcome, planner influence, workflow lineage, cost,
    and trace or provenance fields.
 
@@ -134,7 +134,7 @@ Planner step lineage now comes from workflow execution as the canonical source.
 The reviewed workflow runs a bounded review path:
 
 ```text
-generate -> assess -> revise
+generate -> assess(refinementRequested?) -> planner re-entry(advisory) -> generate(refinementApplied?) -> assess(finalize)
 ```
 
 The `generate` step produces the current draft.
@@ -143,7 +143,8 @@ The `assess` step returns `reviewDecision` and `reviewReason`.
 
 `reviewDecision` is either `finalize` or `revise`.
 
-If the decision is `revise`, the `revise` step produces the next draft.
+If the decision is `revise`, the engine may run planner re-entry and then a
+follow-up `generate` step for refinement.
 
 The loop stops when it reaches a final answer, hits a limit, or fails open.
 
@@ -202,7 +203,7 @@ Receipt text should stay short:
 - `Planner fallback`
 - `Grounding evidence was not available`
 
-Do not show raw workflow chains like `generate -> assess -> revise` under
+Do not show raw workflow chains under
 every answer. That belongs in architecture docs or trace detail, not in the
 normal reading path.
 
@@ -291,7 +292,7 @@ The default limits define hard caps such as `maxWorkflowSteps`, `maxToolCalls`,
 `maxPlanCycles`, `maxReviewCycles`, `maxDeliberationCalls` (compatibility
 field), `maxTokensTotal`, and `maxDurationMs`.
 
-Optional profile extensions can support review and revision behavior, but they
+Optional profile extensions can support review and refinement behavior, but they
 cannot override required no-generation classification, disposition, or
 termination-reason mapping.
 
@@ -303,14 +304,14 @@ Preset chooses run posture. Workflow shape chooses the step pattern.
 
 Use this split when ownership is unclear:
 
-| Concern             | Engine core                                                                          | Workflow profile                                                             | Adapters and callers                                                  |
-| ------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Step legality       | owns the canonical legality check before execution                                   | declares intended flow and policy toggles                                    | supplies policy, but must not bypass legality checks                  |
-| Limits              | owns hard-stop checks and stop-reason mapping                                        | declares default budgets within the shared limits model                      | passes config and surfaces the final result                           |
-| Workflow state      | owns step count, token totals, current step, and lineage progression                 | declares expected step shape                                                 | treats engine-produced workflow state as authoritative                |
-| Step execution      | owns concrete step execution today (`generate`, `assess`, `revise`) and step records | defines step-specific semantics such as review parsing                       | builds requests and calls runtimes or providers                       |
-| Termination reasons | owns canonical termination reasons                                                   | can request stop, but cannot invent new canonical reasons                    | persists and returns engine-assigned reasons unchanged                |
-| Fail-open behavior  | owns degraded fail-open workflow behavior                                            | can define recoverable profile behavior, but not canonical fail-open meaning | must not block the user response on telemetry or persistence failures |
+| Concern             | Engine core                                                                                       | Workflow profile                                                             | Adapters and callers                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Step legality       | owns the canonical legality check before execution                                                | declares intended flow and policy toggles                                    | supplies policy, but must not bypass legality checks                  |
+| Limits              | owns hard-stop checks and stop-reason mapping                                                     | declares default budgets within the shared limits model                      | passes config and surfaces the final result                           |
+| Workflow state      | owns step count, token totals, current step, and lineage progression                              | declares expected step shape                                                 | treats engine-produced workflow state as authoritative                |
+| Step execution      | owns concrete step execution today (`generate`, `assess`, refinement `generate`) and step records | defines step-specific semantics such as review parsing                       | builds requests and calls runtimes or providers                       |
+| Termination reasons | owns canonical termination reasons                                                                | can request stop, but cannot invent new canonical reasons                    | persists and returns engine-assigned reasons unchanged                |
+| Fail-open behavior  | owns degraded fail-open workflow behavior                                                         | can define recoverable profile behavior, but not canonical fail-open meaning | must not block the user response on telemetry or persistence failures |
 
 If a workflow bug looks like "who decided that?", start with this table.
 
@@ -323,19 +324,26 @@ packages/backend/src/services/workflowEngine.ts
 ```
 
 It handles transition checks, hard limits, bounded
-`generate -> assess -> revise` execution, termination reasons, fail-open
+review/refinement execution, termination reasons, fail-open
 handling, `WorkflowRecord` output, and `StepRecord` output.
 
 The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
-`revise`, and `finalize`.
+and `finalize`.
+
+Current first-slice review module posture:
+
+- Supported modules are exactly `natural_human_style` and `concise_answer`.
+- Module wording comes from shared prompts YAML fragments.
+- Module selection is backend/profile-selected only.
+- Planner hints and user-facing module controls are not active in this slice.
 
 ### Current ownership
 
-| Component          | Responsibility                                                                                                    |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `workflowEngine`   | Owns reviewed workflow steps (`generate`, `assess`, `revise`) and injected context-step execution.           |
+| Component          | Responsibility                                                                                                       |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `workflowEngine`   | Owns reviewed workflow steps (`generate`, `assess`, refinement `generate`) and injected context-step execution.      |
 | `chatOrchestrator` | Owns deterministic bootstrap (mode/profile/contract), planner policy application seam, and tool intent construction. |
-| `chatService`      | Invokes workflowEngine and handles context-step short-circuit responses (clarification, failure).              |
+| `chatService`      | Invokes workflowEngine and handles context-step short-circuit responses (clarification, failure).                    |
 
 ### Context-step executor pattern
 

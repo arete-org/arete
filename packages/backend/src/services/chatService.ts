@@ -79,6 +79,7 @@ import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
+import { sanitizeReviewModuleIds } from './reviewModules.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
@@ -932,6 +933,9 @@ export const createChatService = ({
         const effectivePlannerStepExecutor = plannerStepExecutor;
         if (workflowExecutionEnabled) {
             const workflowPolicy: WorkflowPolicy = workflowProfile.policy;
+            const sanitizedReviewModuleIds = sanitizeReviewModuleIds(
+                workflowProfile.optionalExtensions?.reviewModuleIds
+            );
             const trustGraphContextStepRequest =
                 buildTrustGraphContextStepRequest(
                     executionContractTrustGraphContext
@@ -967,6 +971,19 @@ export const createChatService = ({
                     executionLimits: workflowExecutionLimits,
                 },
                 workflowPolicy,
+                ...(workflowProfile.optionalExtensions?.reviewDecisionPrompt !==
+                    undefined && {
+                    reviewDecisionPrompt:
+                        workflowProfile.optionalExtensions.reviewDecisionPrompt,
+                }),
+                ...(workflowProfile.optionalExtensions?.revisionPromptPrefix !==
+                    undefined && {
+                    revisionPromptPrefix:
+                        workflowProfile.optionalExtensions.revisionPromptPrefix,
+                }),
+                ...(sanitizedReviewModuleIds.length > 0 && {
+                    reviewModuleIds: sanitizedReviewModuleIds,
+                }),
                 captureUsage: (result, requestedModel) =>
                     recordUsageForStep(result, requestedModel),
                 plannerStepRequest: effectivePlannerStepRequest,
