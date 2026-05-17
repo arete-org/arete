@@ -58,6 +58,11 @@ import {
 } from './workflowEngine/limits.js';
 import { buildPlannerStepRecord } from './workflowEngine/plannerStepRecord.js';
 import { executeReviewLoop } from './workflowEngine/reviewLoopExecutor.js';
+import {
+    injectContextMessagesIntoPrompt,
+    selectContextStepExecutor,
+    selectFollowUpSearchHint,
+} from './workflowEngine/contextStepHelpers.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -176,12 +181,6 @@ export type RunBoundedReviewWorkflowResult =
 export type ContextStepRequest = ContractContextStepRequest;
 
 export type ContextStepResult = ContractContextStepResult;
-
-type FollowUpSearchHint = {
-    query: string;
-    intent: 'repo_explainer' | 'current_facts';
-    priority: 'low' | 'medium' | 'high';
-};
 
 export type ContextStepExecutorInput = {
     request: ContextStepRequest;
@@ -590,127 +589,16 @@ export const runBoundedReviewWorkflow = async ({
         shouldStop = true;
     }
 
-    const injectContextMessagesIntoPrompt = (
-        baseMessages: RuntimeMessage[],
-        contextMessages: string[] | undefined
-    ): RuntimeMessage[] => {
-        if (!contextMessages || contextMessages.length === 0) {
-            return baseMessages;
-        }
-
-        const normalizedContextMessages = contextMessages
-            .map((message) => message.trim())
-            .filter((message) => message.length > 0)
-            .map(
-                (message): RuntimeMessage => ({
-                    role: 'system',
-                    content: message,
-                })
-            );
-        if (normalizedContextMessages.length === 0) {
-            return baseMessages;
-        }
-
-        const plannerMessageIndex = baseMessages.findIndex(
-            (message) =>
-                message.role === 'system' &&
-                message.content.includes('// BEGIN Planner Output')
-        );
-        if (plannerMessageIndex < 0) {
-            return [...baseMessages, ...normalizedContextMessages];
-        }
-
-        return [
-            ...baseMessages.slice(0, plannerMessageIndex),
-            ...normalizedContextMessages,
-            ...baseMessages.slice(plannerMessageIndex),
-        ];
-    };
-
-    /**
-     * Resolve executor authority per context integration.
-     * Registry mapping is authoritative. Fallback executor is used only when
-     * no integration-specific executor is registered.
-     */
-    const selectContextStepExecutor = (
-        request: ContextStepRequest
-    ): ContextStepExecutor | undefined => {
-        const registryExecutor =
-            contextStepExecutorRegistry?.[request.integrationName];
-        if (registryExecutor !== undefined) {
-            return registryExecutor;
-        }
-        return contextStepExecutor;
-    };
-
-    const selectFollowUpSearchHint = (
-        results: ContextStepResult[]
-    ): FollowUpSearchHint | undefined => {
-        if (!openAiNativeSearchFromHintsEnabled) {
-            return undefined;
-        }
-        if (effectiveGenerationRequest.provider !== 'openai') {
-            return undefined;
-        }
-        const webSearchStep = results.find(
-            (result) => result.integrationContext?.kind === 'web_search'
-        );
-        const payload = webSearchStep?.integrationContext?.payload;
-        if (
-            payload === undefined ||
-            payload === null ||
-            typeof payload !== 'object' ||
-            Array.isArray(payload)
-        ) {
-            return undefined;
-        }
-        const rawHints = (payload as { searchHints?: unknown }).searchHints;
-        if (!Array.isArray(rawHints)) {
-            return undefined;
-        }
-        const hints = rawHints
-            .map((hint) => {
-                if (
-                    hint === null ||
-                    typeof hint !== 'object' ||
-                    Array.isArray(hint)
-                ) {
-                    return undefined;
-                }
-                const hintRecord = hint as Record<string, unknown>;
-                const query =
-                    typeof hintRecord.query === 'string'
-                        ? hintRecord.query.trim()
-                        : '';
-                if (query.length === 0) {
-                    return undefined;
-                }
-                const intent =
-                    hintRecord.intent === 'repo_explainer'
-                        ? 'repo_explainer'
-                        : 'current_facts';
-                const priority =
-                    hintRecord.priority === 'high' ||
-                    hintRecord.priority === 'medium' ||
-                    hintRecord.priority === 'low'
-                        ? hintRecord.priority
-                        : 'medium';
-                return { query, intent, priority } satisfies FollowUpSearchHint;
-            })
-            .filter((hint): hint is FollowUpSearchHint => hint !== undefined)
-            .sort((left, right) => {
-                const weight = (priority: FollowUpSearchHint['priority']) =>
-                    priority === 'high' ? 3 : priority === 'medium' ? 2 : 1;
-                return weight(right.priority) - weight(left.priority);
-            });
-        return hints[0];
-    };
-
     const requestedContextSteps = (effectiveContextStepRequests ?? []).filter(
         (request) => request.requested === true && request.eligible
     );
     const executableContextSteps = requestedContextSteps.filter(
-        (request) => selectContextStepExecutor(request) !== undefined
+        (request) =>
+            selectContextStepExecutor(
+                request,
+                contextStepExecutor,
+                contextStepExecutorRegistry
+            ) !== undefined
     );
     if (!shouldStop && executableContextSteps.length > 0) {
         if (
@@ -747,7 +635,11 @@ export const runBoundedReviewWorkflow = async ({
                             };
                         }
                         reservedToolCallCount += 1;
-                        const executor = selectContextStepExecutor(request);
+                        const executor = selectContextStepExecutor(
+                            request,
+                            contextStepExecutor,
+                            contextStepExecutorRegistry
+                        );
                         if (executor === undefined) {
                             return {
                                 request,
@@ -938,9 +830,11 @@ export const runBoundedReviewWorkflow = async ({
                         contextStepResult.contextMessages ?? []
                 )
             );
-            const selectedFollowUpSearchHint = selectFollowUpSearchHint(
-                executedContextStepResults
-            );
+            const selectedFollowUpSearchHint = selectFollowUpSearchHint({
+                results: executedContextStepResults,
+                openAiNativeSearchFromHintsEnabled,
+                effectiveGenerationRequest,
+            });
             try {
                 draftResult = await generationRuntime.generate({
                     ...effectiveGenerationRequest,
@@ -1053,7 +947,7 @@ export const runBoundedReviewWorkflow = async ({
         effectiveContextEnvelope,
         effectiveRevisionPromptPrefix,
         stepCounterRef: { value: stepCounter },
-        workflowStepsRef: { value: workflowSteps as unknown[] },
+        workflowStepsRef: { value: workflowSteps },
         planContinuation,
     });
     stepCounter = reviewLoopResult.stepCounter;
@@ -1062,7 +956,6 @@ export const runBoundedReviewWorkflow = async ({
     workflowStatus = reviewLoopResult.workflowStatus;
     workflowState = reviewLoopResult.workflowState;
     exhaustedLimitKey = reviewLoopResult.exhaustedLimitKey;
-    effectiveGenerationRequest = reviewLoopResult.effectiveGenerationRequest;
     planContinuation = reviewLoopResult.planContinuation;
 
     const workflowLineage: WorkflowRecord = {

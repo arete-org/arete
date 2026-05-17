@@ -6,8 +6,8 @@
  * @footnote-ethics: high - Review loop controls bounded deliberation and safety posture.
  */
 import type {
-    BoundedReviewAssessSignals,
     ExecutionReasonCode,
+    StepRecord,
     WorkflowTerminationReason,
 } from '@footnote/contracts/policy';
 import type {
@@ -32,6 +32,7 @@ import type { ReviewDecision } from './reviewDecision.js';
 import { isWorkflowTransitionAllowed } from './transitions.js';
 import { applyStepExecutionToState, type WorkflowState } from './state.js';
 import type { WorkflowRunPolicy } from '../workflowEngine.js';
+import { buildAssessSignals } from './reviewLoopSignals.js';
 
 type CaptureStep = (input: {
     stepKind: 'plan' | 'tool' | 'generate' | 'assess' | 'revise' | 'finalize';
@@ -106,7 +107,7 @@ export const executeReviewLoop = async (ctx: {
     effectiveContextEnvelope: ConversationContextEnvelope;
     effectiveRevisionPromptPrefix: string;
     stepCounterRef: { value: number };
-    workflowStepsRef: { value: Array<unknown> };
+    workflowStepsRef: { value: StepRecord[] };
     planContinuation?: PlanContinuation;
 }): Promise<{
     stepCounter: number;
@@ -221,29 +222,7 @@ export const executeReviewLoop = async (ctx: {
                 shouldStop = true;
                 break;
             }
-            const assessSignals: BoundedReviewAssessSignals = {
-                reviewDecision: decision.reviewDecision,
-                reviewReason: decision.reviewReason,
-                ...(decision.reviewDecision === 'revise' && {
-                    refinementRequested: true,
-                }),
-                ...(decision.concerns?.length !== undefined && {
-                    lengthConcern: decision.concerns.length,
-                }),
-                ...(decision.concerns?.style !== undefined && {
-                    styleConcern: decision.concerns.style,
-                }),
-                ...(decision.concerns?.evidence !== undefined && {
-                    evidenceConcern: decision.concerns.evidence,
-                }),
-                ...(decision.moduleHints !== undefined && {
-                    moduleHintCount: decision.moduleHints.length,
-                }),
-                ...(decision.moduleHints !== undefined &&
-                    decision.moduleHints.length > 0 && {
-                        moduleHintIdsCsv: decision.moduleHints.join(','),
-                    }),
-            };
+            const assessSignals = buildAssessSignals(decision);
             const reviewStepId = ctx.captureStep({
                 stepKind: 'assess',
                 status: 'executed',
