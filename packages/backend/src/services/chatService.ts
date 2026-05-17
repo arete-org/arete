@@ -52,7 +52,7 @@ import {
     runBoundedReviewWorkflow,
     type ContextStepExecutor,
     type RunBoundedReviewWorkflowResult,
-    type WorkflowPolicy,
+    type WorkflowRunPolicy,
 } from './workflowEngine.js';
 import { createTrustGraphContextStepExecutor } from './contextIntegrations/trustgraph/index.js';
 import {
@@ -932,7 +932,7 @@ export const createChatService = ({
         const effectivePlannerStepRequest = plannerStepRequest;
         const effectivePlannerStepExecutor = plannerStepExecutor;
         if (workflowExecutionEnabled) {
-            const workflowPolicy: WorkflowPolicy = workflowProfile.policy;
+            const workflowPolicy: WorkflowRunPolicy = workflowProfile.policy;
             const sanitizedReviewModuleIds = sanitizeReviewModuleIds(
                 workflowProfile.optionalExtensions?.reviewModuleIds
             );

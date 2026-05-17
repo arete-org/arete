@@ -15,6 +15,7 @@ import type {
     WorkflowTerminationReason,
     WorkflowStepKind,
 } from '@footnote/contracts/policy';
+import type { ReviewDecision } from './workflowEngine/reviewDecision.js';
 
 /**
  * Stable workflow profile identifier.
@@ -288,18 +289,8 @@ type WorkflowProfileRuntimeHooks = {
             reasonCode: WorkflowNoGenerationReasonCode
         ) => WorkflowNoGenerationReasonCode;
     };
-    parseReviewDecision?: (text: string) => {
-        reviewDecision: 'finalize' | 'revise';
-        reviewReason: string;
-        revisionInstruction?: string;
-        moduleHints?: string[];
-        concerns?: {
-            length?: 'too_long' | 'ok';
-            style?: 'too_stiff' | 'ok';
-            evidence?: 'needs_caution' | 'ok';
-        };
-    } | null;
+    parseReviewDecision?: (text: string) => ReviewDecision | null;
 };
 
-export type RuntimeWorkflowProfile = WorkflowProfileContract &
+export type WorkflowProfileRuntime = WorkflowProfileContract &
     WorkflowProfileRuntimeHooks;

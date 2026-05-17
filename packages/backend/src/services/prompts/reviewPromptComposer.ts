@@ -45,6 +45,13 @@ const renderReviewModulePromptBundle = (input: {
     return renderPromptBundle(input.registry, promptKeys).trim();
 };
 
+/**
+ * Compose the assess system prompt from a base prompt override or registry default plus
+ * allowlisted review-module fragments in deterministic order.
+ * Authority note: caller-provided `basePromptOverride` text wins for wording, but module IDs
+ * are always sanitized against the backend registry; this function does not decide legality.
+ * Returns a non-empty prompt string when defaults exist and the exact applied module IDs.
+ */
 export const composeAssessPrompt = (input: {
     moduleIds?: readonly string[];
     basePromptOverride?: string;
@@ -74,6 +81,13 @@ export const composeAssessPrompt = (input: {
     };
 };
 
+/**
+ * Compose refinement guidance from registry defaults, optional revision prefix, bounded
+ * revision instruction text, and sanitized allowlisted module fragments.
+ * Authority note: backend registry controls which module IDs can render; this function only
+ * assembles bounded wording and may trim overlong revision instructions for fail-open safety.
+ * Returns the composed prompt string and deterministic applied module IDs.
+ */
 export const composeRefinementPrompt = (input: {
     revisionPromptPrefix?: string;
     revisionInstruction?: string;

@@ -8,25 +8,15 @@
 import type { WorkflowStepKind } from '@footnote/contracts/policy';
 import type { WorkflowTerminationReason } from '@footnote/contracts/policy';
 import type {
-    BoundedReviewAssessSignals,
     ContextStepRequest as ContractContextStepRequest,
     ContextStepResult as ContractContextStepResult,
-    ExecutionStatus,
-    ToolExecutionContext,
-    PlannerExecutionApplyOutcome,
-    PlannerExecutionContractType,
-    PlannerExecutionPurpose,
     ExecutionReasonCode,
+    ToolExecutionContext,
     StepRecord,
-    WorkflowEffectiveLimit,
     WorkflowLimitKey,
-    WorkflowLimitStop,
     WorkflowRecord,
 } from '@footnote/contracts/policy';
-import type {
-    WorkflowProfileExecutionLimitsContract,
-    WorkflowProfilePolicyContract,
-} from './workflowProfileContract.js';
+import type { WorkflowProfilePolicyContract } from './workflowProfileContract.js';
 import type {
     GenerationRequest,
     GenerationResult,
@@ -48,9 +38,26 @@ import {
     type ReviewModuleId,
 } from './reviewModules.js';
 import {
-    composeAssessPrompt,
-    composeRefinementPrompt,
-} from './prompts/reviewPromptComposer.js';
+    DEFAULT_REVIEW_DECISION_PROMPT,
+    DEFAULT_REVISION_PROMPT_PREFIX,
+    parseReviewDecisionOutput,
+    type ReviewDecision,
+} from './workflowEngine/reviewDecision.js';
+import { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
+import {
+    applyStepExecutionToState,
+    createInitialWorkflowState,
+} from './workflowEngine/state.js';
+import {
+    resolveExecutionLimits,
+    buildExecutionLimitStop,
+    checkExecutionLimits,
+    mapLimitExhaustionToTerminationReason,
+    UNBOUNDED_EXECUTION_LIMIT,
+    type ExecutionLimits,
+} from './workflowEngine/limits.js';
+import { buildPlannerStepRecord } from './workflowEngine/plannerStepRecord.js';
+import { executeReviewLoop } from './workflowEngine/reviewLoopExecutor.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -58,140 +65,22 @@ import {
  * This alias keeps existing engine call sites stable while making
  * `WorkflowProfilePolicyContract` the single source of truth for shape.
  */
-export type WorkflowPolicy = WorkflowProfilePolicyContract;
+export type WorkflowRunPolicy = WorkflowProfilePolicyContract;
 
 /**
  * Canonical execution-limits surface used by workflow runtime checks.
  */
-export type ExecutionLimits = WorkflowProfileExecutionLimitsContract;
-
-export type ExhaustedLimit = WorkflowLimitKey;
-
-export type WorkflowState = {
-    workflowId: string;
-    workflowName: string;
-    startedAtMs: number;
-    currentStepKind: WorkflowStepKind | null;
-    stepCount: number;
-    toolCallCount: number;
-    planCallCount: number;
-    reviewCallCount: number;
-    deliberationCallCount: number;
-    totalTokens: number;
-};
-
-export type ReviewDecision = {
-    reviewDecision: 'finalize' | 'revise';
-    reviewReason: string;
-    revisionInstruction?: string;
-    moduleHints?: string[];
-    concerns?: {
-        length?: 'too_long' | 'ok';
-        style?: 'too_stiff' | 'ok';
-        evidence?: 'needs_caution' | 'ok';
-    };
-};
-
-export const DEFAULT_REVIEW_DECISION_PROMPT = `Return plain JSON only.
-Schema:
-{
-  "reviewDecision": "finalize" | "revise",
-  "reviewReason": "one short sentence",
-  "revisionInstruction": "required when reviewDecision is revise",
-  "moduleHints": ["optional review module ids"],
-  "concerns": {
-    "length": "too_long" | "ok",
-    "style": "too_stiff" | "ok",
-    "evidence": "needs_caution" | "ok"
-  }
-}
-Choose "finalize" when the draft is complete, accurate, and ready.
-Choose "revise" only when one additional revision would materially improve quality.
-Provide concise fields and keep revisionInstruction specific and short.
-Do not include markdown or extra keys.`;
-
-export const DEFAULT_REVISION_PROMPT_PREFIX =
-    'Revise the prior draft using the review guidance while preserving factual grounding and provenance boundaries.';
-
-export const parseReviewDecisionText = (
-    text: string
-): ReviewDecision | null => {
-    const trimmed = text.trim();
-    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
-        return null;
-    }
-
-    try {
-        const parsed = JSON.parse(trimmed) as {
-            reviewDecision?: unknown;
-            reviewReason?: unknown;
-            revisionInstruction?: unknown;
-            moduleHints?: unknown;
-            concerns?: unknown;
-        };
-        if (
-            parsed.reviewDecision !== 'finalize' &&
-            parsed.reviewDecision !== 'revise'
-        ) {
-            return null;
-        }
-        if (
-            typeof parsed.reviewReason !== 'string' ||
-            parsed.reviewReason.trim().length === 0
-        ) {
-            return null;
-        }
-        const rawRevisionInstruction =
-            typeof parsed.revisionInstruction === 'string'
-                ? parsed.revisionInstruction.trim()
-                : undefined;
-        if (
-            parsed.reviewDecision === 'revise' &&
-            (!rawRevisionInstruction || rawRevisionInstruction.length === 0)
-        ) {
-            return null;
-        }
-        const moduleHints = Array.isArray(parsed.moduleHints)
-            ? sanitizeReviewModuleIds(
-                  parsed.moduleHints.filter(
-                      (hint): hint is string => typeof hint === 'string'
-                  )
-              )
-            : undefined;
-        const concerns =
-            parsed.concerns && typeof parsed.concerns === 'object'
-                ? (parsed.concerns as Record<string, unknown>)
-                : undefined;
-        const normalizedConcerns: NonNullable<ReviewDecision['concerns']> = {
-            ...(concerns?.length === 'too_long' || concerns?.length === 'ok'
-                ? { length: concerns.length as 'too_long' | 'ok' }
-                : {}),
-            ...(concerns?.style === 'too_stiff' || concerns?.style === 'ok'
-                ? { style: concerns.style as 'too_stiff' | 'ok' }
-                : {}),
-            ...(concerns?.evidence === 'needs_caution' ||
-            concerns?.evidence === 'ok'
-                ? {
-                      evidence: concerns.evidence as 'needs_caution' | 'ok',
-                  }
-                : {}),
-        };
-
-        return {
-            reviewDecision: parsed.reviewDecision,
-            reviewReason: parsed.reviewReason.trim(),
-            ...(rawRevisionInstruction !== undefined && {
-                revisionInstruction: rawRevisionInstruction,
-            }),
-            ...(moduleHints !== undefined && { moduleHints }),
-            ...(Object.keys(normalizedConcerns).length > 0 && {
-                concerns: normalizedConcerns,
-            }),
-        };
-    } catch {
-        return null;
-    }
-};
+export type {
+    ExecutionLimits,
+    ExhaustedExecutionLimit,
+} from './workflowEngine/limits.js';
+export type { WorkflowState } from './workflowEngine/state.js';
+export type { ReviewDecision } from './workflowEngine/reviewDecision.js';
+export {
+    DEFAULT_REVIEW_DECISION_PROMPT,
+    DEFAULT_REVISION_PROMPT_PREFIX,
+    parseReviewDecisionOutput,
+} from './workflowEngine/reviewDecision.js';
 
 export type BoundedReviewProfileStrategy = {
     reviewDecisionPrompt: string;
@@ -202,7 +91,7 @@ export type BoundedReviewProfileStrategy = {
 export const BOUNDED_REVIEW_PROFILE_STRATEGY: BoundedReviewProfileStrategy = {
     reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
     revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
-    parseReviewDecision: parseReviewDecisionText,
+    parseReviewDecision: parseReviewDecisionOutput,
 };
 
 export type ReviewWorkflowRuntimeConfig = {
@@ -231,7 +120,7 @@ export type RunBoundedReviewWorkflowInput = {
     contextEnvelope: ConversationContextEnvelope;
     generationStartedAtMs: number;
     workflowConfig: ReviewWorkflowRuntimeConfig;
-    workflowPolicy: WorkflowPolicy;
+    workflowPolicy: WorkflowRunPolicy;
     profileStrategy?: BoundedReviewProfileStrategy;
     reviewDecisionPrompt?: string;
     revisionPromptPrefix?: string;
@@ -313,474 +202,18 @@ type ContextStepExecutionOutcome = {
     startedAtMs: number;
     finishedAtMs: number;
 };
-
-const LEGAL_TRANSITIONS: Record<
-    WorkflowStepKind,
-    ReadonlySet<WorkflowStepKind>
-> = {
-    plan: new Set(['tool', 'generate', 'assess', 'finalize']),
-    tool: new Set(['tool', 'generate', 'assess', 'finalize']),
-    generate: new Set(['assess', 'finalize']),
-    assess: new Set(['plan', 'tool', 'generate', 'finalize']),
-    revise: new Set(['assess', 'generate', 'finalize']),
-    finalize: new Set([]),
-};
-
-const isStepKindAllowedByPolicy = (
-    stepKind: WorkflowStepKind,
-    policy: WorkflowPolicy
-): boolean => {
-    if (stepKind === 'plan') {
-        return policy.enablePlanning;
-    }
-    if (stepKind === 'tool') {
-        return policy.enableToolUse;
-    }
-    if (stepKind === 'assess') {
-        return policy.enableAssessment;
-    }
-    if (stepKind === 'revise') {
-        return policy.enableRevision;
-    }
-    if (stepKind === 'generate') {
-        return policy.enableGeneration !== false;
-    }
-
-    return true;
-};
-
-export const isTransitionAllowed = (
-    fromStepKind: WorkflowStepKind | null,
-    toStepKind: WorkflowStepKind,
-    policy: WorkflowPolicy
-): boolean => {
-    if (!isStepKindAllowedByPolicy(toStepKind, policy)) {
-        return false;
-    }
-
-    if (fromStepKind === null) {
-        return (
-            toStepKind === 'plan' ||
-            toStepKind === 'tool' ||
-            toStepKind === 'generate'
-        );
-    }
-
-    if (fromStepKind === 'plan' && toStepKind === 'plan') {
-        return policy.enableReplanning;
-    }
-
-    return LEGAL_TRANSITIONS[fromStepKind].has(toStepKind);
-};
-
-export const createInitialWorkflowState = (input: {
-    workflowId: string;
-    workflowName: string;
-    startedAtMs: number;
-}): WorkflowState => ({
-    workflowId: input.workflowId,
-    workflowName: input.workflowName,
-    startedAtMs: input.startedAtMs,
-    currentStepKind: null,
-    stepCount: 0,
-    toolCallCount: 0,
-    planCallCount: 0,
-    reviewCallCount: 0,
-    deliberationCallCount: 0,
-    totalTokens: 0,
-});
-
-export const cloneWorkflowState = (state: WorkflowState): WorkflowState => ({
-    ...state,
-});
-
-export const applyStepExecutionToState = (
-    state: WorkflowState,
-    stepKind: WorkflowStepKind,
-    usageTokens: number,
-    toolCallsExecuted: number,
-    deliberationCallsExecuted: number
-): WorkflowState => {
-    const sanitizeDelta = (value: number): number => {
-        if (!Number.isFinite(value)) {
-            return 0;
-        }
-
-        return Math.max(0, Math.floor(value));
-    };
-
-    const sanitizedUsageTokens = sanitizeDelta(usageTokens);
-    const sanitizedToolCallsExecuted = sanitizeDelta(toolCallsExecuted);
-    const sanitizedDeliberationCallsExecuted = sanitizeDelta(
-        deliberationCallsExecuted
-    );
-
-    return {
-        ...state,
-        currentStepKind: stepKind,
-        stepCount: state.stepCount + 1,
-        toolCallCount: state.toolCallCount + sanitizedToolCallsExecuted,
-        planCallCount: state.planCallCount + (stepKind === 'plan' ? 1 : 0),
-        reviewCallCount:
-            state.reviewCallCount + (stepKind === 'assess' ? 1 : 0),
-        deliberationCallCount:
-            state.deliberationCallCount + sanitizedDeliberationCallsExecuted,
-        totalTokens: state.totalTokens + sanitizedUsageTokens,
-    };
-};
-
-export const isWithinExecutionLimits = (
-    state: WorkflowState,
-    limits: ExecutionLimits,
-    nowMs: number,
-    nextStepKind?: WorkflowStepKind
-): {
-    withinLimits: boolean;
-    exhaustedBy?: ExhaustedLimit;
-} => {
-    if (state.stepCount >= limits.maxWorkflowSteps) {
-        return {
-            withinLimits: false,
-            exhaustedBy: 'maxWorkflowSteps',
-        };
-    }
-
-    const isNextStepTool = nextStepKind === 'tool';
-    if (isNextStepTool && state.toolCallCount >= limits.maxToolCalls) {
-        return {
-            withinLimits: false,
-            exhaustedBy: 'maxToolCalls',
-        };
-    }
-
-    const isNextStepDeliberative =
-        nextStepKind === 'plan' || nextStepKind === 'assess';
-    const maxPlanCycles =
-        limits.maxPlanCycles ?? Math.max(0, limits.maxDeliberationCalls);
-    const maxReviewCycles =
-        limits.maxReviewCycles ??
-        Math.max(0, limits.maxDeliberationCalls - maxPlanCycles);
-    if (nextStepKind === 'plan' && state.planCallCount >= maxPlanCycles) {
-        return {
-            withinLimits: false,
-            exhaustedBy: 'maxDeliberationCalls',
-        };
-    }
-    if (nextStepKind === 'assess' && state.reviewCallCount >= maxReviewCycles) {
-        return {
-            withinLimits: false,
-            exhaustedBy: 'maxDeliberationCalls',
-        };
-    }
-    if (
-        isNextStepDeliberative &&
-        state.deliberationCallCount >= limits.maxDeliberationCalls
-    ) {
-        return {
-            withinLimits: false,
-            exhaustedBy: 'maxDeliberationCalls',
-        };
-    }
-
-    if (state.totalTokens >= limits.maxTokensTotal) {
-        return {
-            withinLimits: false,
-            exhaustedBy: 'maxTokensTotal',
-        };
-    }
-
-    if (nowMs - state.startedAtMs >= limits.maxDurationMs) {
-        return {
-            withinLimits: false,
-            exhaustedBy: 'maxDurationMs',
-        };
-    }
-
-    return {
-        withinLimits: true,
-    };
-};
-
-export const mapExhaustedLimitToTerminationReason = (
-    exhaustedBy: ExhaustedLimit
-): WorkflowTerminationReason => {
-    if (exhaustedBy === 'maxWorkflowSteps') {
-        return 'budget_exhausted_steps';
-    }
-
-    if (exhaustedBy === 'maxTokensTotal') {
-        return 'budget_exhausted_tokens';
-    }
-
-    if (exhaustedBy === 'maxDurationMs') {
-        return 'budget_exhausted_time';
-    }
-
-    if (exhaustedBy === 'maxToolCalls') {
-        return 'max_tool_calls_reached';
-    }
-
-    if (exhaustedBy === 'maxDeliberationCalls') {
-        return 'max_deliberation_calls_reached';
-    }
-
-    const exhaustiveCheck: never = exhaustedBy;
-    throw new Error(
-        `Unsupported exhausted execution limit: ${exhaustiveCheck}`
-    );
-};
-
-const UNBOUNDED_LIMIT_SENTINEL = Number.MAX_SAFE_INTEGER;
-
-const isUnavailableExecutionLimit = (value: number): boolean =>
-    !Number.isFinite(value) || value >= UNBOUNDED_LIMIT_SENTINEL;
-
-const isExecutionLimitPathActive = (
-    key: WorkflowLimitKey,
-    policy: WorkflowPolicy
-): boolean => {
-    if (key === 'maxToolCalls') {
-        return policy.enableToolUse;
-    }
-
-    if (key === 'maxDeliberationCalls') {
-        return (
-            policy.enablePlanning ||
-            policy.enableAssessment ||
-            policy.enableRevision
-        );
-    }
-
-    return true;
-};
-
-const buildWorkflowEffectiveLimits = (input: {
-    limits: ExecutionLimits;
-    policy: WorkflowPolicy;
-    exhaustedLimitKey?: WorkflowLimitKey;
-}): WorkflowEffectiveLimit[] => {
-    const orderedKeys: WorkflowLimitKey[] = [
-        'maxWorkflowSteps',
-        'maxToolCalls',
-        'maxDeliberationCalls',
-        'maxTokensTotal',
-        'maxDurationMs',
-    ];
-
-    return orderedKeys.map((key) => {
-        const value = input.limits[key];
-        const limitAvailable = !isUnavailableExecutionLimit(value);
-        const pathActive = isExecutionLimitPathActive(key, input.policy);
-        const state = !limitAvailable
-            ? 'unavailable'
-            : !pathActive
-              ? 'configured_inactive'
-              : 'enforced';
-
-        return {
-            key,
-            state,
-            ...(limitAvailable && { value }),
-            stoppedRun: input.exhaustedLimitKey === key,
-        };
-    });
-};
-
-const buildWorkflowLimitStop = (input: {
-    terminationReason: WorkflowTerminationReason;
-    exhaustedLimitKey?: WorkflowLimitKey;
-}): WorkflowLimitStop => ({
-    stoppedByLimit: input.exhaustedLimitKey !== undefined,
-    terminationReason: input.terminationReason,
-    ...(input.exhaustedLimitKey !== undefined && {
-        exhaustedLimitKey: input.exhaustedLimitKey,
-    }),
-});
-
-type PlannerStepRecordSummary = {
-    status: ExecutionStatus;
-    reasonCode?: ExecutionReasonCode;
-    purpose: PlannerExecutionPurpose;
-    contractType: PlannerExecutionContractType;
-    applyOutcome: PlannerExecutionApplyOutcome;
-    durationMs?: number;
-    action?: 'message' | 'react' | 'ignore' | 'image';
-    modality?: 'text' | 'tts';
-    requestedCapabilityProfile?: string;
-    selectedCapabilityProfile?: string;
-    profileId?: string;
-    originalProfileId?: string;
-    effectiveProfileId?: string;
-    provider?: string;
-    model?: string;
-    usage?: StepRecord['usage'];
-    cost?: StepRecord['cost'];
-    mattered?: boolean;
-    matteredControlIds?: string[];
-};
-
-export type BuildPlannerStepRecordInput = {
-    stepId: string;
-    attempt: number;
-    parentStepId?: string;
-    startedAtMs?: number;
-    finishedAtMs: number;
-    summary: PlannerStepRecordSummary;
-};
-
-const toNonNegativeIntegerOrZero = (value: unknown): number => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return 0;
-    }
-
-    return Math.max(0, Math.floor(value));
-};
-
-const toNonNegativeNumberOrUndefined = (value: unknown): number | undefined => {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-        return undefined;
-    }
-
-    return value;
-};
-
-const isPlannerReasonCode = (
-    value: unknown
-): value is Extract<
-    ExecutionReasonCode,
-    'planner_runtime_error' | 'planner_invalid_output'
-> => value === 'planner_runtime_error' || value === 'planner_invalid_output';
-
-/**
- * Builds a planner-specific workflow step record for workflow lineage.
- *
- * Keep this mapper narrow and bounded to planner-safe summary fields only.
- * It must not become a generic workflow-step factory.
- */
-export const buildPlannerStepRecord = ({
-    stepId,
-    attempt,
-    parentStepId,
-    startedAtMs,
-    finishedAtMs,
-    summary,
-}: BuildPlannerStepRecordInput): StepRecord => {
-    const coercedFinishedAtMs = Number(finishedAtMs);
-    const normalizedFinishedAtMs = Number.isFinite(coercedFinishedAtMs)
-        ? Math.floor(coercedFinishedAtMs)
-        : Date.now();
-    const coercedStartedAtMs = Number(startedAtMs);
-    const normalizedDurationMs = Number.isFinite(coercedStartedAtMs)
-        ? Math.max(
-              0,
-              Math.floor(
-                  normalizedFinishedAtMs - Math.floor(coercedStartedAtMs)
-              )
-          )
-        : toNonNegativeIntegerOrZero(summary.durationMs);
-    const normalizedStartedAtMs = normalizedFinishedAtMs - normalizedDurationMs;
-    const normalizedAttempt = Number.isFinite(Number(attempt))
-        ? Math.max(1, Math.floor(Number(attempt)))
-        : 1;
-    const sanitizedReasonCode = isPlannerReasonCode(summary.reasonCode)
-        ? summary.reasonCode
-        : undefined;
-
-    const signals: NonNullable<StepRecord['outcome']['signals']> = {
-        applyOutcome: summary.applyOutcome,
-        purpose: summary.purpose,
-        contractType: summary.contractType,
-        ...(summary.action !== undefined && { action: summary.action }),
-        ...(summary.modality !== undefined && { modality: summary.modality }),
-        ...(summary.requestedCapabilityProfile !== undefined && {
-            requestedCapabilityProfile: summary.requestedCapabilityProfile,
-        }),
-        ...(summary.selectedCapabilityProfile !== undefined && {
-            selectedCapabilityProfile: summary.selectedCapabilityProfile,
-        }),
-        ...(summary.profileId !== undefined && {
-            profileId: summary.profileId,
-        }),
-        ...(summary.originalProfileId !== undefined && {
-            originalProfileId: summary.originalProfileId,
-        }),
-        ...(summary.effectiveProfileId !== undefined && {
-            effectiveProfileId: summary.effectiveProfileId,
-        }),
-        ...(summary.provider !== undefined && { provider: summary.provider }),
-        ...(summary.mattered !== undefined && { mattered: summary.mattered }),
-        ...(Array.isArray(summary.matteredControlIds) && {
-            matteredControlCount: summary.matteredControlIds.length,
-        }),
-    };
-
-    const usage = summary.usage
-        ? {
-              promptTokens: toNonNegativeNumberOrUndefined(
-                  summary.usage.promptTokens
-              ),
-              completionTokens: toNonNegativeNumberOrUndefined(
-                  summary.usage.completionTokens
-              ),
-              totalTokens: toNonNegativeNumberOrUndefined(
-                  summary.usage.totalTokens
-              ),
-          }
-        : undefined;
-    const hasUsage =
-        usage !== undefined &&
-        (usage.promptTokens !== undefined ||
-            usage.completionTokens !== undefined ||
-            usage.totalTokens !== undefined);
-    const validatedCostInput =
-        summary.cost !== undefined
-            ? toNonNegativeNumberOrUndefined(summary.cost.inputCostUsd)
-            : undefined;
-    const validatedCostOutput =
-        summary.cost !== undefined
-            ? toNonNegativeNumberOrUndefined(summary.cost.outputCostUsd)
-            : undefined;
-    const validatedCostTotal =
-        summary.cost !== undefined
-            ? toNonNegativeNumberOrUndefined(summary.cost.totalCostUsd)
-            : undefined;
-    const normalizedCost =
-        validatedCostInput !== undefined &&
-        validatedCostOutput !== undefined &&
-        validatedCostTotal !== undefined
-            ? {
-                  inputCostUsd: validatedCostInput,
-                  outputCostUsd: validatedCostOutput,
-                  totalCostUsd: validatedCostTotal,
-              }
-            : undefined;
-
-    return {
-        stepId,
-        ...(parentStepId !== undefined && { parentStepId }),
-        attempt: normalizedAttempt,
-        stepKind: 'plan',
-        ...(sanitizedReasonCode !== undefined && {
-            reasonCode: sanitizedReasonCode,
-        }),
-        startedAt: new Date(normalizedStartedAtMs).toISOString(),
-        finishedAt: new Date(normalizedFinishedAtMs).toISOString(),
-        durationMs: normalizedDurationMs,
-        ...(summary.model !== undefined && { model: summary.model }),
-        ...(hasUsage && usage !== undefined && { usage }),
-        ...(normalizedCost !== undefined && { cost: normalizedCost }),
-        outcome: {
-            status: summary.status,
-            summary:
-                summary.status === 'executed'
-                    ? 'Planner step emitted bounded action-selection summary.'
-                    : summary.status === 'failed'
-                      ? 'Planner step failed; bounded fallback guidance remained in effect.'
-                      : 'Planner step was skipped before action selection.',
-            signals,
-        },
-    };
-};
+export { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
+export {
+    applyStepExecutionToState,
+    cloneWorkflowState,
+    createInitialWorkflowState,
+} from './workflowEngine/state.js';
+export {
+    checkExecutionLimits,
+    mapLimitExhaustionToTerminationReason,
+} from './workflowEngine/limits.js';
+export { buildPlannerStepRecord } from './workflowEngine/plannerStepRecord.js';
+export type { BuildPlannerStepRecordInput } from './workflowEngine/plannerStepRecord.js';
 
 export const runBoundedReviewWorkflow = async ({
     generationRuntime,
@@ -812,7 +245,6 @@ export const runBoundedReviewWorkflow = async ({
     }
     // NOTE: Concrete tool execution is still orchestrator/registry-owned.
     // This engine path currently executes only Reviewed generation steps.
-    const UNBOUNDED_LIMIT = UNBOUNDED_LIMIT_SENTINEL;
     const sanitizeNonNegativeInteger = (
         value: number,
         fallback: number
@@ -856,7 +288,6 @@ export const runBoundedReviewWorkflow = async ({
     let workflowStatus: WorkflowRecord['status'] = 'degraded';
     let draftResult: GenerationResult | null = null;
     let draftParentStepId: string | undefined;
-    let latestRevisionInstruction: string | undefined;
     let shouldStop = false;
     let exhaustedLimitKey: WorkflowLimitKey | undefined;
     let executedContextStepResult: ContextStepResult | undefined;
@@ -882,8 +313,9 @@ export const runBoundedReviewWorkflow = async ({
             Math.max(1, normalizedMaxIterations * 2)
         ),
         maxToolCalls: sanitizeNonNegativeInteger(
-            workflowConfig.executionLimits?.maxToolCalls ?? UNBOUNDED_LIMIT,
-            UNBOUNDED_LIMIT
+            workflowConfig.executionLimits?.maxToolCalls ??
+                UNBOUNDED_EXECUTION_LIMIT,
+            UNBOUNDED_EXECUTION_LIMIT
         ),
         maxPlanCycles: sanitizeNonNegativeInteger(
             workflowConfig.executionLimits?.maxPlanCycles ?? 1,
@@ -900,8 +332,9 @@ export const runBoundedReviewWorkflow = async ({
             Math.max(1, normalizedMaxIterations * 2)
         ),
         maxTokensTotal: sanitizeNonNegativeInteger(
-            workflowConfig.executionLimits?.maxTokensTotal ?? UNBOUNDED_LIMIT,
-            UNBOUNDED_LIMIT
+            workflowConfig.executionLimits?.maxTokensTotal ??
+                UNBOUNDED_EXECUTION_LIMIT,
+            UNBOUNDED_EXECUTION_LIMIT
         ),
         maxDurationMs: sanitizePositiveInteger(
             workflowConfig.executionLimits?.maxDurationMs ??
@@ -1008,7 +441,7 @@ export const runBoundedReviewWorkflow = async ({
     };
 
     const stopIfOverLimits = (nextStepKind?: WorkflowStepKind): boolean => {
-        const limitsCheck = isWithinExecutionLimits(
+        const limitsCheck = checkExecutionLimits(
             workflowState,
             executionLimits,
             Date.now(),
@@ -1021,7 +454,7 @@ export const runBoundedReviewWorkflow = async ({
         exhaustedLimitKey = limitsCheck.exhaustedBy;
         terminationReason =
             exhaustedLimitKey !== undefined
-                ? mapExhaustedLimitToTerminationReason(exhaustedLimitKey)
+                ? mapLimitExhaustionToTerminationReason(exhaustedLimitKey)
                 : 'budget_exhausted_steps';
         workflowStatus = 'degraded';
         shouldStop = true;
@@ -1034,7 +467,7 @@ export const runBoundedReviewWorkflow = async ({
         plannerStepExecutor !== undefined
     ) {
         if (
-            !isTransitionAllowed(
+            !isWorkflowTransitionAllowed(
                 workflowState.currentStepKind,
                 'plan',
                 workflowPolicy
@@ -1281,7 +714,7 @@ export const runBoundedReviewWorkflow = async ({
     );
     if (!shouldStop && executableContextSteps.length > 0) {
         if (
-            !isTransitionAllowed(
+            !isWorkflowTransitionAllowed(
                 workflowState.currentStepKind,
                 'tool',
                 workflowPolicy
@@ -1293,7 +726,7 @@ export const runBoundedReviewWorkflow = async ({
             // Parallel execution keeps integration latency bounded while each
             // outcome remains independently fail-open and lineage-recorded.
             const remainingToolCalls =
-                executionLimits.maxToolCalls === UNBOUNDED_LIMIT
+                executionLimits.maxToolCalls === UNBOUNDED_EXECUTION_LIMIT
                     ? Number.POSITIVE_INFINITY
                     : Math.max(
                           0,
@@ -1351,7 +784,7 @@ export const runBoundedReviewWorkflow = async ({
                 if (contextStepOutcome.blockedByLimit === true) {
                     exhaustedLimitKey = 'maxToolCalls';
                     terminationReason =
-                        mapExhaustedLimitToTerminationReason('maxToolCalls');
+                        mapLimitExhaustionToTerminationReason('maxToolCalls');
                     workflowStatus = 'degraded';
                     shouldStop = true;
                     continue;
@@ -1487,7 +920,7 @@ export const runBoundedReviewWorkflow = async ({
 
     if (!shouldStop) {
         if (
-            !isTransitionAllowed(
+            !isWorkflowTransitionAllowed(
                 workflowState.currentStepKind,
                 'generate',
                 workflowPolicy
@@ -1592,375 +1025,45 @@ export const runBoundedReviewWorkflow = async ({
         workflowStatus = 'completed';
     }
 
-    for (
-        let iteration = 1;
-        iteration <= effectiveMaxIterations && !shouldStop;
-        iteration += 1
-    ) {
-        if (
-            !isTransitionAllowed(
-                workflowState.currentStepKind,
-                'assess',
-                workflowPolicy
-            )
-        ) {
-            terminationReason = 'transition_blocked_by_policy';
-            workflowStatus = 'degraded';
-            break;
-        }
-
-        if (stopIfOverLimits('assess')) {
-            break;
-        }
-
-        const reviewStartedAt = Date.now();
-        try {
-            const assessPrompt = composeAssessPrompt({
-                moduleIds: selectedReviewModuleIds,
-                basePromptOverride: effectiveReviewDecisionPrompt,
-            });
-            const reviewResult = await generationRuntime.generate({
-                messages: [
-                    ...messagesWithContext,
-                    {
-                        role: 'assistant',
-                        content: draftResult?.text ?? '',
-                    },
-                    {
-                        role: 'system',
-                        content: assessPrompt.prompt,
-                    },
-                ],
-                model: effectiveGenerationRequest.model,
-                ...(effectiveGenerationRequest.provider !== undefined && {
-                    provider: effectiveGenerationRequest.provider,
-                }),
-                ...(effectiveGenerationRequest.capabilities !== undefined && {
-                    capabilities: effectiveGenerationRequest.capabilities,
-                }),
-                maxOutputTokens: 200,
-                reasoningEffort: 'low',
-                verbosity: 'low',
-            });
-            const reviewFinishedAt = Date.now();
-            const reviewUsage = captureUsage(
-                reviewResult,
-                effectiveGenerationRequest.model
-            );
-            workflowState = applyStepExecutionToState(
-                workflowState,
-                'assess',
-                reviewUsage.totalTokens,
-                0,
-                1
-            );
-            const decision = effectiveParseReviewDecision(reviewResult.text);
-            if (!decision) {
-                captureStep({
-                    stepKind: 'assess',
-                    status: 'failed',
-                    summary:
-                        'Assessment step returned invalid decision output; fail-open returned latest successful draft.',
-                    reasonCode: 'generation_runtime_error',
-                    startedAtMs: reviewStartedAt,
-                    finishedAtMs: reviewFinishedAt,
-                    model: reviewUsage.model,
-                    usage: reviewResult.usage,
-                    estimatedCost: reviewUsage.estimatedCost,
-                    parentStepId: draftParentStepId,
-                    attempt: iteration,
-                });
-                terminationReason = 'executor_error_fail_open';
-                workflowStatus = 'degraded';
-                shouldStop = true;
-                break;
-            }
-
-            const assessSignals: BoundedReviewAssessSignals = {
-                reviewDecision: decision.reviewDecision,
-                reviewReason: decision.reviewReason,
-                ...(decision.reviewDecision === 'revise' && {
-                    refinementRequested: true,
-                }),
-                ...(decision.concerns?.length !== undefined && {
-                    lengthConcern: decision.concerns.length,
-                }),
-                ...(decision.concerns?.style !== undefined && {
-                    styleConcern: decision.concerns.style,
-                }),
-                ...(decision.concerns?.evidence !== undefined && {
-                    evidenceConcern: decision.concerns.evidence,
-                }),
-                ...(decision.moduleHints !== undefined && {
-                    moduleHintCount: decision.moduleHints.length,
-                }),
-                ...(decision.moduleHints !== undefined &&
-                    decision.moduleHints.length > 0 && {
-                        moduleHintIdsCsv: decision.moduleHints.join(','),
-                    }),
-            };
-            const reviewStepId = captureStep({
-                stepKind: 'assess',
-                status: 'executed',
-                summary:
-                    'Assessment step evaluated draft quality and emitted Reviewed decision.',
-                startedAtMs: reviewStartedAt,
-                finishedAtMs: reviewFinishedAt,
-                model: reviewUsage.model,
-                usage: reviewResult.usage,
-                estimatedCost: reviewUsage.estimatedCost,
-                parentStepId: draftParentStepId,
-                attempt: iteration,
-                signals: assessSignals,
-            });
-            latestRevisionInstruction = decision.revisionInstruction;
-            if (decision.reviewDecision === 'finalize') {
-                terminationReason = 'goal_satisfied';
-                workflowStatus = 'completed';
-                shouldStop = true;
-                break;
-            }
-
-            if (iteration >= effectiveMaxIterations) {
-                terminationReason = 'budget_exhausted_steps';
-                exhaustedLimitKey = 'maxWorkflowSteps';
-                workflowStatus = 'degraded';
-                shouldStop = true;
-                break;
-            }
-
-            if (!workflowPolicy.enableRevision) {
-                terminationReason = 'transition_blocked_by_policy';
-                workflowStatus = 'degraded';
-                shouldStop = true;
-                break;
-            }
-
-            if (
-                !isTransitionAllowed(
-                    workflowState.currentStepKind,
-                    'generate',
-                    workflowPolicy
-                )
-            ) {
-                terminationReason = 'transition_blocked_by_policy';
-                workflowStatus = 'degraded';
-                shouldStop = true;
-                break;
-            }
-
-            if (stopIfOverLimits('generate')) {
-                break;
-            }
-
-            let reentryAttempt = 0;
-            if (
-                plannerStepRequest !== undefined &&
-                plannerStepExecutor !== undefined &&
-                planContinuationBuilder !== undefined
-            ) {
-                if (
-                    !isTransitionAllowed(
-                        workflowState.currentStepKind,
-                        'plan',
-                        workflowPolicy
-                    )
-                ) {
-                    terminationReason = 'transition_blocked_by_policy';
-                    workflowStatus = 'degraded';
-                    shouldStop = true;
-                    break;
-                }
-                if (stopIfOverLimits('plan')) {
-                    break;
-                }
-                const plannerReentryStartedAt = Date.now();
-                try {
-                    const plannerReentryResult = await plannerStepExecutor({
-                        ...plannerStepRequest,
-                        workflowId,
-                        workflowName: workflowConfig.workflowName,
-                        attempt: iteration + 1,
-                    });
-                    const plannerReentryFinishedAt = Date.now();
-                    const plannerReentryStep = buildPlannerStepRecord({
-                        stepId: `step_${stepCounter + 1}`,
-                        attempt: iteration + 1,
-                        parentStepId: reviewStepId,
-                        startedAtMs: plannerReentryStartedAt,
-                        finishedAtMs: plannerReentryFinishedAt,
-                        summary: {
-                            status: plannerReentryResult.execution.status,
-                            ...(plannerReentryResult.execution.reasonCode !==
-                                undefined && {
-                                reasonCode:
-                                    plannerReentryResult.execution.reasonCode,
-                            }),
-                            purpose: plannerReentryResult.execution.purpose,
-                            contractType:
-                                plannerReentryResult.execution.contractType,
-                            applyOutcome:
-                                plannerReentryResult.execution.status ===
-                                'executed'
-                                    ? 'applied'
-                                    : 'not_applied',
-                            durationMs:
-                                plannerReentryResult.execution.durationMs,
-                            action: plannerReentryResult.plan.action,
-                            modality: plannerReentryResult.plan.modality,
-                            requestedCapabilityProfile:
-                                plannerReentryResult.plan
-                                    .requestedCapabilityProfile,
-                        },
-                    });
-                    workflowSteps.push(plannerReentryStep);
-                    stepCounter += 1;
-                    workflowState = applyStepExecutionToState(
-                        workflowState,
-                        'plan',
-                        0,
-                        0,
-                        1
-                    );
-                    planContinuation = planContinuationBuilder({
-                        plannerStepResult: plannerReentryResult,
-                        workflowId,
-                        workflowName: workflowConfig.workflowName,
-                        attempt: iteration + 1,
-                        baseMessagesWithHints: effectiveMessagesWithHints,
-                        baseGenerationRequest: effectiveGenerationRequest,
-                        contextEnvelope: effectiveContextEnvelope,
-                    });
-                    if (planContinuation.continuation !== 'continue_message') {
-                        terminationReason = 'executor_error_fail_open';
-                        workflowStatus = 'degraded';
-                        shouldStop = true;
-                        break;
-                    }
-                    reentryAttempt = iteration;
-                    effectiveGenerationRequest =
-                        planContinuation.generationRequest;
-                    effectiveMessagesWithHints =
-                        planContinuation.messagesWithHints;
-                    effectiveContextEnvelope = planContinuation.contextEnvelope;
-                    messagesWithContext = effectiveMessagesWithHints;
-                } catch {
-                    terminationReason = 'executor_error_fail_open';
-                    workflowStatus = 'degraded';
-                    shouldStop = true;
-                    break;
-                }
-            }
-
-            const revisionStartedAt = Date.now();
-            try {
-                const refinementPrompt = composeRefinementPrompt({
-                    revisionPromptPrefix: effectiveRevisionPromptPrefix,
-                    revisionInstruction: latestRevisionInstruction,
-                    moduleIds: selectedReviewModuleIds,
-                });
-                const revisionResult = await generationRuntime.generate({
-                    ...effectiveGenerationRequest,
-                    messages: [
-                        ...effectiveMessagesWithHints,
-                        {
-                            role: 'assistant',
-                            content: draftResult?.text ?? '',
-                        },
-                        {
-                            role: 'system',
-                            content: refinementPrompt.prompt,
-                        },
-                    ],
-                });
-                const revisionFinishedAt = Date.now();
-                const revisionUsage = captureUsage(
-                    revisionResult,
-                    effectiveGenerationRequest.model
-                );
-                const revisionStepId = captureStep({
-                    stepKind: 'generate',
-                    status: 'executed',
-                    summary:
-                        'Generated refinement draft from assessment guidance.',
-                    startedAtMs: revisionStartedAt,
-                    finishedAtMs: revisionFinishedAt,
-                    model: revisionUsage.model,
-                    usage: revisionResult.usage,
-                    estimatedCost: revisionUsage.estimatedCost,
-                    parentStepId: reviewStepId,
-                    attempt: iteration,
-                    signals: {
-                        refinementApplied: true,
-                        refinementSourceStepId: reviewStepId,
-                        appliedModuleCount: selectedReviewModuleIds.length,
-                        ...(selectedReviewModuleIds.length > 0 && {
-                            appliedModuleIdsCsv:
-                                selectedReviewModuleIds.join(','),
-                        }),
-                        ...(reentryAttempt > 0 && {
-                            reentryAttempt,
-                        }),
-                    },
-                });
-                workflowState = applyStepExecutionToState(
-                    workflowState,
-                    'generate',
-                    revisionUsage.totalTokens,
-                    0,
-                    0
-                );
-                draftResult = revisionResult;
-                draftParentStepId = revisionStepId;
-            } catch {
-                const revisionFinishedAt = Date.now();
-                captureStep({
-                    stepKind: 'generate',
-                    status: 'failed',
-                    summary:
-                        'Refinement generation failed; fail-open returned latest successful draft.',
-                    reasonCode: 'generation_runtime_error',
-                    startedAtMs: revisionStartedAt,
-                    finishedAtMs: revisionFinishedAt,
-                    parentStepId: reviewStepId,
-                    attempt: iteration,
-                });
-                workflowState = applyStepExecutionToState(
-                    workflowState,
-                    'generate',
-                    0,
-                    0,
-                    0
-                );
-                terminationReason = 'executor_error_fail_open';
-                workflowStatus = 'degraded';
-                shouldStop = true;
-            }
-        } catch {
-            const reviewFinishedAt = Date.now();
-            captureStep({
-                stepKind: 'assess',
-                status: 'failed',
-                summary:
-                    'Assessment step failed; fail-open returned latest successful draft.',
-                reasonCode: 'generation_runtime_error',
-                startedAtMs: reviewStartedAt,
-                finishedAtMs: reviewFinishedAt,
-                parentStepId: draftParentStepId,
-                attempt: iteration,
-            });
-            workflowState = applyStepExecutionToState(
-                workflowState,
-                'assess',
-                0,
-                0,
-                1
-            );
-            terminationReason = 'executor_error_fail_open';
-            workflowStatus = 'degraded';
-            shouldStop = true;
-        }
-    }
+    const reviewLoopResult = await executeReviewLoop({
+        effectiveMaxIterations,
+        workflowPolicy,
+        stopIfOverLimits,
+        selectedReviewModuleIds,
+        effectiveReviewDecisionPrompt,
+        generationRuntime,
+        messagesWithContext,
+        draftResult,
+        effectiveGenerationRequest,
+        captureUsage,
+        effectiveParseReviewDecision,
+        captureStep,
+        draftParentStepId,
+        terminationReason,
+        workflowStatus,
+        shouldStop,
+        workflowState,
+        exhaustedLimitKey,
+        plannerStepRequest,
+        plannerStepExecutor,
+        planContinuationBuilder,
+        workflowId,
+        workflowName: workflowConfig.workflowName,
+        effectiveMessagesWithHints,
+        effectiveContextEnvelope,
+        effectiveRevisionPromptPrefix,
+        stepCounterRef: { value: stepCounter },
+        workflowStepsRef: { value: workflowSteps as unknown[] },
+        planContinuation,
+    });
+    stepCounter = reviewLoopResult.stepCounter;
+    draftResult = reviewLoopResult.draftResult;
+    terminationReason = reviewLoopResult.terminationReason;
+    workflowStatus = reviewLoopResult.workflowStatus;
+    workflowState = reviewLoopResult.workflowState;
+    exhaustedLimitKey = reviewLoopResult.exhaustedLimitKey;
+    effectiveGenerationRequest = reviewLoopResult.effectiveGenerationRequest;
+    planContinuation = reviewLoopResult.planContinuation;
 
     const workflowLineage: WorkflowRecord = {
         workflowId,
@@ -1969,12 +1072,12 @@ export const runBoundedReviewWorkflow = async ({
         stepCount: workflowSteps.length,
         maxSteps: executionLimits.maxWorkflowSteps,
         maxDurationMs: executionLimits.maxDurationMs,
-        effectiveLimits: buildWorkflowEffectiveLimits({
+        effectiveLimits: resolveExecutionLimits({
             limits: executionLimits,
             policy: workflowPolicy,
             exhaustedLimitKey,
         }),
-        limitStop: buildWorkflowLimitStop({
+        limitStop: buildExecutionLimitStop({
             terminationReason,
             exhaustedLimitKey,
         }),
