@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 test('workflowEngine remains policy/runtime neutral and avoids orchestrator policy imports', () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
     const workflowEngineSource = readFileSync(
-        join(testDir, '..', 'src', 'services', 'workflowEngine.ts'),
+        join(testDir, '..', '..', 'src', 'services', 'workflowEngine.ts'),
         'utf8'
     );
     assert.equal(
