@@ -593,11 +593,17 @@ const mergeContextStepRequests = (input: {
  * execution-contract context.
  */
 const buildTrustGraphContextStepRequest = (
+    executionContractTrustGraph:
+        | ExecutionContractTrustGraphRuntimeOptions
+        | undefined,
     executionContractTrustGraphContext:
         | ExecutionContractTrustGraphContext
         | undefined
 ): ContextStepRequest | undefined => {
-    if (executionContractTrustGraphContext === undefined) {
+    if (
+        executionContractTrustGraph === undefined ||
+        executionContractTrustGraphContext === undefined
+    ) {
         return undefined;
     }
     return {
@@ -980,6 +986,7 @@ export const createChatService = ({
             );
             const trustGraphContextStepRequest =
                 buildTrustGraphContextStepRequest(
+                    executionContractTrustGraph,
                     executionContractTrustGraphContext
                 );
             const effectiveContextStepRequests = mergeContextStepRequests({
