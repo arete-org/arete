@@ -201,6 +201,14 @@ type ContextStepExecutionOutcome = {
     startedAtMs: number;
     finishedAtMs: number;
 };
+
+type LimitStopEvaluation = {
+    stopped: boolean;
+    shouldStop: boolean;
+    terminationReason: WorkflowTerminationReason;
+    workflowStatus: WorkflowRecord['status'];
+    exhaustedLimitKey?: WorkflowLimitKey;
+};
 export { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
 export {
     applyStepExecutionToState,
@@ -439,7 +447,9 @@ export const runBoundedReviewWorkflow = async ({
         return stepId;
     };
 
-    const stopIfOverLimits = (nextStepKind?: WorkflowStepKind): boolean => {
+    const stopIfOverLimits = (
+        nextStepKind?: WorkflowStepKind
+    ): LimitStopEvaluation => {
         const limitsCheck = checkExecutionLimits(
             workflowState,
             executionLimits,
@@ -447,7 +457,13 @@ export const runBoundedReviewWorkflow = async ({
             nextStepKind
         );
         if (limitsCheck.withinLimits) {
-            return false;
+            return {
+                stopped: false,
+                shouldStop,
+                terminationReason,
+                workflowStatus,
+                exhaustedLimitKey,
+            };
         }
 
         exhaustedLimitKey = limitsCheck.exhaustedBy;
@@ -457,7 +473,13 @@ export const runBoundedReviewWorkflow = async ({
                 : 'budget_exhausted_steps';
         workflowStatus = 'degraded';
         shouldStop = true;
-        return true;
+        return {
+            stopped: true,
+            shouldStop,
+            terminationReason,
+            workflowStatus,
+            exhaustedLimitKey,
+        };
     };
 
     if (
@@ -474,7 +496,7 @@ export const runBoundedReviewWorkflow = async ({
         ) {
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
-        } else if (!stopIfOverLimits('plan')) {
+        } else if (!stopIfOverLimits('plan').stopped) {
             const plannerStartedAt = Date.now();
             plannerExecutionResult = await plannerStepExecutor({
                 ...plannerStepRequest,
@@ -610,7 +632,7 @@ export const runBoundedReviewWorkflow = async ({
         ) {
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
-        } else if (!stopIfOverLimits('tool')) {
+        } else if (!stopIfOverLimits('tool').stopped) {
             // Parallel execution keeps integration latency bounded while each
             // outcome remains independently fail-open and lineage-recorded.
             const remainingToolCalls =
@@ -820,7 +842,7 @@ export const runBoundedReviewWorkflow = async ({
         ) {
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
-        } else if (!stopIfOverLimits('generate')) {
+        } else if (!stopIfOverLimits('generate').stopped) {
             const initialDraftStartedAt = generationStartedAtMs;
             messagesWithContext = injectContextMessagesIntoPrompt(
                 effectiveMessagesWithHints,

@@ -55,6 +55,26 @@ type CaptureStep = (input: {
     recommendations?: string[];
 }) => string;
 
+type LimitStopEvaluation = {
+    stopped: boolean;
+    shouldStop: boolean;
+    terminationReason: WorkflowTerminationReason;
+    workflowStatus: 'completed' | 'degraded';
+    exhaustedLimitKey?:
+        | 'maxWorkflowSteps'
+        | 'maxToolCalls'
+        | 'maxDeliberationCalls'
+        | 'maxTokensTotal'
+        | 'maxDurationMs';
+};
+
+/**
+ * Executes the assess/revise loop and returns the updated workflow state bag.
+ * The loop remains fail-open: generation/review/planner runtime failures are
+ * converted into degraded termination instead of throwing. Policy and
+ * transition authority comes from `workflowPolicy`, `stopIfOverLimits`,
+ * `effectiveParseReviewDecision`, and optional planner re-entry seams.
+ */
 export const executeReviewLoop = async (ctx: {
     effectiveMaxIterations: number;
     workflowPolicy: WorkflowRunPolicy;
@@ -66,7 +86,7 @@ export const executeReviewLoop = async (ctx: {
             | 'assess'
             | 'revise'
             | 'finalize'
-    ) => boolean;
+    ) => LimitStopEvaluation;
     selectedReviewModuleIds: string[];
     effectiveReviewDecisionPrompt?: string;
     generationRuntime: GenerationRuntime;
@@ -144,6 +164,16 @@ export const executeReviewLoop = async (ctx: {
         planContinuation,
     } = ctx;
     let latestRevisionInstruction: string | undefined;
+    const syncLimitStop = (evaluation: LimitStopEvaluation): boolean => {
+        if (!evaluation.stopped) {
+            return false;
+        }
+        shouldStop = evaluation.shouldStop;
+        terminationReason = evaluation.terminationReason;
+        workflowStatus = evaluation.workflowStatus;
+        exhaustedLimitKey = evaluation.exhaustedLimitKey;
+        return true;
+    };
 
     for (
         let iteration = 1;
@@ -161,7 +191,7 @@ export const executeReviewLoop = async (ctx: {
             workflowStatus = 'degraded';
             break;
         }
-        if (ctx.stopIfOverLimits('assess')) {
+        if (syncLimitStop(ctx.stopIfOverLimits('assess'))) {
             break;
         }
         const reviewStartedAt = Date.now();
@@ -269,7 +299,7 @@ export const executeReviewLoop = async (ctx: {
                 shouldStop = true;
                 break;
             }
-            if (ctx.stopIfOverLimits('generate')) {
+            if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
                 break;
             }
             let reentryAttempt = 0;
@@ -290,7 +320,7 @@ export const executeReviewLoop = async (ctx: {
                     shouldStop = true;
                     break;
                 }
-                if (ctx.stopIfOverLimits('plan')) {
+                if (syncLimitStop(ctx.stopIfOverLimits('plan'))) {
                     break;
                 }
                 const plannerReentryStartedAt = Date.now();
@@ -370,7 +400,7 @@ export const executeReviewLoop = async (ctx: {
                     break;
                 }
             }
-            if (ctx.stopIfOverLimits('generate')) {
+            if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
                 break;
             }
             const revisionStartedAt = Date.now();
