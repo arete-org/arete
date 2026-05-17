@@ -79,7 +79,7 @@ export const checkExecutionLimits = (
         limits.maxPlanCycles ?? Math.max(0, limits.maxDeliberationCalls);
     const maxReviewCycles =
         limits.maxReviewCycles ??
-        Math.max(0, limits.maxDeliberationCalls - maxPlanCycles);
+        Math.max(1, limits.maxDeliberationCalls - maxPlanCycles);
     if (nextStepKind === 'plan' && state.planCallCount >= maxPlanCycles) {
         return {
             withinLimits: false,
