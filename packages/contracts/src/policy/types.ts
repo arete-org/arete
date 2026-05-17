@@ -8,7 +8,7 @@
 import type { ContextIntegrationName } from './contextIntegrations.js';
 
 // This file is the single source of truth for cross-package metadata shapes.
-// It is intentionally "types only": no functions and no runtime behavior.
+// It primarily defines types and narrow pure helpers for contract-safe checks.
 
 /**
  * SafetyTier labels how sensitive a response is.
@@ -105,6 +105,65 @@ export type ResponseTemperament = {
  */
 export type PartialResponseTemperament = Partial<ResponseTemperament>;
 
+export const TRACE_TEMPERAMENT_AXIS_KEYS = [
+    'tightness',
+    'rationale',
+    'attribution',
+    'caution',
+    'extent',
+] as const;
+export type TraceTemperamentAxisKey =
+    (typeof TRACE_TEMPERAMENT_AXIS_KEYS)[number];
+
+export const TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS: Record<
+    TraceTemperamentAxisKey,
+    keyof Pick<
+        BoundedReviewAssessSignals,
+        | 'finalTemperamentTightness'
+        | 'finalTemperamentRationale'
+        | 'finalTemperamentAttribution'
+        | 'finalTemperamentCaution'
+        | 'finalTemperamentExtent'
+    >
+> = {
+    tightness: 'finalTemperamentTightness',
+    rationale: 'finalTemperamentRationale',
+    attribution: 'finalTemperamentAttribution',
+    caution: 'finalTemperamentCaution',
+    extent: 'finalTemperamentExtent',
+};
+
+export const TRACE_PLANNER_TARGET_TEMPERAMENT_SIGNAL_KEYS: Record<
+    TraceTemperamentAxisKey,
+    | 'traceTargetTightness'
+    | 'traceTargetRationale'
+    | 'traceTargetAttribution'
+    | 'traceTargetCaution'
+    | 'traceTargetExtent'
+> = {
+    tightness: 'traceTargetTightness',
+    rationale: 'traceTargetRationale',
+    attribution: 'traceTargetAttribution',
+    caution: 'traceTargetCaution',
+    extent: 'traceTargetExtent',
+};
+
+export const isTraceTemperamentEqual = (
+    left: PartialResponseTemperament | undefined,
+    right: PartialResponseTemperament | undefined
+): boolean => {
+    const normalizedLeft = left ?? {};
+    const normalizedRight = right ?? {};
+
+    for (const axisKey of TRACE_TEMPERAMENT_AXIS_KEYS) {
+        if (normalizedLeft[axisKey] !== normalizedRight[axisKey]) {
+            return false;
+        }
+    }
+
+    return true;
+};
+
 /**
  * Reason code for cases where delivered TRACE posture differs from the
  * intended TRACE posture.
@@ -112,7 +171,9 @@ export type PartialResponseTemperament = Partial<ResponseTemperament>;
  * Keep this narrow in v1. Additive expansion is allowed when runtime
  * divergence classes become contract-stable.
  */
-export type TraceFinalizationReasonCode = 'runtime_posture_adjustment';
+export type TraceFinalizationReasonCode =
+    | 'runtime_posture_adjustment'
+    | 'assess_trace_misalignment';
 
 export type ExecutionStatus = 'executed' | 'skipped' | 'failed';
 
@@ -444,9 +505,10 @@ export type BoundedReviewAssessDecision =
  * Keep this intentionally narrow so review output remains inspectable and does
  * not become a generic policy bag.
  */
-export type BoundedReviewAssessSignals = {
+export type BoundedReviewAssessCoreSignals = {
     reviewDecision: BoundedReviewAssessDecision;
     reviewReason: string;
+    revisionInstruction?: string;
     refinementRequested?: boolean;
     moduleHintCount?: number;
     moduleHintIdsCsv?: string;
@@ -454,6 +516,19 @@ export type BoundedReviewAssessSignals = {
     styleConcern?: 'too_stiff' | 'ok';
     evidenceConcern?: 'needs_caution' | 'ok';
 };
+
+export type AssessTraceAlignmentSignals = {
+    traceAlignment?: 'aligned' | 'misaligned';
+    traceAlignmentReason?: string;
+    finalTemperamentTightness?: TraceAxisScore;
+    finalTemperamentRationale?: TraceAxisScore;
+    finalTemperamentAttribution?: TraceAxisScore;
+    finalTemperamentCaution?: TraceAxisScore;
+    finalTemperamentExtent?: TraceAxisScore;
+};
+
+export type BoundedReviewAssessSignals = BoundedReviewAssessCoreSignals &
+    AssessTraceAlignmentSignals;
 
 export type StepOutcome = {
     status: WorkflowStepStatus;
@@ -463,7 +538,8 @@ export type StepOutcome = {
      * Machine-readable per-step outputs.
      *
      * For `stepKind === "assess"` in the reviewed profile, emit
-     * `reviewDecision` + `reviewReason` as the canonical decision seam.
+     * `reviewDecision` + `reviewReason` as the canonical decision seam and
+     * emit non-empty `revisionInstruction` when `reviewDecision === "revise"`.
      */
     signals?: Record<string, string | number | boolean | null>;
     recommendations?: string[];

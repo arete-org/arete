@@ -702,6 +702,49 @@ test('ResponseMetadataSchema rejects executed assess step without reviewReason',
     assert.equal(blankReasonParsed.success, false);
 });
 
+test('ResponseMetadataSchema accepts executed assess revise step with revisionInstruction', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    const reviseSignals = payload.workflow.steps[1].outcome.signals as Record<
+        string,
+        unknown
+    >;
+    reviseSignals.reviewDecision = 'revise';
+    reviseSignals.reviewReason = 'Need one revision pass.';
+    reviseSignals.revisionInstruction = 'Shorten and clarify the wording.';
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects executed assess revise step without revisionInstruction', () => {
+    const now = new Date().toISOString();
+    const payloadMissingInstruction = createValidWorkflowMetadataPayload(now);
+    const missingInstructionSignals = payloadMissingInstruction.workflow
+        .steps[1].outcome.signals as Record<string, unknown>;
+    missingInstructionSignals.reviewDecision = 'revise';
+    missingInstructionSignals.reviewReason = 'Need one revision pass.';
+    delete missingInstructionSignals.revisionInstruction;
+    const missingInstructionParsed = ResponseMetadataSchema.safeParse(
+        payloadMissingInstruction
+    );
+
+    assert.equal(missingInstructionParsed.success, false);
+
+    const payloadBlankInstruction = createValidWorkflowMetadataPayload(now);
+    const blankInstructionSignals = payloadBlankInstruction.workflow.steps[1]
+        .outcome.signals as Record<string, unknown>;
+    blankInstructionSignals.reviewDecision = 'revise';
+    blankInstructionSignals.reviewReason = 'Need one revision pass.';
+    blankInstructionSignals.revisionInstruction = '   ';
+    const blankInstructionParsed = ResponseMetadataSchema.safeParse(
+        payloadBlankInstruction
+    );
+
+    assert.equal(blankInstructionParsed.success, false);
+});
+
 test('ResponseMetadataSchema rejects non-canonical safety decision rule tuples', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,
@@ -990,6 +1033,14 @@ test('ResponseMetadataSchema requires divergence reason code when trace_target a
         trace_final_reason_code: 'runtime_posture_adjustment',
     });
     assert.equal(withReason.success, true);
+
+    const withAssessReason = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        trace_target: { tightness: 3 },
+        trace_final: { tightness: 5 },
+        trace_final_reason_code: 'assess_trace_misalignment',
+    });
+    assert.equal(withAssessReason.success, true);
 });
 
 test('ResponseMetadataSchema rejects trace_final_reason_code when trace_target and trace_final match', () => {

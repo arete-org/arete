@@ -10,7 +10,43 @@ import {
     createTraceStoreFromConfig,
     type TraceStore,
 } from '../storage/traces/traceStore.js';
+import type { LangfuseMetadataMirror } from './langfuseMetadataMirrorExporter.js';
 import { logger } from '../utils/logger.js';
+
+let traceMetadataMirror: LangfuseMetadataMirror | null = null;
+
+/**
+ * Sets the global mutable metadata mirror callback used by `storeTrace`.
+ *
+ * Callers should set this during service initialization and may reset it to
+ * `null` during teardown or tests. This affects all subsequent calls to
+ * `storeTrace` in the current process.
+ *
+ * When `traceMetadataMirror` is `null`, `storeTrace` remains fail-open and
+ * continues storing local traces without mirrored metadata export.
+ */
+export const configureTraceMetadataMirror = (
+    mirror: LangfuseMetadataMirror | null
+): void => {
+    traceMetadataMirror = mirror;
+};
+
+export const mirrorTraceMetadata = async (
+    metadata: ResponseMetadata
+): Promise<void> => {
+    if (!traceMetadataMirror) {
+        return;
+    }
+
+    const responseId = metadata.responseId;
+    try {
+        await traceMetadataMirror(metadata);
+    } catch (error) {
+        logger.warn(
+            `Langfuse metadata mirror failed for response "${responseId}": ${error instanceof Error ? error.message : String(error)}`
+        );
+    }
+};
 
 // --- Trace store initialization ---
 const createTraceStore = (): TraceStore => createTraceStoreFromConfig();
@@ -31,6 +67,8 @@ const storeTrace = async (
         // --- Write-through ---
         await traceStore.upsert(metadata);
         logger.debug(`Trace stored successfully: ${responseId}`);
+
+        await mirrorTraceMetadata(metadata);
 
         // --- Optional trace-card persistence ---
         // Trace-card generation stays out of this write path so trace storage

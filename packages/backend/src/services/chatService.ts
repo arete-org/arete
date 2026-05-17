@@ -80,6 +80,10 @@ import { buildToolClarificationResponse } from './tools/toolClarificationRespons
 import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
 import { sanitizeReviewModuleIds } from './reviewModules.js';
+import {
+    fromAssessSignalsToFinalTemperament,
+    hasDifferentTemperament,
+} from './traceAlignmentSignals.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
@@ -350,6 +354,44 @@ const mapCoverageToTraceAxisScore = (
     const conflictPenalty = conflictSignalsCount > 0 ? 1 : 0;
     const clamped = Math.max(1, Math.min(5, baseScore - conflictPenalty));
     return clamped as TraceAxisScore;
+};
+
+const toAssessFinalTemperamentFromWorkflow = (
+    workflow?: WorkflowRecord
+):
+    | {
+          finalTemperament: PartialResponseTemperament;
+          traceAlignment?: 'aligned' | 'misaligned';
+      }
+    | undefined => {
+    if (!workflow) {
+        return undefined;
+    }
+
+    const latestAssessStep = [...workflow.steps]
+        .reverse()
+        .find(
+            (step) =>
+                step.stepKind === 'assess' && step.outcome.status === 'executed'
+        );
+    const signals = latestAssessStep?.outcome.signals;
+    if (!signals) {
+        return undefined;
+    }
+    const finalTemperament = fromAssessSignalsToFinalTemperament(signals);
+    if (finalTemperament === undefined) {
+        return undefined;
+    }
+
+    return {
+        finalTemperament,
+        ...(signals.traceAlignment === 'aligned' ||
+        signals.traceAlignment === 'misaligned'
+            ? {
+                  traceAlignment: signals.traceAlignment,
+              }
+            : {}),
+    };
 };
 
 const toPublicProvenanceJoin = (
@@ -1428,12 +1470,31 @@ export const createChatService = ({
                   }
                 : undefined);
         const normalizedWorkflowLineage = workflowLineage;
+        const assessTemperament = toAssessFinalTemperamentFromWorkflow(
+            normalizedWorkflowLineage
+        );
+        const finalTemperamentFromAssess = assessTemperament?.finalTemperament;
+        const temperamentFinalizationReasonCode =
+            finalTemperamentFromAssess !== undefined &&
+            hasDifferentTemperament(
+                effectivePlannerTemperament,
+                finalTemperamentFromAssess
+            ) &&
+            assessTemperament?.traceAlignment === 'misaligned'
+                ? 'assess_trace_misalignment'
+                : undefined;
 
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
             conversationSnapshot: `${workflowConversationSnapshot ?? conversationSnapshot}\n\n${generationResult.text}`,
             ...(totalDurationMs !== undefined && { totalDurationMs }),
             plannerTemperament: effectivePlannerTemperament,
+            ...(finalTemperamentFromAssess !== undefined && {
+                finalTemperament: finalTemperamentFromAssess,
+            }),
+            ...(temperamentFinalizationReasonCode !== undefined && {
+                temperamentFinalizationReasonCode,
+            }),
             ...(normalizedWorkflowLineage !== undefined && {
                 workflow: normalizedWorkflowLineage,
             }),

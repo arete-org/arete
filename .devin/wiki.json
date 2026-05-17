@@ -112,6 +112,7 @@
                 "docs/api/openapi.yaml",
                 "docs/architecture/prompt-resolution.md",
                 "docs/architecture/workflow.md",
+                "docs/architecture/langfuse-metadata-mirror.md",
                 "docs/architecture/context-integrations/README.md"
             ],
             "page_notes": [
@@ -156,7 +157,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Also define: workflow behavior presets (balanced/grounded), shared reviewed workflow shape (generate -> assess -> revise), workflow plan step (workflow-owned planner timing/lineage), applied plan state (`AppliedPlanState`), plan continuation (`PlanContinuation`), context step (integration context injection before generation), planner advisory boundary (planner suggests, backend policy decides), planner result applier (policy-application seam), terminal_action (workflow terminal outcome for ignore/react/image).",
+                    "content": "Also define: workflow behavior presets (balanced/grounded), shared reviewed workflow shape (generate -> assess -> planner re-entry -> generate), assess decision signals (`reviewDecision`, `reviewReason`, and revise-only `revisionInstruction`), workflow plan step (workflow-owned planner timing/lineage), applied plan state (`AppliedPlanState`), plan continuation (`PlanContinuation`), context step (integration context injection before generation), planner advisory boundary (planner suggests, backend policy decides), planner result applier (policy-application seam), terminal_action (workflow terminal outcome for ignore/react/image).",
                     "author": "Maintainer"
                 }
             ]
@@ -214,6 +215,7 @@
                 "packages/discord-bot/src/utils/logger.ts",
                 "packages/backend/src/utils/logger.ts",
                 "packages/discord-bot/src/state/ChannelContextManager.ts",
+                "docs/architecture/langfuse-metadata-mirror.md",
                 "AGENTS.md",
                 "cursor.rules"
             ],
@@ -234,7 +236,7 @@
             "parent": "Foundations",
             "entrypoints": [
                 "docs/architecture/workflow.md",
-                "docs/status/workflow-engine-rollout-status.md",
+                "docs/architecture/footnote-and-common-agentic-patterns.md",
                 "packages/backend/src/services/workflowEngine.ts",
                 "packages/backend/src/services/plannerWorkflowSeams.ts",
                 "packages/backend/src/services/chatService/planContinuation.ts",
@@ -253,7 +255,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "balanced and grounded presets use the shared reviewed workflow shape (generate -> assess -> revise)."
+                    "content": "balanced and grounded presets use the shared reviewed workflow shape (generate -> assess -> planner re-entry -> generate)."
                 },
                 {
                     "author": "Maintainer",
@@ -261,7 +263,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Planner now runs as an early workflow `plan` step through injected `PlannerStepExecutor`, and workflow-owned plan lineage is the canonical source."
+                    "content": "Planner runs as an early workflow `plan` step through injected `PlannerStepExecutor`, and workflow-owned plan lineage is the canonical source."
                 },
                 {
                     "author": "Maintainer",
@@ -270,6 +272,10 @@
                 {
                     "author": "Maintainer",
                     "content": "Context-step integrations include weather_forecast, web_search, file_scan, trustgraph, and reverse_image_search."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "TRACE alignment flows through assess lineage signals and runtime finalization, with target/final comparison semantics normalized via shared contracts helpers and canonical axis keys."
                 }
             ]
         },
@@ -506,7 +512,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Chat requests now route through workflowEngine. balanced and grounded both use the shared reviewed workflow shape."
+                    "content": "Chat requests now route through workflowEngine. balanced and grounded both use the shared reviewed workflow shape (generate -> assess -> planner re-entry -> generate)."
                 },
                 {
                     "author": "Maintainer",
