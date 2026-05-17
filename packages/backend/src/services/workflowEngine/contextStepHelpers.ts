@@ -20,6 +20,11 @@ type FollowUpSearchHint = {
     priority: 'low' | 'medium' | 'high';
 };
 
+/**
+ * Injects normalized context-step system messages into the generation prompt.
+ * Context is inserted before planner output markers when present, otherwise
+ * appended to preserve fail-open execution ordering.
+ */
 export const injectContextMessagesIntoPrompt = (
     baseMessages: RuntimeMessage[],
     contextMessages: string[] | undefined
@@ -57,19 +62,37 @@ export const injectContextMessagesIntoPrompt = (
     ];
 };
 
+/**
+ * Selects the context-step executor with explicit authority precedence.
+ * Registry-owned executors take priority when the integration key is an own
+ * property; otherwise the shared injected executor is used as fail-open
+ * fallback.
+ */
 export const selectContextStepExecutor = (
     request: ContextStepRequest,
     contextStepExecutor: ContextStepExecutor | undefined,
     contextStepExecutorRegistry: Record<string, ContextStepExecutor> | undefined
 ): ContextStepExecutor | undefined => {
-    const registryExecutor =
-        contextStepExecutorRegistry?.[request.integrationName];
+    const hasRegistryExecutor =
+        contextStepExecutorRegistry !== undefined &&
+        Object.prototype.hasOwnProperty.call(
+            contextStepExecutorRegistry,
+            request.integrationName
+        );
+    const registryExecutor = hasRegistryExecutor
+        ? contextStepExecutorRegistry[request.integrationName]
+        : undefined;
     if (registryExecutor !== undefined) {
         return registryExecutor;
     }
     return contextStepExecutor;
 };
 
+/**
+ * Picks a single native-search hint from context-step outputs when OpenAI
+ * follow-up search is enabled. Returns undefined fail-open when hints are
+ * missing or malformed.
+ */
 export const selectFollowUpSearchHint = (input: {
     results: ContextStepResult[];
     openAiNativeSearchFromHintsEnabled: boolean;
