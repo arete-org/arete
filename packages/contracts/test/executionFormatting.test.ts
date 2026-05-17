@@ -269,3 +269,94 @@ test('formatExecutionTimelineSummary surfaces planner lineage from workflow plan
         'planner:openai-text-fast(executed, 10ms) -> generation:gpt-5-mini(executed)'
     );
 });
+
+test('formatExecutionTimelineSummary appends workflow assess and refinement steps for reviewed loops', () => {
+    const summary = formatExecutionTimelineSummary(
+        [
+            {
+                kind: 'planner',
+                status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'text_json',
+                applyOutcome: 'applied',
+                mattered: false,
+                matteredControlIds: [],
+                model: 'gpt-5-nano',
+            },
+            {
+                kind: 'generation',
+                status: 'executed',
+                model: 'gpt-5-mini',
+                durationMs: 120,
+            },
+        ],
+        {
+            workflowId: 'wf_3',
+            workflowName: 'message_reviewed',
+            status: 'degraded',
+            terminationReason: 'executor_error_fail_open',
+            stepCount: 4,
+            maxSteps: 8,
+            maxDurationMs: 70000,
+            steps: [
+                {
+                    stepId: 'step_plan_1',
+                    attempt: 1,
+                    stepKind: 'plan',
+                    startedAt: '2026-04-01T00:00:00.000Z',
+                    finishedAt: '2026-04-01T00:00:00.010Z',
+                    durationMs: 10,
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Planner step emitted bounded summary.',
+                    },
+                },
+                {
+                    stepId: 'step_generate_1',
+                    attempt: 1,
+                    stepKind: 'generate',
+                    startedAt: '2026-04-01T00:00:00.010Z',
+                    finishedAt: '2026-04-01T00:00:00.130Z',
+                    durationMs: 120,
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Generated initial draft response.',
+                    },
+                },
+                {
+                    stepId: 'step_assess_1',
+                    attempt: 1,
+                    stepKind: 'assess',
+                    startedAt: '2026-04-01T00:00:00.130Z',
+                    finishedAt: '2026-04-01T00:00:00.150Z',
+                    durationMs: 20,
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Assessment step evaluated draft quality.',
+                    },
+                },
+                {
+                    stepId: 'step_generate_2',
+                    attempt: 1,
+                    stepKind: 'generate',
+                    startedAt: '2026-04-01T00:00:00.150Z',
+                    finishedAt: '2026-04-01T00:00:00.190Z',
+                    durationMs: 40,
+                    reasonCode: 'generation_runtime_error',
+                    outcome: {
+                        status: 'failed',
+                        summary: 'Refinement generation failed.',
+                        signals: {
+                            refinementApplied: true,
+                        },
+                    },
+                },
+            ],
+        }
+    );
+
+    assert.equal(
+        summary,
+        'planner:workflow(executed, 10ms) -> generation:gpt-5-mini(executed, 120ms) -> assess:workflow(executed, 20ms) -> generate:workflow(failed, generation_runtime_error, 40ms)'
+    );
+});
