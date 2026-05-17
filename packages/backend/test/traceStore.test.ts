@@ -152,3 +152,65 @@ test('TraceStore delete removes both trace metadata and trace-card SVG', async (
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
+
+test('TraceStore retrieve repairs missing assess TRACE alignment fail-open', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-repair-'));
+    const dbPath = path.join(tempRoot, 'provenance.db');
+    const store = new SqliteTraceStore({ dbPath });
+    const responseId = 'trace_repair_alignment_123';
+
+    const metadata: ResponseMetadata = {
+        responseId,
+        provenance: 'Inferred',
+        safetyTier: 'Low',
+        tradeoffCount: 1,
+        chainHash: 'repair_hash',
+        licenseContext: 'MIT + HL3',
+        modelVersion: 'gpt-5-mini',
+        staleAfter: new Date(Date.now() + 60000).toISOString(),
+        citations: [],
+        trace_target: {},
+        trace_final: {},
+        workflow: {
+            workflowId: 'wf_repair_123',
+            workflowName: 'message_reviewed',
+            status: 'completed',
+            terminationReason: 'goal_satisfied',
+            stepCount: 1,
+            maxSteps: 4,
+            maxDurationMs: 15000,
+            steps: [
+                {
+                    stepId: 'step_1',
+                    attempt: 1,
+                    stepKind: 'assess',
+                    startedAt: new Date().toISOString(),
+                    finishedAt: new Date().toISOString(),
+                    durationMs: 1,
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Assess completed.',
+                        signals: {
+                            reviewDecision: 'finalize',
+                            reviewReason: 'Ready.',
+                        },
+                    },
+                },
+            ],
+        },
+    };
+
+    try {
+        await store.upsert(metadata);
+        const repaired = await store.retrieve(responseId);
+        assert.ok(repaired, 'trace should be retrievable with compatibility');
+        const assessStep = repaired.workflow?.steps.find(
+            (step) => step.stepKind === 'assess'
+        );
+        assert.ok(assessStep);
+        assert.equal(assessStep.outcome.signals?.traceAlignment, 'aligned');
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});

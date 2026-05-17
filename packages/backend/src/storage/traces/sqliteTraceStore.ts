@@ -5,15 +5,17 @@
  * @footnote-risk: medium - Storage errors can drop trace records or corrupt metadata.
  * @footnote-ethics: medium - Trace accuracy underpins transparency and auditability.
  */
-import type { Citation, ResponseMetadata } from '@footnote/contracts/policy';
+import {
+    TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS,
+    type Citation,
+    type ResponseMetadata,
+} from '@footnote/contracts/policy';
+import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
-import {
-    assertValidResponseMetadata,
-    traceStoreJsonReplacer,
-} from './traceStoreUtils.js';
+import { traceStoreJsonReplacer } from './traceStoreUtils.js';
 
 const BUSY_MAX_ATTEMPTS = 5;
 const BUSY_RETRY_DELAY_MS = 50;
@@ -23,6 +25,120 @@ const traceLogger =
     typeof logger.child === 'function'
         ? logger.child({ module: 'sqliteTraceStore' })
         : logger;
+const TRACE_ASSESS_FINAL_AXIS_SIGNAL_KEYS = Object.values(
+    TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS
+);
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    !!value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype;
+
+const hasFinalTemperamentAxisSignals = (
+    signals: Record<string, unknown>
+): boolean =>
+    TRACE_ASSESS_FINAL_AXIS_SIGNAL_KEYS.some((axisKey) => {
+        const score = signals[axisKey];
+        return (
+            typeof score === 'number' &&
+            Number.isInteger(score) &&
+            score >= 1 &&
+            score <= 5
+        );
+    });
+
+const normalizeAssessSignalsForCompatibility = (
+    signals: Record<string, unknown>
+): Record<string, unknown> => {
+    const normalizedSignals: Record<string, unknown> = { ...signals };
+    const reviewDecision = normalizedSignals.reviewDecision;
+    const reviewReason = normalizedSignals.reviewReason;
+    if (
+        (reviewDecision === 'finalize' || reviewDecision === 'revise') &&
+        (typeof reviewReason !== 'string' || reviewReason.trim().length === 0)
+    ) {
+        normalizedSignals.reviewReason =
+            'Compatibility fallback: assess reason unavailable.';
+    }
+    if (reviewDecision === 'revise') {
+        const revisionInstruction = normalizedSignals.revisionInstruction;
+        if (
+            typeof revisionInstruction !== 'string' ||
+            revisionInstruction.trim().length === 0
+        ) {
+            normalizedSignals.revisionInstruction =
+                'Compatibility fallback: revision instruction unavailable.';
+        }
+    }
+
+    const traceAlignment = normalizedSignals.traceAlignment;
+    const hasTraceAlignment =
+        traceAlignment === 'aligned' || traceAlignment === 'misaligned';
+    if (!hasTraceAlignment) {
+        normalizedSignals.traceAlignment = 'aligned';
+        return normalizedSignals;
+    }
+
+    if (traceAlignment === 'misaligned') {
+        const traceAlignmentReason = normalizedSignals.traceAlignmentReason;
+        const hasReason =
+            typeof traceAlignmentReason === 'string' &&
+            traceAlignmentReason.trim().length > 0;
+        if (!hasReason || !hasFinalTemperamentAxisSignals(normalizedSignals)) {
+            normalizedSignals.traceAlignment = 'aligned';
+            delete normalizedSignals.traceAlignmentReason;
+        }
+    }
+
+    return normalizedSignals;
+};
+
+const repairTraceMetadataForCompatibility = (metadata: unknown): unknown => {
+    if (!isPlainObject(metadata)) {
+        return metadata;
+    }
+
+    const root = { ...metadata };
+    if (!isPlainObject(root.workflow)) {
+        return root;
+    }
+
+    const workflow = { ...root.workflow };
+    if (!Array.isArray(workflow.steps)) {
+        root.workflow = workflow;
+        return root;
+    }
+
+    workflow.steps = workflow.steps.map((step): unknown => {
+        if (!isPlainObject(step)) {
+            return step;
+        }
+        if (step.stepKind !== 'assess') {
+            return step;
+        }
+        if (!isPlainObject(step.outcome)) {
+            return step;
+        }
+        if (step.outcome.status !== 'executed') {
+            return step;
+        }
+        const outcome = { ...step.outcome };
+        const existingSignals = isPlainObject(outcome.signals)
+            ? outcome.signals
+            : {};
+        outcome.signals =
+            normalizeAssessSignalsForCompatibility(existingSignals);
+
+        return {
+            ...step,
+            outcome,
+        };
+    });
+
+    root.workflow = workflow;
+    return root;
+};
 
 export interface SqliteTraceStoreConfig {
     dbPath: string;
@@ -232,43 +348,60 @@ export class SqliteTraceStore {
             return null;
         }
 
-        const filePath = `sqlite:${responseId}`;
-        const parsed = JSON.parse(row.metadata_json) as unknown;
-
-        if (
-            !parsed ||
-            typeof parsed !== 'object' ||
-            !Array.isArray((parsed as { citations?: unknown }).citations)
-        ) {
-            throw new Error(
-                `Trace record "${responseId}" is invalid: missing citations array.`
+        let parsedJson: unknown;
+        try {
+            parsedJson = JSON.parse(row.metadata_json) as unknown;
+        } catch (error) {
+            traceLogger.warn(
+                `Trace record "${responseId}" failed JSON parsing; returning null fail-open.`,
+                {
+                    responseId,
+                    reasonCode: 'trace_json_parse_error',
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                }
             );
+            return null;
         }
 
-        const citations = (parsed as { citations: unknown[] }).citations;
-        for (const citation of citations) {
-            if (!citation || typeof citation !== 'object') {
-                throw new Error(
-                    `Trace record "${responseId}" is invalid: citation entry is invalid.`
+        const strictParsed = ResponseMetadataSchema.safeParse(parsedJson);
+        if (strictParsed.success) {
+            if (strictParsed.data.responseId !== responseId) {
+                traceLogger.warn(
+                    `Trace record "${responseId}" has mismatched responseId "${strictParsed.data.responseId}"; returning null fail-open.`
                 );
+                return null;
             }
-
-            const citationRecord = citation as Record<string, unknown>;
-            if (typeof citationRecord.url !== 'string') {
-                throw new Error(
-                    `Trace record "${responseId}" is invalid: citation URL missing or malformed.`
-                );
-            }
+            return strictParsed.data;
         }
 
-        assertValidResponseMetadata(parsed, filePath, responseId);
-        if ((parsed as ResponseMetadata).responseId !== responseId) {
-            throw new Error(
-                `Trace record "${responseId}" is corrupted: responseId mismatch (expected "${responseId}" but found "${(parsed as ResponseMetadata).responseId}").`
+        const repairedPayload = repairTraceMetadataForCompatibility(parsedJson);
+        const repairedParsed =
+            ResponseMetadataSchema.safeParse(repairedPayload);
+        if (repairedParsed.success) {
+            if (repairedParsed.data.responseId !== responseId) {
+                traceLogger.warn(
+                    `Compatibility-repaired trace "${responseId}" still has mismatched responseId "${repairedParsed.data.responseId}"; returning null fail-open.`
+                );
+                return null;
+            }
+            traceLogger.warn(
+                `Trace record "${responseId}" required compatibility repair to satisfy metadata schema.`
             );
+            return repairedParsed.data;
         }
 
-        return parsed as ResponseMetadata;
+        const firstIssue = repairedParsed.error.issues[0];
+        const issuePath =
+            firstIssue && firstIssue.path.length > 0
+                ? firstIssue.path.join('.')
+                : 'root';
+        const issueMessage =
+            firstIssue?.message ?? 'Invalid trace metadata payload.';
+        traceLogger.warn(
+            `Trace record "${responseId}" remains invalid after compatibility repair (${issuePath}: ${issueMessage}); returning null fail-open.`
+        );
+        return null;
     }
 
     async delete(responseId: string): Promise<void> {
