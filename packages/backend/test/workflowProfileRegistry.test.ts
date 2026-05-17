@@ -108,6 +108,7 @@ test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review
         reviewLoopEnabled: true,
         maxIterations: 5,
         maxDurationMs: 9000,
+        maxRequestReviewCycles: 7,
     });
     assert.equal(balancedRuntimeConfig.profileId, 'reviewed');
     assert.equal(balancedRuntimeConfig.workflowExecutionEnabled, true);
@@ -137,6 +138,7 @@ test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review
         reviewLoopEnabled: false,
         maxIterations: 5,
         maxDurationMs: 9000,
+        maxRequestReviewCycles: 7,
     });
     assert.equal(groundedRuntimeConfig.profileId, 'reviewed');
     assert.equal(groundedRuntimeConfig.workflowExecutionEnabled, false);
@@ -238,6 +240,7 @@ test('resolveWorkflowRuntimeConfig exposes bounded workflow-owned escalation met
         reviewLoopEnabled: true,
         maxIterations: 3,
         maxDurationMs: 9000,
+        maxRequestReviewCycles: 7,
         modeEscalationRequest: {
             targetModeId: 'grounded',
             reason: 'retrieval required for grounded evidence posture',
@@ -260,6 +263,7 @@ test('resolveWorkflowRuntimeConfig rejects downward mode changes and keeps initi
         reviewLoopEnabled: true,
         maxIterations: 3,
         maxDurationMs: 9000,
+        maxRequestReviewCycles: 7,
         modeEscalationRequest: {
             targetModeId: 'balanced',
             reason: 'attempt downgrade',
@@ -282,6 +286,7 @@ test('resolveWorkflowRuntimeConfig fails open when escalation target mode id is 
         reviewLoopEnabled: true,
         maxIterations: 3,
         maxDurationMs: 9000,
+        maxRequestReviewCycles: 7,
         modeEscalationRequest: {
             targetModeId: 'not-a-mode',
             reason: 'unsafe runtime input',
@@ -370,6 +375,7 @@ test('resolveWorkflowRuntimeConfig keeps maxDeliberationCalls compatibility mapp
         reviewLoopEnabled: true,
         maxIterations: 5,
         maxDurationMs: 9000,
+        maxRequestReviewCycles: 7,
     });
     assert.equal(
         balanced.workflowExecutionLimits.maxDeliberationCalls,
@@ -384,6 +390,7 @@ test('resolveWorkflowRuntimeConfig allows grounded contract defaults to run at l
         reviewLoopEnabled: false,
         maxIterations: 5,
         maxDurationMs: 9000,
+        maxRequestReviewCycles: 7,
         ExecutionContract: {
             response: {
                 responseMode: 'quality_grounded',
@@ -413,4 +420,19 @@ test('resolveWorkflowRuntimeConfig allows grounded contract defaults to run at l
         groundedWithContract.workflowExecutionLimits.maxDeliberationCalls,
         3
     );
+});
+
+test('resolveWorkflowRuntimeConfig clamps request maxReviewCycles to configured cap', () => {
+    const capped = resolveWorkflowRuntimeConfig({
+        modeId: 'grounded',
+        reviewLoopEnabled: true,
+        maxIterations: 5,
+        maxDurationMs: 9000,
+        maxRequestReviewCycles: 7,
+        requestMaxReviewCycles: 50,
+    });
+
+    assert.equal(capped.workflowExecutionLimits.maxReviewCycles, 7);
+    assert.equal(capped.workflowExecutionLimits.maxPlanCycles, 7);
+    assert.equal(capped.workflowExecutionLimits.maxDeliberationCalls, 14);
 });

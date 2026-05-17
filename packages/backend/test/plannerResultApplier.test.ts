@@ -132,13 +132,13 @@ test('PlannerResultApplier applies surface coercion for web requests', () => {
     assert.equal(output.plannerApplyOutcome, 'applied');
 });
 
-test('PlannerResultApplier merges request generation overrides', () => {
+test('PlannerResultApplier merges request TRACE target overrides', () => {
     const applier = createApplier();
     const output = applier({
         normalizedRequest: createChatRequest({
-            generation: {
-                reasoningEffort: 'high',
-                verbosity: 'high',
+            traceTarget: {
+                tightness: 5,
+                caution: 4,
             },
         }),
         plannerStepResult: createPlannerStepResult(),
@@ -148,8 +148,8 @@ test('PlannerResultApplier merges request generation overrides', () => {
         }).policyContract,
     });
 
-    assert.equal(output.generationForExecution.reasoningEffort, 'high');
-    assert.equal(output.generationForExecution.verbosity, 'high');
+    assert.equal(output.generationForExecution.temperament?.tightness, 5);
+    assert.equal(output.generationForExecution.temperament?.caution, 4);
 });
 
 test('PlannerResultApplier enforces single-tool policy and derives weather context-step request', () => {
@@ -179,9 +179,7 @@ test('PlannerResultApplier enforces single-tool policy and derives weather conte
 test('PlannerResultApplier resolves profile and keeps planner suggestions non-authoritative', () => {
     const applier = createApplier();
     const output = applier({
-        normalizedRequest: createChatRequest({
-            profileId: runtimeConfig.modelProfiles.defaultProfileId,
-        }),
+        normalizedRequest: createChatRequest(),
         plannerStepResult: createPlannerStepResult({
             plan: {
                 ...createPlannerStepResult().plan,

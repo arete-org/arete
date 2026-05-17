@@ -150,6 +150,12 @@ export const buildServiceSections = (
             'CHAT_REVIEW_LOOP_MAX_DURATION_MS',
             warn
         ),
+        maxRequestReviewCycles: parseNonNegativeIntEnv(
+            env.CHAT_MAX_REQUEST_REVIEW_CYCLES,
+            7,
+            'CHAT_MAX_REQUEST_REVIEW_CYCLES',
+            warn
+        ),
         contextIntegrations: {
             webSearch: {
                 enabled: parseBooleanEnv(

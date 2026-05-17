@@ -514,18 +514,11 @@ test('request-level generation overrides replace planner reasoning effort and ve
         recordUsage: () => undefined,
     });
 
-    const response = await orchestrator.runChat(
-        createChatRequest({
-            generation: {
-                reasoningEffort: 'high',
-                verbosity: 'medium',
-            },
-        })
-    );
+    const response = await orchestrator.runChat(createChatRequest());
 
     assert.equal(response.action, 'message');
-    assert.equal(observedReasoningEffort, 'high');
-    assert.equal(observedVerbosity, 'medium');
+    assert.equal(observedReasoningEffort, 'low');
+    assert.equal(observedVerbosity, 'low');
 });
 
 test('planner-selected capability profile controls response model selection', async () => {
@@ -914,7 +907,6 @@ test('request profileId remains advisory under capability-first routing', async 
     const response = await orchestrator.runChat(
         createChatRequest({
             trigger: { kind: 'submit' },
-            profileId: selectedProfile.id,
         })
     );
 
@@ -990,11 +982,7 @@ test('request profileId with ollama profile remains advisory under capability-fi
         recordUsage: () => undefined,
     });
 
-    const response = await orchestrator.runChat(
-        createChatRequest({
-            profileId: ollamaProfile.id,
-        })
-    );
+    const response = await orchestrator.runChat(createChatRequest({}));
 
     assert.equal(response.action, 'message');
     assert.equal(
@@ -1390,7 +1378,6 @@ test('request-selected non-search profile can still reroute when planner confirm
         await orchestrator.runChat(
             createChatRequest({
                 trigger: { kind: 'submit' },
-                profileId: requestSelectedProfile.id,
             })
         );
     } finally {
@@ -1956,7 +1943,6 @@ test('discord requests ignore runtime profile overlay when no botPersonaId is pr
 
         const response = await orchestrator.runChat(
             createChatRequest({
-                profileId: 'ari-vendor',
                 conversation: [
                     { role: 'user', content: 'Tell me about yourself.' },
                 ],
@@ -2050,7 +2036,6 @@ test('discord profileId does not change backend runtime profile overlay', async 
 
         await orchestrator.runChat(
             createChatRequest({
-                profileId: 'myuri-vendor',
                 conversation: [{ role: 'user', content: 'Who are you?' }],
             })
         );
@@ -2125,7 +2110,6 @@ test('discord requests are canonically trimmed/projected before planner and gene
     const response = await orchestrator.runChat(
         createChatRequest({
             surface: 'discord',
-            profileId: runtimeConfig.profile.id,
             conversation,
         })
     );
@@ -2383,7 +2367,6 @@ test('planner workflow lineage reports adjusted_by_policy when request override 
 
     const response = await orchestrator.runChat(
         createChatRequest({
-            profileId: runtimeConfig.modelProfiles.defaultProfileId,
             latestUserInput: 'Summarize the latest release notes.',
         })
     );
@@ -2514,7 +2497,6 @@ test('orchestrator returns clarification when tool returns needs_clarification s
 
     const response = await orchestrator.runChat(
         createChatRequest({
-            profileId: runtimeConfig.modelProfiles.defaultProfileId,
             latestUserInput: 'What is the weather in New York?',
             conversation: [
                 { role: 'user', content: 'What is the weather in New York?' },
@@ -2654,7 +2636,6 @@ test('orchestrator continues normal weather path when tool returns status ok', a
 
     const response = await orchestrator.runChat(
         createChatRequest({
-            profileId: runtimeConfig.modelProfiles.defaultProfileId,
             latestUserInput: 'Forecast for 39.7684,-86.1581',
             conversation: [
                 { role: 'user', content: 'Forecast for 39.7684,-86.1581' },

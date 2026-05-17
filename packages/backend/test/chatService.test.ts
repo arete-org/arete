@@ -1812,7 +1812,6 @@ test('runChatMessages forwards planner seams into workflow runtime for reviewed 
                 conversation: [{ role: 'user', content: 'Summarize this.' }],
                 surface: 'web',
                 trigger: { kind: 'submit' },
-                profileId: 'openai-text-fast',
             },
             invocationContext: {
                 owner: 'workflow',
@@ -1826,7 +1825,6 @@ test('runChatMessages forwards planner seams into workflow runtime for reviewed 
             plan: {
                 action: 'message',
                 modality: 'text',
-                profileId: 'openai-text-fast',
                 safetyTier: 'Low',
                 reasoning: 'Planner execution context forwarding test.',
                 generation: {

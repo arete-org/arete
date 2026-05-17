@@ -507,6 +507,8 @@ export const resolveWorkflowRuntimeConfig = (input: {
     reviewLoopEnabled: boolean;
     maxIterations: number;
     maxDurationMs: number;
+    maxRequestReviewCycles: number;
+    requestMaxReviewCycles?: number;
     ExecutionContract?: Pick<ExecutionContract, 'response' | 'limits'>;
     modeEscalationRequest?: WorkflowModeEscalationRequest;
 }): ResolvedWorkflowRuntimeConfig => {
@@ -561,13 +563,16 @@ export const resolveWorkflowRuntimeConfig = (input: {
         executionContract?.limits.maxDeliberationCalls ?? Infinity,
         Infinity
     );
-    const resolvedMaxPlanCycles = Math.min(
+    const resolvedMaxPlanCyclesBaseline = Math.min(
         sanitizeNonNegativeInteger(defaultPlanCycles, defaultPlanCycles),
         sanitizeNonNegativeInteger(modeMaxPlanCycles, modeMaxPlanCycles),
         contractBudget
     );
-    const remainingBudget = Math.max(0, contractBudget - resolvedMaxPlanCycles);
-    const resolvedMaxReviewCycles = Math.min(
+    const remainingBudget = Math.max(
+        0,
+        contractBudget - resolvedMaxPlanCyclesBaseline
+    );
+    const resolvedMaxReviewCyclesBaseline = Math.min(
         sanitizeNonNegativeInteger(
             executionContract?.limits.maxDeliberationCalls !== undefined
                 ? Math.max(0, executionContract.limits.maxDeliberationCalls - 1)
@@ -579,8 +584,24 @@ export const resolveWorkflowRuntimeConfig = (input: {
         sanitizeNonNegativeInteger(modeMaxReviewCycles, modeMaxReviewCycles),
         remainingBudget
     );
+    const requestMaxReviewCycles = sanitizeNonNegativeInteger(
+        input.requestMaxReviewCycles ?? resolvedMaxReviewCyclesBaseline,
+        resolvedMaxReviewCyclesBaseline
+    );
+    // Request-level review override is clamped to the contract-safe resolved
+    // review baseline for this run.
+    const resolvedMaxReviewCycles = Math.min(
+        requestMaxReviewCycles,
+        resolvedMaxReviewCyclesBaseline
+    );
+    // Keep plan/review coupling aligned with current workflow behavior where
+    // deeper review loops imply deeper planner re-entry opportunity.
+    const resolvedMaxPlanCyclesCoupled = Math.max(
+        resolvedMaxPlanCyclesBaseline,
+        resolvedMaxReviewCycles
+    );
     const resolvedMaxDeliberationCalls =
-        resolvedMaxPlanCycles + resolvedMaxReviewCycles;
+        resolvedMaxPlanCyclesCoupled + resolvedMaxReviewCycles;
     const workflowExecutionLimits: WorkflowProfileRuntime['defaultLimits'] = {
         maxWorkflowSteps: Math.min(
             sanitizePositiveInteger(
@@ -597,7 +618,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
                 workflowProfile.defaultLimits.maxToolCalls,
             workflowProfile.defaultLimits.maxToolCalls
         ),
-        maxPlanCycles: resolvedMaxPlanCycles,
+        maxPlanCycles: resolvedMaxPlanCyclesCoupled,
         maxReviewCycles: resolvedMaxReviewCycles,
         maxDeliberationCalls: resolvedMaxDeliberationCalls,
         maxTokensTotal: sanitizeNonNegativeInteger(

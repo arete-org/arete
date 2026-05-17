@@ -88,8 +88,8 @@ paths:
                 Submit a transport-neutral chat request and receive the backend-selected action.
                 Public web callers use Turnstile when enabled; trusted internal callers may authenticate with service headers.
                 Send X-Session-Id / X-Turnstile-Token headers when needed for browser traffic.
-                Optionally provide `profileId` to select a backend response profile.
                 Optionally provide `botPersonaId` to select the backend-owned bot persona overlay (discord).
+                Optionally provide `maxReviewCycles` and `traceTarget` to tune workflow depth and TRACE posture for this request.
             tags:
                 - Chat
             parameters:
@@ -1300,23 +1300,33 @@ components:
                     type: string
                     pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
                     description: Optional bot persona selector used for backend-owned persona overlays (discord).
-                profileId:
-                    type: string
-                    pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
-                    description: Optional response profile selector resolved by backend model routing.
                 modeId:
                     type: string
                     enum: [balanced, grounded]
                     description: Optional user-facing posture selector for workflow mode routing.
-                generation:
+                maxReviewCycles:
+                    type: integer
+                    minimum: 0
+                    description: Optional hard override for reviewed workflow cycle depth.
+                traceTarget:
                     type: object
+                    description: Optional partial TRACE target override for this request.
                     properties:
-                        reasoningEffort:
-                            type: string
-                            enum: [minimal, low, medium, high]
-                        verbosity:
-                            type: string
-                            enum: [low, medium, high]
+                        tightness:
+                            type: integer
+                            enum: [1, 2, 3, 4, 5]
+                        rationale:
+                            type: integer
+                            enum: [1, 2, 3, 4, 5]
+                        attribution:
+                            type: integer
+                            enum: [1, 2, 3, 4, 5]
+                        caution:
+                            type: integer
+                            enum: [1, 2, 3, 4, 5]
+                        extent:
+                            type: integer
+                            enum: [1, 2, 3, 4, 5]
                     additionalProperties: false
                 trigger:
                     type: object

@@ -322,12 +322,15 @@ export type ChatImageRequest = {
 export type PostChatRequest = {
     surface: ChatSurface;
     botPersonaId?: string;
-    profileId?: string;
     modeId?: WorkflowModeId;
-    generation?: {
-        reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
-        verbosity?: 'low' | 'medium' | 'high';
-    };
+    maxReviewCycles?: number;
+    traceTarget?: Partial<{
+        tightness: TraceAxisScore;
+        rationale: TraceAxisScore;
+        attribution: TraceAxisScore;
+        caution: TraceAxisScore;
+        extent: TraceAxisScore;
+    }>;
     trigger: {
         kind: ChatTriggerKind;
         messageId?: string;
