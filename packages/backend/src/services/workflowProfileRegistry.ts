@@ -11,7 +11,7 @@
 import {
     DEFAULT_REVIEW_DECISION_PROMPT,
     DEFAULT_REVISION_PROMPT_PREFIX,
-    parseReviewDecisionText,
+    parseReviewDecisionOutput,
 } from './workflowEngine.js';
 import type {
     ExecutionContract,
@@ -23,7 +23,7 @@ import type {
     WorkflowModeId,
 } from '@footnote/contracts/policy';
 import type {
-    RuntimeWorkflowProfile,
+    WorkflowProfileRuntime,
     WorkflowProfileContract,
     WorkflowProfileId,
 } from './workflowProfileContract.js';
@@ -42,7 +42,7 @@ type BuiltinWorkflowModeId = WorkflowModeId;
  * - Chat orchestrator remains the runtime coordinator.
  */
 const EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
-    RuntimeWorkflowProfile['policy']
+    WorkflowProfileRuntime['policy']
 > = {
     enablePlanning: true,
     enableToolUse: true,
@@ -53,7 +53,7 @@ const EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
 };
 
 const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
-    RuntimeWorkflowProfile['defaultLimits']
+    WorkflowProfileRuntime['defaultLimits']
 > = {
     maxWorkflowSteps: 4,
     maxToolCalls: 1,
@@ -64,7 +64,7 @@ const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
     maxDurationMs: 15000,
 };
 
-const REVIEWED_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
+const REVIEWED_WORKFLOW_PROFILE: WorkflowProfileRuntime = {
     profileId: 'reviewed',
     profileVersion: 'v1',
     displayName: 'Reviewed',
@@ -82,7 +82,7 @@ const REVIEWED_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
         canEmitGeneration: () => true,
         classifyNoGeneration: (reasonCode) => reasonCode,
     },
-    parseReviewDecision: parseReviewDecisionText,
+    parseReviewDecision: parseReviewDecisionOutput,
 };
 
 // Extension checklist (workflow profiles):
@@ -90,7 +90,7 @@ const REVIEWED_WORKFLOW_PROFILE: RuntimeWorkflowProfile = {
 // 2) Keep unknown-id fail-open behavior in this module.
 // 3) Add/adjust registry + chatService tests for execution/fallback behavior.
 const BUILTIN_RUNTIME_WORKFLOW_PROFILES: Readonly<
-    Record<BuiltinWorkflowProfileId, RuntimeWorkflowProfile>
+    Record<BuiltinWorkflowProfileId, WorkflowProfileRuntime>
 > = {
     reviewed: REVIEWED_WORKFLOW_PROFILE,
 };
@@ -413,7 +413,7 @@ const deriveDefaultMaxIterationsFromWorkflowSteps = (
 };
 
 const toWorkflowProfileContract = (
-    runtimeProfile: RuntimeWorkflowProfile
+    runtimeProfile: WorkflowProfileRuntime
 ): WorkflowProfileContract => ({
     profileId: runtimeProfile.profileId,
     profileVersion: runtimeProfile.profileVersion,
@@ -430,7 +430,7 @@ export type WorkflowProfileRegistryResolution = {
     requestedProfileId?: string;
     isKnownProfileId: boolean;
     /** Runtime shape with hooks used by workflow execution. */
-    runtimeProfile: RuntimeWorkflowProfile;
+    runtimeProfile: WorkflowProfileRuntime;
     /** Serializable mirror safe to expose beyond backend runtime. */
     profileContract: WorkflowProfileContract;
 };
@@ -482,10 +482,10 @@ export type ResolvedWorkflowRuntimeConfig = {
     modeId: WorkflowModeId;
     modeDecision: WorkflowModeDecision;
     profileId: WorkflowProfileId;
-    runtimeProfile: RuntimeWorkflowProfile;
+    runtimeProfile: WorkflowProfileRuntime;
     profileContract: WorkflowProfileContract;
     workflowExecutionEnabled: boolean;
-    workflowExecutionLimits: RuntimeWorkflowProfile['defaultLimits'];
+    workflowExecutionLimits: WorkflowProfileRuntime['defaultLimits'];
 };
 
 /**
@@ -581,7 +581,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
     );
     const resolvedMaxDeliberationCalls =
         resolvedMaxPlanCycles + resolvedMaxReviewCycles;
-    const workflowExecutionLimits: RuntimeWorkflowProfile['defaultLimits'] = {
+    const workflowExecutionLimits: WorkflowProfileRuntime['defaultLimits'] = {
         maxWorkflowSteps: Math.min(
             sanitizePositiveInteger(
                 executionContract?.limits.maxWorkflowSteps ??
