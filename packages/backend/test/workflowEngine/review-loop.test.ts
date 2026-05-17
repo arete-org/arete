@@ -462,6 +462,7 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         assessStep.outcome.signals?.reviewReason,
         'Draft is complete and clear.'
     );
+    assert.equal(assessStep.outcome.signals?.traceAlignment, 'aligned');
     assert.equal(generationCalls, 2);
 });
 
@@ -575,6 +576,11 @@ test('runBoundedReviewWorkflow executes engine-bounded refinement path without r
     );
     assert.ok(assessReviseStep);
     assert.equal(assessReviseStep.outcome.signals?.refinementRequested, true);
+    assert.equal(
+        assessReviseStep.outcome.signals?.revisionInstruction,
+        'Trim and soften the phrasing.'
+    );
+    assert.equal(assessReviseStep.outcome.signals?.traceAlignment, 'aligned');
     assert.equal(assessReviseStep.outcome.signals?.moduleHintCount, 1);
     assert.equal(
         assessReviseStep.outcome.signals?.moduleHintIdsCsv,
@@ -778,4 +784,86 @@ test('runBoundedReviewWorkflow fail-opens when assess revise omits required revi
         ),
         false
     );
+});
+
+test('runBoundedReviewWorkflow persists assess TRACE alignment signals when provided', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+
+            return {
+                text: '{"reviewDecision":"finalize","reviewReason":"Ready to ship.","traceAlignment":"misaligned","traceAlignmentReason":"Need tighter caution tone.","finalTemperament":{"caution":4}}',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    const assessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.ok(assessStep);
+    assert.equal(assessStep.outcome.status, 'executed');
+    assert.equal(assessStep.outcome.signals?.traceAlignment, 'misaligned');
+    assert.equal(
+        assessStep.outcome.signals?.traceAlignmentReason,
+        'Need tighter caution tone.'
+    );
+    assert.equal(assessStep.outcome.signals?.finalTemperamentCaution, 4);
 });

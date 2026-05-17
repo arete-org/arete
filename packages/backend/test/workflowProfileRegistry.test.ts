@@ -377,3 +377,40 @@ test('resolveWorkflowRuntimeConfig keeps maxDeliberationCalls compatibility mapp
             (balanced.workflowExecutionLimits.maxReviewCycles ?? 0)
     );
 });
+
+test('resolveWorkflowRuntimeConfig allows grounded contract defaults to run at least one refinement cycle', () => {
+    const groundedWithContract = resolveWorkflowRuntimeConfig({
+        modeId: 'grounded',
+        reviewLoopEnabled: false,
+        maxIterations: 5,
+        maxDurationMs: 9000,
+        ExecutionContract: {
+            response: {
+                responseMode: 'quality_grounded',
+                stoppingRule: 'bounded_sufficient_answer',
+            },
+            limits: {
+                maxWorkflowSteps: 8,
+                maxToolCalls: 3,
+                maxDeliberationCalls: 3,
+                maxTokensTotal: 14000,
+                maxDurationMs: 70000,
+            },
+        },
+    });
+
+    assert.equal(groundedWithContract.workflowExecutionEnabled, true);
+    assert.equal(
+        groundedWithContract.workflowExecutionLimits.maxWorkflowSteps,
+        8
+    );
+    assert.equal(groundedWithContract.workflowExecutionLimits.maxPlanCycles, 1);
+    assert.equal(
+        groundedWithContract.workflowExecutionLimits.maxReviewCycles,
+        2
+    );
+    assert.equal(
+        groundedWithContract.workflowExecutionLimits.maxDeliberationCalls,
+        3
+    );
+});

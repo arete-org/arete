@@ -26,6 +26,9 @@ test('resolveExecutionContract maps known preset ids deterministically', () => {
         qualityGrounded.policyContract.response.responseMode,
         'quality_grounded'
     );
+    assert.equal(qualityGrounded.policyContract.limits.maxWorkflowSteps, 8);
+    assert.equal(qualityGrounded.policyContract.limits.maxToolCalls, 3);
+    assert.equal(qualityGrounded.policyContract.limits.maxDeliberationCalls, 3);
     assert.equal(
         qualityGrounded.policyContract.response.stoppingRule,
         'bounded_sufficient_answer'
