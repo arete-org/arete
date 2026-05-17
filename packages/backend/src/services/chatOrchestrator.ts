@@ -726,6 +726,7 @@ export const createChatOrchestrator = ({
             provider: defaultResponseProfile.provider,
             capabilities: defaultResponseProfile.capabilities,
             workflowModeId: workflowModeResolution.modeDecision.modeId,
+            workflowMaxReviewCycles: normalizedRequest.maxReviewCycles,
             plannerStepRequest,
             plannerStepExecutor,
             planContinuationBuilder,
@@ -872,7 +873,7 @@ export const createChatOrchestrator = ({
                 workflowMode: workflowModeResolution.modeDecision,
                 executionContractResponseMode:
                     resolvedExecutionContract.response.responseMode,
-                requestedProfileId: normalizedRequest.profileId,
+                requestedProfileId: undefined,
                 plannerSelectedProfileId: executionPlan.profileId,
                 selectedProfile: {
                     profileId: plannerSummary.selectedResponseProfile.id,
@@ -893,7 +894,7 @@ export const createChatOrchestrator = ({
                             workflowModeResolution.modeDecision.modeId,
                         executionContractResponseMode:
                             resolvedExecutionContract.response.responseMode,
-                        requestedProfileId: normalizedRequest.profileId,
+                        requestedProfileId: undefined,
                         plannerSelectedProfileId: executionPlan.profileId,
                         selectedProfileId:
                             plannerSummary.selectedResponseProfile.id,
@@ -936,7 +937,7 @@ export const createChatOrchestrator = ({
                       workflowMode: workflowModeResolution.modeDecision,
                       executionContractResponseMode:
                           resolvedExecutionContract.response.responseMode,
-                      requestedProfileId: normalizedRequest.profileId,
+                      requestedProfileId: undefined,
                       plannerSelectedProfileId: executionPlan.profileId,
                       selectedProfile: {
                           profileId: plannerSummary.selectedResponseProfile.id,

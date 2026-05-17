@@ -9,29 +9,25 @@ import {
     AttachmentBuilder,
     ChatInputCommandInteraction,
     SlashCommandBuilder,
-    type SlashCommandStringOption,
 } from 'discord.js';
 import type {
+    PartialResponseTemperament,
     ResponseMetadata,
+    TraceAxisScore,
     WorkflowModeId,
 } from '@footnote/contracts/policy';
-import type { ChatProfileOption } from '@footnote/contracts/web';
 import { botApi } from '../api/botApi.js';
 import type { DiscordChatApiResponse } from '../api/index.js';
 import { runtimeConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildProvenanceActionRow } from '../utils/response/provenanceCgi.js';
+import type { ChatProfileOption } from '@footnote/contracts/web';
 import type { Command, SlashCommand } from './BaseCommand.js';
 
-const PROFILE_CHOICE_LIMIT = 25;
-const MAX_PROFILE_CHOICE_LABEL = 100;
 const MAX_REPLY_LENGTH = 2000;
 
-type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
-type Verbosity = 'low' | 'medium' | 'high';
-
 type ChatCommandWithProfiles = Command & {
-    setProfileChoices: (profiles: ChatProfileOption[]) => void;
+    setProfileChoices: (_profiles: ChatProfileOption[]) => void;
 };
 
 const clampReplyContent = (content: string): string => {
@@ -42,49 +38,11 @@ const clampReplyContent = (content: string): string => {
     return `${content.slice(0, MAX_REPLY_LENGTH - 3)}...`;
 };
 
-const toChoiceName = (profile: ChatProfileOption): string => {
-    const description = profile.description?.trim();
-    const rawLabel =
-        description && description.length > 0
-            ? `${profile.id} - ${description}`
-            : profile.id;
-    if (rawLabel.length <= MAX_PROFILE_CHOICE_LABEL) {
-        return rawLabel;
-    }
-
-    return `${rawLabel.slice(0, MAX_PROFILE_CHOICE_LABEL - 3)}...`;
-};
-
-const addProfileOption = (
-    option: SlashCommandStringOption,
-    profileChoices: ChatProfileOption[]
-): SlashCommandStringOption => {
-    const baseOption = option
-        .setName('profile_id')
-        .setDescription('Optional model profile id to use for this one request')
-        .setRequired(false);
-
-    if (profileChoices.length === 0) {
-        return baseOption;
-    }
-
-    for (const profile of profileChoices.slice(0, PROFILE_CHOICE_LIMIT)) {
-        baseOption.addChoices({
-            name: toChoiceName(profile),
-            value: profile.id,
-        });
-    }
-
-    return baseOption;
-};
-
-const buildChatCommandData = (
-    profileChoices: ChatProfileOption[]
-): SlashCommand => {
+const buildChatCommandData = (): SlashCommand => {
     const builder = new SlashCommandBuilder()
         .setName('chat')
         .setDescription(
-            'Send a one-shot prompt with optional profile/model tweaks'
+            'Send a one-shot prompt with optional workflow and TRACE tweaks'
         )
         .addStringOption((option) =>
             option
@@ -92,7 +50,6 @@ const buildChatCommandData = (
                 .setDescription('Prompt to send to backend chat')
                 .setRequired(true)
         )
-        .addStringOption((option) => addProfileOption(option, profileChoices))
         .addStringOption((option) =>
             option
                 .setName('mode')
@@ -103,27 +60,50 @@ const buildChatCommandData = (
                 )
                 .setRequired(false)
         )
-        .addStringOption((option) =>
+        .addIntegerOption((option) =>
             option
-                .setName('reasoning_effort')
-                .setDescription('Reasoning effort hint for this request')
-                .addChoices(
-                    { name: 'Minimal', value: 'minimal' },
-                    { name: 'Low', value: 'low' },
-                    { name: 'Medium', value: 'medium' },
-                    { name: 'High', value: 'high' }
-                )
+                .setName('max_review_cycles')
+                .setDescription('Optional hard override for review cycle depth')
                 .setRequired(false)
         )
-        .addStringOption((option) =>
+        .addIntegerOption((option) =>
             option
-                .setName('verbosity')
-                .setDescription('Verbosity hint for this request')
-                .addChoices(
-                    { name: 'Low', value: 'low' },
-                    { name: 'Medium', value: 'medium' },
-                    { name: 'High', value: 'high' }
-                )
+                .setName('trace_tightness')
+                .setDescription('TRACE tightness axis target (1-5)')
+                .setMinValue(1)
+                .setMaxValue(5)
+                .setRequired(false)
+        )
+        .addIntegerOption((option) =>
+            option
+                .setName('trace_rationale')
+                .setDescription('TRACE rationale axis target (1-5)')
+                .setMinValue(1)
+                .setMaxValue(5)
+                .setRequired(false)
+        )
+        .addIntegerOption((option) =>
+            option
+                .setName('trace_attribution')
+                .setDescription('TRACE attribution axis target (1-5)')
+                .setMinValue(1)
+                .setMaxValue(5)
+                .setRequired(false)
+        )
+        .addIntegerOption((option) =>
+            option
+                .setName('trace_caution')
+                .setDescription('TRACE caution axis target (1-5)')
+                .setMinValue(1)
+                .setMaxValue(5)
+                .setRequired(false)
+        )
+        .addIntegerOption((option) =>
+            option
+                .setName('trace_extent')
+                .setDescription('TRACE extent axis target (1-5)')
+                .setMinValue(1)
+                .setMaxValue(5)
                 .setRequired(false)
         );
 
@@ -164,25 +144,31 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
     );
 
 const buildChatDetailsPrefix = (options: {
-    profileId: string | null | undefined;
     modeId: WorkflowModeId | null;
-    reasoningEffort: ReasoningEffort | null;
-    verbosity: Verbosity | null;
+    maxReviewCycles?: number;
+    traceTarget?: PartialResponseTemperament;
 }): string => {
     const details: string[] = [];
-    const trimmedProfileId = options.profileId?.trim();
-
-    if (trimmedProfileId) {
-        details.push(`> profile_id: ${trimmedProfileId}`);
-    }
     if (options.modeId) {
         details.push(`> mode: ${options.modeId}`);
     }
-    if (options.reasoningEffort) {
-        details.push(`> reasoning_effort: ${options.reasoningEffort}`);
+    if (options.maxReviewCycles !== undefined) {
+        details.push(`> max_review_cycles: ${options.maxReviewCycles}`);
     }
-    if (options.verbosity) {
-        details.push(`> verbosity: ${options.verbosity}`);
+    if (options.traceTarget?.tightness !== undefined) {
+        details.push(`> trace_tightness: ${options.traceTarget.tightness}`);
+    }
+    if (options.traceTarget?.rationale !== undefined) {
+        details.push(`> trace_rationale: ${options.traceTarget.rationale}`);
+    }
+    if (options.traceTarget?.attribution !== undefined) {
+        details.push(`> trace_attribution: ${options.traceTarget.attribution}`);
+    }
+    if (options.traceTarget?.caution !== undefined) {
+        details.push(`> trace_caution: ${options.traceTarget.caution}`);
+    }
+    if (options.traceTarget?.extent !== undefined) {
+        details.push(`> trace_extent: ${options.traceTarget.extent}`);
     }
 
     if (details.length === 0) {
@@ -190,6 +176,21 @@ const buildChatDetailsPrefix = (options: {
     }
 
     return details.join('\n') + '\n\n';
+};
+
+const toTraceAxisScore = (
+    value: number | null | undefined
+): TraceAxisScore | undefined => {
+    if (
+        value === 1 ||
+        value === 2 ||
+        value === 3 ||
+        value === 4 ||
+        value === 5
+    ) {
+        return value;
+    }
+    return undefined;
 };
 
 const buildSearchUnavailablePrefix = (
@@ -210,31 +211,60 @@ const buildSearchUnavailablePrefix = (
 };
 
 const chatCommand: ChatCommandWithProfiles = {
-    data: buildChatCommandData([]),
-    setProfileChoices(profiles: ChatProfileOption[]) {
-        this.data = buildChatCommandData(profiles);
+    data: buildChatCommandData(),
+    setProfileChoices(_profiles: ChatProfileOption[]) {
+        // /chat no longer exposes profile_id choices; keep method as no-op
+        // to preserve startup wiring compatibility.
     },
     async execute(interaction: ChatInputCommandInteraction): Promise<void> {
         await interaction.deferReply();
 
         const prompt = interaction.options.getString('prompt', true).trim();
-        const profileId = interaction.options.getString('profile_id')?.trim();
         const modeId = interaction.options.getString(
             'mode'
         ) as WorkflowModeId | null;
-        const reasoningEffort = interaction.options.getString(
-            'reasoning_effort'
-        ) as ReasoningEffort | null;
-        const verbosity = interaction.options.getString(
-            'verbosity'
-        ) as Verbosity | null;
+        const maxReviewCycles =
+            interaction.options.getInteger('max_review_cycles') ?? undefined;
+        const traceTarget: PartialResponseTemperament = {};
+        const traceTightness = toTraceAxisScore(
+            interaction.options.getInteger('trace_tightness')
+        );
+        const traceRationale = toTraceAxisScore(
+            interaction.options.getInteger('trace_rationale')
+        );
+        const traceAttribution = toTraceAxisScore(
+            interaction.options.getInteger('trace_attribution')
+        );
+        const traceCaution = toTraceAxisScore(
+            interaction.options.getInteger('trace_caution')
+        );
+        const traceExtent = toTraceAxisScore(
+            interaction.options.getInteger('trace_extent')
+        );
+        if (traceTightness !== undefined) {
+            traceTarget.tightness = traceTightness;
+        }
+        if (traceRationale !== undefined) {
+            traceTarget.rationale = traceRationale;
+        }
+        if (traceAttribution !== undefined) {
+            traceTarget.attribution = traceAttribution;
+        }
+        if (traceCaution !== undefined) {
+            traceTarget.caution = traceCaution;
+        }
+        if (traceExtent !== undefined) {
+            traceTarget.extent = traceExtent;
+        }
+        const hasTraceTarget = Object.keys(traceTarget).length > 0;
 
         try {
             const response = await botApi.chatViaApi({
                 surface: 'discord',
                 botPersonaId: runtimeConfig.profile.id,
-                ...(profileId && profileId.length > 0 ? { profileId } : {}),
                 ...(modeId ? { modeId } : {}),
+                ...(maxReviewCycles !== undefined && { maxReviewCycles }),
+                ...(hasTraceTarget ? { traceTarget } : {}),
                 trigger: {
                     kind: 'submit',
                     messageId: interaction.id,
@@ -246,14 +276,6 @@ const chatCommand: ChatCommandWithProfiles = {
                     canGenerateImages: true,
                     canUseTts: true,
                 },
-                ...((reasoningEffort ?? verbosity) !== null
-                    ? {
-                          generation: {
-                              ...(reasoningEffort ? { reasoningEffort } : {}),
-                              ...(verbosity ? { verbosity } : {}),
-                          },
-                      }
-                    : {}),
                 surfaceContext: {
                     channelId: interaction.channelId ?? undefined,
                     guildId: interaction.guildId ?? undefined,
@@ -269,7 +291,7 @@ const chatCommand: ChatCommandWithProfiles = {
                     ? response.metadata
                     : null;
                 const replyBody = clampReplyContent(
-                    `${buildChatDetailsPrefix({ profileId, modeId, reasoningEffort, verbosity })}${buildSearchUnavailablePrefix(metadata)}${response.message}`
+                    `${buildChatDetailsPrefix({ modeId, maxReviewCycles, traceTarget: hasTraceTarget ? traceTarget : undefined })}${buildSearchUnavailablePrefix(metadata)}${response.message}`
                 );
                 if (!metadata) {
                     await interaction.editReply({
@@ -318,7 +340,7 @@ const chatCommand: ChatCommandWithProfiles = {
 
             await interaction.editReply({
                 content: clampReplyContent(
-                    `${buildChatDetailsPrefix({ profileId, modeId, reasoningEffort, verbosity })}${renderNonMessageAction(response)}`
+                    `${buildChatDetailsPrefix({ modeId, maxReviewCycles, traceTarget: hasTraceTarget ? traceTarget : undefined })}${renderNonMessageAction(response)}`
                 ),
             });
         } catch (error) {

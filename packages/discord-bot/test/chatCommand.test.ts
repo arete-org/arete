@@ -13,9 +13,13 @@ import chatCommand from '../src/commands/chat.js';
 
 const createInteraction = (overrides: {
     prompt?: string;
-    profileId?: string | null;
-    reasoningEffort?: string | null;
-    verbosity?: string | null;
+    modeId?: string | null;
+    maxReviewCycles?: number | null;
+    traceTightness?: number | null;
+    traceRationale?: number | null;
+    traceAttribution?: number | null;
+    traceCaution?: number | null;
+    traceExtent?: number | null;
     id?: string;
 }) => {
     const editReplyPayloads: unknown[] = [];
@@ -37,14 +41,29 @@ const createInteraction = (overrides: {
                         }
                         return overrides.prompt ?? null;
                     }
-                    if (name === 'profile_id') {
-                        return overrides.profileId ?? null;
+                    if (name === 'mode') {
+                        return overrides.modeId ?? null;
                     }
-                    if (name === 'reasoning_effort') {
-                        return overrides.reasoningEffort ?? null;
+                    return null;
+                },
+                getInteger: (name: string) => {
+                    if (name === 'max_review_cycles') {
+                        return overrides.maxReviewCycles ?? null;
                     }
-                    if (name === 'verbosity') {
-                        return overrides.verbosity ?? null;
+                    if (name === 'trace_tightness') {
+                        return overrides.traceTightness ?? null;
+                    }
+                    if (name === 'trace_rationale') {
+                        return overrides.traceRationale ?? null;
+                    }
+                    if (name === 'trace_attribution') {
+                        return overrides.traceAttribution ?? null;
+                    }
+                    if (name === 'trace_caution') {
+                        return overrides.traceCaution ?? null;
+                    }
+                    if (name === 'trace_extent') {
+                        return overrides.traceExtent ?? null;
                     }
                     return null;
                 },
@@ -61,7 +80,7 @@ const createInteraction = (overrides: {
     };
 };
 
-test('/chat forwards prompt/profile/generation options and renders message action', async () => {
+test('/chat forwards prompt/workflow options and renders message action', async () => {
     const originalChatViaApi = botApi.chatViaApi;
     const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;
     const seenRequests: unknown[] = [];
@@ -100,9 +119,11 @@ test('/chat forwards prompt/profile/generation options and renders message actio
     const { interaction, editReplyPayloads, deferReplyPayloads } =
         createInteraction({
             prompt: 'Compare model output.',
-            profileId: 'openai-text-medium',
-            reasoningEffort: 'high',
-            verbosity: 'low',
+            modeId: 'grounded',
+            maxReviewCycles: 4,
+            traceTightness: 4,
+            traceRationale: 2,
+            traceAttribution: 5,
         });
 
     try {
@@ -113,7 +134,13 @@ test('/chat forwards prompt/profile/generation options and renders message actio
             {
                 surface: 'discord',
                 botPersonaId: 'footnote',
-                profileId: 'openai-text-medium',
+                modeId: 'grounded',
+                maxReviewCycles: 4,
+                traceTarget: {
+                    tightness: 4,
+                    rationale: 2,
+                    attribution: 5,
+                },
                 trigger: {
                     kind: 'submit',
                     messageId: 'interaction-1',
@@ -130,10 +157,6 @@ test('/chat forwards prompt/profile/generation options and renders message actio
                     canGenerateImages: true,
                     canUseTts: true,
                 },
-                generation: {
-                    reasoningEffort: 'high',
-                    verbosity: 'low',
-                },
                 surfaceContext: {
                     channelId: 'channel-123',
                     guildId: 'guild-456',
@@ -148,7 +171,7 @@ test('/chat forwards prompt/profile/generation options and renders message actio
         };
         assert.match(
             String(payload.content),
-            /^> profile_id: openai-text-medium\n> reasoning_effort: high\n> verbosity: low\n\n⚠️ search unavailable for selected model\n\nModel-switched response$/
+            /^> mode: grounded\n> max_review_cycles: 4\n> trace_tightness: 4\n> trace_rationale: 2\n> trace_attribution: 5\n\n⚠️ search unavailable for selected model\n\nModel-switched response$/
         );
         assert.equal(Array.isArray(payload.components), true);
         assert.equal(payload.components?.length, 1);

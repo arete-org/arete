@@ -699,6 +699,7 @@ export type RunChatMessagesInput = {
     generation?: ChatGenerationPlan;
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
     workflowModeId?: string;
+    workflowMaxReviewCycles?: number;
     workflowModeEscalationRequest?: WorkflowModeEscalationRequest;
     toolRequest?: ToolInvocationRequest;
     contextStepRequests?: ContextStepRequest[];
@@ -868,6 +869,7 @@ export const createChatService = ({
         generation,
         executionContext,
         workflowModeId,
+        workflowMaxReviewCycles,
         workflowModeEscalationRequest,
         toolRequest,
         contextStepRequests,
@@ -954,6 +956,7 @@ export const createChatService = ({
             reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
             maxIterations: chatWorkflowConfig.maxIterations,
             maxDurationMs: chatWorkflowConfig.maxDurationMs,
+            requestMaxReviewCycles: workflowMaxReviewCycles,
             ExecutionContract:
                 ExecutionContract !== undefined
                     ? {

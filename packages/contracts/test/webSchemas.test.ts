@@ -139,7 +139,11 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
     assert.equal(
         PostChatRequestSchema.safeParse({
             surface: 'web',
-            profileId: 'footnote',
+            modeId: 'grounded',
+            maxReviewCycles: 3,
+            traceTarget: {
+                tightness: 4,
+            },
             trigger: { kind: 'submit' },
             latestUserInput: 'What is Footnote?',
             conversation: [
@@ -186,7 +190,7 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
     assert.equal(
         PostChatRequestSchema.safeParse({
             surface: 'discord',
-            profileId: 'INVALID_UPPERCASE_WITH_UNDERSCORE',
+            maxReviewCycles: -1,
             trigger: { kind: 'direct' },
             latestUserInput: 'What is Footnote?',
             conversation: [
@@ -200,7 +204,7 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
     );
 });
 
-test('openapi ChatRequest documents optional persona/profile ids with matching constraints', () => {
+test('openapi ChatRequest documents optional mode/review/trace request controls', () => {
     const chatRequestSectionMatch = openApiSource.match(
         /ChatRequest:[\s\S]*?ChatResponse:/m
     );
@@ -208,17 +212,15 @@ test('openapi ChatRequest documents optional persona/profile ids with matching c
 
     const chatRequestSection = chatRequestSectionMatch[0];
     assert.match(chatRequestSection, /botPersonaId:\s*\n\s*type:\s*string/);
-    assert.match(chatRequestSection, /profileId:\s*\n\s*type:\s*string/);
-    assert.match(
-        chatRequestSection,
-        /pattern:\s*'\^\[a-z0-9\]\[a-z0-9-\]\{0,31\}\$'/
-    );
+    assert.match(chatRequestSection, /modeId:\s*\n\s*type:\s*string/);
+    assert.match(chatRequestSection, /maxReviewCycles:\s*\n\s*type:\s*integer/);
+    assert.match(chatRequestSection, /traceTarget:\s*\n\s*type:\s*object/);
     assert.equal(
         /required:\s*[\s\S]*-\s*botPersonaId/.test(chatRequestSection),
         false
     );
     assert.equal(
-        /required:\s*[\s\S]*-\s*profileId/.test(chatRequestSection),
+        /required:\s*[\s\S]*-\s*modeId/.test(chatRequestSection),
         false
     );
 });

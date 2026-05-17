@@ -61,8 +61,8 @@ type ResolveExecutionProfileResult = {
  * Chooses the model profile we will actually use for this response.
  *
  * The easy mistake is to treat planner output as the final answer. It is only
- * one input here. A request-level override may win, and the default profile is
- * still the fallback if the requested or planned choice is missing or disabled.
+ * one input here. The default profile is still the fallback if the planned
+ * choice is missing or disabled.
  */
 export const resolveExecutionProfile = (
     input: ResolveExecutionProfileInput,
@@ -74,10 +74,6 @@ export const resolveExecutionProfile = (
     const routingStrategy = input.resolvedExecutionPolicy.routing.strategy;
     let selectedResponseProfile = input.defaultResponseProfile;
     let profileSelectionSource: PlannerSelectionSource = 'default';
-    const requestedModelProfileId = input.normalizedRequest.profileId?.trim();
-    const allowRequestProfileOverride =
-        input.normalizedRequest.trigger.kind === 'submit' &&
-        routingStrategy === 'profile-first';
     const selectedCapabilityDecision = selectModelProfileForWorkflowStep({
         step: 'generation',
         requestedCapabilityProfile: input.plan.requestedCapabilityProfile,
@@ -93,12 +89,6 @@ export const resolveExecutionProfile = (
     }> =
         routingStrategy === 'profile-first'
             ? [
-                  {
-                      source: 'request',
-                      profileId: allowRequestProfileOverride
-                          ? requestedModelProfileId
-                          : undefined,
-                  },
                   {
                       source: 'default',
                       profileId: input.defaultResponseProfile.id,
@@ -163,34 +153,9 @@ export const resolveExecutionProfile = (
                 surface: input.normalizedRequest.surface,
             }
         );
-        if (candidate.source === 'request') {
-            fallbackReasons.push('request_invalid_or_disabled_profile');
-        } else if (candidate.source === 'planner') {
+        if (candidate.source === 'planner') {
             fallbackReasons.push('planner_invalid_or_disabled_profile');
         }
-    }
-
-    if (
-        profileSelectionSource === 'request' &&
-        plannerSelectedModelProfileId &&
-        plannerSelectedModelProfileId !== selectedResponseProfile.id
-    ) {
-        onWarn.warn(
-            'chat request profile override superseded planner capability selection',
-            {
-                event: 'chat.orchestration.profile_fallback',
-                policy: RESPONSE_PROFILE_FALLBACK_POLICY,
-                stage: 'request_override_superseded_planner',
-                requestedProfileId: selectedResponseProfile.id,
-                plannerProfileId: plannerSelectedModelProfileId,
-                requestedCapabilityProfile:
-                    input.plan.requestedCapabilityProfile,
-                selectedCapabilityProfile:
-                    selectedCapabilityDecision.selectedCapabilityProfile,
-                capabilityReasonCode: selectedCapabilityDecision.reasonCode,
-                surface: input.normalizedRequest.surface,
-            }
-        );
     }
     const originalSelectedProfileId = selectedResponseProfile.id;
     let effectiveSelectedProfileId = selectedResponseProfile.id;

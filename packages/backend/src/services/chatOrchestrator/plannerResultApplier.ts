@@ -23,8 +23,39 @@ import type {
     PlannerApplicationInput,
     PlannerApplicationResult,
 } from '../plannerWorkflowSeams.js';
+import type { ResponseTemperament } from '@footnote/contracts/policy';
 
 type PlannerSelectionSource = 'default' | 'planner' | 'request_override';
+
+const DEFAULT_REQUEST_TRACE_TEMPERAMENT: ResponseTemperament = {
+    tightness: 3,
+    rationale: 3,
+    attribution: 3,
+    caution: 3,
+    extent: 3,
+};
+
+const applyRequestTraceTargetOverride = (input: {
+    generation: ChatGenerationPlan;
+    traceTarget: PostChatRequest['traceTarget'] | undefined;
+}): ChatGenerationPlan => {
+    if (input.traceTarget === undefined) {
+        return input.generation;
+    }
+    const traceTarget = input.traceTarget;
+    const baseTemperament =
+        input.generation.temperament ?? DEFAULT_REQUEST_TRACE_TEMPERAMENT;
+    return {
+        ...input.generation,
+        temperament: {
+            tightness: traceTarget.tightness ?? baseTemperament.tightness,
+            rationale: traceTarget.rationale ?? baseTemperament.rationale,
+            attribution: traceTarget.attribution ?? baseTemperament.attribution,
+            caution: traceTarget.caution ?? baseTemperament.caution,
+            extent: traceTarget.extent ?? baseTemperament.extent,
+        },
+    };
+};
 
 export type CreatePlannerResultApplierInput = {
     enabledProfiles: ModelProfile[];
@@ -104,16 +135,11 @@ export const createPlannerResultApplier = (
             plannerPlan,
             input.logger
         );
-        const requestGeneration = plannerInput.normalizedRequest.generation;
-        let generationForExecution: ChatGenerationPlan = {
-            ...plan.generation,
-            ...(requestGeneration?.reasoningEffort
-                ? { reasoningEffort: requestGeneration.reasoningEffort }
-                : {}),
-            ...(requestGeneration?.verbosity
-                ? { verbosity: requestGeneration.verbosity }
-                : {}),
-        };
+        let generationForExecution: ChatGenerationPlan =
+            applyRequestTraceTargetOverride({
+                generation: plan.generation,
+                traceTarget: plannerInput.normalizedRequest.traceTarget,
+            });
         if (plannerInput.clarificationContinuation.kind === 'resolved') {
             generationForExecution = {
                 ...generationForExecution,

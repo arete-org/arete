@@ -69,7 +69,6 @@ const ChatTriggerKindSchema = z.enum([
     'catchup',
 ]);
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
-const ChatProfileIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 const ChatModeIdSchema = z.enum(['balanced', 'grounded']);
 const ChatConversationMessageSchema = z
     .object({
@@ -1037,17 +1036,9 @@ export const PostChatRequestSchema = z
     .object({
         surface: ChatSurfaceSchema,
         botPersonaId: ChatPersonaIdSchema.optional(),
-        profileId: ChatProfileIdSchema.optional(),
         modeId: ChatModeIdSchema.optional(),
-        generation: z
-            .object({
-                reasoningEffort: z
-                    .enum(['minimal', 'low', 'medium', 'high'])
-                    .optional(),
-                verbosity: z.enum(['low', 'medium', 'high']).optional(),
-            })
-            .strict()
-            .optional(),
+        maxReviewCycles: z.number().int().nonnegative().optional(),
+        traceTarget: PartialResponseTemperamentSchema.optional(),
         trigger: z
             .object({
                 kind: ChatTriggerKindSchema,
