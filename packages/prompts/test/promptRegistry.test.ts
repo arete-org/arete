@@ -276,6 +276,9 @@ test('chat planner TRACE rubric is rendered from traceTemperamentContract defaul
 });
 
 test('traceTemperamentContract defaults include canonical anchor axes and levels', () => {
+    // Dual strategy: this test parses defaults.yaml directly to validate source
+    // data integrity (anchor, axes, levels), while the planner-render test
+    // verifies runtime consumption/rendering through PromptRegistry.
     const defaultsPath = path.resolve(
         testDirectory,
         '..',

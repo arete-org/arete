@@ -273,8 +273,8 @@ class SharedPromptRegistry implements PromptRegistry {
     ): RenderedPrompt {
         const definition = this.getPrompt(key);
         const content = interpolateTemplate(definition.template, {
-            ...this.globalTemplateVariables,
             ...variables,
+            ...this.globalTemplateVariables,
         });
         return {
             content,
@@ -352,6 +352,16 @@ const parseTraceTemperamentContract = (
     context: PromptValidationContext
 ): TraceTemperamentContract | undefined => {
     if (value === undefined) {
+        if (context.mode === 'strict') {
+            reportPromptValidationIssue(
+                context,
+                'Missing required trace temperament contract entry.',
+                {
+                    promptKey: 'traceTemperamentContract',
+                    reason: 'traceTemperamentContract is required in strict mode',
+                }
+            );
+        }
         return undefined;
     }
 
