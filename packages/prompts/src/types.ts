@@ -53,6 +53,24 @@ export interface PromptDefinition extends PromptMetadata {
     template: string;
 }
 
+export type TraceTemperamentAxisKey =
+    | 'tightness'
+    | 'rationale'
+    | 'attribution'
+    | 'caution'
+    | 'extent';
+
+export type TraceTemperamentLevel = '1' | '2' | '3' | '4' | '5';
+
+export type TraceTemperamentContract = {
+    defaultAnchor: 3;
+    axes: TraceTemperamentAxisKey[];
+    levels: Record<
+        TraceTemperamentLevel,
+        Record<TraceTemperamentAxisKey, string>
+    >;
+};
+
 export interface PromptCatalog {
     prompts: Record<PromptKey, PromptDefinition>;
 }

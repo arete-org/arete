@@ -14,11 +14,13 @@ detail once you have the main runtime shape in mind.
 2. [Answer Posture And Control Influence](./answer-posture-and-control-influence.md):
    use this when you need the metadata map for mode, TRACE, planner influence,
    control influence, and provenance.
-3. [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
+3. [TRACE Temperament Contract](./trace-temperament-contract.md): canonical
+   TRACE defaults, level matrix semantics, and compact rubric rules.
+4. [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
    overrides resolve at runtime.
-4. [Bounded User Control Mapping](./bounded-user-control-mapping.md): what
+5. [Bounded User Control Mapping](./bounded-user-control-mapping.md): what
    users can steer directly and what stays backend-owned.
-5. [Context Integrations](./context-integrations/README.md): shared rules for
+6. [Context Integrations](./context-integrations/README.md): shared rules for
    external systems that can add context without taking execution authority.
 
 ## Context Integrations

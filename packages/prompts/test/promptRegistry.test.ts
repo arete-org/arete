@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import yaml from 'js-yaml';
 
 import { createPromptRegistry } from '../src/index.js';
 
@@ -249,4 +250,67 @@ test('legacy backend and discord default prompt files are gone', () => {
 
     assert.equal(fs.existsSync(legacyBackendDefaultsPath), false);
     assert.equal(fs.existsSync(legacyDiscordDefaultsPath), false);
+});
+
+test('chat planner TRACE rubric is rendered from traceTemperamentContract defaults', () => {
+    const registry = createPromptRegistry();
+    const renderedPlannerPrompt = registry.renderPrompt(
+        'chat.planner.system'
+    ).content;
+
+    assert.match(renderedPlannerPrompt, /default posture anchor: 3/);
+    assert.match(
+        renderedPlannerPrompt,
+        /tightness 1: expansive and loose; no compression pressure; best for exploratory or reflective exchanges/
+    );
+    assert.match(
+        renderedPlannerPrompt,
+        /extent 5: broad option framing with explicit comparison; best for high-stakes trade-off evaluation/
+    );
+    const tightness1Index = renderedPlannerPrompt.indexOf('tightness 1:');
+    const extent1Index = renderedPlannerPrompt.indexOf('extent 1:');
+    const tightness2Index = renderedPlannerPrompt.indexOf('tightness 2:');
+    assert.ok(tightness1Index > -1);
+    assert.ok(extent1Index > tightness1Index);
+    assert.ok(tightness2Index > extent1Index);
+});
+
+test('traceTemperamentContract defaults include canonical anchor axes and levels', () => {
+    const defaultsPath = path.resolve(
+        testDirectory,
+        '..',
+        'src',
+        'defaults.yaml'
+    );
+    const parsed = yaml.load(fs.readFileSync(defaultsPath, 'utf8')) as Record<
+        string,
+        unknown
+    >;
+    const contract = parsed.traceTemperamentContract as
+        | {
+              defaultAnchor?: number;
+              axes?: unknown[];
+              levels?: Record<string, Record<string, unknown>>;
+          }
+        | undefined;
+
+    assert.ok(contract);
+    assert.equal(contract?.defaultAnchor, 3);
+    assert.deepEqual(contract?.axes, [
+        'tightness',
+        'rationale',
+        'attribution',
+        'caution',
+        'extent',
+    ]);
+    for (const level of ['1', '2', '3', '4', '5'] as const) {
+        const levelMap: Record<string, unknown> | undefined =
+            contract?.levels?.[level];
+        assert.ok(levelMap);
+        assert.equal(typeof levelMap?.tightness, 'string');
+        assert.equal(typeof levelMap?.rationale, 'string');
+        assert.equal(typeof levelMap?.attribution, 'string');
+        assert.equal(typeof levelMap?.caution, 'string');
+        assert.equal(typeof levelMap?.extent, 'string');
+    }
 });

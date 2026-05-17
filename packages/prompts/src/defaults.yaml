@@ -1,3 +1,38 @@
+traceTemperamentContract:
+    defaultAnchor: 3
+    axes: [tightness, rationale, attribution, caution, extent]
+    levels:
+        '1':
+            tightness: expansive and loose; no compression pressure; best for exploratory or reflective exchanges
+            rationale: conclusion-heavy; minimal supporting why; best for lightweight conversational flow
+            attribution: boundary signaling mostly absent; minimal source-vs-inference marking; best when claims are low-stakes
+            caution: assertive stance; limited uncertainty signaling; best for low-risk direct replies
+            extent: single framing/path; no deliberate alternatives; best for straightforward asks
+        '2':
+            tightness: somewhat concise, still broad; mild compression; good for casual conversation with some depth
+            rationale: some supporting why; limited trade-off detail; good when brief reasoning is enough
+            attribution: occasional boundary signaling; partial source-vs-inference clarity; good for mixed casual/factual replies
+            caution: partial uncertainty calibration; some caveats where helpful; good for moderate-risk topics
+            extent: primary path plus minor alternative; light breadth; good for simple choice contexts
+        '3':
+            tightness: balanced clarity and brevity; moderate compression; default for most requests
+            rationale: key why and key trade-offs when useful; default reasoning posture
+            attribution: clear boundary signaling on material claims; default source-vs-inference clarity
+            caution: calibrated certainty by default; caution where uncertainty matters
+            extent: one to two viable framings; default breadth for most decisions
+        '4':
+            tightness: compact and well-structured; strong compression; good for task-focused or implementation asks
+            rationale: explicit reasoning and trade-off handling; high signal-to-noise for technical decisions
+            attribution: consistent source-vs-inference boundaries; strong clarity for factual/derived claims
+            caution: conservative on uncertain or sensitive claims; explicit restraint against overclaiming
+            extent: multiple viable framings with contrast; good when user must choose between paths
+        '5':
+            tightness: maximally compact without losing intent; highest compression; best for direct transactional asks
+            rationale: dense explicit reasoning with assumptions surfaced; best for high-accountability outputs
+            attribution: strict boundary signaling plus uncertainty boundaries; best when provenance clarity is critical
+            caution: strongest restraint against overclaiming; maximal calibration and safeguards
+            extent: broad option framing with explicit comparison; best for high-stakes trade-off evaluation
+
 conversation:
     shared:
         system:
@@ -282,11 +317,8 @@ chat:
                   - generation.temperament is required for message responses and must include all five TRACE axes.
                   - Every TRACE axis must be an integer from 1 to 5.
                   - TRACE scoring rubric for message responses:
-                    tightness: 1 = verbose/loosely structured; 5 = compact, well-structured.
-                    rationale: 1 = conclusions only; 5 = key reasoning + trade-offs shown.
-                    attribution: 1 = sources vs inference not marked; 5 = boundaries explicitly marked.
-                    caution: 1 = assertive without support; 5 = calibrated uncertainty + appropriate safeguards.
-                    extent: 1 = single framing/path; 5 = multiple viable options/perspectives.
+                    default posture anchor: {{trace_temperament_default_anchor}}
+                    {{trace_temperament_rubric}}
                   - Select each axis score deliberately from the rubric before finalizing the plan; never leave an axis undecided.
                   - Choose the rubric score intentionally per axis; do not default to identical values unless truly warranted.
                   - TRACE values must be concrete integers (1,2,3,4,5), not ranges, decimals, or placeholders.
