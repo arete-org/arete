@@ -55,13 +55,13 @@ const EXECUTION_CONTRACT_QUALITY_GROUNDED_WORKFLOW_POLICY_PRESET: Readonly<
 const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
     WorkflowProfileRuntime['defaultLimits']
 > = {
-    maxWorkflowSteps: 4,
-    maxToolCalls: 1,
+    maxWorkflowSteps: 8,
+    maxToolCalls: 3,
     maxPlanCycles: 1,
     maxReviewCycles: 3,
     maxDeliberationCalls: 4,
     maxTokensTotal: Number.MAX_SAFE_INTEGER,
-    maxDurationMs: 15000,
+    maxDurationMs: 70000,
 };
 
 const REVIEWED_WORKFLOW_PROFILE: WorkflowProfileRuntime = {
