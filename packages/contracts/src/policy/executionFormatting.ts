@@ -7,6 +7,12 @@
  */
 import type { ExecutionEvent, StepRecord, WorkflowRecord } from './types.js';
 
+type TimelineEntry = {
+    segment: string;
+    phaseOrder: 0 | 1 | 2;
+    index: number;
+};
+
 const formatEvaluatorSummary = (event: ExecutionEvent): string => {
     if (event.kind !== 'evaluator') {
         return 'decision';
@@ -87,7 +93,11 @@ const formatExecutionEvent = (event: ExecutionEvent): string => {
     return `${event.kind}:${modelOrProfile}(${event.status}${reasonSuffix}${durationSuffix})`;
 };
 
-const formatWorkflowPlannerStep = (step: StepRecord): string => {
+const formatWorkflowStep = (
+    label: string,
+    step: StepRecord,
+    defaultModelOrProfile: string
+): string => {
     const durationSuffix =
         step.durationMs !== undefined ? `, ${step.durationMs}ms` : '';
     const reasonSuffix =
@@ -100,8 +110,52 @@ const formatWorkflowPlannerStep = (step: StepRecord): string => {
         (typeof profileIdSignal === 'string' &&
         profileIdSignal.trim().length > 0
             ? profileIdSignal
-            : 'workflow');
-    return `planner:${modelOrProfile}(${step.outcome.status}${reasonSuffix}${durationSuffix})`;
+            : defaultModelOrProfile);
+    return `${label}:${modelOrProfile}(${step.outcome.status}${reasonSuffix}${durationSuffix})`;
+};
+
+const isIncludedWorkflowStep = (step: StepRecord): boolean =>
+    step.stepKind === 'plan' ||
+    step.stepKind === 'assess' ||
+    (step.stepKind === 'generate' &&
+        step.outcome.signals?.refinementApplied === true);
+
+const normalizeWorkflowStepEntry = (
+    step: StepRecord,
+    index: number
+): TimelineEntry | null => {
+    if (!isIncludedWorkflowStep(step)) {
+        return null;
+    }
+
+    if (step.stepKind === 'plan') {
+        return {
+            segment: formatWorkflowStep('planner', step, 'workflow'),
+            phaseOrder: 0,
+            index,
+        };
+    }
+
+    return {
+        segment: formatWorkflowStep(step.stepKind, step, 'workflow'),
+        phaseOrder: 2,
+        index,
+    };
+};
+
+const normalizeExecutionEventEntry = (
+    event: ExecutionEvent,
+    index: number
+): TimelineEntry | null => {
+    if (event.kind === 'planner') {
+        return null;
+    }
+
+    return {
+        segment: formatExecutionEvent(event),
+        phaseOrder: 1,
+        index,
+    };
 };
 
 /**
@@ -111,18 +165,21 @@ export const formatExecutionTimelineSummary = (
     execution: ExecutionEvent[] | undefined,
     workflow?: WorkflowRecord
 ): string | null => {
-    const executionEvents = execution ?? [];
-    const workflowPlannerSummaries =
+    const workflowEntries =
         workflow?.steps
-            .filter((step) => step.stepKind === 'plan')
-            .map(formatWorkflowPlannerStep) ?? [];
-    const executionSummaries = executionEvents
-        .filter((event) => event.kind !== 'planner')
-        .map(formatExecutionEvent);
-    const timelineSegments = [
-        ...workflowPlannerSummaries,
-        ...executionSummaries,
-    ];
+            .map((step, index) => normalizeWorkflowStepEntry(step, index))
+            .filter((entry): entry is TimelineEntry => entry !== null) ?? [];
+    const executionEntries =
+        (execution ?? [])
+            .map((event, index) => normalizeExecutionEventEntry(event, index))
+            .filter((entry): entry is TimelineEntry => entry !== null) ?? [];
+    const timelineSegments = [...workflowEntries, ...executionEntries]
+        .sort((left, right) =>
+            left.phaseOrder === right.phaseOrder
+                ? left.index - right.index
+                : left.phaseOrder - right.phaseOrder
+        )
+        .map((entry) => entry.segment);
 
     if (timelineSegments.length === 0) {
         return null;
