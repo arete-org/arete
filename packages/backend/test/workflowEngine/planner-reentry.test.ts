@@ -378,7 +378,10 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
     assert.equal(result.workflowLineage.stepCount, 2);
     assert.equal(result.workflowLineage.steps[0].stepKind, 'plan');
     assert.equal(result.workflowLineage.steps[1].stepKind, 'generate');
-    assert.equal(result.workflowLineage.steps[1].parentStepId, 'step_1');
+    assert.equal(
+        result.workflowLineage.steps[1].parentStepId,
+        result.workflowLineage.steps[0].stepId
+    );
     assert.equal(generationCalls, 1);
     assert.ok(
         generatedMessages?.some(
