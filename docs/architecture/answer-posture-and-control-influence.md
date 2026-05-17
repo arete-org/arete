@@ -74,9 +74,10 @@ implement a full TRACE lifecycle or history model. TRACE revision context is
 captured in workflow lineage signals (for example assess alignment outputs and
 planner trace-revision signals), not a separate top-level metadata field.
 
-TRACE target/final equality checks are now normalized through shared contracts
+TRACE target/final equality checks are normalized through shared contracts
 helpers keyed by canonical TRACE axis order, so schema and backend runtime use
-the same comparison semantics.
+the same comparison semantics. See
+[TRACE Temperament Contract](./trace-temperament-contract.md).
 
 ## TRACE boundaries
 

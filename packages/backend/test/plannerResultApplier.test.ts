@@ -150,6 +150,9 @@ test('PlannerResultApplier merges request TRACE target overrides', () => {
 
     assert.equal(output.generationForExecution.temperament?.tightness, 5);
     assert.equal(output.generationForExecution.temperament?.caution, 4);
+    assert.equal(output.generationForExecution.temperament?.rationale, 3);
+    assert.equal(output.generationForExecution.temperament?.attribution, 3);
+    assert.equal(output.generationForExecution.temperament?.extent, 3);
 });
 
 test('PlannerResultApplier enforces single-tool policy and derives weather context-step request', () => {

@@ -12,6 +12,7 @@ For first-time local setup, start at the root [Quickstart](../README.md#quicksta
   and reading order.
 - [Decisions](./decisions/): durable technical choices and why they were made.
 - [Proposals](./proposals/): unadopted or exploratory ideas.
+- [Status](./status/): branch-level implementation tracking documents.
 - [API](./api/README.md): OpenAPI source, operation mapping, and code-linking
   rules.
 - [AI](./ai/README.md): contributor workflow for AI-assisted changes.

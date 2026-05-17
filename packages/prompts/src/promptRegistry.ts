@@ -19,6 +19,9 @@ import type {
     PromptRegistry,
     PromptVariables,
     RenderedPrompt,
+    TraceTemperamentAxisKey,
+    TraceTemperamentContract,
+    TraceTemperamentLevel,
 } from './types.js';
 import { promptKeys } from './types.js';
 
@@ -26,6 +29,23 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const knownPromptKeys = new Set<PromptKey>(promptKeys);
 
 type PromptMap = Partial<Record<PromptKey, PromptDefinition>>;
+const TRACE_TEMPERAMENT_LEVELS: readonly TraceTemperamentLevel[] = [
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+] as const;
+const TRACE_TEMPERAMENT_AXES: readonly TraceTemperamentAxisKey[] = [
+    'tightness',
+    'rationale',
+    'attribution',
+    'caution',
+    'extent',
+] as const;
+const TRACE_TEMPERAMENT_RUBRIC_TEMPLATE_VARIABLE = 'trace_temperament_rubric';
+const TRACE_TEMPERAMENT_DEFAULT_TEMPLATE_VARIABLE =
+    'trace_temperament_default_anchor';
 /**
  * Validation mode used while loading prompt catalogs.
  * - strict: throw on invalid prompt node shape (used for canonical defaults)
@@ -154,17 +174,23 @@ const reportPromptValidationIssue = (
 
 class SharedPromptRegistry implements PromptRegistry {
     private readonly prompts: PromptMap;
+    private readonly globalTemplateVariables: PromptVariables;
 
     constructor(options: CreatePromptRegistryOptions = {}) {
         // Shared prompt resolution order:
         // 1) bundled defaults
         // 2) optional PROMPT_CONFIG_PATH-style overrides (full key replacement)
-        const defaults = loadPromptFile(resolveBundledDefaultsPath(), {
-            optional: false,
-            mode: 'strict',
-            logger: options.logger,
-        });
-        let merged = defaults;
+        const defaultsLoadResult = loadPromptFile(
+            resolveBundledDefaultsPath(),
+            {
+                optional: false,
+                mode: 'strict',
+                logger: options.logger,
+            }
+        );
+        let merged = defaultsLoadResult.prompts;
+        let traceTemperamentContract =
+            defaultsLoadResult.traceTemperamentContract;
 
         if (options.overridePath) {
             const resolvedOverridePath = resolveAbsolutePath(
@@ -178,15 +204,33 @@ class SharedPromptRegistry implements PromptRegistry {
                     }
                 );
                 this.prompts = merged;
+                this.globalTemplateVariables =
+                    traceTemperamentContract === undefined
+                        ? {}
+                        : {
+                              [TRACE_TEMPERAMENT_DEFAULT_TEMPLATE_VARIABLE]:
+                                  traceTemperamentContract.defaultAnchor,
+                              [TRACE_TEMPERAMENT_RUBRIC_TEMPLATE_VARIABLE]:
+                                  renderTraceTemperamentRubric(
+                                      traceTemperamentContract
+                                  ),
+                          };
                 return;
             }
             try {
-                const overrideData = loadPromptFile(resolvedOverridePath, {
-                    optional: true,
-                    mode: 'warn-and-skip',
-                    logger: options.logger,
-                });
-                merged = mergePromptCatalog(merged, overrideData);
+                const overrideLoadResult = loadPromptFile(
+                    resolvedOverridePath,
+                    {
+                        optional: true,
+                        mode: 'warn-and-skip',
+                        logger: options.logger,
+                    }
+                );
+                merged = mergePromptCatalog(merged, overrideLoadResult.prompts);
+                if (overrideLoadResult.traceTemperamentContract) {
+                    traceTemperamentContract =
+                        overrideLoadResult.traceTemperamentContract;
+                }
             } catch (error) {
                 options.logger?.warn?.(
                     'Ignoring prompt override file due to load failure.',
@@ -202,6 +246,17 @@ class SharedPromptRegistry implements PromptRegistry {
         }
 
         this.prompts = merged;
+        this.globalTemplateVariables =
+            traceTemperamentContract === undefined
+                ? {}
+                : {
+                      [TRACE_TEMPERAMENT_DEFAULT_TEMPLATE_VARIABLE]:
+                          traceTemperamentContract.defaultAnchor,
+                      [TRACE_TEMPERAMENT_RUBRIC_TEMPLATE_VARIABLE]:
+                          renderTraceTemperamentRubric(
+                              traceTemperamentContract
+                          ),
+                  };
     }
 
     public getPrompt(key: PromptKey): PromptDefinition {
@@ -217,7 +272,10 @@ class SharedPromptRegistry implements PromptRegistry {
         variables: PromptVariables = {}
     ): RenderedPrompt {
         const definition = this.getPrompt(key);
-        const content = interpolateTemplate(definition.template, variables);
+        const content = interpolateTemplate(definition.template, {
+            ...variables,
+            ...this.globalTemplateVariables,
+        });
         return {
             content,
             description: definition.description,
@@ -248,14 +306,17 @@ const loadPromptFile = (
         mode: PromptValidationMode;
         logger?: CreatePromptRegistryOptions['logger'];
     }
-): PromptMap => {
+): {
+    prompts: PromptMap;
+    traceTemperamentContract?: TraceTemperamentContract;
+} => {
     const resolvedPath = path.isAbsolute(filePath)
         ? filePath
         : path.resolve(filePath);
 
     if (!fs.existsSync(resolvedPath)) {
         if (options.optional) {
-            return {};
+            return { prompts: {} };
         }
         throw new Error(`Prompt configuration file not found: ${resolvedPath}`);
     }
@@ -268,12 +329,156 @@ const loadPromptFile = (
         );
     }
 
-    return flattenPromptTree(parsed as Record<string, unknown>, {
-        sourcePath: resolvedPath,
-        mode: options.mode,
-        logger: options.logger,
-    });
+    const parsedRoot = parsed as Record<string, unknown>;
+    return {
+        prompts: flattenPromptTree(parsedRoot, {
+            sourcePath: resolvedPath,
+            mode: options.mode,
+            logger: options.logger,
+        }),
+        traceTemperamentContract: parseTraceTemperamentContract(
+            parsedRoot.traceTemperamentContract,
+            {
+                sourcePath: resolvedPath,
+                mode: options.mode,
+                logger: options.logger,
+            }
+        ),
+    };
 };
+
+const parseTraceTemperamentContract = (
+    value: unknown,
+    context: PromptValidationContext
+): TraceTemperamentContract | undefined => {
+    if (value === undefined) {
+        if (context.mode === 'strict') {
+            reportPromptValidationIssue(
+                context,
+                'Missing required trace temperament contract entry.',
+                {
+                    promptKey: 'traceTemperamentContract',
+                    reason: 'traceTemperamentContract is required in strict mode',
+                }
+            );
+        }
+        return undefined;
+    }
+
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        reportPromptValidationIssue(
+            context,
+            'Ignoring invalid trace temperament contract entry.',
+            {
+                promptKey: 'traceTemperamentContract',
+                reason: 'traceTemperamentContract must be an object',
+            }
+        );
+        return undefined;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    if (candidate.defaultAnchor !== 3) {
+        reportPromptValidationIssue(
+            context,
+            'Ignoring invalid trace temperament contract entry.',
+            {
+                promptKey: 'traceTemperamentContract.defaultAnchor',
+                reason: 'defaultAnchor must be 3',
+            }
+        );
+        return undefined;
+    }
+
+    const axesRaw = candidate.axes;
+    if (
+        !Array.isArray(axesRaw) ||
+        axesRaw.length !== TRACE_TEMPERAMENT_AXES.length ||
+        !TRACE_TEMPERAMENT_AXES.every((axis, index) => axesRaw[index] === axis)
+    ) {
+        reportPromptValidationIssue(
+            context,
+            'Ignoring invalid trace temperament contract entry.',
+            {
+                promptKey: 'traceTemperamentContract.axes',
+                reason: 'axes must be [tightness, rationale, attribution, caution, extent] in canonical order',
+            }
+        );
+        return undefined;
+    }
+
+    const levelsRaw = candidate.levels;
+    if (
+        !levelsRaw ||
+        typeof levelsRaw !== 'object' ||
+        Array.isArray(levelsRaw)
+    ) {
+        reportPromptValidationIssue(
+            context,
+            'Ignoring invalid trace temperament contract entry.',
+            {
+                promptKey: 'traceTemperamentContract.levels',
+                reason: 'levels must be an object',
+            }
+        );
+        return undefined;
+    }
+
+    const levelsCandidate = levelsRaw as Record<string, unknown>;
+    const levels = {} as TraceTemperamentContract['levels'];
+    for (const level of TRACE_TEMPERAMENT_LEVELS) {
+        const levelRaw = levelsCandidate[level];
+        if (
+            !levelRaw ||
+            typeof levelRaw !== 'object' ||
+            Array.isArray(levelRaw)
+        ) {
+            reportPromptValidationIssue(
+                context,
+                'Ignoring invalid trace temperament contract entry.',
+                {
+                    promptKey: `traceTemperamentContract.levels.${level}`,
+                    reason: 'each level must be an object',
+                }
+            );
+            return undefined;
+        }
+        const levelCandidate = levelRaw as Record<string, unknown>;
+        const axisMap = {} as Record<TraceTemperamentAxisKey, string>;
+        for (const axis of TRACE_TEMPERAMENT_AXES) {
+            const axisText = levelCandidate[axis];
+            if (typeof axisText !== 'string' || axisText.trim().length === 0) {
+                reportPromptValidationIssue(
+                    context,
+                    'Ignoring invalid trace temperament contract entry.',
+                    {
+                        promptKey: `traceTemperamentContract.levels.${level}.${axis}`,
+                        reason: 'axis text must be a non-empty string',
+                    }
+                );
+                return undefined;
+            }
+            axisMap[axis] = axisText.trim();
+        }
+        levels[level] = axisMap;
+    }
+
+    return {
+        defaultAnchor: 3,
+        axes: [...TRACE_TEMPERAMENT_AXES],
+        levels,
+    };
+};
+
+const renderTraceTemperamentRubric = (
+    contract: TraceTemperamentContract
+): string =>
+    TRACE_TEMPERAMENT_LEVELS.map((level) => {
+        const levelAxes = contract.levels[level];
+        return TRACE_TEMPERAMENT_AXES.map(
+            (axis) => `${axis} ${level}: ${levelAxes[axis]}`
+        ).join('\n');
+    }).join('\n');
 
 /**
  * Walks nested YAML prompt trees and extracts valid prompt definitions.
