@@ -1746,6 +1746,20 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'CHAT_MAX_REQUEST_REVIEW_CYCLES',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum manual maxReviewCycles override accepted from /api/chat requests before backend clamping.',
+        defaultValue: literal(7),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'CHAT_CONTEXT_WEB_SEARCH_ENABLED',
         owner: 'backend',
         stage: 'runtime',

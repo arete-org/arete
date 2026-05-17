@@ -64,6 +64,7 @@ const buildChatCommandData = (): SlashCommand => {
             option
                 .setName('max_review_cycles')
                 .setDescription('Optional hard override for review cycle depth')
+                .setMinValue(0)
                 .setRequired(false)
         )
         .addIntegerOption((option) =>

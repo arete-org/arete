@@ -669,6 +669,7 @@ export type CreateChatServiceOptions = {
         reviewLoopEnabled: boolean;
         maxIterations: number;
         maxDurationMs: number;
+        maxRequestReviewCycles?: number;
     };
     runReviewWorkflow?: (
         input: Parameters<typeof runBoundedReviewWorkflow>[0]
@@ -956,6 +957,9 @@ export const createChatService = ({
             reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
             maxIterations: chatWorkflowConfig.maxIterations,
             maxDurationMs: chatWorkflowConfig.maxDurationMs,
+            maxRequestReviewCycles:
+                chatWorkflowConfig.maxRequestReviewCycles ??
+                runtimeConfig.chatWorkflow.maxRequestReviewCycles,
             requestMaxReviewCycles: workflowMaxReviewCycles,
             ExecutionContract:
                 ExecutionContract !== undefined

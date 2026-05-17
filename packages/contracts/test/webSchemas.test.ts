@@ -223,6 +223,16 @@ test('openapi ChatRequest documents optional mode/review/trace request controls'
         /required:\s*[\s\S]*-\s*modeId/.test(chatRequestSection),
         false
     );
+    assert.equal(
+        /required:\s*[\s\S]*-\s*maxReviewCycles/.test(chatRequestSection),
+        false
+    );
+    assert.equal(
+        /required:\s*[\s\S]*-\s*traceTarget/.test(chatRequestSection),
+        false
+    );
+    assert.ok(!/profileId:/.test(chatRequestSection));
+    assert.ok(!/generation:/.test(chatRequestSection));
 });
 
 test('ResponseMetadataSchema remains tolerant for forward-compatible responses', () => {

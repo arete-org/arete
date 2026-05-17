@@ -507,6 +507,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
     reviewLoopEnabled: boolean;
     maxIterations: number;
     maxDurationMs: number;
+    maxRequestReviewCycles: number;
     requestMaxReviewCycles?: number;
     ExecutionContract?: Pick<ExecutionContract, 'response' | 'limits'>;
     modeEscalationRequest?: WorkflowModeEscalationRequest;
@@ -587,9 +588,12 @@ export const resolveWorkflowRuntimeConfig = (input: {
         input.requestMaxReviewCycles ?? resolvedMaxReviewCyclesBaseline,
         resolvedMaxReviewCyclesBaseline
     );
-    // Request-level hard override for review depth. Keep execution structurally
-    // safe (non-negative integer) while allowing user-directed cycle count.
-    const resolvedMaxReviewCycles = requestMaxReviewCycles;
+    // Request-level review override is clamped to the contract-safe resolved
+    // review baseline for this run.
+    const resolvedMaxReviewCycles = Math.min(
+        requestMaxReviewCycles,
+        resolvedMaxReviewCyclesBaseline
+    );
     // Keep plan/review coupling aligned with current workflow behavior where
     // deeper review loops imply deeper planner re-entry opportunity.
     const resolvedMaxPlanCyclesCoupled = Math.max(

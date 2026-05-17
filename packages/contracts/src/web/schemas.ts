@@ -1045,7 +1045,7 @@ export const PostChatRequestSchema = z
                 messageId: z.string().min(1).optional(),
             })
             .strict(),
-        latestUserInput: z.string().min(1).max(3072),
+        latestUserInput: z.string().min(0).max(3072),
         conversation: z.array(ChatConversationMessageSchema).min(1).max(64),
         attachments: z.array(ChatAttachmentSchema).max(8).optional(),
         capabilities: ChatCapabilitiesSchema.optional(),

@@ -43,6 +43,15 @@ const applyRequestTraceTargetOverride = (input: {
         return input.generation;
     }
     const traceTarget = input.traceTarget;
+    const hasAnyTraceAxisOverride =
+        traceTarget.tightness !== undefined ||
+        traceTarget.rationale !== undefined ||
+        traceTarget.attribution !== undefined ||
+        traceTarget.caution !== undefined ||
+        traceTarget.extent !== undefined;
+    if (!hasAnyTraceAxisOverride) {
+        return input.generation;
+    }
     const baseTemperament =
         input.generation.temperament ?? DEFAULT_REQUEST_TRACE_TEMPERAMENT;
     return {

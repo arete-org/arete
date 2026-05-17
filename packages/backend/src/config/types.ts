@@ -105,6 +105,7 @@ export type RuntimeConfig = {
         reviewLoopEnabled: boolean;
         maxIterations: number;
         maxDurationMs: number;
+        maxRequestReviewCycles: number;
         contextIntegrations: {
             /**
              * Web-search context integration controls for chat workflow execution.

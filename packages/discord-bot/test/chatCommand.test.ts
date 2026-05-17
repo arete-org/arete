@@ -124,6 +124,8 @@ test('/chat forwards prompt/workflow options and renders message action', async 
             traceTightness: 4,
             traceRationale: 2,
             traceAttribution: 5,
+            traceCaution: 3,
+            traceExtent: 1,
         });
 
     try {
@@ -140,6 +142,8 @@ test('/chat forwards prompt/workflow options and renders message action', async 
                     tightness: 4,
                     rationale: 2,
                     attribution: 5,
+                    caution: 3,
+                    extent: 1,
                 },
                 trigger: {
                     kind: 'submit',
@@ -171,7 +175,7 @@ test('/chat forwards prompt/workflow options and renders message action', async 
         };
         assert.match(
             String(payload.content),
-            /^> mode: grounded\n> max_review_cycles: 4\n> trace_tightness: 4\n> trace_rationale: 2\n> trace_attribution: 5\n\n⚠️ search unavailable for selected model\n\nModel-switched response$/
+            /^> mode: grounded\n> max_review_cycles: 4\n> trace_tightness: 4\n> trace_rationale: 2\n> trace_attribution: 5\n> trace_caution: 3\n> trace_extent: 1\n\n⚠️ search unavailable for selected model\n\nModel-switched response$/
         );
         assert.equal(Array.isArray(payload.components), true);
         assert.equal(payload.components?.length, 1);
