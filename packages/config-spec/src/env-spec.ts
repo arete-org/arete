@@ -391,6 +391,32 @@ export const envEntries = [
         ],
     }),
     defineEnv({
+        key: 'VOLTAGENT_PUBLIC_KEY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'trace',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'VoltOps project public key used for optional backend observability tracing.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'VOLTAGENT_SECRET_KEY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'trace',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'VoltOps project secret key used for optional backend observability tracing.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
         key: 'LANGFUSE_METADATA_MIRROR_ENABLED',
         owner: 'backend',
         stage: 'runtime',
@@ -500,6 +526,20 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description: 'Discord application client ID.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/discord-bot/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'DISCORD_GUILD_IDS',
+        owner: 'discord-bot',
+        stage: 'runtime',
+        section: 'discord-bot',
+        required: false,
+        secret: false,
+        kind: 'csv',
+        description:
+            'Preferred comma-separated Discord guild IDs used for command registration.',
         defaultValue: noDefault(),
         usedBy: ['packages/discord-bot/src/config.ts'],
     }),
@@ -1746,6 +1786,60 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'CHAT_WORKFLOW_MODE_ID',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'enum',
+        allowedValues: ['balanced', 'grounded'] as const,
+        description:
+            'Chat workflow mode selection used by backend orchestration.',
+        defaultValue: literal('grounded'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'CHAT_REVIEW_LOOP_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Enables backend chat review-loop orchestration for iterative review cycles.',
+        defaultValue: literal(false),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'CHAT_REVIEW_LOOP_MAX_ITERATIONS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum number of backend review-loop iterations when review loop is enabled.',
+        defaultValue: literal(2),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'CHAT_REVIEW_LOOP_MAX_DURATION_MS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum total review-loop duration in milliseconds when review loop is enabled.',
+        defaultValue: literal(15000),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'CHAT_MAX_REQUEST_REVIEW_CYCLES',
         owner: 'backend',
         stage: 'runtime',
@@ -1996,6 +2090,205 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Enables advisory Execution Contract TrustGraph retrieval integration.',
+        defaultValue: literal(false),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Emergency kill switch for external TrustGraph retrieval while preserving local chat behavior.',
+        defaultValue: literal(false),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_POLICY_ID',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Policy ID sent to TrustGraph adapters for advisory retrieval scope decisions.',
+        defaultValue: literal('server_chat_runtime_policy'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_TIMEOUT_MS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Timeout budget in milliseconds for TrustGraph advisory retrieval calls.',
+        defaultValue: literal(800),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_CALLS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum number of TrustGraph advisory retrieval calls per request.',
+        defaultValue: literal(1),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_MODE',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'enum',
+        allowedValues: ['none', 'stub', 'http'] as const,
+        description:
+            'Adapter mode for TrustGraph retrieval integration (`none`, `stub`, or `http`).',
+        defaultValue: literal('none'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_STUB_ADAPTER_MODE',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'enum',
+        allowedValues: ['success', 'failure', 'timeout', 'poisoned'] as const,
+        description:
+            'Stub adapter response mode used for local or test TrustGraph wiring.',
+        defaultValue: literal('success'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_ENDPOINT_URL',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'HTTP endpoint URL for TrustGraph adapter mode when adapter mode is `http`.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'Optional API token sent to the TrustGraph adapter when using HTTP mode.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_CONFIG_REF',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional adapter configuration reference passed with TrustGraph HTTP calls.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_BINDING_MODE',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'enum',
+        allowedValues: ['none', 'http'] as const,
+        description:
+            'Ownership binding mode used by TrustGraph tenancy checks (`none` or `http`).',
+        defaultValue: literal('none'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_VALIDATOR_ID',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Ownership validator ID used when TrustGraph ownership binding is active.',
+        defaultValue: literal('backend_tenancy_http_v1'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_ENDPOINT_URL',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'HTTP ownership validator endpoint URL used when ownership binding mode is `http`.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_API_TOKEN',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'Optional API token used by the TrustGraph ownership validator endpoint.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'WEB_API_RATE_LIMIT_IP',
         owner: 'backend',
         stage: 'runtime',
@@ -2150,19 +2443,6 @@ export const envEntries = [
         kind: 'string',
         description: 'GitHub webhook signing secret.',
         defaultValue: noDefault(),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
-
-    defineEnv({
-        key: 'GITHUB_WEBHOOK_REPOSITORY',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'webhooks',
-        required: false,
-        secret: false,
-        kind: 'string',
-        description: 'GitHub repository accepted by the webhook handler.',
-        defaultValue: literal('footnote-ai/footnote'),
         usedBy: ['packages/backend/src/config.ts'],
     }),
 
