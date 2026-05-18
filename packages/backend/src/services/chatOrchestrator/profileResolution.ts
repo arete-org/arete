@@ -41,6 +41,7 @@ type ResolveExecutionProfileInput = {
     defaultResponseProfile: ModelProfile;
     generationForExecution: ChatGenerationPlan;
     resolvedExecutionPolicy: ExecutionContract;
+    generateProfileOverrideId?: string;
 };
 
 type ResolveExecutionProfileResult = {
@@ -83,12 +84,18 @@ export const resolveExecutionProfile = (
     });
     const plannerSelectedModelProfileId =
         selectedCapabilityDecision.selectedProfile?.id.trim();
+    const normalizedGenerateOverrideId =
+        input.generateProfileOverrideId?.trim() || undefined;
     const profileSelectionOrder: Array<{
         source: PlannerSelectionSource;
         profileId?: string;
     }> =
         routingStrategy === 'profile-first'
             ? [
+                  {
+                      source: 'request',
+                      profileId: normalizedGenerateOverrideId,
+                  },
                   {
                       source: 'default',
                       profileId: input.defaultResponseProfile.id,
@@ -99,6 +106,10 @@ export const resolveExecutionProfile = (
                   },
               ]
             : [
+                  {
+                      source: 'request',
+                      profileId: normalizedGenerateOverrideId,
+                  },
                   {
                       source: 'planner',
                       profileId: plannerSelectedModelProfileId,

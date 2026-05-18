@@ -25,7 +25,7 @@ import type {
 } from '../plannerWorkflowSeams.js';
 import type { ResponseTemperament } from '@footnote/contracts/policy';
 
-type PlannerSelectionSource = 'default' | 'planner' | 'request_override';
+type PlannerSelectionSource = 'default' | 'planner' | 'request';
 
 const DEFAULT_REQUEST_TRACE_TEMPERAMENT: ResponseTemperament = {
     tightness: 3,
@@ -183,6 +183,8 @@ export const createPlannerResultApplier = (
                 defaultResponseProfile: input.defaultResponseProfile,
                 generationForExecution,
                 resolvedExecutionPolicy: plannerInput.resolvedExecutionPolicy,
+                generateProfileOverrideId:
+                    plannerInput.normalizedRequest.generateProfileId,
             },
             input.logger
         );

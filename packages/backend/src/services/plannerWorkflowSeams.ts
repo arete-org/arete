@@ -37,6 +37,7 @@ import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ChatSurfacePolicyCoercion } from './chatSurfacePolicy.js';
 import type { CapabilityProfileId } from './modelCapabilityPolicy.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
+import type { RoutingChainAttemptLog } from './stepRoutingExecutor.js';
 
 /** Workflow engine sends this to PlannerStepExecutor for the plan step. */
 export type PlannerStepRequest = {
@@ -63,6 +64,7 @@ export type PlannerStepResult = {
         profileId?: string;
         provider?: string;
         model?: string;
+        routingChainAttempts?: RoutingChainAttemptLog[];
     };
     ingestion: {
         outputApplyOutcome: 'accepted' | 'partially_applied' | 'rejected';
@@ -119,7 +121,7 @@ export type PlannerApplicationResult = {
     plannerMattered: boolean;
     plannerMatteredControlIds: SteerabilityControlId[];
     fallbackReasons: string[];
-    fallbackRollupSelectionSource: 'default' | 'planner' | 'request_override';
+    fallbackRollupSelectionSource: 'default' | 'planner' | 'request';
 };
 
 export type PlannerResultApplier = (
@@ -164,7 +166,7 @@ export type AppliedPlanState = {
     plannerMattered: boolean;
     plannerMatteredControlIds: SteerabilityControlId[];
     fallbackReasons: string[];
-    fallbackRollupSelectionSource: 'default' | 'planner' | 'request_override';
+    fallbackRollupSelectionSource: 'default' | 'planner' | 'request';
     modality: ChatPlan['modality'];
     safetyTier: ChatPlan['safetyTier'];
     searchRequested: boolean;

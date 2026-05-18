@@ -35,6 +35,17 @@ type PlannerStepRecordSummary = {
     cost?: StepRecord['cost'];
     mattered?: boolean;
     matteredControlIds?: string[];
+    routingChainAttempts?: Array<{
+        index: number;
+        profileId: string;
+        provider?: string;
+        model?: string;
+        status: string;
+        reasonCode?: string;
+        chooseOneUsed: boolean;
+        chooseOneSelectedIndex?: number;
+        seedKeyType?: string;
+    }>;
 };
 
 export type BuildPlannerStepRecordInput = {
@@ -123,6 +134,12 @@ export const buildPlannerStepRecord = ({
         ...(summary.mattered !== undefined && { mattered: summary.mattered }),
         ...(Array.isArray(summary.matteredControlIds) && {
             matteredControlCount: summary.matteredControlIds.length,
+        }),
+        ...(Array.isArray(summary.routingChainAttempts) && {
+            routingChainAttemptCount: summary.routingChainAttempts.length,
+            routingChainAttemptsJson: JSON.stringify(
+                summary.routingChainAttempts
+            ),
         }),
     };
 

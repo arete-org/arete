@@ -57,6 +57,25 @@ export interface ModelProfile {
     latencyClass?: ModelLatencyClass;
 }
 
+export type WorkflowModelStepKind = 'planner' | 'generate' | 'assess';
+export type WorkflowModeProfileId = 'balanced' | 'grounded';
+
+export type StepRoutingEntry =
+    | string
+    | {
+          chooseOne: string[];
+      };
+
+export type StepRoutingModeMap = Record<
+    WorkflowModelStepKind,
+    StepRoutingEntry[]
+>;
+
+export type StepRoutingChainsConfig = Record<
+    WorkflowModeProfileId,
+    StepRoutingModeMap
+>;
+
 /**
  * Schema used when loading and testing capability flags.
  */
@@ -113,3 +132,32 @@ export const ModelProfileCatalogSchema = z
             });
         }
     });
+
+export const WorkflowModelStepKindSchema = z.enum([
+    'planner',
+    'generate',
+    'assess',
+]);
+export const WorkflowModeProfileIdSchema = z.enum(['balanced', 'grounded']);
+export const StepRoutingEntrySchema = z.union([
+    z.string().min(1),
+    z
+        .object({
+            chooseOne: z.array(z.string().min(1)).min(1),
+        })
+        .strict(),
+]);
+export const StepRoutingModeMapSchema: z.ZodType<StepRoutingModeMap> = z
+    .object({
+        planner: z.array(StepRoutingEntrySchema).default([]),
+        generate: z.array(StepRoutingEntrySchema).default([]),
+        assess: z.array(StepRoutingEntrySchema).default([]),
+    })
+    .strict();
+export const StepRoutingChainsConfigSchema: z.ZodType<StepRoutingChainsConfig> =
+    z
+        .object({
+            balanced: StepRoutingModeMapSchema,
+            grounded: StepRoutingModeMapSchema,
+        })
+        .strict();

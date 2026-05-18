@@ -60,6 +60,24 @@ const buildChatCommandData = (): SlashCommand => {
                 )
                 .setRequired(false)
         )
+        .addStringOption((option) =>
+            option
+                .setName('planner_profile_id')
+                .setDescription('Optional planner model profile override')
+                .setRequired(false)
+        )
+        .addStringOption((option) =>
+            option
+                .setName('generate_profile_id')
+                .setDescription('Optional generation model profile override')
+                .setRequired(false)
+        )
+        .addStringOption((option) =>
+            option
+                .setName('assess_profile_id')
+                .setDescription('Optional assess model profile override')
+                .setRequired(false)
+        )
         .addIntegerOption((option) =>
             option
                 .setName('max_review_cycles')
@@ -147,6 +165,9 @@ const hasResponseMetadata = (value: unknown): value is ResponseMetadata =>
 const buildChatDetailsPrefix = (options: {
     modeId: WorkflowModeId | null;
     maxReviewCycles?: number;
+    plannerProfileId?: string;
+    generateProfileId?: string;
+    assessProfileId?: string;
     traceTarget?: PartialResponseTemperament;
 }): string => {
     const details: string[] = [];
@@ -155,6 +176,15 @@ const buildChatDetailsPrefix = (options: {
     }
     if (options.maxReviewCycles !== undefined) {
         details.push(`> max_review_cycles: ${options.maxReviewCycles}`);
+    }
+    if (options.plannerProfileId) {
+        details.push(`> planner_profile_id: ${options.plannerProfileId}`);
+    }
+    if (options.generateProfileId) {
+        details.push(`> generate_profile_id: ${options.generateProfileId}`);
+    }
+    if (options.assessProfileId) {
+        details.push(`> assess_profile_id: ${options.assessProfileId}`);
     }
     if (options.traceTarget?.tightness !== undefined) {
         details.push(`> trace_tightness: ${options.traceTarget.tightness}`);
@@ -226,6 +256,12 @@ const chatCommand: ChatCommandWithProfiles = {
         ) as WorkflowModeId | null;
         const maxReviewCycles =
             interaction.options.getInteger('max_review_cycles') ?? undefined;
+        const plannerProfileId =
+            interaction.options.getString('planner_profile_id') ?? undefined;
+        const generateProfileId =
+            interaction.options.getString('generate_profile_id') ?? undefined;
+        const assessProfileId =
+            interaction.options.getString('assess_profile_id') ?? undefined;
         const traceTarget: PartialResponseTemperament = {};
         const traceTightness = toTraceAxisScore(
             interaction.options.getInteger('trace_tightness')
@@ -265,6 +301,9 @@ const chatCommand: ChatCommandWithProfiles = {
                 botPersonaId: runtimeConfig.profile.id,
                 ...(modeId ? { modeId } : {}),
                 ...(maxReviewCycles !== undefined && { maxReviewCycles }),
+                ...(plannerProfileId !== undefined && { plannerProfileId }),
+                ...(generateProfileId !== undefined && { generateProfileId }),
+                ...(assessProfileId !== undefined && { assessProfileId }),
                 ...(hasTraceTarget ? { traceTarget } : {}),
                 trigger: {
                     kind: 'submit',
@@ -292,7 +331,7 @@ const chatCommand: ChatCommandWithProfiles = {
                     ? response.metadata
                     : null;
                 const replyBody = clampReplyContent(
-                    `${buildChatDetailsPrefix({ modeId, maxReviewCycles, traceTarget: hasTraceTarget ? traceTarget : undefined })}${buildSearchUnavailablePrefix(metadata)}${response.message}`
+                    `${buildChatDetailsPrefix({ modeId, maxReviewCycles, plannerProfileId, generateProfileId, assessProfileId, traceTarget: hasTraceTarget ? traceTarget : undefined })}${buildSearchUnavailablePrefix(metadata)}${response.message}`
                 );
                 if (!metadata) {
                     await interaction.editReply({
@@ -341,7 +380,7 @@ const chatCommand: ChatCommandWithProfiles = {
 
             await interaction.editReply({
                 content: clampReplyContent(
-                    `${buildChatDetailsPrefix({ modeId, maxReviewCycles, traceTarget: hasTraceTarget ? traceTarget : undefined })}${renderNonMessageAction(response)}`
+                    `${buildChatDetailsPrefix({ modeId, maxReviewCycles, plannerProfileId, generateProfileId, assessProfileId, traceTarget: hasTraceTarget ? traceTarget : undefined })}${renderNonMessageAction(response)}`
                 ),
             });
         } catch (error) {

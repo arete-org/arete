@@ -15,6 +15,9 @@ const createInteraction = (overrides: {
     prompt?: string;
     modeId?: string | null;
     maxReviewCycles?: number | null;
+    plannerProfileId?: string | null;
+    generateProfileId?: string | null;
+    assessProfileId?: string | null;
     traceTightness?: number | null;
     traceRationale?: number | null;
     traceAttribution?: number | null;
@@ -43,6 +46,15 @@ const createInteraction = (overrides: {
                     }
                     if (name === 'mode') {
                         return overrides.modeId ?? null;
+                    }
+                    if (name === 'planner_profile_id') {
+                        return overrides.plannerProfileId ?? null;
+                    }
+                    if (name === 'generate_profile_id') {
+                        return overrides.generateProfileId ?? null;
+                    }
+                    if (name === 'assess_profile_id') {
+                        return overrides.assessProfileId ?? null;
                     }
                     return null;
                 },
@@ -207,6 +219,45 @@ test('/chat handles non-message actions gracefully', async () => {
         assert.match(
             String((editReplyPayloads[0] as { content?: string }).content),
             /^Backend selected reaction mode \(👍\). \/chat currently returns text only\.$/i
+        );
+    } finally {
+        botApi.chatViaApi = originalChatViaApi;
+    }
+});
+
+test('/chat forwards optional step profile overrides', async () => {
+    const originalChatViaApi = botApi.chatViaApi;
+    const seenRequests: unknown[] = [];
+    botApi.chatViaApi = (async (request) => {
+        seenRequests.push(request);
+        return {
+            action: 'ignore',
+            metadata: null,
+        };
+    }) as typeof botApi.chatViaApi;
+
+    const { interaction } = createInteraction({
+        prompt: 'Use a specific profile chain.',
+        plannerProfileId: 'openai-text-fast',
+        generateProfileId: 'openai-text-medium',
+        assessProfileId: 'ollama-text-gptoss',
+    });
+
+    try {
+        await chatCommand.execute(interaction as never);
+        assert.equal(seenRequests.length, 1);
+        assert.deepEqual(
+            (seenRequests[0] as { plannerProfileId?: string }).plannerProfileId,
+            'openai-text-fast'
+        );
+        assert.deepEqual(
+            (seenRequests[0] as { generateProfileId?: string })
+                .generateProfileId,
+            'openai-text-medium'
+        );
+        assert.deepEqual(
+            (seenRequests[0] as { assessProfileId?: string }).assessProfileId,
+            'ollama-text-gptoss'
         );
     } finally {
         botApi.chatViaApi = originalChatViaApi;

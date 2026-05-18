@@ -94,6 +94,11 @@ test('buildModelProfilesSection loads valid catalog YAML with profile defaults',
     assert.equal(section.catalog.length, 1);
     assert.equal(section.catalog[0]?.providerModel, 'gpt-5-mini');
     assert.equal(section.catalog[0]?.capabilities.canUseSearch, true);
+    assert.equal(typeof section.pools, 'object');
+    assert.equal(
+        Array.isArray(section.stepRoutingChains.grounded.generate),
+        true
+    );
     assert.equal(warnings.length, 0);
 });
 
@@ -136,6 +141,63 @@ test('buildModelProfilesSection warns and skips invalid profile entries', () => 
     assert.equal(section.catalog.length, 1);
     assert.equal(section.plannerProfileId, 'openai-text-quality');
     assert.match(warnings.join('\n'), /Ignoring invalid model profile/i);
+});
+
+test('buildModelProfilesSection parses pools and stepRoutingChains with validation', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-catalog-'));
+    const yamlPath = path.join(tempDir, 'catalog.yaml');
+    fs.writeFileSync(
+        yamlPath,
+        [
+            'profiles:',
+            '  - id: openai-text-fast',
+            '    description: Fast profile',
+            '    provider: openai',
+            '    providerModel: gpt-5-mini',
+            '    enabled: true',
+            '    tierBindings: [text-fast]',
+            '    capabilities:',
+            '      canUseSearch: true',
+            '  - id: openai-text-medium',
+            '    description: Medium profile',
+            '    provider: openai',
+            '    providerModel: gpt-5.4-mini',
+            '    enabled: true',
+            '    tierBindings: [text-medium]',
+            '    capabilities:',
+            '      canUseSearch: true',
+            'pools:',
+            '  openai_pair: [openai-text-fast, openai-text-medium]',
+            'stepRoutingChains:',
+            '  balanced:',
+            '    planner: [openai-text-fast]',
+            '    generate:',
+            '      - chooseOne: [openai_pair]',
+            '    assess: [openai-text-medium]',
+            '  grounded:',
+            '    planner: [openai-text-fast]',
+            '    generate: [openai-text-medium]',
+            '    assess: [openai-text-fast]',
+        ].join('\n')
+    );
+
+    const section = buildModelProfilesSection(
+        {
+            MODEL_PROFILE_CATALOG_PATH: yamlPath,
+            DEFAULT_PROFILE_ID: 'openai-text-fast',
+            OPENAI_API_KEY: 'test-key',
+        },
+        process.cwd(),
+        () => undefined
+    );
+
+    assert.deepEqual(section.pools.openai_pair, [
+        'openai-text-fast',
+        'openai-text-medium',
+    ]);
+    assert.deepEqual(section.stepRoutingChains.balanced.planner, [
+        'openai-text-fast',
+    ]);
 });
 
 test('buildModelProfilesSection falls back to bundled defaults when custom catalog structure is malformed', () => {

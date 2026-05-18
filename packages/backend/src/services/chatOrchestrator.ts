@@ -45,6 +45,8 @@ import { createReverseImageSearchContextStepExecutor } from './contextIntegratio
 import { createSerpApiReverseImageSearchProvider } from './contextIntegrations/reverseImageSearch/index.js';
 import { createWebSearchContextStepExecutor } from './contextIntegrations/webSearch/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
+import { resolveStepRoutingChain } from './stepRoutingChains.js';
+import { executeStepRoutingChain } from './stepRoutingExecutor.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
 import { toSnapshotContextEnvelope } from './conversationContextService.js';
 import { runtimeConfig } from '../config.js';
@@ -126,6 +128,10 @@ export const createChatOrchestrator = ({
     const plannerProfile = modelProfileResolver.resolve(
         runtimeConfig.modelProfiles.plannerProfileId
     );
+    const allProfilesById = new Map(
+        catalogProfiles.map((profile) => [profile.id, profile])
+    );
+    let activePlannerProfile = plannerProfile;
     // Startup fallback profile for end-user response generation.
     // Planner may request a capability profile that resolves to one catalog profile.
     const defaultResponseProfile = modelProfileResolver.resolve(defaultModel);
@@ -160,7 +166,7 @@ export const createChatOrchestrator = ({
             }),
         executePlanner: async ({
             messages,
-            model,
+            model: _model,
             maxOutputTokens,
             reasoningEffort,
             verbosity,
@@ -169,9 +175,9 @@ export const createChatOrchestrator = ({
             // behavior stay aligned with normal generation calls.
             const plannerResult = await generationRuntime.generate({
                 messages,
-                model,
-                provider: plannerProfile.provider,
-                capabilities: plannerProfile.capabilities,
+                model: activePlannerProfile.providerModel,
+                provider: activePlannerProfile.provider,
+                capabilities: activePlannerProfile.capabilities,
                 maxOutputTokens,
                 reasoningEffort,
                 verbosity,
@@ -337,9 +343,9 @@ export const createChatOrchestrator = ({
             plan: plannerResult.plan,
             execution: {
                 ...plannerResult.execution,
-                profileId: plannerProfile.id,
-                provider: plannerProfile.provider,
-                model: plannerProfile.providerModel,
+                profileId: activePlannerProfile.id,
+                provider: activePlannerProfile.provider,
+                model: activePlannerProfile.providerModel,
             },
             ingestion: {
                 outputApplyOutcome:
@@ -356,13 +362,62 @@ export const createChatOrchestrator = ({
             },
             diagnostics: plannerResult.diagnostics,
         });
-        const plannerStepExecutor: PlannerStepExecutor = async (input) =>
-            toPlannerStepResult(
+        const plannerStepExecutor: PlannerStepExecutor = async (input) => {
+            const modeResolution = resolveWorkflowModeDecision({
+                modeId:
+                    input.request.modeId ?? runtimeConfig.chatWorkflow.modeId,
+            });
+            const plannerCandidates = resolveStepRoutingChain(
+                {
+                    modeId: modeResolution.modeDecision.modeId,
+                    step: 'planner',
+                    request: input.request,
+                    correlationId: input.request.trigger.messageId ?? 'none',
+                    stepOverrideProfileId: input.request.plannerProfileId,
+                },
+                enabledProfilesById,
+                allProfilesById
+            );
+            const chainResult = await executeStepRoutingChain({
+                step: 'planner',
+                candidates: plannerCandidates,
+                enabledProfilesById,
+                requiresSearch: false,
+                runWithProfile: async (profile) => {
+                    activePlannerProfile = profile;
+                    return chatPlanner.planChat(
+                        input.request,
+                        input.invocationContext
+                    );
+                },
+            });
+
+            if (chainResult.status === 'executed') {
+                activePlannerProfile = chainResult.selected.profile;
+                const base = toPlannerStepResult(chainResult.value);
+                return {
+                    ...base,
+                    execution: {
+                        ...base.execution,
+                        routingChainAttempts: chainResult.attempts,
+                    },
+                };
+            }
+
+            const fallback = toPlannerStepResult(
                 await chatPlanner.planChat(
                     input.request,
                     input.invocationContext
                 )
             );
+            return {
+                ...fallback,
+                execution: {
+                    ...fallback.execution,
+                    routingChainAttempts: chainResult.attempts,
+                },
+            };
+        };
         const fallbackReasons: PlannerFallbackReason[] = [];
         const fallbackRollupSelectionSourceRef: {
             value: PlannerSelectionSource;
@@ -386,6 +441,7 @@ export const createChatOrchestrator = ({
             modeId:
                 normalizedRequest.modeId ?? runtimeConfig.chatWorkflow.modeId,
         });
+        activePlannerProfile = plannerProfile;
         // Pick the run mode first, then derive the contract from it. That keeps
         // later branches from inventing their own policy rules.
         // TODO(workflow-mode-escalation): Add optional runtime mode transitions
@@ -727,6 +783,14 @@ export const createChatOrchestrator = ({
             capabilities: defaultResponseProfile.capabilities,
             workflowModeId: workflowModeResolution.modeDecision.modeId,
             workflowMaxReviewCycles: normalizedRequest.maxReviewCycles,
+            routingRequest: {
+                sessionId: normalizedRequest.sessionId,
+                traceTarget: normalizedRequest.traceTarget,
+                plannerProfileId: normalizedRequest.plannerProfileId,
+                generateProfileId: normalizedRequest.generateProfileId,
+                assessProfileId: normalizedRequest.assessProfileId,
+                trigger: normalizedRequest.trigger,
+            },
             plannerStepRequest,
             plannerStepExecutor,
             planContinuationBuilder,
@@ -1027,7 +1091,7 @@ export const createChatOrchestrator = ({
                 evaluatorExecutionContext?.outcome?.authorityLevel,
             generationDurationMs: response.generationDurationMs,
             totalDurationMs,
-            plannerProfileId: plannerProfile.id,
+            plannerProfileId: activePlannerProfile.id,
             incomingBotPersonaId:
                 normalizedRequest.botPersonaId?.trim() || null,
             personaProfileId: personaProfile.id,
