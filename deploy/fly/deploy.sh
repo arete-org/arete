@@ -107,7 +107,7 @@ ensure_secrets() {
   echo "Checking secrets for $app_name..."
   local existing
   existing=$(get_secret_names "$app_name")
-  local env_path="${SCRIPT_DIR}/../.env"
+  local env_path="${SCRIPT_DIR}/../../.env"
 
   for secret in "${required_secrets[@]}"; do
     if ! echo "$existing" | grep -qx "$secret"; then
@@ -137,7 +137,7 @@ ensure_optional_secrets() {
   echo "Checking optional secrets for $app_name..."
   local existing
   existing=$(get_secret_names "$app_name")
-  local env_path="${SCRIPT_DIR}/../.env"
+  local env_path="${SCRIPT_DIR}/../../.env"
 
   for secret in "${optional_secrets[@]}"; do
     if ! echo "$existing" | grep -qx "$secret"; then
@@ -159,20 +159,20 @@ ensure_optional_secrets() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Fly/Depot uses current working directory as Docker build context.
 # Force repo root so Dockerfiles can COPY workspace files reliably.
 cd "$REPO_ROOT"
 
 echo "Ensuring Fly apps exist..."
-ensure_app "$SCRIPT_DIR/fly.backend.toml"
-ensure_app "$SCRIPT_DIR/fly.web.toml"
-ensure_app "$SCRIPT_DIR/fly.bot.toml"
+ensure_app "$SCRIPT_DIR/backend.toml"
+ensure_app "$SCRIPT_DIR/web.toml"
+ensure_app "$SCRIPT_DIR/bot.toml"
 
-bot_app_name=$(get_app_name "$SCRIPT_DIR/fly.bot.toml")
-backend_app_name=$(get_app_name "$SCRIPT_DIR/fly.backend.toml")
-web_app_name=$(get_app_name "$SCRIPT_DIR/fly.web.toml")
+bot_app_name=$(get_app_name "$SCRIPT_DIR/bot.toml")
+backend_app_name=$(get_app_name "$SCRIPT_DIR/backend.toml")
+web_app_name=$(get_app_name "$SCRIPT_DIR/web.toml")
 
 echo "Configuring backend secrets..."
 ensure_secrets "$backend_app_name" OPENAI_API_KEY TRACE_API_TOKEN
@@ -185,20 +185,21 @@ ensure_optional_secrets "$bot_app_name" WEB_BASE_URL CLOUDINARY_CLOUD_NAME CLOUD
 run_env_validation fly-bot "$bot_app_name"
 
 echo "Deploying backend..."
-fly deploy -c "$SCRIPT_DIR/fly.backend.toml"
+fly deploy -c "$SCRIPT_DIR/backend.toml"
 echo "Scaling backend to one instance..."
 fly scale count 1 -a "$backend_app_name" -y
 echo "Deploying web..."
-fly deploy -c "$SCRIPT_DIR/fly.web.toml"
+fly deploy -c "$SCRIPT_DIR/web.toml"
 echo "Scaling web to one instance..."
 fly scale count 1 -a "$web_app_name" -y
 echo "Deploying bot..."
-fly deploy -c "$SCRIPT_DIR/fly.bot.toml"
+fly deploy -c "$SCRIPT_DIR/bot.toml"
 
 echo "Scaling bot to one instance..."
 fly scale count 1 -a "$bot_app_name" -y
 
-if [[ -f "$SCRIPT_DIR/fly-start.sh" ]]; then
+if [[ -f "$SCRIPT_DIR/start.sh" ]]; then
   echo "Starting all apps..."
-  bash "$SCRIPT_DIR/fly-start.sh"
+  bash "$SCRIPT_DIR/start.sh"
 fi
+

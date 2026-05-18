@@ -27,9 +27,9 @@ if [[ "$confirm" != "YES" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-backend_app=$(get_app_name "$SCRIPT_DIR/fly.backend.toml")
-web_app=$(get_app_name "$SCRIPT_DIR/fly.web.toml")
-bot_app=$(get_app_name "$SCRIPT_DIR/fly.bot.toml")
+backend_app=$(get_app_name "$SCRIPT_DIR/backend.toml")
+web_app=$(get_app_name "$SCRIPT_DIR/web.toml")
+bot_app=$(get_app_name "$SCRIPT_DIR/bot.toml")
 
 for app in "$backend_app" "$web_app" "$bot_app"; do
   echo "Clearing secrets for $app..."
@@ -39,3 +39,4 @@ for app in "$backend_app" "$web_app" "$bot_app"; do
     fly secrets unset "$secret" -a "$app" >/dev/null
   done
  done
+

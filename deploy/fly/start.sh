@@ -21,9 +21,9 @@ get_machine_ids() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-backend_app=$(get_app_name "$SCRIPT_DIR/fly.backend.toml")
-web_app=$(get_app_name "$SCRIPT_DIR/fly.web.toml")
-bot_app=$(get_app_name "$SCRIPT_DIR/fly.bot.toml")
+backend_app=$(get_app_name "$SCRIPT_DIR/backend.toml")
+web_app=$(get_app_name "$SCRIPT_DIR/web.toml")
+bot_app=$(get_app_name "$SCRIPT_DIR/bot.toml")
 
 echo "Starting backend ($backend_app)..."
 for id in $(get_machine_ids "$backend_app"); do
@@ -42,3 +42,4 @@ for id in $(get_machine_ids "$bot_app"); do
   echo "Starting machine $id..."
   fly machine start "$id" -a "$bot_app" >/dev/null
 done
+

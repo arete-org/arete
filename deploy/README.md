@@ -109,16 +109,16 @@ Split:
 
 ## Fly.io
 
-- Backend: `fly deploy -c deploy/fly.backend.toml`
-- Web: `fly deploy -c deploy/fly.web.toml`
-- Bot: `fly deploy -c deploy/fly.bot.toml`
-- All three (bash): `./deploy/deploy-fly.sh`
-- All three (PowerShell): `./deploy/deploy-fly.ps1`
+- Backend: `fly deploy -c deploy/fly/backend.toml`
+- Web: `fly deploy -c deploy/fly/web.toml`
+- Bot: `fly deploy -c deploy/fly/bot.toml`
+- All three (bash): `./deploy/fly/deploy.sh`
+- All three (PowerShell): `./deploy/fly/deploy.ps1`
   (Requires Fly CLI: https://fly.io/docs/flyctl/install/)
   The scripts read `.env`, prompt for missing secrets, and run `pnpm validate-env` before deploy.
   Note: we use three separate Fly apps to mirror the Docker Compose service split.
-  Note: web uses `BACKEND_HOST=footnote-backend.internal` in `deploy/fly.web.toml`; update it if the backend app name changes.
-  GitHub Actions deploys use `.github/workflows/fly-deploy.yml` and only need the `FLY_API_TOKEN` secret; app names come from `deploy/fly.*.toml`.
+  Note: web uses `BACKEND_HOST=footnote-backend.internal` in `deploy/fly/web.toml`; update it if the backend app name changes.
+  GitHub Actions deploys use `.github/workflows/fly-deploy.yml` and only need the `FLY_API_TOKEN` secret; app names come from `deploy/fly/*.toml`.
   Secrets per app:
     - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
     - backend (optional): `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY`, `LOG_LEVEL`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS` (required as optional backend secrets when `reverse_image_search` runtime provider mode is enabled)
@@ -168,3 +168,4 @@ Template overlay paths:
     - copy restored files to `/data/provenance.db` and `/data/incidents.db`
     - restart backend container
 4. Confirm backend boot logs show normal SQLite initialization and no Litestream replication errors.
+

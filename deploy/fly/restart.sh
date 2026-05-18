@@ -35,9 +35,9 @@ start_machines() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-backend_app=$(get_app_name "$SCRIPT_DIR/fly.backend.toml")
-web_app=$(get_app_name "$SCRIPT_DIR/fly.web.toml")
-bot_app=$(get_app_name "$SCRIPT_DIR/fly.bot.toml")
+backend_app=$(get_app_name "$SCRIPT_DIR/backend.toml")
+web_app=$(get_app_name "$SCRIPT_DIR/web.toml")
+bot_app=$(get_app_name "$SCRIPT_DIR/bot.toml")
 
 echo "Restarting backend ($backend_app)..."
 start_machines "$backend_app"
@@ -45,3 +45,4 @@ echo "Restarting web ($web_app)..."
 start_machines "$web_app"
 echo "Restarting bot ($bot_app)..."
 start_machines "$bot_app"
+

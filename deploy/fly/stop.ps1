@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-# Starts machines for backend/web/bot apps without recreating them.
+# Stops machines for backend/web/bot apps without destroying them.
 
 function Get-FlyAppName {
   param([string]$ConfigPath)
@@ -26,22 +26,23 @@ function Get-MachineIds {
 }
 
 $configRoot = $PSScriptRoot
-$backendApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.backend.toml')
-$webApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.web.toml')
-$botApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.bot.toml')
+$backendApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'backend.toml')
+$webApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'web.toml')
+$botApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'bot.toml')
 
-Write-Host "Starting backend ($backendApp)..."
+Write-Host "Stopping backend ($backendApp)..."
 foreach ($id in Get-MachineIds -AppName $backendApp) {
-  Write-Host "Starting machine $id..."
-  fly machine start $id -a $backendApp | Out-Null
+  Write-Host "Stopping machine $id..."
+  fly machine stop $id -a $backendApp | Out-Null
 }
-Write-Host "Starting web ($webApp)..."
+Write-Host "Stopping web ($webApp)..."
 foreach ($id in Get-MachineIds -AppName $webApp) {
-  Write-Host "Starting machine $id..."
-  fly machine start $id -a $webApp | Out-Null
+  Write-Host "Stopping machine $id..."
+  fly machine stop $id -a $webApp | Out-Null
 }
-Write-Host "Starting bot ($botApp)..."
+Write-Host "Stopping bot ($botApp)..."
 foreach ($id in Get-MachineIds -AppName $botApp) {
-  Write-Host "Starting machine $id..."
-  fly machine start $id -a $botApp | Out-Null
+  Write-Host "Stopping machine $id..."
+  fly machine stop $id -a $botApp | Out-Null
 }
+

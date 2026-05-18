@@ -171,19 +171,19 @@ function Ensure-FlySecrets {
 }
 
 $configRoot = $PSScriptRoot
-$repoRoot = Resolve-Path (Join-Path $configRoot '..')
-$envPath = Join-Path $configRoot '..\.env'
+$repoRoot = Resolve-Path (Join-Path $configRoot '..\..')
+$envPath = Join-Path $configRoot '..\..\.env'
 
 Push-Location $repoRoot
 try {
 Write-Host "Ensuring Fly apps exist..."
-Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'fly.backend.toml')
-Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'fly.web.toml')
-Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'fly.bot.toml')
+Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'backend.toml')
+Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'web.toml')
+Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'bot.toml')
 
-$botAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.bot.toml')
-$backendAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.backend.toml')
-$webAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.web.toml')
+$botAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'bot.toml')
+$backendAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'backend.toml')
+$webAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'web.toml')
 
 Write-Host "Configuring backend secrets..."
 Ensure-FlySecrets -AppName $backendAppName `
@@ -200,20 +200,20 @@ Ensure-FlySecrets -AppName $botAppName `
 Invoke-EnvValidation -Target 'fly-bot' -AppName $botAppName
 
 Write-Host "Deploying backend..."
-fly deploy -c (Join-Path $configRoot 'fly.backend.toml')
+fly deploy -c (Join-Path $configRoot 'backend.toml')
 Write-Host "Scaling backend to one instance..."
 fly scale count 1 -a $backendAppName -y
 Write-Host "Deploying web..."
-fly deploy -c (Join-Path $configRoot 'fly.web.toml')
+fly deploy -c (Join-Path $configRoot 'web.toml')
 Write-Host "Scaling web to one instance..."
 fly scale count 1 -a $webAppName -y
 Write-Host "Deploying bot..."
-fly deploy -c (Join-Path $configRoot 'fly.bot.toml')
+fly deploy -c (Join-Path $configRoot 'bot.toml')
 
 Write-Host "Scaling bot to one instance..."
 fly scale count 1 -a $botAppName -y
 
-$startScript = Join-Path $configRoot 'fly-start.ps1'
+$startScript = Join-Path $configRoot 'start.ps1'
 if (Test-Path $startScript) {
   Write-Host "Starting all apps..."
   & $startScript
@@ -221,3 +221,4 @@ if (Test-Path $startScript) {
 } finally {
   Pop-Location
 }
+

@@ -30,9 +30,9 @@ if ($confirm -ne 'YES') {
 
 $configRoot = $PSScriptRoot
 $appNames = @(
-  (Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.backend.toml'))
-  (Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.web.toml'))
-  (Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.bot.toml'))
+  (Get-FlyAppName -ConfigPath (Join-Path $configRoot 'backend.toml'))
+  (Get-FlyAppName -ConfigPath (Join-Path $configRoot 'web.toml'))
+  (Get-FlyAppName -ConfigPath (Join-Path $configRoot 'bot.toml'))
 )
 
 foreach ($app in $appNames) {
@@ -43,3 +43,4 @@ foreach ($app in $appNames) {
     fly secrets unset $secret -a $app | Out-Null
   }
 }
+

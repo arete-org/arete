@@ -61,9 +61,9 @@ All-in-one mode supports exactly one bot profile per container. Multi-profile de
 Keep the existing split deployment as the default mode for multi-bot vendor deployments:
 
 - `deploy/compose.yml`
-- `deploy/fly.backend.toml`
-- `deploy/fly.web.toml`
-- `deploy/fly.bot.toml`
+- `deploy/fly/backend.toml`
+- `deploy/fly/web.toml`
+- `deploy/fly/bot.toml`
 - existing deploy scripts and per-service images
 
 The split mode remains the right shape when many independent Discord bot machines share one backend orchestration and trace pipeline.
@@ -158,3 +158,4 @@ Status as of 2026-05-18:
 - **Phase 1:** not started
 - **Phase 2:** not started
 - **Phase 3:** not started
+
