@@ -64,8 +64,12 @@ import {
     selectContextStepExecutor,
     selectFollowUpSearchHint,
 } from './workflowEngine/contextStepHelpers.js';
-import { executeStepRoutingChain } from './stepRoutingExecutor.js';
+import {
+    executeStepRoutingChain,
+    type RoutingChainAttemptLog,
+} from './stepRoutingExecutor.js';
 import type { ResolvedStepRoutingCandidate } from './stepRoutingChains.js';
+import { buildRoutingChainSignals } from './workflowEngine/routingSignals.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -874,19 +878,7 @@ export const runBoundedReviewWorkflow = async ({
             });
             try {
                 let initialRoutingChainAttempts:
-                    | Array<{
-                          index: number;
-                          step: string;
-                          profileId: string;
-                          provider?: string;
-                          model?: string;
-                          status: string;
-                          reasonCode?: string;
-                          chooseOneUsed: boolean;
-                          chooseOneCandidates?: string[];
-                          chooseOneSelectedIndex?: number;
-                          seedKeyType?: 'session_id' | 'correlation_id';
-                      }>
+                    | RoutingChainAttemptLog[]
                     | undefined;
                 let initialRoutedProfile:
                     | {
@@ -959,15 +951,18 @@ export const runBoundedReviewWorkflow = async ({
                     attempt: 1,
                     ...(initialRoutingChainAttempts !== undefined && {
                         signals: {
-                            routingChainAttemptCount:
-                                initialRoutingChainAttempts.length,
-                            routingChainAttemptsJson: JSON.stringify(
-                                initialRoutingChainAttempts
-                            ),
-                            ...(initialRoutedProfile !== undefined && {
-                                routedProfileId: initialRoutedProfile.profileId,
-                                routedProvider: initialRoutedProfile.provider,
-                                routedModel: initialRoutedProfile.model,
+                            ...buildRoutingChainSignals({
+                                attempts: initialRoutingChainAttempts,
+                                selectedProfileId:
+                                    initialRoutedProfile?.profileId,
+                                selectedProvider:
+                                    initialRoutedProfile?.provider,
+                                selectedModel: initialRoutedProfile?.model,
+                                signalKeys: {
+                                    profileId: 'routedProfileId',
+                                    provider: 'routedProvider',
+                                    model: 'routedModel',
+                                },
                             }),
                         },
                     }),

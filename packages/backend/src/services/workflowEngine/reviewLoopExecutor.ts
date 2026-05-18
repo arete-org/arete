@@ -41,6 +41,10 @@ import {
     extractRoutingHintsFromAssess,
     reorderRevisionCandidatesByHintLane,
 } from './revisionRoutingHints.js';
+import {
+    buildAssessRoutingHintSignals,
+    buildRoutingChainSignals,
+} from './routingSignals.js';
 
 type CaptureStep = (input: {
     stepKind: 'plan' | 'tool' | 'generate' | 'assess' | 'revise' | 'finalize';
@@ -195,26 +199,27 @@ export const executeReviewLoop = async (ctx: {
         exhaustedLimitKey = evaluation.exhaustedLimitKey;
         return true;
     };
-
-    for (
-        let iteration = 1;
-        iteration <= ctx.effectiveMaxIterations && !shouldStop;
-        iteration += 1
-    ) {
-        if (
-            !isWorkflowTransitionAllowed(
-                workflowState.currentStepKind,
-                'assess',
-                ctx.workflowPolicy
-            )
-        ) {
-            terminationReason = 'transition_blocked_by_policy';
-            workflowStatus = 'degraded';
-            break;
-        }
-        if (syncLimitStop(ctx.stopIfOverLimits('assess'))) {
-            break;
-        }
+    const toLatestRoutingHintSignals = (): Record<
+        string,
+        string | number | boolean | null
+    > =>
+        buildAssessRoutingHintSignals({
+            assessRoutingHintsCsv: latestAssessRoutingHintsCsv,
+            routingHintApplied: latestRoutingHintApplied,
+            routingHintConflictResolved: latestRoutingHintConflictResolved,
+        });
+    const executeAssessStep = async (
+        iteration: number
+    ): Promise<
+        | {
+              status: 'executed';
+              decision: ReviewDecision;
+              reviewStepId: string;
+          }
+        | {
+              status: 'stopped';
+          }
+    > => {
         const reviewStartedAt = Date.now();
         try {
             const assessPrompt = composeAssessPrompt({
@@ -300,7 +305,7 @@ export const executeReviewLoop = async (ctx: {
                 terminationReason = 'executor_error_fail_open';
                 workflowStatus = 'degraded';
                 shouldStop = true;
-                break;
+                return { status: 'stopped' };
             }
             const assessSignals = buildAssessSignals(decision);
             const assessRoutingHints = extractRoutingHintsFromAssess({
@@ -329,325 +334,22 @@ export const executeReviewLoop = async (ctx: {
                 attempt: iteration,
                 signals: {
                     ...assessSignals,
-                    ...(latestAssessRoutingHintsCsv !== undefined && {
-                        assessRoutingHintsCsv: latestAssessRoutingHintsCsv,
-                    }),
-                    routingHintApplied: latestRoutingHintApplied ?? 'none',
-                    ...(latestRoutingHintConflictResolved !== undefined && {
-                        routingHintConflictResolved:
-                            latestRoutingHintConflictResolved,
-                    }),
-                    ...(assessChainResult !== undefined && {
-                        routingChainAttemptCount:
-                            assessChainResult.attempts.length,
-                        routingChainAttemptsJson: JSON.stringify(
-                            assessChainResult.attempts
-                        ),
+                    ...toLatestRoutingHintSignals(),
+                    ...buildRoutingChainSignals({
+                        attempts: assessChainResult?.attempts,
                         selectedProfileId:
-                            assessChainResult.status === 'executed'
+                            assessChainResult?.status === 'executed'
                                 ? assessChainResult.selected.profile.id
                                 : null,
                     }),
                 },
             });
             latestRevisionInstruction = decision.revisionInstruction;
-            if (decision.reviewDecision === 'finalize') {
-                terminationReason = 'goal_satisfied';
-                workflowStatus = 'completed';
-                shouldStop = true;
-                break;
-            }
-            if (iteration >= ctx.effectiveMaxIterations) {
-                terminationReason = 'budget_exhausted_steps';
-                exhaustedLimitKey = 'maxWorkflowSteps';
-                workflowStatus = 'degraded';
-                shouldStop = true;
-                break;
-            }
-            if (!ctx.workflowPolicy.enableRevision) {
-                terminationReason = 'transition_blocked_by_policy';
-                workflowStatus = 'degraded';
-                shouldStop = true;
-                break;
-            }
-            if (
-                !isWorkflowTransitionAllowed(
-                    workflowState.currentStepKind,
-                    'generate',
-                    ctx.workflowPolicy
-                )
-            ) {
-                terminationReason = 'transition_blocked_by_policy';
-                workflowStatus = 'degraded';
-                shouldStop = true;
-                break;
-            }
-            if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
-                break;
-            }
-            let reentryAttempt = 0;
-            if (
-                ctx.plannerStepRequest !== undefined &&
-                ctx.plannerStepExecutor !== undefined &&
-                ctx.planContinuationBuilder !== undefined
-            ) {
-                if (
-                    !isWorkflowTransitionAllowed(
-                        workflowState.currentStepKind,
-                        'plan',
-                        ctx.workflowPolicy
-                    )
-                ) {
-                    terminationReason = 'transition_blocked_by_policy';
-                    workflowStatus = 'degraded';
-                    shouldStop = true;
-                    break;
-                }
-                if (syncLimitStop(ctx.stopIfOverLimits('plan'))) {
-                    break;
-                }
-                const plannerReentryStartedAt = Date.now();
-                try {
-                    const plannerReentryResult = await ctx.plannerStepExecutor({
-                        ...ctx.plannerStepRequest,
-                        workflowId: ctx.workflowId,
-                        workflowName: ctx.workflowName,
-                        attempt: iteration + 1,
-                    });
-                    const plannerReentryFinishedAt = Date.now();
-                    const plannerReentryStep = buildPlannerStepRecord({
-                        stepId: `step_${ctx.stepCounterRef.value + 1}`,
-                        attempt: iteration + 1,
-                        parentStepId: reviewStepId,
-                        startedAtMs: plannerReentryStartedAt,
-                        finishedAtMs: plannerReentryFinishedAt,
-                        summary: {
-                            status: plannerReentryResult.execution.status,
-                            ...(plannerReentryResult.execution.reasonCode !==
-                                undefined && {
-                                reasonCode:
-                                    plannerReentryResult.execution.reasonCode,
-                            }),
-                            purpose: plannerReentryResult.execution.purpose,
-                            contractType:
-                                plannerReentryResult.execution.contractType,
-                            applyOutcome:
-                                plannerReentryResult.execution.status ===
-                                'executed'
-                                    ? 'applied'
-                                    : 'not_applied',
-                            durationMs:
-                                plannerReentryResult.execution.durationMs,
-                            action: plannerReentryResult.plan.action,
-                            modality: plannerReentryResult.plan.modality,
-                            requestedCapabilityProfile:
-                                plannerReentryResult.plan
-                                    .requestedCapabilityProfile,
-                            ...(plannerReentryResult.execution
-                                .routingChainAttempts !== undefined && {
-                                routingChainAttempts:
-                                    plannerReentryResult.execution
-                                        .routingChainAttempts,
-                            }),
-                        },
-                    });
-                    ctx.workflowStepsRef.value.push(plannerReentryStep);
-                    ctx.stepCounterRef.value += 1;
-                    workflowState = applyStepExecutionToState(
-                        workflowState,
-                        'plan',
-                        0,
-                        0,
-                        1
-                    );
-                    planContinuation = ctx.planContinuationBuilder({
-                        plannerStepResult: plannerReentryResult,
-                        workflowId: ctx.workflowId,
-                        workflowName: ctx.workflowName,
-                        attempt: iteration + 1,
-                        baseMessagesWithHints: effectiveMessagesWithHints,
-                        baseGenerationRequest: effectiveGenerationRequest,
-                        contextEnvelope: effectiveContextEnvelope,
-                    });
-                    if (planContinuation.continuation !== 'continue_message') {
-                        terminationReason = 'executor_error_fail_open';
-                        workflowStatus = 'degraded';
-                        shouldStop = true;
-                        break;
-                    }
-                    reentryAttempt = iteration;
-                    effectiveGenerationRequest =
-                        planContinuation.generationRequest;
-                    effectiveMessagesWithHints =
-                        planContinuation.messagesWithHints;
-                    effectiveContextEnvelope = planContinuation.contextEnvelope;
-                    messagesWithContext = effectiveMessagesWithHints;
-                } catch {
-                    terminationReason = 'executor_error_fail_open';
-                    workflowStatus = 'degraded';
-                    shouldStop = true;
-                    break;
-                }
-            }
-            if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
-                break;
-            }
-            const revisionStartedAt = Date.now();
-            try {
-                const refinementModuleIds =
-                    decision.moduleHints !== undefined &&
-                    decision.moduleHints.length > 0
-                        ? decision.moduleHints
-                        : ctx.selectedReviewModuleIds;
-                const refinementPrompt = composeRefinementPrompt({
-                    revisionPromptPrefix: ctx.effectiveRevisionPromptPrefix,
-                    revisionInstruction: latestRevisionInstruction,
-                    moduleIds: refinementModuleIds,
-                });
-                const revisionRequest: GenerationRequest = {
-                    ...effectiveGenerationRequest,
-                    messages: [
-                        ...effectiveMessagesWithHints,
-                        { role: 'assistant', content: draftResult?.text ?? '' },
-                        { role: 'system', content: refinementPrompt.prompt },
-                    ],
-                };
-                const revisionChainResult =
-                    ctx.stepRoutingChainSet?.generateCandidates &&
-                    ctx.stepRoutingChainSet.generateCandidates.length > 0
-                        ? await executeStepRoutingChain({
-                              step: 'generate',
-                              candidates: reorderRevisionCandidatesByHintLane({
-                                  candidates:
-                                      ctx.stepRoutingChainSet
-                                          .generateCandidates,
-                                  enabledProfilesById:
-                                      ctx.stepRoutingChainSet
-                                          .enabledProfilesById,
-                                  lane: latestRoutingHintApplied ?? 'none',
-                              }),
-                              enabledProfilesById:
-                                  ctx.stepRoutingChainSet.enabledProfilesById,
-                              requiresSearch:
-                                  revisionRequest.search !== undefined,
-                              runWithProfile: async (profile) =>
-                                  ctx.generationRuntime.generate({
-                                      ...revisionRequest,
-                                      model: profile.providerModel,
-                                      provider: profile.provider,
-                                      capabilities: profile.capabilities,
-                                  }),
-                          })
-                        : undefined;
-                if (revisionChainResult?.status === 'exhausted') {
-                    throw new Error(revisionChainResult.reasonCode);
-                }
-                const revisionResult =
-                    revisionChainResult?.status === 'executed'
-                        ? revisionChainResult.value
-                        : await ctx.generationRuntime.generate(revisionRequest);
-                const revisionUsageModel =
-                    revisionChainResult?.status === 'executed'
-                        ? revisionChainResult.selected.profile.providerModel
-                        : effectiveGenerationRequest.model;
-                const revisionFinishedAt = Date.now();
-                const revisionUsage = ctx.captureUsage(
-                    revisionResult,
-                    revisionUsageModel
-                );
-                const revisionStepId = ctx.captureStep({
-                    stepKind: 'generate',
-                    status: 'executed',
-                    summary:
-                        'Generated refinement draft from assessment guidance.',
-                    startedAtMs: revisionStartedAt,
-                    finishedAtMs: revisionFinishedAt,
-                    model: revisionUsage.model,
-                    usage: revisionResult.usage,
-                    estimatedCost: revisionUsage.estimatedCost,
-                    parentStepId: reviewStepId,
-                    attempt: iteration,
-                    signals: {
-                        refinementApplied: true,
-                        refinementSourceStepId: reviewStepId,
-                        appliedModuleCount:
-                            refinementPrompt.appliedModuleIds.length,
-                        ...(refinementPrompt.appliedModuleIds.length > 0 && {
-                            appliedModuleIdsCsv:
-                                refinementPrompt.appliedModuleIds.join(','),
-                        }),
-                        ...(reentryAttempt > 0 && { reentryAttempt }),
-                        ...(latestAssessRoutingHintsCsv !== undefined && {
-                            assessRoutingHintsCsv: latestAssessRoutingHintsCsv,
-                        }),
-                        routingHintApplied: latestRoutingHintApplied ?? 'none',
-                        ...(latestRoutingHintConflictResolved !== undefined && {
-                            routingHintConflictResolved:
-                                latestRoutingHintConflictResolved,
-                        }),
-                        ...(revisionChainResult !== undefined && {
-                            routingChainAttemptCount:
-                                revisionChainResult.attempts.length,
-                            routingChainAttemptsJson: JSON.stringify(
-                                revisionChainResult.attempts
-                            ),
-                            selectedProfileId:
-                                revisionChainResult.status === 'executed'
-                                    ? revisionChainResult.selected.profile.id
-                                    : null,
-                        }),
-                    },
-                });
-                workflowState = applyStepExecutionToState(
-                    workflowState,
-                    'generate',
-                    revisionUsage.totalTokens,
-                    0,
-                    0
-                );
-                draftResult = revisionResult;
-                draftParentStepId = revisionStepId;
-            } catch (error) {
-                const revisionFinishedAt = Date.now();
-                const errorMessage =
-                    error instanceof Error ? error.message : String(error);
-                const reasonCode: ExecutionReasonCode =
-                    errorMessage === 'routing_chain_exhausted' ||
-                    errorMessage === 'routing_chain_non_transient_error'
-                        ? (errorMessage as ExecutionReasonCode)
-                        : 'generation_runtime_error';
-                ctx.captureStep({
-                    stepKind: 'generate',
-                    status: 'failed',
-                    summary:
-                        'Refinement generation failed; fail-open returned latest successful draft.',
-                    reasonCode,
-                    startedAtMs: revisionStartedAt,
-                    finishedAtMs: revisionFinishedAt,
-                    parentStepId: reviewStepId,
-                    attempt: iteration,
-                    signals: {
-                        ...(latestAssessRoutingHintsCsv !== undefined && {
-                            assessRoutingHintsCsv: latestAssessRoutingHintsCsv,
-                        }),
-                        routingHintApplied: latestRoutingHintApplied ?? 'none',
-                        ...(latestRoutingHintConflictResolved !== undefined && {
-                            routingHintConflictResolved:
-                                latestRoutingHintConflictResolved,
-                        }),
-                    },
-                });
-                workflowState = applyStepExecutionToState(
-                    workflowState,
-                    'generate',
-                    0,
-                    0,
-                    0
-                );
-                terminationReason = 'executor_error_fail_open';
-                workflowStatus = 'degraded';
-                shouldStop = true;
-            }
+            return {
+                status: 'executed',
+                decision,
+                reviewStepId,
+            };
         } catch (error) {
             const reviewFinishedAt = Date.now();
             const errorMessage =
@@ -667,16 +369,7 @@ export const executeReviewLoop = async (ctx: {
                 finishedAtMs: reviewFinishedAt,
                 parentStepId: draftParentStepId,
                 attempt: iteration,
-                signals: {
-                    ...(latestAssessRoutingHintsCsv !== undefined && {
-                        assessRoutingHintsCsv: latestAssessRoutingHintsCsv,
-                    }),
-                    routingHintApplied: latestRoutingHintApplied ?? 'none',
-                    ...(latestRoutingHintConflictResolved !== undefined && {
-                        routingHintConflictResolved:
-                            latestRoutingHintConflictResolved,
-                    }),
-                },
+                signals: toLatestRoutingHintSignals(),
             });
             workflowState = applyStepExecutionToState(
                 workflowState,
@@ -688,6 +381,346 @@ export const executeReviewLoop = async (ctx: {
             terminationReason = 'executor_error_fail_open';
             workflowStatus = 'degraded';
             shouldStop = true;
+            return { status: 'stopped' };
+        }
+    };
+    const executePlannerReentryStep = async (
+        iteration: number,
+        reviewStepId: string
+    ): Promise<
+        | {
+              status: 'executed';
+              reentryAttempt: number;
+          }
+        | {
+              status: 'skipped';
+              reentryAttempt: number;
+          }
+        | {
+              status: 'stopped';
+          }
+    > => {
+        if (
+            ctx.plannerStepRequest === undefined ||
+            ctx.plannerStepExecutor === undefined ||
+            ctx.planContinuationBuilder === undefined
+        ) {
+            return {
+                status: 'skipped',
+                reentryAttempt: 0,
+            };
+        }
+        if (
+            !isWorkflowTransitionAllowed(
+                workflowState.currentStepKind,
+                'plan',
+                ctx.workflowPolicy
+            )
+        ) {
+            terminationReason = 'transition_blocked_by_policy';
+            workflowStatus = 'degraded';
+            shouldStop = true;
+            return { status: 'stopped' };
+        }
+        if (syncLimitStop(ctx.stopIfOverLimits('plan'))) {
+            return { status: 'stopped' };
+        }
+        const plannerReentryStartedAt = Date.now();
+        try {
+            const plannerReentryResult = await ctx.plannerStepExecutor({
+                ...ctx.plannerStepRequest,
+                workflowId: ctx.workflowId,
+                workflowName: ctx.workflowName,
+                attempt: iteration + 1,
+            });
+            const plannerReentryFinishedAt = Date.now();
+            const plannerReentryStep = buildPlannerStepRecord({
+                stepId: `step_${ctx.stepCounterRef.value + 1}`,
+                attempt: iteration + 1,
+                parentStepId: reviewStepId,
+                startedAtMs: plannerReentryStartedAt,
+                finishedAtMs: plannerReentryFinishedAt,
+                summary: {
+                    status: plannerReentryResult.execution.status,
+                    ...(plannerReentryResult.execution.reasonCode !==
+                        undefined && {
+                        reasonCode: plannerReentryResult.execution.reasonCode,
+                    }),
+                    purpose: plannerReentryResult.execution.purpose,
+                    contractType: plannerReentryResult.execution.contractType,
+                    applyOutcome:
+                        plannerReentryResult.execution.status === 'executed'
+                            ? 'applied'
+                            : 'not_applied',
+                    durationMs: plannerReentryResult.execution.durationMs,
+                    action: plannerReentryResult.plan.action,
+                    modality: plannerReentryResult.plan.modality,
+                    requestedCapabilityProfile:
+                        plannerReentryResult.plan.requestedCapabilityProfile,
+                    ...(plannerReentryResult.execution.routingChainAttempts !==
+                        undefined && {
+                        routingChainAttempts:
+                            plannerReentryResult.execution.routingChainAttempts,
+                    }),
+                },
+            });
+            ctx.workflowStepsRef.value.push(plannerReentryStep);
+            ctx.stepCounterRef.value += 1;
+            workflowState = applyStepExecutionToState(
+                workflowState,
+                'plan',
+                0,
+                0,
+                1
+            );
+            planContinuation = ctx.planContinuationBuilder({
+                plannerStepResult: plannerReentryResult,
+                workflowId: ctx.workflowId,
+                workflowName: ctx.workflowName,
+                attempt: iteration + 1,
+                baseMessagesWithHints: effectiveMessagesWithHints,
+                baseGenerationRequest: effectiveGenerationRequest,
+                contextEnvelope: effectiveContextEnvelope,
+            });
+            if (planContinuation.continuation !== 'continue_message') {
+                terminationReason = 'executor_error_fail_open';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+                return { status: 'stopped' };
+            }
+            effectiveGenerationRequest = planContinuation.generationRequest;
+            effectiveMessagesWithHints = planContinuation.messagesWithHints;
+            effectiveContextEnvelope = planContinuation.contextEnvelope;
+            messagesWithContext = effectiveMessagesWithHints;
+            return {
+                status: 'executed',
+                reentryAttempt: iteration,
+            };
+        } catch {
+            terminationReason = 'executor_error_fail_open';
+            workflowStatus = 'degraded';
+            shouldStop = true;
+            return { status: 'stopped' };
+        }
+    };
+    const executeRevisionStep = async (input: {
+        iteration: number;
+        decision: ReviewDecision;
+        reviewStepId: string;
+        reentryAttempt: number;
+    }): Promise<void> => {
+        const revisionStartedAt = Date.now();
+        try {
+            const refinementModuleIds =
+                input.decision.moduleHints !== undefined &&
+                input.decision.moduleHints.length > 0
+                    ? input.decision.moduleHints
+                    : ctx.selectedReviewModuleIds;
+            const refinementPrompt = composeRefinementPrompt({
+                revisionPromptPrefix: ctx.effectiveRevisionPromptPrefix,
+                revisionInstruction: latestRevisionInstruction,
+                moduleIds: refinementModuleIds,
+            });
+            const revisionRequest: GenerationRequest = {
+                ...effectiveGenerationRequest,
+                messages: [
+                    ...effectiveMessagesWithHints,
+                    { role: 'assistant', content: draftResult?.text ?? '' },
+                    { role: 'system', content: refinementPrompt.prompt },
+                ],
+            };
+            const revisionChainResult =
+                ctx.stepRoutingChainSet?.generateCandidates &&
+                ctx.stepRoutingChainSet.generateCandidates.length > 0
+                    ? await executeStepRoutingChain({
+                          step: 'generate',
+                          candidates: reorderRevisionCandidatesByHintLane({
+                              candidates:
+                                  ctx.stepRoutingChainSet.generateCandidates,
+                              enabledProfilesById:
+                                  ctx.stepRoutingChainSet.enabledProfilesById,
+                              lane: latestRoutingHintApplied ?? 'none',
+                          }),
+                          enabledProfilesById:
+                              ctx.stepRoutingChainSet.enabledProfilesById,
+                          requiresSearch: revisionRequest.search !== undefined,
+                          runWithProfile: async (profile) =>
+                              ctx.generationRuntime.generate({
+                                  ...revisionRequest,
+                                  model: profile.providerModel,
+                                  provider: profile.provider,
+                                  capabilities: profile.capabilities,
+                              }),
+                      })
+                    : undefined;
+            if (revisionChainResult?.status === 'exhausted') {
+                throw new Error(revisionChainResult.reasonCode);
+            }
+            const revisionResult =
+                revisionChainResult?.status === 'executed'
+                    ? revisionChainResult.value
+                    : await ctx.generationRuntime.generate(revisionRequest);
+            const revisionUsageModel =
+                revisionChainResult?.status === 'executed'
+                    ? revisionChainResult.selected.profile.providerModel
+                    : effectiveGenerationRequest.model;
+            const revisionFinishedAt = Date.now();
+            const revisionUsage = ctx.captureUsage(
+                revisionResult,
+                revisionUsageModel
+            );
+            const revisionStepId = ctx.captureStep({
+                stepKind: 'generate',
+                status: 'executed',
+                summary: 'Generated refinement draft from assessment guidance.',
+                startedAtMs: revisionStartedAt,
+                finishedAtMs: revisionFinishedAt,
+                model: revisionUsage.model,
+                usage: revisionResult.usage,
+                estimatedCost: revisionUsage.estimatedCost,
+                parentStepId: input.reviewStepId,
+                attempt: input.iteration,
+                signals: {
+                    refinementApplied: true,
+                    refinementSourceStepId: input.reviewStepId,
+                    appliedModuleCount:
+                        refinementPrompt.appliedModuleIds.length,
+                    ...(refinementPrompt.appliedModuleIds.length > 0 && {
+                        appliedModuleIdsCsv:
+                            refinementPrompt.appliedModuleIds.join(','),
+                    }),
+                    ...(input.reentryAttempt > 0 && {
+                        reentryAttempt: input.reentryAttempt,
+                    }),
+                    ...toLatestRoutingHintSignals(),
+                    ...buildRoutingChainSignals({
+                        attempts: revisionChainResult?.attempts,
+                        selectedProfileId:
+                            revisionChainResult?.status === 'executed'
+                                ? revisionChainResult.selected.profile.id
+                                : null,
+                    }),
+                },
+            });
+            workflowState = applyStepExecutionToState(
+                workflowState,
+                'generate',
+                revisionUsage.totalTokens,
+                0,
+                0
+            );
+            draftResult = revisionResult;
+            draftParentStepId = revisionStepId;
+        } catch (error) {
+            const revisionFinishedAt = Date.now();
+            const errorMessage =
+                error instanceof Error ? error.message : String(error);
+            const reasonCode: ExecutionReasonCode =
+                errorMessage === 'routing_chain_exhausted' ||
+                errorMessage === 'routing_chain_non_transient_error'
+                    ? (errorMessage as ExecutionReasonCode)
+                    : 'generation_runtime_error';
+            ctx.captureStep({
+                stepKind: 'generate',
+                status: 'failed',
+                summary:
+                    'Refinement generation failed; fail-open returned latest successful draft.',
+                reasonCode,
+                startedAtMs: revisionStartedAt,
+                finishedAtMs: revisionFinishedAt,
+                parentStepId: input.reviewStepId,
+                attempt: input.iteration,
+                signals: toLatestRoutingHintSignals(),
+            });
+            workflowState = applyStepExecutionToState(
+                workflowState,
+                'generate',
+                0,
+                0,
+                0
+            );
+            terminationReason = 'executor_error_fail_open';
+            workflowStatus = 'degraded';
+            shouldStop = true;
+        }
+    };
+
+    for (
+        let iteration = 1;
+        iteration <= ctx.effectiveMaxIterations && !shouldStop;
+        iteration += 1
+    ) {
+        if (
+            !isWorkflowTransitionAllowed(
+                workflowState.currentStepKind,
+                'assess',
+                ctx.workflowPolicy
+            )
+        ) {
+            terminationReason = 'transition_blocked_by_policy';
+            workflowStatus = 'degraded';
+            break;
+        }
+        if (syncLimitStop(ctx.stopIfOverLimits('assess'))) {
+            break;
+        }
+        const assessStepResult = await executeAssessStep(iteration);
+        if (assessStepResult.status === 'stopped' || shouldStop) {
+            break;
+        }
+        const { decision, reviewStepId } = assessStepResult;
+        if (decision.reviewDecision === 'finalize') {
+            terminationReason = 'goal_satisfied';
+            workflowStatus = 'completed';
+            shouldStop = true;
+            break;
+        }
+        if (iteration >= ctx.effectiveMaxIterations) {
+            terminationReason = 'budget_exhausted_steps';
+            exhaustedLimitKey = 'maxWorkflowSteps';
+            workflowStatus = 'degraded';
+            shouldStop = true;
+            break;
+        }
+        if (!ctx.workflowPolicy.enableRevision) {
+            terminationReason = 'transition_blocked_by_policy';
+            workflowStatus = 'degraded';
+            shouldStop = true;
+            break;
+        }
+        if (
+            !isWorkflowTransitionAllowed(
+                workflowState.currentStepKind,
+                'generate',
+                ctx.workflowPolicy
+            )
+        ) {
+            terminationReason = 'transition_blocked_by_policy';
+            workflowStatus = 'degraded';
+            shouldStop = true;
+            break;
+        }
+        if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
+            break;
+        }
+        const plannerReentryResult = await executePlannerReentryStep(
+            iteration,
+            reviewStepId
+        );
+        if (plannerReentryResult.status === 'stopped' || shouldStop) {
+            break;
+        }
+        if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
+            break;
+        }
+        await executeRevisionStep({
+            iteration,
+            decision,
+            reviewStepId,
+            reentryAttempt: plannerReentryResult.reentryAttempt,
+        });
+        if (shouldStop) {
+            break;
         }
     }
 
