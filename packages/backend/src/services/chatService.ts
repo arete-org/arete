@@ -926,404 +926,418 @@ export const createChatService = ({
                 finalToolExecutionTelemetry,
             };
         };
-        const generationStartedAt = Date.now();
-        const normalizedGeneration = normalizeGenerationPlan(generation);
-        // Repo-explainer mode appends one helper system hint so responses stay
-        // aligned with Footnote repository-explanation expectations.
-        const repoExplainerHint = normalizedGeneration
-            ? buildRepoExplainerResponseHint(normalizedGeneration)
-            : null;
-        const messagesWithHints: RuntimeMessage[] = repoExplainerHint
-            ? [
-                  ...messages,
-                  {
-                      role: 'system',
-                      content: repoExplainerHint,
-                  },
-              ]
-            : messages;
-        const generationRequest: GenerationRequest = {
-            messages: messagesWithHints,
-            model: model ?? defaultModel,
-            ...((provider ?? defaultProvider) !== undefined && {
-                provider: provider ?? defaultProvider,
-            }),
-            ...((capabilities ?? defaultCapabilities) !== undefined && {
-                capabilities: capabilities ?? defaultCapabilities,
-            }),
-            ...(normalizedGeneration?.reasoningEffort !== undefined && {
-                reasoningEffort: normalizedGeneration.reasoningEffort,
-            }),
-            ...(normalizedGeneration?.verbosity !== undefined && {
-                verbosity: normalizedGeneration.verbosity,
-            }),
-            ...(normalizedGeneration?.search !== undefined && {
-                search: normalizedGeneration.search,
-            }),
-        };
-        let effectiveMessagesWithHints = messagesWithHints;
-        let effectiveGenerationRequest = generationRequest;
-        let effectiveNormalizedGeneration = normalizedGeneration;
-        let effectivePlannerTemperament = plannerTemperament;
-        // Execution Contract governs allowed policy shape. Runtime resolution
-        // here applies initial mode routing, then profile shape selection,
-        // and composes workflow execution settings within that contract.
-        const workflowRuntimeConfig = resolveWorkflowRuntimeConfig({
-            modeId: workflowModeId ?? chatWorkflowConfig.modeId,
-            reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
-            maxIterations: chatWorkflowConfig.maxIterations,
-            maxDurationMs: chatWorkflowConfig.maxDurationMs,
-            maxRequestReviewCycles:
-                chatWorkflowConfig.maxRequestReviewCycles ??
-                runtimeConfig.chatWorkflow.maxRequestReviewCycles,
-            requestMaxReviewCycles: workflowMaxReviewCycles,
-            ExecutionContract:
-                ExecutionContract !== undefined
-                    ? {
-                          response: ExecutionContract.response,
-                          limits: ExecutionContract.limits,
-                      }
-                    : undefined,
-            modeEscalationRequest: workflowModeEscalationRequest,
-        });
-        const workflowProfile = workflowRuntimeConfig.runtimeProfile;
-        const workflowExecutionEnabled =
-            workflowRuntimeConfig.workflowExecutionEnabled;
-        const workflowExecutionLimits =
-            workflowRuntimeConfig.workflowExecutionLimits;
-        const enabledProfiles = runtimeConfig.modelProfiles.catalog.filter(
-            (profile) => profile.enabled
-        );
-        const enabledProfilesById = new Map<string, ModelProfile>(
-            enabledProfiles.map((profile) => [profile.id, profile])
-        );
-        const allProfilesById = new Map<string, ModelProfile>(
-            runtimeConfig.modelProfiles.catalog.map((profile) => [
-                profile.id,
-                profile,
-            ])
-        );
-        const routingCorrelationId =
-            routingRequest?.trigger.messageId ?? 'none';
-        const routingBaseRequest = {
-            sessionId: routingRequest?.sessionId,
-            traceTarget: routingRequest?.traceTarget,
-        };
-        const generateProfileCandidates = resolveStepRoutingChain(
-            {
-                modeId: workflowRuntimeConfig.modeDecision.modeId,
-                step: 'generate',
-                request: routingBaseRequest,
-                correlationId: routingCorrelationId,
-                stepOverrideProfileId: routingRequest?.generateProfileId,
-            },
-            enabledProfilesById,
-            allProfilesById
-        );
-        const assessProfileCandidates = resolveStepRoutingChain(
-            {
-                modeId: workflowRuntimeConfig.modeDecision.modeId,
-                step: 'assess',
-                request: routingBaseRequest,
-                correlationId: routingCorrelationId,
-                stepOverrideProfileId: routingRequest?.assessProfileId,
-            },
-            enabledProfilesById,
-            allProfilesById
-        );
-        const runGenerateWithChain = async (
-            request: GenerationRequest
-        ): Promise<{
-            generationResult: GenerationResult;
-            selectedProfile: ModelProfile;
-            attempts: Array<{
-                index: number;
-                step: string;
-                profileId: string;
-                provider?: string;
-                model?: string;
-                status: string;
-                reasonCode?: string;
-                errorMessage?: string;
-                chooseOneUsed: boolean;
-                chooseOneCandidates?: string[];
-                chooseOneSelectedIndex?: number;
-                seedKeyType?: 'session_id' | 'correlation_id';
-            }>;
-        }> => {
-            const chainResult = await executeStepRoutingChain({
-                step: 'generate',
-                candidates: generateProfileCandidates,
-                enabledProfilesById,
-                requiresSearch: request.search !== undefined,
-                runWithProfile: async (profile) =>
-                    generationRuntime.generate({
-                        ...request,
-                        model: profile.providerModel,
-                        provider: profile.provider,
-                        capabilities: profile.capabilities,
-                    }),
+        const initializeChatExecutionPhases = () => {
+            const generationStartedAt = Date.now();
+            const normalizedGeneration = normalizeGenerationPlan(generation);
+            // Repo-explainer mode appends one helper system hint so responses stay
+            // aligned with Footnote repository-explanation expectations.
+            const repoExplainerHint = normalizedGeneration
+                ? buildRepoExplainerResponseHint(normalizedGeneration)
+                : null;
+            const messagesWithHints: RuntimeMessage[] = repoExplainerHint
+                ? [
+                      ...messages,
+                      {
+                          role: 'system',
+                          content: repoExplainerHint,
+                      },
+                  ]
+                : messages;
+            const generationRequest: GenerationRequest = {
+                messages: messagesWithHints,
+                model: model ?? defaultModel,
+                ...((provider ?? defaultProvider) !== undefined && {
+                    provider: provider ?? defaultProvider,
+                }),
+                ...((capabilities ?? defaultCapabilities) !== undefined && {
+                    capabilities: capabilities ?? defaultCapabilities,
+                }),
+                ...(normalizedGeneration?.reasoningEffort !== undefined && {
+                    reasoningEffort: normalizedGeneration.reasoningEffort,
+                }),
+                ...(normalizedGeneration?.verbosity !== undefined && {
+                    verbosity: normalizedGeneration.verbosity,
+                }),
+                ...(normalizedGeneration?.search !== undefined && {
+                    search: normalizedGeneration.search,
+                }),
+            };
+            // Execution Contract governs allowed policy shape. Runtime resolution
+            // here applies initial mode routing, then profile shape selection,
+            // and composes workflow execution settings within that contract.
+            const workflowRuntimeConfig = resolveWorkflowRuntimeConfig({
+                modeId: workflowModeId ?? chatWorkflowConfig.modeId,
+                reviewLoopEnabled: chatWorkflowConfig.reviewLoopEnabled,
+                maxIterations: chatWorkflowConfig.maxIterations,
+                maxDurationMs: chatWorkflowConfig.maxDurationMs,
+                maxRequestReviewCycles:
+                    chatWorkflowConfig.maxRequestReviewCycles ??
+                    runtimeConfig.chatWorkflow.maxRequestReviewCycles,
+                requestMaxReviewCycles: workflowMaxReviewCycles,
+                ExecutionContract:
+                    ExecutionContract !== undefined
+                        ? {
+                              response: ExecutionContract.response,
+                              limits: ExecutionContract.limits,
+                          }
+                        : undefined,
+                modeEscalationRequest: workflowModeEscalationRequest,
             });
-            if (chainResult.status !== 'executed') {
-                throw new Error(chainResult.reasonCode);
-            }
+            const enabledProfiles = runtimeConfig.modelProfiles.catalog.filter(
+                (profile) => profile.enabled
+            );
+            const enabledProfilesById = new Map<string, ModelProfile>(
+                enabledProfiles.map((profile) => [profile.id, profile])
+            );
+            const allProfilesById = new Map<string, ModelProfile>(
+                runtimeConfig.modelProfiles.catalog.map((profile) => [
+                    profile.id,
+                    profile,
+                ])
+            );
+            const routingCorrelationId =
+                routingRequest?.trigger.messageId ?? 'none';
+            const routingBaseRequest = {
+                sessionId: routingRequest?.sessionId,
+                traceTarget: routingRequest?.traceTarget,
+            };
+            const generateProfileCandidates = resolveStepRoutingChain(
+                {
+                    modeId: workflowRuntimeConfig.modeDecision.modeId,
+                    step: 'generate',
+                    request: routingBaseRequest,
+                    correlationId: routingCorrelationId,
+                    stepOverrideProfileId: routingRequest?.generateProfileId,
+                },
+                enabledProfilesById,
+                allProfilesById
+            );
+            const assessProfileCandidates = resolveStepRoutingChain(
+                {
+                    modeId: workflowRuntimeConfig.modeDecision.modeId,
+                    step: 'assess',
+                    request: routingBaseRequest,
+                    correlationId: routingCorrelationId,
+                    stepOverrideProfileId: routingRequest?.assessProfileId,
+                },
+                enabledProfilesById,
+                allProfilesById
+            );
+            const runGenerateWithChain = async (
+                request: GenerationRequest
+            ): Promise<{
+                generationResult: GenerationResult;
+                selectedProfile: ModelProfile;
+                attempts: Array<{
+                    index: number;
+                    step: string;
+                    profileId: string;
+                    provider?: string;
+                    model?: string;
+                    status: string;
+                    reasonCode?: string;
+                    errorMessage?: string;
+                    chooseOneUsed: boolean;
+                    chooseOneCandidates?: string[];
+                    chooseOneSelectedIndex?: number;
+                    seedKeyType?: 'session_id' | 'correlation_id';
+                }>;
+            }> => {
+                const chainResult = await executeStepRoutingChain({
+                    step: 'generate',
+                    candidates: generateProfileCandidates,
+                    enabledProfilesById,
+                    requiresSearch: request.search !== undefined,
+                    runWithProfile: async (profile) =>
+                        generationRuntime.generate({
+                            ...request,
+                            model: profile.providerModel,
+                            provider: profile.provider,
+                            capabilities: profile.capabilities,
+                        }),
+                });
+                if (chainResult.status !== 'executed') {
+                    throw new Error(chainResult.reasonCode);
+                }
+                return {
+                    generationResult: chainResult.value,
+                    selectedProfile: chainResult.selected.profile,
+                    attempts: chainResult.attempts,
+                };
+            };
+
             return {
-                generationResult: chainResult.value,
-                selectedProfile: chainResult.selected.profile,
-                attempts: chainResult.attempts,
+                generationStartedAt,
+                workflowRuntimeConfig,
+                workflowProfile: workflowRuntimeConfig.runtimeProfile,
+                workflowExecutionEnabled:
+                    workflowRuntimeConfig.workflowExecutionEnabled,
+                workflowExecutionLimits:
+                    workflowRuntimeConfig.workflowExecutionLimits,
+                enabledProfilesById,
+                generateProfileCandidates,
+                assessProfileCandidates,
+                runGenerateWithChain,
+                initialMessagesWithHints: messagesWithHints,
+                initialGenerationRequest: generationRequest,
+                initialNormalizedGeneration: normalizedGeneration,
+                initialPlannerTemperament: plannerTemperament,
             };
         };
+        const executionPhases = initializeChatExecutionPhases();
+        const generationStartedAt = executionPhases.generationStartedAt;
+        const workflowProfile = executionPhases.workflowProfile;
+        const workflowExecutionEnabled =
+            executionPhases.workflowExecutionEnabled;
+        const workflowExecutionLimits = executionPhases.workflowExecutionLimits;
+        const enabledProfilesById = executionPhases.enabledProfilesById;
+        const generateProfileCandidates =
+            executionPhases.generateProfileCandidates;
+        const assessProfileCandidates = executionPhases.assessProfileCandidates;
+        const runGenerateWithChain = executionPhases.runGenerateWithChain;
+        let effectiveMessagesWithHints =
+            executionPhases.initialMessagesWithHints;
+        let effectiveGenerationRequest =
+            executionPhases.initialGenerationRequest;
+        let effectiveNormalizedGeneration =
+            executionPhases.initialNormalizedGeneration;
+        let effectivePlannerTemperament =
+            executionPhases.initialPlannerTemperament;
 
-        let generationResult: GenerationResult;
-        let routedGenerationSelectedProfile: ModelProfile | undefined;
-        let workflowLineage: WorkflowRecord | undefined;
-        let workflowContextStepResult: ContextStepResult | undefined;
-        let workflowContextStepResults: ContextStepResult[] | undefined;
-        let workflowPlannerSummary: AppliedPlanState | undefined;
-        let workflowPlannerStepResult: PlannerStepResult | undefined;
-        let workflowConversationSnapshot: string | undefined;
-        let fallbackAfterInternalNoGeneration = false;
-        const effectivePlannerStepRequest = plannerStepRequest;
-        const effectivePlannerStepExecutor = plannerStepExecutor;
-        if (workflowExecutionEnabled) {
-            const workflowPolicy: WorkflowRunPolicy = workflowProfile.policy;
-            const sanitizedReviewModuleIds = sanitizeReviewModuleIds(
-                workflowProfile.optionalExtensions?.reviewModuleIds
-            );
-            const trustGraphContextStepRequest =
-                buildTrustGraphContextStepRequest(
-                    executionContractTrustGraph,
-                    executionContractTrustGraphContext
+        const executeGenerationPhase = async (): Promise<
+            | {
+                  kind: 'result';
+                  result: RunChatMessagesResult;
+              }
+            | {
+                  kind: 'continue';
+                  generationResult: GenerationResult;
+                  routedGenerationSelectedProfile?: ModelProfile;
+                  workflowLineage?: WorkflowRecord;
+                  workflowContextStepResult?: ContextStepResult;
+                  workflowContextStepResults?: ContextStepResult[];
+                  workflowPlannerSummary?: AppliedPlanState;
+                  workflowPlannerStepResult?: PlannerStepResult;
+                  workflowConversationSnapshot?: string;
+                  fallbackAfterInternalNoGeneration: boolean;
+              }
+        > => {
+            let generationResult: GenerationResult;
+            let routedGenerationSelectedProfile: ModelProfile | undefined;
+            let workflowLineage: WorkflowRecord | undefined;
+            let workflowContextStepResult: ContextStepResult | undefined;
+            let workflowContextStepResults: ContextStepResult[] | undefined;
+            let workflowPlannerSummary: AppliedPlanState | undefined;
+            let workflowPlannerStepResult: PlannerStepResult | undefined;
+            let workflowConversationSnapshot: string | undefined;
+            let fallbackAfterInternalNoGeneration = false;
+
+            if (workflowExecutionEnabled) {
+                const workflowPolicy: WorkflowRunPolicy =
+                    workflowProfile.policy;
+                const sanitizedReviewModuleIds = sanitizeReviewModuleIds(
+                    workflowProfile.optionalExtensions?.reviewModuleIds
                 );
-            const effectiveContextStepRequests = mergeContextStepRequests({
-                contextStepRequests,
-                trustGraphContextStepRequest,
-            });
-            const workflowResult = await runReviewWorkflow({
-                generationRuntime,
-                generationRequest: effectiveGenerationRequest,
-                messagesWithHints: effectiveMessagesWithHints,
-                generationStartedAtMs: generationStartedAt,
-                workflowConfig: {
-                    workflowName: workflowProfile.workflowName,
-                    maxIterations: Math.max(
-                        0,
-                        Math.min(
-                            workflowExecutionLimits.maxReviewCycles ??
-                                Math.ceil(
-                                    workflowExecutionLimits.maxDeliberationCalls /
-                                        2
-                                ),
-                            Math.ceil(
-                                Math.max(
-                                    0,
-                                    workflowExecutionLimits.maxWorkflowSteps - 1
-                                ) / 2
-                            )
-                        )
-                    ),
-                    maxDurationMs: workflowExecutionLimits.maxDurationMs,
-                    executionLimits: workflowExecutionLimits,
-                },
-                workflowPolicy,
-                ...(workflowProfile.optionalExtensions?.reviewDecisionPrompt !==
-                    undefined && {
-                    reviewDecisionPrompt:
-                        workflowProfile.optionalExtensions.reviewDecisionPrompt,
-                }),
-                ...(workflowProfile.optionalExtensions?.revisionPromptPrefix !==
-                    undefined && {
-                    revisionPromptPrefix:
-                        workflowProfile.optionalExtensions.revisionPromptPrefix,
-                }),
-                ...(sanitizedReviewModuleIds.length > 0 && {
-                    reviewModuleIds: sanitizedReviewModuleIds,
-                }),
-                captureUsage: (result, requestedModel) =>
-                    recordUsageForStep(result, requestedModel),
-                plannerStepRequest: effectivePlannerStepRequest,
-                plannerStepExecutor: effectivePlannerStepExecutor,
-                planContinuationBuilder,
-                contextEnvelope,
-                contextStepRequests:
-                    effectiveContextStepRequests.length > 0
-                        ? effectiveContextStepRequests
-                        : undefined,
-                contextStepExecutor,
-                contextStepExecutorRegistry: {
-                    ...(contextStepExecutorRegistry ?? {}),
-                    [TRUSTGRAPH_CONTEXT_STEP_NAME]:
-                        createTrustGraphContextStepExecutor({
-                            runtimeOptions: executionContractTrustGraph,
-                            onWarn: (message, meta) =>
-                                logger.warn(message, meta),
-                        }),
-                },
-                openAiNativeSearchFromHintsEnabled:
-                    runtimeConfig.chatWorkflow.contextIntegrations.webSearch
-                        .openAiNativeSearchFromHintsEnabled,
-                stepRoutingChainSet: {
-                    enabledProfilesById,
-                    generateCandidates: generateProfileCandidates,
-                    assessCandidates: assessProfileCandidates,
-                },
-            });
-            workflowPlannerStepResult = workflowResult.plannerStepResult;
-            workflowPlannerSummary =
-                workflowResult.planContinuation?.plannerSummary;
-            if (
-                workflowResult.planContinuation?.continuation ===
-                'continue_message'
-            ) {
-                workflowConversationSnapshot =
-                    workflowResult.planContinuation.conversationSnapshot;
-                effectiveGenerationRequest =
-                    workflowResult.planContinuation.generationRequest;
-                effectivePlannerTemperament =
-                    workflowResult.planContinuation.plannerTemperament ??
-                    workflowResult.planContinuation.plannerSummary.executionPlan
-                        .generation.temperament ??
-                    effectivePlannerTemperament;
-                effectiveNormalizedGeneration =
-                    workflowResult.planContinuation.plannerSummary
-                        .generationForExecution;
-            } else {
-                workflowConversationSnapshot = undefined;
-            }
-            workflowContextStepResult = workflowResult.contextStepResult;
-            workflowContextStepResults = workflowResult.contextStepResults;
-            switch (workflowResult.outcome) {
-                case 'generated': {
-                    generationResult = workflowResult.generationResult;
-                    workflowLineage = workflowResult.workflowLineage;
-                    const generatedShortCircuit = buildContextStepShortCircuit({
-                        workflowContextStepResult,
-                        workflowContextStepResults,
-                        executionContext,
-                        plannerTemperament: effectivePlannerTemperament,
-                        toolRequest,
-                        model,
-                        defaultModel,
-                        conversationSnapshot:
-                            workflowConversationSnapshot ??
-                            conversationSnapshot,
-                        latestUserInput,
-                        buildResponseMetadata,
-                    });
-                    if (
-                        generatedShortCircuit !== undefined &&
-                        generatedShortCircuit.response !== undefined
-                    ) {
-                        return toShortCircuitMessageResult(
-                            generatedShortCircuit.response,
-                            generatedShortCircuit.telemetry
-                        );
-                    }
-                    break;
-                }
-                case 'terminal_action': {
-                    return {
-                        kind: 'terminal_action',
-                        response: planTerminalActionToResponse(
-                            workflowResult.terminalAction
-                        ),
-                        generationDurationMs: Math.max(
+                const trustGraphContextStepRequest =
+                    buildTrustGraphContextStepRequest(
+                        executionContractTrustGraph,
+                        executionContractTrustGraphContext
+                    );
+                const effectiveContextStepRequests = mergeContextStepRequests({
+                    contextStepRequests,
+                    trustGraphContextStepRequest,
+                });
+                const workflowResult = await runReviewWorkflow({
+                    generationRuntime,
+                    generationRequest: effectiveGenerationRequest,
+                    messagesWithHints: effectiveMessagesWithHints,
+                    generationStartedAtMs: generationStartedAt,
+                    workflowConfig: {
+                        workflowName: workflowProfile.workflowName,
+                        maxIterations: Math.max(
                             0,
-                            Date.now() - generationStartedAt
+                            Math.min(
+                                workflowExecutionLimits.maxReviewCycles ??
+                                    Math.ceil(
+                                        workflowExecutionLimits.maxDeliberationCalls /
+                                            2
+                                    ),
+                                Math.ceil(
+                                    Math.max(
+                                        0,
+                                        workflowExecutionLimits.maxWorkflowSteps -
+                                            1
+                                    ) / 2
+                                )
+                            )
                         ),
-                    };
+                        maxDurationMs: workflowExecutionLimits.maxDurationMs,
+                        executionLimits: workflowExecutionLimits,
+                    },
+                    workflowPolicy,
+                    ...(workflowProfile.optionalExtensions
+                        ?.reviewDecisionPrompt !== undefined && {
+                        reviewDecisionPrompt:
+                            workflowProfile.optionalExtensions
+                                .reviewDecisionPrompt,
+                    }),
+                    ...(workflowProfile.optionalExtensions
+                        ?.revisionPromptPrefix !== undefined && {
+                        revisionPromptPrefix:
+                            workflowProfile.optionalExtensions
+                                .revisionPromptPrefix,
+                    }),
+                    ...(sanitizedReviewModuleIds.length > 0 && {
+                        reviewModuleIds: sanitizedReviewModuleIds,
+                    }),
+                    captureUsage: (result, requestedModel) =>
+                        recordUsageForStep(result, requestedModel),
+                    plannerStepRequest,
+                    plannerStepExecutor,
+                    planContinuationBuilder,
+                    contextEnvelope,
+                    contextStepRequests:
+                        effectiveContextStepRequests.length > 0
+                            ? effectiveContextStepRequests
+                            : undefined,
+                    contextStepExecutor,
+                    contextStepExecutorRegistry: {
+                        ...(contextStepExecutorRegistry ?? {}),
+                        [TRUSTGRAPH_CONTEXT_STEP_NAME]:
+                            createTrustGraphContextStepExecutor({
+                                runtimeOptions: executionContractTrustGraph,
+                                onWarn: (message, meta) =>
+                                    logger.warn(message, meta),
+                            }),
+                    },
+                    openAiNativeSearchFromHintsEnabled:
+                        runtimeConfig.chatWorkflow.contextIntegrations.webSearch
+                            .openAiNativeSearchFromHintsEnabled,
+                    stepRoutingChainSet: {
+                        enabledProfilesById,
+                        generateCandidates: generateProfileCandidates,
+                        assessCandidates: assessProfileCandidates,
+                    },
+                });
+                workflowPlannerStepResult = workflowResult.plannerStepResult;
+                workflowPlannerSummary =
+                    workflowResult.planContinuation?.plannerSummary;
+                if (
+                    workflowResult.planContinuation?.continuation ===
+                    'continue_message'
+                ) {
+                    workflowConversationSnapshot =
+                        workflowResult.planContinuation.conversationSnapshot;
+                    effectiveGenerationRequest =
+                        workflowResult.planContinuation.generationRequest;
+                    effectivePlannerTemperament =
+                        workflowResult.planContinuation.plannerTemperament ??
+                        workflowResult.planContinuation.plannerSummary
+                            .executionPlan.generation.temperament ??
+                        effectivePlannerTemperament;
+                    effectiveNormalizedGeneration =
+                        workflowResult.planContinuation.plannerSummary
+                            .generationForExecution;
+                } else {
+                    workflowConversationSnapshot = undefined;
                 }
-                case 'no_generation': {
-                    workflowLineage = workflowResult.workflowLineage;
-                    const noGenShortCircuit = buildContextStepShortCircuit({
-                        workflowContextStepResult,
-                        workflowContextStepResults,
-                        executionContext,
-                        plannerTemperament: effectivePlannerTemperament,
-                        toolRequest,
-                        model,
-                        defaultModel,
-                        conversationSnapshot:
-                            workflowConversationSnapshot ??
-                            conversationSnapshot,
-                        latestUserInput,
-                        buildResponseMetadata,
-                    });
-                    if (
-                        noGenShortCircuit !== undefined &&
-                        noGenShortCircuit.response !== undefined
-                    ) {
-                        return toShortCircuitMessageResult(
-                            noGenShortCircuit.response,
-                            noGenShortCircuit.telemetry
-                        );
-                    }
-                    const noGenerationResolution =
-                        resolveNoGenerationHandlingFromTermination({
-                            terminationReason:
-                                workflowResult.workflowLineage
-                                    .terminationReason,
-                            generationEnabledByPolicy:
-                                workflowPolicy.enableGeneration !== false,
-                        });
-                    if (
-                        noGenerationResolution.kind ===
-                        'unsupported_termination_reason'
-                    ) {
-                        logger.error(
-                            'Unsupported no-generation termination reason.',
-                            {
-                                workflowName: workflowProfile.workflowName,
-                                terminationReason:
-                                    noGenerationResolution.terminationReason,
-                                noGenerationResolution,
-                            }
-                        );
-                        generationResult = {
-                            text: SURFACED_NO_GENERATION_MESSAGE,
-                            model: effectiveGenerationRequest.model,
-                            provenance: 'Inferred',
-                            citations: [],
-                        };
+                workflowContextStepResult = workflowResult.contextStepResult;
+                workflowContextStepResults = workflowResult.contextStepResults;
+                switch (workflowResult.outcome) {
+                    case 'generated': {
+                        generationResult = workflowResult.generationResult;
+                        workflowLineage = workflowResult.workflowLineage;
+                        const generatedShortCircuit =
+                            buildContextStepShortCircuit({
+                                workflowContextStepResult,
+                                workflowContextStepResults,
+                                executionContext,
+                                plannerTemperament: effectivePlannerTemperament,
+                                toolRequest,
+                                model,
+                                defaultModel,
+                                conversationSnapshot:
+                                    workflowConversationSnapshot ??
+                                    conversationSnapshot,
+                                latestUserInput,
+                                buildResponseMetadata,
+                            });
+                        if (
+                            generatedShortCircuit !== undefined &&
+                            generatedShortCircuit.response !== undefined
+                        ) {
+                            return {
+                                kind: 'result',
+                                result: toShortCircuitMessageResult(
+                                    generatedShortCircuit.response,
+                                    generatedShortCircuit.telemetry
+                                ),
+                            };
+                        }
                         break;
                     }
-
-                    const handling = noGenerationResolution.handling;
-                    const backendFailOpenAllowed =
-                        ExecutionContract?.failOpen.allowFallbackGeneration ??
-                        true;
-
-                    if (
-                        handling.runtimeAction === 'run_fallback_generation' &&
-                        backendFailOpenAllowed
-                    ) {
-                        try {
-                            const chainGenerationResult =
-                                await runGenerateWithChain(
-                                    effectiveGenerationRequest
-                                );
-                            generationResult =
-                                chainGenerationResult.generationResult;
-                            routedGenerationSelectedProfile =
-                                chainGenerationResult.selectedProfile;
-                            recordUsageForStep(
-                                generationResult,
-                                effectiveGenerationRequest.model
-                            );
-                        } catch (error) {
-                            logger.warn(
-                                'Fallback generation after internal no-generation failed; preserving no-generation lineage.',
+                    case 'terminal_action': {
+                        return {
+                            kind: 'result',
+                            result: {
+                                kind: 'terminal_action',
+                                response: planTerminalActionToResponse(
+                                    workflowResult.terminalAction
+                                ),
+                                generationDurationMs: Math.max(
+                                    0,
+                                    Date.now() - generationStartedAt
+                                ),
+                            },
+                        };
+                    }
+                    case 'no_generation': {
+                        workflowLineage = workflowResult.workflowLineage;
+                        const noGenShortCircuit = buildContextStepShortCircuit({
+                            workflowContextStepResult,
+                            workflowContextStepResults,
+                            executionContext,
+                            plannerTemperament: effectivePlannerTemperament,
+                            toolRequest,
+                            model,
+                            defaultModel,
+                            conversationSnapshot:
+                                workflowConversationSnapshot ??
+                                conversationSnapshot,
+                            latestUserInput,
+                            buildResponseMetadata,
+                        });
+                        if (
+                            noGenShortCircuit !== undefined &&
+                            noGenShortCircuit.response !== undefined
+                        ) {
+                            return {
+                                kind: 'result',
+                                result: toShortCircuitMessageResult(
+                                    noGenShortCircuit.response,
+                                    noGenShortCircuit.telemetry
+                                ),
+                            };
+                        }
+                        const noGenerationResolution =
+                            resolveNoGenerationHandlingFromTermination({
+                                terminationReason:
+                                    workflowResult.workflowLineage
+                                        .terminationReason,
+                                generationEnabledByPolicy:
+                                    workflowPolicy.enableGeneration !== false,
+                            });
+                        if (
+                            noGenerationResolution.kind ===
+                            'unsupported_termination_reason'
+                        ) {
+                            logger.error(
+                                'Unsupported no-generation termination reason.',
                                 {
                                     workflowName: workflowProfile.workflowName,
-                                    reasonCode:
-                                        noGenerationResolution.reasonCode,
                                     terminationReason:
-                                        workflowResult.workflowLineage
-                                            .terminationReason,
-                                    error:
-                                        error instanceof Error
-                                            ? error.message
-                                            : String(error),
+                                        noGenerationResolution.terminationReason,
+                                    noGenerationResolution,
                                 }
                             );
                             generationResult = {
@@ -1332,56 +1346,140 @@ export const createChatService = ({
                                 provenance: 'Inferred',
                                 citations: [],
                             };
+                            break;
                         }
-                        fallbackAfterInternalNoGeneration = true;
+
+                        const handling = noGenerationResolution.handling;
+                        const backendFailOpenAllowed =
+                            ExecutionContract?.failOpen
+                                .allowFallbackGeneration ?? true;
+
+                        if (
+                            handling.runtimeAction ===
+                                'run_fallback_generation' &&
+                            backendFailOpenAllowed
+                        ) {
+                            try {
+                                const chainGenerationResult =
+                                    await runGenerateWithChain(
+                                        effectiveGenerationRequest
+                                    );
+                                generationResult =
+                                    chainGenerationResult.generationResult;
+                                routedGenerationSelectedProfile =
+                                    chainGenerationResult.selectedProfile;
+                                recordUsageForStep(
+                                    generationResult,
+                                    effectiveGenerationRequest.model
+                                );
+                            } catch (error) {
+                                logger.warn(
+                                    'Fallback generation after internal no-generation failed; preserving no-generation lineage.',
+                                    {
+                                        workflowName:
+                                            workflowProfile.workflowName,
+                                        reasonCode:
+                                            noGenerationResolution.reasonCode,
+                                        terminationReason:
+                                            workflowResult.workflowLineage
+                                                .terminationReason,
+                                        error:
+                                            error instanceof Error
+                                                ? error.message
+                                                : String(error),
+                                    }
+                                );
+                                generationResult = {
+                                    text: SURFACED_NO_GENERATION_MESSAGE,
+                                    model: effectiveGenerationRequest.model,
+                                    provenance: 'Inferred',
+                                    citations: [],
+                                };
+                            }
+                            fallbackAfterInternalNoGeneration = true;
+                            break;
+                        }
+                        if (
+                            handling.runtimeAction ===
+                                'run_fallback_generation' &&
+                            !backendFailOpenAllowed
+                        ) {
+                            logger.info(
+                                'Execution policy disabled fallback generation after internal no-generation outcome.',
+                                {
+                                    workflowName: workflowProfile.workflowName,
+                                    failOpenAuthority:
+                                        ExecutionContract?.failOpen.authority ??
+                                        'backend',
+                                    reasonCode:
+                                        noGenerationResolution.reasonCode,
+                                    terminationReason:
+                                        workflowResult.workflowLineage
+                                            .terminationReason,
+                                }
+                            );
+                        }
+
+                        generationResult = {
+                            text: SURFACED_NO_GENERATION_MESSAGE,
+                            model: effectiveGenerationRequest.model,
+                            provenance: 'Inferred',
+                            citations: [],
+                        };
                         break;
                     }
-                    if (
-                        handling.runtimeAction === 'run_fallback_generation' &&
-                        !backendFailOpenAllowed
-                    ) {
-                        logger.info(
-                            'Execution policy disabled fallback generation after internal no-generation outcome.',
-                            {
-                                workflowName: workflowProfile.workflowName,
-                                failOpenAuthority:
-                                    ExecutionContract?.failOpen.authority ??
-                                    'backend',
-                                reasonCode: noGenerationResolution.reasonCode,
-                                terminationReason:
-                                    workflowResult.workflowLineage
-                                        .terminationReason,
-                            }
+                    default: {
+                        const exhaustiveCheck: never = workflowResult;
+                        throw new Error(
+                            `Unsupported workflow outcome: ${JSON.stringify(exhaustiveCheck)}`
                         );
                     }
-
-                    generationResult = {
-                        text: SURFACED_NO_GENERATION_MESSAGE,
-                        model: effectiveGenerationRequest.model,
-                        provenance: 'Inferred',
-                        citations: [],
-                    };
-                    break;
                 }
-                default: {
-                    const exhaustiveCheck: never = workflowResult;
-                    throw new Error(
-                        `Unsupported workflow outcome: ${JSON.stringify(exhaustiveCheck)}`
-                    );
-                }
+            } else {
+                const chainGenerationResult = await runGenerateWithChain(
+                    effectiveGenerationRequest
+                );
+                generationResult = chainGenerationResult.generationResult;
+                routedGenerationSelectedProfile =
+                    chainGenerationResult.selectedProfile;
+                recordUsageForStep(
+                    generationResult,
+                    effectiveGenerationRequest.model
+                );
             }
-        } else {
-            const chainGenerationResult = await runGenerateWithChain(
-                effectiveGenerationRequest
-            );
-            generationResult = chainGenerationResult.generationResult;
-            routedGenerationSelectedProfile =
-                chainGenerationResult.selectedProfile;
-            recordUsageForStep(
+
+            return {
+                kind: 'continue',
                 generationResult,
-                effectiveGenerationRequest.model
-            );
+                routedGenerationSelectedProfile,
+                workflowLineage,
+                workflowContextStepResult,
+                workflowContextStepResults,
+                workflowPlannerSummary,
+                workflowPlannerStepResult,
+                workflowConversationSnapshot,
+                fallbackAfterInternalNoGeneration,
+            };
+        };
+        const generationPhase = await executeGenerationPhase();
+        if (generationPhase.kind === 'result') {
+            return generationPhase.result;
         }
+        const generationResult = generationPhase.generationResult;
+        const routedGenerationSelectedProfile =
+            generationPhase.routedGenerationSelectedProfile;
+        const workflowLineage = generationPhase.workflowLineage;
+        const workflowContextStepResult =
+            generationPhase.workflowContextStepResult;
+        const workflowContextStepResults =
+            generationPhase.workflowContextStepResults;
+        const workflowPlannerSummary = generationPhase.workflowPlannerSummary;
+        const workflowPlannerStepResult =
+            generationPhase.workflowPlannerStepResult;
+        const workflowConversationSnapshot =
+            generationPhase.workflowConversationSnapshot;
+        const fallbackAfterInternalNoGeneration =
+            generationPhase.fallbackAfterInternalNoGeneration;
 
         const effectiveContextStepResults = getEffectiveContextStepResults(
             workflowContextStepResults,
