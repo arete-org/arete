@@ -159,3 +159,18 @@ export {
     formatTraceTokenSourceLog,
     resolveTraceToken,
 };
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+    resolveTraceToken()
+        .then((result) => {
+            process.stdout.write(`${JSON.stringify(result)}\n`);
+        })
+        .catch((error) => {
+            process.stderr.write(
+                `Failed to resolve trace token: ${
+                    error instanceof Error ? error.message : String(error)
+                }\n`
+            );
+            process.exit(1);
+        });
+}

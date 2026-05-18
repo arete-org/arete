@@ -59,7 +59,6 @@ const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
             'OPENAI_API_KEY',
             'DISCORD_USER_ID',
             'INCIDENT_PSEUDONYMIZATION_SECRET',
-            'TRACE_API_TOKEN',
         ],
         warnings: [],
     },
