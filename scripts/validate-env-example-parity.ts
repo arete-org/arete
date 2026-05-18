@@ -98,20 +98,18 @@ const validate = (): void => {
     unexpectedInExample.sort();
 
     if (missingInExample.length > 0) {
-        logger.error(
-            '[validate-env-example-parity] Missing keys in .env.example:'
-        );
         for (const key of missingInExample) {
-            logger.error(`- ${key}`);
+            logger.error(
+                `Footnote tag error in .env.example: [validate-env-example-parity] missing key "${key}".`
+            );
         }
     }
 
     if (unexpectedInExample.length > 0) {
-        logger.error(
-            '[validate-env-example-parity] Unexpected keys in .env.example:'
-        );
         for (const key of unexpectedInExample) {
-            logger.error(`- ${key}`);
+            logger.error(
+                `Footnote tag error in .env.example: [validate-env-example-parity] unexpected key "${key}".`
+            );
         }
     }
 
