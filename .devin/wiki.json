@@ -259,6 +259,10 @@
                 },
                 {
                     "author": "Maintainer",
+                    "content": "Document stepRoutingChains: planner/generate/assess resolve independently per mode; balanced generation prefers Ollama then OpenAI, grounded generation prefers OpenAI then Ollama; chooseOne pools are deterministic and fail-open."
+                },
+                {
+                    "author": "Maintainer",
                     "content": "workflowEngine owns step timing and lineage, not provider policy. The engine decides step legality, enforces limits, and records termination reasons."
                 },
                 {
