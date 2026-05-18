@@ -103,6 +103,17 @@ pnpm dev
 
 Open the web app at `http://localhost:8080`.
 
+### 4) Docker all-in-one (single container)
+
+This mode runs backend + web static assets + discord-bot in one container.
+
+```bash
+pnpm validate-env --target allinone
+docker compose -f deploy/compose.allinone.yml up --build
+```
+
+Use a durable `/data` volume for non-throwaway deployments.
+
 ### Advanced configuration
 
 - [Deployment guide](deploy/README.md)

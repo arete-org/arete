@@ -3,13 +3,24 @@
 If you landed here first, start with the main README for the big-picture overview:
 `README.md`
 
-This folder defines the minimal three-service split for local/self-hosted Docker Compose.
+This folder supports two deployment modes:
+
+- all-in-one: one container running backend + web static assets + discord-bot.
+- split: three services (`backend`, `web`, `discord-bot`) for shared-backend deployments.
+
+Use all-in-one for single-profile personal hosting.
+Use split when multiple bot deployments need to share one backend.
 
 Services:
 
 - backend: Node server (`server.js`) for `/api/*`, Turnstile verification, rate limiting, and tracing.
 - web: builds the Vite app and serves it with Caddy, proxying `/api/*` to backend.
 - discord-bot: Discord bot runtime only.
+
+All-in-one image and compose wrapper:
+
+- image build: `deploy/Dockerfile.allinone`
+- compose wrapper: `deploy/compose.allinone.yml`
 
 ## Prerequisites
 
@@ -19,12 +30,14 @@ Services:
 
 - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
 - discord-bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
+- all-in-one: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
     > Why `TRACE_API_TOKEN`? It's a shared key used to authenticate trace uploads from the bot to the backend.
 
 Validate expected deployment env before deploy:
 
 - backend: `pnpm validate-env --target fly-backend`
 - bot: `pnpm validate-env --target fly-bot`
+- all-in-one: `pnpm validate-env --target allinone`
 
 ## Optional environment
 
@@ -76,9 +89,21 @@ Validate expected deployment env before deploy:
 
 ## Start
 
+All-in-one:
+
+`docker compose -f deploy/compose.allinone.yml up --build`
+
+Split:
+
 `docker compose -f deploy/compose.yml up --build`
 
 ## Stop
+
+All-in-one:
+
+`docker compose -f deploy/compose.allinone.yml down`
+
+Split:
 
 `docker compose -f deploy/compose.yml down`
 
@@ -124,8 +149,10 @@ Template overlay paths:
 
 ## Notes
 
-- Only the web service is exposed on host port 8080 (`http://localhost:8080`) to avoid admin privileges.
-- The backend listens internally on port 3000 and stores data in `/data` (Docker volume: `footnote-data`).
+- Split mode exposes only web on host port 8080 (`http://localhost:8080`); backend stays internal on port 3000.
+- All-in-one mode exposes backend/web transport directly on host port 8080 -> container port 3000.
+- The backend stores data in `/data` (Docker volume: `footnote-data`).
+- Durable `/data` is required for persistent provenance/incident history. Ephemeral `/data` is suitable only for throwaway testing.
 - Backend startup logs include Litestream replication visibility and latest known snapshot timestamp (or `none yet`).
 - The web app fetches runtime config from `/config.json` (proxied to the backend) to read `TURNSTILE_SITE_KEY`.
 

@@ -27,7 +27,7 @@ These two use cases have different shapes and should be served by different depl
 - Enable a single `docker run` one-liner for personal/free-tier deployments.
 - Preserve the existing split deployment for multi-bot vendor use without behavior changes.
 - Eliminate the separate `web` container in all-in-one mode by having the backend serve the Vite build as static files.
-- Eliminate the user-facing `TRACE_API_TOKEN` requirement in all-in-one mode by auto-generating it at container startup.
+- Keep `TRACE_API_TOKEN` explicitly required in all deployment modes, including all-in-one.
 - Keep Footnote provenance, trace, auth, incident, review, and cost authority in the backend.
 - Introduce no changes to core application logic in either mode.
 
@@ -45,7 +45,7 @@ A process entrypoint starts both runtimes:
 
 - Backend (`node dist/server.js`) serves the API and the Vite static build.
 - Bot (`node dist/index.js`) connects to the backend at `http://localhost:3000`.
-- `TRACE_API_TOKEN` is auto-generated at startup if unset, exported to both processes, and never logged.
+- `TRACE_API_TOKEN` is required and must be passed via environment, then exported to both processes without being logged.
 - If either child process exits, the entrypoint shuts down the other process and exits non-zero so the platform can restart the container.
 
 Example local deployment:
@@ -104,7 +104,7 @@ Users who care about provenance, trace, and incident history must provide durabl
     - bot build stage
     - combined runtime stage
 - Add an all-in-one entrypoint that:
-    - auto-generates `TRACE_API_TOKEN` if not set,
+    - requires `TRACE_API_TOKEN` to be set before startup,
     - exports `BACKEND_BASE_URL=http://localhost:3000` for the bot,
     - preserves optional Litestream backup support if `LITESTREAM_REPLICA_URL` is configured,
     - starts backend and bot as sibling child processes,
@@ -133,7 +133,7 @@ Users who care about provenance, trace, and incident history must provide durabl
 - **Invariant A:** Split mode (`compose.yml`, Fly manifests, deploy scripts, and per-service images) must continue to work without behavior changes.
 - **Invariant B:** All-in-one mode supports exactly one bot profile. Users needing multiple profiles must use split mode.
 - **Invariant C:** Persistent data paths remain anchored at `/data`. Data written in all-in-one mode should be readable if the user later migrates to split mode.
-- **Invariant D:** Auto-generated `TRACE_API_TOKEN` in all-in-one mode must not be logged or exposed in startup output.
+- **Invariant D:** `TRACE_API_TOKEN` handling in all-in-one mode must not log or expose the token in startup output.
 - **Invariant E:** If either backend or bot exits in all-in-one mode, the container must stop so the host platform can restart it.
 - **Invariant F:** All-in-one mode must not move provenance, trace, auth, incident, review, or cost authority out of the backend.
 - **Invariant G:** Exposing the backend directly in all-in-one mode must preserve backend-owned HTTP protections, including route auth, rate limits, CSP, and trace authentication.
