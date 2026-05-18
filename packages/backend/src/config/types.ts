@@ -16,6 +16,7 @@ import type {
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
 import type { ModelProfile } from '@footnote/contracts';
+import type { StepRoutingChainsConfig } from '@footnote/contracts';
 import type { WorkflowModeId } from '@footnote/contracts/policy';
 import type { BotProfileConfig } from './profile.js';
 
@@ -73,6 +74,8 @@ export type RuntimeConfig = {
         plannerProfileId: string;
         catalogPath: string;
         catalog: ModelProfile[];
+        pools: Record<string, string[]>;
+        stepRoutingChains: StepRoutingChainsConfig;
     };
     voltagent: {
         publicKey: string | null;

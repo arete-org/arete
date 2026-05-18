@@ -9,13 +9,31 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { envDefaultValues } from '@footnote/config-spec';
-import { ModelProfileSchema } from '@footnote/contracts';
+import {
+    ModelProfileSchema,
+    StepRoutingChainsConfigSchema,
+    type WorkflowModeProfileId,
+    type StepRoutingChainsConfig,
+} from '@footnote/contracts';
 import yaml from 'js-yaml';
 import { parseBooleanFlag, parseOptionalTrimmedString } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const DEFAULT_CATALOG_RELATIVE_PATH =
     'packages/backend/src/config/model-profiles.defaults.yaml';
+
+const DEFAULT_STEP_CHAINS: StepRoutingChainsConfig = {
+    balanced: {
+        planner: ['openai-json-optimized', 'ollama-text-gptoss'],
+        generate: [{ chooseOne: ['free-ollama-style'] }, 'openai-text-medium'],
+        assess: ['openai-json-optimized', 'ollama-text-gptoss'],
+    },
+    grounded: {
+        planner: ['openai-json-optimized', 'ollama-text-gptoss'],
+        generate: ['openai-text-medium', { chooseOne: ['free-ollama-style'] }],
+        assess: ['openai-json-optimized', 'ollama-text-gptoss'],
+    },
+};
 
 const resolveCatalogPath = (
     projectRoot: string,
@@ -42,18 +60,28 @@ const readCatalogYaml = (
     }
 };
 
-const tryExtractCatalogEntries = (payload: unknown): unknown[] | null => {
+type RawModelCatalogPayload = {
+    profiles?: unknown;
+    pools?: unknown;
+    stepRoutingChains?: unknown;
+};
+
+const tryExtractCatalogPayload = (
+    payload: unknown
+): RawModelCatalogPayload | null => {
     if (Array.isArray(payload)) {
-        return payload;
+        return {
+            profiles: payload,
+        };
     }
 
-    if (
-        payload &&
-        typeof payload === 'object' &&
-        !Array.isArray(payload) &&
-        Array.isArray((payload as { profiles?: unknown[] }).profiles)
-    ) {
-        return (payload as { profiles: unknown[] }).profiles;
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        const candidate = payload as RawModelCatalogPayload;
+        return {
+            profiles: candidate.profiles,
+            pools: candidate.pools,
+            stepRoutingChains: candidate.stepRoutingChains,
+        };
     }
 
     return null;
@@ -164,6 +192,160 @@ const parseCatalogEntries = (
     return parsedCatalog;
 };
 
+const parsePools = (
+    poolsValue: unknown,
+    profileIds: Set<string>,
+    sourcePath: string,
+    warn: WarningSink
+): Record<string, string[]> => {
+    if (
+        !poolsValue ||
+        typeof poolsValue !== 'object' ||
+        Array.isArray(poolsValue)
+    ) {
+        return {};
+    }
+
+    const pools: Record<string, string[]> = {};
+    for (const [poolName, poolIds] of Object.entries(
+        poolsValue as Record<string, unknown>
+    )) {
+        if (!Array.isArray(poolIds)) {
+            warn(
+                `Ignoring pools.${poolName} in "${sourcePath}" because it is not a list.`
+            );
+            continue;
+        }
+        const normalized = poolIds.filter(
+            (value): value is string =>
+                typeof value === 'string' && value.trim().length > 0
+        );
+        const valid = normalized.filter((profileId) => {
+            if (profileIds.has(profileId)) {
+                return true;
+            }
+            warn(
+                `Ignoring unknown profile "${profileId}" in pools.${poolName} from "${sourcePath}".`
+            );
+            return false;
+        });
+        if (valid.length === 0) {
+            warn(
+                `Ignoring empty/invalid pools.${poolName} from "${sourcePath}".`
+            );
+            continue;
+        }
+        pools[poolName] = valid;
+    }
+
+    return pools;
+};
+
+const pruneStepRoutingChains = (
+    chains: StepRoutingChainsConfig,
+    pools: Record<string, string[]>,
+    profileIds: Set<string>,
+    sourcePath: string,
+    warn: WarningSink
+): StepRoutingChainsConfig => {
+    const resolved = JSON.parse(
+        JSON.stringify(chains)
+    ) as StepRoutingChainsConfig;
+    const modes: WorkflowModeProfileId[] = ['balanced', 'grounded'];
+    for (const mode of modes) {
+        const steps: Array<'planner' | 'generate' | 'assess'> = [
+            'planner',
+            'generate',
+            'assess',
+        ];
+        for (const step of steps) {
+            resolved[mode][step] = resolved[mode][step].filter((entry) => {
+                if (typeof entry === 'string') {
+                    if (profileIds.has(entry)) {
+                        return true;
+                    }
+                    const pooled = pools[entry];
+                    if (pooled) {
+                        return true;
+                    }
+                    warn(
+                        `Skipping unknown stepRoutingChains.${mode}.${step} entry "${entry}" from "${sourcePath}".`
+                    );
+                    return false;
+                }
+
+                const candidateIds = entry.chooseOne.filter((id) => {
+                    if (profileIds.has(id) || pools[id]) {
+                        return true;
+                    }
+                    warn(
+                        `Skipping unknown chooseOne candidate "${id}" in stepRoutingChains.${mode}.${step} from "${sourcePath}".`
+                    );
+                    return false;
+                });
+                entry.chooseOne = candidateIds;
+                if (entry.chooseOne.length === 0) {
+                    warn(
+                        `Skipping empty chooseOne candidate list in stepRoutingChains.${mode}.${step} from "${sourcePath}".`
+                    );
+                    return false;
+                }
+                return true;
+            });
+        }
+    }
+
+    return resolved;
+};
+
+const validateStepRoutingChains = (
+    value: unknown,
+    pools: Record<string, string[]>,
+    profileIds: Set<string>,
+    sourcePath: string,
+    warn: WarningSink
+): StepRoutingChainsConfig => {
+    const prunedDefaults = pruneStepRoutingChains(
+        DEFAULT_STEP_CHAINS,
+        pools,
+        profileIds,
+        sourcePath,
+        warn
+    );
+    if (value === undefined) {
+        return prunedDefaults;
+    }
+    const parsed = StepRoutingChainsConfigSchema.safeParse(value);
+    if (!parsed.success) {
+        warn(
+            `Invalid stepRoutingChains in "${sourcePath}". Using defaults. ${parsed.error.issues.map((issue) => issue.message).join('; ')}`
+        );
+        return prunedDefaults;
+    }
+    const resolved = pruneStepRoutingChains(
+        parsed.data,
+        pools,
+        profileIds,
+        sourcePath,
+        warn
+    );
+    const modes: WorkflowModeProfileId[] = ['balanced', 'grounded'];
+    for (const mode of modes) {
+        const steps: Array<'planner' | 'generate' | 'assess'> = [
+            'planner',
+            'generate',
+            'assess',
+        ];
+        for (const step of steps) {
+            if (resolved[mode][step].length === 0) {
+                resolved[mode][step] = [...prunedDefaults[mode][step]];
+            }
+        }
+    }
+
+    return resolved;
+};
+
 /**
  * Builds the model profile section used by backend model resolution.
  *
@@ -190,36 +372,36 @@ export const buildModelProfilesSection = (
     const defaultProfileId =
         parseOptionalTrimmedString(env.DEFAULT_PROFILE_ID) ||
         envDefaultValues.DEFAULT_PROFILE_ID;
-    // Response generation fallback profile.
-    // Used when callers provide no selector or an invalid/disabled selector.
     const plannerProfileId =
         parseOptionalTrimmedString(env.PLANNER_PROFILE_ID) ||
         envDefaultValues.PLANNER_PROFILE_ID;
-    // Planner execution profile.
-    // Kept separate so planner cost/latency can be tuned independently.
 
     let effectiveCatalogPath = preferredCatalogPath;
-    let entries: unknown[] | null = null;
+    let payload: RawModelCatalogPayload | null = null;
 
     const preferredPayload = readCatalogYaml(preferredCatalogPath, warn);
     if (preferredPayload !== null) {
-        entries = tryExtractCatalogEntries(preferredPayload);
+        payload = tryExtractCatalogPayload(preferredPayload);
+        const entries = Array.isArray(payload?.profiles)
+            ? payload.profiles
+            : null;
         if (entries === null) {
             warn(
                 `Model profile catalog "${preferredCatalogPath}" must be a YAML list or object with a "profiles" array.`
             );
+            payload = null;
         }
     }
 
     const shouldTryBundledFallback =
-        (preferredPayload === null || entries === null) &&
+        (preferredPayload === null || payload === null) &&
         preferredCatalogPath !== bundledCatalogPath;
     if (shouldTryBundledFallback) {
         const bundledPayload = readCatalogYaml(bundledCatalogPath, warn);
         if (bundledPayload !== null) {
-            const bundledEntries = tryExtractCatalogEntries(bundledPayload);
-            if (bundledEntries !== null) {
-                entries = bundledEntries;
+            const extractedPayload = tryExtractCatalogPayload(bundledPayload);
+            if (Array.isArray(extractedPayload?.profiles)) {
+                payload = extractedPayload;
                 effectiveCatalogPath = bundledCatalogPath;
                 warn(
                     `Using bundled model profile catalog fallback "${bundledCatalogPath}" instead of "${preferredCatalogPath}".`
@@ -228,24 +410,24 @@ export const buildModelProfilesSection = (
                 warn(
                     `Bundled model profile catalog "${bundledCatalogPath}" must be a YAML list or object with a "profiles" array. Using an empty catalog.`
                 );
-                entries = [];
+                payload = { profiles: [] };
                 effectiveCatalogPath = bundledCatalogPath;
             }
-        } else if (entries === null) {
-            entries = [];
+        } else if (payload === null) {
+            payload = { profiles: [] };
             effectiveCatalogPath = preferredCatalogPath;
         }
     }
 
-    if (entries === null) {
-        entries = [];
+    if (payload === null) {
+        payload = { profiles: [] };
         warn(
             `Model profile catalog "${effectiveCatalogPath}" must be a YAML list or object with a "profiles" array. Using an empty catalog.`
         );
     }
 
     const parsedCatalog = parseCatalogEntries(
-        entries,
+        Array.isArray(payload.profiles) ? payload.profiles : [],
         effectiveCatalogPath,
         warn
     );
@@ -255,11 +437,27 @@ export const buildModelProfilesSection = (
         providerAvailability,
         warn
     );
+    const profileIds = new Set(catalog.map((profile) => profile.id));
+    const pools = parsePools(
+        payload.pools,
+        profileIds,
+        effectiveCatalogPath,
+        warn
+    );
+    const stepRoutingChains = validateStepRoutingChains(
+        payload.stepRoutingChains,
+        pools,
+        profileIds,
+        effectiveCatalogPath,
+        warn
+    );
 
     return {
         defaultProfileId,
         plannerProfileId,
         catalogPath: effectiveCatalogPath,
         catalog,
+        pools,
+        stepRoutingChains,
     };
 };

@@ -40,6 +40,24 @@ profiles:
       costClass: medium
       latencyClass: medium
 
+    # https://developers.openai.com/api/docs/models/gpt-5.4-nano
+    - id: openai-json-optimized
+      description: Structured/JSON-oriented routing profile for planner and assess steps.
+      provider: openai
+      providerModel: gpt-5.4-nano
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: true
+          toolCapabilities:
+              routing.generation.structured-cheap: true
+              routing.generation.balanced-general: false
+              routing.generation.expressive-generation: false
+      maxInputTokens: 400000
+      maxOutputTokens: 64000
+      costClass: low
+      latencyClass: low
+
     # https://platform.openai.com/docs/models/gpt-5.1
     - id: openai-text-quality
       description: Deeper reasoning and more complex prompts.
@@ -361,3 +379,46 @@ profiles:
       maxInputTokens: 131072
       costClass: high
       latencyClass: high
+
+pools:
+    free-ollama-style:
+        - ollama-text-qwen
+        - ollama-text-gptoss
+        - ollama-ministral-3-14b
+        - ollama-rnj-1-8b
+        - ollama-nemotron-3-nano-30b
+
+# User-configurable per-step routing chains.
+# - planner/generate/assess are resolved independently for each mode.
+# - string entry: direct profile id or pool id.
+# - chooseOne: deterministic equal-chance pick keyed by session/correlation seed.
+# - invalid ids/entries are skipped fail-open at runtime config load.
+stepRoutingChains:
+    balanced:
+        planner:
+            # Intent: prefer low-cost structured planning; fail-open to ollama.
+            - openai-json-optimized
+            - ollama-text-gptoss
+        generate:
+            # Intent: prefer stylistic variance and low cost first in balanced mode.
+            - chooseOne: [free-ollama-style]
+            # Fallback: stronger deterministic quality pass when ollama path fails.
+            - openai-text-medium
+        assess:
+            # Intent: keep review logic structured/compact; fail-open to ollama.
+            - openai-json-optimized
+            - ollama-text-gptoss
+    grounded:
+        planner:
+            # Intent: keep grounded planning on OpenAI structured profile first.
+            - openai-json-optimized
+            - ollama-text-gptoss
+        generate:
+            # Intent: prefer quality/reliability first in grounded mode.
+            - openai-text-medium
+            # Fallback: lower-cost style/creativity pass from free ollama pool.
+            - chooseOne: [free-ollama-style]
+        assess:
+            # Intent: grounded assessment stays logic-first and schema-friendly.
+            - openai-json-optimized
+            - ollama-text-gptoss

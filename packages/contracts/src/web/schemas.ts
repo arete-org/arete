@@ -184,6 +184,10 @@ const ExecutionReasonCodeSchema = z.enum([
     'tool_invalid_response',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
+    'routing_chain_exhausted',
+    'routing_chain_entry_ineligible',
+    'routing_chain_transient_error',
+    'routing_chain_non_transient_error',
 ]);
 const PlannerExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
@@ -214,6 +218,8 @@ const PlannerMatteredControlIdSchema = SteerabilityControlIdSchema;
 const EvaluatorExecutionReasonCodeSchema = z.enum(['evaluator_runtime_error']);
 const GenerationExecutionReasonCodeSchema = z.enum([
     'generation_runtime_error',
+    'routing_chain_exhausted',
+    'routing_chain_non_transient_error',
 ]);
 const ToolExecutionReasonCodeSchema = z.enum([
     'tool_not_requested',
@@ -1039,6 +1045,9 @@ export const PostChatRequestSchema = z
         modeId: ChatModeIdSchema.optional(),
         maxReviewCycles: z.number().int().nonnegative().optional(),
         traceTarget: PartialResponseTemperamentSchema.optional(),
+        plannerProfileId: z.string().min(1).max(64).optional(),
+        generateProfileId: z.string().min(1).max(64).optional(),
+        assessProfileId: z.string().min(1).max(64).optional(),
         trigger: z
             .object({
                 kind: ChatTriggerKindSchema,

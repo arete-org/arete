@@ -129,6 +129,37 @@ The current chat path looks like this:
 
 Planner step lineage now comes from workflow execution as the canonical source.
 
+## Step routing chains
+
+Model routing is step-specific and backend-owned.
+
+Routing defaults are centralized in:
+
+```text
+packages/backend/src/config/model-profiles.defaults.yaml
+```
+
+Each mode resolves independent chains for `planner`, `generate`, and `assess`.
+Chain entries can be direct profile ids or `chooseOne` pools. `chooseOne`
+selection is deterministic per request seed and step, so it is reproducible
+while still distributing traffic over the pool.
+
+Current default routing intent:
+
+- `balanced` generate favors Ollama first, then OpenAI fallback
+- `grounded` generate favors OpenAI first, then Ollama fallback
+- `planner` and `assess` favor `openai-json-optimized` first in both modes
+
+Routing remains fail-open:
+
+- invalid chain entries are skipped with warnings
+- empty chains fall back to safe backend defaults
+- transient provider or upstream failures advance to the next chain entry
+- non-transient errors stop chain advancement for that step
+
+Execution metadata and step signals record selected profile lineage, fallback
+attempts, and routing reason codes for trace inspection.
+
 ## Review loop
 
 The reviewed workflow runs a bounded review path:
@@ -159,6 +190,17 @@ They are advisory and do not bypass workflow policy or limits.
 
 If the decision is `revise`, the engine may run planner re-entry and then a
 follow-up `generate` step for refinement.
+
+During revision generation only, assess hints can reorder the resolved generate
+chain before execution:
+
+- logic or grounding hints prefer an OpenAI-first lane
+- style hints prefer an Ollama-first lane
+- cost hints prefer cheaper candidates while preserving safe ordering
+- when hints conflict, logic or grounding wins over style
+
+This hint routing is advisory and internal. It does not add new required public
+API schema fields.
 
 The loop stops when it reaches a final answer, hits a limit, or fails open.
 

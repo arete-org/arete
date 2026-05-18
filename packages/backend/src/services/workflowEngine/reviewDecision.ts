@@ -26,6 +26,7 @@ export type ReviewDecision = {
         style?: 'too_stiff' | 'ok';
         evidence?: 'needs_caution' | 'ok';
     };
+    routingHints?: string[];
 };
 
 export const DEFAULT_REVIEW_DECISION_PROMPT = `Return plain JSON only.
@@ -48,7 +49,10 @@ Schema:
     "length": "too_long" | "ok",
     "style": "too_stiff" | "ok",
     "evidence": "needs_caution" | "ok"
-  }
+  },
+  "routingHints": [
+    "optional routing hints from: style.ai_speak_down | style.creativity_up | logic.precision_up | grounding.citation_strict | cost.cheaper_path"
+  ]
 }
 Choose "finalize" when the draft is complete, accurate, and ready.
 Choose "revise" only when one additional revision would materially improve quality.
@@ -93,6 +97,7 @@ const ReviewDecisionSchema = z
             })
             .strict()
             .optional(),
+        routingHints: z.array(z.string()).optional(),
     })
     .passthrough()
     .superRefine((value, context) => {
@@ -189,6 +194,9 @@ export const parseReviewDecisionOutput = (
             ...(moduleHints !== undefined && { moduleHints }),
             ...(Object.keys(normalizedConcerns).length > 0 && {
                 concerns: normalizedConcerns,
+            }),
+            ...(parsedDecision.data.routingHints !== undefined && {
+                routingHints: parsedDecision.data.routingHints,
             }),
         };
     } catch {

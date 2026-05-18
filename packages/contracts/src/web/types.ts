@@ -331,6 +331,9 @@ export type PostChatRequest = {
         caution: TraceAxisScore;
         extent: TraceAxisScore;
     }>;
+    plannerProfileId?: string;
+    generateProfileId?: string;
+    assessProfileId?: string;
     trigger: {
         kind: ChatTriggerKind;
         messageId?: string;

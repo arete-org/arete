@@ -9,8 +9,8 @@ detail once you have the main runtime shape in mind.
 
 1. [Workflow](./workflow.md): read this next for the
    current workflow and planner model, including mode, profile, review/refinement,
-   planner boundaries, workflow-facing wording, placement, and provenance
-   presentation boundaries.
+   step routing chains, planner boundaries, workflow-facing wording, placement,
+   and provenance presentation boundaries.
 2. [Answer Posture And Control Influence](./answer-posture-and-control-influence.md):
    use this when you need the metadata map for mode, TRACE, planner influence,
    control influence, and provenance.

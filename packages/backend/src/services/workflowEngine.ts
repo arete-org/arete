@@ -23,6 +23,7 @@ import type {
     GenerationRuntime,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
+import type { ModelProfile } from '@footnote/contracts';
 import { logger } from '../utils/logger.js';
 import type {
     PlanContinuationBuilder,
@@ -63,6 +64,8 @@ import {
     selectContextStepExecutor,
     selectFollowUpSearchHint,
 } from './workflowEngine/contextStepHelpers.js';
+import { executeStepRoutingChain } from './stepRoutingExecutor.js';
+import type { ResolvedStepRoutingCandidate } from './stepRoutingChains.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -148,6 +151,11 @@ export type RunBoundedReviewWorkflowInput = {
     contextStepExecutorRegistry?: Record<string, ContextStepExecutor>;
     // Optional OpenAI-native follow-up search from context-step search hints.
     openAiNativeSearchFromHintsEnabled?: boolean;
+    stepRoutingChainSet?: {
+        enabledProfilesById: Map<string, ModelProfile>;
+        generateCandidates: ResolvedStepRoutingCandidate[];
+        assessCandidates: ResolvedStepRoutingCandidate[];
+    };
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -244,6 +252,7 @@ export const runBoundedReviewWorkflow = async ({
     contextStepExecutor,
     contextStepExecutorRegistry,
     openAiNativeSearchFromHintsEnabled = false,
+    stepRoutingChainSet,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     if (!contextEnvelope) {
         throw new Error(
@@ -527,6 +536,12 @@ export const runBoundedReviewWorkflow = async ({
                     modality: plannerExecutionResult.plan.modality,
                     requestedCapabilityProfile:
                         plannerExecutionResult.plan.requestedCapabilityProfile,
+                    ...(plannerExecutionResult.execution
+                        .routingChainAttempts !== undefined && {
+                        routingChainAttempts:
+                            plannerExecutionResult.execution
+                                .routingChainAttempts,
+                    }),
                 },
             });
             workflowSteps.push(plannerStep);
@@ -858,7 +873,29 @@ export const runBoundedReviewWorkflow = async ({
                 effectiveGenerationRequest,
             });
             try {
-                draftResult = await generationRuntime.generate({
+                let initialRoutingChainAttempts:
+                    | Array<{
+                          index: number;
+                          step: string;
+                          profileId: string;
+                          provider?: string;
+                          model?: string;
+                          status: string;
+                          reasonCode?: string;
+                          chooseOneUsed: boolean;
+                          chooseOneCandidates?: string[];
+                          chooseOneSelectedIndex?: number;
+                          seedKeyType?: 'session_id' | 'correlation_id';
+                      }>
+                    | undefined;
+                let initialRoutedProfile:
+                    | {
+                          profileId: string;
+                          provider: string;
+                          model: string;
+                      }
+                    | undefined;
+                const generationRequestForAttempt: GenerationRequest = {
                     ...effectiveGenerationRequest,
                     messages: messagesWithContext,
                     ...(selectedFollowUpSearchHint !== undefined &&
@@ -869,7 +906,41 @@ export const runBoundedReviewWorkflow = async ({
                                 contextSize: 'low',
                             },
                         }),
-                });
+                };
+                if (
+                    stepRoutingChainSet?.generateCandidates &&
+                    stepRoutingChainSet.generateCandidates.length > 0
+                ) {
+                    const chainResult = await executeStepRoutingChain({
+                        step: 'generate',
+                        candidates: stepRoutingChainSet.generateCandidates,
+                        enabledProfilesById:
+                            stepRoutingChainSet.enabledProfilesById,
+                        requiresSearch:
+                            generationRequestForAttempt.search !== undefined,
+                        runWithProfile: async (profile) =>
+                            generationRuntime.generate({
+                                ...generationRequestForAttempt,
+                                model: profile.providerModel,
+                                provider: profile.provider,
+                                capabilities: profile.capabilities,
+                            }),
+                    });
+                    if (chainResult.status !== 'executed') {
+                        throw new Error(chainResult.reasonCode);
+                    }
+                    initialRoutingChainAttempts = chainResult.attempts;
+                    initialRoutedProfile = {
+                        profileId: chainResult.selected.profile.id,
+                        provider: chainResult.selected.profile.provider,
+                        model: chainResult.selected.profile.providerModel,
+                    };
+                    draftResult = chainResult.value;
+                } else {
+                    draftResult = await generationRuntime.generate(
+                        generationRequestForAttempt
+                    );
+                }
                 const initialDraftFinishedAt = Date.now();
                 const initialDraftUsage = captureUsage(
                     draftResult,
@@ -886,6 +957,20 @@ export const runBoundedReviewWorkflow = async ({
                     estimatedCost: initialDraftUsage.estimatedCost,
                     parentStepId: plannerRootStepId,
                     attempt: 1,
+                    ...(initialRoutingChainAttempts !== undefined && {
+                        signals: {
+                            routingChainAttemptCount:
+                                initialRoutingChainAttempts.length,
+                            routingChainAttemptsJson: JSON.stringify(
+                                initialRoutingChainAttempts
+                            ),
+                            ...(initialRoutedProfile !== undefined && {
+                                routedProfileId: initialRoutedProfile.profileId,
+                                routedProvider: initialRoutedProfile.provider,
+                                routedModel: initialRoutedProfile.model,
+                            }),
+                        },
+                    }),
                 });
                 draftParentStepId = initialDraftStepId;
                 workflowState = applyStepExecutionToState(
@@ -897,11 +982,18 @@ export const runBoundedReviewWorkflow = async ({
                 );
             } catch (error) {
                 const initialDraftFinishedAt = Date.now();
+                const errorMessage =
+                    error instanceof Error ? error.message : String(error);
+                const reasonCode: ExecutionReasonCode =
+                    errorMessage === 'routing_chain_exhausted' ||
+                    errorMessage === 'routing_chain_non_transient_error'
+                        ? (errorMessage as ExecutionReasonCode)
+                        : 'generation_runtime_error';
                 logger.error(
                     'Initial workflow generation failed; returning classified no-generation outcome.',
                     {
                         stepKind: 'generate',
-                        reasonCode: 'generation_runtime_error',
+                        reasonCode,
                         startedAtMs: initialDraftStartedAt,
                         finishedAtMs: initialDraftFinishedAt,
                         workflowName: workflowState.workflowName,
@@ -917,7 +1009,7 @@ export const runBoundedReviewWorkflow = async ({
                     status: 'failed',
                     summary:
                         'Initial generation failed; workflow returned classified no-generation outcome.',
-                    reasonCode: 'generation_runtime_error',
+                    reasonCode,
                     startedAtMs: initialDraftStartedAt,
                     finishedAtMs: initialDraftFinishedAt,
                     parentStepId: plannerRootStepId,
@@ -971,6 +1063,7 @@ export const runBoundedReviewWorkflow = async ({
         stepCounterRef: { value: stepCounter },
         workflowStepsRef: { value: workflowSteps },
         planContinuation,
+        stepRoutingChainSet,
     });
     stepCounter = reviewLoopResult.stepCounter;
     draftResult = reviewLoopResult.draftResult;

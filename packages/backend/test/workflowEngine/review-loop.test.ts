@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { GenerationRuntime } from '@footnote/agent-runtime';
+import type { ModelProfile } from '@footnote/contracts';
 import { runBoundedReviewWorkflowForTest } from './helpers.js';
 
 test('runBoundedReviewWorkflow enforces legality before initial generate execution', async () => {
@@ -866,4 +867,275 @@ test('runBoundedReviewWorkflow persists assess TRACE alignment signals when prov
         'Need tighter caution tone.'
     );
     assert.equal(assessStep.outcome.signals?.finalTemperamentCaution, 4);
+});
+
+test('runBoundedReviewWorkflow can use independent generate and assess model chains', async () => {
+    const seenModels: string[] = [];
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            seenModels.push(input.model ?? 'unknown-model');
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial draft',
+                    model: input.model,
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: '{"reviewDecision":"finalize","reviewReason":"Done."}',
+                model: input.model,
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const generateProfile: ModelProfile = {
+        id: 'openai-text-medium',
+        description: 'Generate profile',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-mini',
+        enabled: true,
+        tierBindings: ['text-medium'],
+        capabilities: { canUseSearch: true },
+    };
+    const assessProfile: ModelProfile = {
+        id: 'ollama-text-gptoss',
+        description: 'Assess profile',
+        provider: 'ollama',
+        providerModel: 'gpt-oss:20b-cloud',
+        enabled: true,
+        tierBindings: ['text-medium'],
+        capabilities: { canUseSearch: false },
+    };
+    const enabledProfilesById = new Map<string, ModelProfile>([
+        [generateProfile.id, generateProfile],
+        [assessProfile.id, assessProfile],
+    ]);
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+        stepRoutingChainSet: {
+            enabledProfilesById,
+            generateCandidates: [
+                {
+                    profileId: generateProfile.id,
+                    chooseOneUsed: false,
+                },
+            ],
+            assessCandidates: [
+                {
+                    profileId: assessProfile.id,
+                    chooseOneUsed: false,
+                },
+            ],
+        },
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(seenModels[0], 'gpt-5.4-mini');
+    assert.equal(seenModels[1], 'gpt-oss:20b-cloud');
+});
+
+test('runBoundedReviewWorkflow applies assess hints to revision routing order', async () => {
+    const seenModels: string[] = [];
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            seenModels.push(input.model ?? 'unknown-model');
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial draft',
+                    model: input.model,
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            if (generationCalls === 2) {
+                return {
+                    text: '{"reviewDecision":"revise","reviewReason":"Need less AI-speak and more precise logic.","revisionInstruction":"Apply style and logic edits.","routingHints":["style.ai_speak_down","logic.precision_up"]}',
+                    model: input.model,
+                    usage: {
+                        promptTokens: 5,
+                        completionTokens: 5,
+                        totalTokens: 10,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: 'refined draft',
+                model: input.model,
+                usage: {
+                    promptTokens: 6,
+                    completionTokens: 6,
+                    totalTokens: 12,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const openAiGenerateProfile: ModelProfile = {
+        id: 'openai-text-medium',
+        description: 'OpenAI generate profile',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-mini',
+        enabled: true,
+        tierBindings: ['text-medium'],
+        capabilities: { canUseSearch: true },
+        costClass: 'medium',
+    };
+    const ollamaGenerateProfile: ModelProfile = {
+        id: 'ollama-text-gptoss',
+        description: 'Ollama style profile',
+        provider: 'ollama',
+        providerModel: 'gpt-oss:20b-cloud',
+        enabled: true,
+        tierBindings: ['text-medium'],
+        capabilities: { canUseSearch: false },
+        costClass: 'low',
+    };
+    const assessProfile: ModelProfile = {
+        id: 'openai-json-optimized',
+        description: 'Assess profile',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-nano',
+        enabled: true,
+        tierBindings: [],
+        capabilities: { canUseSearch: true },
+        costClass: 'low',
+    };
+    const enabledProfilesById = new Map<string, ModelProfile>([
+        [openAiGenerateProfile.id, openAiGenerateProfile],
+        [ollamaGenerateProfile.id, ollamaGenerateProfile],
+        [assessProfile.id, assessProfile],
+    ]);
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+        stepRoutingChainSet: {
+            enabledProfilesById,
+            generateCandidates: [
+                {
+                    profileId: ollamaGenerateProfile.id,
+                    chooseOneUsed: true,
+                },
+                {
+                    profileId: openAiGenerateProfile.id,
+                    chooseOneUsed: false,
+                },
+            ],
+            assessCandidates: [
+                {
+                    profileId: assessProfile.id,
+                    chooseOneUsed: false,
+                },
+            ],
+        },
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(seenModels[0], 'gpt-oss:20b-cloud');
+    assert.equal(seenModels[1], 'gpt-5.4-nano');
+    // logic + style hints => logic precedence => OpenAI first for revision
+    assert.equal(seenModels[2], 'gpt-5.4-mini');
+
+    const revisionStep = result.workflowLineage.steps.find(
+        (step) =>
+            step.stepKind === 'generate' &&
+            step.outcome.signals?.refinementApplied === true
+    );
+    assert.ok(revisionStep);
+    assert.equal(
+        revisionStep.outcome.signals?.routingHintApplied,
+        'openai_first_logic'
+    );
+    assert.equal(
+        revisionStep.outcome.signals?.routingHintConflictResolved,
+        'logic_over_style'
+    );
 });

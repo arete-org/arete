@@ -26,9 +26,13 @@ import type {
 } from '@footnote/contracts/policy';
 import type {
     ModelProfileCapabilities,
+    ModelProfile,
     SupportedProvider,
 } from '@footnote/contracts';
-import type { PostChatResponse } from '@footnote/contracts/web';
+import type {
+    PostChatRequest,
+    PostChatResponse,
+} from '@footnote/contracts/web';
 import type {
     AssistantResponseMetadata,
     AssistantUsage,
@@ -78,6 +82,8 @@ import { logger } from '../utils/logger.js';
 import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
+import { resolveStepRoutingChain } from './stepRoutingChains.js';
+import { executeStepRoutingChain } from './stepRoutingExecutor.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
 import { sanitizeReviewModuleIds } from './reviewModules.js';
 import {
@@ -702,6 +708,15 @@ export type RunChatMessagesInput = {
     workflowModeId?: string;
     workflowMaxReviewCycles?: number;
     workflowModeEscalationRequest?: WorkflowModeEscalationRequest;
+    routingRequest?: Pick<
+        PostChatRequest,
+        | 'sessionId'
+        | 'traceTarget'
+        | 'plannerProfileId'
+        | 'generateProfileId'
+        | 'assessProfileId'
+        | 'trigger'
+    >;
     toolRequest?: ToolInvocationRequest;
     contextStepRequests?: ContextStepRequest[];
     contextStepExecutor?: ContextStepExecutor;
@@ -872,6 +887,7 @@ export const createChatService = ({
         workflowModeId,
         workflowMaxReviewCycles,
         workflowModeEscalationRequest,
+        routingRequest,
         toolRequest,
         contextStepRequests,
         contextStepExecutor,
@@ -975,8 +991,91 @@ export const createChatService = ({
             workflowRuntimeConfig.workflowExecutionEnabled;
         const workflowExecutionLimits =
             workflowRuntimeConfig.workflowExecutionLimits;
+        const enabledProfiles = runtimeConfig.modelProfiles.catalog.filter(
+            (profile) => profile.enabled
+        );
+        const enabledProfilesById = new Map<string, ModelProfile>(
+            enabledProfiles.map((profile) => [profile.id, profile])
+        );
+        const allProfilesById = new Map<string, ModelProfile>(
+            runtimeConfig.modelProfiles.catalog.map((profile) => [
+                profile.id,
+                profile,
+            ])
+        );
+        const routingCorrelationId =
+            routingRequest?.trigger.messageId ?? 'none';
+        const routingBaseRequest = {
+            sessionId: routingRequest?.sessionId,
+            traceTarget: routingRequest?.traceTarget,
+        };
+        const generateProfileCandidates = resolveStepRoutingChain(
+            {
+                modeId: workflowRuntimeConfig.modeDecision.modeId,
+                step: 'generate',
+                request: routingBaseRequest,
+                correlationId: routingCorrelationId,
+                stepOverrideProfileId: routingRequest?.generateProfileId,
+            },
+            enabledProfilesById,
+            allProfilesById
+        );
+        const assessProfileCandidates = resolveStepRoutingChain(
+            {
+                modeId: workflowRuntimeConfig.modeDecision.modeId,
+                step: 'assess',
+                request: routingBaseRequest,
+                correlationId: routingCorrelationId,
+                stepOverrideProfileId: routingRequest?.assessProfileId,
+            },
+            enabledProfilesById,
+            allProfilesById
+        );
+        const runGenerateWithChain = async (
+            request: GenerationRequest
+        ): Promise<{
+            generationResult: GenerationResult;
+            selectedProfile: ModelProfile;
+            attempts: Array<{
+                index: number;
+                step: string;
+                profileId: string;
+                provider?: string;
+                model?: string;
+                status: string;
+                reasonCode?: string;
+                errorMessage?: string;
+                chooseOneUsed: boolean;
+                chooseOneCandidates?: string[];
+                chooseOneSelectedIndex?: number;
+                seedKeyType?: 'session_id' | 'correlation_id';
+            }>;
+        }> => {
+            const chainResult = await executeStepRoutingChain({
+                step: 'generate',
+                candidates: generateProfileCandidates,
+                enabledProfilesById,
+                requiresSearch: request.search !== undefined,
+                runWithProfile: async (profile) =>
+                    generationRuntime.generate({
+                        ...request,
+                        model: profile.providerModel,
+                        provider: profile.provider,
+                        capabilities: profile.capabilities,
+                    }),
+            });
+            if (chainResult.status !== 'executed') {
+                throw new Error(chainResult.reasonCode);
+            }
+            return {
+                generationResult: chainResult.value,
+                selectedProfile: chainResult.selected.profile,
+                attempts: chainResult.attempts,
+            };
+        };
 
         let generationResult: GenerationResult;
+        let routedGenerationSelectedProfile: ModelProfile | undefined;
         let workflowLineage: WorkflowRecord | undefined;
         let workflowContextStepResult: ContextStepResult | undefined;
         let workflowContextStepResults: ContextStepResult[] | undefined;
@@ -1063,6 +1162,11 @@ export const createChatService = ({
                 openAiNativeSearchFromHintsEnabled:
                     runtimeConfig.chatWorkflow.contextIntegrations.webSearch
                         .openAiNativeSearchFromHintsEnabled,
+                stepRoutingChainSet: {
+                    enabledProfilesById,
+                    generateCandidates: generateProfileCandidates,
+                    assessCandidates: assessProfileCandidates,
+                },
             });
             workflowPlannerStepResult = workflowResult.plannerStepResult;
             workflowPlannerSummary =
@@ -1194,9 +1298,14 @@ export const createChatService = ({
                         backendFailOpenAllowed
                     ) {
                         try {
-                            generationResult = await generationRuntime.generate(
-                                effectiveGenerationRequest
-                            );
+                            const chainGenerationResult =
+                                await runGenerateWithChain(
+                                    effectiveGenerationRequest
+                                );
+                            generationResult =
+                                chainGenerationResult.generationResult;
+                            routedGenerationSelectedProfile =
+                                chainGenerationResult.selectedProfile;
                             recordUsageForStep(
                                 generationResult,
                                 effectiveGenerationRequest.model
@@ -1262,9 +1371,12 @@ export const createChatService = ({
                 }
             }
         } else {
-            generationResult = await generationRuntime.generate(
+            const chainGenerationResult = await runGenerateWithChain(
                 effectiveGenerationRequest
             );
+            generationResult = chainGenerationResult.generationResult;
+            routedGenerationSelectedProfile =
+                chainGenerationResult.selectedProfile;
             recordUsageForStep(
                 generationResult,
                 effectiveGenerationRequest.model
@@ -1440,7 +1552,16 @@ export const createChatService = ({
                           usageModel,
                       durationMs: generationDurationMs,
                   } satisfies GenerationExecutionContext)
-                : undefined;
+                : routedGenerationSelectedProfile !== undefined
+                  ? ({
+                        status: 'executed',
+                        profileId: routedGenerationSelectedProfile.id,
+                        effectiveProfileId: routedGenerationSelectedProfile.id,
+                        provider: routedGenerationSelectedProfile.provider,
+                        model: routedGenerationSelectedProfile.providerModel,
+                        durationMs: generationDurationMs,
+                    } satisfies GenerationExecutionContext)
+                  : undefined;
         const effectivePlannerExecutionContext =
             executionContext?.planner ??
             (workflowPlannerStepResult !== undefined

@@ -98,7 +98,11 @@ const normalizeGenerationReasonCode = (
         return undefined;
     }
 
-    if (reasonCode === 'generation_runtime_error') {
+    if (
+        reasonCode === 'generation_runtime_error' ||
+        reasonCode === 'routing_chain_exhausted' ||
+        reasonCode === 'routing_chain_non_transient_error'
+    ) {
         return reasonCode;
     }
 

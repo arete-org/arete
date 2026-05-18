@@ -199,7 +199,11 @@ export type ExecutionReasonCode =
     | 'tool_invalid_response'
     | 'location_not_resolved'
     | 'search_not_supported_by_selected_profile'
-    | 'unspecified_tool_outcome';
+    | 'unspecified_tool_outcome'
+    | 'routing_chain_exhausted'
+    | 'routing_chain_entry_ineligible'
+    | 'routing_chain_transient_error'
+    | 'routing_chain_non_transient_error';
 
 export type PlannerExecutionReasonCode = Extract<
     ExecutionReasonCode,
@@ -237,7 +241,9 @@ export type EvaluatorExecutionReasonCode = Extract<
 
 export type GenerationExecutionReasonCode = Extract<
     ExecutionReasonCode,
-    'generation_runtime_error'
+    | 'generation_runtime_error'
+    | 'routing_chain_exhausted'
+    | 'routing_chain_non_transient_error'
 >;
 
 export type EvaluatorAuthorityLevel = 'observe' | 'influence' | 'enforce';

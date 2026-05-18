@@ -58,6 +58,45 @@ export interface ModelProfile {
 }
 
 /**
+ * Workflow step buckets that resolve independent routing chains.
+ */
+export type WorkflowModelStepKind = 'planner' | 'generate' | 'assess';
+/**
+ * Built-in workflow modes that own default routing posture.
+ */
+export type WorkflowModeProfileId = 'balanced' | 'grounded';
+
+/**
+ * One routing-chain entry.
+ * - string: direct profile id (or pool id resolved by backend config)
+ * - chooseOne: deterministic single pick from the candidate list
+ */
+export type StepRoutingEntry =
+    | string
+    | {
+          chooseOne: string[];
+      };
+
+/**
+ * Step-specific chain map for one workflow mode.
+ */
+export type StepRoutingModeMap = Record<
+    WorkflowModelStepKind,
+    StepRoutingEntry[]
+>;
+
+/**
+ * Full routing-chain config keyed by mode.
+ *
+ * Runtime is fail-open: invalid/missing entries are skipped, and execution may
+ * continue with remaining candidates or backend-safe defaults.
+ */
+export type StepRoutingChainsConfig = Record<
+    WorkflowModeProfileId,
+    StepRoutingModeMap
+>;
+
+/**
  * Schema used when loading and testing capability flags.
  */
 export const ModelProfileCapabilitiesSchema = z
@@ -113,3 +152,32 @@ export const ModelProfileCatalogSchema = z
             });
         }
     });
+
+export const WorkflowModelStepKindSchema = z.enum([
+    'planner',
+    'generate',
+    'assess',
+]);
+export const WorkflowModeProfileIdSchema = z.enum(['balanced', 'grounded']);
+export const StepRoutingEntrySchema = z.union([
+    z.string().min(1),
+    z
+        .object({
+            chooseOne: z.array(z.string().min(1)).min(1),
+        })
+        .strict(),
+]);
+export const StepRoutingModeMapSchema: z.ZodType<StepRoutingModeMap> = z
+    .object({
+        planner: z.array(StepRoutingEntrySchema).default([]),
+        generate: z.array(StepRoutingEntrySchema).default([]),
+        assess: z.array(StepRoutingEntrySchema).default([]),
+    })
+    .strict();
+export const StepRoutingChainsConfigSchema: z.ZodType<StepRoutingChainsConfig> =
+    z
+        .object({
+            balanced: StepRoutingModeMapSchema,
+            grounded: StepRoutingModeMapSchema,
+        })
+        .strict();
