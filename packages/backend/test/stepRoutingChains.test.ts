@@ -155,24 +155,43 @@ test('resolveStepRoutingChain uses deterministic chooseOne selection with seed v
         enabledProfilesById,
         allProfilesById
     );
-    const second = resolveStepRoutingChain(
+    const secondSameSeed = resolveStepRoutingChain(
         {
             modeId: 'grounded',
             step: 'generate',
             request: {
-                sessionId: 'session-b',
+                sessionId: 'session-a',
                 traceTarget: undefined,
             },
-            correlationId: 'corr-b',
+            correlationId: 'corr-a',
         },
         enabledProfilesById,
         allProfilesById
     );
+    let observedDifferentSeedPick = false;
+    for (let index = 0; index < 20; index += 1) {
+        const differentSeedResult = resolveStepRoutingChain(
+            {
+                modeId: 'grounded',
+                step: 'generate',
+                request: {
+                    sessionId: `session-b-${index}`,
+                    traceTarget: undefined,
+                },
+                correlationId: `corr-b-${index}`,
+            },
+            enabledProfilesById,
+            allProfilesById
+        );
+        if (first[1]?.profileId !== differentSeedResult[1]?.profileId) {
+            observedDifferentSeedPick = true;
+            break;
+        }
+    }
 
-    assert.equal(first.length > 0, true);
-    assert.equal(second.length > 0, true);
+    assert.deepEqual(first, secondSameSeed);
     assert.equal(first[0]?.profileId !== undefined, true);
-    assert.equal(second[0]?.profileId !== undefined, true);
+    assert.equal(observedDifferentSeedPick, true);
 });
 
 test('resolveStepRoutingChain spreads chooseOne picks across seeds', () => {
@@ -227,5 +246,5 @@ test('default step routing keeps balanced ollama-first and grounded openai-first
     );
 
     assert.equal(balanced[0]?.profileId?.startsWith('ollama-') ?? false, true);
-    assert.equal(grounded[0]?.profileId, 'openai-text-medium');
+    assert.equal(grounded[0]?.profileId?.startsWith('openai-') ?? false, true);
 });

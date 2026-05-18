@@ -57,20 +57,40 @@ export interface ModelProfile {
     latencyClass?: ModelLatencyClass;
 }
 
+/**
+ * Workflow step buckets that resolve independent routing chains.
+ */
 export type WorkflowModelStepKind = 'planner' | 'generate' | 'assess';
+/**
+ * Built-in workflow modes that own default routing posture.
+ */
 export type WorkflowModeProfileId = 'balanced' | 'grounded';
 
+/**
+ * One routing-chain entry.
+ * - string: direct profile id (or pool id resolved by backend config)
+ * - chooseOne: deterministic single pick from the candidate list
+ */
 export type StepRoutingEntry =
     | string
     | {
           chooseOne: string[];
       };
 
+/**
+ * Step-specific chain map for one workflow mode.
+ */
 export type StepRoutingModeMap = Record<
     WorkflowModelStepKind,
     StepRoutingEntry[]
 >;
 
+/**
+ * Full routing-chain config keyed by mode.
+ *
+ * Runtime is fail-open: invalid/missing entries are skipped, and execution may
+ * continue with remaining candidates or backend-safe defaults.
+ */
 export type StepRoutingChainsConfig = Record<
     WorkflowModeProfileId,
     StepRoutingModeMap
