@@ -1,0 +1,17 @@
+name: footnote-allinone
+
+services:
+    allinone:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.allinone
+        env_file:
+            - ../.env
+        ports:
+            - '8080:3000'
+        volumes:
+            - footnote-data:/data
+        restart: unless-stopped
+
+volumes:
+    footnote-data:

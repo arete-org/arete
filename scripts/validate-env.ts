@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { envSpecByKey } from '../packages/config-spec/src/env-spec';
 import { logger } from '../packages/discord-bot/src/utils/logger';
 
-type ValidationTarget = 'local-dev' | 'fly-backend' | 'fly-bot';
+type ValidationTarget = 'local-dev' | 'fly-backend' | 'fly-bot' | 'allinone';
 
 type ValidationProfile = {
     required: string[];
@@ -23,6 +23,7 @@ const TARGETS = new Set<ValidationTarget>([
     'local-dev',
     'fly-backend',
     'fly-bot',
+    'allinone',
 ]);
 
 const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
@@ -39,6 +40,18 @@ const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
         warnings: [],
     },
     'fly-bot': {
+        required: [
+            'DISCORD_TOKEN',
+            'DISCORD_CLIENT_ID',
+            'DISCORD_GUILD_ID',
+            'OPENAI_API_KEY',
+            'DISCORD_USER_ID',
+            'INCIDENT_PSEUDONYMIZATION_SECRET',
+            'TRACE_API_TOKEN',
+        ],
+        warnings: [],
+    },
+    allinone: {
         required: [
             'DISCORD_TOKEN',
             'DISCORD_CLIENT_ID',
