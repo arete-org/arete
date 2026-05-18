@@ -3,13 +3,13 @@
 If you landed here first, start with the main README for the big-picture overview:
 `README.md`
 
-This folder supports two deployment modes:
+This folder supports server and node deployment topologies.
 
-- all-in-one: one container running backend + web static assets + discord-bot.
-- split: three services (`backend`, `web`, `discord-bot`) for shared-backend deployments.
+- `server-local-node`: one container runs the Footnote server and supervises one local Discord node.
+- `server-external-nodes`: separate `backend`, `web`, and `discord-bot` services for shared-backend deployments.
+- `server-only`: server runtime without an active local node.
 
-Use all-in-one for single-profile personal hosting.
-Use split when multiple bot deployments need to share one backend.
+Most people run the Footnote server. The server can include one local Discord node for simple self-hosting. Larger deployments can run nodes separately.
 
 Services:
 
@@ -17,10 +17,10 @@ Services:
 - web: builds the Vite app and serves it with Caddy, proxying `/api/*` to backend.
 - discord-bot: Discord bot runtime only.
 
-All-in-one image and compose wrapper:
+Server image and compose wrapper:
 
-- image build: `deploy/Dockerfile.allinone`
-- compose wrapper: `deploy/compose.allinone.yml`
+- image build: `deploy/Dockerfile.server`
+- compose wrapper: `deploy/compose.server.yml`
 
 ## Prerequisites
 
@@ -30,14 +30,14 @@ All-in-one image and compose wrapper:
 
 - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
 - discord-bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
-- all-in-one: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
+- server (`server-local-node`): `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
     > Why `TRACE_API_TOKEN`? It's a shared key used to authenticate trace uploads from the bot to the backend.
 
 Validate expected deployment env before deploy:
 
 - backend: `pnpm validate-env --target fly-backend`
 - bot: `pnpm validate-env --target fly-bot`
-- all-in-one: `pnpm validate-env --target allinone`
+- server: `pnpm validate-env --target server`
 
 ## Optional environment
 
@@ -89,9 +89,9 @@ Validate expected deployment env before deploy:
 
 ## Start
 
-All-in-one:
+Server (`server-local-node`):
 
-`docker compose -f deploy/compose.allinone.yml up --build`
+`docker compose -f deploy/compose.server.yml up --build`
 
 Split:
 
@@ -99,9 +99,9 @@ Split:
 
 ## Stop
 
-All-in-one:
+Server (`server-local-node`):
 
-`docker compose -f deploy/compose.allinone.yml down`
+`docker compose -f deploy/compose.server.yml down`
 
 Split:
 
@@ -150,7 +150,7 @@ Template overlay paths:
 ## Notes
 
 - Split mode exposes only web on host port 8080 (`http://localhost:8080`); backend stays internal on port 3000.
-- All-in-one mode exposes backend/web transport directly on host port 8080 -> container port 3000.
+- Server (`server-local-node`) exposes backend/web transport directly on host port 8080 -> container port 3000.
 - The backend stores data in `/data` (Docker volume: `footnote-data`).
 - Durable `/data` is required for persistent provenance/incident history. Ephemeral `/data` is suitable only for throwaway testing.
 - Backend startup logs include Litestream replication visibility and latest known snapshot timestamp (or `none yet`).

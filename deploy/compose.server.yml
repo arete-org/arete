@@ -1,10 +1,10 @@
-name: footnote-allinone
+name: footnote-server
 
 services:
-    allinone:
+    server:
         build:
             context: ..
-            dockerfile: deploy/Dockerfile.allinone
+            dockerfile: deploy/Dockerfile.server
         env_file:
             - ../.env
         ports:

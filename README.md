@@ -103,13 +103,13 @@ pnpm dev
 
 Open the web app at `http://localhost:8080`.
 
-### 4) Docker all-in-one (single container)
+### 4) Docker server (single container)
 
-This mode runs backend + web static assets + discord-bot in one container.
+Most people run the Footnote server. The server can include one local Discord node for simple self-hosting.
 
 ```bash
-pnpm validate-env --target allinone
-docker compose -f deploy/compose.allinone.yml up --build
+pnpm validate-env --target server
+docker compose -f deploy/compose.server.yml up --build
 ```
 
 Use a durable `/data` volume for non-throwaway deployments.

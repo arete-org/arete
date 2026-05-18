@@ -2,7 +2,7 @@
 set -eu
 
 if [ -z "${TRACE_API_TOKEN:-}" ]; then
-  echo "TRACE_API_TOKEN is required for all-in-one mode."
+  echo "TRACE_API_TOKEN is required for server-local-node mode."
   exit 1
 fi
 
@@ -49,14 +49,14 @@ start_bot
 while :; do
   if ! kill -0 "${BACKEND_PID}" 2>/dev/null; then
     wait "${BACKEND_PID}" || true
-    echo "Backend process exited; stopping all-in-one container."
+    echo "Backend process exited; stopping server container."
     shutdown_children
     exit 1
   fi
 
   if ! kill -0 "${BOT_PID}" 2>/dev/null; then
     wait "${BOT_PID}" || true
-    echo "Discord bot process exited; stopping all-in-one container."
+    echo "Discord node process exited; stopping server container."
     shutdown_children
     exit 1
   fi
