@@ -8,6 +8,7 @@
 import './bootstrapEnv.js';
 
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -79,6 +80,7 @@ const openAiRealtimeLogger =
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(currentDirectory, '../../web/dist');
+const STATIC_INDEX_PATH = path.join(DIST_DIR, 'index.html');
 const VOLTAGENT_LOG_DIR = path.join(
     runtimeConfig.logging.directory,
     'voltagent'
@@ -156,6 +158,15 @@ const initializeServices = () => {
         }`
     );
     logger.info(`NODE_ENV: ${runtimeConfig.runtime.nodeEnv}`);
+    const staticAssetsAvailable = fs.existsSync(STATIC_INDEX_PATH);
+    logger.info(
+        `WEB_STATIC_ASSETS: ${staticAssetsAvailable ? 'AVAILABLE' : 'MISSING'} (${DIST_DIR})`
+    );
+    if (!staticAssetsAvailable) {
+        logger.warn(
+            'Web static build output was not found at startup; backend API and bot routes will still run.'
+        );
+    }
 
     // --- Trace store ---
     try {

@@ -363,3 +363,28 @@ test('/api/internal/image stream path keeps NDJSON response contract', async (t)
     const terminalType = parsedEvents[parsedEvents.length - 1]?.type;
     assert.ok(terminalType === 'result' || terminalType === 'error');
 });
+
+test(
+    'backend stays available when static index output is missing',
+    async (t) => {
+        const harness = await startBackendServerContractHarness({
+            staticFixtureMode: 'none',
+        });
+        t.after(async () => {
+            await harness.stop();
+        });
+
+        const staticResponse = await fetch(
+            `${harness.baseUrl}/missing-static-route`
+        );
+        assert.equal(staticResponse.status, 404);
+        assert.equal(await staticResponse.text(), 'Not Found');
+
+        const configResponse = await fetch(`${harness.baseUrl}/config.json`);
+        assert.equal(configResponse.status, 200);
+        assert.match(
+            configResponse.headers.get('content-type') ?? '',
+            /application\/json/i
+        );
+    }
+);
