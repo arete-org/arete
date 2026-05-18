@@ -63,7 +63,6 @@ const isTransientError = (error: unknown): boolean => {
         message.includes('429') ||
         message.includes('rate limit') ||
         message.includes('quota') ||
-        message.includes('billing') ||
         message.includes('503') ||
         message.includes('502') ||
         message.includes('504') ||

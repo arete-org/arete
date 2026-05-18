@@ -241,26 +241,15 @@ const parsePools = (
     return pools;
 };
 
-const validateStepRoutingChains = (
-    value: unknown,
+const pruneStepRoutingChains = (
+    chains: StepRoutingChainsConfig,
     pools: Record<string, string[]>,
     profileIds: Set<string>,
     sourcePath: string,
     warn: WarningSink
 ): StepRoutingChainsConfig => {
-    if (value === undefined) {
-        return DEFAULT_STEP_CHAINS;
-    }
-    const parsed = StepRoutingChainsConfigSchema.safeParse(value);
-    if (!parsed.success) {
-        warn(
-            `Invalid stepRoutingChains in "${sourcePath}". Using defaults. ${parsed.error.issues.map((issue) => issue.message).join('; ')}`
-        );
-        return DEFAULT_STEP_CHAINS;
-    }
-
     const resolved = JSON.parse(
-        JSON.stringify(parsed.data)
+        JSON.stringify(chains)
     ) as StepRoutingChainsConfig;
     const modes: WorkflowModeProfileId[] = ['balanced', 'grounded'];
     for (const mode of modes) {
@@ -303,9 +292,53 @@ const validateStepRoutingChains = (
                 }
                 return true;
             });
+        }
+    }
 
+    return resolved;
+};
+
+const validateStepRoutingChains = (
+    value: unknown,
+    pools: Record<string, string[]>,
+    profileIds: Set<string>,
+    sourcePath: string,
+    warn: WarningSink
+): StepRoutingChainsConfig => {
+    const prunedDefaults = pruneStepRoutingChains(
+        DEFAULT_STEP_CHAINS,
+        pools,
+        profileIds,
+        sourcePath,
+        warn
+    );
+    if (value === undefined) {
+        return prunedDefaults;
+    }
+    const parsed = StepRoutingChainsConfigSchema.safeParse(value);
+    if (!parsed.success) {
+        warn(
+            `Invalid stepRoutingChains in "${sourcePath}". Using defaults. ${parsed.error.issues.map((issue) => issue.message).join('; ')}`
+        );
+        return prunedDefaults;
+    }
+    const resolved = pruneStepRoutingChains(
+        parsed.data,
+        pools,
+        profileIds,
+        sourcePath,
+        warn
+    );
+    const modes: WorkflowModeProfileId[] = ['balanced', 'grounded'];
+    for (const mode of modes) {
+        const steps: Array<'planner' | 'generate' | 'assess'> = [
+            'planner',
+            'generate',
+            'assess',
+        ];
+        for (const step of steps) {
             if (resolved[mode][step].length === 0) {
-                resolved[mode][step] = [...DEFAULT_STEP_CHAINS[mode][step]];
+                resolved[mode][step] = [...prunedDefaults[mode][step]];
             }
         }
     }

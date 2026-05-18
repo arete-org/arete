@@ -58,25 +58,44 @@ const buildBaseEntries = (input: {
     modeId: WorkflowModeProfileId;
     step: WorkflowModelStep;
 }): Array<string | { chooseOne: string[] }> =>
-    runtimeConfig.modelProfiles.stepRoutingChains[input.modeId][input.step];
+    runtimeConfig.modelProfiles.stepRoutingChains?.[input.modeId]?.[
+        input.step
+    ] ?? [];
 
 const maybeApplyTraceBandRule = (
     entries: Array<string | { chooseOne: string[] }>,
-    input: Pick<ResolveStepRoutingChainInput, 'request' | 'modeId' | 'step'>
+    input: Pick<ResolveStepRoutingChainInput, 'request' | 'modeId' | 'step'>,
+    allProfilesById: Map<string, ModelProfile>
 ): Array<string | { chooseOne: string[] }> => {
+    const filterKnownEntry = (
+        entry: string | { chooseOne: string[] }
+    ): string | { chooseOne: string[] } | null => {
+        if (typeof entry === 'string') {
+            return allProfilesById.has(entry) ? entry : null;
+        }
+        const knownCandidates = entry.chooseOne.filter((candidate) =>
+            allProfilesById.has(candidate)
+        );
+        if (knownCandidates.length === 0) {
+            return null;
+        }
+        return { chooseOne: knownCandidates };
+    };
+
     if (input.modeId !== 'grounded') {
         return entries;
     }
 
     // Bounded v1 TRACE-aware routing: rationale axis only.
     if (isTraceScoreInBand(input.request.traceTarget?.rationale, 4, 5)) {
-        return [
-            { chooseOne: ['openai-text-medium', 'ollama-text-qwen'] },
-            ...entries,
-        ];
+        const injectedEntry = filterKnownEntry({
+            chooseOne: ['openai-text-medium', 'ollama-text-qwen'],
+        });
+        return injectedEntry ? [injectedEntry, ...entries] : entries;
     }
     if (isTraceScoreInBand(input.request.traceTarget?.rationale, 1, 2)) {
-        return ['openai-text-fast', ...entries];
+        const injectedEntry = filterKnownEntry('openai-text-fast');
+        return injectedEntry ? [injectedEntry, ...entries] : entries;
     }
 
     return entries;
@@ -94,7 +113,8 @@ export const resolveStepRoutingChain = (
 
     const entries = maybeApplyTraceBandRule(
         buildBaseEntries({ modeId: input.modeId, step: input.step }),
-        input
+        input,
+        allProfilesById
     );
 
     const prefixedEntries: Array<string | { chooseOne: string[] }> =

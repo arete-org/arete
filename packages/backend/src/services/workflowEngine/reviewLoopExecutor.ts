@@ -263,10 +263,14 @@ export const executeReviewLoop = async (ctx: {
                 assessChainResult?.status === 'executed'
                     ? assessChainResult.value
                     : await ctx.generationRuntime.generate(assessRequest);
+            const assessUsageModel =
+                assessChainResult?.status === 'executed'
+                    ? assessChainResult.selected.profile.providerModel
+                    : effectiveGenerationRequest.model;
             const reviewFinishedAt = Date.now();
             const reviewUsage = ctx.captureUsage(
                 reviewResult,
-                effectiveGenerationRequest.model
+                assessUsageModel
             );
             workflowState = applyStepExecutionToState(
                 workflowState,
@@ -542,10 +546,14 @@ export const executeReviewLoop = async (ctx: {
                     revisionChainResult?.status === 'executed'
                         ? revisionChainResult.value
                         : await ctx.generationRuntime.generate(revisionRequest);
+                const revisionUsageModel =
+                    revisionChainResult?.status === 'executed'
+                        ? revisionChainResult.selected.profile.providerModel
+                        : effectiveGenerationRequest.model;
                 const revisionFinishedAt = Date.now();
                 const revisionUsage = ctx.captureUsage(
                     revisionResult,
-                    effectiveGenerationRequest.model
+                    revisionUsageModel
                 );
                 const revisionStepId = ctx.captureStep({
                     stepKind: 'generate',

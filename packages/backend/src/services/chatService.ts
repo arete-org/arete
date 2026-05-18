@@ -1033,7 +1033,24 @@ export const createChatService = ({
         );
         const runGenerateWithChain = async (
             request: GenerationRequest
-        ): Promise<GenerationResult> => {
+        ): Promise<{
+            generationResult: GenerationResult;
+            selectedProfile: ModelProfile;
+            attempts: Array<{
+                index: number;
+                step: string;
+                profileId: string;
+                provider?: string;
+                model?: string;
+                status: string;
+                reasonCode?: string;
+                errorMessage?: string;
+                chooseOneUsed: boolean;
+                chooseOneCandidates?: string[];
+                chooseOneSelectedIndex?: number;
+                seedKeyType?: 'session_id' | 'correlation_id';
+            }>;
+        }> => {
             const chainResult = await executeStepRoutingChain({
                 step: 'generate',
                 candidates: generateProfileCandidates,
@@ -1050,10 +1067,15 @@ export const createChatService = ({
             if (chainResult.status !== 'executed') {
                 throw new Error(chainResult.reasonCode);
             }
-            return chainResult.value;
+            return {
+                generationResult: chainResult.value,
+                selectedProfile: chainResult.selected.profile,
+                attempts: chainResult.attempts,
+            };
         };
 
         let generationResult: GenerationResult;
+        let routedGenerationSelectedProfile: ModelProfile | undefined;
         let workflowLineage: WorkflowRecord | undefined;
         let workflowContextStepResult: ContextStepResult | undefined;
         let workflowContextStepResults: ContextStepResult[] | undefined;
@@ -1276,9 +1298,14 @@ export const createChatService = ({
                         backendFailOpenAllowed
                     ) {
                         try {
-                            generationResult = await runGenerateWithChain(
-                                effectiveGenerationRequest
-                            );
+                            const chainGenerationResult =
+                                await runGenerateWithChain(
+                                    effectiveGenerationRequest
+                                );
+                            generationResult =
+                                chainGenerationResult.generationResult;
+                            routedGenerationSelectedProfile =
+                                chainGenerationResult.selectedProfile;
                             recordUsageForStep(
                                 generationResult,
                                 effectiveGenerationRequest.model
@@ -1344,9 +1371,12 @@ export const createChatService = ({
                 }
             }
         } else {
-            generationResult = await runGenerateWithChain(
+            const chainGenerationResult = await runGenerateWithChain(
                 effectiveGenerationRequest
             );
+            generationResult = chainGenerationResult.generationResult;
+            routedGenerationSelectedProfile =
+                chainGenerationResult.selectedProfile;
             recordUsageForStep(
                 generationResult,
                 effectiveGenerationRequest.model
@@ -1522,7 +1552,16 @@ export const createChatService = ({
                           usageModel,
                       durationMs: generationDurationMs,
                   } satisfies GenerationExecutionContext)
-                : undefined;
+                : routedGenerationSelectedProfile !== undefined
+                  ? ({
+                        status: 'executed',
+                        profileId: routedGenerationSelectedProfile.id,
+                        effectiveProfileId: routedGenerationSelectedProfile.id,
+                        provider: routedGenerationSelectedProfile.provider,
+                        model: routedGenerationSelectedProfile.providerModel,
+                        durationMs: generationDurationMs,
+                    } satisfies GenerationExecutionContext)
+                  : undefined;
         const effectivePlannerExecutionContext =
             executionContext?.planner ??
             (workflowPlannerStepResult !== undefined

@@ -888,6 +888,13 @@ export const runBoundedReviewWorkflow = async ({
                           seedKeyType?: 'session_id' | 'correlation_id';
                       }>
                     | undefined;
+                let initialRoutedProfile:
+                    | {
+                          profileId: string;
+                          provider: string;
+                          model: string;
+                      }
+                    | undefined;
                 const generationRequestForAttempt: GenerationRequest = {
                     ...effectiveGenerationRequest,
                     messages: messagesWithContext,
@@ -923,6 +930,11 @@ export const runBoundedReviewWorkflow = async ({
                         throw new Error(chainResult.reasonCode);
                     }
                     initialRoutingChainAttempts = chainResult.attempts;
+                    initialRoutedProfile = {
+                        profileId: chainResult.selected.profile.id,
+                        provider: chainResult.selected.profile.provider,
+                        model: chainResult.selected.profile.providerModel,
+                    };
                     draftResult = chainResult.value;
                 } else {
                     draftResult = await generationRuntime.generate(
@@ -952,6 +964,11 @@ export const runBoundedReviewWorkflow = async ({
                             routingChainAttemptsJson: JSON.stringify(
                                 initialRoutingChainAttempts
                             ),
+                            ...(initialRoutedProfile !== undefined && {
+                                routedProfileId: initialRoutedProfile.profileId,
+                                routedProvider: initialRoutedProfile.provider,
+                                routedModel: initialRoutedProfile.model,
+                            }),
                         },
                     }),
                 });

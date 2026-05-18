@@ -9,6 +9,7 @@ import type {
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
+import type { ModelProfile } from '@footnote/contracts';
 import type { SafetyTier } from '@footnote/contracts/policy';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
@@ -131,7 +132,6 @@ export const createChatOrchestrator = ({
     const allProfilesById = new Map(
         catalogProfiles.map((profile) => [profile.id, profile])
     );
-    let activePlannerProfile = plannerProfile;
     // Startup fallback profile for end-user response generation.
     // Planner may request a capability profile that resolves to one catalog profile.
     const defaultResponseProfile = modelProfileResolver.resolve(defaultModel);
@@ -153,47 +153,51 @@ export const createChatOrchestrator = ({
         recordUsage,
         executionContractTrustGraph,
     });
-    const chatPlanner = createChatPlanner({
-        availableCapabilityProfiles: plannerCapabilityOptions,
-        ...(runtimeConfig.openai.plannerStructuredOutputEnabled &&
-            plannerProfile.provider === 'openai' &&
-            runtimeConfig.openai.apiKey &&
-            generationRuntime.kind !== 'test-runtime' && {
-                executePlannerStructured:
-                    createOpenAiChatPlannerStructuredExecutor({
-                        apiKey: runtimeConfig.openai.apiKey,
-                    }),
-            }),
-        executePlanner: async ({
-            messages,
-            model: _model,
-            maxOutputTokens,
-            reasoningEffort,
-            verbosity,
-        }) => {
-            // Planner calls go through the same runtime seam so model usage and
-            // behavior stay aligned with normal generation calls.
-            const plannerResult = await generationRuntime.generate({
+    const createRuntimeChatPlanner = (
+        getActivePlannerProfile: () => ModelProfile
+    ) =>
+        createChatPlanner({
+            availableCapabilityProfiles: plannerCapabilityOptions,
+            ...(runtimeConfig.openai.plannerStructuredOutputEnabled &&
+                plannerProfile.provider === 'openai' &&
+                runtimeConfig.openai.apiKey &&
+                generationRuntime.kind !== 'test-runtime' && {
+                    executePlannerStructured:
+                        createOpenAiChatPlannerStructuredExecutor({
+                            apiKey: runtimeConfig.openai.apiKey,
+                        }),
+                }),
+            executePlanner: async ({
                 messages,
-                model: activePlannerProfile.providerModel,
-                provider: activePlannerProfile.provider,
-                capabilities: activePlannerProfile.capabilities,
+                model: _model,
                 maxOutputTokens,
                 reasoningEffort,
                 verbosity,
-            });
+            }) => {
+                const activePlannerProfile = getActivePlannerProfile();
+                // Planner calls go through the same runtime seam so model usage
+                // and behavior stay aligned with normal generation calls.
+                const plannerResult = await generationRuntime.generate({
+                    messages,
+                    model: activePlannerProfile.providerModel,
+                    provider: activePlannerProfile.provider,
+                    capabilities: activePlannerProfile.capabilities,
+                    maxOutputTokens,
+                    reasoningEffort,
+                    verbosity,
+                });
 
-            return {
-                text: plannerResult.text,
-                model: plannerResult.model,
-                usage: plannerResult.usage,
-            };
-        },
-        allowTextJsonCompatibilityFallback:
-            runtimeConfig.openai.plannerAllowTextJsonCompatibilityFallback,
-        defaultModel: plannerProfile.providerModel,
-        recordUsage,
-    });
+                return {
+                    text: plannerResult.text,
+                    model: plannerResult.model,
+                    usage: plannerResult.usage,
+                };
+            },
+            allowTextJsonCompatibilityFallback:
+                runtimeConfig.openai.plannerAllowTextJsonCompatibilityFallback,
+            defaultModel: plannerProfile.providerModel,
+            recordUsage,
+        });
 
     /**
      * Runs one chat request end-to-end.
@@ -205,6 +209,10 @@ export const createChatOrchestrator = ({
     const runChat = async (
         request: PostChatRequest
     ): Promise<PostChatResponse> => {
+        let activePlannerProfile = plannerProfile;
+        const chatPlanner = createRuntimeChatPlanner(
+            () => activePlannerProfile
+        );
         const isWeatherLikeRequest = (input: string): boolean => {
             const normalized = input.trim().toLowerCase();
             if (normalized.length === 0) {
@@ -404,6 +412,7 @@ export const createChatOrchestrator = ({
                 };
             }
 
+            activePlannerProfile = plannerProfile;
             const fallback = toPlannerStepResult(
                 await chatPlanner.planChat(
                     input.request,
