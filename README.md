@@ -85,6 +85,7 @@ DISCORD_GUILD_ID=...
 ```
 
 For the full set of options, see `.env.example`.
+Start with section `00) Start Here (minimum to run)`, then fill optional sections only as needed.
 
 ### 3) Launch
 

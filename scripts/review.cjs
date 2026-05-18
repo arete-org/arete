@@ -733,6 +733,21 @@ function main() {
             },
         },
         {
+            name: 'validate-env-example-parity',
+            shouldRun: () => true,
+            run: () =>
+                runCommand(pnpmBinary, [
+                    'exec',
+                    'tsx',
+                    'scripts/validate-env-example-parity.ts',
+                ]),
+            parse: (result) =>
+                parseFootnoteTagDiagnostics(
+                    result,
+                    'scripts/validate-env-example-parity.ts'
+                ),
+        },
+        {
             name: 'validate-openapi-links',
             shouldRun: () => !changedOnly || shouldRunOpenApiInChangedMode,
             run: () =>

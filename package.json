@@ -33,6 +33,7 @@
         "check-annotation-schema": "pnpm exec tsx scripts/check-annotation-schema.ts",
         "validate-footnote-tags": "pnpm exec tsx scripts/validate-footnote-tags.ts",
         "validate-env": "pnpm exec tsx scripts/validate-env.ts",
+        "validate-env-example-parity": "pnpm exec tsx scripts/validate-env-example-parity.ts",
         "validate-openapi-links": "pnpm exec tsx scripts/validate-openapi-links.ts",
         "refactor:lookup": "node scripts/refactor-lookup.cjs",
         "review": "node scripts/review.cjs",
