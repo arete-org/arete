@@ -2447,19 +2447,6 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'GITHUB_WEBHOOK_REPOSITORY',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'webhooks',
-        required: false,
-        secret: false,
-        kind: 'string',
-        description: 'GitHub repository accepted by the webhook handler.',
-        defaultValue: literal('footnote-ai/footnote'),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
-
-    defineEnv({
         key: 'GITHUB_WEBHOOK_MAX_BODY_BYTES',
         owner: 'backend',
         stage: 'runtime',
