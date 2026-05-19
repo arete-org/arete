@@ -37,8 +37,9 @@ trap cleanup EXIT
 
 wait_for_config() {
   local retries=40
+  echo "[smoke] polling http://localhost:8080/config.json for readiness (transient connection resets are expected during startup/restart)"
   for _ in $(seq 1 "$retries"); do
-    if curl -fsS "http://localhost:8080/config.json" >/dev/null; then
+    if curl -fsS "http://localhost:8080/config.json" >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
