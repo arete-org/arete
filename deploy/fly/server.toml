@@ -3,7 +3,7 @@ app = 'footnote-server'
 primary_region = 'ord'
 
 [build]
-  dockerfile = 'Dockerfile.server'
+  dockerfile = 'deploy/Dockerfile.server'
 
 [env]
   NODE_ENV = 'production'

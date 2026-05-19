@@ -36,7 +36,10 @@ const tryChmod = async (targetPath, mode) => {
     try {
         await fs.chmod(targetPath, mode);
     } catch (error) {
-        if (isUnsupportedPermissionOperation(error)) {
+        if (
+            isUnsupportedPermissionOperation(error) ||
+            isPermissionError(error)
+        ) {
             return;
         }
         throw error;

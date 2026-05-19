@@ -29,7 +29,14 @@ $configRoot = $PSScriptRoot
 $serverApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'server.toml')
 
 Write-Host "Restarting server ($serverApp)..."
-foreach ($id in Get-MachineIds -AppName $serverApp) {
+$machineIds = Get-MachineIds -AppName $serverApp
+if ($machineIds.Count -eq 0) {
+  Write-Host "No machines found for $serverApp; scaling to one machine..."
+  fly scale count 1 -a $serverApp -y | Out-Null
+  return
+}
+
+foreach ($id in $machineIds) {
   Write-Host "Starting machine $id..."
   fly machine start $id -a $serverApp | Out-Null
 }

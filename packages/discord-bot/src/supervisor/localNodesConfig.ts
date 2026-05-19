@@ -18,8 +18,11 @@ const require = createRequire(import.meta.url);
 const loadYamlModule = (): YamlModule => {
     try {
         return require('js-yaml') as YamlModule;
-    } catch {
-        return require('../../../backend/node_modules/js-yaml') as YamlModule;
+    } catch (error) {
+        throw new Error(
+            `Missing dependency "js-yaml" for local node config parsing. Install workspace dependencies (pnpm install).`,
+            { cause: error }
+        );
     }
 };
 const yamlModule = loadYamlModule();
@@ -474,6 +477,29 @@ const resolveRuntimeNode = (
     };
 };
 
+/**
+ * Loads server-local Discord node YAML config and resolves launchable node runtime settings.
+ *
+ * Inputs:
+ * - `LoadLocalNodeConfigOptions` (`env`, optional `configPath`, optional `readFile` override)
+ *
+ * Returns:
+ * - `LocalNodeConfigLoadResult` with `status`, `configPath`, `activeNodes`, and `disabledNodes`
+ *
+ * Guarantee and fail-open semantics:
+ * - missing config file (`ENOENT`) returns `status: "missing"` with empty node lists
+ * - optional nodes with missing refs/env values are returned in `disabledNodes`
+ * - required nodes are enforced and cause loader failure when not launchable
+ *
+ * Throw behavior:
+ * - unreadable config files (except `ENOENT`)
+ * - invalid YAML/schema/version
+ * - required node resolution failures
+ *
+ * Side effects:
+ * - reads the YAML config file from disk unless `readFile` is injected
+ * - no logging is performed in this loader; callers own logging decisions
+ */
 export const loadLocalNodeConfig = (
     options: LoadLocalNodeConfigOptions = {}
 ): LocalNodeConfigLoadResult => {

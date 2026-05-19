@@ -72,7 +72,7 @@ const DownloadPage = (): JSX.Element => {
                             Copy the Docker command
                         </button>
                     </div>
-                    <p>
+                    <p aria-live="polite" role="status">
                         {copyStatus === 'copied'
                             ? 'Copied.'
                             : copyStatus === 'error'

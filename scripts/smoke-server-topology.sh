@@ -4,7 +4,6 @@ set -euo pipefail
 COMPOSE_FILE="deploy/compose.server.yml"
 ENV_FILE=".env"
 REQUIRED_ENV_KEYS=(
-  OPENAI_API_KEY
   INCIDENT_PSEUDONYMIZATION_SECRET
 )
 

@@ -32,11 +32,11 @@ const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
     },
     server: {
         required: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
-        warnings: ['LOCAL_DISCORD_NODES_CONFIG_PATH'],
+        warnings: [],
     },
     'fly-server': {
         required: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
-        warnings: ['LOCAL_DISCORD_NODES_CONFIG_PATH'],
+        warnings: [],
     },
 };
 

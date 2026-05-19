@@ -159,13 +159,15 @@ const initializeServices = () => {
     );
     logger.info(`NODE_ENV: ${runtimeConfig.runtime.nodeEnv}`);
     const staticAssetsAvailable = fs.existsSync(STATIC_INDEX_PATH);
-    logger.info(
-        `WEB_STATIC_ASSETS: ${staticAssetsAvailable ? 'AVAILABLE' : 'MISSING'} (${DIST_DIR})`
-    );
+    logger.info('static_assets_status', {
+        available: staticAssetsAvailable,
+        path: DIST_DIR,
+    });
     if (!staticAssetsAvailable) {
-        logger.warn(
-            'Web static build output was not found at startup; backend API and bot routes will still run.'
-        );
+        logger.warn('static_assets_missing', {
+            available: staticAssetsAvailable,
+            path: DIST_DIR,
+        });
     }
 
     // --- Trace store ---

@@ -34,8 +34,12 @@ Removed from supported deploy surface:
 
 Server runtime required keys:
 
-- `OPENAI_API_KEY`
 - `INCIDENT_PSEUDONYMIZATION_SECRET`
+
+Provider configuration is optional at startup:
+
+- the server starts fail-open without `OPENAI_API_KEY` or `OLLAMA_BASE_URL`
+- model-dependent features return setup-required responses until a provider is configured
 
 Trace token resolution (server runtime):
 
