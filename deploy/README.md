@@ -1,133 +1,154 @@
 # Deployment
 
-If you landed here first, start with the main README for the big-picture overview:
-`README.md`
+Start with `README.md` for project overview.
 
-This folder defines the minimal three-service split for local/self-hosted Docker Compose.
+Footnote supports one canonical deployment mechanism: run the Footnote server container.
 
-Services:
+Canonical artifacts:
 
-- backend: Node server (`server.js`) for `/api/*`, Turnstile verification, rate limiting, and tracing.
-- web: builds the Vite app and serves it with Caddy, proxying `/api/*` to backend.
-- discord-bot: Discord bot runtime only.
+- image build: `deploy/Dockerfile.server`
+- entrypoint: `deploy/server-entrypoint.sh`
+- compose wrapper: `deploy/compose.server.yml`
+- Fly manifest: `deploy/fly/server.toml`
 
-## Prerequisites
+## Canonical Install Image
 
-- Ensure `.env` is present at the repo root.
+Use:
 
-## Required environment
+- `ghcr.io/footnote-ai/footnote:latest` (default branch)
+- `ghcr.io/footnote-ai/footnote:sha-<shortsha>` (main-branch immutable build)
+- `ghcr.io/footnote-ai/footnote:vX.Y.Z` and `ghcr.io/footnote-ai/footnote:X.Y.Z` (tag builds)
 
-- backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
-- discord-bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
-    > Why `TRACE_API_TOKEN`? It's a shared key used to authenticate trace uploads from the bot to the backend.
+## Breaking Changes (Hard Cutover)
 
-Validate expected deployment env before deploy:
+Removed from supported deploy surface:
 
-- backend: `pnpm validate-env --target fly-backend`
-- bot: `pnpm validate-env --target fly-bot`
+- `deploy/compose.yml`
+- `deploy/Dockerfile.backend`
+- `deploy/Dockerfile.web`
+- `deploy/Dockerfile.bot`
+- split Fly manifests (`deploy/fly/backend.toml`, `deploy/fly/web.toml`, `deploy/fly/bot.toml`)
+- split deploy model (separate backend/web/bot apps)
 
-## Optional environment
+## Required Environment
 
-### Optional Services
+Server runtime required keys:
 
-- **Cloudflare Turnstile (abuse prevention)**  
-  Turnstile protects public endpoints from abuse.  
-  If **both keys** are set, CAPTCHA is enforced.  
-  If **neither key** is set, CAPTCHA is skipped.
-    ```env
-    TURNSTILE_SITE_KEY=...
-    TURNSTILE_SECRET_KEY=...
-    ```
-- **Cloudinary (image uploads)**  
-  If Cloudinary credentials are provided, images can be uploaded and referenced in traces.  
-  If not, the system falls back to attaching images directly in Discord.
-    ```env
-    CLOUDINARY_CLOUD_NAME=...
-    CLOUDINARY_API_KEY=...
-    CLOUDINARY_API_SECRET=...
-    ```
-    > If these are missing, images are still delivered via Discord attachments.
-- **Storage Path**  
-  Response traces are stored in SQLite:
-    ```env
-    PROVENANCE_SQLITE_PATH=/data/provenance.db
-    ```
-    > On Fly.io, `/data` is backed by a persistent volume. On other hosts, point this path at a durable directory.
-- **Litestream backup replication**
-  Backend image runs through Litestream and can continuously replicate both SQLite files.
-    ```env
-    LITESTREAM_REPLICA_URL=s3://<bucket>/<prefix>
-    ```
-    > Litestream reads `deploy/litestream.yml` and replicates `/data/provenance.db` and `/data/incidents.db`.
+- `INCIDENT_PSEUDONYMIZATION_SECRET`
 
-### Optional Environment Variables
+Provider configuration is optional at startup:
 
-- backend: `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` (both required to enable CAPTCHA)
-- backend/bot: `LOG_LEVEL` (defaults to `debug`)
-- backend: `ALLOWED_ORIGINS`, `FRAME_ANCESTORS` (override CORS/CSP allowlists)
-- backend: `DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`, `DEFAULT_VERBOSITY` (reflect defaults)
-- backend: `OLLAMA_BASE_URL`, `OLLAMA_API_KEY`, `OLLAMA_LOCAL_INFERENCE_ENABLED` (Ollama cloud/local behavior)
-- backend: `TRACE_API_RATE_LIMIT`, `TRACE_API_RATE_LIMIT_WINDOW_MS`, `TRACE_API_MAX_BODY_BYTES` (trace ingestion limits)
-- backend: `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS` (reverse-image provider runtime)
-- backend: `LITESTREAM_REPLICA_URL` (SQLite replication target)
-- bot: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` (optional image uploads)
-- bot: `BOT_PROFILE_ID`, `BOT_PROFILE_DISPLAY_NAME`, `BOT_PROFILE_PROMPT_OVERLAY_PATH` (optional persona overlays)
-- bot: `WEB_BASE_URL` (recommended for split deployments so trace links open on the canonical web host)
+- the server starts fail-open without `OPENAI_API_KEY` or `OLLAMA_BASE_URL`
+- model-dependent features return setup-required responses until a provider is configured
 
-## Start
+Trace token resolution (server runtime):
 
-`docker compose -f deploy/compose.yml up --build`
+- `TRACE_API_TOKEN > TRACE_API_TOKEN_FILE > /data/secrets/trace-api-token`
+- token values are never logged
+- `/data/secrets/trace-api-token` is generated once, then reused
 
-## Stop
+Validate before deploy:
 
-`docker compose -f deploy/compose.yml down`
+- local/server: `pnpm validate-env --target server`
+- Fly server app: `pnpm validate-env --target fly-server`
 
-## Fly.io
+## Local Discord Node Configuration (Canonical)
 
-- Backend: `fly deploy -c deploy/fly.backend.toml`
-- Web: `fly deploy -c deploy/fly.web.toml`
-- Bot: `fly deploy -c deploy/fly.bot.toml`
-- All three (bash): `./deploy/deploy-fly.sh`
-- All three (PowerShell): `./deploy/deploy-fly.ps1`
-  (Requires Fly CLI: https://fly.io/docs/flyctl/install/)
-  The scripts read `.env`, prompt for missing secrets, and run `pnpm validate-env` before deploy.
-  Note: we use three separate Fly apps to mirror the Docker Compose service split.
-  Note: web uses `BACKEND_HOST=footnote-backend.internal` in `deploy/fly.web.toml`; update it if the backend app name changes.
-  GitHub Actions deploys use `.github/workflows/fly-deploy.yml` and only need the `FLY_API_TOKEN` secret; app names come from `deploy/fly.*.toml`.
-  Secrets per app:
-    - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
-    - backend (optional): `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY`, `LOG_LEVEL`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_SERPAPI_API_KEY`, `CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS` (required as optional backend secrets when `reverse_image_search` runtime provider mode is enabled)
-    - bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
-    - bot (optional): `LOG_LEVEL`, `WEB_BASE_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `BOT_PROFILE_ID`, `BOT_PROFILE_DISPLAY_NAME`, `BOT_PROFILE_PROMPT_OVERLAY_PATH`
+The server can supervise local Discord persona nodes from one YAML config file.
 
-## Execution Contract TrustGraph Rollout Boundary
+- env key: `LOCAL_DISCORD_NODES_CONFIG_PATH` (optional)
+- default path: `/data/config/local-discord-nodes.yaml`
+- missing file: server boots with zero nodes and logs `no_local_nodes_configured`
 
-- Backend `executionContractTrustGraph` runtime integration exists in this repo.
-- External TrustGraph service implementation does not exist in this repo.
-- This repo currently supports backend config hardening, runtime safety, and kill-switch rollback behavior.
-- Full local Docker and Fly rollout for TrustGraph requires a pinned external service contract (image/repo, endpoint path, auth token contract, health behavior).
-- Canonical rollback remains backend-side: set `EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH=true`.
+Security model:
 
-### Next steps
+- YAML stores env variable names, not raw secret values.
+- Discord credentials are only required for nodes that are enabled.
 
-1. Pin external TrustGraph service image/repo.
-2. Pin evidence endpoint path and health/readiness contract.
-3. Pin auth token expectations and rotation approach.
-4. Add compose TrustGraph service only after the external contract is pinned.
-5. Add Fly TrustGraph app manifest only after the external contract is pinned.
-6. Validate local full-stack path and private Fly path with backend kill-switch rollback test.
+Example (`version: 1`):
 
-Template overlay paths:
+```yaml
+version: 1
+nodes:
+    - id: footnote
+      required: true
+      credentials:
+          discordTokenEnv: FOOTNOTE_DISCORD_TOKEN
+          discordClientIdEnv: FOOTNOTE_DISCORD_CLIENT_ID
+          discordGuildIdsEnv: FOOTNOTE_DISCORD_GUILD_IDS
+          discordUserIdEnv: FOOTNOTE_DISCORD_USER_ID
+          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
+      profile:
+          id: footnote
+          displayName: Footnote
+          mentionAliases: [footnote]
 
-- `packages/prompts/src/profile-overlays/danny.md`
-- `packages/prompts/src/profile-overlays/myuri.md`
+    - id: danny
+      enabled: true
+      required: false
+      credentials:
+          discordTokenEnv: DANNY_DISCORD_TOKEN
+          discordClientIdEnv: DANNY_DISCORD_CLIENT_ID
+          discordGuildIdEnv: DANNY_DISCORD_GUILD_ID
+          discordUserIdEnv: DANNY_DISCORD_USER_ID
+          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
+      profile:
+          id: danny
+          displayName: Danny
+          overlayPath: /data/profiles/danny.md
+
+    - id: myuri
+      enabled: true
+      required: false
+      credentials:
+          discordTokenEnv: MYURI_DISCORD_TOKEN
+          discordClientIdEnv: MYURI_DISCORD_CLIENT_ID
+          discordGuildIdEnv: MYURI_DISCORD_GUILD_ID
+          discordUserIdEnv: MYURI_DISCORD_USER_ID
+          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
+      profile:
+          id: myuri
+          displayName: Myuri
+```
+
+Behavior:
+
+- optional node missing creds/config => disabled + explicit log reason
+- required node missing creds/config => startup failure
+- node crash retry policy => unhealthy after 3 failures in 5 minutes
+
+## Start / Stop (Docker)
+
+Start:
+
+`docker compose -f deploy/compose.server.yml up --build`
+
+Stop:
+
+`docker compose -f deploy/compose.server.yml down`
+
+## Fly.io (Single App)
+
+Deploy one server app:
+
+- `fly deploy -c deploy/fly/server.toml`
+- `./deploy/fly/deploy.sh`
+- `./deploy/fly/deploy.ps1`
+
+Lifecycle helpers:
+
+- `./deploy/fly/start.sh` / `./deploy/fly/start.ps1`
+- `./deploy/fly/stop.sh` / `./deploy/fly/stop.ps1`
+- `./deploy/fly/restart.sh` / `./deploy/fly/restart.ps1`
+- `./deploy/fly/clear-secrets.sh` / `./deploy/fly/clear-secrets.ps1`
 
 ## Notes
 
-- Only the web service is exposed on host port 8080 (`http://localhost:8080`) to avoid admin privileges.
-- The backend listens internally on port 3000 and stores data in `/data` (Docker volume: `footnote-data`).
-- Backend startup logs include Litestream replication visibility and latest known snapshot timestamp (or `none yet`).
-- The web app fetches runtime config from `/config.json` (proxied to the backend) to read `TURNSTILE_SITE_KEY`.
+- Server listens on container port `3000` and is mapped to host port `8080` in compose.
+- `/data` must be durable for persistent provenance/incident history and trace-token persistence.
+- Local Discord persona nodes are supervised adapters; backend authority remains in the server process.
+- Backend static serving remains fail-open when static build output is absent.
+- Backend startup logs include Litestream replication visibility.
 
 ## Litestream Restore Runbook
 

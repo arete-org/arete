@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploys backend/web/bot Fly apps, ensuring secrets are set and machines are running.
+# Deploys the canonical server Fly app, ensuring required secrets are set.
 
 if ! command -v fly >/dev/null 2>&1; then
   echo "Fly CLI is required. Install from https://fly.io/docs/flyctl/install/"
@@ -107,7 +107,7 @@ ensure_secrets() {
   echo "Checking secrets for $app_name..."
   local existing
   existing=$(get_secret_names "$app_name")
-  local env_path="${SCRIPT_DIR}/../.env"
+  local env_path="${SCRIPT_DIR}/../../.env"
 
   for secret in "${required_secrets[@]}"; do
     if ! echo "$existing" | grep -qx "$secret"; then
@@ -137,7 +137,7 @@ ensure_optional_secrets() {
   echo "Checking optional secrets for $app_name..."
   local existing
   existing=$(get_secret_names "$app_name")
-  local env_path="${SCRIPT_DIR}/../.env"
+  local env_path="${SCRIPT_DIR}/../../.env"
 
   for secret in "${optional_secrets[@]}"; do
     if ! echo "$existing" | grep -qx "$secret"; then
@@ -159,46 +159,30 @@ ensure_optional_secrets() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Fly/Depot uses current working directory as Docker build context.
 # Force repo root so Dockerfiles can COPY workspace files reliably.
 cd "$REPO_ROOT"
 
-echo "Ensuring Fly apps exist..."
-ensure_app "$SCRIPT_DIR/fly.backend.toml"
-ensure_app "$SCRIPT_DIR/fly.web.toml"
-ensure_app "$SCRIPT_DIR/fly.bot.toml"
+SERVER_CONFIG_PATH="$SCRIPT_DIR/server.toml"
+server_app_name=$(get_app_name "$SERVER_CONFIG_PATH")
 
-bot_app_name=$(get_app_name "$SCRIPT_DIR/fly.bot.toml")
-backend_app_name=$(get_app_name "$SCRIPT_DIR/fly.backend.toml")
-web_app_name=$(get_app_name "$SCRIPT_DIR/fly.web.toml")
+echo "Ensuring Fly app exists ($server_app_name)..."
+ensure_app "$SERVER_CONFIG_PATH"
 
-echo "Configuring backend secrets..."
-ensure_secrets "$backend_app_name" OPENAI_API_KEY TRACE_API_TOKEN
-ensure_optional_secrets "$backend_app_name" TURNSTILE_SECRET_KEY TURNSTILE_SITE_KEY
-run_env_validation fly-backend "$backend_app_name"
+echo "Configuring server secrets..."
+ensure_secrets "$server_app_name" INCIDENT_PSEUDONYMIZATION_SECRET
+ensure_optional_secrets "$server_app_name" TRACE_API_TOKEN TRACE_API_TOKEN_FILE LOCAL_DISCORD_NODES_CONFIG_PATH TURNSTILE_SECRET_KEY TURNSTILE_SITE_KEY DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_GUILD_IDS DISCORD_GUILD_ID DISCORD_USER_ID CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET BOT_PROFILE_ID BOT_PROFILE_DISPLAY_NAME BOT_PROFILE_PROMPT_OVERLAY_PATH BOT_PROFILE_MENTION_ALIASES
+run_env_validation fly-server "$server_app_name"
 
-echo "Configuring bot secrets..."
-ensure_secrets "$bot_app_name" DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_GUILD_ID OPENAI_API_KEY DISCORD_USER_ID INCIDENT_PSEUDONYMIZATION_SECRET TRACE_API_TOKEN
-ensure_optional_secrets "$bot_app_name" WEB_BASE_URL CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET
-run_env_validation fly-bot "$bot_app_name"
+echo "Deploying server..."
+fly deploy -c "$SERVER_CONFIG_PATH"
+echo "Scaling server to one instance..."
+fly scale count 1 -a "$server_app_name" -y
 
-echo "Deploying backend..."
-fly deploy -c "$SCRIPT_DIR/fly.backend.toml"
-echo "Scaling backend to one instance..."
-fly scale count 1 -a "$backend_app_name" -y
-echo "Deploying web..."
-fly deploy -c "$SCRIPT_DIR/fly.web.toml"
-echo "Scaling web to one instance..."
-fly scale count 1 -a "$web_app_name" -y
-echo "Deploying bot..."
-fly deploy -c "$SCRIPT_DIR/fly.bot.toml"
-
-echo "Scaling bot to one instance..."
-fly scale count 1 -a "$bot_app_name" -y
-
-if [[ -f "$SCRIPT_DIR/fly-start.sh" ]]; then
-  echo "Starting all apps..."
-  bash "$SCRIPT_DIR/fly-start.sh"
+if [[ -f "$SCRIPT_DIR/start.sh" ]]; then
+  echo "Starting server app..."
+  bash "$SCRIPT_DIR/start.sh"
 fi
+

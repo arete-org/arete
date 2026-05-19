@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-# Deploys backend/web/bot Fly apps, ensuring secrets are set and machines are running.
+# Deploys the canonical server Fly app, ensuring required secrets are set.
 
 if (-not (Get-Command fly -ErrorAction SilentlyContinue)) {
   Write-Host "Fly CLI is required. Install from https://fly.io/docs/flyctl/install/"
@@ -46,7 +46,7 @@ function Get-FlySecretNames {
 
 function Invoke-EnvValidation {
   param(
-    [ValidateSet('fly-backend', 'fly-bot')]
+    [ValidateSet('fly-server')]
     [string]$Target,
     [string]$AppName
   )
@@ -171,53 +171,35 @@ function Ensure-FlySecrets {
 }
 
 $configRoot = $PSScriptRoot
-$repoRoot = Resolve-Path (Join-Path $configRoot '..')
-$envPath = Join-Path $configRoot '..\.env'
+$repoRoot = Resolve-Path (Join-Path $configRoot '..\..')
+$envPath = Join-Path $configRoot '..\..\.env'
 
 Push-Location $repoRoot
 try {
-Write-Host "Ensuring Fly apps exist..."
-Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'fly.backend.toml')
-Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'fly.web.toml')
-Ensure-FlyApp -ConfigPath (Join-Path $configRoot 'fly.bot.toml')
+$serverConfigPath = Join-Path $configRoot 'server.toml'
+$serverAppName = Get-FlyAppName -ConfigPath $serverConfigPath
 
-$botAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.bot.toml')
-$backendAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.backend.toml')
-$webAppName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'fly.web.toml')
+Write-Host "Ensuring Fly app exists ($serverAppName)..."
+Ensure-FlyApp -ConfigPath $serverConfigPath
 
-Write-Host "Configuring backend secrets..."
-Ensure-FlySecrets -AppName $backendAppName `
-  -RequiredSecrets @('OPENAI_API_KEY', 'TRACE_API_TOKEN') `
-  -OptionalSecrets @('TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY') `
+Write-Host "Configuring server secrets..."
+Ensure-FlySecrets -AppName $serverAppName `
+  -RequiredSecrets @('INCIDENT_PSEUDONYMIZATION_SECRET') `
+  -OptionalSecrets @('TRACE_API_TOKEN', 'TRACE_API_TOKEN_FILE', 'LOCAL_DISCORD_NODES_CONFIG_PATH', 'TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_IDS', 'DISCORD_GUILD_ID', 'DISCORD_USER_ID', 'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'BOT_PROFILE_ID', 'BOT_PROFILE_DISPLAY_NAME', 'BOT_PROFILE_PROMPT_OVERLAY_PATH', 'BOT_PROFILE_MENTION_ALIASES') `
   -EnvPath $envPath
-Invoke-EnvValidation -Target 'fly-backend' -AppName $backendAppName
+Invoke-EnvValidation -Target 'fly-server' -AppName $serverAppName
 
-Write-Host "Configuring bot secrets..."
-Ensure-FlySecrets -AppName $botAppName `
-  -RequiredSecrets @('DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID', 'OPENAI_API_KEY', 'DISCORD_USER_ID', 'INCIDENT_PSEUDONYMIZATION_SECRET', 'TRACE_API_TOKEN') `
-  -OptionalSecrets @('WEB_BASE_URL', 'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET') `
-  -EnvPath $envPath
-Invoke-EnvValidation -Target 'fly-bot' -AppName $botAppName
+Write-Host "Deploying server..."
+fly deploy -c $serverConfigPath
+Write-Host "Scaling server to one instance..."
+fly scale count 1 -a $serverAppName -y
 
-Write-Host "Deploying backend..."
-fly deploy -c (Join-Path $configRoot 'fly.backend.toml')
-Write-Host "Scaling backend to one instance..."
-fly scale count 1 -a $backendAppName -y
-Write-Host "Deploying web..."
-fly deploy -c (Join-Path $configRoot 'fly.web.toml')
-Write-Host "Scaling web to one instance..."
-fly scale count 1 -a $webAppName -y
-Write-Host "Deploying bot..."
-fly deploy -c (Join-Path $configRoot 'fly.bot.toml')
-
-Write-Host "Scaling bot to one instance..."
-fly scale count 1 -a $botAppName -y
-
-$startScript = Join-Path $configRoot 'fly-start.ps1'
+$startScript = Join-Path $configRoot 'start.ps1'
 if (Test-Path $startScript) {
-  Write-Host "Starting all apps..."
+  Write-Host "Starting server app..."
   & $startScript
 }
 } finally {
   Pop-Location
 }
+

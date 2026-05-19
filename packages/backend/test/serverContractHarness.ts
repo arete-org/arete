@@ -16,6 +16,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 
 type StartBackendServerContractHarnessOptions = {
     envOverrides?: Record<string, string>;
+    staticFixtureMode?: 'create' | 'none';
 };
 
 type StaticFixture = {
@@ -23,6 +24,10 @@ type StaticFixture = {
     indexWasCreated: boolean;
     createdAssetPath: string;
     createdIndexPath: string | null;
+    cleanup: () => Promise<void>;
+};
+
+type StaticSuppression = {
     cleanup: () => Promise<void>;
 };
 
@@ -130,6 +135,40 @@ const ensureStaticFixture = async (
     };
 };
 
+const suppressStaticIndex = async (repoRoot: string): Promise<StaticSuppression> => {
+    const distDir = path.join(repoRoot, 'packages/web/dist');
+    const indexPath = path.join(distDir, 'index.html');
+    const backupPath = path.join(
+        distDir,
+        `index.html.server-contract-${randomUUID()}.bak`
+    );
+
+    await fs.mkdir(distDir, { recursive: true });
+    const indexExists = await fs
+        .stat(indexPath)
+        .then((stats) => stats.isFile())
+        .catch(() => false);
+    if (!indexExists) {
+        return {
+            cleanup: async () => undefined,
+        };
+    }
+
+    await fs.rename(indexPath, backupPath);
+    return {
+        cleanup: async () => {
+            const backupExists = await fs
+                .stat(backupPath)
+                .then((stats) => stats.isFile())
+                .catch(() => false);
+            if (!backupExists) {
+                return;
+            }
+            await fs.rename(backupPath, indexPath);
+        },
+    };
+};
+
 const waitForHttpReady = async (
     baseUrl: string,
     child: ChildProcess
@@ -214,9 +253,17 @@ const stopChildProcess = async (child: ChildProcess): Promise<void> => {
 
 export const startBackendServerContractHarness = async ({
     envOverrides = {},
+    staticFixtureMode = 'create',
 }: StartBackendServerContractHarnessOptions = {}): Promise<BackendServerContractHarness> => {
     const repoRoot = getRepoRoot();
-    const staticFixture = await ensureStaticFixture(repoRoot);
+    const staticFixture =
+        staticFixtureMode === 'create'
+            ? await ensureStaticFixture(repoRoot)
+            : null;
+    const staticSuppression =
+        staticFixtureMode === 'none'
+            ? await suppressStaticIndex(repoRoot)
+            : null;
     const port = await reserveFreePort();
     const dataDir = await fs.mkdtemp(
         path.join(os.tmpdir(), 'footnote-server-contract-data-')
@@ -260,7 +307,8 @@ export const startBackendServerContractHarness = async ({
         await waitForHttpReady(baseUrl, child);
     } catch (error) {
         await stopChildProcess(child).catch(() => undefined);
-        await staticFixture.cleanup().catch(() => undefined);
+        await staticFixture?.cleanup().catch(() => undefined);
+        await staticSuppression?.cleanup().catch(() => undefined);
         await fs
             .rm(dataDir, { recursive: true, force: true })
             .catch(() => undefined);
@@ -283,8 +331,10 @@ export const startBackendServerContractHarness = async ({
         host: TEST_HOST,
         port,
         staticFixture: {
-            routePath: staticFixture.routePath,
-            indexWasCreated: staticFixture.indexWasCreated,
+            routePath:
+                staticFixture?.routePath ??
+                '/__server-contract-static-disabled__.js',
+            indexWasCreated: staticFixture?.indexWasCreated ?? false,
         },
         stop: async () => {
             let stopError: unknown = null;
@@ -297,9 +347,17 @@ export const startBackendServerContractHarness = async ({
             }
 
             try {
-                await staticFixture.cleanup();
+                await staticFixture?.cleanup();
             } catch (error) {
                 cleanupError = error;
+            }
+
+            try {
+                await staticSuppression?.cleanup();
+            } catch (error) {
+                if (!cleanupError) {
+                    cleanupError = error;
+                }
             }
 
             try {

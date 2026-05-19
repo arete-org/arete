@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Starts machines for backend/web/bot apps (safe restart after stop).
+# Starts machines for the canonical server app (safe restart after stop).
 
 get_app_name() {
   local config_path="$1"
@@ -35,13 +35,8 @@ start_machines() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-backend_app=$(get_app_name "$SCRIPT_DIR/fly.backend.toml")
-web_app=$(get_app_name "$SCRIPT_DIR/fly.web.toml")
-bot_app=$(get_app_name "$SCRIPT_DIR/fly.bot.toml")
+server_app=$(get_app_name "$SCRIPT_DIR/server.toml")
 
-echo "Restarting backend ($backend_app)..."
-start_machines "$backend_app"
-echo "Restarting web ($web_app)..."
-start_machines "$web_app"
-echo "Restarting bot ($bot_app)..."
-start_machines "$bot_app"
+echo "Restarting server ($server_app)..."
+start_machines "$server_app"
+

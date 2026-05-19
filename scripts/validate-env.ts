@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { envSpecByKey } from '../packages/config-spec/src/env-spec';
 import { logger } from '../packages/discord-bot/src/utils/logger';
 
-type ValidationTarget = 'local-dev' | 'fly-backend' | 'fly-bot';
+type ValidationTarget = 'local-dev' | 'server' | 'fly-server';
 
 type ValidationProfile = {
     required: string[];
@@ -21,8 +21,8 @@ type ValidationProfile = {
 
 const TARGETS = new Set<ValidationTarget>([
     'local-dev',
-    'fly-backend',
-    'fly-bot',
+    'server',
+    'fly-server',
 ]);
 
 const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
@@ -30,24 +30,12 @@ const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
         required: [],
         warnings: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
     },
-    'fly-backend': {
-        required: [
-            'OPENAI_API_KEY',
-            'TRACE_API_TOKEN',
-            'INCIDENT_PSEUDONYMIZATION_SECRET',
-        ],
+    server: {
+        required: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
         warnings: [],
     },
-    'fly-bot': {
-        required: [
-            'DISCORD_TOKEN',
-            'DISCORD_CLIENT_ID',
-            'DISCORD_GUILD_ID',
-            'OPENAI_API_KEY',
-            'DISCORD_USER_ID',
-            'INCIDENT_PSEUDONYMIZATION_SECRET',
-            'TRACE_API_TOKEN',
-        ],
+    'fly-server': {
+        required: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
         warnings: [],
     },
 };
@@ -209,6 +197,30 @@ const assertKnownKeys = (keys: string[]): void => {
     }
 };
 
+const hasConfiguredInferenceProvider = (
+    envSnapshot: Map<string, string>,
+    assumedPresent: Set<string>
+): boolean => {
+    const openAiKey = envSnapshot.get('OPENAI_API_KEY');
+    if (
+        (typeof openAiKey === 'string' && openAiKey.trim().length > 0) ||
+        assumedPresent.has('OPENAI_API_KEY')
+    ) {
+        return true;
+    }
+
+    const ollamaBaseUrl = envSnapshot.get('OLLAMA_BASE_URL');
+    if (
+        (typeof ollamaBaseUrl === 'string' &&
+            ollamaBaseUrl.trim().length > 0) ||
+        assumedPresent.has('OLLAMA_BASE_URL')
+    ) {
+        return true;
+    }
+
+    return false;
+};
+
 const validate = (): void => {
     const { target, assumedPresent } = parseArgs();
     const profile = validationProfiles[target];
@@ -247,6 +259,18 @@ const validate = (): void => {
         );
         for (const key of missingWarnings) {
             logger.warn(`- ${key}`);
+        }
+    }
+
+    if (target === 'server' || target === 'fly-server') {
+        const hasProvider = hasConfiguredInferenceProvider(
+            envSnapshot,
+            assumedPresent
+        );
+        if (!hasProvider) {
+            logger.warn(
+                `[validate-env] ${target} no inference provider is configured. Server startup is allowed, but model-dependent features (/api/chat, image, voice generation) will return setup-required errors until OPENAI_API_KEY or OLLAMA_BASE_URL is configured.`
+            );
         }
     }
 

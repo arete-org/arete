@@ -1,0 +1,19 @@
+name: footnote-server
+
+services:
+    server:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.server
+        env_file:
+            - ../.env
+        environment:
+            PORT: '3000'
+        ports:
+            - '8080:3000'
+        volumes:
+            - footnote-data:/data
+        restart: unless-stopped
+
+volumes:
+    footnote-data:
