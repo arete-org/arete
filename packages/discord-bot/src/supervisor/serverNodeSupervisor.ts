@@ -8,9 +8,13 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { logger } from '../utils/logger.js';
 import {
-    loadLocalNodeConfig,
+    parseLocalNodeDefinitions,
+    resolveLocalNodeDefinitions,
+    type LocalNodeDefinition,
     type LocalNodeRuntimeConfig,
 } from './localNodesConfig.js';
 import {
@@ -25,6 +29,11 @@ const BACKEND_ENTRYPOINT = '/usr/local/bin/backend-entrypoint.sh';
 const DEFAULT_BACKEND_PORT = '3000';
 const NODE_RESTART_DELAY_MS = 1000;
 const PROCESS_STOP_TIMEOUT_MS = 10_000;
+const DEFAULT_SERVER_SETTINGS_PATH = '/data/config/footnote.server.yaml';
+
+type YamlModule = { load(input: string): unknown };
+const require = createRequire(import.meta.url);
+const yaml = require('js-yaml') as YamlModule;
 
 type NodeProcessState = {
     config: LocalNodeRuntimeConfig;
@@ -51,6 +60,65 @@ const resolveBackendBaseUrl = (env: NodeJS.ProcessEnv): string => {
         return configured.replace(/\/+$/, '');
     }
     return `http://localhost:${normalizePort(env.PORT)}`;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null;
+
+const loadCanonicalLocalNodeDefinitions = (
+    env: NodeJS.ProcessEnv
+): LocalNodeDefinition[] | null => {
+    if (typeof env.LOCAL_DISCORD_NODES_CONFIG_PATH === 'string') {
+        logger.warn(
+            'LOCAL_DISCORD_NODES_CONFIG_PATH is unsupported and ignored. Define local nodes directly in footnote.server.yaml under settings.localNodes.'
+        );
+    }
+
+    const settingsPath =
+        env.FOOTNOTE_SERVER_SETTINGS_PATH?.trim() ||
+        DEFAULT_SERVER_SETTINGS_PATH;
+    try {
+        const raw = fs.readFileSync(settingsPath, 'utf8');
+        const parsed = yaml.load(raw);
+        if (!isRecord(parsed) || !isRecord(parsed.settings)) {
+            return [];
+        }
+        const localNodes = parsed.settings.localNodes;
+        if (Array.isArray(localNodes)) {
+            throw new Error(
+                'settings.localNodes must be an object. Use settings.localNodes.nodes for node definitions.'
+            );
+        }
+        if (isRecord(localNodes)) {
+            if ('configPath' in localNodes) {
+                throw new Error(
+                    'settings.localNodes.configPath is removed. Define nodes directly under settings.localNodes.nodes.'
+                );
+            }
+            if (Array.isArray(localNodes.nodes)) {
+                return parseLocalNodeDefinitions(localNodes.nodes);
+            }
+            if (localNodes.nodes !== undefined) {
+                throw new Error(
+                    'settings.localNodes.nodes must be an array when provided.'
+                );
+            }
+            return [];
+        }
+        return [];
+    } catch (error) {
+        const nodeError = error as NodeJS.ErrnoException;
+        if (nodeError.code === 'ENOENT') {
+            logger.warn(
+                `Server settings YAML not found at ${settingsPath}; starting with no configured local nodes.`
+            );
+            return null;
+        }
+        throw new Error(
+            `Invalid server settings YAML at ${settingsPath}: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error }
+        );
+    }
 };
 
 const stopChildProcess = async (
@@ -127,17 +195,25 @@ class ServerNodeSupervisor {
     constructor(private readonly env: NodeJS.ProcessEnv = process.env) {}
 
     async start(): Promise<void> {
-        const loadResult = loadLocalNodeConfig({ env: this.env });
+        const localNodeDefinitions = loadCanonicalLocalNodeDefinitions(
+            this.env
+        );
+        const resolvedNodes =
+            localNodeDefinitions === null
+                ? { activeNodes: [], disabledNodes: [] }
+                : resolveLocalNodeDefinitions(localNodeDefinitions, this.env);
         const backendBaseUrl = resolveBackendBaseUrl(this.env);
 
         logger.info('local_nodes_config_status', {
-            status: loadResult.status,
-            configPath: loadResult.configPath,
-            activeNodeCount: loadResult.activeNodes.length,
-            disabledNodeCount: loadResult.disabledNodes.length,
+            status: localNodeDefinitions === null ? 'missing' : 'configured',
+            configPath:
+                this.env.FOOTNOTE_SERVER_SETTINGS_PATH?.trim() ??
+                DEFAULT_SERVER_SETTINGS_PATH,
+            activeNodeCount: resolvedNodes.activeNodes.length,
+            disabledNodeCount: resolvedNodes.disabledNodes.length,
         });
 
-        for (const disabledNode of loadResult.disabledNodes) {
+        for (const disabledNode of resolvedNodes.disabledNodes) {
             logger.info('local_node_disabled', {
                 nodeId: disabledNode.id,
                 reason: disabledNode.reason,
@@ -145,20 +221,22 @@ class ServerNodeSupervisor {
             });
         }
 
-        if (loadResult.activeNodes.length === 0) {
+        if (resolvedNodes.activeNodes.length === 0) {
             logger.info('no_local_nodes_configured', {
                 reason:
-                    loadResult.status === 'missing'
+                    localNodeDefinitions === null
                         ? 'config_missing'
                         : 'no_launchable_nodes',
-                configPath: loadResult.configPath,
+                configPath:
+                    this.env.FOOTNOTE_SERVER_SETTINGS_PATH?.trim() ??
+                    DEFAULT_SERVER_SETTINGS_PATH,
             });
         }
 
         this.installSignalHandlers();
         this.startBackendProcess();
 
-        for (const nodeConfig of loadResult.activeNodes) {
+        for (const nodeConfig of resolvedNodes.activeNodes) {
             const state: NodeProcessState = {
                 config: nodeConfig,
                 child: null,

@@ -70,6 +70,8 @@ type ParsedNodeConfig = {
     profile: LocalNodeProfileConfig;
 };
 
+export type LocalNodeDefinition = ParsedNodeConfig;
+
 export type LocalNodeResolvedCredentials = {
     discordToken: string;
     discordClientId: string;
@@ -227,7 +229,9 @@ const parseCredentialReferences = (
     return credentialReferences;
 };
 
-const parseNodes = (rawNodes: unknown): ParsedNodeConfig[] => {
+export const parseLocalNodeDefinitions = (
+    rawNodes: unknown
+): ParsedNodeConfig[] => {
     if (!Array.isArray(rawNodes)) {
         throw new Error('nodes must be an array.');
     }
@@ -291,7 +295,7 @@ const parseRawConfig = (contents: string): ParsedNodeConfig[] => {
         );
     }
 
-    return parseNodes(rawParsed.nodes);
+    return parseLocalNodeDefinitions(rawParsed.nodes);
 };
 
 const resolveEnvValue = (
@@ -477,6 +481,35 @@ const resolveRuntimeNode = (
     };
 };
 
+export const resolveLocalNodeDefinitions = (
+    parsedNodes: LocalNodeDefinition[],
+    env: NodeJS.ProcessEnv
+): {
+    activeNodes: LocalNodeRuntimeConfig[];
+    disabledNodes: LocalNodeDisabledConfig[];
+} => {
+    const activeNodes: LocalNodeRuntimeConfig[] = [];
+    const disabledNodes: LocalNodeDisabledConfig[] = [];
+
+    for (const parsedNode of parsedNodes) {
+        const resolved = resolveRuntimeNode(parsedNode, env);
+        if (resolved.kind === 'active') {
+            activeNodes.push(resolved.node);
+            continue;
+        }
+
+        if (resolved.node.required) {
+            throw new Error(
+                `Required local node "${resolved.node.id}" is not launchable (${resolved.node.reason}).`
+            );
+        }
+
+        disabledNodes.push(resolved.node);
+    }
+
+    return { activeNodes, disabledNodes };
+};
+
 /**
  * Loads server-local Discord node YAML config and resolves launchable node runtime settings.
  *
@@ -535,24 +568,10 @@ export const loadLocalNodeConfig = (
     }
 
     const parsedNodes = parseRawConfig(rawConfigText);
-    const activeNodes: LocalNodeRuntimeConfig[] = [];
-    const disabledNodes: LocalNodeDisabledConfig[] = [];
-
-    for (const parsedNode of parsedNodes) {
-        const resolved = resolveRuntimeNode(parsedNode, env);
-        if (resolved.kind === 'active') {
-            activeNodes.push(resolved.node);
-            continue;
-        }
-
-        if (resolved.node.required) {
-            throw new Error(
-                `Required local node "${resolved.node.id}" is not launchable (${resolved.node.reason}).`
-            );
-        }
-
-        disabledNodes.push(resolved.node);
-    }
+    const { activeNodes, disabledNodes } = resolveLocalNodeDefinitions(
+        parsedNodes,
+        env
+    );
 
     return {
         status: 'configured',

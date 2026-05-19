@@ -14,12 +14,14 @@ export {
     runtime,
 } from './env-factories.js';
 export {
+    envConfigSourceByKey,
     envDefaultValues,
     envEntries,
     envSpec,
     envSpecByKey,
 } from './env-spec.js';
 export type {
+    ConfigSource,
     EnvDefault,
     EnvLiteralValue,
     EnvOwner,

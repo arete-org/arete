@@ -22,6 +22,7 @@ import { buildTurnstileSection } from './sections/turnstile.js';
 import { buildVoltAgentSection } from './sections/voltagent.js';
 import { buildWebSection } from './sections/web.js';
 import type { RuntimeConfig, WarningSink } from './types.js';
+import { buildEffectiveConfigEnv, loadServerSettings } from './settings.js';
 
 /**
  * Builds the full backend config object from one env snapshot. Reading env
@@ -32,30 +33,32 @@ export const buildRuntimeConfig = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
 ): RuntimeConfig => {
-    const { runtime, server } = buildRuntimeSections(env, warn);
-    const openai = buildOpenAISection(env, warn);
-    const ollama = buildOllamaSection(env);
+    const { yamlSettings, yamlEnv } = loadServerSettings(env, warn);
+    const effectiveEnv = buildEffectiveConfigEnv(env, yamlEnv, warn);
+    const { runtime, server } = buildRuntimeSections(effectiveEnv, warn);
+    const openai = buildOpenAISection(effectiveEnv, warn);
+    const ollama = buildOllamaSection(effectiveEnv);
     const modelProfiles = buildModelProfilesSection(
-        env,
+        effectiveEnv,
         runtime.projectRoot,
         warn
     );
-    const voltagent = buildVoltAgentSection(env, warn);
-    const web = buildWebSection(env, warn);
+    const voltagent = buildVoltAgentSection(effectiveEnv, warn);
+    const web = buildWebSection(effectiveEnv, warn);
     const { reflect, trace, langfuseMetadataMirror, chatWorkflow } =
-        buildServiceSections(env, warn);
+        buildServiceSections(effectiveEnv, warn);
     const executionContractTrustGraph = buildExecutionContractTrustGraphSection(
-        env,
+        effectiveEnv,
         warn
     );
-    const turnstile = buildTurnstileSection(env, warn);
-    const rateLimits = buildRateLimitsSection(env, warn);
-    const storage = buildStorageSection(env, warn);
-    const logging = buildLoggingSection(env, warn);
-    const litestream = buildLitestreamSection(env);
-    const alerts = buildAlertsSection(env, warn);
+    const turnstile = buildTurnstileSection(effectiveEnv, warn);
+    const rateLimits = buildRateLimitsSection(effectiveEnv, warn);
+    const storage = buildStorageSection(effectiveEnv, warn);
+    const logging = buildLoggingSection(effectiveEnv, warn);
+    const litestream = buildLitestreamSection(effectiveEnv);
+    const alerts = buildAlertsSection(effectiveEnv, warn);
     const profile = readBotProfileConfig({
-        env,
+        env: effectiveEnv,
         projectRoot: runtime.projectRoot,
         warn,
     });
@@ -81,5 +84,8 @@ export const buildRuntimeConfig = (
         litestream,
         alerts,
         profile,
+        settings: {
+            localNodes: yamlSettings?.settings.localNodes ?? null,
+        },
     };
 };

@@ -27,6 +27,11 @@ export type EnvValueKind =
     | 'json';
 
 /**
+ * Canonical runtime source classification for server config values.
+ */
+export type ConfigSource = 'secret_env' | 'settings_yaml' | 'bootstrap_env';
+
+/**
  * Literal values that can be represented directly in the generated default map.
  */
 export type EnvLiteralValue =
@@ -67,4 +72,5 @@ export type EnvSpecEntry<TDefault extends EnvDefault = EnvDefault> = {
     example?: string;
     notes?: readonly string[];
     usedBy: readonly string[];
+    configSource?: ConfigSource;
 };

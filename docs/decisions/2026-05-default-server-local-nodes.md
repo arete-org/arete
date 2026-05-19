@@ -41,15 +41,16 @@ Local Discord nodes run as server-local child processes.
 
 ### 2.3 Local node config contract
 
-- config file only: `LOCAL_DISCORD_NODES_CONFIG_PATH` or default `/data/config/local-discord-nodes.yaml`
-- missing config file => fail-open with zero nodes and `no_local_nodes_configured` log
+- canonical file: `footnote.server.yaml` at `FOOTNOTE_SERVER_SETTINGS_PATH` (default `/data/config/footnote.server.yaml`)
+- local nodes key: `settings.localNodes.nodes`
+- missing canonical file => fail-open with zero nodes and `no_local_nodes_configured` log
 - required node missing config/credentials => startup failure
 - optional node missing config/credentials => disabled with explicit log reason
 
 Schema:
 
 - `version: 1`
-- `nodes[]`
+- `settings.localNodes.nodes[]`
     - `id`, `enabled`, `required`
     - `credentials` env-key references only
     - `profile` metadata (`id`, `displayName`, optional `overlayPath`, optional `mentionAliases`)

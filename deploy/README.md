@@ -54,11 +54,12 @@ Validate before deploy:
 
 ## Local Discord Node Configuration (Canonical)
 
-The server can supervise local Discord persona nodes from one YAML config file.
+The server can supervise local Discord persona nodes from canonical server settings YAML.
 
-- env key: `LOCAL_DISCORD_NODES_CONFIG_PATH` (optional)
-- default path: `/data/config/local-discord-nodes.yaml`
-- missing file: server boots with zero nodes and logs `no_local_nodes_configured`
+- settings path env key: `FOOTNOTE_SERVER_SETTINGS_PATH` (optional)
+- default server settings path: `/data/config/footnote.server.yaml`
+- local nodes key: `settings.localNodes.nodes`
+- missing `settings.localNodes.nodes`: server boots with zero nodes and logs `no_local_nodes_configured`
 
 Security model:
 
@@ -69,46 +70,21 @@ Example (`version: 1`):
 
 ```yaml
 version: 1
-nodes:
-    - id: footnote
-      required: true
-      credentials:
-          discordTokenEnv: FOOTNOTE_DISCORD_TOKEN
-          discordClientIdEnv: FOOTNOTE_DISCORD_CLIENT_ID
-          discordGuildIdsEnv: FOOTNOTE_DISCORD_GUILD_IDS
-          discordUserIdEnv: FOOTNOTE_DISCORD_USER_ID
-          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
-      profile:
-          id: footnote
-          displayName: Footnote
-          mentionAliases: [footnote]
-
-    - id: danny
-      enabled: true
-      required: false
-      credentials:
-          discordTokenEnv: DANNY_DISCORD_TOKEN
-          discordClientIdEnv: DANNY_DISCORD_CLIENT_ID
-          discordGuildIdEnv: DANNY_DISCORD_GUILD_ID
-          discordUserIdEnv: DANNY_DISCORD_USER_ID
-          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
-      profile:
-          id: danny
-          displayName: Danny
-          overlayPath: /data/profiles/danny.md
-
-    - id: myuri
-      enabled: true
-      required: false
-      credentials:
-          discordTokenEnv: MYURI_DISCORD_TOKEN
-          discordClientIdEnv: MYURI_DISCORD_CLIENT_ID
-          discordGuildIdEnv: MYURI_DISCORD_GUILD_ID
-          discordUserIdEnv: MYURI_DISCORD_USER_ID
-          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
-      profile:
-          id: myuri
-          displayName: Myuri
+settings:
+    localNodes:
+        nodes:
+            - id: footnote
+              required: true
+              credentials:
+                  discordTokenEnv: FOOTNOTE_DISCORD_TOKEN
+                  discordClientIdEnv: FOOTNOTE_DISCORD_CLIENT_ID
+                  discordGuildIdsEnv: FOOTNOTE_DISCORD_GUILD_IDS
+                  discordUserIdEnv: FOOTNOTE_DISCORD_USER_ID
+                  incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
+              profile:
+                  id: footnote
+                  displayName: Footnote
+                  mentionAliases: [footnote]
 ```
 
 Behavior:

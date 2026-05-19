@@ -227,5 +227,21 @@ export type RuntimeConfig = {
             to: string[];
         };
     };
+    settings: {
+        localNodes: {
+            nodes: Array<{
+                id: string;
+                enabled?: boolean;
+                required?: boolean;
+                credentials: Record<string, string | undefined>;
+                profile: {
+                    id: string;
+                    displayName: string;
+                    overlayPath?: string;
+                    mentionAliases?: string[];
+                };
+            }>;
+        } | null;
+    };
     profile: BotProfileConfig;
 };

@@ -121,7 +121,7 @@ For production-like installs, pin to an explicit version tag:
 `ghcr.io/footnote-ai/footnote:<version>`
 
 For non-throwaway installs, `/data` must be durable because Footnote stores persistence and generated trace token state there.
-The server can supervise local Discord persona nodes from YAML; if `LOCAL_DISCORD_NODES_CONFIG_PATH` is unset or missing, the server starts with zero local nodes (fail-open).
+The server can supervise local Discord persona nodes from `footnote.server.yaml` under `settings.localNodes.nodes`; if missing, the server starts with zero local nodes (fail-open).
 If no inference provider is configured yet, server startup still succeeds; model-dependent requests return setup guidance until `OPENAI_API_KEY` or `OLLAMA_BASE_URL` is configured.
 
 ### Compose-based local server run

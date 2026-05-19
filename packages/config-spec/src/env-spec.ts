@@ -384,11 +384,27 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Optional server-local path to the Discord nodes YAML file. Defaults to /data/config/local-discord-nodes.yaml when unset.',
+            'Legacy standalone discord-bot path to local nodes YAML. Server runtime ignores this key.',
         defaultValue: literal('/data/config/local-discord-nodes.yaml'),
+        usedBy: ['packages/discord-bot/src/supervisor/localNodesConfig.ts'],
+    }),
+
+    defineEnv({
+        key: 'FOOTNOTE_SERVER_SETTINGS_PATH',
+        owner: 'shared',
+        stage: 'bootstrap',
+        section: 'runtime',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional server-local path to canonical runtime settings YAML. Defaults to /data/config/footnote.server.yaml when unset.',
+        defaultValue: literal('/data/config/footnote.server.yaml'),
         usedBy: [
-            'packages/discord-bot/src/supervisor/localNodesConfig.ts',
-            'deploy/server-entrypoint.sh',
+            'packages/backend/src/config/settings.ts',
+            'packages/discord-bot/src/supervisor/serverNodeSupervisor.ts',
+            'deploy/fly/deploy.sh',
+            'deploy/fly/deploy.ps1',
         ],
     }),
 
@@ -2586,3 +2602,28 @@ export const envDefaultValues = Object.fromEntries(
         )
         .map((entry) => [entry.key, entry.defaultValue.value])
 ) as EnvDefaultValues;
+
+const BOOTSTRAP_ENV_ALLOWLIST = new Set<string>([
+    'FOOTNOTE_SERVER_SETTINGS_PATH',
+    'NODE_ENV',
+    'FLY_APP_NAME',
+    'PROMPT_CONFIG_PATH',
+    'TRACE_API_TOKEN_FILE',
+]);
+
+/**
+ * Runtime source classification for each env key.
+ */
+export const envConfigSourceByKey = Object.fromEntries(
+    envEntries.map((entry) => {
+        const configSource = entry.secret
+            ? 'secret_env'
+            : BOOTSTRAP_ENV_ALLOWLIST.has(entry.key)
+              ? 'bootstrap_env'
+              : 'settings_yaml';
+        return [entry.key, configSource];
+    })
+) as Record<
+    EnvEntries[number]['key'],
+    'secret_env' | 'settings_yaml' | 'bootstrap_env'
+>;
