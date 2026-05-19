@@ -76,7 +76,7 @@ OLLAMA_API_KEY=...
 OPENAI_API_KEY=...
 ```
 
-Required credentials for Discord bot:
+Discord credentials are only required when you enable local Discord persona nodes:
 
 ```yaml
 DISCORD_TOKEN=...
@@ -89,7 +89,7 @@ Start with section `00) Start Here (minimum to run)`, then fill optional section
 
 ### 3) Launch
 
-Start all services:
+Start all services (including the standalone local Discord bot process):
 
 ```bash
 pnpm start:all
@@ -122,6 +122,7 @@ For production-like installs, pin to an explicit version tag:
 
 For non-throwaway installs, `/data` must be durable because Footnote stores persistence and generated trace token state there.
 The server can supervise local Discord persona nodes from YAML; if `LOCAL_DISCORD_NODES_CONFIG_PATH` is unset or missing, the server starts with zero local nodes (fail-open).
+If no inference provider is configured yet, server startup still succeeds; model-dependent requests return setup guidance until `OPENAI_API_KEY` or `OLLAMA_BASE_URL` is configured.
 
 ### Compose-based local server run
 

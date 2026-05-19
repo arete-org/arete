@@ -31,11 +31,11 @@ const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
         warnings: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
     },
     server: {
-        required: ['OPENAI_API_KEY', 'INCIDENT_PSEUDONYMIZATION_SECRET'],
+        required: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
         warnings: ['LOCAL_DISCORD_NODES_CONFIG_PATH'],
     },
     'fly-server': {
-        required: ['OPENAI_API_KEY', 'INCIDENT_PSEUDONYMIZATION_SECRET'],
+        required: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
         warnings: ['LOCAL_DISCORD_NODES_CONFIG_PATH'],
     },
 };
@@ -197,6 +197,30 @@ const assertKnownKeys = (keys: string[]): void => {
     }
 };
 
+const hasConfiguredInferenceProvider = (
+    envSnapshot: Map<string, string>,
+    assumedPresent: Set<string>
+): boolean => {
+    const openAiKey = envSnapshot.get('OPENAI_API_KEY');
+    if (
+        (typeof openAiKey === 'string' && openAiKey.trim().length > 0) ||
+        assumedPresent.has('OPENAI_API_KEY')
+    ) {
+        return true;
+    }
+
+    const ollamaBaseUrl = envSnapshot.get('OLLAMA_BASE_URL');
+    if (
+        (typeof ollamaBaseUrl === 'string' &&
+            ollamaBaseUrl.trim().length > 0) ||
+        assumedPresent.has('OLLAMA_BASE_URL')
+    ) {
+        return true;
+    }
+
+    return false;
+};
+
 const validate = (): void => {
     const { target, assumedPresent } = parseArgs();
     const profile = validationProfiles[target];
@@ -235,6 +259,18 @@ const validate = (): void => {
         );
         for (const key of missingWarnings) {
             logger.warn(`- ${key}`);
+        }
+    }
+
+    if (target === 'server' || target === 'fly-server') {
+        const hasProvider = hasConfiguredInferenceProvider(
+            envSnapshot,
+            assumedPresent
+        );
+        if (!hasProvider) {
+            logger.warn(
+                `[validate-env] ${target} no inference provider is configured. Server startup is allowed, but model-dependent features (/api/chat, image, voice generation) will return setup-required errors until OPENAI_API_KEY or OLLAMA_BASE_URL is configured.`
+            );
         }
     }
 

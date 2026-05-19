@@ -48,7 +48,10 @@ const DownloadPage = (): JSX.Element => {
                         owns provenance/traces, and supervises local Discord
                         persona nodes.
                     </p>
-                    <p>Container image: `ghcr.io/footnote-ai/footnote`</p>
+                    <p>
+                        Container image:{' '}
+                        <code>ghcr.io/footnote-ai/footnote</code>
+                    </p>
                     <pre>
                         <code>{dockerCommand}</code>
                     </pre>
