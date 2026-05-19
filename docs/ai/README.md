@@ -44,7 +44,7 @@ When relevant:
     - Run when you change API boundary code, `@api.operationId`/`@api.path` annotations, or `docs/api/openapi.yaml` `x-codeRefs`.
 - `pnpm review`
     - Run for cross-cutting changes (multiple packages, shared contracts, validators, or policy-sensitive paths).
-- `docker compose -f deploy/compose.yml build`
+- `docker compose -f deploy/compose.server.yml build`
     - Run when a change can affect deployable runtime packaging (service startup, build/deploy config, runtime dependencies).
 
 ## Refactor/Design Example Lookup

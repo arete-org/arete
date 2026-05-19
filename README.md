@@ -103,16 +103,32 @@ pnpm dev
 
 Open the web app at `http://localhost:8080`.
 
-### 4) Docker server (single container)
+### Run with Docker
 
-Most people run the Footnote server. The server can include one local Discord node for simple self-hosting.
+The canonical install path is the Footnote server container image:
+`ghcr.io/footnote-ai/footnote`
+
+```sh
+docker run \
+  --name footnote \
+  -p 8080:3000 \
+  --env-file .env \
+  -v footnote-data:/data \
+  ghcr.io/footnote-ai/footnote:latest
+```
+
+For production-like installs, pin to an explicit version tag:
+`ghcr.io/footnote-ai/footnote:<version>`
+
+For non-throwaway installs, `/data` must be durable because Footnote stores persistence and generated trace token state there.
+The server can supervise local Discord persona nodes from YAML; if `LOCAL_DISCORD_NODES_CONFIG_PATH` is unset or missing, the server starts with zero local nodes (fail-open).
+
+### Compose-based local server run
 
 ```bash
 pnpm validate-env --target server
 docker compose -f deploy/compose.server.yml up --build
 ```
-
-Use a durable `/data` volume for non-throwaway deployments.
 
 ### Advanced configuration
 

@@ -800,6 +800,46 @@
                     "author": "Maintainer"
                 }
             ]
+        },
+        {
+            "title": "Server and Local Nodes",
+            "purpose": "Define the canonical server-container deployment model and operator expectations for supervised local Discord nodes.",
+            "parent": "Foundations",
+            "entrypoints": [
+                "deploy/Dockerfile.server",
+                "deploy/server-entrypoint.sh",
+                "deploy/compose.server.yml",
+                "deploy/traceTokenResolver.mjs",
+                "packages/discord-bot/src/supervisor",
+                "README.md",
+                "deploy/README.md"
+            ],
+            "page_notes": [
+                {
+                    "author": "Maintainer",
+                    "content": "Canonical deployment is one Footnote server container that serves web/API and supervises local Discord persona nodes."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Server ownership: orchestration, trace/provenance, auth, incident/review semantics, cost accounting, and persistence."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Local nodes are supervised adapters for Discord personas; backend logic remains server-authoritative."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Image distribution: ghcr.io/footnote-ai/footnote. Show docker run with durable /data and configured env/secrets."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Trace token resolver order is TRACE_API_TOKEN > TRACE_API_TOKEN_FILE > /data/secrets/trace-api-token, and token values are never logged."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Not yet supported as a default path: provider-specific one-click deployment flows."
+                }
+            ]
         }
     ]
 }
