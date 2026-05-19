@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Starts machines for backend/web/bot apps without recreating them.
+# Starts machines for the canonical server app without recreating them.
 
 get_app_name() {
   local config_path="$1"
@@ -21,25 +21,11 @@ get_machine_ids() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-backend_app=$(get_app_name "$SCRIPT_DIR/backend.toml")
-web_app=$(get_app_name "$SCRIPT_DIR/web.toml")
-bot_app=$(get_app_name "$SCRIPT_DIR/bot.toml")
+server_app=$(get_app_name "$SCRIPT_DIR/server.toml")
 
-echo "Starting backend ($backend_app)..."
-for id in $(get_machine_ids "$backend_app"); do
+echo "Starting server ($server_app)..."
+for id in $(get_machine_ids "$server_app"); do
   echo "Starting machine $id..."
-  fly machine start "$id" -a "$backend_app" >/dev/null
-done
-
-echo "Starting web ($web_app)..."
-for id in $(get_machine_ids "$web_app"); do
-  echo "Starting machine $id..."
-  fly machine start "$id" -a "$web_app" >/dev/null
-done
-
-echo "Starting bot ($bot_app)..."
-for id in $(get_machine_ids "$bot_app"); do
-  echo "Starting machine $id..."
-  fly machine start "$id" -a "$bot_app" >/dev/null
+  fly machine start "$id" -a "$server_app" >/dev/null
 done
 

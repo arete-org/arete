@@ -376,6 +376,23 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'LOCAL_DISCORD_NODES_CONFIG_PATH',
+        owner: 'shared',
+        stage: 'runtime',
+        section: 'runtime',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional server-local path to the Discord nodes YAML file. Defaults to /data/config/local-discord-nodes.yaml when unset.',
+        defaultValue: literal('/data/config/local-discord-nodes.yaml'),
+        usedBy: [
+            'packages/discord-bot/src/supervisor/localNodesConfig.ts',
+            'deploy/server-entrypoint.sh',
+        ],
+    }),
+
+    defineEnv({
         key: 'TRACE_API_TOKEN',
         owner: 'shared',
         stage: 'runtime',
@@ -389,6 +406,19 @@ export const envEntries = [
             'packages/backend/src/config.ts',
             'packages/discord-bot/src/config.ts',
         ],
+    }),
+    defineEnv({
+        key: 'TRACE_API_TOKEN_FILE',
+        owner: 'shared',
+        stage: 'runtime',
+        section: 'trace',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional file path used to load the trace API token before fallback token generation.',
+        defaultValue: literal('/data/secrets/trace-api-token'),
+        usedBy: ['deploy/traceTokenResolver.mjs'],
     }),
     defineEnv({
         key: 'VOLTAGENT_PUBLIC_KEY',

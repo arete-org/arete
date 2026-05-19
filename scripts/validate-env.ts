@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { envSpecByKey } from '../packages/config-spec/src/env-spec';
 import { logger } from '../packages/discord-bot/src/utils/logger';
 
-type ValidationTarget = 'local-dev' | 'fly-backend' | 'fly-bot' | 'server';
+type ValidationTarget = 'local-dev' | 'server' | 'fly-server';
 
 type ValidationProfile = {
     required: string[];
@@ -21,9 +21,8 @@ type ValidationProfile = {
 
 const TARGETS = new Set<ValidationTarget>([
     'local-dev',
-    'fly-backend',
-    'fly-bot',
     'server',
+    'fly-server',
 ]);
 
 const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
@@ -31,36 +30,13 @@ const validationProfiles: Record<ValidationTarget, ValidationProfile> = {
         required: [],
         warnings: ['INCIDENT_PSEUDONYMIZATION_SECRET'],
     },
-    'fly-backend': {
-        required: [
-            'OPENAI_API_KEY',
-            'TRACE_API_TOKEN',
-            'INCIDENT_PSEUDONYMIZATION_SECRET',
-        ],
-        warnings: [],
-    },
-    'fly-bot': {
-        required: [
-            'DISCORD_TOKEN',
-            'DISCORD_CLIENT_ID',
-            'DISCORD_GUILD_ID',
-            'OPENAI_API_KEY',
-            'DISCORD_USER_ID',
-            'INCIDENT_PSEUDONYMIZATION_SECRET',
-            'TRACE_API_TOKEN',
-        ],
-        warnings: [],
-    },
     server: {
-        required: [
-            'DISCORD_TOKEN',
-            'DISCORD_CLIENT_ID',
-            'DISCORD_GUILD_ID',
-            'OPENAI_API_KEY',
-            'DISCORD_USER_ID',
-            'INCIDENT_PSEUDONYMIZATION_SECRET',
-        ],
-        warnings: [],
+        required: ['OPENAI_API_KEY', 'INCIDENT_PSEUDONYMIZATION_SECRET'],
+        warnings: ['LOCAL_DISCORD_NODES_CONFIG_PATH'],
+    },
+    'fly-server': {
+        required: ['OPENAI_API_KEY', 'INCIDENT_PSEUDONYMIZATION_SECRET'],
+        warnings: ['LOCAL_DISCORD_NODES_CONFIG_PATH'],
     },
 };
 

@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-# Starts machines for backend/web/bot apps without recreating them.
+# Starts machines for the canonical server app without recreating them.
 
 function Get-FlyAppName {
   param([string]$ConfigPath)
@@ -26,23 +26,11 @@ function Get-MachineIds {
 }
 
 $configRoot = $PSScriptRoot
-$backendApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'backend.toml')
-$webApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'web.toml')
-$botApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'bot.toml')
+$serverApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'server.toml')
 
-Write-Host "Starting backend ($backendApp)..."
-foreach ($id in Get-MachineIds -AppName $backendApp) {
+Write-Host "Starting server ($serverApp)..."
+foreach ($id in Get-MachineIds -AppName $serverApp) {
   Write-Host "Starting machine $id..."
-  fly machine start $id -a $backendApp | Out-Null
-}
-Write-Host "Starting web ($webApp)..."
-foreach ($id in Get-MachineIds -AppName $webApp) {
-  Write-Host "Starting machine $id..."
-  fly machine start $id -a $webApp | Out-Null
-}
-Write-Host "Starting bot ($botApp)..."
-foreach ($id in Get-MachineIds -AppName $botApp) {
-  Write-Host "Starting machine $id..."
-  fly machine start $id -a $botApp | Out-Null
+  fly machine start $id -a $serverApp | Out-Null
 }
 

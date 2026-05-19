@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Removes all Fly secrets from backend/web/bot apps.
+# Removes all Fly secrets from the canonical server app.
 
 get_app_name() {
   local config_path="$1"
@@ -20,23 +20,19 @@ get_secret_names() {
   fly secrets list -a "$app_name" 2>/dev/null | awk 'NR>1 {print $1}'
 }
 
-read -r -p "This will remove ALL Fly secrets for backend/web/bot apps. Type YES to continue: " confirm
+read -r -p "This will remove ALL Fly secrets for the server app. Type YES to continue: " confirm
 if [[ "$confirm" != "YES" ]]; then
   echo "Aborted."
   exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-backend_app=$(get_app_name "$SCRIPT_DIR/backend.toml")
-web_app=$(get_app_name "$SCRIPT_DIR/web.toml")
-bot_app=$(get_app_name "$SCRIPT_DIR/bot.toml")
+server_app=$(get_app_name "$SCRIPT_DIR/server.toml")
 
-for app in "$backend_app" "$web_app" "$bot_app"; do
-  echo "Clearing secrets for $app..."
-  secrets=$(get_secret_names "$app")
-  for secret in $secrets; do
-    echo "Removing $secret from $app..."
-    fly secrets unset "$secret" -a "$app" >/dev/null
-  done
- done
+echo "Clearing secrets for $server_app..."
+secrets=$(get_secret_names "$server_app")
+for secret in $secrets; do
+  echo "Removing $secret from $server_app..."
+  fly secrets unset "$secret" -a "$server_app" >/dev/null
+done
 

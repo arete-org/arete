@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-# Removes all Fly secrets from backend/web/bot apps.
+# Removes all Fly secrets from the canonical server app.
 
 function Get-FlyAppName {
   param([string]$ConfigPath)
@@ -22,25 +22,19 @@ function Get-FlySecrets {
   return $lines | ForEach-Object { ($_ -split '\s+')[0] }
 }
 
-$confirm = Read-Host "This will remove ALL Fly secrets for backend/web/bot apps. Type YES to continue"
+$confirm = Read-Host "This will remove ALL Fly secrets for the server app. Type YES to continue"
 if ($confirm -ne 'YES') {
   Write-Host "Aborted."
   exit 1
 }
 
 $configRoot = $PSScriptRoot
-$appNames = @(
-  (Get-FlyAppName -ConfigPath (Join-Path $configRoot 'backend.toml'))
-  (Get-FlyAppName -ConfigPath (Join-Path $configRoot 'web.toml'))
-  (Get-FlyAppName -ConfigPath (Join-Path $configRoot 'bot.toml'))
-)
+$appName = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'server.toml')
 
-foreach ($app in $appNames) {
-  Write-Host "Clearing secrets for $app..."
-  $secrets = Get-FlySecrets -AppName $app
-  foreach ($secret in $secrets) {
-    Write-Host "Removing $secret from $app..."
-    fly secrets unset $secret -a $app | Out-Null
-  }
+Write-Host "Clearing secrets for $appName..."
+$secrets = Get-FlySecrets -AppName $appName
+foreach ($secret in $secrets) {
+  Write-Host "Removing $secret from $appName..."
+  fly secrets unset $secret -a $appName | Out-Null
 }
 

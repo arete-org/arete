@@ -1,5 +1,5 @@
 /**
- * @description: Resolves the trace token for server-local-node topology with
+ * @description: Resolves the trace token for canonical server deployment with
  * deterministic precedence and persistent fallback token creation.
  * @footnote-scope: utility
  * @footnote-module: TraceTokenResolver

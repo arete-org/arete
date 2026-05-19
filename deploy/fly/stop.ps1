@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-# Stops machines for backend/web/bot apps without destroying them.
+# Stops machines for the canonical server app without destroying them.
 
 function Get-FlyAppName {
   param([string]$ConfigPath)
@@ -26,23 +26,11 @@ function Get-MachineIds {
 }
 
 $configRoot = $PSScriptRoot
-$backendApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'backend.toml')
-$webApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'web.toml')
-$botApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'bot.toml')
+$serverApp = Get-FlyAppName -ConfigPath (Join-Path $configRoot 'server.toml')
 
-Write-Host "Stopping backend ($backendApp)..."
-foreach ($id in Get-MachineIds -AppName $backendApp) {
+Write-Host "Stopping server ($serverApp)..."
+foreach ($id in Get-MachineIds -AppName $serverApp) {
   Write-Host "Stopping machine $id..."
-  fly machine stop $id -a $backendApp | Out-Null
-}
-Write-Host "Stopping web ($webApp)..."
-foreach ($id in Get-MachineIds -AppName $webApp) {
-  Write-Host "Stopping machine $id..."
-  fly machine stop $id -a $webApp | Out-Null
-}
-Write-Host "Stopping bot ($botApp)..."
-foreach ($id in Get-MachineIds -AppName $botApp) {
-  Write-Host "Stopping machine $id..."
-  fly machine stop $id -a $botApp | Out-Null
+  fly machine stop $id -a $serverApp | Out-Null
 }
 

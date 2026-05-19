@@ -7,6 +7,8 @@ services:
             dockerfile: deploy/Dockerfile.server
         env_file:
             - ../.env
+        environment:
+            PORT: '3000'
         ports:
             - '8080:3000'
         volumes:
