@@ -9,6 +9,7 @@
 
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import { isRecord } from './valueGuards.js';
 
 type YamlModule = {
     load(input: string): unknown;
@@ -110,9 +111,6 @@ type LoadLocalNodeConfigOptions = {
     configPath?: string;
     readFile?: (path: string) => string;
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null;
 
 const normalizeOptionalString = (value: unknown): string | undefined => {
     if (typeof value !== 'string') {

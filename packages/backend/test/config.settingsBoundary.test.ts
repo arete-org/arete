@@ -63,6 +63,28 @@ test('secret env key in settings yaml fails validation', () => {
     }, /must not contain secret values|not YAML-configurable/i);
 });
 
+test('integer settings reject non-integer numbers', () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-settings-')
+    );
+    const settingsPath = path.join(tempDir, 'footnote.server.yaml');
+    fs.writeFileSync(
+        settingsPath,
+        'settings:\n  env:\n    WEB_API_RATE_LIMIT_IP: 3.5\n',
+        'utf8'
+    );
+
+    assert.throws(() => {
+        buildRuntimeConfig(
+            {
+                NODE_ENV: 'test',
+                FOOTNOTE_SERVER_SETTINGS_PATH: settingsPath,
+            },
+            () => undefined
+        );
+    }, /settings\.env\.WEB_API_RATE_LIMIT_IP must be an integer/i);
+});
+
 test('rejects removed settings.localNodes.configPath', () => {
     const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'footnote-settings-')
@@ -120,7 +142,7 @@ test('LOCAL_DISCORD_NODES_CONFIG_PATH warns and is ignored', () => {
     assert.equal(config.settings.localNodes, null);
     assert.match(
         warnings.join('\n'),
-        /LOCAL_DISCORD_NODES_CONFIG_PATH is unsupported and ignored/i
+        /LOCAL_DISCORD_NODES_CONFIG_PATH is unsupported.*Ignoring env value/i
     );
 });
 

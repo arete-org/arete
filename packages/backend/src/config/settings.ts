@@ -90,6 +90,14 @@ const validateEnvSetting = (key: string, value: unknown): SettingsScalar => {
             }
             return value;
         case 'integer':
+            if (
+                typeof value !== 'number' ||
+                Number.isNaN(value) ||
+                !Number.isInteger(value)
+            ) {
+                throw new Error(`settings.env.${key} must be an integer.`);
+            }
+            return value;
         case 'number':
             if (typeof value !== 'number' || Number.isNaN(value)) {
                 throw new Error(`settings.env.${key} must be a number.`);
@@ -118,6 +126,34 @@ const validateEnvSetting = (key: string, value: unknown): SettingsScalar => {
     }
 };
 
+/**
+ * `loadServerSettings` is the canonical authority boundary reader for server
+ * runtime settings YAML.
+ *
+ * Inputs:
+ * - `env`: process environment snapshot used only for bootstrap lookup and
+ *   legacy-key warning checks.
+ * - `warn`: warning sink for non-fatal boundary and fail-open notices.
+ *
+ * Returns:
+ * - `settingsPath`: resolved canonical YAML path.
+ * - `yamlSettings`: parsed canonical settings object or `null` when YAML is
+ *   missing.
+ * - `yamlEnv`: validated non-secret `settings.env` values converted to env
+ *   string form for downstream section parsers.
+ *
+ * Failure policy:
+ * - Missing YAML (`ENOENT`) is fail-open with warning (except suppressed under
+ *   `NODE_ENV=test`): callers should continue with defaults.
+ * - Present but invalid YAML is fail-closed via thrown errors with actionable
+ *   messages.
+ *
+ * Security and trust assumptions:
+ * - Secret/bootstrap keys are never accepted from `settings.env`.
+ * - YAML values are treated as operator-controlled non-secret runtime intent.
+ * - Warning side effects are emitted through `warn` for deprecated env usage
+ *   and fail-open conditions.
+ */
 export const loadServerSettings = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
@@ -220,6 +256,26 @@ const getLegacySettingsEnvKeys = (): string[] =>
 
 const LEGACY_SETTINGS_ENV_KEYS = getLegacySettingsEnvKeys();
 
+/**
+ * `buildEffectiveConfigEnv` builds the effective runtime env snapshot used by
+ * backend config sections.
+ *
+ * Inputs:
+ * - `processEnv`: raw process env containing secrets/bootstrap and possible
+ *   legacy non-secret keys.
+ * - `yamlEnv`: validated non-secret settings values from canonical YAML.
+ * - `warn`: warning sink used when deprecated non-secret env overrides are
+ *   detected and ignored.
+ *
+ * Returns:
+ * - a merged env object where:
+ *   - `secret_env` and `bootstrap_env` values come only from `processEnv`
+ *   - `settings_yaml` values come only from `yamlEnv`
+ *
+ * Behavior:
+ * - Fail-open for legacy non-secret env keys: emits warnings and ignores them.
+ * - No file I/O and no thrown errors expected under normal inputs.
+ */
 export const buildEffectiveConfigEnv = (
     processEnv: NodeJS.ProcessEnv,
     yamlEnv: NodeJS.ProcessEnv,

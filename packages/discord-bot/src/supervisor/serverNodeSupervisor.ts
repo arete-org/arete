@@ -11,6 +11,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { logger } from '../utils/logger.js';
+import { isRecord } from './valueGuards.js';
 import {
     parseLocalNodeDefinitions,
     resolveLocalNodeDefinitions,
@@ -61,9 +62,6 @@ const resolveBackendBaseUrl = (env: NodeJS.ProcessEnv): string => {
     }
     return `http://localhost:${normalizePort(env.PORT)}`;
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null;
 
 const loadCanonicalLocalNodeDefinitions = (
     env: NodeJS.ProcessEnv
