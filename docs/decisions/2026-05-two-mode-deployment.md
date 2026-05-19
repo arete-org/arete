@@ -1,161 +1,115 @@
-# Two-Mode Deployment: All-in-One and Split
+# Server and Nodes Deployment Topologies
 
-**Decision:** Support two deployment modes: a single-container all-in-one mode for personal/free-tier use, and the existing three-service split mode for multi-bot vendor deployments.  
+**Decision:** Footnote deployment is modeled as a server authority with optional attached nodes.  
 **Date:** 2026-05-18
 
 ---
 
 ## 1. Context
 
-The current three-service split (`backend`, `web`, `discord-bot`) is well-suited for multi-bot vendor deployments where many bot machines share one backend. Each bot carries its own `BOT_PROFILE_*` env vars and the backend remains the shared runtime boundary for orchestration, traces, incidents, review behavior, and cost recording.
+Footnote needs two operational shapes that preserve one architectural boundary:
 
-The same split is a barrier for single-user 1-click hosting:
+- The **server** remains the authority for orchestration, traces, auth, incidents, review behavior, cost recording, storage, and web/API transport.
+- **Nodes** are attached processes that provide adapter/persona/capability surfaces.
 
-- It requires Docker Compose or three separate cloud apps.
-- Persistent volumes on free-tier platforms are often paid or platform-specific.
-- Internal networking config (`BACKEND_HOST`, `BACKEND_BASE_URL`, `TRACE_API_TOKEN`) adds setup friction.
-- The `web` service currently serves static files with Caddy and proxies `/api/*`; it does not own application logic.
+Today, the first supported node type is a Discord persona node.
 
-The multi-bot design still requires the bot to remain separate from the backend in vendor deployments. Each bot instance supplies profile-specific adapter context while one shared backend owns orchestration and trace persistence. Merging those roles in vendor mode would require running one full backend container per bot profile, which is more expensive and weakens the shared-backend model.
-
-These two use cases have different shapes and should be served by different deployment modes.
+The previous naming (`all-in-one` vs `split`) described packaging, not architecture. This decision pivots to topology language while preserving authority boundaries.
 
 ---
 
-## 2. Goals
+## 2. Topology Model
 
-- Enable a single `docker run` one-liner for personal/free-tier deployments.
-- Preserve the existing split deployment for multi-bot vendor use without behavior changes.
-- Eliminate the separate `web` container in all-in-one mode by having the backend serve the Vite build as static files.
-- Keep `TRACE_API_TOKEN` explicitly required in all deployment modes, including all-in-one.
-- Keep Footnote provenance, trace, auth, incident, review, and cost authority in the backend.
-- Introduce no changes to core application logic in either mode.
+### 2.1 `server-local-node`
 
----
+- One container runs the Footnote server and supervises one local Discord node.
+- Backed by `deploy/Dockerfile.server`, `deploy/server-entrypoint.sh`, and `deploy/compose.server.yml`.
+- Recommended for simple self-hosting.
 
-## 3. Decision
+### 2.2 `server-external-nodes`
 
-### 3.1 Mode A: All-in-One (new)
+- Server and nodes run as separate services/containers.
+- Current reference compose remains `deploy/compose.yml`.
+- Suitable when multiple independent node deployments share one backend.
 
-Add a new all-in-one image for personal and free-tier deployments.
+### 2.3 `server-only`
 
-A new `deploy/Dockerfile.allinone` builds the Vite app, backend, and Discord bot into one image.
-
-A process entrypoint starts both runtimes:
-
-- Backend (`node dist/server.js`) serves the API and the Vite static build.
-- Bot (`node dist/index.js`) connects to the backend at `http://localhost:3000`.
-- `TRACE_API_TOKEN` is required and must be passed via environment, then exported to both processes without being logged.
-- If either child process exits, the entrypoint shuts down the other process and exits non-zero so the platform can restart the container.
-
-Example local deployment:
-
-```sh
-docker run -p 8080:3000 --env-file .env -v footnote-data:/data ghcr.io/footnote-ai/footnote:latest
-```
-
-All-in-one mode supports exactly one bot profile per container. Multi-profile deployments must use split mode.
-
-### 3.2 Mode B: Split (unchanged)
-
-Keep the existing split deployment as the default mode for multi-bot vendor deployments:
-
-- `deploy/compose.yml`
-- `deploy/fly/backend.toml`
-- `deploy/fly/web.toml`
-- `deploy/fly/bot.toml`
-- existing deploy scripts and per-service images
-
-The split mode remains the right shape when many independent Discord bot machines share one backend orchestration and trace pipeline.
-
-### 3.3 Backend Static Transport
-
-The backend already owns static/SPA transport code through `packages/backend/src/http/staticTransport.ts` and asset resolution through `packages/backend/src/http/assets.ts`.
-
-All-in-one implementation should reuse and harden that path rather than adding a second `express.static` mechanism. Static serving must remain fail-open:
-
-- If the Vite build output is present, the backend serves it.
-- If the build output is absent, backend startup continues.
-- Missing static assets return the existing static transport fallback/404 behavior.
-- Startup logs should warn about missing static output without blocking API or bot operation.
-
-### 3.4 Durability Boundary
-
-All-in-one mode reduces process and networking complexity; it does not remove durability requirements.
-
-Users who care about provenance, trace, and incident history must provide durable storage for `/data` or configure backup replication. If `/data` is ephemeral, the deployment is suitable only for throwaway testing.
+- Server runtime without an active local node.
+- Useful for web/API-only operation and future expansion paths.
 
 ---
 
-## 4. High-Level Plan
+## 3. Trace Token Policy (`server-local-node`)
 
-### Phase 0: Backend Static Serving Verification
+`TRACE_API_TOKEN` is resolved in strict order:
 
-- Verify the backend static transport serves the packaged `packages/web/dist` output in an all-in-one image.
-- Harden missing-build behavior so absence of `index.html` does not cause backend startup failure.
-- Add startup logging that reports whether static web assets are available.
-- Do not change the API surface or route semantics.
+1. `TRACE_API_TOKEN` env value.
+2. `TRACE_API_TOKEN_FILE` path.
+3. `/data/secrets/trace-api-token` (create if missing, then reuse).
 
-### Phase 1: All-in-One Dockerfile and Entrypoint
+Rules:
 
-- Add `deploy/Dockerfile.allinone` with a multi-stage build:
-    - web build stage
-    - backend build stage
-    - bot build stage
-    - combined runtime stage
-- Add an all-in-one entrypoint that:
-    - requires `TRACE_API_TOKEN` to be set before startup,
-    - exports `BACKEND_BASE_URL=http://localhost:3000` for the bot,
-    - preserves optional Litestream backup support if `LITESTREAM_REPLICA_URL` is configured,
-    - starts backend and bot as sibling child processes,
-    - forwards shutdown signals to both processes,
-    - exits non-zero when either process exits unexpectedly.
+- Generated token is persistent and reused across restarts.
+- Resolver attempts restrictive permissions where supported (`0700` dir, `0600` file).
+- Startup logs report **token source only**, never token value.
+- If token cannot be read/created and no env override exists, startup fails clearly.
 
-### Phase 2: Compose and Documentation
-
-- Add `deploy/compose.allinone.yml` as a convenience wrapper for local testing of the all-in-one image.
-- Update `deploy/README.md` to document both modes with a clear decision guide:
-    - use all-in-one for personal/free-tier or single-profile deployments,
-    - use split for multi-bot vendor deployments.
-- Add a `docker run` one-liner to the root `README.md` quick-start section.
-- Document that durable `/data` or backup replication is required for non-throwaway deployments.
-
-### Phase 3: CI/CD
-
-- Add a GitHub Actions job to build and push the all-in-one image to `ghcr.io/footnote-ai/footnote` on `main`.
-- Keep existing per-service image builds and Fly deploy workflow unchanged.
-- Add provider deploy buttons only after the image is published and a platform-specific smoke test confirms port, volume, and entrypoint behavior.
+Distributed (`server-external-nodes`) deployments may continue to provide `TRACE_API_TOKEN` explicitly through platform secrets.
 
 ---
 
-## 5. Invariants
+## 4. Durability Boundary
 
-- **Invariant A:** Split mode (`compose.yml`, Fly manifests, deploy scripts, and per-service images) must continue to work without behavior changes.
-- **Invariant B:** All-in-one mode supports exactly one bot profile. Users needing multiple profiles must use split mode.
-- **Invariant C:** Persistent data paths remain anchored at `/data`. Data written in all-in-one mode should be readable if the user later migrates to split mode.
-- **Invariant D:** `TRACE_API_TOKEN` handling in all-in-one mode must not log or expose the token in startup output.
-- **Invariant E:** If either backend or bot exits in all-in-one mode, the container must stop so the host platform can restart it.
-- **Invariant F:** All-in-one mode must not move provenance, trace, auth, incident, review, or cost authority out of the backend.
-- **Invariant G:** Exposing the backend directly in all-in-one mode must preserve backend-owned HTTP protections, including route auth, rate limits, CSP, and trace authentication.
+Topology simplification does not remove durability requirements.
+
+- `/data` remains the boundary for provenance/incident history and persisted local-node token material.
+- Ephemeral `/data` is suitable only for throwaway testing.
+- Durable `/data` (or backup replication) is required for persistent operation.
 
 ---
 
-## 6. Non-Goals
+## 5. Deploy Folder Shape
 
-- No database migrations, backfills, or compatibility layers.
-- No multi-profile support inside one all-in-one container.
-- No changes to vendor profile semantics.
-- No changes to core chat, trace, incident, review, planner, or model-routing behavior.
-- No replacement of the split deployment model.
+Server and shared deploy artifacts remain at `deploy/` root.
+
+Fly-specific assets are grouped under `deploy/fly/`:
+
+- manifests: `deploy/fly/backend.toml`, `deploy/fly/web.toml`, `deploy/fly/bot.toml`
+- scripts: `deploy/fly/deploy.{sh,ps1}`, `deploy/fly/start.{sh,ps1}`, `deploy/fly/stop.{sh,ps1}`, `deploy/fly/restart.{sh,ps1}`, `deploy/fly/clear-secrets.{sh,ps1}`
 
 ---
 
-## 7. Implementation Status
+## 6. Invariants
 
-Status as of 2026-05-18:
+- **Invariant A:** Server authority boundary remains unchanged.
+- **Invariant B:** Local Discord runtime is a supervised node process, not merged backend logic.
+- **Invariant C:** `server-external-nodes` behavior remains unchanged aside from naming/path references.
+- **Invariant D:** Trace token value must never be logged.
+- **Invariant E:** In `server-local-node`, if backend or local node exits unexpectedly, container exits non-zero.
+- **Invariant F:** Backend static serving remains fail-open when static build output is absent.
 
-- **Phase 0:** not started
-- **Phase 1:** not started
-- **Phase 2:** not started
-- **Phase 3:** not started
+---
 
+## 7. Non-Goals
+
+- No API schema changes.
+- No database migrations/backfills.
+- No token-key rename in this pass (`TRACE_API_TOKEN` remains canonical).
+- No compatibility wrappers for renamed deploy files.
+
+---
+
+## 8. Implementation Status (this branch)
+
+Completed:
+
+- Renamed server topology artifacts:
+    - `deploy/Dockerfile.server`
+    - `deploy/server-entrypoint.sh`
+    - `deploy/compose.server.yml`
+- Updated deploy/docs language to server+nodes framing and topology IDs.
+- Moved Fly assets into `deploy/fly/` and updated script/workflow references.
+- Added `deploy/traceTokenResolver.mjs` with unit tests.
+- Wired server startup to token resolver with persistent token behavior.
+- Updated env validation target to `server`.
+- Added server topology smoke script for lifecycle verification.

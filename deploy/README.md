@@ -30,8 +30,9 @@ Server image and compose wrapper:
 
 - backend: `OPENAI_API_KEY`, `TRACE_API_TOKEN`
 - discord-bot: `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
-- server (`server-local-node`): `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`
+- server (`server-local-node`): `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `OPENAI_API_KEY`, `DISCORD_USER_ID`, `INCIDENT_PSEUDONYMIZATION_SECRET`
     > Why `TRACE_API_TOKEN`? It's a shared key used to authenticate trace uploads from the bot to the backend.
+    > In server-local-node topology, the server resolves the token in this order: `TRACE_API_TOKEN` -> `TRACE_API_TOKEN_FILE` -> `/data/secrets/trace-api-token` (auto-created and reused).
 
 Validate expected deployment env before deploy:
 
@@ -168,4 +169,3 @@ Template overlay paths:
     - copy restored files to `/data/provenance.db` and `/data/incidents.db`
     - restart backend container
 4. Confirm backend boot logs show normal SQLite initialization and no Litestream replication errors.
-
