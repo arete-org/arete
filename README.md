@@ -4,47 +4,11 @@
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
-Footnote is an AI assistant that helps you see what is behind an answer.
-
-Ask a question and Footnote gives you a response with receipts: source links, confidence and safety notes, and a trace page for digging deeper.
-
-You can use Footnote in the browser, or run your own copy from this repo.
-
-<img width="761" height="344" alt="image" src="https://github.com/user-attachments/assets/706ea443-7085-41c0-a7ee-06633f196acd" />
-
-[Demo](https://ai.jordanmakes.dev) · [Reading a response](#reading-a-response) · [Quickstart](#quickstart) · [Docs](#docs)
-
----
-
-## Why Footnote
-
-Most AI tools give you a finished answer and leave the messy part out of view: where the answer came from, what was checked, and how confident the system should really sound.
-
-Footnote keeps more of that context attached to the response. It will not make every answer correct, and it does not pretend to. It gives you more to inspect before you decide what to do with the answer.
-
-## Reading a response
-
-A Footnote response can include:
-
-- the answer
-- source links
-- confidence and safety notes
-- tradeoffs or constraints when they matter
-- a trace page with more detail about the run
-
-The trace helps you review the answer; it does not prove the answer is right. For the technical model, see [Response Metadata](docs/architecture/response-metadata.md).
+Footnote is an AI assistant focused on transparency and provenance.
 
 ## Quickstart
 
-This starts the local backend and web app.
-
-### Prerequisites
-
-- Node.js installed
-- `pnpm` available (or `corepack` enabled)
-- At least one generation provider (e.g. Ollama, OpenAI)
-
-### 1) Clone and bootstrap
+1. Clone and bootstrap:
 
 ```bash
 git clone https://github.com/footnote-ai/footnote.git
@@ -54,91 +18,70 @@ pnpm setup
 
 `pnpm setup` will:
 
-- create `.env` from `.env.example` when missing
-- generate local development secrets when missing (`INCIDENT_PSEUDONYMIZATION_SECRET`, `TRACE_API_TOKEN`)
+- create `.env` from `.env.example` if missing
+- generate required local secrets if missing
+- generate `footnote.yaml` if missing
 - install dependencies
 
-### 2) Configure environment
+2. Add provider secrets in `.env` (optional at startup, required for model features):
 
-Configure at least one LLM provider:
-
-```yaml
-# Ollama (local)
-OLLAMA_LOCAL_INFERENCE_ENABLED=true
-OLLAMA_BASE_URL=http://localhost:11434
-
-# Ollama (cloud)
-# Cannot enable alongside local inference
-OLLAMA_BASE_URL=https://api.ollama.com
-OLLAMA_API_KEY=...
-
-# OpenAI (cloud)
+```env
 OPENAI_API_KEY=...
+# or
+OLLAMA_API_KEY=...
 ```
 
-Discord credentials are only required when you enable local Discord persona nodes:
-
-```yaml
-DISCORD_TOKEN=...
-DISCORD_CLIENT_ID=...
-DISCORD_GUILD_ID=...
-```
-
-For the full set of options, see `.env.example`.
-Start with section `00) Start Here (minimum to run)`, then fill optional sections only as needed.
-
-### 3) Launch
-
-Start all services (including the standalone local Discord bot process):
-
-```bash
-pnpm start:all
-```
-
-Backend and web UI only:
+3. Start backend + web:
 
 ```bash
 pnpm dev
 ```
 
-Open the web app at `http://localhost:8080`.
+Open `http://localhost:8080`.
 
-### Run with Docker
+## Where Settings Go
 
-The canonical install path is the Footnote server container image:
-`ghcr.io/footnote-ai/footnote`
+- Non-secret runtime settings: `footnote.yaml`
+- Secrets: `.env` (local) or platform secrets (for example Fly secrets)
 
-```sh
-docker run \
-  --name footnote \
-  -p 8080:3000 \
-  --env-file .env \
-  -v footnote-data:/data \
-  ghcr.io/footnote-ai/footnote:latest
+Example `footnote.yaml`:
+
+```yaml
+version: 1
+
+server:
+    host: '::'
+    port: 3000
+    trust-proxy: false
+    data-dir: '/data'
+
+web:
+    allowed-origins:
+        - 'http://localhost:8080'
+        - 'http://localhost:3000'
+    frame-ancestors:
+        - "'self'"
+        - 'http://localhost:8080'
+        - 'http://localhost:3000'
+
+discord-bots: []
 ```
 
-For production-like installs, pin to an explicit version tag:
-`ghcr.io/footnote-ai/footnote:<version>`
+The server can supervise multiple Discord bots from `discord-bots`. Most users can keep it empty at first.
 
-For non-throwaway installs, `/data` must be durable because Footnote stores persistence and generated trace token state there.
-The server can supervise local Discord persona nodes from YAML; if `LOCAL_DISCORD_NODES_CONFIG_PATH` is unset or missing, the server starts with zero local nodes (fail-open).
-If no inference provider is configured yet, server startup still succeeds; model-dependent requests return setup guidance until `OPENAI_API_KEY` or `OLLAMA_BASE_URL` is configured.
-
-### Compose-based local server run
+## Docker
 
 ```bash
 pnpm validate-env --target server
-docker compose -f deploy/compose.server.yml up --build
+docker compose -f deploy/compose.yml up --build
 ```
 
-### Advanced configuration
+## Docs
 
-- [Deployment guide](deploy/README.md)
-- [Prompt/profile configuration](docs/architecture/prompt-resolution.md)
-- [Documentation map](docs/README.md)
+- Deployment guide: [deploy/README.md](deploy/README.md)
+- Prompt/profile config: [docs/architecture/prompt-resolution.md](docs/architecture/prompt-resolution.md)
+- Docs map: [docs/README.md](docs/README.md)
 
 ## License
 
-Footnote is dual-licensed under MIT and the Hippocratic License v3 (HL3-CORE).
-
-See [license strategy](docs/LICENSE_STRATEGY.md) for details.
+Footnote is dual-licensed under MIT and HL3-CORE. See [docs/LICENSE_STRATEGY.md](docs/LICENSE_STRATEGY.md).

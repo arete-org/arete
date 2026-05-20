@@ -227,5 +227,25 @@ export type RuntimeConfig = {
             to: string[];
         };
     };
+    settings: {
+        discordBots: Array<{
+            id?: string;
+            enabled?: boolean;
+            required?: boolean;
+            credentials?: {
+                discordTokenEnv?: string;
+                discordClientIdEnv?: string;
+                discordGuildIdsEnv?: string;
+                discordUserIdEnv?: string;
+                incidentSecretEnv?: string;
+            };
+            profile?: {
+                id?: string;
+                displayName?: string;
+                overlayPath?: string;
+                mentionAliases?: string[];
+            };
+        }> | null;
+    };
     profile: BotProfileConfig;
 };

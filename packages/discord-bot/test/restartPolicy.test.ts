@@ -1,5 +1,5 @@
 /**
- * @description: Validates local node restart failure-window thresholds used by
+ * @description: Validates discord bot restart failure-window thresholds used by
  * the canonical server supervisor.
  * @footnote-scope: test
  * @footnote-module: LocalNodeRestartPolicyTests

@@ -1,164 +1,88 @@
 # Deployment
 
-Start with `README.md` for project overview.
-
-Footnote supports one canonical deployment mechanism: run the Footnote server container.
+Footnote deploys as one server container.
 
 Canonical artifacts:
 
-- image build: `deploy/Dockerfile.server`
-- entrypoint: `deploy/server-entrypoint.sh`
-- compose wrapper: `deploy/compose.server.yml`
-- Fly manifest: `deploy/fly/server.toml`
-
-## Canonical Install Image
-
-Use:
-
-- `ghcr.io/footnote-ai/footnote:latest` (default branch)
-- `ghcr.io/footnote-ai/footnote:sha-<shortsha>` (main-branch immutable build)
-- `ghcr.io/footnote-ai/footnote:vX.Y.Z` and `ghcr.io/footnote-ai/footnote:X.Y.Z` (tag builds)
-
-## Breaking Changes (Hard Cutover)
-
-Removed from supported deploy surface:
-
+- `deploy/Dockerfile.server`
+- `deploy/server-entrypoint.sh`
 - `deploy/compose.yml`
-- `deploy/Dockerfile.backend`
-- `deploy/Dockerfile.web`
-- `deploy/Dockerfile.bot`
-- split Fly manifests (`deploy/fly/backend.toml`, `deploy/fly/web.toml`, `deploy/fly/bot.toml`)
-- split deploy model (separate backend/web/bot apps)
+- `deploy/fly/server.toml`
 
-## Required Environment
+## First Setup
 
-Server runtime required keys:
+1. Run setup once:
 
-- `INCIDENT_PSEUDONYMIZATION_SECRET`
+```bash
+pnpm setup
+```
 
-Provider configuration is optional at startup:
+2. Keep or edit `footnote.yaml` (non-secret runtime settings):
+    - default path: `./footnote.yaml`
+    - advanced override: `FOOTNOTE_SETTINGS_PATH` env var
 
-- the server starts fail-open without `OPENAI_API_KEY` or `OLLAMA_BASE_URL`
-- model-dependent features return setup-required responses until a provider is configured
+3. Set secrets only in `.env` (or platform secrets).
 
-Trace token resolution (server runtime):
+4. Validate env:
 
-- `TRACE_API_TOKEN > TRACE_API_TOKEN_FILE > /data/secrets/trace-api-token`
-- token values are never logged
-- `/data/secrets/trace-api-token` is generated once, then reused
+```bash
+pnpm validate-env --target server
+```
 
-Validate before deploy:
+5. Start:
 
-- local/server: `pnpm validate-env --target server`
-- Fly server app: `pnpm validate-env --target fly-server`
+```bash
+docker compose -f deploy/compose.yml up --build
+```
 
-## Local Discord Node Configuration (Canonical)
+## Settings vs Secrets
 
-The server can supervise local Discord persona nodes from one YAML config file.
+- `footnote.yaml`: non-secret runtime behavior
+- `.env` / Fly secrets: secret values
 
-- env key: `LOCAL_DISCORD_NODES_CONFIG_PATH` (optional)
-- default path: `/data/config/local-discord-nodes.yaml`
-- missing file: server boots with zero nodes and logs `no_local_nodes_configured`
+`footnote.yaml` can contain env var names for Discord bot credentials (for example `discord-token-env: DISCORD_TOKEN`) but must not contain secret values.
 
-Security model:
+## Discord Bots
 
-- YAML stores env variable names, not raw secret values.
-- Discord credentials are only required for nodes that are enabled.
+A Discord bot entry tells the server to run one bot process.
+You can run multiple bots by adding multiple items in `discord-bots`.
 
-Example (`version: 1`):
+Minimal example:
 
 ```yaml
 version: 1
-nodes:
-    - id: footnote
-      required: true
-      credentials:
-          discordTokenEnv: FOOTNOTE_DISCORD_TOKEN
-          discordClientIdEnv: FOOTNOTE_DISCORD_CLIENT_ID
-          discordGuildIdsEnv: FOOTNOTE_DISCORD_GUILD_IDS
-          discordUserIdEnv: FOOTNOTE_DISCORD_USER_ID
-          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
-      profile:
-          id: footnote
-          displayName: Footnote
-          mentionAliases: [footnote]
 
-    - id: danny
+discord-bots:
+    - id: 'main-discord'
       enabled: true
       required: false
       credentials:
-          discordTokenEnv: DANNY_DISCORD_TOKEN
-          discordClientIdEnv: DANNY_DISCORD_CLIENT_ID
-          discordGuildIdEnv: DANNY_DISCORD_GUILD_ID
-          discordUserIdEnv: DANNY_DISCORD_USER_ID
-          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
+          discord-token-env: 'DISCORD_TOKEN'
+          discord-client-id-env: 'DISCORD_CLIENT_ID'
+          discord-guild-ids-env: 'DISCORD_GUILD_IDS'
+          discord-user-id-env: 'DISCORD_USER_ID'
+          incident-secret-env: 'INCIDENT_PSEUDONYMIZATION_SECRET'
       profile:
-          id: danny
-          displayName: Danny
-          overlayPath: /data/profiles/danny.md
-
-    - id: myuri
-      enabled: true
-      required: false
-      credentials:
-          discordTokenEnv: MYURI_DISCORD_TOKEN
-          discordClientIdEnv: MYURI_DISCORD_CLIENT_ID
-          discordGuildIdEnv: MYURI_DISCORD_GUILD_ID
-          discordUserIdEnv: MYURI_DISCORD_USER_ID
-          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
-      profile:
-          id: myuri
-          displayName: Myuri
+          id: 'default'
+          display-name: 'Footnote'
+          mention-aliases: []
 ```
 
 Behavior:
 
-- optional node missing creds/config => disabled + explicit log reason
-- required node missing creds/config => startup failure
-- node crash retry policy => unhealthy after 3 failures in 5 minutes
+- optional bot missing credentials: disabled with explicit log reason
+- required bot missing credentials: startup fails
+- no `discord-bots`: fail-open startup with zero bots
 
-## Start / Stop (Docker)
+## Fly.io
 
-Start:
+Single-app deploy:
 
-`docker compose -f deploy/compose.server.yml up --build`
-
-Stop:
-
-`docker compose -f deploy/compose.server.yml down`
-
-## Fly.io (Single App)
-
-Deploy one server app:
-
-- `fly deploy -c deploy/fly/server.toml`
 - `./deploy/fly/deploy.sh`
 - `./deploy/fly/deploy.ps1`
 
-Lifecycle helpers:
+Manual deploy:
 
-- `./deploy/fly/start.sh` / `./deploy/fly/start.ps1`
-- `./deploy/fly/stop.sh` / `./deploy/fly/stop.ps1`
-- `./deploy/fly/restart.sh` / `./deploy/fly/restart.ps1`
-- `./deploy/fly/clear-secrets.sh` / `./deploy/fly/clear-secrets.ps1`
-
-## Notes
-
-- Server listens on container port `3000` and is mapped to host port `8080` in compose.
-- `/data` must be durable for persistent provenance/incident history and trace-token persistence.
-- Local Discord persona nodes are supervised adapters; backend authority remains in the server process.
-- Backend static serving remains fail-open when static build output is absent.
-- Backend startup logs include Litestream replication visibility.
-
-## Litestream Restore Runbook
-
-1. Stop backend writes and run restore commands to a temp directory:
-    - `litestream restore -if-replica-exists -o /tmp/restore/provenance.db "${LITESTREAM_REPLICA_URL}/provenance"`
-    - `litestream restore -if-replica-exists -o /tmp/restore/incidents.db "${LITESTREAM_REPLICA_URL}/incidents"`
-2. Verify restored DBs are readable:
-    - `sqlite3 /tmp/restore/provenance.db "select count(*) from provenance_traces;"`
-    - `sqlite3 /tmp/restore/incidents.db "select count(*) from incidents;"`
-3. Replace live files only during maintenance downtime:
-    - copy restored files to `/data/provenance.db` and `/data/incidents.db`
-    - restart backend container
-4. Confirm backend boot logs show normal SQLite initialization and no Litestream replication errors.
+```bash
+fly deploy -c deploy/fly/server.toml
+```

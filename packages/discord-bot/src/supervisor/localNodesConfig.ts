@@ -1,42 +1,18 @@
 /**
- * @description: Loads and validates server-local Discord node YAML config, then resolves
- * credential env references into runtime-safe node launch settings.
+ * @description: Validates canonical Discord bot definitions and resolves credential
+ * env references into runtime-safe launch settings.
  * @footnote-scope: core
  * @footnote-module: LocalNodesConfig
  * @footnote-risk: high - Invalid parsing or credential resolution can break node startup policy.
  * @footnote-ethics: medium - Node identity and secret-reference handling impact governance and operator trust.
  */
 
-import fs from 'node:fs';
-import { createRequire } from 'node:module';
-
-type YamlModule = {
-    load(input: string): unknown;
-};
-
-const require = createRequire(import.meta.url);
-const loadYamlModule = (): YamlModule => {
-    try {
-        return require('js-yaml') as YamlModule;
-    } catch (error) {
-        throw new Error(
-            `Missing dependency "js-yaml" for local node config parsing. Install workspace dependencies (pnpm install).`,
-            { cause: error }
-        );
-    }
-};
-const yamlModule = loadYamlModule();
-
-export const DEFAULT_LOCAL_DISCORD_NODES_CONFIG_PATH =
-    '/data/config/local-discord-nodes.yaml';
-
-const SUPPORTED_CONFIG_VERSION = 1;
+import { isRecord } from './valueGuards.js';
 
 type CredentialReferenceKey =
     | 'discordTokenEnv'
     | 'discordClientIdEnv'
     | 'discordGuildIdsEnv'
-    | 'discordGuildIdEnv'
     | 'discordUserIdEnv'
     | 'incidentSecretEnv';
 
@@ -50,7 +26,6 @@ type LocalNodeCredentialReferences = {
     discordTokenEnv?: string;
     discordClientIdEnv?: string;
     discordGuildIdsEnv?: string;
-    discordGuildIdEnv?: string;
     discordUserIdEnv?: string;
     incidentSecretEnv?: string;
 };
@@ -69,6 +44,8 @@ type ParsedNodeConfig = {
     credentials: LocalNodeCredentialReferences;
     profile: LocalNodeProfileConfig;
 };
+
+export type LocalNodeDefinition = ParsedNodeConfig;
 
 export type LocalNodeResolvedCredentials = {
     discordToken: string;
@@ -95,22 +72,6 @@ export type LocalNodeDisabledConfig = {
     required: boolean;
     reason: string;
 };
-
-export type LocalNodeConfigLoadResult = {
-    status: 'configured' | 'missing';
-    configPath: string;
-    activeNodes: LocalNodeRuntimeConfig[];
-    disabledNodes: LocalNodeDisabledConfig[];
-};
-
-type LoadLocalNodeConfigOptions = {
-    env?: NodeJS.ProcessEnv;
-    configPath?: string;
-    readFile?: (path: string) => string;
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null;
 
 const normalizeOptionalString = (value: unknown): string | undefined => {
     if (typeof value !== 'string') {
@@ -202,7 +163,6 @@ const parseCredentialReferences = (
         discordTokenEnv: normalizeOptionalString(value.discordTokenEnv),
         discordClientIdEnv: normalizeOptionalString(value.discordClientIdEnv),
         discordGuildIdsEnv: normalizeOptionalString(value.discordGuildIdsEnv),
-        discordGuildIdEnv: normalizeOptionalString(value.discordGuildIdEnv),
         discordUserIdEnv: normalizeOptionalString(value.discordUserIdEnv),
         incidentSecretEnv: normalizeOptionalString(value.incidentSecretEnv),
     };
@@ -227,7 +187,25 @@ const parseCredentialReferences = (
     return credentialReferences;
 };
 
-const parseNodes = (rawNodes: unknown): ParsedNodeConfig[] => {
+/**
+ * Parses and normalizes raw Discord bot node definitions.
+ *
+ * @param rawNodes Unknown parsed input expected to be an array of node
+ * objects with `id`, optional `enabled`/`required`, `credentials`, and
+ * `profile`.
+ * @returns Normalized node definitions with defaults applied.
+ * @throws When `rawNodes` is not an array, a node is malformed, `id` is
+ * missing, or duplicate ids are present.
+ *
+ * Validation/normalization details:
+ * - `id` is required
+ * - duplicate ids are rejected
+ * - `enabled` defaults to `true`
+ * - `required` defaults to `false`
+ */
+export const parseLocalNodeDefinitions = (
+    rawNodes: unknown
+): ParsedNodeConfig[] => {
     if (!Array.isArray(rawNodes)) {
         throw new Error('nodes must be an array.');
     }
@@ -276,22 +254,6 @@ const parseNodes = (rawNodes: unknown): ParsedNodeConfig[] => {
     }
 
     return parsedNodes;
-};
-
-const parseRawConfig = (contents: string): ParsedNodeConfig[] => {
-    const rawParsed = yamlModule.load(contents);
-    if (!isRecord(rawParsed)) {
-        throw new Error('Local nodes config must be a YAML object.');
-    }
-
-    const version = rawParsed.version;
-    if (version !== SUPPORTED_CONFIG_VERSION) {
-        throw new Error(
-            `Unsupported local nodes config version "${String(version)}". Expected ${SUPPORTED_CONFIG_VERSION}.`
-        );
-    }
-
-    return parseNodes(rawParsed.nodes);
 };
 
 const resolveEnvValue = (
@@ -355,16 +317,14 @@ const resolveRuntimeNode = (
         }
     }
 
-    const guildIdsReference =
-        parsedNode.credentials.discordGuildIdsEnv ??
-        parsedNode.credentials.discordGuildIdEnv;
+    const guildIdsReference = parsedNode.credentials.discordGuildIdsEnv;
     if (!guildIdsReference) {
         return {
             kind: 'disabled',
             node: {
                 id: parsedNode.id,
                 required: parsedNode.required,
-                reason: 'missing_credential_reference:discordGuildIdsEnv|discordGuildIdEnv',
+                reason: 'missing_credential_reference:discordGuildIdsEnv',
             },
         };
     }
@@ -399,28 +359,17 @@ const resolveRuntimeNode = (
         };
     }
 
-    const guildIdsFromPreferred = resolveEnvValue(
+    const discordGuildIds = resolveEnvValue(
         env,
         parsedNode.credentials.discordGuildIdsEnv
     );
-    const guildIdsFromLegacy = resolveEnvValue(
-        env,
-        parsedNode.credentials.discordGuildIdEnv
-    );
-    const discordGuildIds = guildIdsFromPreferred ?? guildIdsFromLegacy;
     if (!discordGuildIds) {
-        const attemptedKeys = [
-            parsedNode.credentials.discordGuildIdsEnv,
-            parsedNode.credentials.discordGuildIdEnv,
-        ]
-            .filter((entry): entry is string => typeof entry === 'string')
-            .join('|');
         return {
             kind: 'disabled',
             node: {
                 id: parsedNode.id,
                 required: parsedNode.required,
-                reason: `missing_credential_env_value:${attemptedKeys}`,
+                reason: `missing_credential_env_value:${parsedNode.credentials.discordGuildIdsEnv}`,
             },
         };
     }
@@ -478,63 +427,29 @@ const resolveRuntimeNode = (
 };
 
 /**
- * Loads server-local Discord node YAML config and resolves launchable node runtime settings.
+ * Resolves parsed node definitions against env-backed credential references.
  *
- * Inputs:
- * - `LoadLocalNodeConfigOptions` (`env`, optional `configPath`, optional `readFile` override)
+ * @param parsedNodes Normalized node definitions from
+ * `parseLocalNodeDefinitions`.
+ * @param env Environment variable snapshot used to resolve credential
+ * references.
+ * @returns Partitioned runtime result with launchable `activeNodes` and
+ * non-launchable optional `disabledNodes`.
+ * @throws When a required node cannot be launched due to missing references or
+ * missing env credential values.
  *
- * Returns:
- * - `LocalNodeConfigLoadResult` with `status`, `configPath`, `activeNodes`, and `disabledNodes`
- *
- * Guarantee and fail-open semantics:
- * - missing config file (`ENOENT`) returns `status: "missing"` with empty node lists
- * - optional nodes with missing refs/env values are returned in `disabledNodes`
- * - required nodes are enforced and cause loader failure when not launchable
- *
- * Throw behavior:
- * - unreadable config files (except `ENOENT`)
- * - invalid YAML/schema/version
- * - required node resolution failures
- *
- * Side effects:
- * - reads the YAML config file from disk unless `readFile` is injected
- * - no logging is performed in this loader; callers own logging decisions
+ * Semantics:
+ * - disabled/optional-unlaunchable nodes are returned in `disabledNodes`
+ * - launchable nodes are returned in `activeNodes`
+ * - required nodes that are unlaunchable cause an error
  */
-export const loadLocalNodeConfig = (
-    options: LoadLocalNodeConfigOptions = {}
-): LocalNodeConfigLoadResult => {
-    const env = options.env ?? process.env;
-    const configPath =
-        normalizeOptionalString(options.configPath) ??
-        normalizeOptionalString(env.LOCAL_DISCORD_NODES_CONFIG_PATH) ??
-        DEFAULT_LOCAL_DISCORD_NODES_CONFIG_PATH;
-    const readFile =
-        options.readFile ??
-        ((targetPath: string) => fs.readFileSync(targetPath, 'utf8'));
-
-    let rawConfigText: string;
-    try {
-        rawConfigText = readFile(configPath);
-    } catch (error) {
-        const nodeError = error as NodeJS.ErrnoException;
-        if (nodeError.code === 'ENOENT') {
-            return {
-                status: 'missing',
-                configPath,
-                activeNodes: [],
-                disabledNodes: [],
-            };
-        }
-
-        throw new Error(
-            `Failed to read local nodes config at ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
-            {
-                cause: error,
-            }
-        );
-    }
-
-    const parsedNodes = parseRawConfig(rawConfigText);
+export const resolveLocalNodeDefinitions = (
+    parsedNodes: LocalNodeDefinition[],
+    env: NodeJS.ProcessEnv
+): {
+    activeNodes: LocalNodeRuntimeConfig[];
+    disabledNodes: LocalNodeDisabledConfig[];
+} => {
     const activeNodes: LocalNodeRuntimeConfig[] = [];
     const disabledNodes: LocalNodeDisabledConfig[] = [];
 
@@ -547,17 +462,12 @@ export const loadLocalNodeConfig = (
 
         if (resolved.node.required) {
             throw new Error(
-                `Required local node "${resolved.node.id}" is not launchable (${resolved.node.reason}).`
+                `Required discord bot "${resolved.node.id}" is not launchable (${resolved.node.reason}).`
             );
         }
 
         disabledNodes.push(resolved.node);
     }
 
-    return {
-        status: 'configured',
-        configPath,
-        activeNodes,
-        disabledNodes,
-    };
+    return { activeNodes, disabledNodes };
 };

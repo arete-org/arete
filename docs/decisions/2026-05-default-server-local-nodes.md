@@ -1,6 +1,9 @@
-# Default Server Deployment With Local Nodes
+# Default Server Deployment With Discord Bots
 
-**Decision:** Footnote supports one canonical deployment shape: a single server container that can supervise local Discord persona nodes.
+Operational setup steps live in `deploy/README.md`.
+This page explains why the server uses canonical YAML settings and env secrets.
+
+**Decision:** Footnote supports one canonical deployment shape: a single server container that can supervise Discord bot subprocesses.
 **Date:** 2026-05-18
 
 ---
@@ -13,7 +16,7 @@ This decision hard-cuts to one supported deployment mechanism:
 
 - one server app/container
 - backend remains runtime authority
-- local Discord persona nodes are supervised subprocesses of that server
+- Discord bots are supervised subprocesses of that server
 
 ---
 
@@ -30,29 +33,30 @@ The server process remains authoritative for:
 - web and API serving
 - public runtime boundary for web and Discord nodes
 
-### 2.2 Local node supervision
+### 2.2 Discord bot supervision
 
-Local Discord nodes run as server-local child processes.
+Discord bots run as server-local child processes.
 
 - backend exit => server container exits non-zero
 - node crash => per-node restart attempts
 - unhealthy threshold => 3 failures in 5 minutes per node
 - unhealthy node => stop restarting that node; keep server running
 
-### 2.3 Local node config contract
+### 2.3 Discord bot config contract
 
-- config file only: `LOCAL_DISCORD_NODES_CONFIG_PATH` or default `/data/config/local-discord-nodes.yaml`
-- missing config file => fail-open with zero nodes and `no_local_nodes_configured` log
-- required node missing config/credentials => startup failure
-- optional node missing config/credentials => disabled with explicit log reason
+- canonical file: `footnote.yaml` at `FOOTNOTE_SETTINGS_PATH` (default `/data/config/footnote.yaml`)
+- discord bots key: `discord-bots`
+- missing canonical file => fail-open with zero bots and `no_discord_bots_configured` log
+- required bot missing config/credentials => startup failure
+- optional bot missing config/credentials => disabled with explicit log reason
 
 Schema:
 
 - `version: 1`
-- `nodes[]`
+- `discord-bots[]`
     - `id`, `enabled`, `required`
     - `credentials` env-key references only
-    - `profile` metadata (`id`, `displayName`, optional `overlayPath`, optional `mentionAliases`)
+    - `profile` metadata (`id`, `display-name`, optional `overlay-path`, optional `mention-aliases`)
 
 ---
 
@@ -72,7 +76,6 @@ Token values are never logged.
 
 Removed from active support:
 
-- `deploy/compose.yml`
 - `deploy/Dockerfile.backend`
 - `deploy/Dockerfile.web`
 - `deploy/Dockerfile.bot`
@@ -82,7 +85,7 @@ Canonical artifacts:
 
 - `deploy/Dockerfile.server`
 - `deploy/server-entrypoint.sh`
-- `deploy/compose.server.yml`
+- `deploy/compose.yml`
 - `deploy/fly/server.toml`
 - `pnpm validate-env --target server`
 - `pnpm validate-env --target fly-server`

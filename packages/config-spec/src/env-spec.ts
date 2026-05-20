@@ -376,19 +376,21 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'LOCAL_DISCORD_NODES_CONFIG_PATH',
+        key: 'FOOTNOTE_SETTINGS_PATH',
         owner: 'shared',
-        stage: 'runtime',
+        stage: 'bootstrap',
         section: 'runtime',
         required: false,
         secret: false,
         kind: 'string',
         description:
-            'Optional server-local path to the Discord nodes YAML file. Defaults to /data/config/local-discord-nodes.yaml when unset.',
-        defaultValue: literal('/data/config/local-discord-nodes.yaml'),
+            'Optional server-local path to canonical runtime settings YAML. Defaults to /data/config/footnote.yaml when unset.',
+        defaultValue: literal('/data/config/footnote.yaml'),
         usedBy: [
-            'packages/discord-bot/src/supervisor/localNodesConfig.ts',
-            'deploy/server-entrypoint.sh',
+            'packages/backend/src/config/settings.ts',
+            'packages/discord-bot/src/supervisor/serverNodeSupervisor.ts',
+            'deploy/fly/deploy.sh',
+            'deploy/fly/deploy.ps1',
         ],
     }),
 
@@ -565,24 +567,11 @@ export const envEntries = [
         owner: 'discord-bot',
         stage: 'runtime',
         section: 'discord-bot',
-        required: false,
+        required: true,
         secret: false,
         kind: 'csv',
         description:
-            'Preferred comma-separated Discord guild IDs used for command registration.',
-        defaultValue: noDefault(),
-        usedBy: ['packages/discord-bot/src/config.ts'],
-    }),
-
-    defineEnv({
-        key: 'DISCORD_GUILD_ID',
-        owner: 'discord-bot',
-        stage: 'runtime',
-        section: 'discord-bot',
-        required: true,
-        secret: false,
-        kind: 'string',
-        description: 'Primary Discord guild ID for command registration.',
+            'Comma-separated Discord guild IDs used for command registration.',
         defaultValue: noDefault(),
         usedBy: ['packages/discord-bot/src/config.ts'],
     }),
@@ -2586,3 +2575,28 @@ export const envDefaultValues = Object.fromEntries(
         )
         .map((entry) => [entry.key, entry.defaultValue.value])
 ) as EnvDefaultValues;
+
+const BOOTSTRAP_ENV_ALLOWLIST = new Set<string>([
+    'FOOTNOTE_SETTINGS_PATH',
+    'NODE_ENV',
+    'FLY_APP_NAME',
+    'PROMPT_CONFIG_PATH',
+    'TRACE_API_TOKEN_FILE',
+]);
+
+/**
+ * Runtime source classification for each env key.
+ */
+export const envConfigSourceByKey = Object.fromEntries(
+    envEntries.map((entry) => {
+        const configSource = entry.secret
+            ? 'secret_env'
+            : BOOTSTRAP_ENV_ALLOWLIST.has(entry.key)
+              ? 'bootstrap_env'
+              : 'settings_yaml';
+        return [entry.key, configSource];
+    })
+) as Record<
+    EnvEntries[number]['key'],
+    'secret_env' | 'settings_yaml' | 'bootstrap_env'
+>;

@@ -84,12 +84,9 @@ const validateEnvironment = () => {
         process.env.DISCORD_GUILD_IDS.split(',').some(
             (entry) => entry.trim().length > 0
         );
-    const hasLegacyGuildId =
-        typeof process.env.DISCORD_GUILD_ID === 'string' &&
-        process.env.DISCORD_GUILD_ID.trim().length > 0;
-    if (!hasGuildIds && !hasLegacyGuildId) {
+    if (!hasGuildIds) {
         throw new Error(
-            'Missing required Discord guild configuration. Set DISCORD_GUILD_IDS (comma-delimited) or DISCORD_GUILD_ID.'
+            'Missing required Discord guild configuration. Set DISCORD_GUILD_IDS (comma-delimited).'
         );
     }
 
@@ -426,13 +423,7 @@ const resolveCommandDeploymentGuildIds = (): string[] => {
         return uniqueGuildIds;
     }
 
-    const legacyGuildId = getOptionalStringEnv('DISCORD_GUILD_ID');
-    if (legacyGuildId) {
-        return [legacyGuildId];
-    }
-
-    // validateEnvironment should guarantee this path is unreachable.
-    return [];
+    return configuredGuildIds;
 };
 
 const getRealtimeTurnDetectionEnv = (

@@ -158,6 +158,26 @@ ensure_optional_secrets() {
   done
 }
 
+upload_settings_yaml() {
+  local app_name="$1"
+  local settings_path="$REPO_ROOT/footnote.yaml"
+  if [[ ! -f "$settings_path" ]]; then
+    echo "No footnote.yaml found at $settings_path; skipping remote settings upload."
+    return
+  fi
+
+  echo "Uploading canonical footnote.yaml to /data/config/footnote.yaml..."
+  set +e
+  fly ssh console -a "$app_name" -C "mkdir -p /data/config && cat > /data/config/footnote.yaml" < "$settings_path"
+  status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
+    echo "Warning: unable to upload footnote.yaml to $app_name. Continuing deploy."
+    return
+  fi
+  echo "Uploaded footnote.yaml to $app_name."
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
@@ -173,8 +193,9 @@ ensure_app "$SERVER_CONFIG_PATH"
 
 echo "Configuring server secrets..."
 ensure_secrets "$server_app_name" INCIDENT_PSEUDONYMIZATION_SECRET
-ensure_optional_secrets "$server_app_name" TRACE_API_TOKEN TRACE_API_TOKEN_FILE LOCAL_DISCORD_NODES_CONFIG_PATH TURNSTILE_SECRET_KEY TURNSTILE_SITE_KEY DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_GUILD_IDS DISCORD_GUILD_ID DISCORD_USER_ID CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET BOT_PROFILE_ID BOT_PROFILE_DISPLAY_NAME BOT_PROFILE_PROMPT_OVERLAY_PATH BOT_PROFILE_MENTION_ALIASES
+ensure_optional_secrets "$server_app_name" OPENAI_API_KEY OLLAMA_API_KEY TRACE_API_TOKEN REFLECT_SERVICE_TOKEN TURNSTILE_SECRET_KEY DISCORD_TOKEN CLOUDINARY_API_KEY CLOUDINARY_API_SECRET GITHUB_WEBHOOK_SECRET
 run_env_validation fly-server "$server_app_name"
+upload_settings_yaml "$server_app_name"
 
 echo "Deploying server..."
 fly deploy -c "$SERVER_CONFIG_PATH"
