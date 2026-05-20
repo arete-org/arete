@@ -60,9 +60,13 @@ data/
 packages/discord-bot/logs
 logs/
 artifacts/repomix/
+.tmp-start*.log
 
 # the 2>nul commmand creates a "nul" file on Unix systems, so we ignore it
 nul
 
 # OpenCode settings
 opencode.json
+
+# Local startup snapshots
+.footnote-dev/

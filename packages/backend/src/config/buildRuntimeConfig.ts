@@ -34,7 +34,7 @@ export const buildRuntimeConfig = (
     warn: WarningSink
 ): RuntimeConfig => {
     const { yamlSettings, yamlEnv } = loadServerSettings(env, warn);
-    const effectiveEnv = buildEffectiveConfigEnv(env, yamlEnv, warn);
+    const effectiveEnv = buildEffectiveConfigEnv(env, yamlEnv);
     const { runtime, server } = buildRuntimeSections(effectiveEnv, warn);
     const openai = buildOpenAISection(effectiveEnv, warn);
     const ollama = buildOllamaSection(effectiveEnv);

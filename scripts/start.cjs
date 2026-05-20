@@ -252,7 +252,7 @@ const main = async () => {
     const requestedBasePort = resolveFootnoteBasePort(process.env);
     const preflightEnv = {
         ...process.env,
-        PORT: String(requestedBasePort),
+        FOOTNOTE_BASE_PORT: String(requestedBasePort),
     };
 
     const preflightStatus = run(
@@ -300,19 +300,18 @@ const main = async () => {
         console.log(`[start] Using backend dev port ${backendPort}.`);
     }
     console.log(
-        `[start] Web dev prefers port ${webPreferredPort} (Vite may auto-fallback if busy).`
-    );
-    console.log(
         `[start] Browser auto-open is ${openBrowser ? 'enabled' : 'disabled'}.`
     );
     console.log(`[start] Using runtime settings file ${runtimeSettingsPath}.`);
     console.log('[start] Launching local services:');
     console.log(`[start]   Backend: http://localhost:${backendPort}`);
-    console.log(`[start]   Web:     http://localhost:${webPreferredPort}`);
+    console.log(
+        `[start]   Web:     selecting available port (starting at ${webPreferredPort})`
+    );
 
     const backendCommand =
-        'cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm --filter @footnote/backend exec tsx src/server.ts';
-    const webCommand = `cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= BACKEND_BASE_URL=http://localhost:${backendPort} FOOTNOTE_WEB_PORT=${webPreferredPort} FOOTNOTE_WEB_OPEN=${openBrowser ? '1' : '0'} pnpm --filter @footnote/web exec vite`;
+        'cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:backend:run';
+    const webCommand = `cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= BACKEND_BASE_URL=http://localhost:${backendPort} FOOTNOTE_WEB_PORT=${webPreferredPort} FOOTNOTE_WEB_OPEN=${openBrowser ? '1' : '0'} pnpm dev:web:run`;
 
     const concurrentStatus = run(
         pnpmBin,

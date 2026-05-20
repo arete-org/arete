@@ -472,10 +472,6 @@ export const loadServerSettings = (
     return { settingsPath, yamlSettings, yamlEnv };
 };
 
-const LEGACY_SETTINGS_ENV_KEYS = Object.entries(envConfigSourceByKey)
-    .filter(([, source]) => source === 'settings_yaml')
-    .map(([key]) => key);
-
 /**
  * `buildEffectiveConfigEnv` assembles the runtime env snapshot used by config
  * section builders after source-boundary enforcement.
@@ -483,17 +479,14 @@ const LEGACY_SETTINGS_ENV_KEYS = Object.entries(envConfigSourceByKey)
  * Source boundary:
  * - includes process env values for `secret_env` and `bootstrap_env` keys only
  * - applies YAML-projected values for `settings_yaml` keys only
- * - warns and ignores legacy process env values for `settings_yaml` keys
  *
  * @param processEnv Raw process env snapshot.
  * @param yamlEnv YAML-projected non-secret settings keyed by env variable name.
- * @param warn Warning sink used for ignored legacy env key notices.
  * @returns Effective env snapshot for downstream config section parsing.
  */
 export const buildEffectiveConfigEnv = (
     processEnv: NodeJS.ProcessEnv,
-    yamlEnv: NodeJS.ProcessEnv,
-    warn: WarningSink
+    yamlEnv: NodeJS.ProcessEnv
 ): NodeJS.ProcessEnv => {
     const effectiveEnv: NodeJS.ProcessEnv = {};
 
@@ -509,15 +502,6 @@ export const buildEffectiveConfigEnv = (
 
     for (const [key, value] of Object.entries(yamlEnv)) {
         effectiveEnv[key] = value;
-    }
-
-    for (const key of LEGACY_SETTINGS_ENV_KEYS) {
-        if (typeof processEnv[key] !== 'string') {
-            continue;
-        }
-        warn(
-            `Ignoring deprecated env key ${key}. Non-secret runtime settings must come from footnote.yaml.`
-        );
     }
 
     effectiveEnv.FOOTNOTE_SETTINGS_PATH =

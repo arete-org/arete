@@ -43,12 +43,9 @@ const portFromUrl = (value) => {
 };
 
 const resolveFootnoteBasePort = (env = process.env) =>
-    parsePort(env.FOOTNOTE_BASE_PORT) ??
-    parsePort(env.PORT) ??
-    DEFAULT_FOOTNOTE_BASE_PORT;
+    parsePort(env.FOOTNOTE_BASE_PORT) ?? DEFAULT_FOOTNOTE_BASE_PORT;
 
-const resolveBackendPort = (env = process.env) =>
-    parsePort(env.PORT) ?? resolveFootnoteBasePort(env);
+const resolveBackendPort = (env = process.env) => resolveFootnoteBasePort(env);
 
 const resolveWebPort = (
     env = process.env,

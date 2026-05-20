@@ -8,8 +8,10 @@
     "scripts": {
         "start": "node scripts/start.cjs",
         "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
-        "dev:backend": "pnpm backend:prepare && pnpm exec tsx packages/backend/src/server.ts",
-        "dev:web": "pnpm --filter @footnote/web dev",
+        "dev:backend:run": "pnpm exec tsx packages/backend/src/server.ts",
+        "dev:backend": "pnpm backend:prepare && pnpm dev:backend:run",
+        "dev:web:run": "pnpm --filter @footnote/web exec vite",
+        "dev:web": "pnpm dev:web:run",
         "dev:bot": "pnpm --filter @footnote/discord-bot dev",
         "start:dev": "pnpm dev",
         "start:backend": "node scripts/preflight-dev-ports.cjs backend && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:backend",
