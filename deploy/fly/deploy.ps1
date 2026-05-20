@@ -170,6 +170,31 @@ function Ensure-FlySecrets {
   }
 }
 
+function Upload-FootnoteSettings {
+  param(
+    [string]$AppName,
+    [string]$RepoRootPath
+  )
+
+  $settingsPath = Join-Path $RepoRootPath 'footnote.yaml'
+  if (-not (Test-Path $settingsPath)) {
+    Write-Host "No footnote.yaml found at $settingsPath; skipping remote settings upload."
+    return
+  }
+
+  Write-Host "Uploading canonical footnote.yaml to /data/config/footnote.yaml..."
+  try {
+    Get-Content -Path $settingsPath -Raw | fly ssh console -a $AppName -C "mkdir -p /data/config && cat > /data/config/footnote.yaml" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "Unable to upload footnote.yaml to $AppName. Continuing deploy."
+      return
+    }
+    Write-Host "Uploaded footnote.yaml to $AppName."
+  } catch {
+    Write-Warning "Unable to upload footnote.yaml to $AppName. Continuing deploy."
+  }
+}
+
 $configRoot = $PSScriptRoot
 $repoRoot = Resolve-Path (Join-Path $configRoot '..\..')
 $envPath = Join-Path $configRoot '..\..\.env'
@@ -185,7 +210,7 @@ Ensure-FlyApp -ConfigPath $serverConfigPath
 Write-Host "Configuring server secrets..."
 Ensure-FlySecrets -AppName $serverAppName `
   -RequiredSecrets @('INCIDENT_PSEUDONYMIZATION_SECRET') `
-  -OptionalSecrets @('TRACE_API_TOKEN', 'TRACE_API_TOKEN_FILE', 'FOOTNOTE_SERVER_SETTINGS_PATH', 'TURNSTILE_SECRET_KEY', 'TURNSTILE_SITE_KEY', 'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_IDS', 'DISCORD_USER_ID', 'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'BOT_PROFILE_ID', 'BOT_PROFILE_DISPLAY_NAME', 'BOT_PROFILE_PROMPT_OVERLAY_PATH', 'BOT_PROFILE_MENTION_ALIASES') `
+  -OptionalSecrets @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET') `
   -EnvPath $envPath
 Invoke-EnvValidation -Target 'fly-server' -AppName $serverAppName
 
@@ -193,6 +218,7 @@ Write-Host "Deploying server..."
 fly deploy -c $serverConfigPath
 Write-Host "Scaling server to one instance..."
 fly scale count 1 -a $serverAppName -y
+Upload-FootnoteSettings -AppName $serverAppName -RepoRootPath $repoRoot
 
 $startScript = Join-Path $configRoot 'start.ps1'
 if (Test-Path $startScript) {

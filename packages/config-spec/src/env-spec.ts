@@ -376,7 +376,7 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'FOOTNOTE_SERVER_SETTINGS_PATH',
+        key: 'FOOTNOTE_SETTINGS_PATH',
         owner: 'shared',
         stage: 'bootstrap',
         section: 'runtime',
@@ -384,8 +384,8 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Optional server-local path to canonical runtime settings YAML. Defaults to /data/config/footnote.server.yaml when unset.',
-        defaultValue: literal('/data/config/footnote.server.yaml'),
+            'Optional server-local path to canonical runtime settings YAML. Defaults to /data/config/footnote.yaml when unset.',
+        defaultValue: literal('/data/config/footnote.yaml'),
         usedBy: [
             'packages/backend/src/config/settings.ts',
             'packages/discord-bot/src/supervisor/serverNodeSupervisor.ts',
@@ -2577,7 +2577,7 @@ export const envDefaultValues = Object.fromEntries(
 ) as EnvDefaultValues;
 
 const BOOTSTRAP_ENV_ALLOWLIST = new Set<string>([
-    'FOOTNOTE_SERVER_SETTINGS_PATH',
+    'FOOTNOTE_SETTINGS_PATH',
     'NODE_ENV',
     'FLY_APP_NAME',
     'PROMPT_CONFIG_PATH',

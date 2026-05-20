@@ -85,7 +85,7 @@ export const buildRuntimeConfig = (
         alerts,
         profile,
         settings: {
-            localNodes: yamlSettings?.settings.localNodes ?? null,
+            discordBots: yamlSettings?.['discord-bots'] ?? null,
         },
     };
 };

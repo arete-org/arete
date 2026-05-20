@@ -1,28 +1,23 @@
 /**
- * @description: Enforces strict key parity between .env.example and shared env spec metadata.
+ * @description: Enforces secrets-only policy for .env.example using shared env spec metadata.
  * @footnote-scope: utility
  * @footnote-module: ValidateEnvExampleParity
- * @footnote-risk: medium - Incorrect parity checks can block valid config changes or miss drift.
+ * @footnote-risk: medium - Incorrect checks can allow confusing env-doc drift.
  * @footnote-ethics: low - Tooling-only validation with no direct user data impact.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { envEntries } from '../packages/config-spec/src/env-spec';
+import { envSpecByKey } from '../packages/config-spec/src/env-spec';
 import { logger } from '../packages/discord-bot/src/utils/logger';
-
-type PatternSpec = {
-    key: string;
-    regex: RegExp;
-};
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(currentDirectory, '..');
 const envExamplePath = path.join(repoRoot, '.env.example');
 
-const parseExampleKeys = (content: string): Set<string> => {
-    const keys = new Set<string>();
+const parseExampleKeys = (content: string): string[] => {
+    const keys: string[] = [];
     const keyPattern = /^\s*([A-Z][A-Z0-9_]+)\s*=/;
 
     for (const rawLine of content.split(/\r?\n/)) {
@@ -33,25 +28,11 @@ const parseExampleKeys = (content: string): Set<string> => {
 
         const match = line.match(keyPattern);
         if (match) {
-            keys.add(match[1]);
+            keys.push(match[1]);
         }
     }
 
     return keys;
-};
-
-const buildPatternSpecs = (): PatternSpec[] => {
-    const patternEntries = envEntries.filter(
-        (entry) => 'isPattern' in entry && entry.isPattern === true
-    );
-
-    return patternEntries.map((entry) => {
-        const expression = `^${entry.key.replace(/<[^>]+>/g, '[A-Z0-9_]+')}$`;
-        return {
-            key: entry.key,
-            regex: new RegExp(expression),
-        };
-    });
 };
 
 const validate = (): void => {
@@ -59,65 +40,44 @@ const validate = (): void => {
         throw new Error(`Missing .env.example at ${envExamplePath}`);
     }
 
-    const envExampleKeys = parseExampleKeys(
-        fs.readFileSync(envExamplePath, 'utf8')
-    );
-    const patternSpecs = buildPatternSpecs();
+    const keys = parseExampleKeys(fs.readFileSync(envExamplePath, 'utf8'));
+    const unknownKeys: string[] = [];
+    const nonSecretKeys: string[] = [];
 
-    const specConcreteKeys = new Set<string>(
-        envEntries
-            .filter(
-                (entry) => !('isPattern' in entry && entry.isPattern === true)
-            )
-            .map((entry) => String(entry.key))
-    );
-
-    const missingInExample: string[] = [];
-    for (const key of specConcreteKeys) {
-        if (!envExampleKeys.has(key)) {
-            missingInExample.push(key);
-        }
-    }
-
-    const unexpectedInExample: string[] = [];
-    for (const key of envExampleKeys) {
-        if (specConcreteKeys.has(key)) {
+    for (const key of keys) {
+        const entry = envSpecByKey[key as keyof typeof envSpecByKey];
+        if (!entry) {
+            unknownKeys.push(key);
             continue;
         }
 
-        const matchesPattern = patternSpecs.some((patternSpec) =>
-            patternSpec.regex.test(key)
+        if (!entry.secret) {
+            nonSecretKeys.push(key);
+        }
+    }
+
+    unknownKeys.sort();
+    nonSecretKeys.sort();
+
+    for (const key of unknownKeys) {
+        logger.error(
+            `Footnote tag error in .env.example: [validate-env-example-parity] unknown key "${key}".`
         );
-
-        if (!matchesPattern) {
-            unexpectedInExample.push(key);
-        }
     }
 
-    missingInExample.sort();
-    unexpectedInExample.sort();
-
-    if (missingInExample.length > 0) {
-        for (const key of missingInExample) {
-            logger.error(
-                `Footnote tag error in .env.example: [validate-env-example-parity] missing key "${key}".`
-            );
-        }
+    for (const key of nonSecretKeys) {
+        logger.error(
+            `Footnote tag error in .env.example: [validate-env-example-parity] "${key}" is non-secret and must move to footnote.yaml.`
+        );
     }
 
-    if (unexpectedInExample.length > 0) {
-        for (const key of unexpectedInExample) {
-            logger.error(
-                `Footnote tag error in .env.example: [validate-env-example-parity] unexpected key "${key}".`
-            );
-        }
-    }
-
-    if (missingInExample.length > 0 || unexpectedInExample.length > 0) {
+    if (unknownKeys.length > 0 || nonSecretKeys.length > 0) {
         process.exit(1);
     }
 
-    logger.info('[validate-env-example-parity] .env.example parity passed.');
+    logger.info(
+        '[validate-env-example-parity] .env.example secrets-only policy passed.'
+    );
 };
 
 validate();

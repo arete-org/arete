@@ -825,7 +825,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Local nodes are supervised adapters for Discord personas; backend logic remains server-authoritative."
+                    "content": "Discord bots are supervised adapters for Discord personas; backend logic remains server-authoritative."
                 },
                 {
                     "author": "Maintainer",

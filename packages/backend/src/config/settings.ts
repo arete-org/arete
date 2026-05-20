@@ -1,90 +1,102 @@
 /**
- * @description: Loads canonical server settings YAML and enforces config-source boundaries.
+ * @description: Loads canonical footnote.yaml settings and enforces source boundaries.
  * @footnote-scope: core
- * @footnote-module: BackendServerSettings
- * @footnote-risk: high - Incorrect source-boundary parsing can silently apply unsafe runtime config.
- * @footnote-ethics: medium - Clear source separation protects operator intent and secret-handling governance.
+ * @footnote-module: BackendSettingsLoader
+ * @footnote-risk: high - Misparsed settings can route runtime controls to unintended behavior.
+ * @footnote-ethics: medium - Clear secret/runtime boundaries protect operator intent and governance posture.
  */
 
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import { envConfigSourceByKey, envDefaultValues } from '@footnote/config-spec';
 import {
-    envConfigSourceByKey,
-    envDefaultValues,
-    envSpecByKey,
-} from '@footnote/config-spec';
+    envPathSourceEntries,
+    settingsSpecEntries,
+    type SettingsValueKind,
+} from './settings-spec.js';
 import type { WarningSink } from './types.js';
 
 type YamlModule = { load(input: string): unknown };
 const require = createRequire(import.meta.url);
 const yaml = require('js-yaml') as YamlModule;
 
-const DEFAULT_SERVER_SETTINGS_PATH = '/data/config/footnote.server.yaml';
-type CanonicalLocalNodeList = NonNullable<
-    FootnoteServerSettings['settings']['localNodes']
->['nodes'];
+const DEFAULT_SETTINGS_PATH = '/data/config/footnote.yaml';
+const KEBAB_KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 type SettingsScalar = string | number | boolean | string[];
 type SettingsMap = Record<string, SettingsScalar>;
 
-export type FootnoteServerSettings = {
-    settings: {
-        env?: SettingsMap;
-        localNodes?: {
-            nodes: Array<{
-                id: string;
-                enabled?: boolean;
-                required?: boolean;
-                credentials: {
-                    discordTokenEnv?: string;
-                    discordClientIdEnv?: string;
-                    discordGuildIdsEnv?: string;
-                    discordUserIdEnv?: string;
-                    incidentSecretEnv?: string;
-                };
-                profile: {
-                    id: string;
-                    displayName: string;
-                    overlayPath?: string;
-                    mentionAliases?: string[];
-                };
-            }>;
-        };
+type CanonicalDiscordBot = {
+    id?: string;
+    enabled?: boolean;
+    required?: boolean;
+    credentials?: {
+        discordTokenEnv?: string;
+        discordClientIdEnv?: string;
+        discordGuildIdsEnv?: string;
+        discordUserIdEnv?: string;
+        incidentSecretEnv?: string;
     };
+    profile?: {
+        id?: string;
+        displayName?: string;
+        overlayPath?: string;
+        mentionAliases?: string[];
+    };
+};
+
+export type FootnoteSettings = {
+    version: number;
+    'discord-bots': CanonicalDiscordBot[];
+    settingsEnv: SettingsMap;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
 
 const normalizePath = (value: string | undefined): string =>
-    value?.trim() || DEFAULT_SERVER_SETTINGS_PATH;
+    value?.trim() || DEFAULT_SETTINGS_PATH;
 
-const serializeValue = (value: SettingsScalar): string =>
-    Array.isArray(value) ? value.join(',') : String(value);
-
-const validateEnvSetting = (key: string, value: unknown): SettingsScalar => {
-    const spec = envSpecByKey[key as keyof typeof envSpecByKey];
-    if (!spec) {
-        throw new Error(`settings.env.${key} is not a supported server key.`);
-    }
-    if (
-        envConfigSourceByKey[key as keyof typeof envConfigSourceByKey] !==
-        'settings_yaml'
-    ) {
-        throw new Error(
-            `settings.env.${key} is not YAML-configurable (source: ${envConfigSourceByKey[key as keyof typeof envConfigSourceByKey]}).`
+const validateKebabCaseKeys = (value: unknown, pointer = 'root'): void => {
+    if (Array.isArray(value)) {
+        value.forEach((entry, index) =>
+            validateKebabCaseKeys(entry, `${pointer}[${index}]`)
         );
+        return;
     }
-    if (spec.secret) {
-        throw new Error(
-            `settings.env.${key} must not contain secret values. Use env-only secret wiring.`
-        );
+    if (!isRecord(value)) {
+        return;
     }
+    for (const [key, child] of Object.entries(value)) {
+        if (!KEBAB_KEY_PATTERN.test(key)) {
+            throw new Error(
+                `Invalid key "${key}" at ${pointer}. Use kebab-case keys in footnote.yaml.`
+            );
+        }
+        validateKebabCaseKeys(child, `${pointer}.${key}`);
+    }
+};
 
-    switch (spec.kind) {
+const getNestedValue = (root: unknown, path: string[]): unknown => {
+    let current: unknown = root;
+    for (const segment of path) {
+        if (!isRecord(current)) {
+            return undefined;
+        }
+        current = current[segment];
+    }
+    return current;
+};
+
+const validateSettingValue = (
+    kind: SettingsValueKind,
+    value: unknown,
+    keyPath: string
+): SettingsScalar => {
+    switch (kind) {
         case 'boolean':
             if (typeof value !== 'boolean') {
-                throw new Error(`settings.env.${key} must be a boolean.`);
+                throw new Error(`${keyPath} must be a boolean.`);
             }
             return value;
         case 'integer':
@@ -93,75 +105,249 @@ const validateEnvSetting = (key: string, value: unknown): SettingsScalar => {
                 Number.isNaN(value) ||
                 !Number.isInteger(value)
             ) {
-                throw new Error(`settings.env.${key} must be an integer.`);
+                throw new Error(`${keyPath} must be an integer.`);
             }
             return value;
         case 'number':
             if (typeof value !== 'number' || Number.isNaN(value)) {
-                throw new Error(`settings.env.${key} must be a number.`);
+                throw new Error(`${keyPath} must be a number.`);
             }
             return value;
         case 'csv':
             if (Array.isArray(value)) {
                 if (!value.every((entry) => typeof entry === 'string')) {
                     throw new Error(
-                        `settings.env.${key} array entries must be strings.`
+                        `${keyPath} array entries must be strings.`
                     );
                 }
                 return value;
             }
             if (typeof value !== 'string') {
                 throw new Error(
-                    `settings.env.${key} must be a comma-separated string or string array.`
+                    `${keyPath} must be a comma-separated string or string array.`
                 );
             }
             return value;
+        case 'json':
+            if (!isRecord(value)) {
+                throw new Error(`${keyPath} must be an object.`);
+            }
+            return JSON.stringify(value);
         default:
             if (typeof value !== 'string') {
-                throw new Error(`settings.env.${key} must be a string.`);
+                throw new Error(`${keyPath} must be a string.`);
             }
             return value;
     }
 };
 
+const serializeSettingValue = (value: SettingsScalar): string =>
+    Array.isArray(value) ? value.join(',') : String(value);
+
+type SourceNode = {
+    children: Map<string, SourceNode>;
+    envKey?: string;
+    source?: 'secret_env' | 'settings_yaml' | 'bootstrap_env';
+};
+
+const createSourceTree = (): SourceNode => {
+    const root: SourceNode = { children: new Map() };
+
+    for (const entry of envPathSourceEntries) {
+        let cursor = root;
+        for (const segment of entry.path) {
+            const next = cursor.children.get(segment) ?? {
+                children: new Map(),
+            };
+            cursor.children.set(segment, next);
+            cursor = next;
+        }
+        cursor.envKey = entry.envKey;
+        cursor.source = entry.source;
+    }
+
+    return root;
+};
+
+const SOURCE_TREE = createSourceTree();
+
+const validateSupportedSettingsKeys = (
+    root: Record<string, unknown>,
+    pointer = 'root',
+    node: SourceNode = SOURCE_TREE
+): void => {
+    for (const [key, value] of Object.entries(root)) {
+        if (
+            pointer === 'root' &&
+            (key === 'version' || key === 'discord-bots')
+        ) {
+            continue;
+        }
+
+        const path = pointer === 'root' ? key : `${pointer}.${key}`;
+        const next = node.children.get(key);
+        if (!next) {
+            throw new Error(
+                `Invalid server settings YAML: ${path} is not a supported key.`
+            );
+        }
+
+        if (next.source === 'secret_env') {
+            throw new Error(
+                `Invalid server settings YAML: ${path} maps to secret env key ${next.envKey} and is not YAML-configurable.`
+            );
+        }
+
+        if (next.source === 'bootstrap_env') {
+            throw new Error(
+                `Invalid server settings YAML: ${path} maps to bootstrap env key ${next.envKey} and is not YAML-configurable.`
+            );
+        }
+
+        if (next.children.size > 0) {
+            if (!isRecord(value)) {
+                throw new Error(
+                    `Invalid server settings YAML: ${path} must be an object.`
+                );
+            }
+            validateSupportedSettingsKeys(value, path, next);
+            continue;
+        }
+
+        if (isRecord(value)) {
+            throw new Error(
+                `Invalid server settings YAML: ${path} must be a scalar or array value.`
+            );
+        }
+    }
+};
+
+const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
+    if (value === undefined) {
+        return [] as CanonicalDiscordBot[];
+    }
+    if (!Array.isArray(value)) {
+        throw new Error(
+            `Invalid server settings YAML at ${settingsPath}: discord-bots must be an array when provided.`
+        );
+    }
+
+    return value.map((entry, index): CanonicalDiscordBot => {
+        if (!isRecord(entry)) {
+            throw new Error(
+                `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}] must be an object.`
+            );
+        }
+
+        const credentialsSource = entry['credentials'];
+        const profileSource = entry['profile'];
+        if (!isRecord(credentialsSource)) {
+            throw new Error(
+                `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].credentials must be an object.`
+            );
+        }
+        if (!isRecord(profileSource)) {
+            throw new Error(
+                `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].profile must be an object.`
+            );
+        }
+        const mentionAliases = profileSource['mention-aliases'];
+        if (
+            mentionAliases !== undefined &&
+            (!Array.isArray(mentionAliases) ||
+                !mentionAliases.every((entry) => typeof entry === 'string'))
+        ) {
+            throw new Error(
+                `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].profile.mention-aliases must be an array of strings.`
+            );
+        }
+
+        return {
+            id: typeof entry.id === 'string' ? entry.id : undefined,
+            enabled:
+                typeof entry.enabled === 'boolean' ? entry.enabled : undefined,
+            required:
+                typeof entry.required === 'boolean'
+                    ? entry.required
+                    : undefined,
+            credentials: {
+                discordTokenEnv:
+                    typeof credentialsSource['discord-token-env'] === 'string'
+                        ? credentialsSource['discord-token-env']
+                        : undefined,
+                discordClientIdEnv:
+                    typeof credentialsSource['discord-client-id-env'] ===
+                    'string'
+                        ? credentialsSource['discord-client-id-env']
+                        : undefined,
+                discordGuildIdsEnv:
+                    typeof credentialsSource['discord-guild-ids-env'] ===
+                    'string'
+                        ? credentialsSource['discord-guild-ids-env']
+                        : undefined,
+                discordUserIdEnv:
+                    typeof credentialsSource['discord-user-id-env'] === 'string'
+                        ? credentialsSource['discord-user-id-env']
+                        : undefined,
+                incidentSecretEnv:
+                    typeof credentialsSource['incident-secret-env'] === 'string'
+                        ? credentialsSource['incident-secret-env']
+                        : undefined,
+            },
+            profile: {
+                id:
+                    typeof profileSource['id'] === 'string'
+                        ? profileSource['id']
+                        : undefined,
+                displayName:
+                    typeof profileSource['display-name'] === 'string'
+                        ? profileSource['display-name']
+                        : undefined,
+                overlayPath:
+                    typeof profileSource['overlay-path'] === 'string'
+                        ? profileSource['overlay-path']
+                        : undefined,
+                mentionAliases:
+                    Array.isArray(mentionAliases) && mentionAliases.length > 0
+                        ? (mentionAliases as string[])
+                        : undefined,
+            },
+        };
+    });
+};
+
 /**
- * `loadServerSettings` is the canonical authority boundary reader for server
- * runtime settings YAML.
+ * `loadServerSettings` reads the canonical `footnote.yaml` settings plane and
+ * converts YAML-backed non-secret keys into an env-like map for downstream
+ * config builders.
  *
- * Inputs:
- * - `env`: process environment snapshot used only for bootstrap lookup and
- *   legacy-key warning checks.
- * - `warn`: warning sink for non-fatal boundary and fail-open notices.
+ * Source boundary:
+ * - `env` is trusted only for bootstrap path selection (`FOOTNOTE_SETTINGS_PATH`)
+ * - YAML is trusted for non-secret runtime settings only
+ * - secret/bootstrap settings inside YAML are rejected as invalid
  *
- * Returns:
- * - `settingsPath`: resolved canonical YAML path.
- * - `yamlSettings`: parsed canonical settings object or `null` when YAML is
- *   missing.
- * - `yamlEnv`: validated non-secret `settings.env` values converted to env
- *   string form for downstream section parsers.
+ * Behavior:
+ * - Missing YAML file (`ENOENT`): fail-open, calls `warn`, returns defaults-only shape
+ * - Present but invalid YAML/schema: fail-closed by throwing actionable errors
  *
- * Failure policy:
- * - Missing YAML (`ENOENT`) is fail-open with warning (except suppressed under
- *   `NODE_ENV=test`): callers should continue with defaults.
- * - Present but invalid YAML is fail-closed via thrown errors with actionable
- *   messages.
+ * Side effects:
+ * - Reads a file from disk
+ * - Emits warnings through `warn` for missing optional settings file
  *
- * Security and trust assumptions:
- * - Secret/bootstrap keys are never accepted from `settings.env`.
- * - YAML values are treated as operator-controlled non-secret runtime intent.
- * - Warning side effects are emitted through `warn` for deprecated env usage
- *   and fail-open conditions.
+ * @param env Process environment used only for bootstrap path resolution.
+ * @param warn Warning sink for fail-open missing-file notices.
+ * @returns `{ settingsPath, yamlSettings, yamlEnv }` where `yamlEnv` contains
+ * env-key/value projections for YAML-configurable non-secret settings.
  */
 export const loadServerSettings = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
 ): {
     settingsPath: string;
-    yamlSettings: FootnoteServerSettings | null;
+    yamlSettings: FootnoteSettings | null;
     yamlEnv: NodeJS.ProcessEnv;
 } => {
-    const settingsPath = normalizePath(env.FOOTNOTE_SERVER_SETTINGS_PATH);
-
+    const settingsPath = normalizePath(env.FOOTNOTE_SETTINGS_PATH);
     let rawText: string;
     try {
         rawText = fs.readFileSync(settingsPath, 'utf8');
@@ -182,92 +368,84 @@ export const loadServerSettings = (
     }
 
     const parsed = yaml.load(rawText);
-    if (!isRecord(parsed) || !isRecord(parsed.settings)) {
+    if (!isRecord(parsed)) {
         throw new Error(
-            `Invalid server settings YAML at ${settingsPath}: root must contain a "settings" object.`
+            `Invalid server settings YAML at ${settingsPath}: root must be an object.`
         );
     }
 
-    const rawLocalNodes = parsed.settings.localNodes;
-    if (rawLocalNodes !== undefined && !isRecord(rawLocalNodes)) {
-        throw new Error(
-            `Invalid server settings YAML at ${settingsPath}: settings.localNodes must be an object.`
-        );
-    }
-    const localNodes = rawLocalNodes as Record<string, unknown> | undefined;
-    if (localNodes && 'configPath' in localNodes) {
-        throw new Error(
-            `Invalid server settings YAML at ${settingsPath}: settings.localNodes.configPath is removed. Define nodes directly under settings.localNodes.nodes.`
-        );
-    }
-    if (
-        localNodes &&
-        localNodes.nodes !== undefined &&
-        !Array.isArray(localNodes.nodes)
-    ) {
-        throw new Error(
-            `Invalid server settings YAML at ${settingsPath}: settings.localNodes.nodes must be an array when provided.`
-        );
-    }
-
-    const yamlEnv: NodeJS.ProcessEnv = {};
-    if (parsed.settings.env !== undefined) {
-        if (!isRecord(parsed.settings.env)) {
+    if ('settings' in parsed) {
+        if (
+            isRecord(parsed.settings) &&
+            isRecord(parsed.settings['localNodes']) &&
+            parsed.settings['localNodes']['configPath'] !== undefined
+        ) {
             throw new Error(
-                `Invalid server settings YAML at ${settingsPath}: settings.env must be an object when provided.`
+                `Invalid server settings YAML at ${settingsPath}: settings.localNodes.configPath is removed. Configure bots under top-level discord-bots.`
             );
         }
-
-        for (const [key, rawValue] of Object.entries(parsed.settings.env)) {
-            const normalized = validateEnvSetting(key, rawValue);
-            yamlEnv[key] = serializeValue(normalized);
-        }
+        throw new Error(
+            `Invalid server settings YAML at ${settingsPath}: legacy settings.* shape is removed. Use top-level kebab-case keys in footnote.yaml.`
+        );
     }
 
-    const yamlSettings: FootnoteServerSettings = {
-        settings: {
-            env: isRecord(parsed.settings.env)
-                ? (parsed.settings.env as SettingsMap)
-                : undefined,
-            localNodes: localNodes
-                ? {
-                      nodes: Array.isArray(localNodes.nodes)
-                          ? (localNodes.nodes as CanonicalLocalNodeList)
-                          : [],
-                  }
-                : undefined,
-        },
+    validateKebabCaseKeys(parsed);
+    validateSupportedSettingsKeys(parsed);
+
+    const version = parsed.version;
+    if (version !== 1) {
+        throw new Error(
+            `Invalid server settings YAML at ${settingsPath}: version must be 1.`
+        );
+    }
+
+    const settingsEnv: SettingsMap = {};
+    const yamlEnv: NodeJS.ProcessEnv = {};
+    for (const specEntry of settingsSpecEntries) {
+        const rawValue = getNestedValue(parsed, specEntry.path);
+        if (rawValue === undefined) {
+            continue;
+        }
+        const keyPath = specEntry.path.join('.');
+        const normalized = validateSettingValue(
+            specEntry.kind,
+            rawValue,
+            keyPath
+        );
+        settingsEnv[keyPath] = normalized;
+        yamlEnv[specEntry.envKey] = serializeSettingValue(normalized);
+    }
+
+    const discordBots = normalizeDiscordBots(
+        parsed['discord-bots'],
+        settingsPath
+    );
+    const yamlSettings: FootnoteSettings = {
+        version: 1,
+        'discord-bots': discordBots,
+        settingsEnv,
     };
 
     return { settingsPath, yamlSettings, yamlEnv };
 };
 
-const getLegacySettingsEnvKeys = (): string[] =>
-    Object.entries(envConfigSourceByKey)
-        .filter(([, source]) => source === 'settings_yaml')
-        .map(([key]) => key);
-
-const LEGACY_SETTINGS_ENV_KEYS = getLegacySettingsEnvKeys();
+const LEGACY_SETTINGS_ENV_KEYS = Object.entries(envConfigSourceByKey)
+    .filter(([, source]) => source === 'settings_yaml')
+    .map(([key]) => key);
 
 /**
- * `buildEffectiveConfigEnv` builds the effective runtime env snapshot used by
- * backend config sections.
+ * `buildEffectiveConfigEnv` assembles the runtime env snapshot used by config
+ * section builders after source-boundary enforcement.
  *
- * Inputs:
- * - `processEnv`: raw process env containing secrets/bootstrap and possible
- *   legacy non-secret keys.
- * - `yamlEnv`: validated non-secret settings values from canonical YAML.
- * - `warn`: warning sink used when deprecated non-secret env overrides are
- *   detected and ignored.
+ * Source boundary:
+ * - includes process env values for `secret_env` and `bootstrap_env` keys only
+ * - applies YAML-projected values for `settings_yaml` keys only
+ * - warns and ignores legacy process env values for `settings_yaml` keys
  *
- * Returns:
- * - a merged env object where:
- *   - `secret_env` and `bootstrap_env` values come only from `processEnv`
- *   - `settings_yaml` values come only from `yamlEnv`
- *
- * Behavior:
- * - Fail-open for legacy non-secret env keys: emits warnings and ignores them.
- * - No file I/O and no thrown errors expected under normal inputs.
+ * @param processEnv Raw process env snapshot.
+ * @param yamlEnv YAML-projected non-secret settings keyed by env variable name.
+ * @param warn Warning sink used for ignored legacy env key notices.
+ * @returns Effective env snapshot for downstream config section parsing.
  */
 export const buildEffectiveConfigEnv = (
     processEnv: NodeJS.ProcessEnv,
@@ -295,13 +473,13 @@ export const buildEffectiveConfigEnv = (
             continue;
         }
         warn(
-            `Ignoring deprecated env key ${key}. Non-secret runtime settings must come from footnote.server.yaml.`
+            `Ignoring deprecated env key ${key}. Non-secret runtime settings must come from footnote.yaml.`
         );
     }
 
-    effectiveEnv.FOOTNOTE_SERVER_SETTINGS_PATH =
-        processEnv.FOOTNOTE_SERVER_SETTINGS_PATH ??
-        envDefaultValues.FOOTNOTE_SERVER_SETTINGS_PATH;
+    effectiveEnv.FOOTNOTE_SETTINGS_PATH =
+        processEnv.FOOTNOTE_SETTINGS_PATH ??
+        envDefaultValues.FOOTNOTE_SETTINGS_PATH;
 
     return effectiveEnv;
 };

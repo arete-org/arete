@@ -13,6 +13,7 @@ services:
             - '8080:3000'
         volumes:
             - footnote-data:/data
+            - ../footnote.yaml:/data/config/footnote.yaml:ro
         restart: unless-stopped
 
 volumes:

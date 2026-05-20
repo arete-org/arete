@@ -17,6 +17,7 @@ const { spawnSync } = require('node:child_process');
 const repoRoot = path.resolve(__dirname, '..');
 const envPath = path.join(repoRoot, '.env');
 const envExamplePath = path.join(repoRoot, '.env.example');
+const settingsPath = path.join(repoRoot, 'footnote.yaml');
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const lineEnding = process.platform === 'win32' ? '\r\n' : '\n';
 
@@ -44,6 +45,35 @@ const ensureEnvFileExists = () => {
 
     fs.copyFileSync(envExamplePath, envPath);
     console.log('[setup] Created .env from .env.example.');
+};
+
+const ensureSettingsFileExists = () => {
+    if (fs.existsSync(settingsPath)) {
+        console.log('[setup] Found existing footnote.yaml.');
+        return;
+    }
+
+    const generatorPath = path.join(
+        repoRoot,
+        'scripts',
+        'generate-footnote-settings.cjs'
+    );
+
+    const result = spawnSync(
+        process.execPath,
+        [generatorPath, '--if-missing'],
+        {
+            cwd: repoRoot,
+            stdio: 'inherit',
+        }
+    );
+
+    if (result.error) {
+        throw result.error;
+    }
+    if ((result.status ?? 1) !== 0) {
+        throw new Error('Failed to generate default footnote.yaml.');
+    }
 };
 
 const readEnvValue = (envContent, key) => {
@@ -124,31 +154,23 @@ const run = (command, args) => {
 const printChecklist = () => {
     const envContent = readEnvFile() ?? '';
     const hasOpenAiKey = Boolean(readEnvValue(envContent, 'OPENAI_API_KEY'));
-    const ollamaEnabled =
-        readEnvValue(envContent, 'OLLAMA_LOCAL_INFERENCE_ENABLED') === 'true';
-    const hasOllamaBaseUrl = Boolean(
-        readEnvValue(envContent, 'OLLAMA_BASE_URL')
-    );
-    const hasProvider = hasOpenAiKey || hasOllamaBaseUrl;
+    const hasOllamaApiKey = Boolean(readEnvValue(envContent, 'OLLAMA_API_KEY'));
+    const hasProviderSecret = hasOpenAiKey || hasOllamaApiKey;
 
-    if (hasOllamaBaseUrl && !ollamaEnabled) {
-        console.info(
-            '[setup] OLLAMA_BASE_URL is set while OLLAMA_LOCAL_INFERENCE_ENABLED is not true. This is expected for remote Ollama endpoints.'
-        );
-    }
-
-    if (!hasProvider) {
+    if (!hasProviderSecret) {
         console.warn(
-            '[setup] No text provider configured yet. Set OPENAI_API_KEY or OLLAMA_LOCAL_INFERENCE_ENABLED=true with OLLAMA_BASE_URL.'
+            '[setup] No provider secret configured yet. Startup is still allowed; model-dependent features will show setup-required responses until provider config is added.'
         );
     }
 
+    console.log('[setup] Runtime settings live in footnote.yaml.');
     console.log('[setup] Complete. Start with: pnpm dev');
 };
 
 const main = () => {
     ensureEnvFileExists();
     ensureGeneratedSecrets();
+    ensureSettingsFileExists();
     run(pnpmBin, ['install']);
     printChecklist();
 };

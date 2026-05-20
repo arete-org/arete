@@ -30,7 +30,7 @@ const BACKEND_ENTRYPOINT = '/usr/local/bin/backend-entrypoint.sh';
 const DEFAULT_BACKEND_PORT = '3000';
 const NODE_RESTART_DELAY_MS = 1000;
 const PROCESS_STOP_TIMEOUT_MS = 10_000;
-const DEFAULT_SERVER_SETTINGS_PATH = '/data/config/footnote.server.yaml';
+const DEFAULT_SERVER_SETTINGS_PATH = '/data/config/footnote.yaml';
 
 type YamlModule = { load(input: string): unknown };
 const require = createRequire(import.meta.url);
@@ -66,43 +66,72 @@ const resolveBackendBaseUrl = (env: NodeJS.ProcessEnv): string => {
 const loadCanonicalLocalNodeDefinitions = (
     env: NodeJS.ProcessEnv
 ): LocalNodeDefinition[] | null => {
+    if (
+        typeof env.LOCAL_DISCORD_NODES_CONFIG_PATH === 'string' &&
+        env.LOCAL_DISCORD_NODES_CONFIG_PATH.trim().length > 0
+    ) {
+        logger.warn(
+            'LOCAL_DISCORD_NODES_CONFIG_PATH is unsupported in server runtime. Ignoring env value and loading discord-bots from footnote.yaml only.'
+        );
+    }
+
     const settingsPath =
-        env.FOOTNOTE_SERVER_SETTINGS_PATH?.trim() ||
-        DEFAULT_SERVER_SETTINGS_PATH;
+        env.FOOTNOTE_SETTINGS_PATH?.trim() || DEFAULT_SERVER_SETTINGS_PATH;
     try {
         const raw = fs.readFileSync(settingsPath, 'utf8');
         const parsed = yaml.load(raw);
-        if (!isRecord(parsed) || !isRecord(parsed.settings)) {
+        if (!isRecord(parsed)) {
             return [];
         }
-        const localNodes = parsed.settings.localNodes;
-        if (Array.isArray(localNodes)) {
+        if ('settings' in parsed) {
             throw new Error(
-                'settings.localNodes must be an object. Use settings.localNodes.nodes for node definitions.'
+                'legacy settings.* YAML shape is removed. Use top-level discord-bots in footnote.yaml.'
             );
         }
-        if (isRecord(localNodes)) {
-            if ('configPath' in localNodes) {
-                throw new Error(
-                    'settings.localNodes.configPath is removed. Define nodes directly under settings.localNodes.nodes.'
-                );
-            }
-            if (Array.isArray(localNodes.nodes)) {
-                return parseLocalNodeDefinitions(localNodes.nodes);
-            }
-            if (localNodes.nodes !== undefined) {
-                throw new Error(
-                    'settings.localNodes.nodes must be an array when provided.'
-                );
-            }
+
+        const discordBots = parsed['discord-bots'];
+        if (discordBots === undefined) {
             return [];
         }
-        return [];
+        if (!Array.isArray(discordBots)) {
+            throw new Error('discord-bots must be an array when provided.');
+        }
+        return parseLocalNodeDefinitions(
+            discordBots.map((entry) => {
+                if (!isRecord(entry)) {
+                    return entry;
+                }
+                const credentials = isRecord(entry.credentials)
+                    ? entry.credentials
+                    : {};
+                const profile = isRecord(entry.profile) ? entry.profile : {};
+                return {
+                    id: entry.id,
+                    enabled: entry.enabled,
+                    required: entry.required,
+                    credentials: {
+                        discordTokenEnv: credentials['discord-token-env'],
+                        discordClientIdEnv:
+                            credentials['discord-client-id-env'],
+                        discordGuildIdsEnv:
+                            credentials['discord-guild-ids-env'],
+                        discordUserIdEnv: credentials['discord-user-id-env'],
+                        incidentSecretEnv: credentials['incident-secret-env'],
+                    },
+                    profile: {
+                        id: profile.id,
+                        displayName: profile['display-name'],
+                        overlayPath: profile['overlay-path'],
+                        mentionAliases: profile['mention-aliases'],
+                    },
+                };
+            })
+        );
     } catch (error) {
         const nodeError = error as NodeJS.ErrnoException;
         if (nodeError.code === 'ENOENT') {
             logger.warn(
-                `Server settings YAML not found at ${settingsPath}; starting with no configured local nodes.`
+                `Server settings YAML not found at ${settingsPath}; starting with no configured discord bots.`
             );
             return null;
         }
@@ -195,17 +224,17 @@ class ServerNodeSupervisor {
                 : resolveLocalNodeDefinitions(localNodeDefinitions, this.env);
         const backendBaseUrl = resolveBackendBaseUrl(this.env);
 
-        logger.info('local_nodes_config_status', {
+        logger.info('discord_bots_config_status', {
             status: localNodeDefinitions === null ? 'missing' : 'configured',
             configPath:
-                this.env.FOOTNOTE_SERVER_SETTINGS_PATH?.trim() ??
+                this.env.FOOTNOTE_SETTINGS_PATH?.trim() ??
                 DEFAULT_SERVER_SETTINGS_PATH,
             activeNodeCount: resolvedNodes.activeNodes.length,
             disabledNodeCount: resolvedNodes.disabledNodes.length,
         });
 
         for (const disabledNode of resolvedNodes.disabledNodes) {
-            logger.info('local_node_disabled', {
+            logger.info('discord_bot_disabled', {
                 nodeId: disabledNode.id,
                 reason: disabledNode.reason,
                 required: disabledNode.required,
@@ -213,13 +242,13 @@ class ServerNodeSupervisor {
         }
 
         if (resolvedNodes.activeNodes.length === 0) {
-            logger.info('no_local_nodes_configured', {
+            logger.info('no_discord_bots_configured', {
                 reason:
                     localNodeDefinitions === null
                         ? 'config_missing'
                         : 'no_launchable_nodes',
                 configPath:
-                    this.env.FOOTNOTE_SERVER_SETTINGS_PATH?.trim() ??
+                    this.env.FOOTNOTE_SETTINGS_PATH?.trim() ??
                     DEFAULT_SERVER_SETTINGS_PATH,
             });
         }
@@ -286,7 +315,7 @@ class ServerNodeSupervisor {
         });
         state.child = child;
 
-        logger.info('local_node_started', {
+        logger.info('discord_bot_started', {
             nodeId: state.config.id,
             pid: child.pid,
             required: state.config.required,
@@ -300,7 +329,7 @@ class ServerNodeSupervisor {
             }
 
             const failureDecision = state.restartPolicy.recordFailure();
-            logger.warn('local_node_exited', {
+            logger.warn('discord_bot_exited', {
                 nodeId: state.config.id,
                 code,
                 signal,
@@ -309,7 +338,7 @@ class ServerNodeSupervisor {
 
             if (failureDecision.unhealthy) {
                 state.unhealthy = true;
-                logger.error('local_node_unhealthy', {
+                logger.error('discord_bot_unhealthy', {
                     nodeId: state.config.id,
                     failureCount: failureDecision.failureCount,
                     threshold: LOCAL_NODE_FAILURE_THRESHOLD,

@@ -1,37 +1,13 @@
 /**
- * @description: Loads and validates server-local Discord node YAML config, then resolves
- * credential env references into runtime-safe node launch settings.
+ * @description: Validates canonical Discord bot definitions and resolves credential
+ * env references into runtime-safe launch settings.
  * @footnote-scope: core
  * @footnote-module: LocalNodesConfig
  * @footnote-risk: high - Invalid parsing or credential resolution can break node startup policy.
  * @footnote-ethics: medium - Node identity and secret-reference handling impact governance and operator trust.
  */
 
-import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import { isRecord } from './valueGuards.js';
-
-type YamlModule = {
-    load(input: string): unknown;
-};
-
-const require = createRequire(import.meta.url);
-const loadYamlModule = (): YamlModule => {
-    try {
-        return require('js-yaml') as YamlModule;
-    } catch (error) {
-        throw new Error(
-            `Missing dependency "js-yaml" for local node config parsing. Install workspace dependencies (pnpm install).`,
-            { cause: error }
-        );
-    }
-};
-const yamlModule = loadYamlModule();
-
-export const DEFAULT_LOCAL_DISCORD_NODES_CONFIG_PATH =
-    '/data/config/local-discord-nodes.yaml';
-
-const SUPPORTED_CONFIG_VERSION = 1;
 
 type CredentialReferenceKey =
     | 'discordTokenEnv'
@@ -95,19 +71,6 @@ export type LocalNodeDisabledConfig = {
     id: string;
     required: boolean;
     reason: string;
-};
-
-export type LocalNodeConfigLoadResult = {
-    status: 'configured' | 'missing';
-    configPath: string;
-    activeNodes: LocalNodeRuntimeConfig[];
-    disabledNodes: LocalNodeDisabledConfig[];
-};
-
-type LoadLocalNodeConfigOptions = {
-    env?: NodeJS.ProcessEnv;
-    configPath?: string;
-    readFile?: (path: string) => string;
 };
 
 const normalizeOptionalString = (value: unknown): string | undefined => {
@@ -275,22 +238,6 @@ export const parseLocalNodeDefinitions = (
     }
 
     return parsedNodes;
-};
-
-const parseRawConfig = (contents: string): ParsedNodeConfig[] => {
-    const rawParsed = yamlModule.load(contents);
-    if (!isRecord(rawParsed)) {
-        throw new Error('Local nodes config must be a YAML object.');
-    }
-
-    const version = rawParsed.version;
-    if (version !== SUPPORTED_CONFIG_VERSION) {
-        throw new Error(
-            `Unsupported local nodes config version "${String(version)}". Expected ${SUPPORTED_CONFIG_VERSION}.`
-        );
-    }
-
-    return parseLocalNodeDefinitions(rawParsed.nodes);
 };
 
 const resolveEnvValue = (
@@ -482,7 +429,7 @@ export const resolveLocalNodeDefinitions = (
 
         if (resolved.node.required) {
             throw new Error(
-                `Required local node "${resolved.node.id}" is not launchable (${resolved.node.reason}).`
+                `Required discord bot "${resolved.node.id}" is not launchable (${resolved.node.reason}).`
             );
         }
 
@@ -490,74 +437,4 @@ export const resolveLocalNodeDefinitions = (
     }
 
     return { activeNodes, disabledNodes };
-};
-
-/**
- * Loads server-local Discord node YAML config and resolves launchable node runtime settings.
- *
- * Inputs:
- * - `LoadLocalNodeConfigOptions` (`env`, optional `configPath`, optional `readFile` override)
- *
- * Returns:
- * - `LocalNodeConfigLoadResult` with `status`, `configPath`, `activeNodes`, and `disabledNodes`
- *
- * Guarantee and fail-open semantics:
- * - missing config file (`ENOENT`) returns `status: "missing"` with empty node lists
- * - optional nodes with missing refs/env values are returned in `disabledNodes`
- * - required nodes are enforced and cause loader failure when not launchable
- *
- * Throw behavior:
- * - unreadable config files (except `ENOENT`)
- * - invalid YAML/schema/version
- * - required node resolution failures
- *
- * Side effects:
- * - reads the YAML config file from disk unless `readFile` is injected
- * - no logging is performed in this loader; callers own logging decisions
- */
-export const loadLocalNodeConfig = (
-    options: LoadLocalNodeConfigOptions = {}
-): LocalNodeConfigLoadResult => {
-    const env = options.env ?? process.env;
-    const configPath =
-        normalizeOptionalString(options.configPath) ??
-        DEFAULT_LOCAL_DISCORD_NODES_CONFIG_PATH;
-    const readFile =
-        options.readFile ??
-        ((targetPath: string) => fs.readFileSync(targetPath, 'utf8'));
-
-    let rawConfigText: string;
-    try {
-        rawConfigText = readFile(configPath);
-    } catch (error) {
-        const nodeError = error as NodeJS.ErrnoException;
-        if (nodeError.code === 'ENOENT') {
-            return {
-                status: 'missing',
-                configPath,
-                activeNodes: [],
-                disabledNodes: [],
-            };
-        }
-
-        throw new Error(
-            `Failed to read local nodes config at ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
-            {
-                cause: error,
-            }
-        );
-    }
-
-    const parsedNodes = parseRawConfig(rawConfigText);
-    const { activeNodes, disabledNodes } = resolveLocalNodeDefinitions(
-        parsedNodes,
-        env
-    );
-
-    return {
-        status: 'configured',
-        configPath,
-        activeNodes,
-        disabledNodes,
-    };
 };

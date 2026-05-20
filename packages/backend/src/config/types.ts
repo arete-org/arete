@@ -228,20 +228,24 @@ export type RuntimeConfig = {
         };
     };
     settings: {
-        localNodes: {
-            nodes: Array<{
-                id: string;
-                enabled?: boolean;
-                required?: boolean;
-                credentials: Record<string, string | undefined>;
-                profile: {
-                    id: string;
-                    displayName: string;
-                    overlayPath?: string;
-                    mentionAliases?: string[];
-                };
-            }>;
-        } | null;
+        discordBots: Array<{
+            id?: string;
+            enabled?: boolean;
+            required?: boolean;
+            credentials?: {
+                discordTokenEnv?: string;
+                discordClientIdEnv?: string;
+                discordGuildIdsEnv?: string;
+                discordUserIdEnv?: string;
+                incidentSecretEnv?: string;
+            };
+            profile?: {
+                id?: string;
+                displayName?: string;
+                overlayPath?: string;
+                mentionAliases?: string[];
+            };
+        }> | null;
     };
     profile: BotProfileConfig;
 };
