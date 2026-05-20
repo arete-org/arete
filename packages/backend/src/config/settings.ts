@@ -148,6 +148,7 @@ type SourceNode = {
     children: Map<string, SourceNode>;
     envKey?: string;
     source?: 'secret_env' | 'settings_yaml' | 'bootstrap_env';
+    kind?: SettingsValueKind;
 };
 
 const createSourceTree = (): SourceNode => {
@@ -164,6 +165,7 @@ const createSourceTree = (): SourceNode => {
         }
         cursor.envKey = entry.envKey;
         cursor.source = entry.source;
+        cursor.kind = entry.kind;
     }
 
     return root;
@@ -214,7 +216,7 @@ const validateSupportedSettingsKeys = (
             continue;
         }
 
-        if (isRecord(value)) {
+        if (isRecord(value) && next.kind !== 'json') {
             throw new Error(
                 `Invalid server settings YAML: ${path} must be a scalar or array value.`
             );
@@ -238,6 +240,20 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
                 `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}] must be an object.`
             );
         }
+        const allowedBotKeys = new Set([
+            'id',
+            'enabled',
+            'required',
+            'credentials',
+            'profile',
+        ]);
+        for (const key of Object.keys(entry)) {
+            if (!allowedBotKeys.has(key)) {
+                throw new Error(
+                    `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}] contains unsupported key "${key}".`
+                );
+            }
+        }
 
         const credentialsSource = entry['credentials'];
         const profileSource = entry['profile'];
@@ -246,10 +262,37 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
                 `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].credentials must be an object.`
             );
         }
+        const allowedCredentialKeys = new Set([
+            'discord-token-env',
+            'discord-client-id-env',
+            'discord-guild-ids-env',
+            'discord-user-id-env',
+            'incident-secret-env',
+        ]);
+        for (const key of Object.keys(credentialsSource)) {
+            if (!allowedCredentialKeys.has(key)) {
+                throw new Error(
+                    `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].credentials contains unsupported key "${key}".`
+                );
+            }
+        }
         if (!isRecord(profileSource)) {
             throw new Error(
                 `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].profile must be an object.`
             );
+        }
+        const allowedProfileKeys = new Set([
+            'id',
+            'display-name',
+            'overlay-path',
+            'mention-aliases',
+        ]);
+        for (const key of Object.keys(profileSource)) {
+            if (!allowedProfileKeys.has(key)) {
+                throw new Error(
+                    `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].profile contains unsupported key "${key}".`
+                );
+            }
         }
         const mentionAliases = profileSource['mention-aliases'];
         if (

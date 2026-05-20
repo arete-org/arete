@@ -26,7 +26,16 @@ if (!fs.existsSync(settingsPath)) {
     process.exit(1);
 }
 
-const parsed = yaml.load(fs.readFileSync(settingsPath, 'utf8'));
+let parsed;
+try {
+    parsed = yaml.load(fs.readFileSync(settingsPath, 'utf8'));
+} catch (error) {
+    console.error(
+        `[settings:check] Failed to parse YAML at ${settingsPath}: ${error instanceof Error ? error.message : String(error)}`
+    );
+    process.exit(1);
+}
+
 if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     console.error('[settings:check] Settings root must be a YAML object.');
     process.exit(1);

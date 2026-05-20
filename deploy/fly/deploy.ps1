@@ -213,12 +213,12 @@ Ensure-FlySecrets -AppName $serverAppName `
   -OptionalSecrets @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET') `
   -EnvPath $envPath
 Invoke-EnvValidation -Target 'fly-server' -AppName $serverAppName
+Upload-FootnoteSettings -AppName $serverAppName -RepoRootPath $repoRoot
 
 Write-Host "Deploying server..."
 fly deploy -c $serverConfigPath
 Write-Host "Scaling server to one instance..."
 fly scale count 1 -a $serverAppName -y
-Upload-FootnoteSettings -AppName $serverAppName -RepoRootPath $repoRoot
 
 $startScript = Join-Path $configRoot 'start.ps1'
 if (Test-Path $startScript) {

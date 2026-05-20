@@ -63,6 +63,19 @@ const resolveBackendBaseUrl = (env: NodeJS.ProcessEnv): string => {
     return `http://localhost:${normalizePort(env.PORT)}`;
 };
 
+/**
+ * Loads canonical Discord bot definitions from `footnote.yaml`.
+ *
+ * Contract:
+ * - Returns `null` when the settings file is missing (`ENOENT`) so callers can
+ *   treat startup as fail-open with "no configured bots".
+ * - Returns `[]` when the settings file exists but `discord-bots` is unset or
+ *   explicitly empty.
+ * - Throws when YAML is malformed or validation fails.
+ *
+ * `start()` treats `null` and `[]` differently (`missing` vs `configured`), so
+ * callers must preserve that distinction.
+ */
 const loadCanonicalLocalNodeDefinitions = (
     env: NodeJS.ProcessEnv
 ): LocalNodeDefinition[] | null => {
@@ -84,6 +97,11 @@ const loadCanonicalLocalNodeDefinitions = (
             return [];
         }
         if ('settings' in parsed) {
+            if (!isRecord(parsed.settings)) {
+                throw new Error(
+                    `Invalid server settings YAML at ${settingsPath}: settings must be an object when present.`
+                );
+            }
             throw new Error(
                 'legacy settings.* YAML shape is removed. Use top-level discord-bots in footnote.yaml.'
             );
@@ -227,7 +245,7 @@ class ServerNodeSupervisor {
         logger.info('discord_bots_config_status', {
             status: localNodeDefinitions === null ? 'missing' : 'configured',
             configPath:
-                this.env.FOOTNOTE_SETTINGS_PATH?.trim() ??
+                this.env.FOOTNOTE_SETTINGS_PATH?.trim() ||
                 DEFAULT_SERVER_SETTINGS_PATH,
             activeNodeCount: resolvedNodes.activeNodes.length,
             disabledNodeCount: resolvedNodes.disabledNodes.length,
@@ -248,7 +266,7 @@ class ServerNodeSupervisor {
                         ? 'config_missing'
                         : 'no_launchable_nodes',
                 configPath:
-                    this.env.FOOTNOTE_SETTINGS_PATH?.trim() ??
+                    this.env.FOOTNOTE_SETTINGS_PATH?.trim() ||
                     DEFAULT_SERVER_SETTINGS_PATH,
             });
         }

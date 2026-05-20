@@ -195,12 +195,12 @@ echo "Configuring server secrets..."
 ensure_secrets "$server_app_name" INCIDENT_PSEUDONYMIZATION_SECRET
 ensure_optional_secrets "$server_app_name" OPENAI_API_KEY OLLAMA_API_KEY TRACE_API_TOKEN REFLECT_SERVICE_TOKEN TURNSTILE_SECRET_KEY DISCORD_TOKEN CLOUDINARY_API_KEY CLOUDINARY_API_SECRET GITHUB_WEBHOOK_SECRET
 run_env_validation fly-server "$server_app_name"
+upload_settings_yaml "$server_app_name"
 
 echo "Deploying server..."
 fly deploy -c "$SERVER_CONFIG_PATH"
 echo "Scaling server to one instance..."
 fly scale count 1 -a "$server_app_name" -y
-upload_settings_yaml "$server_app_name"
 
 if [[ -f "$SCRIPT_DIR/start.sh" ]]; then
   echo "Starting server app..."

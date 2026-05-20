@@ -76,7 +76,6 @@ Token values are never logged.
 
 Removed from active support:
 
-- `deploy/compose.yml`
 - `deploy/Dockerfile.backend`
 - `deploy/Dockerfile.web`
 - `deploy/Dockerfile.bot`

@@ -187,6 +187,22 @@ const parseCredentialReferences = (
     return credentialReferences;
 };
 
+/**
+ * Parses and normalizes raw Discord bot node definitions.
+ *
+ * @param rawNodes Unknown parsed input expected to be an array of node
+ * objects with `id`, optional `enabled`/`required`, `credentials`, and
+ * `profile`.
+ * @returns Normalized node definitions with defaults applied.
+ * @throws When `rawNodes` is not an array, a node is malformed, `id` is
+ * missing, or duplicate ids are present.
+ *
+ * Validation/normalization details:
+ * - `id` is required
+ * - duplicate ids are rejected
+ * - `enabled` defaults to `true`
+ * - `required` defaults to `false`
+ */
 export const parseLocalNodeDefinitions = (
     rawNodes: unknown
 ): ParsedNodeConfig[] => {
@@ -410,6 +426,23 @@ const resolveRuntimeNode = (
     };
 };
 
+/**
+ * Resolves parsed node definitions against env-backed credential references.
+ *
+ * @param parsedNodes Normalized node definitions from
+ * `parseLocalNodeDefinitions`.
+ * @param env Environment variable snapshot used to resolve credential
+ * references.
+ * @returns Partitioned runtime result with launchable `activeNodes` and
+ * non-launchable optional `disabledNodes`.
+ * @throws When a required node cannot be launched due to missing references or
+ * missing env credential values.
+ *
+ * Semantics:
+ * - disabled/optional-unlaunchable nodes are returned in `disabledNodes`
+ * - launchable nodes are returned in `activeNodes`
+ * - required nodes that are unlaunchable cause an error
+ */
 export const resolveLocalNodeDefinitions = (
     parsedNodes: LocalNodeDefinition[],
     env: NodeJS.ProcessEnv

@@ -45,30 +45,35 @@ const resolveEnvPath = (entry: { key: string; section: string }): string[] =>
         toKebabCase(entry.key),
     ];
 
+const resolveConfigSource = (
+    key: string
+): 'secret_env' | 'settings_yaml' | 'bootstrap_env' => {
+    const source =
+        envConfigSourceByKey[key as keyof typeof envConfigSourceByKey];
+    if (!source) {
+        throw new Error(
+            `Missing env config source mapping for key "${key}" in envConfigSourceByKey.`
+        );
+    }
+    return source;
+};
+
 export const envPathSourceEntries = envEntries
     .filter((entry) => !('isPattern' in entry && entry.isPattern === true))
     .filter((entry) => entry.section !== 'discord-bot')
     .map((entry) => {
-        const source =
-            envConfigSourceByKey[
-                entry.key as keyof typeof envConfigSourceByKey
-            ] ?? 'settings_yaml';
         return {
             envKey: entry.key,
             path: resolveEnvPath(entry),
-            source,
+            source: resolveConfigSource(entry.key),
+            kind: entry.kind as SettingsValueKind,
         };
     });
 
 export const settingsSpecEntries: SettingsSpecEntry[] = envEntries
     .filter((entry) => !('isPattern' in entry && entry.isPattern === true))
     .filter((entry) => entry.section !== 'discord-bot')
-    .filter(
-        (entry) =>
-            envConfigSourceByKey[
-                entry.key as keyof typeof envConfigSourceByKey
-            ] === 'settings_yaml'
-    )
+    .filter((entry) => resolveConfigSource(entry.key) === 'settings_yaml')
     .map((entry) => ({
         envKey: entry.key,
         section: toKebabCase(entry.section),

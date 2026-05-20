@@ -6,5 +6,11 @@
  * @footnote-ethics: low - Guard consistency helps predictable config validation behavior.
  */
 
+/**
+ * Type guard for non-null object values that can be treated as
+ * `Record<string, unknown>` at config boundaries.
+ *
+ * Returns `false` for `null` and non-object primitives.
+ */
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
