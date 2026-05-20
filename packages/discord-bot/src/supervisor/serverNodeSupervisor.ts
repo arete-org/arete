@@ -66,12 +66,6 @@ const resolveBackendBaseUrl = (env: NodeJS.ProcessEnv): string => {
 const loadCanonicalLocalNodeDefinitions = (
     env: NodeJS.ProcessEnv
 ): LocalNodeDefinition[] | null => {
-    if (typeof env.LOCAL_DISCORD_NODES_CONFIG_PATH === 'string') {
-        logger.warn(
-            'LOCAL_DISCORD_NODES_CONFIG_PATH is unsupported and ignored. Define local nodes directly in footnote.server.yaml under settings.localNodes.'
-        );
-    }
-
     const settingsPath =
         env.FOOTNOTE_SERVER_SETTINGS_PATH?.trim() ||
         DEFAULT_SERVER_SETTINGS_PATH;
@@ -181,7 +175,6 @@ const buildNodeEnvironment = (
         delete env.BOT_PROFILE_MENTION_ALIASES;
     }
 
-    delete env.DISCORD_GUILD_ID;
     return env;
 };
 

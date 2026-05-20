@@ -129,23 +129,6 @@ test('rejects bootstrap env keys in YAML settings.env', () => {
     }, /not YAML-configurable/i);
 });
 
-test('LOCAL_DISCORD_NODES_CONFIG_PATH warns and is ignored', () => {
-    const warnings: string[] = [];
-    const config = buildRuntimeConfig(
-        {
-            NODE_ENV: 'test',
-            LOCAL_DISCORD_NODES_CONFIG_PATH: '/tmp/legacy.yaml',
-        },
-        (message) => warnings.push(message)
-    );
-
-    assert.equal(config.settings.localNodes, null);
-    assert.match(
-        warnings.join('\n'),
-        /LOCAL_DISCORD_NODES_CONFIG_PATH is unsupported.*Ignoring env value/i
-    );
-});
-
 test('canonical localNodes definitions load under settings.localNodes.nodes', () => {
     const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'footnote-settings-')
@@ -164,7 +147,7 @@ test('canonical localNodes definitions load under settings.localNodes.nodes', ()
             '        credentials:',
             '          discordTokenEnv: DISCORD_TOKEN',
             '          discordClientIdEnv: DISCORD_CLIENT_ID',
-            '          discordGuildIdEnv: DISCORD_GUILD_ID',
+            '          discordGuildIdsEnv: DISCORD_GUILD_IDS',
             '          discordUserIdEnv: DISCORD_USER_ID',
             '          incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET',
             '        profile:',

@@ -20,7 +20,6 @@ const require = createRequire(import.meta.url);
 const yaml = require('js-yaml') as YamlModule;
 
 const DEFAULT_SERVER_SETTINGS_PATH = '/data/config/footnote.server.yaml';
-const LEGACY_LOCAL_NODES_ENV_KEY = 'LOCAL_DISCORD_NODES_CONFIG_PATH';
 type CanonicalLocalNodeList = NonNullable<
     FootnoteServerSettings['settings']['localNodes']
 >['nodes'];
@@ -40,7 +39,6 @@ export type FootnoteServerSettings = {
                     discordTokenEnv?: string;
                     discordClientIdEnv?: string;
                     discordGuildIdsEnv?: string;
-                    discordGuildIdEnv?: string;
                     discordUserIdEnv?: string;
                     incidentSecretEnv?: string;
                 };
@@ -163,11 +161,6 @@ export const loadServerSettings = (
     yamlEnv: NodeJS.ProcessEnv;
 } => {
     const settingsPath = normalizePath(env.FOOTNOTE_SERVER_SETTINGS_PATH);
-    if (typeof env[LEGACY_LOCAL_NODES_ENV_KEY] === 'string') {
-        warn(
-            `${LEGACY_LOCAL_NODES_ENV_KEY} is unsupported. Define local nodes directly under settings.localNodes.nodes in footnote.server.yaml. Ignoring env value.`
-        );
-    }
 
     let rawText: string;
     try {

@@ -37,7 +37,6 @@ type CredentialReferenceKey =
     | 'discordTokenEnv'
     | 'discordClientIdEnv'
     | 'discordGuildIdsEnv'
-    | 'discordGuildIdEnv'
     | 'discordUserIdEnv'
     | 'incidentSecretEnv';
 
@@ -51,7 +50,6 @@ type LocalNodeCredentialReferences = {
     discordTokenEnv?: string;
     discordClientIdEnv?: string;
     discordGuildIdsEnv?: string;
-    discordGuildIdEnv?: string;
     discordUserIdEnv?: string;
     incidentSecretEnv?: string;
 };
@@ -202,7 +200,6 @@ const parseCredentialReferences = (
         discordTokenEnv: normalizeOptionalString(value.discordTokenEnv),
         discordClientIdEnv: normalizeOptionalString(value.discordClientIdEnv),
         discordGuildIdsEnv: normalizeOptionalString(value.discordGuildIdsEnv),
-        discordGuildIdEnv: normalizeOptionalString(value.discordGuildIdEnv),
         discordUserIdEnv: normalizeOptionalString(value.discordUserIdEnv),
         incidentSecretEnv: normalizeOptionalString(value.incidentSecretEnv),
     };
@@ -357,16 +354,14 @@ const resolveRuntimeNode = (
         }
     }
 
-    const guildIdsReference =
-        parsedNode.credentials.discordGuildIdsEnv ??
-        parsedNode.credentials.discordGuildIdEnv;
+    const guildIdsReference = parsedNode.credentials.discordGuildIdsEnv;
     if (!guildIdsReference) {
         return {
             kind: 'disabled',
             node: {
                 id: parsedNode.id,
                 required: parsedNode.required,
-                reason: 'missing_credential_reference:discordGuildIdsEnv|discordGuildIdEnv',
+                reason: 'missing_credential_reference:discordGuildIdsEnv',
             },
         };
     }
@@ -401,28 +396,17 @@ const resolveRuntimeNode = (
         };
     }
 
-    const guildIdsFromPreferred = resolveEnvValue(
+    const discordGuildIds = resolveEnvValue(
         env,
         parsedNode.credentials.discordGuildIdsEnv
     );
-    const guildIdsFromLegacy = resolveEnvValue(
-        env,
-        parsedNode.credentials.discordGuildIdEnv
-    );
-    const discordGuildIds = guildIdsFromPreferred ?? guildIdsFromLegacy;
     if (!discordGuildIds) {
-        const attemptedKeys = [
-            parsedNode.credentials.discordGuildIdsEnv,
-            parsedNode.credentials.discordGuildIdEnv,
-        ]
-            .filter((entry): entry is string => typeof entry === 'string')
-            .join('|');
         return {
             kind: 'disabled',
             node: {
                 id: parsedNode.id,
                 required: parsedNode.required,
-                reason: `missing_credential_env_value:${attemptedKeys}`,
+                reason: `missing_credential_env_value:${parsedNode.credentials.discordGuildIdsEnv}`,
             },
         };
     }
@@ -537,7 +521,6 @@ export const loadLocalNodeConfig = (
     const env = options.env ?? process.env;
     const configPath =
         normalizeOptionalString(options.configPath) ??
-        normalizeOptionalString(env.LOCAL_DISCORD_NODES_CONFIG_PATH) ??
         DEFAULT_LOCAL_DISCORD_NODES_CONFIG_PATH;
     const readFile =
         options.readFile ??

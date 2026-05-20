@@ -45,7 +45,7 @@ nodes:
     credentials:
       discordTokenEnv: DANNY_DISCORD_TOKEN
       discordClientIdEnv: DANNY_DISCORD_CLIENT_ID
-      discordGuildIdEnv: DANNY_DISCORD_GUILD_ID
+      discordGuildIdsEnv: DANNY_DISCORD_GUILD_IDS
       discordUserIdEnv: DANNY_DISCORD_USER_ID
       incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
     profile:
@@ -56,7 +56,7 @@ nodes:
     credentials:
       discordTokenEnv: MYURI_DISCORD_TOKEN
       discordClientIdEnv: MYURI_DISCORD_CLIENT_ID
-      discordGuildIdEnv: MYURI_DISCORD_GUILD_ID
+      discordGuildIdsEnv: MYURI_DISCORD_GUILD_IDS
       discordUserIdEnv: MYURI_DISCORD_USER_ID
       incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
     profile:
@@ -73,7 +73,7 @@ nodes:
             FOOTNOTE_DISCORD_USER_ID: 'user-footnote',
             MYURI_DISCORD_TOKEN: 'token-myuri',
             MYURI_DISCORD_CLIENT_ID: 'client-myuri',
-            MYURI_DISCORD_GUILD_ID: 'guild-myuri',
+            MYURI_DISCORD_GUILD_IDS: 'guild-myuri-a,guild-myuri-b',
             MYURI_DISCORD_USER_ID: 'user-myuri',
             INCIDENT_PSEUDONYMIZATION_SECRET: 'incident-secret',
         },
@@ -88,7 +88,7 @@ nodes:
     assert.equal(result.activeNodes[0].profile.displayName, 'Footnote');
     assert.equal(
         result.activeNodes[1].credentials.discordGuildIds,
-        'guild-myuri'
+        'guild-myuri-a,guild-myuri-b'
     );
     assert.deepEqual(result.disabledNodes, [
         {
@@ -119,7 +119,7 @@ nodes:
     credentials:
       discordTokenEnv: FOOTNOTE_DISCORD_TOKEN
       discordClientIdEnv: FOOTNOTE_DISCORD_CLIENT_ID
-      discordGuildIdEnv: FOOTNOTE_DISCORD_GUILD_ID
+      discordGuildIdsEnv: FOOTNOTE_DISCORD_GUILD_IDS
       discordUserIdEnv: FOOTNOTE_DISCORD_USER_ID
       incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
     profile:
@@ -129,7 +129,7 @@ nodes:
     credentials:
       discordTokenEnv: SECOND_TOKEN
       discordClientIdEnv: SECOND_CLIENT_ID
-      discordGuildIdEnv: SECOND_GUILD_ID
+      discordGuildIdsEnv: SECOND_GUILD_IDS
       discordUserIdEnv: SECOND_USER_ID
       incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
     profile:
@@ -152,7 +152,7 @@ nodes:
     credentials:
       discordTokenEnv: FOOTNOTE_DISCORD_TOKEN
       discordClientIdEnv: FOOTNOTE_DISCORD_CLIENT_ID
-      discordGuildIdEnv: FOOTNOTE_DISCORD_GUILD_ID
+      discordGuildIdsEnv: FOOTNOTE_DISCORD_GUILD_IDS
       discordUserIdEnv: FOOTNOTE_DISCORD_USER_ID
       incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
     profile:
@@ -166,7 +166,7 @@ nodes:
                 configPath,
                 env: {
                     FOOTNOTE_DISCORD_CLIENT_ID: 'client',
-                    FOOTNOTE_DISCORD_GUILD_ID: 'guild',
+                    FOOTNOTE_DISCORD_GUILD_IDS: 'guild',
                     FOOTNOTE_DISCORD_USER_ID: 'user',
                     INCIDENT_PSEUDONYMIZATION_SECRET: 'incident',
                 },
@@ -184,7 +184,7 @@ nodes:
     credentials:
       discordTokenEnv: MYURI_DISCORD_TOKEN
       discordClientIdEnv: MYURI_DISCORD_CLIENT_ID
-      discordGuildIdEnv: MYURI_DISCORD_GUILD_ID
+      discordGuildIdsEnv: MYURI_DISCORD_GUILD_IDS
       discordUserIdEnv: MYURI_DISCORD_USER_ID
       incidentSecretEnv: INCIDENT_PSEUDONYMIZATION_SECRET
     profile:

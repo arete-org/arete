@@ -376,20 +376,6 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'LOCAL_DISCORD_NODES_CONFIG_PATH',
-        owner: 'shared',
-        stage: 'runtime',
-        section: 'runtime',
-        required: false,
-        secret: false,
-        kind: 'string',
-        description:
-            'Legacy standalone discord-bot path to local nodes YAML. Server runtime ignores this key.',
-        defaultValue: literal('/data/config/local-discord-nodes.yaml'),
-        usedBy: ['packages/discord-bot/src/supervisor/localNodesConfig.ts'],
-    }),
-
-    defineEnv({
         key: 'FOOTNOTE_SERVER_SETTINGS_PATH',
         owner: 'shared',
         stage: 'bootstrap',
@@ -581,24 +567,11 @@ export const envEntries = [
         owner: 'discord-bot',
         stage: 'runtime',
         section: 'discord-bot',
-        required: false,
+        required: true,
         secret: false,
         kind: 'csv',
         description:
-            'Preferred comma-separated Discord guild IDs used for command registration.',
-        defaultValue: noDefault(),
-        usedBy: ['packages/discord-bot/src/config.ts'],
-    }),
-
-    defineEnv({
-        key: 'DISCORD_GUILD_ID',
-        owner: 'discord-bot',
-        stage: 'runtime',
-        section: 'discord-bot',
-        required: true,
-        secret: false,
-        kind: 'string',
-        description: 'Primary Discord guild ID for command registration.',
+            'Comma-separated Discord guild IDs used for command registration.',
         defaultValue: noDefault(),
         usedBy: ['packages/discord-bot/src/config.ts'],
     }),
