@@ -19,6 +19,25 @@ const settingsPath = path.join(repoRoot, 'footnote.yaml');
 const nodeModulesPath = path.join(repoRoot, 'node_modules');
 const pnpmStorePath = path.join(nodeModulesPath, '.pnpm');
 const setupScriptPath = path.join(repoRoot, 'scripts', 'setup.cjs');
+const preflightDevPortsScriptPath = path.join(
+    repoRoot,
+    'scripts',
+    'preflight-dev-ports.cjs'
+);
+const apiClientWebClientDistPath = path.join(
+    repoRoot,
+    'packages',
+    'api-client',
+    'dist',
+    'webClient.js'
+);
+const apiClientIndexDistPath = path.join(
+    repoRoot,
+    'packages',
+    'api-client',
+    'dist',
+    'index.js'
+);
 
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const nodeBin = process.execPath;
@@ -64,6 +83,25 @@ if (needsBootstrapFiles) {
     const installStatus = run(pnpmBin, ['install']);
     if (installStatus !== 0) {
         process.exit(installStatus);
+    }
+}
+
+const preflightStatus = run(nodeBin, [preflightDevPortsScriptPath, 'backend']);
+if (preflightStatus !== 0) {
+    process.exit(preflightStatus);
+}
+
+const needsApiClientBuild =
+    !fs.existsSync(apiClientWebClientDistPath) ||
+    !fs.existsSync(apiClientIndexDistPath);
+if (needsApiClientBuild) {
+    const apiClientBuildStatus = run(pnpmBin, [
+        '--filter',
+        '@footnote/api-client',
+        'build:dev',
+    ]);
+    if (apiClientBuildStatus !== 0) {
+        process.exit(apiClientBuildStatus);
     }
 }
 
