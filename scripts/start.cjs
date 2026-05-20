@@ -44,6 +44,8 @@ const apiClientIndexDistPath = path.join(
     'dist',
     'index.js'
 );
+const devSettingsDirPath = path.join(repoRoot, '.footnote-dev');
+const devSettingsPath = path.join(devSettingsDirPath, 'footnote.runtime.yaml');
 
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const nodeBin = process.execPath;
@@ -110,6 +112,80 @@ const resolveBackendDevPort = async (basePort) => {
     );
 };
 
+const renderRuntimeSettings = (source, port) => {
+    const lineEnding = source.includes('\r\n') ? '\r\n' : '\n';
+    const lines = source.split(/\r?\n/);
+
+    let inServerSection = false;
+    let serverIndent = 0;
+    let serverHeaderIndex = -1;
+    let replacedPortLine = false;
+
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        const trimmed = line.trim();
+        const indent = line.length - line.trimStart().length;
+
+        if (!inServerSection && /^server:\s*$/.test(trimmed)) {
+            inServerSection = true;
+            serverIndent = indent;
+            serverHeaderIndex = index;
+            continue;
+        }
+
+        if (inServerSection) {
+            const isComment = trimmed.startsWith('#');
+            const isBlank = trimmed.length === 0;
+            const leavesSection =
+                !isBlank && !isComment && indent <= serverIndent;
+
+            if (leavesSection) {
+                inServerSection = false;
+            }
+        }
+
+        if (!inServerSection) {
+            continue;
+        }
+
+        if (/^\s*port:\s*.+$/.test(line) && indent > serverIndent) {
+            const portIndent = line.match(/^(\s*)/)?.[1] ?? '  ';
+            lines[index] = `${portIndent}port: ${port}`;
+            replacedPortLine = true;
+        }
+    }
+
+    if (serverHeaderIndex === -1) {
+        const suffix = source.endsWith(lineEnding) ? '' : lineEnding;
+        return `${source}${suffix}${lineEnding}server:${lineEnding}  port: ${port}${lineEnding}`;
+    }
+
+    if (!replacedPortLine) {
+        const insertAt = serverHeaderIndex + 1;
+        lines.splice(
+            insertAt,
+            0,
+            `${' '.repeat(serverIndent + 2)}port: ${port}`
+        );
+    }
+
+    return `${lines.join(lineEnding)}${lineEnding}`;
+};
+
+const createRuntimeSettingsSnapshot = (port) => {
+    if (!fs.existsSync(settingsPath)) {
+        throw new Error(
+            `[start] Missing base settings file at ${settingsPath}. Run setup again to regenerate footnote.yaml.`
+        );
+    }
+
+    const source = fs.readFileSync(settingsPath, 'utf8');
+    const rendered = renderRuntimeSettings(source, port);
+    fs.mkdirSync(devSettingsDirPath, { recursive: true });
+    fs.writeFileSync(devSettingsPath, rendered, 'utf8');
+    return devSettingsPath;
+};
+
 const main = async () => {
     const needsBootstrapFiles =
         !fs.existsSync(envPath) || !fs.existsSync(settingsPath);
@@ -145,11 +221,10 @@ const main = async () => {
 
     const backendPort = await resolveBackendDevPort(requestedBasePort);
     const webPreferredPort = resolveWebPort(process.env, backendPort);
-    const devEnv = {
+    const runtimeSettingsPath = createRuntimeSettingsSnapshot(backendPort);
+    const sharedDevEnv = {
         ...process.env,
-        PORT: String(backendPort),
-        BACKEND_BASE_URL: `http://localhost:${backendPort}`,
-        FOOTNOTE_WEB_PORT: String(webPreferredPort),
+        FOOTNOTE_SETTINGS_PATH: runtimeSettingsPath,
     };
 
     const needsApiClientBuild =
@@ -159,7 +234,7 @@ const main = async () => {
         const apiClientBuildStatus = run(
             pnpmBin,
             ['--filter', '@footnote/api-client', 'build:dev'],
-            devEnv
+            sharedDevEnv
         );
         if (apiClientBuildStatus !== 0) {
             process.exit(apiClientBuildStatus);
@@ -176,9 +251,29 @@ const main = async () => {
     console.log(
         `[start] Web dev prefers port ${webPreferredPort} (Vite may auto-fallback if busy).`
     );
+    console.log(`[start] Using runtime settings file ${runtimeSettingsPath}.`);
 
-    const devStatus = run(pnpmBin, ['dev'], devEnv);
-    process.exit(devStatus);
+    const backendCommand =
+        'cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:backend';
+    const webCommand = `cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= BACKEND_BASE_URL=http://localhost:${backendPort} FOOTNOTE_WEB_PORT=${webPreferredPort} pnpm dev:web`;
+
+    const concurrentStatus = run(
+        pnpmBin,
+        [
+            'exec',
+            'concurrently',
+            '--names',
+            'backend,web',
+            '--prefix-colors',
+            'cyan,magenta',
+            '--kill-others',
+            '--kill-others-on-fail',
+            backendCommand,
+            webCommand,
+        ],
+        sharedDevEnv
+    );
+    process.exit(concurrentStatus);
 };
 
 main().catch((error) => {

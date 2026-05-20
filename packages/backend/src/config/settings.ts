@@ -52,7 +52,7 @@ export type FootnoteSettings = {
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' && value !== null;
+    typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const normalizePath = (value: string | undefined): string =>
     value?.trim() || DEFAULT_SETTINGS_PATH;
