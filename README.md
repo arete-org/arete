@@ -8,20 +8,21 @@ Footnote is an AI assistant focused on transparency and provenance.
 
 ## Quickstart
 
-1. Clone and bootstrap:
+1. Clone and start:
 
 ```bash
 git clone https://github.com/footnote-ai/footnote.git
 cd footnote
-pnpm setup
+pnpm start
 ```
 
-`pnpm setup` will:
+`pnpm start` will:
 
 - create `.env` from `.env.example` if missing
 - generate required local secrets if missing
 - generate `footnote.yaml` if missing
-- install dependencies
+- install dependencies if missing
+- start backend + web
 
 2. Add provider secrets in `.env` (optional at startup, required for model features):
 
@@ -31,13 +32,15 @@ OPENAI_API_KEY=...
 OLLAMA_API_KEY=...
 ```
 
-3. Start backend + web:
+3. For later local runs, use:
 
 ```bash
-pnpm dev
+pnpm start
 ```
 
 Open `http://localhost:8080`.
+
+Native wrappers (`.sh`, `.ps1`, `.exe`) are planned as follow-up work and are not part of this flow yet.
 
 ## Where Settings Go
 

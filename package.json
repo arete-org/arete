@@ -6,6 +6,7 @@
         "packages/*"
     ],
     "scripts": {
+        "start": "node scripts/start.cjs",
         "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
         "dev:backend": "pnpm backend:prepare && pnpm exec tsx packages/backend/src/server.ts",
         "dev:web": "pnpm --filter @footnote/web dev",

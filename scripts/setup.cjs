@@ -164,7 +164,7 @@ const printChecklist = () => {
     }
 
     console.log('[setup] Runtime settings live in footnote.yaml.');
-    console.log('[setup] Complete. Start with: pnpm dev');
+    console.log('[setup] Complete. Start with: pnpm start');
 };
 
 const main = () => {
