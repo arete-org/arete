@@ -19,6 +19,7 @@ const envPath = path.join(repoRoot, '.env');
 const envExamplePath = path.join(repoRoot, '.env.example');
 const settingsPath = path.join(repoRoot, 'footnote.yaml');
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const isWindows = process.platform === 'win32';
 const lineEnding = process.platform === 'win32' ? '\r\n' : '\n';
 
 const requiredGeneratedSecrets = [
@@ -136,7 +137,19 @@ const ensureGeneratedSecrets = () => {
 };
 
 const run = (command, args) => {
-    const result = spawnSync(command, args, {
+    const normalizedCommand = command.toLowerCase();
+    const isWindowsBatchCommand =
+        isWindows &&
+        (normalizedCommand.endsWith('.cmd') ||
+            normalizedCommand.endsWith('.bat'));
+
+    // Windows batch files like `pnpm.cmd` need `cmd.exe` to launch reliably.
+    const executable = isWindowsBatchCommand ? 'cmd.exe' : command;
+    const executableArgs = isWindowsBatchCommand
+        ? ['/d', '/s', '/c', command, ...args]
+        : args;
+
+    const result = spawnSync(executable, executableArgs, {
         cwd: repoRoot,
         stdio: 'inherit',
     });

@@ -24,46 +24,23 @@ const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const nodeBin = process.execPath;
 const isWindows = process.platform === 'win32';
 
-const resolveCommand = (command, env = process.env) => {
-    if (path.isAbsolute(command)) {
-        return command;
-    }
-
-    if (command.includes(path.sep) || (path.sep === '\\' && command.includes('/'))) {
-        return path.resolve(repoRoot, command);
-    }
-
-    const pathValue = env.PATH || env.Path || env.path || '';
-    const pathDirs = pathValue.split(path.delimiter).filter(Boolean);
-    const pathext = isWindows
-        ? (env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
-              .split(';')
-              .map((ext) => ext.toLowerCase())
-        : [''];
-    const hasExtension = !!path.extname(command);
-    const candidates = isWindows && !hasExtension
-        ? pathext.map((ext) => `${command}${ext}`)
-        : [command];
-
-    for (const dir of pathDirs) {
-        for (const candidate of candidates) {
-            const fullPath = path.join(dir, candidate);
-            if (fs.existsSync(fullPath)) {
-                return fullPath;
-            }
-        }
-    }
-
-    throw new Error(`Unable to resolve executable: ${command}`);
-};
-
 const run = (command, args, env = process.env) => {
-    const executable = resolveCommand(command, env);
-    const result = spawnSync(executable, args, {
+    const normalizedCommand = command.toLowerCase();
+    const isWindowsBatchCommand =
+        isWindows &&
+        (normalizedCommand.endsWith('.cmd') ||
+            normalizedCommand.endsWith('.bat'));
+
+    // Windows batch files like `pnpm.cmd` need `cmd.exe` to launch reliably.
+    const executable = isWindowsBatchCommand ? 'cmd.exe' : command;
+    const executableArgs = isWindowsBatchCommand
+        ? ['/d', '/s', '/c', command, ...args]
+        : args;
+
+    const result = spawnSync(executable, executableArgs, {
         cwd: repoRoot,
         env,
         stdio: 'inherit',
-        shell: false,
     });
 
     if (result.error) {
