@@ -142,16 +142,18 @@ const applyProviderAvailability = (
     catalog: RuntimeConfig['modelProfiles']['catalog'],
     providerAvailability: Record<'openai' | 'ollama', boolean>,
     warn: WarningSink
-): RuntimeConfig['modelProfiles']['catalog'] =>
-    catalog.map((profile) => {
+): RuntimeConfig['modelProfiles']['catalog'] => {
+    const disabledCountsByProvider = new Map<'openai' | 'ollama', number>();
+
+    const normalizedCatalog = catalog.map((profile) => {
         if (!profile.enabled) {
             return profile;
         }
 
         if (!providerAvailability[profile.provider]) {
-            warn(
-                `Disabling model profile "${profile.id}" because provider "${profile.provider}" is not configured.`
-            );
+            const currentCount =
+                disabledCountsByProvider.get(profile.provider) ?? 0;
+            disabledCountsByProvider.set(profile.provider, currentCount + 1);
             return {
                 ...profile,
                 enabled: false,
@@ -160,6 +162,15 @@ const applyProviderAvailability = (
 
         return profile;
     });
+
+    for (const [provider, count] of disabledCountsByProvider.entries()) {
+        warn(
+            `Disabled ${count} model profile${count === 1 ? '' : 's'} for provider "${provider}" (not configured).`
+        );
+    }
+
+    return normalizedCatalog;
+};
 
 const parseCatalogEntries = (
     entries: unknown[],

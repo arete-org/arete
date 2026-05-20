@@ -157,7 +157,7 @@ const printChecklist = () => {
 
     if (!hasProviderSecret) {
         console.warn(
-            '[setup] No provider secret configured yet. Startup is still allowed; model-dependent features will show setup-required responses until provider config is added.'
+            '[setup] No model provider key found (OPENAI_API_KEY or OLLAMA_API_KEY). UI will run; responses stay disabled until configured.'
         );
     }
 

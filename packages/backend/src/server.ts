@@ -121,53 +121,37 @@ const voltAgentLogger = createVoltAgentLogger({
 
 // --- Service initialization ---
 const initializeServices = () => {
-    // --- Environment visibility ---
-    logger.info('Environment variables check:');
-    logger.info(
-        `OPENAI_API_KEY: ${runtimeConfig.openai.apiKey ? 'SET' : 'NOT SET'}`
+    const renderServiceState = (
+        enabled: boolean,
+        disabledRequirement: string
+    ): string => (enabled ? 'ON' : `OFF (needs ${disabledRequirement})`);
+    const turnstileEnabled = Boolean(
+        runtimeConfig.turnstile.secretKey && runtimeConfig.turnstile.siteKey
     );
     logger.info(
-        `OLLAMA_BASE_URL: ${runtimeConfig.ollama.baseUrl ? 'SET' : 'NOT SET'}`
+        `Service - Turnstile: ${renderServiceState(turnstileEnabled, 'TURNSTILE_SECRET_KEY + TURNSTILE_SITE_KEY')}`
     );
     logger.info(
-        `OLLAMA_API_KEY: ${runtimeConfig.ollama.apiKey ? 'SET' : 'NOT SET'}`
+        `Service - VoltOps Tracing: ${renderServiceState(runtimeConfig.voltagent.observabilityEnabled, 'VOLTOPS_TRACING_PUBLIC_KEY + VOLTOPS_TRACING_SECRET_KEY')}`
     );
     logger.info(
-        `OLLAMA_LOCAL_INFERENCE_ENABLED: ${runtimeConfig.ollama.localInferenceEnabled ? 'ENABLED' : 'DISABLED'}`
+        `Service - Langfuse Mirror: ${renderServiceState(runtimeConfig.langfuseMetadataMirror.enabled, 'LANGFUSE_METADATA_MIRROR_URL + LANGFUSE_METADATA_MIRROR_API_KEY')}`
     );
     logger.info(
-        `TURNSTILE_SECRET_KEY: ${runtimeConfig.turnstile.secretKey ? 'SET' : 'NOT SET'}`
+        `Service - Litestream Replica: ${renderServiceState(Boolean(runtimeConfig.litestream.replicaUrl), 'LITESTREAM_REPLICA_URL')}`
     );
     logger.info(
-        `TURNSTILE_SITE_KEY: ${runtimeConfig.turnstile.siteKey ? 'SET' : 'NOT SET'}`
+        `Service - Runtime Mode: ${runtimeConfig.runtime.nodeEnv.toUpperCase()}`
     );
     logger.info(
-        `VOLTOPS_TRACING_CONFIGURED: ${runtimeConfig.voltagent.observabilityEnabled ? 'ENABLED' : 'DISABLED'}`
+        `Service - Litestream Snapshot: ${runtimeConfig.litestream.latestSnapshotAt || 'none yet'}`
     );
-    logger.info(
-        `LANGFUSE_METADATA_MIRROR: ${runtimeConfig.langfuseMetadataMirror.enabled ? 'ENABLED' : 'DISABLED'}`
-    );
-    logger.info(
-        `LITESTREAM_REPLICA_URL: ${
-            runtimeConfig.litestream.replicaUrl ? 'SET' : 'NOT SET'
-        }`
-    );
-    logger.info(
-        `LITESTREAM_LATEST_SNAPSHOT_AT: ${
-            runtimeConfig.litestream.latestSnapshotAt || 'none yet'
-        }`
-    );
-    logger.info(`NODE_ENV: ${runtimeConfig.runtime.nodeEnv}`);
     const staticAssetsAvailable = fs.existsSync(STATIC_INDEX_PATH);
-    logger.info('static_assets_status', {
-        available: staticAssetsAvailable,
-        path: DIST_DIR,
-    });
+    logger.info(
+        `Service - Static Assets: ${staticAssetsAvailable ? 'ON' : `OFF (${DIST_DIR} missing)`}`
+    );
     if (!staticAssetsAvailable) {
-        logger.warn('static_assets_missing', {
-            available: staticAssetsAvailable,
-            path: DIST_DIR,
-        });
+        logger.warn('Static asset bundle missing; frontend routes may fail.');
     }
 
     // --- Trace store ---
@@ -242,11 +226,14 @@ const initializeServices = () => {
         ollamaHostname !== null &&
         (!ollamaBaseUrlIsLocal || runtimeConfig.ollama.localInferenceEnabled);
     logger.info(
-        `Text generation provider availability: openai=${hasOpenAiProvider ? 'available' : 'unavailable'}, ollama=${hasOllamaProvider ? 'available' : 'unavailable'}`
+        `Service - OpenAI: ${renderServiceState(hasOpenAiProvider, 'OPENAI_API_KEY')}`
+    );
+    logger.info(
+        `Service - Ollama: ${renderServiceState(hasOllamaProvider, 'valid OLLAMA_BASE_URL (and OLLAMA_LOCAL_INFERENCE_ENABLED=true when local)')}`
     );
     if (hasOllamaCatalogProfiles && !hasOllamaProvider) {
         logger.warn(
-            'Ollama profiles are present in the model catalog, but Ollama provider is unavailable at boot. Ollama profiles will remain disabled.'
+            'Ollama provider unavailable; ollama catalog profiles remain disabled.'
         );
     }
     const startupModelProfileResolver = createModelProfileResolver({

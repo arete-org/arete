@@ -24,7 +24,7 @@ const repoRoot = path.resolve(__dirname, '..');
 const envPath = path.join(repoRoot, '.env');
 
 if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
+    dotenv.config({ path: envPath, quiet: true });
 }
 
 // Canonical dev ports from .env with local defaults.
@@ -369,18 +369,14 @@ if (allPids.length === 0) {
 // Step 3: stop only safe matches and report every decision.
 let killed = 0;
 let skipped = 0;
+let skippedNonFootnote = 0;
 for (const pid of allPids) {
     const info = platform.getProcessInfo(pid);
     const isKnownStaleBotPid = staleBotPidSet.has(pid);
 
     if (!isKnownStaleBotPid && !shouldKillProcess(info)) {
         skipped += 1;
-        const name = isWindows
-            ? info?.Name || 'unknown'
-            : info?.name || 'unknown';
-        console.log(
-            `[preflight] Skipping PID ${pid} (${name}); not a Footnote node dev process.`
-        );
+        skippedNonFootnote += 1;
         continue;
     }
 
@@ -398,5 +394,5 @@ for (const pid of allPids) {
 }
 
 console.log(
-    `[preflight] Checked ${scope} scope. Ports: ${uniquePorts.join(', ')}. Killed ${killed}, skipped ${skipped}.`
+    `[preflight] Checked ${scope} scope. Ports: ${uniquePorts.join(', ')}. Killed ${killed}, skipped ${skipped} (non-footnote: ${skippedNonFootnote}).`
 );

@@ -79,7 +79,7 @@ const ensureLocalIncidentSecret = (envFilePath: string): void => {
 
 if (fs.existsSync(repoEnvPath)) {
     const dotenv = await import('dotenv');
-    dotenv.config({ path: repoEnvPath });
+    dotenv.config({ path: repoEnvPath, quiet: true });
 }
 
 ensureLocalIncidentSecret(repoEnvPath);

@@ -63,6 +63,33 @@ const run = (command, args, env = process.env) => {
     return result.status ?? 1;
 };
 
+const runCaptured = (command, args, env = process.env) =>
+    runCommand(command, args, {
+        cwd: repoRoot,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        encoding: 'utf8',
+    });
+
+const runQuietStep = (label, command, args, env = process.env) => {
+    const result = runCaptured(command, args, env);
+    if (result.error) {
+        throw result.error;
+    }
+
+    const exitCode = result.status ?? 1;
+    if (exitCode !== 0) {
+        console.error(`[start] ${label} failed.`);
+        if (result.stdout?.trim()) {
+            process.stdout.write(result.stdout);
+        }
+        if (result.stderr?.trim()) {
+            process.stderr.write(result.stderr);
+        }
+        process.exit(exitCode);
+    }
+};
+
 const probePortOnHost = (port, host) =>
     new Promise((resolve) => {
         const server = net.createServer();
@@ -245,18 +272,24 @@ const main = async () => {
         FOOTNOTE_SETTINGS_PATH: runtimeSettingsPath,
     };
 
+    console.log('[start] Preparing backend runtime artifacts...');
+    runQuietStep(
+        'backend preparation',
+        pnpmBin,
+        ['backend:prepare'],
+        sharedDevEnv
+    );
+
     const needsApiClientBuild =
         !fs.existsSync(apiClientWebClientDistPath) ||
         !fs.existsSync(apiClientIndexDistPath);
     if (needsApiClientBuild) {
-        const apiClientBuildStatus = run(
+        runQuietStep(
+            'api-client build',
             pnpmBin,
             ['--filter', '@footnote/api-client', 'build:dev'],
             sharedDevEnv
         );
-        if (apiClientBuildStatus !== 0) {
-            process.exit(apiClientBuildStatus);
-        }
     }
 
     if (backendPort !== requestedBasePort) {
@@ -273,10 +306,13 @@ const main = async () => {
         `[start] Browser auto-open is ${openBrowser ? 'enabled' : 'disabled'}.`
     );
     console.log(`[start] Using runtime settings file ${runtimeSettingsPath}.`);
+    console.log('[start] Launching local services:');
+    console.log(`[start]   Backend: http://localhost:${backendPort}`);
+    console.log(`[start]   Web:     http://localhost:${webPreferredPort}`);
 
     const backendCommand =
-        'cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:backend';
-    const webCommand = `cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= BACKEND_BASE_URL=http://localhost:${backendPort} FOOTNOTE_WEB_PORT=${webPreferredPort} FOOTNOTE_WEB_OPEN=${openBrowser ? '1' : '0'} pnpm dev:web`;
+        'cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm --filter @footnote/backend exec tsx src/server.ts';
+    const webCommand = `cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= BACKEND_BASE_URL=http://localhost:${backendPort} FOOTNOTE_WEB_PORT=${webPreferredPort} FOOTNOTE_WEB_OPEN=${openBrowser ? '1' : '0'} pnpm --filter @footnote/web exec vite`;
 
     const concurrentStatus = run(
         pnpmBin,

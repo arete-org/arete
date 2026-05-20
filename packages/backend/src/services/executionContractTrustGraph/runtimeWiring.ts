@@ -54,18 +54,16 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
     config: ExecutionContractTrustGraphRuntimeConfig
 ): CreateChatServiceOptions['executionContractTrustGraph'] | undefined => {
     if (!config.enabled) {
-        logger.info({
-            event: 'chat.execution_contract_trustgraph.runtime_disabled',
-            reasonCode: 'disabled_by_config',
-        });
+        logger.info(
+            'chat.execution_contract_trustgraph.runtime_disabled (reason=disabled_by_config)'
+        );
         return undefined;
     }
 
     if (config.killSwitchExternalRetrieval) {
-        logger.warn({
-            event: 'chat.execution_contract_trustgraph.runtime_disabled',
-            reasonCode: 'kill_switch_active',
-        });
+        logger.warn(
+            'chat.execution_contract_trustgraph.runtime_disabled (reason=kill_switch_active)'
+        );
         return undefined;
     }
 
@@ -102,11 +100,9 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
         // Missing ownership wiring fails open at the adapter seam. Retrieval may
         // still be disabled later by downstream validation or caller policy.
         if (!isNonEmptyString(config.ownership.endpointUrl)) {
-            logger.warn({
-                event: 'chat.execution_contract_trustgraph.ownership_wiring',
-                reasonCode: 'ownership_http_missing_endpoint',
-                ownershipBindingMode: config.ownership.bindingMode,
-            });
+            logger.warn(
+                `chat.execution_contract_trustgraph.ownership_wiring (reason=ownership_http_missing_endpoint, bindingMode=${config.ownership.bindingMode})`
+            );
             scopeOwnershipValidator = undefined;
         } else {
             const tenancyService = createBackendTenancyOwnershipHttpService({
@@ -124,16 +120,13 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
         scopeOwnershipValidator = undefined;
     }
 
-    logger.info({
-        event: 'chat.execution_contract_trustgraph.runtime_wiring',
-        enabled: true,
-        adapterMode: config.adapter.mode,
-        adapterConfigured: adapter !== undefined,
-        adapterConfigRef: config.adapter.configRef,
-        ownershipBindingMode: config.ownership.bindingMode,
-        ownershipValidatorConfigured: scopeOwnershipValidator !== undefined,
-        policyId: config.policyId,
-    });
+    logger.info(
+        `chat.execution_contract_trustgraph.runtime_wiring (enabled=true, adapterMode=${config.adapter.mode}, adapterConfigured=${String(
+            adapter !== undefined
+        )}, adapterConfigRef=${config.adapter.configRef}, ownershipBindingMode=${config.ownership.bindingMode}, ownershipValidatorConfigured=${String(
+            scopeOwnershipValidator !== undefined
+        )}, policyId=${config.policyId})`
+    );
 
     return {
         adapter,
