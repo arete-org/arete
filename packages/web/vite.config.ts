@@ -88,15 +88,27 @@ const cspPlugin = () => ({
 const trimTrailingSlashes = (value: string): string =>
     value.replace(/\/+$/, '');
 
+const parsePort = (value: string | undefined, fallback: number): number => {
+    if (!value) {
+        return fallback;
+    }
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
+        return fallback;
+    }
+    return parsed;
+};
+
 const backendBaseUrl = trimTrailingSlashes(
     process.env.BACKEND_BASE_URL?.trim() || 'http://localhost:3000'
 );
+const webDevPort = parsePort(process.env.FOOTNOTE_WEB_PORT, 5173);
 
 // Vite configuration keeps things lean while allowing TypeScript paths for components and styles.
 export default defineConfig({
     plugins: [react(), cspPlugin()],
     server: {
-        port: 5173,
+        port: webDevPort,
         proxy: {
             '/api': {
                 target: backendBaseUrl,
@@ -109,7 +121,7 @@ export default defineConfig({
         },
     },
     preview: {
-        port: 5173,
+        port: webDevPort,
     },
     resolve: {
         alias: {

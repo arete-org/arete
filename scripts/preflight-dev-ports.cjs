@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* eslint-env node */
-/* global __dirname, process, console, URL */
+/* global __dirname, process, console */
 
 /**
  * @description: Preflight cleanup for local startup that frees stale Footnote node listeners on configured dev ports.
@@ -12,8 +12,13 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 const dotenv = require('dotenv');
+const { runCommand } = require('./lib/run-command.cjs');
+const {
+    resolveBackendPort,
+    resolvePreflightWebPort,
+    resolveWebhookPort,
+} = require('./lib/dev-port-policy.cjs');
 
 const repoRoot = path.resolve(__dirname, '..');
 const envPath = path.join(repoRoot, '.env');
@@ -22,42 +27,10 @@ if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath });
 }
 
-/**
- * Parse an env-like value into a valid TCP port.
- */
-const parsePort = (value) => {
-    if (!value) {
-        return undefined;
-    }
-    const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
-        return undefined;
-    }
-    return parsed;
-};
-
-/**
- * Extract an explicit port from a URL string (for example WEB_BASE_URL).
- */
-const portFromUrl = (value) => {
-    if (!value) {
-        return undefined;
-    }
-    try {
-        const url = new URL(value);
-        if (!url.port) {
-            return undefined;
-        }
-        return parsePort(url.port);
-    } catch {
-        return undefined;
-    }
-};
-
 // Canonical dev ports from .env with local defaults.
-const backendPort = parsePort(process.env.PORT) ?? 3000;
-const webhookPort = parsePort(process.env.WEBHOOK_PORT) ?? 3001;
-const webPort = portFromUrl(process.env.WEB_BASE_URL) ?? 8080;
+const backendPort = resolveBackendPort(process.env);
+const webhookPort = resolveWebhookPort(process.env);
+const webPort = resolvePreflightWebPort(process.env);
 
 // Scope allows per-service preflight in start:backend/start:web/start:bot.
 // Supported: all, backend, web, bot.
@@ -93,7 +66,7 @@ if (!portsForScope) {
 const uniquePorts = [...new Set(portsForScope)].sort((a, b) => a - b);
 
 const run = (command, args) =>
-    spawnSync(command, args, {
+    runCommand(command, args, {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
     });

@@ -12,29 +12,16 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { spawnSync } = require('node:child_process');
+const { runCommand } = require('./lib/run-command.cjs');
 
 const repoRoot = path.resolve(__dirname, '..');
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-const isWindows = process.platform === 'win32';
 const workspaceEnvPath = path.join(repoRoot, '.env');
 
 const run = (command, args, env = process.env) => {
-    const normalizedCommand = command.toLowerCase();
-    const isWindowsBatchCommand =
-        isWindows &&
-        (normalizedCommand.endsWith('.cmd') ||
-            normalizedCommand.endsWith('.bat'));
-
-    const executable = isWindowsBatchCommand ? 'cmd.exe' : command;
-    const executableArgs = isWindowsBatchCommand
-        ? ['/d', '/s', '/c', command, ...args]
-        : args;
-
-    const result = spawnSync(executable, executableArgs, {
+    const result = runCommand(command, args, {
         cwd: repoRoot,
         env,
-        stdio: 'inherit',
     });
 
     if (result.error) {

@@ -12,14 +12,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { spawnSync } = require('node:child_process');
+const { runCommand } = require('./lib/run-command.cjs');
 
 const repoRoot = path.resolve(__dirname, '..');
 const envPath = path.join(repoRoot, '.env');
 const envExamplePath = path.join(repoRoot, '.env.example');
 const settingsPath = path.join(repoRoot, 'footnote.yaml');
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-const isWindows = process.platform === 'win32';
 const lineEnding = process.platform === 'win32' ? '\r\n' : '\n';
 
 const requiredGeneratedSecrets = [
@@ -60,12 +59,11 @@ const ensureSettingsFileExists = () => {
         'generate-footnote-settings.cjs'
     );
 
-    const result = spawnSync(
+    const result = runCommand(
         process.execPath,
         [generatorPath, '--if-missing'],
         {
             cwd: repoRoot,
-            stdio: 'inherit',
         }
     );
 
@@ -137,21 +135,8 @@ const ensureGeneratedSecrets = () => {
 };
 
 const run = (command, args) => {
-    const normalizedCommand = command.toLowerCase();
-    const isWindowsBatchCommand =
-        isWindows &&
-        (normalizedCommand.endsWith('.cmd') ||
-            normalizedCommand.endsWith('.bat'));
-
-    // Windows batch files like `pnpm.cmd` need `cmd.exe` to launch reliably.
-    const executable = isWindowsBatchCommand ? 'cmd.exe' : command;
-    const executableArgs = isWindowsBatchCommand
-        ? ['/d', '/s', '/c', command, ...args]
-        : args;
-
-    const result = spawnSync(executable, executableArgs, {
+    const result = runCommand(command, args, {
         cwd: repoRoot,
-        stdio: 'inherit',
     });
 
     if (result.error) {

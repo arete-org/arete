@@ -10,30 +10,16 @@
  * @footnote-ethics: low - Local development startup helper; no user data handling.
  */
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { runCommand } = require('./lib/run-command.cjs');
 
 const repoRoot = path.resolve(__dirname, '..');
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const nodeBin = process.execPath;
-const isWindows = process.platform === 'win32';
 
 const run = (command, args, env = process.env) => {
-    const normalizedCommand = command.toLowerCase();
-    const isWindowsBatchCommand =
-        isWindows &&
-        (normalizedCommand.endsWith('.cmd') ||
-            normalizedCommand.endsWith('.bat'));
-
-    // Windows batch files like `pnpm.cmd` need `cmd.exe` to launch reliably.
-    const executable = isWindowsBatchCommand ? 'cmd.exe' : command;
-    const executableArgs = isWindowsBatchCommand
-        ? ['/d', '/s', '/c', command, ...args]
-        : args;
-
-    const result = spawnSync(executable, executableArgs, {
+    const result = runCommand(command, args, {
         cwd: repoRoot,
         env,
-        stdio: 'inherit',
     });
 
     if (result.error) {

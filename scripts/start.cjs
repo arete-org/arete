@@ -10,8 +10,14 @@
  * @footnote-ethics: low - Local developer startup helper with no direct human-impact decisions.
  */
 const fs = require('node:fs');
+const net = require('node:net');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { runCommand } = require('./lib/run-command.cjs');
+const {
+    MAX_PORT,
+    resolveFootnoteBasePort,
+    resolveWebPort,
+} = require('./lib/dev-port-policy.cjs');
 
 const repoRoot = path.resolve(__dirname, '..');
 const envPath = path.join(repoRoot, '.env');
@@ -41,25 +47,11 @@ const apiClientIndexDistPath = path.join(
 
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const nodeBin = process.execPath;
-const isWindows = process.platform === 'win32';
 
 const run = (command, args, env = process.env) => {
-    const normalizedCommand = command.toLowerCase();
-    const isWindowsBatchCommand =
-        isWindows &&
-        (normalizedCommand.endsWith('.cmd') ||
-            normalizedCommand.endsWith('.bat'));
-
-    // Windows batch files like `pnpm.cmd` need `cmd.exe` to launch reliably.
-    const executable = isWindowsBatchCommand ? 'cmd.exe' : command;
-    const executableArgs = isWindowsBatchCommand
-        ? ['/d', '/s', '/c', command, ...args]
-        : args;
-
-    const result = spawnSync(executable, executableArgs, {
+    const result = runCommand(command, args, {
         cwd: repoRoot,
         env,
-        stdio: 'inherit',
     });
 
     if (result.error) {
@@ -69,41 +61,127 @@ const run = (command, args, env = process.env) => {
     return result.status ?? 1;
 };
 
-const needsBootstrapFiles =
-    !fs.existsSync(envPath) || !fs.existsSync(settingsPath);
-const needsDependencyInstall =
-    !fs.existsSync(nodeModulesPath) || !fs.existsSync(pnpmStorePath);
+const probePortOnHost = (port, host) =>
+    new Promise((resolve) => {
+        const server = net.createServer();
+        server.unref();
 
-if (needsBootstrapFiles) {
-    const setupStatus = run(nodeBin, [setupScriptPath]);
-    if (setupStatus !== 0) {
-        process.exit(setupStatus);
+        server.once('error', (error) => {
+            const code = typeof error?.code === 'string' ? error.code : '';
+            if (code === 'EAFNOSUPPORT') {
+                resolve('unsupported');
+                return;
+            }
+            resolve('unavailable');
+        });
+
+        server.listen({ port, host }, () => {
+            server.close((closeError) => {
+                if (closeError) {
+                    resolve('unavailable');
+                    return;
+                }
+                resolve('available');
+            });
+        });
+    });
+
+const isPortAvailable = async (port) => {
+    const ipv6Probe = await probePortOnHost(port, '::');
+    if (ipv6Probe === 'available') {
+        return true;
     }
-} else if (needsDependencyInstall) {
-    const installStatus = run(pnpmBin, ['install']);
-    if (installStatus !== 0) {
-        process.exit(installStatus);
+    if (ipv6Probe === 'unsupported') {
+        const ipv4Probe = await probePortOnHost(port, '0.0.0.0');
+        return ipv4Probe === 'available';
     }
-}
+    return false;
+};
 
-const preflightStatus = run(nodeBin, [preflightDevPortsScriptPath, 'backend']);
-if (preflightStatus !== 0) {
-    process.exit(preflightStatus);
-}
-
-const needsApiClientBuild =
-    !fs.existsSync(apiClientWebClientDistPath) ||
-    !fs.existsSync(apiClientIndexDistPath);
-if (needsApiClientBuild) {
-    const apiClientBuildStatus = run(pnpmBin, [
-        '--filter',
-        '@footnote/api-client',
-        'build:dev',
-    ]);
-    if (apiClientBuildStatus !== 0) {
-        process.exit(apiClientBuildStatus);
+const resolveBackendDevPort = async (basePort) => {
+    for (let port = basePort; port <= MAX_PORT; port += 1) {
+        if (await isPortAvailable(port)) {
+            return port;
+        }
     }
-}
 
-const devStatus = run(pnpmBin, ['dev']);
-process.exit(devStatus);
+    throw new Error(
+        `[start] No available backend port found from ${basePort} through ${MAX_PORT}.`
+    );
+};
+
+const main = async () => {
+    const needsBootstrapFiles =
+        !fs.existsSync(envPath) || !fs.existsSync(settingsPath);
+    const needsDependencyInstall =
+        !fs.existsSync(nodeModulesPath) || !fs.existsSync(pnpmStorePath);
+
+    if (needsBootstrapFiles) {
+        const setupStatus = run(nodeBin, [setupScriptPath]);
+        if (setupStatus !== 0) {
+            process.exit(setupStatus);
+        }
+    } else if (needsDependencyInstall) {
+        const installStatus = run(pnpmBin, ['install']);
+        if (installStatus !== 0) {
+            process.exit(installStatus);
+        }
+    }
+
+    const requestedBasePort = resolveFootnoteBasePort(process.env);
+    const preflightEnv = {
+        ...process.env,
+        PORT: String(requestedBasePort),
+    };
+
+    const preflightStatus = run(
+        nodeBin,
+        [preflightDevPortsScriptPath, 'backend'],
+        preflightEnv
+    );
+    if (preflightStatus !== 0) {
+        process.exit(preflightStatus);
+    }
+
+    const backendPort = await resolveBackendDevPort(requestedBasePort);
+    const webPreferredPort = resolveWebPort(process.env, backendPort);
+    const devEnv = {
+        ...process.env,
+        PORT: String(backendPort),
+        BACKEND_BASE_URL: `http://localhost:${backendPort}`,
+        FOOTNOTE_WEB_PORT: String(webPreferredPort),
+    };
+
+    const needsApiClientBuild =
+        !fs.existsSync(apiClientWebClientDistPath) ||
+        !fs.existsSync(apiClientIndexDistPath);
+    if (needsApiClientBuild) {
+        const apiClientBuildStatus = run(
+            pnpmBin,
+            ['--filter', '@footnote/api-client', 'build:dev'],
+            devEnv
+        );
+        if (apiClientBuildStatus !== 0) {
+            process.exit(apiClientBuildStatus);
+        }
+    }
+
+    if (backendPort !== requestedBasePort) {
+        console.log(
+            `[start] Backend port ${requestedBasePort} is unavailable. Using ${backendPort}.`
+        );
+    } else {
+        console.log(`[start] Using backend dev port ${backendPort}.`);
+    }
+    console.log(
+        `[start] Web dev prefers port ${webPreferredPort} (Vite may auto-fallback if busy).`
+    );
+
+    const devStatus = run(pnpmBin, ['dev'], devEnv);
+    process.exit(devStatus);
+};
+
+main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+});
