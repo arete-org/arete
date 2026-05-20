@@ -186,7 +186,25 @@ const createRuntimeSettingsSnapshot = (port) => {
     return devSettingsPath;
 };
 
+const shouldOpenBrowser = (args, env = process.env) => {
+    const isHeadless = args.includes('--headless');
+    const isCi = String(env.CI ?? '')
+        .trim()
+        .toLowerCase();
+
+    if (isHeadless) {
+        return false;
+    }
+    if (isCi === '1' || isCi === 'true') {
+        return false;
+    }
+    return true;
+};
+
 const main = async () => {
+    const cliArgs = process.argv.slice(2);
+    const openBrowser = shouldOpenBrowser(cliArgs, process.env);
+
     const needsBootstrapFiles =
         !fs.existsSync(envPath) || !fs.existsSync(settingsPath);
     const needsDependencyInstall =
@@ -251,11 +269,14 @@ const main = async () => {
     console.log(
         `[start] Web dev prefers port ${webPreferredPort} (Vite may auto-fallback if busy).`
     );
+    console.log(
+        `[start] Browser auto-open is ${openBrowser ? 'enabled' : 'disabled'}.`
+    );
     console.log(`[start] Using runtime settings file ${runtimeSettingsPath}.`);
 
     const backendCommand =
         'cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:backend';
-    const webCommand = `cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= BACKEND_BASE_URL=http://localhost:${backendPort} FOOTNOTE_WEB_PORT=${webPreferredPort} pnpm dev:web`;
+    const webCommand = `cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= BACKEND_BASE_URL=http://localhost:${backendPort} FOOTNOTE_WEB_PORT=${webPreferredPort} FOOTNOTE_WEB_OPEN=${openBrowser ? '1' : '0'} pnpm dev:web`;
 
     const concurrentStatus = run(
         pnpmBin,

@@ -103,12 +103,14 @@ const backendBaseUrl = trimTrailingSlashes(
     process.env.BACKEND_BASE_URL?.trim() || 'http://localhost:3000'
 );
 const webDevPort = parsePort(process.env.FOOTNOTE_WEB_PORT, 5173);
+const openBrowser = process.env.FOOTNOTE_WEB_OPEN === '1';
 
 // Vite configuration keeps things lean while allowing TypeScript paths for components and styles.
 export default defineConfig({
     plugins: [react(), cspPlugin()],
     server: {
         port: webDevPort,
+        open: openBrowser,
         proxy: {
             '/api': {
                 target: backendBaseUrl,
