@@ -11,11 +11,19 @@ Canonical artifacts:
 
 ## First Setup
 
-1. Run setup once:
+1. Run local start once:
 
 ```bash
-pnpm setup
+pnpm start
 ```
+
+`pnpm start` will:
+
+- create `.env` from `.env.example` if missing
+- generate required local secrets if missing
+- generate `footnote.yaml` if missing
+- install dependencies if missing
+- start backend + web
 
 2. Keep or edit `footnote.yaml` (non-secret runtime settings):
     - default path: `./footnote.yaml`
