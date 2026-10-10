@@ -274,10 +274,13 @@ class GarminRepository:
             if result is None:
                 conn.execute("ROLLBACK")
                 return False
-            conn.execute(
-                "UPDATE garmin_exports SET state='dirty',updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=? AND state<>'removed') ",
-                [session_id],
-            )
+            # Garmin holds no status: marking a session done or skipped leaves
+            # its verified export as is instead of asking for a re-export.
+            if set(fields) - {"status", "garmin_pushed_at"}:
+                conn.execute(
+                    "UPDATE garmin_exports SET state='dirty',updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=? AND state<>'removed') ",
+                    [session_id],
+                )
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")

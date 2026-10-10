@@ -33,6 +33,13 @@ export function toolLabel(tool: Pick<ToolPart, 'name' | 'status'>): string {
     ?? (tool.status === 'done' ? 'Action terminée' : 'Action en cours');
 }
 
+/** A failure stays reported until a later identical call succeeds: the coach
+ * fixed its cause (e.g. a Garmin check) and repeated it. Nothing is replayed here. */
+export function isRecovered(tool: ToolPart, tools: ToolPart[]): boolean {
+  return tool.status === 'error' && tools.some(retry => retry.retryOf === tool.id
+    && (retry.status === 'done' || isRecovered(retry, tools)));
+}
+
 export function messageTools(message: ChatMessage): ToolPart[] {
   return message.parts?.filter((part): part is ToolPart => part.kind === 'tool') ?? [];
 }

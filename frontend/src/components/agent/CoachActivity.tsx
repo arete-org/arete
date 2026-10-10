@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { CircleAlert, ChevronRight } from 'lucide-react';
-import { hasAnswerText, messageTools, toolLabel } from '@/lib/agentActivity';
+import { hasAnswerText, isRecovered, messageTools, toolLabel } from '@/lib/agentActivity';
 import { STREAM_TIMEOUT_MS, type ChatMessage } from '@/lib/agentStream';
 import { cn } from '@/lib/utils';
 import { markWorkout, measureWorkout } from '@/lib/workoutPerformance';
@@ -57,7 +57,7 @@ export function CoachActivity({ message }: { message: ChatMessage }) {
 
   const tools = messageTools(message);
   const running = tools.find(tool => tool.status === 'running');
-  const failed = tools.some(tool => tool.status === 'error');
+  const failed = tools.some(tool => tool.status === 'error' && !isRecovered(tool, tools));
   const uncertain = tools.some(tool => tool.status === 'interrupted');
   const last = tools.at(-1);
   const confirmed = !running && !failed && !uncertain && last?.status === 'done';

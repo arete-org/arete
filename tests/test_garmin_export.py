@@ -469,6 +469,25 @@ def test_coach_move_marks_export_dirty_without_rewriting_prescription(planned):
     )
 
 
+def test_coach_skip_keeps_verified_export_instead_of_asking_a_resend(planned):
+    from arete.services import planning
+
+    garmin = Garmin()
+    service.export(planned, client=garmin)
+    result = json.loads(
+        planning.update_planned_session(
+            planned, 1, planning.SessionChanges(status="skipped")
+        )
+    )
+    assert result["session"]["status"] == "skipped"
+    assert not result["session"]["exportable"]
+    assert result["export"]["state"] == "scheduled"
+    assert result["export"]["error"] is None
+    calls = len(garmin.calls)
+    assert service.reconcile(planned, client=garmin)["state"] == "ready"
+    assert not any(method != "GET" for method, _, _ in garmin.calls[calls:])
+
+
 def test_daily_session_cannot_change_steps_during_upload(planned):
     with db_connection() as con:
         con.execute(

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import type { Preview, ToolPart } from '@/lib/agentStream';
 
-import { toolLabel } from '@/lib/agentActivity';
+import { isRecovered, toolLabel } from '@/lib/agentActivity';
 
 function ToolPreview({ label, preview }: { label: string; preview?: Preview }) {
   if (!preview?.text) return null;
@@ -39,7 +39,7 @@ function ToolPreview({ label, preview }: { label: string; preview?: Preview }) {
 
 export function ToolActivity({ tools, compact = false }: { tools: ToolPart[]; compact?: boolean }) {
   const running = tools.some((t) => t.status === 'running');
-  const failed = tools.some((t) => t.status === 'error');
+  const failed = tools.some((t) => t.status === 'error' && !isRecovered(t, tools));
   return (
     <section
       aria-label="Activité des outils"
@@ -60,7 +60,7 @@ export function ToolActivity({ tools, compact = false }: { tools: ToolPart[]; co
             {tool.status === 'running' ? (
               <Loader2 className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none text-neon-cyan" />
             ) : tool.status === 'error' ? (
-              <CircleAlert className="size-3.5 shrink-0 text-danger-red" />
+              <CircleAlert className={`size-3.5 shrink-0 ${isRecovered(tool, tools) ? 'text-text-muted' : 'text-danger-red'}`} />
             ) : tool.status === 'interrupted' ? (
               <CircleStop className="size-3.5 shrink-0 text-text-muted" />
             ) : (
@@ -71,7 +71,7 @@ export function ToolActivity({ tools, compact = false }: { tools: ToolPart[]; co
             </span>
             <span className="text-[10px] text-text-muted">
               {tool.status === 'error'
-                ? 'Échec'
+                ? isRecovered(tool, tools) ? 'Échec · repris' : 'Échec'
                 : tool.status === 'interrupted'
                   ? 'Interrompu'
                   : tool.status === 'running'
