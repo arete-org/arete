@@ -402,6 +402,34 @@ def test_m38_creates_system_skills_even_below_a_recorded_future_version(
         con.close()
 
 
+def test_feature_flag_upgrade_is_idempotent_and_preserves_enabled_state(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "feature-flags.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    con = migration_connection(str(path))
+    con.execute("DROP TABLE app.feature_flags")
+    con.execute("DELETE FROM app.schema_version WHERE version=41")
+    con.close()
+    init_duckdb.main()
+    con = migration_connection(str(path))
+    assert con.execute("SELECT * FROM app.feature_flags").fetchall() == []
+    con.execute("INSERT INTO app.feature_flags VALUES ('glm_flash', true)")
+    con.close()
+    init_duckdb.main()
+    con = migration_connection(str(path))
+    try:
+        assert con.execute("SELECT enabled FROM app.feature_flags").fetchone() == (
+            True,
+        )
+        assert con.execute(
+            "SELECT count(*) FROM app.schema_version WHERE version=41"
+        ).fetchone() == (1,)
+    finally:
+        con.close()
+
+
 def test_m31_creates_the_stream_and_feedback_tables_once(tmp_path, monkeypatch):
     path = tmp_path / "streams.duckdb"
     monkeypatch.setenv("ARETE_DB", str(path))

@@ -62,6 +62,14 @@ responsibility a testable owner. Do not create empty architectural scaffolding.
   or an entire run with an ambiguous outcome.
 - `LLM_CONTEXT_TOKENS` is the deployment's configured window, not a guarantee from
   a provider router. Budget system text, schemas, history, page data and output.
+- The admin-only `glm_flash` flag is global, persisted and off by default. Read
+  it at invocation composition and key cached graphs by its effective value;
+  never change a running graph's route. Paid requests require the explicit
+  GLM price cap and low reasoning effort; disabling restores free-only routing.
+  Reject truncated completions before executing their tool calls.
+- OpenRouter provider affinity is request-local: hash the trusted athlete,
+  profile and thread/run identity into `session_id`; never mutate cached clients.
+  Sort providers by latency without a manual order, preserving price caps.
 - Booting the app must not import the agent stack, Garmin's client or the
   workout grammars: `api/agent.py` and `api/ai_tips.py` import them inside their
   handlers, a cold serverless instance pays every top-level import before its

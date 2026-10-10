@@ -1,7 +1,7 @@
-"""Accounts and athletes for administrators; roles for the owner alone.
+"""Accounts and rollout flags for administrators; roles for the owner alone.
 
-Reads and writes only the account tables (``app.users``, ``app.athletes``),
-never an athlete's private data. The rules live in ``services.users``.
+Reads and writes shared account and rollout tables, never an athlete's private
+data. The rules live in ``services.users`` and ``services.feature_flags``.
 """
 
 from __future__ import annotations
@@ -12,11 +12,17 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool
 
 from arete import scheduler
 from arete.api.auth import require_admin, require_owner
 from arete.services import users
+from arete.services.feature_flags import (
+    FeatureFlags,
+    get_feature_flags,
+    glm_flash_available,
+    set_feature_flags,
+)
 from arete.services.users import AccountError, AppUser
 
 router = APIRouter(
@@ -40,6 +46,32 @@ class AccountOut(BaseModel):
 
 class RoleUpdate(BaseModel):
     role: Literal["athlete", "admin"]
+
+
+class FeatureFlagsOut(FeatureFlags):
+    glm_flash_available: bool
+
+
+class FeatureFlagsUpdate(FeatureFlags):
+    glm_flash: StrictBool
+
+
+@router.get("/feature-flags", response_model=FeatureFlagsOut)
+def read_feature_flags() -> FeatureFlagsOut:
+    return FeatureFlagsOut(
+        **get_feature_flags().model_dump(), glm_flash_available=glm_flash_available()
+    )
+
+
+@router.put("/feature-flags", response_model=FeatureFlagsOut)
+def update_feature_flags(body: FeatureFlagsUpdate) -> FeatureFlagsOut:
+    try:
+        flags = set_feature_flags(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return FeatureFlagsOut(
+        **flags.model_dump(), glm_flash_available=glm_flash_available()
+    )
 
 
 @contextmanager

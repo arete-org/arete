@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { authHeaders, setTokenGetter } from '@/lib/auth';
 import { AuthGate } from './AuthGate';
+import { useAuthState } from './authState';
 
 const clerk = vi.hoisted(() => ({
   /** Called when the mocked SDK module is first evaluated, i.e. when the gate loads it. */
@@ -98,6 +99,17 @@ it('renders the app as before, without the Clerk SDK, when sign-in is off', asyn
   expect(requests.map((r) => r.url)).toEqual(['/api/auth/config']);
   expect(requests[0].headers.has('Authorization')).toBe(false);
   expect(await authHeaders()).toEqual({});
+});
+
+it('exposes local administration only after the server confirms sign-in is off', async () => {
+  server(disabled);
+  function Permissions() {
+    const { isAdmin, isOwner } = useAuthState();
+    return <p>{isAdmin && isOwner ? 'Administration locale' : 'Athlète'}</p>;
+  }
+  render(<AuthGate><Permissions /></AuthGate>);
+  expect(screen.queryByText('Administration locale')).toBeNull();
+  expect(await screen.findByText('Administration locale')).toBeTruthy();
 });
 
 it('offers a retry, never the app, when the config cannot be fetched', async () => {

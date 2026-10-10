@@ -225,7 +225,7 @@ def test_cached_coaches_never_share_memory_roots(athletes, monkeypatch):
 
     first, second = athletes
     coaching.get_agent.cache_clear()
-    monkeypatch.setattr(coaching, "_assemble", lambda _profile: memory_root())
+    monkeypatch.setattr(coaching, "_assemble", lambda _profile, **kw: memory_root())
     try:
         with athlete_scope(first.athlete_id):
             first_graph = coaching.get_agent()

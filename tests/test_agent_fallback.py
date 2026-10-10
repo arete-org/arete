@@ -12,7 +12,10 @@ from langchain_core.outputs import ChatGenerationChunk
 
 from arete.agent.capabilities.registry import CAPABILITIES
 from arete.agent.factory import build_agent
-from arete.agent.models.responses import EmptyModelResponseError
+from arete.agent.models.responses import (
+    EmptyModelResponseError,
+    TruncatedModelResponseError,
+)
 from arete.agent.profiles.catalog import get_profile
 from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.execution import invoke_agent, run_config, stream_agent
@@ -83,7 +86,16 @@ def run(graph, mode, context):
 
 
 @pytest.mark.parametrize("mode", ["sync", "async", "stream"])
-@pytest.mark.parametrize("failure", [AIMessage(content="FAIL"), reasoning_only()])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        AIMessage(content="FAIL"),
+        reasoning_only(),
+        AIMessage(
+            content="Je vais créer", response_metadata={"finish_reason": "lengthlength"}
+        ),
+    ],
+)
 def test_fallback_after_write_does_not_replay_tool_and_counts_attempts(
     monkeypatch, mode, failure
 ):
@@ -270,3 +282,36 @@ def test_cancellation_does_not_start_a_fallback():
 
     asyncio.run(cancel())
     assert not fallbacks
+
+
+@pytest.mark.parametrize("mode", ["sync", "async", "stream"])
+def test_truncated_tool_call_is_not_executed_and_keeps_usage(monkeypatch, mode, caplog):
+    caplog.set_level(logging.INFO, logger="arete.observability.agent")
+    writer = next(
+        t for t in CAPABILITIES["planning"].tools if t.name == "create_planned_session"
+    )
+    writes = []
+    monkeypatch.setattr(writer, "func", lambda **kw: writes.append(kw))
+    response = reasoning_only().model_copy(
+        update={
+            "content": "Je prépare",
+            "tool_calls": [
+                {
+                    "name": "create_planned_session",
+                    "args": {
+                        "date_str": "2099-01-01",
+                        "session_type": "tempo",
+                    },
+                    "id": "incomplete",
+                    "type": "tool_call",
+                }
+            ],
+        }
+    )
+    graph = graph_for([response], [])
+    with pytest.raises(TruncatedModelResponseError, match="incomplète"):
+        run(graph, mode, AgentContext())
+    assert writes == []
+    calls = [r.message for r in caplog.records if "Agent model call:" in r.message]
+    assert len(calls) == 1
+    assert "'reasoning': 4096" in calls[0]

@@ -30,6 +30,7 @@ from arete.config import config
 from arete.services import briefing, coaching_rules, session_feedback, weekly_review
 from arete.services.athlete_scope import current_athlete_id, resolve_athlete_id
 from arete.services.coaching_repository import Briefing
+from arete.services.feature_flags import get_feature_flags, glm_flash_available
 from arete.services.system_skills import publish_bundle
 
 AGENT_RECURSION_LIMIT = MAX_GRAPH_STEPS
@@ -45,13 +46,14 @@ def _serialized(factory):
     @wraps(factory)
     def get():
         with _graph_lock:
-            return factory(current_athlete_id())
+            glm_flash = get_feature_flags().glm_flash and glm_flash_available()
+            return factory(current_athlete_id(), glm_flash=glm_flash)
 
     get.cache_clear = factory.cache_clear
     return get
 
 
-def _assemble(profile_id: str):
+def _assemble(profile_id: str, *, glm_flash: bool = False):
     profile = get_profile(profile_id)
     calendar = None
     if profile_id == "chat" and config.google_calendar_configured:
@@ -60,14 +62,18 @@ def _assemble(profile_id: str):
             profile,
             capabilities=(*profile.capabilities, "calendar"),
         )
-    route = resolve_route()
+    route = resolve_route(glm_flash=glm_flash)
     # Use one explicit request per candidate: layering SDK retries and the
     # router's fallback list would multiply requests and exhaust the deadline.
     candidates = tuple(dict.fromkeys((route.model, *route.fallbacks)))
     models = tuple(
         build_chat_model(
             route=replace(route, model=name, fallbacks=()),
-            max_retries=0 if len(candidates) > 1 else AGENT_MAX_RETRIES,
+            max_retries=(
+                0
+                if len(candidates) > 1 or route.openrouter_policy == "glm_flash"
+                else AGENT_MAX_RETRIES
+            ),
         )
         for name in candidates
     )
@@ -86,7 +92,7 @@ def _assemble(profile_id: str):
         if skills_backend is not None
         else None
     )
-    return build_agent(
+    graph = build_agent(
         profile,
         model=model,
         context_tokens=route.context_tokens,
@@ -95,6 +101,9 @@ def _assemble(profile_id: str):
         calendar=calendar,
         fallback_models=models[1:],
         skills=skills,
+    )
+    return graph.with_config(
+        metadata={"model": route.model, "model_policy": route.openrouter_policy}
     )
 
 
@@ -121,9 +130,9 @@ def system_skill_catalog() -> list[dict]:
 
 @_serialized
 @lru_cache(maxsize=MAX_CACHED_ATHLETES)
-def get_agent(athlete_id: int):
+def get_agent(athlete_id: int, *, glm_flash: bool = False):
     assert athlete_id == current_athlete_id()
-    return _assemble("chat")
+    return _assemble("chat", glm_flash=glm_flash)
 
 
 async def run_slack_coach(
@@ -147,23 +156,23 @@ async def run_slack_coach(
 
 @_serialized
 @lru_cache(maxsize=MAX_CACHED_ATHLETES)
-def build_briefing_agent(athlete_id: int):
+def build_briefing_agent(athlete_id: int, *, glm_flash: bool = False):
     assert athlete_id == current_athlete_id()
-    return _assemble("briefing")
+    return _assemble("briefing", glm_flash=glm_flash)
 
 
 @_serialized
 @lru_cache(maxsize=MAX_CACHED_ATHLETES)
-def build_feedback_agent(athlete_id: int):
+def build_feedback_agent(athlete_id: int, *, glm_flash: bool = False):
     assert athlete_id == current_athlete_id()
-    return _assemble("feedback")
+    return _assemble("feedback", glm_flash=glm_flash)
 
 
 @_serialized
 @lru_cache(maxsize=MAX_CACHED_ATHLETES)
-def build_review_agent(athlete_id: int):
+def build_review_agent(athlete_id: int, *, glm_flash: bool = False):
     assert athlete_id == current_athlete_id()
-    return _assemble("review")
+    return _assemble("review", glm_flash=glm_flash)
 
 
 def _run_mission(graph, profile: str, message: str, max_chars: int) -> str:

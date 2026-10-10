@@ -8,6 +8,10 @@ import { GateScreen, GateSpinner } from './GateScreen';
 // The Clerk SDK is only fetched when the server asks for sign-in.
 const ClerkGate = lazy(() => import('./ClerkGate'));
 
+// Without sign-in the server's require_admin resolves the instance owner.
+// Keep the context's unprovided default closed; grant this only after config loads.
+const LOCAL_OWNER = { ...AUTH_DISABLED, isAdmin: true, isOwner: true };
+
 type ConfigState =
   | { status: 'loading' }
   /** The server could not be asked: neither on nor off, never let the app pass as if it were off. */
@@ -59,7 +63,7 @@ export function AuthGate({ children, onSessionEnd }: AuthGateProps) {
   }
   const { config } = state;
   if (!config.enabled) {
-    return <AuthStateContext.Provider value={AUTH_DISABLED}>{children}</AuthStateContext.Provider>;
+    return <AuthStateContext.Provider value={LOCAL_OWNER}>{children}</AuthStateContext.Provider>;
   }
   if (!config.publishable_key) {
     return (

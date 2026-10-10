@@ -498,6 +498,41 @@ class TestBuildChatModel:
         assert models["fallback_models"] == ()
         assert "models" not in self._payload(models["model"])["extra_body"]
 
+    @pytest.mark.parametrize("profile", ["chat", "briefing", "feedback", "review"])
+    def test_glm_flag_overrides_pinned_route_with_bounded_paid_requests(
+        self, monkeypatch, profile
+    ):
+        from arete import coaching
+
+        self._openrouter(monkeypatch, "custom:free", "fallback:free")
+        with patch.object(coaching, "build_agent") as assemble:
+            coaching._assemble(profile, glm_flash=True)
+        models = assemble.call_args.kwargs
+        model = models["model"]
+        payload = self._payload(model)
+        assert payload["model"] == "z-ai/glm-5.3-flash"
+        assert payload["extra_body"] == {
+            "provider": {
+                "sort": "latency",
+                "allow_fallbacks": True,
+                "require_parameters": True,
+                "max_price": {"prompt": 0.15, "completion": 0.5},
+            },
+            "reasoning": {"effort": "low"},
+        }
+        assert model.max_retries == 0
+        assert model.max_tokens == 4096
+        assert model.request_timeout == 60
+        assert models["fallback_models"] == ()
+        with patch.object(coaching, "build_agent") as reverted:
+            coaching._assemble(profile, glm_flash=False)
+        restored = self._payload(reverted.call_args.kwargs["model"])
+        assert restored["model"] == "custom:free"
+        assert restored["extra_body"]["provider"]["max_price"] == {
+            "prompt": 0,
+            "completion": 0,
+        }
+
     @pytest.mark.parametrize("provider", ["ollama", "github"])
     def test_openrouter_reasoning_controls_do_not_reach_other_providers(
         self, monkeypatch, provider
@@ -524,7 +559,8 @@ class TestBuildChatModel:
         self._openrouter(monkeypatch, pinned)
         payload = self._payload(build_chat_model())
         assert payload["extra_body"]["provider"] == {
-            "max_price": {"prompt": 0, "completion": 0}
+            "sort": "latency",
+            "max_price": {"prompt": 0, "completion": 0},
         }
 
     def test_a_pinned_model_takes_explicit_fallbacks_in_order(self, monkeypatch):
