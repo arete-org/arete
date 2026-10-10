@@ -88,7 +88,9 @@ def _extract_date_from_text(text: str) -> tuple[date | None, str]:
 
     # Pattern: DD/MM/YY: or DD/MM/YYYY: at start of text, optionally followed
     # by the first exercise on the same line ("05/12/25: Bench press 4x8 80kg")
-    date_pattern = r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})\s*:?\s*(.*)$"
+    # The tail is sliced, not matched: overlapping `\s*` around the colon
+    # would backtrack quadratically on a line of spaces.
+    date_pattern = r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})"
     match = re.match(date_pattern, first_line)
 
     if match:
@@ -103,7 +105,7 @@ def _extract_date_from_text(text: str) -> tuple[date | None, str]:
         try:
             extracted_date = date(year, month, day)
             # Return text without the date prefix
-            rest_of_line = match.group(4).strip()
+            rest_of_line = first_line[match.end() :].lstrip().removeprefix(":").strip()
             remaining_lines = ([rest_of_line] if rest_of_line else []) + lines[1:]
             return extracted_date, "\n".join(remaining_lines)
         except ValueError:

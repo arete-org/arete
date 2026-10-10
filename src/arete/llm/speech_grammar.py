@@ -157,7 +157,8 @@ def normalize_speech(text: str) -> str:
     for pattern in _EACH_SIDE_PHRASES:
         out = re.sub(pattern, f" {EACH_SIDE_TOKEN} ", out)
     # Whisper hears "RPE 8" and writes "RP-E8", "RPE-8" or "rpe8".
-    out = re.sub(r"\brp\s*-?\s*e\s*-?\s*(\d)", r"rpe \1", out, flags=re.I)
+    # One optional dash per gap, so the spaces around it split only one way.
+    out = re.sub(r"\brp\s*(?:-\s*)?e\s*(?:-\s*)?(\d)", r"rpe \1", out, flags=re.I)
     # threshold=0 so "deux minutes" becomes "2 minutes"; none of this is prose.
     out = alpha2digit(out, "fr", threshold=0.0)
     return re.sub(r"\s+", " ", out).strip()
