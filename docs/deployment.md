@@ -19,6 +19,10 @@ One Vercel project, two services (`vercel.json`): the FastAPI backend behind
 Each deployment stores a ~430 MB function against the Hobby plan's 10 GB, so
 the workflows prune: one PR preview per PR, one main preview, the two newest
 production deployments (the live one and its predecessor, for a rollback).
+PR deployment and close/merge cleanup share a concurrency group: cleanup waits
+for an active deployment to finish. A deployment that starts after the PR closes
+skips publication, so cleanup cannot delete an in-flight build or leave a late
+preview behind.
 
 Environment variables live in the Vercel project, per environment. `ARETE_DB`
 differs between Production and Preview, and `dataio/db.py` refuses to open
