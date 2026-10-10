@@ -4,6 +4,8 @@ Only this composition root imports the agent factory. Domain producers receive
 plain callbacks, so they remain usable and testable without an agent framework.
 """
 
+from collections.abc import Awaitable, Callable
+from contextlib import aclosing
 from dataclasses import replace
 from datetime import date
 from functools import lru_cache, wraps
@@ -139,19 +141,39 @@ async def run_slack_coach(
     messages: list[dict[str, str]],
     thread_id: str,
     visibility: Literal["private", "public"],
+    emit: Callable[[dict], Awaitable[None]],
 ) -> str:
     """Slack supplies its own history; reuse the chat graph and runtime limits."""
-    from arete.agent.runtime.execution import invoke_agent
+    from langchain_core.messages import AIMessage
 
-    result = await invoke_agent(
-        get_agent(),
-        {"messages": messages},
-        context=AgentContext(thread_id=thread_id, slack_visibility=visibility),
-    )
-    replies = result.get("messages", [])
-    if not replies or not (text := replies[-1].text.strip()):
+    from arete.agent.runtime.execution import stream_agent
+    from arete.agent.runtime.streaming import MAX_STREAM_EVENTS, StreamProjection
+
+    projection = StreamProjection()
+    answer = ""
+    count = 0
+    async with aclosing(
+        stream_agent(
+            get_agent(),
+            {"messages": messages},
+            context=AgentContext(thread_id=thread_id, slack_visibility=visibility),
+        )
+    ) as stream:
+        async for part in stream:
+            count += 1
+            if count > MAX_STREAM_EVENTS:
+                raise ValueError("Le stream dépasse la limite d’événements.")
+            # Tokens are provisional: only a completed, tool-free model update
+            # can become canonical Slack history after provider fallback.
+            if part.get("type") == "updates" and not part.get("ns"):
+                for message in (part["data"].get("model") or {}).get("messages", []):
+                    if isinstance(message, AIMessage):
+                        answer = message.text if not message.tool_calls else ""
+            for event in projection.events(part):
+                await emit(event)
+    if not answer.strip():
         raise RuntimeError("Agent returned an empty Slack answer")
-    return str(text)
+    return answer
 
 
 @_serialized

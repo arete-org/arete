@@ -19,7 +19,7 @@ from arete.agent.models.responses import (
 from arete.agent.profiles.catalog import get_profile
 from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.execution import invoke_agent, run_config, stream_agent
-from arete.api.agent_streaming import StreamProjection
+from arete.agent.runtime.streaming import StreamProjection
 
 
 def reasoning_only():

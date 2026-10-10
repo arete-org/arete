@@ -142,7 +142,7 @@ def test_last_model_call_answers_with_all_results_and_no_tools(
     mode, monkeypatch, tmp_path
 ):
     from arete.agent.backends.memory import build_memory_filesystem
-    from arete.api.agent_streaming import StreamProjection
+    from arete.agent.runtime.streaming import StreamProjection
 
     monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
     requests = []

@@ -221,8 +221,9 @@ Manual drafts and existing browser histories are preserved. Old clients may send
 `supports_suggestions`; it is ignored. New clients ignore retired suggestion events
 during rolling upgrades and never turn them into drafts.
 
-Runtime tool events are projected into the existing SSE protocol by
-`api/agent_streaming.py`. Workout events carry session ID/revision, tool call,
+The shared `agent/runtime/streaming.py` projection turns graph chunks into bounded
+message and tool events. `api/agent.py` serializes them into the existing SSE protocol;
+the Slack composition passes them to its transport callback. Workout events carry session ID/revision, tool call,
 thread and durable operation state. The domain service publishes through an injected
 callback; the runtime supplies correlation and the API projects `workout_update`.
 Only catalog-declared workout actions emit these cards: planning lists and session
@@ -300,6 +301,17 @@ browser state is unchanged. Migrations 37 and 40 store delivery IDs, consent and
 run reservation per athlete, not conversation text. Failed ambiguous runs stay
 reserved for operator review and are never replayed. See [Slack setup](slack.md)
 for limits, installation, crash behavior and recovery.
+
+`services/slack.py` also owns the invocation-local Slack stream: session status,
+batched text/task updates, and final message replacement. It receives plain event
+dictionaries and never imports the agent framework. `coaching.run_slack_coach`
+uses the shared runtime stream and projection; a completed tool-free model update
+supplies the canonical final answer, while token events remain provisional.
+Private channel replies select their DM destination before any progress is sent.
+Finalization replaces provisional content, and interrupted stream markers cannot
+be consumed as valid thread history. The per-athlete reservation remains held
+through status cleanup. No new model call, persistence layer or background queue
+is introduced.
 
 ## Documents, direct session creation and outbound workouts
 

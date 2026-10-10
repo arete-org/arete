@@ -14,7 +14,7 @@ from arete.agent.runtime.events import (
     preview,
     tool_result_event,
 )
-from arete.api.agent_streaming import StreamProjection
+from arete.agent.runtime.streaming import StreamProjection
 
 
 def token(text, message_id, **metadata):
@@ -65,7 +65,7 @@ def test_empty_and_oversized_stream_fail_explicitly():
     with pytest.raises(ValueError, match="aucune réponse"):
         stream.done()
     with (
-        patch("arete.api.agent_streaming.MAX_STREAM_TEXT_CHARS", 5),
+        patch("arete.agent.runtime.streaming.MAX_STREAM_TEXT_CHARS", 5),
         pytest.raises(ValueError, match="taille"),
     ):
         stream.events(token("Too long", "m"))

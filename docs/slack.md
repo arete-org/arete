@@ -29,7 +29,7 @@ thread. The coach's prompt says who will read the answer.
 
 1. At <https://api.slack.com/apps>, choose **Create New App → From a manifest**,
    select workspace `T0C7ZT5V0F7`, and paste [`slack-manifest.json`](../slack-manifest.json).
-   Bot scopes: `chat:write`, `im:history`, `im:write` (DM answers to channel
+   Bot scopes: `chat:write`, `assistant:write` (suggested prompts), `im:history`, `im:write` (DM answers to channel
    mentions), `users:read` and `users:read.email` (identity), `channels:history`
    and `groups:history` (channels Arete is invited to). No user token, no Socket Mode.
 2. Install the app from **OAuth & Permissions** (reinstall after a scope change).
@@ -43,7 +43,8 @@ thread. The coach's prompt says who will read the answer.
 
    Pipe copied values through `tr -d '[:space:]'` into `vercel env add`; never put
    secrets in source, command arguments or chat. A new deployment applies them.
-3. The manifest subscribes to `message.im`, `message.channels` and
+3. The manifest enables `agent_view` with three fixed French suggested prompts,
+   and subscribes to `app_home_opened`, `message.im`, `message.channels` and
    `message.groups` at `https://arete-arete15.vercel.app/api/slack/events`. Invite
    Arete to each channel where it should answer (`/invite @Arete`); removing it stops it there.
 4. Send Arete a DM, then mention it in the channel. Check one `Agent run:` log per
@@ -72,18 +73,57 @@ requests from that athlete receive a busy response and are not queued. On Mother
 admissions can conflict on the reservation row; the loser is answered busy
 too, and releasing a finished run retries its idempotent write up to five
 times. Existing browser runs are independent. A turn
-has a 240-second coaching/history/send deadline, up to one history fetch and one
-answer send, each HTTP call has a 10-second timeout and no retries. The existing
-8 model-call / 32 tool-call limits and complete-context token guard still apply.
-No model requests are added for Slack formatting or suggestions.
+has a 240-second coaching/history/stream deadline. Each HTTP call has a 10-second
+timeout and no retries. After that deadline, failure display and cleanup can take
+up to three more HTTP calls (stop, replace the partial answer, clear status).
+The chat runtime's model/tool limits and complete-context token guard still apply.
+No model requests are added for Slack formatting, progress or suggestions.
 
 History is read from Slack, at most 60 messages (16,000 characters per user
 message, 39,000 per answer). Partial,
 paginated or stale history, and other members' messages in a DM, are rejected
 explicitly, never truncated.
-The reply is plain text, bounded to 39,000 characters, with automatic mentions
-and unfurls disabled. No message text is stored in the delivery ledger. Existing
+The session is marked `processing` before the coach starts. One native Slack
+stream displays provisional answer text and task cards with French labels, never
+tool arguments or raw tool results. Appends are batched at most once per second,
+with hard limits of 240 appends, 100 pending chunks, 10,000 characters per batch,
+64,000 streamed characters and 50 distinct task cards (Slack's plan limit).
+The shared runtime projection accepts at most 12,000 events and 64,000 text
+characters. Exceeding a bound fails explicitly; nothing is silently dropped.
+
+When the graph finishes, only its completed, tool-free model answer becomes
+canonical. The stream is stopped and the same message is replaced, removing
+provisional text from earlier model attempts and task cards from conversation
+history. Answers up to 12,000 escaped characters use a native Markdown block;
+longer answers retain the full plain text, up to 39,000 characters. Mentions are
+escaped in rich output and automatic mention parsing is disabled in final text.
+The final `text` field serves both accessibility and subsequent Slack history.
+Provisional messages carry a marker; history containing one is rejected, including
+when a failed final update left partial text behind. Cleanup explicitly clears the
+session status before releasing the athlete's admission reservation.
+
+For a channel request without public consent, Arete creates a DM root quoting the
+athlete's request and streams under that root. No answer tokens or tool progress
+are sent to the source channel; only the existing private-reply notice is posted
+there after completion. No message text is stored in the delivery ledger. Existing
 optional LangSmith tracing still includes the messages and Slack thread ID.
+
+`app_home_opened` is acknowledged without model work; the manifest supplies fixed
+suggested prompts. Stop events and interactive buttons are not enabled: stopping
+an in-flight tool across server instances needs its own execution contract.
+
+## Local verification and rollout
+
+Run `make check` before shipping. Tests mock Slack HTTP and model execution; they
+cover stream delivery, final-answer reconciliation, private routing, interruption,
+deduplication, payload bounds and cleanup failures. No live Slack messages are sent.
+
+After local validation and an authorized deployment, send a DM asking for a
+read-only planning summary. Check the loading indicator, streamed text/task cards,
+the final formatted answer, and a follow-up in the same thread. Repeat from a
+channel with public replies disabled: all progress must appear in a private DM.
+Check one `Agent run:` log for each answered prompt. The production webhook still
+points to production; local code changes alone do not change the installed app.
 
 Migration 37 adds `app.slack_deliveries` (and `app.slack_execution`, unused since
 migration 40). Migration 40 adds `app.slack_athletes`: per athlete, the public-reply

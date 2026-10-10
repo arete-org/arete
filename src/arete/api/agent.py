@@ -261,7 +261,7 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
         TIMEOUT_MESSAGE,
         stream_agent,
     )
-    from arete.api.agent_streaming import MAX_STREAM_EVENTS, StreamProjection
+    from arete.agent.runtime.streaming import MAX_STREAM_EVENTS, StreamProjection
 
     projection = StreamProjection()
     from anyio import to_thread
