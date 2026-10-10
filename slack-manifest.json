@@ -12,13 +12,32 @@
     "app_home": {
       "home_tab_enabled": false,
       "messages_tab_enabled": true,
-      "messages_tab_read_only_enabled": false
+      "messages_tab_read_only_enabled": false,
+      "agent_tasks_enabled": true
+    },
+    "agent_view": {
+      "agent_description": "Ton coach personnel pour l’entraînement, la récupération et la planification.",
+      "suggested_prompts": [
+        {
+          "title": "Ma séance du jour",
+          "message": "Quelle séance me conseilles-tu aujourd’hui ?"
+        },
+        {
+          "title": "Analyser ma semaine",
+          "message": "Analyse mon entraînement et ma récupération cette semaine."
+        },
+        {
+          "title": "Préparer ma semaine",
+          "message": "Propose un programme pour la semaine prochaine."
+        }
+      ]
     }
   },
   "oauth_config": {
     "scopes": {
       "bot": [
         "chat:write",
+        "assistant:write",
         "im:history",
         "im:write",
         "users:read",
@@ -26,7 +45,8 @@
         "channels:history",
         "groups:history"
       ]
-    }
+    },
+    "pkce_enabled": false
   },
   "settings": {
     "org_deploy_enabled": false,
@@ -35,10 +55,13 @@
     "event_subscriptions": {
       "request_url": "https://arete-arete15.vercel.app/api/slack/events",
       "bot_events": [
+        "app_home_opened",
         "message.im",
         "message.channels",
         "message.groups"
       ]
-    }
+    },
+    "app_level_token_rotation_enabled": false,
+    "is_mcp_enabled": false
   }
 }

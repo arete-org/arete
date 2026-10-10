@@ -747,7 +747,7 @@ def test_graph_streams_domain_progress_before_final_answer(planned, monkeypatch)
     from arete.agent.middlewares.events import ToolEventMiddleware
     from arete.agent.runtime.context import AgentContext
     from arete.agent.runtime.execution import stream_agent
-    from arete.api.agent_streaming import StreamProjection
+    from arete.agent.runtime.streaming import StreamProjection
 
     garmin = Garmin()
     monkeypatch.setattr("arete.garmin.client.GarminClient", lambda: garmin)

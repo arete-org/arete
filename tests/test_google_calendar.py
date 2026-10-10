@@ -559,7 +559,7 @@ def test_calendar_tools_stream_proposal_without_writing(calendar):
     from arete.agent.profiles.catalog import get_profile
     from arete.agent.runtime.context import AgentContext
     from arete.agent.runtime.execution import stream_agent
-    from arete.api.agent_streaming import StreamProjection
+    from arete.agent.runtime.streaming import StreamProjection
 
     seen = []
 

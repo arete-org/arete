@@ -7,7 +7,7 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import duckdb
 import httpx
@@ -17,6 +17,19 @@ from arete.api import slack as api
 from arete.dataio.db import db_connection
 from arete.dataio.init_duckdb import main as init_db
 from arete.services import slack
+
+
+def mock_slack_client():
+    client = AsyncMock(spec=slack.SlackClient)
+    client.call.return_value = {"ok": True, "ts": "1700000001.000001"}
+    client.post.return_value = "1700000001.000001"
+    return client
+
+
+def final_update(client):
+    return [
+        c.args[1] for c in client.call.await_args_list if c.args[0] == "chat.update"
+    ][-1]
 
 
 @pytest.fixture
@@ -282,7 +295,7 @@ def test_concurrent_busy_deliveries_cannot_exceed_capacity(
 
 
 def test_retry_invokes_coach_and_posts_once(ledger, message):
-    client = AsyncMock(spec=slack.SlackClient)
+    client = mock_slack_client()
     client.history.return_value = [{"role": "user", "content": message.text}]
     produce = AsyncMock(return_value="Repos aujourd’hui.")
 
@@ -292,29 +305,38 @@ def test_retry_invokes_coach_and_posts_once(ledger, message):
 
     asyncio.run(run())
     produce.assert_awaited_once_with(
-        client.history.return_value, message.thread_id, "private"
+        client.history.return_value, message.thread_id, "private", ANY
     )
-    client.reply.assert_awaited_once_with(message, "Repos aujourd’hui.")
+    assert final_update(client)["text"] == "Repos aujourd’hui."
+    client.reply.assert_not_awaited()
 
 
 def test_ambiguous_coach_failure_blocks_new_writes(ledger, message):
-    client = AsyncMock(spec=slack.SlackClient)
+    client = mock_slack_client()
     produce = AsyncMock(side_effect=RuntimeError("write may have committed"))
     with pytest.raises(RuntimeError):
         asyncio.run(slack.dispatch(message, client=client, produce=produce))
     assert slack.reserve(message) == "duplicate"
     assert slack.reserve(replace(message, event_id="Ev2")) == "busy"
-    client.reply.assert_awaited_once_with(message, slack.FAILURE_MESSAGE)
+    assert final_update(client)["text"] == slack.FAILURE_MESSAGE
 
 
 def test_failed_send_is_not_retried(ledger, message):
-    client = AsyncMock(spec=slack.SlackClient)
-    client.reply.side_effect = slack.SlackError("uncertain send")
+    client = mock_slack_client()
+
+    async def fail_update(method, payload):
+        if method == "chat.update":
+            raise slack.SlackError("uncertain send")
+        return {"ok": True, "ts": "1700000001.000001"}
+
+    client.call.side_effect = fail_update
     produce = AsyncMock(return_value="Terminé")
     with pytest.raises(slack.SlackError):
         asyncio.run(slack.dispatch(message, client=client, produce=produce))
     asyncio.run(slack.dispatch(message, client=client, produce=produce))
-    assert client.reply.await_count == 1
+    assert (
+        len([c for c in client.call.await_args_list if c.args[0] == "chat.update"]) == 1
+    )
     assert produce.await_count == 1
     assert slack.reserve(replace(message, event_id="Ev2")) == "running"
 
@@ -383,7 +405,7 @@ def test_slack_migration_on_existing_database(ledger):
 
 def test_timeout_keeps_ambiguous_reservation(ledger, message, monkeypatch):
     monkeypatch.setattr(slack, "MAX_JOB_SECONDS", 0.01)
-    client = AsyncMock(spec=slack.SlackClient)
+    client = mock_slack_client()
 
     async def produce(*args):
         await asyncio.sleep(1)
@@ -392,11 +414,11 @@ def test_timeout_keeps_ambiguous_reservation(ledger, message, monkeypatch):
     with pytest.raises(TimeoutError):
         asyncio.run(slack.dispatch(message, client=client, produce=produce))
     assert slack.reserve(replace(message, event_id="Ev2")) == "busy"
-    client.reply.assert_awaited_once_with(message, slack.FAILURE_MESSAGE)
+    assert final_update(client)["text"] == slack.FAILURE_MESSAGE
 
 
 def test_unreadable_history_never_invokes_coach(ledger, message):
-    client = AsyncMock(spec=slack.SlackClient)
+    client = mock_slack_client()
     client.history.side_effect = slack.HistoryError("Fil incomplet")
     produce = AsyncMock()
     asyncio.run(slack.dispatch(message, client=client, produce=produce))
@@ -415,23 +437,33 @@ def test_oversized_body_never_schedules_coach(router_client, configured, payload
 
 
 def test_slack_reuses_chat_graph_and_thread_metadata(monkeypatch):
-    from types import SimpleNamespace
+    from langchain_core.messages import AIMessage
 
     from arete import coaching
     from arete.agent.runtime import execution
 
     graph = object()
-    invoke = AsyncMock(return_value={"messages": [SimpleNamespace(text="Repos.")]})
+    captured = {}
+
+    async def stream(*args, **kwargs):
+        captured.update(args=args, kwargs=kwargs)
+        yield {
+            "type": "updates",
+            "data": {"model": {"messages": [AIMessage(content="Repos.")]}},
+        }
+
     monkeypatch.setattr(coaching, "get_agent", lambda: graph)
-    monkeypatch.setattr(execution, "invoke_agent", invoke)
+    monkeypatch.setattr(execution, "stream_agent", stream)
     history = [{"role": "user", "content": "Ma séance ?"}]
-    answer = asyncio.run(coaching.run_slack_coach(history, "slack:T:D:1", "public"))
+    answer = asyncio.run(
+        coaching.run_slack_coach(history, "slack:T:D:1", "public", AsyncMock())
+    )
     assert answer == "Repos."
-    args, kwargs = invoke.call_args
-    assert args == (graph, {"messages": history})
-    assert kwargs["context"].profile == "chat"
-    assert kwargs["context"].thread_id == "slack:T:D:1"
-    assert kwargs["context"].slack_visibility == "public"
+    assert captured["args"] == (graph, {"messages": history})
+    context = captured["kwargs"]["context"]
+    assert context.profile == "chat"
+    assert context.thread_id == "slack:T:D:1"
+    assert context.slack_visibility == "public"
 
 
 @pytest.mark.parametrize("resolved", [7, None])
@@ -461,7 +493,7 @@ def test_reservation_conflict_answers_busy_without_coach(ledger, message, monkey
         raise duckdb.TransactionException("Conflict on tuple deletion!")
 
     monkeypatch.setattr(slack, "reserve", conflict)
-    client = AsyncMock(spec=slack.SlackClient)
+    client = mock_slack_client()
     produce = AsyncMock()
     asyncio.run(slack.dispatch(message, client=client, produce=produce))
     produce.assert_not_awaited()
@@ -545,14 +577,14 @@ def test_only_full_members_with_a_confirmed_email_are_identified(message, user):
 
 
 def test_unknown_author_is_told_and_never_reaches_the_coach(ledger, message):
-    client = AsyncMock(spec=slack.SlackClient)
+    client = mock_slack_client()
     client.author_email.return_value = "nobody@example.com"
     assert asyncio.run(slack.resolve(message, client=client)) is None
     client.reply.assert_awaited_once_with(message, slack.UNLINKED_MESSAGE)
 
 
 def test_channel_chatter_outside_arete_threads_is_ignored(ledger, message):
-    client = AsyncMock(spec=slack.SlackClient)
+    client = mock_slack_client()
     client.engaged.return_value = False
     reply = replace(message, in_channel=True, thread_ts="1699999999.000001")
     assert asyncio.run(slack.resolve(reply, client=client)) is None
@@ -594,20 +626,24 @@ def test_channel_answer_is_public_only_with_consent(ledger, message, public):
 
     slack_athletes.set_public_replies(public)
     mention = replace(message, channel="C123", in_channel=True, mentioned=True)
-    client = AsyncMock(spec=slack.SlackClient)
+    client = mock_slack_client()
     client.history.return_value = [{"role": "user", "content": mention.text}]
     client.open_dm.return_value = "D777"
     produce = AsyncMock(return_value="Repos.")
     asyncio.run(slack.dispatch(mention, client=client, produce=produce))
     visibility = "public" if public else "private"
     produce.assert_awaited_once_with(
-        client.history.return_value, mention.thread_id, visibility
+        client.history.return_value, mention.thread_id, visibility, ANY
     )
     if public:
-        client.reply.assert_awaited_once_with(mention, "Repos.")
+        assert final_update(client)["channel"] == mention.channel
+        client.reply.assert_not_awaited()
         client.post.assert_not_awaited()
     else:
-        client.post.assert_awaited_once_with("D777", None, "Repos.")
+        client.post.assert_awaited_once_with(
+            "D777", None, "Ta demande dans un canal :\n" + mention.text
+        )
+        assert final_update(client)["channel"] == "D777"
         client.reply.assert_awaited_once_with(
             mention, slack.PRIVATE_NOTE.format(user=mention.user)
         )
@@ -655,8 +691,231 @@ def test_surface_section_tells_the_coach_who_reads():
 
 
 def test_top_level_channel_chatter_costs_no_slack_call(ledger, message):
-    client = AsyncMock(spec=slack.SlackClient)
+    client = mock_slack_client()
     chatter = replace(message, in_channel=True)
     assert asyncio.run(slack.resolve(chatter, client=client)) is None
     client.engaged.assert_not_awaited()
     client.author_email.assert_not_awaited()
+
+
+def test_stream_batches_progress_and_replaces_provisional_answer(ledger, message):
+    requests = []
+
+    def respond(request):
+        requests.append(
+            (request.url.path.rsplit("/", 1)[-1], json.loads(request.content))
+        )
+        return httpx.Response(200, json={"ok": True, "ts": "1700000001.000001"})
+
+    async def produce(history, thread_id, visibility, emit):
+        await emit(
+            {
+                "type": "tool_start",
+                "id": "tool-1",
+                "name": "list_planned",
+                "args": {"text": "PRIVATE_ARGUMENTS"},
+            }
+        )
+        await emit(
+            {
+                "type": "tool_end",
+                "id": "tool-1",
+                "name": "list_planned",
+                "status": "done",
+                "output": {"text": "PRIVATE_RESULT"},
+            }
+        )
+        await emit(
+            {"type": "token", "id": "failed-model", "text": "Wrong provisional answer"}
+        )
+        await emit({"type": "token", "id": "valid-model", "text": "**Repos** <@U999>"})
+        return "**Repos** <@U999>"
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+            await slack.dispatch(
+                message, client=slack.SlackClient(http), produce=produce
+            )
+
+    asyncio.run(run())
+    methods = [method for method, _ in requests]
+    assert methods == [
+        "agents.sessions.setStatus",
+        "chat.startStream",
+        "chat.appendStream",
+        "chat.stopStream",
+        "chat.update",
+        "agents.sessions.setStatus",
+    ]
+    assert requests[0][1]["status"] == "processing"
+    assert requests[-1][1]["status"] == "active"
+    start = requests[1][1]
+    assert start["thread_ts"] == message.thread_ts
+    assert start["recipient_team_id"] == message.team
+    assert start["recipient_user_id"] == message.user
+    assert requests[2][1]["chunks"][0]["title"] == "Lecture du planning"
+    update = requests[-2][1]
+    assert update["text"] == "**Repos** <@U999>"
+    assert update["blocks"] == [{"type": "markdown", "text": "**Repos** &lt;@U999&gt;"}]
+    assert update["link_names"] is False
+    assert "PRIVATE_" not in json.dumps(requests)
+    assert "Wrong provisional answer" not in json.dumps(update)
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "agents.sessions.setStatus",
+        "chat.startStream",
+        "chat.appendStream",
+        "chat.stopStream",
+        "chat.update",
+    ],
+)
+def test_stream_failures_are_not_replayed_and_clear_status(ledger, message, method):
+    client = mock_slack_client()
+    failed = False
+
+    async def call(name, payload):
+        nonlocal failed
+        if name == method and not failed:
+            failed = True
+            raise slack.SlackError("uncertain network outcome")
+        return {"ok": True, "ts": "1700000001.000001"}
+
+    client.call.side_effect = call
+
+    async def produce(*args):
+        await args[-1]({"type": "token", "id": "answer", "text": "Bonjour"})
+        return "Bonjour"
+
+    producer = AsyncMock(side_effect=produce)
+    with pytest.raises(slack.SlackError, match="uncertain"):
+        asyncio.run(slack.dispatch(message, client=client, produce=producer))
+    asyncio.run(slack.dispatch(message, client=client, produce=producer))
+    calls = client.call.await_args_list
+    assert calls[-1].args == (
+        "agents.sessions.setStatus",
+        {
+            "channel_id": message.channel,
+            "thread_ts": message.thread_ts,
+            "status": "active",
+        },
+    )
+    assert producer.await_count == (
+        0 if method in ("agents.sessions.setStatus", "chat.startStream") else 1
+    )
+    if method != "agents.sessions.setStatus":
+        assert sum(c.args[0] == method for c in calls) == 1
+    client.reply.assert_not_awaited()
+    assert slack.reserve(replace(message, event_id="Ev2")) == (
+        "busy" if method == "chat.appendStream" else "running"
+    )
+
+
+def test_stream_clears_status_before_releasing_admission(ledger, message):
+    client = mock_slack_client()
+
+    async def call(method, payload):
+        if method == "agents.sessions.setStatus" and payload["status"] == "active":
+            assert slack.reserve(replace(message, event_id="Ev2")) == "busy"
+        return {"ok": True, "ts": "1700000001.000001"}
+
+    client.call.side_effect = call
+    asyncio.run(
+        slack.dispatch(message, client=client, produce=AsyncMock(return_value="Repos."))
+    )
+    assert slack.reserve(replace(message, event_id="Ev3")) == "running"
+
+
+@pytest.mark.parametrize("field", ["text", "blocks"])
+def test_provisional_stream_is_never_used_as_history(message, field):
+    reply = replace(message, ts="1700000002.000001")
+    provisional = {
+        "ts": "1700000001.000001",
+        "app_id": message.app_id,
+        "bot_id": "B123",
+        "text": "Incomplete answer",
+    }
+    provisional[field] = (
+        slack.PENDING_ANSWER
+        if field == "text"
+        else [{"type": "context", "block_id": "arete_pending"}]
+    )
+    rows = [
+        {"ts": message.ts, "user": message.user, "text": message.text},
+        provisional,
+        {"ts": reply.ts, "user": reply.user, "text": reply.text},
+    ]
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda req: httpx.Response(200, json={"ok": True, "messages": rows})
+            )
+        ) as http:
+            await slack.SlackClient(http).history(reply)
+
+    with pytest.raises(slack.HistoryError, match="interrompue"):
+        asyncio.run(run())
+
+
+def test_long_final_answer_is_preserved_without_markdown_truncation(message):
+    client = mock_slack_client()
+    output = slack.SlackStream(client, message)
+    answer = "x" * slack.MAX_REPLY_CHARS
+
+    async def run():
+        await output.start()
+        await output.finish(answer)
+
+    asyncio.run(run())
+    assert final_update(client)["text"] == answer
+    assert final_update(client)["blocks"] == []
+
+
+@pytest.mark.parametrize(
+    "limit", ["MAX_STREAM_CHARS", "MAX_STREAM_APPENDS", "MAX_TASKS"]
+)
+def test_stream_limits_fail_explicitly(message, monkeypatch, limit):
+    monkeypatch.setattr(slack, limit, 0)
+    output = slack.SlackStream(mock_slack_client(), message)
+    event = (
+        {"type": "tool_start", "id": "tool-1", "name": "list_planned"}
+        if limit == "MAX_TASKS"
+        else {"type": "token", "id": "answer", "text": "Bonjour"}
+    )
+
+    async def run():
+        await output.start()
+        await output.emit(event)
+
+    with pytest.raises(slack.SlackError, match="budget"):
+        asyncio.run(run())
+
+
+def test_slack_tokens_without_completed_answer_fail_and_close_stream(monkeypatch):
+    from langchain_core.messages import AIMessageChunk
+
+    from arete import coaching
+    from arete.agent.runtime import execution
+
+    closed = []
+
+    async def stream(*args, **kwargs):
+        try:
+            yield {
+                "type": "messages",
+                "data": (
+                    AIMessageChunk(content="Unvalidated", id="m1"),
+                    {"langgraph_node": "model"},
+                ),
+            }
+        finally:
+            closed.append(True)
+
+    monkeypatch.setattr(coaching, "get_agent", lambda: object())
+    monkeypatch.setattr(execution, "stream_agent", stream)
+    with pytest.raises(RuntimeError, match="empty Slack answer"):
+        asyncio.run(coaching.run_slack_coach([], "slack:T:D:1", "private", AsyncMock()))
+    assert closed == [True]
