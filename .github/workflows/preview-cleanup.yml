@@ -12,6 +12,10 @@ permissions:
 jobs:
   remove:
     if: github.event.pull_request.head.repo.full_name == github.repository
+    # Share the deployment lock so auto-merge cannot delete an active build.
+    concurrency:
+      group: pr-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:

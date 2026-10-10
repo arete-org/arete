@@ -168,6 +168,10 @@ jobs:
       (needs.typecheck.result == 'success' || needs.typecheck.result == 'skipped') &&
       (needs.frontend.result == 'success' || needs.frontend.result == 'skipped')
     needs: [lint, test, typecheck, frontend]
+    # Closing a PR must wait for its deployment before deleting its preview.
+    concurrency:
+      group: pr-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -185,17 +189,28 @@ jobs:
       - name: Deploy the preview
         id: deploy
         run: |
+          # Cleanup may have finished while this job was waiting for CI.
+          state=$(gh pr view "$PR" --json state --jq .state)
+          case "$state" in
+            OPEN) ;;
+            CLOSED|MERGED) echo "PR $PR is closed; skipping preview."; exit 0 ;;
+            *) echo "Unexpected PR state: $state" >&2; exit 1 ;;
+          esac
           url=$(vercel deploy --archive=tgz --yes --token "$VERCEL_TOKEN" --meta pr="$PR")
           echo "url=$url" >> "$GITHUB_OUTPUT"
         env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
       - name: Remove the PR's superseded previews
+        if: steps.deploy.outputs.url != ''
         run: scripts/ci/prune_deployments.sh 1 meta-pr="$PR"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
       - name: Link the preview on the pull request
+        if: steps.deploy.outputs.url != ''
         run: |
           gh pr comment "$PR" --edit-last --create-if-none --body \
             "Preview de ${SHA::7} (branche fusionnée dans main) : $URL"
