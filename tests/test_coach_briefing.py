@@ -447,7 +447,9 @@ class TestSessionFeedback:
         with (
             patch(
                 "arete.agent.factory.create_agent",
-                side_effect=lambda *a, **k: k["name"],
+                side_effect=lambda *a, **k: Mock(
+                    with_config=Mock(return_value=k["name"])
+                ),
             ),
             patch("arete.coaching.build_chat_model", return_value=object()),
         ):

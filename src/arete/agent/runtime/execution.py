@@ -44,7 +44,10 @@ TIMEOUT_MESSAGE = (
 
 
 def run_config(
-    recursion_limit: int = MAX_GRAPH_STEPS, *, context: AgentContext | None = None
+    recursion_limit: int = MAX_GRAPH_STEPS,
+    *,
+    context: AgentContext | None = None,
+    graph: Any = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "recursion_limit": recursion_limit,
@@ -60,6 +63,14 @@ def run_config(
             "model": configured_model_name(),
         },
     }
+    # Composition snapshots the route on the graph. Reading the flag again
+    # here could mislabel a run if an administrator toggles it concurrently.
+    graph_config = getattr(graph, "config", None)
+    if isinstance(graph_config, dict):
+        metadata = graph_config.get("metadata", {})
+        for key in ("model", "model_policy"):
+            if key in metadata:
+                result["metadata"][key] = metadata[key]
     # Model requests are spent per athlete: name whose run this is.
     athlete_id = database_athlete_id()
     if athlete_id is not None:
@@ -87,7 +98,9 @@ async def invoke_agent(graph: Any, state: dict, *, context: AgentContext) -> dic
                 result = cast(
                     dict,
                     await graph.ainvoke(
-                        state, context=context, config=run_config(context=context)
+                        state,
+                        context=context,
+                        config=run_config(context=context, graph=graph),
                     ),
                 )
                 # A tool-free answer is useful only once it has completed.
@@ -129,7 +142,7 @@ async def stream_agent(
                 stream = graph.astream(
                     state,
                     context=context,
-                    config=run_config(context=context),
+                    config=run_config(context=context, graph=graph),
                     stream_mode=["messages", "updates", "custom"],
                     version="v2",
                 )

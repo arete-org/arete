@@ -31,6 +31,52 @@ function leaseLabel(account: AdminAccount): string {
 const refusal = (error: Error) =>
   error instanceof ApiError ? (error.detail ?? 'Action impossible.') : 'Action impossible.';
 
+function FeatureFlagsPanel() {
+  const queryClient = useQueryClient();
+  const flags = useQuery({ queryKey: qk.adminFeatureFlags, queryFn: adminApi.featureFlags, retry: false });
+  const update = useMutation({
+    mutationFn: adminApi.setFeatureFlags,
+    onSuccess: (saved) => queryClient.setQueryData(qk.adminFeatureFlags, saved),
+  });
+
+  return (
+    <Panel variant="inset" className="space-y-3">
+      <h2 className="text-lg font-sans text-text-primary">FONCTIONNALITÉS EXPÉRIMENTALES</h2>
+      {flags.isPending ? (
+        <LoadingState message="CHARGEMENT DES OPTIONS…" />
+      ) : flags.isError ? (
+        <ErrorState message="OPTIONS INDISPONIBLES" onRetry={() => void flags.refetch()} />
+      ) : (
+        <>
+          <label className="flex items-start gap-3 text-sm text-text-secondary">
+            <input
+              type="checkbox"
+              className="accent-neon-cyan mt-0.5"
+              checked={flags.data.glm_flash}
+              disabled={update.isPending || (!flags.data.glm_flash_available && !flags.data.glm_flash)}
+              onChange={(event) => update.mutate(event.target.checked)}
+              aria-describedby="glm-flash-description"
+            />
+            Coach GLM Flash (payant)
+          </label>
+          <p id="glm-flash-description" className="text-xs text-text-muted">
+            Active GLM 5.3 Flash pour tous les athlètes : chat, briefings et bilans.
+            Plafond : 0,15 $ en entrée et 0,50 $ en sortie par million de tokens.
+            Le changement s’applique aux prochaines demandes ; les réponses en cours continuent.
+            Désactiver rétablit le modèle configuré sur le serveur.
+          </p>
+          {!flags.data.glm_flash_available && (
+            <p className="text-xs text-warning-orange">OpenRouter et sa clé API doivent être configurés sur le serveur.</p>
+          )}
+        </>
+      )}
+      {update.isPending && <p role="status" className="text-xs text-text-muted">Enregistrement…</p>}
+      {update.isSuccess && <p role="status" className="text-xs text-success-green">Option enregistrée.</p>}
+      {update.isError && <p role="alert" className="text-xs text-danger-red">{refusal(update.error)}</p>}
+    </Panel>
+  );
+}
+
 /**
  * Every athlete and login of the instance, for admins. The buttons mirror the
  * server's rules; the server still enforces them, and its refusal is shown.
@@ -84,6 +130,7 @@ export function AdminTab() {
 
   return (
     <div className="space-y-6">
+      <FeatureFlagsPanel />
       <div className="flex justify-between items-center gap-4">
         <h2 className="text-lg font-sans text-text-primary">COMPTES ET ATHLÈTES</h2>
         <Button

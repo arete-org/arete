@@ -96,6 +96,7 @@ const SIGNED_IN: AuthState = { ...AUTH_DISABLED, enabled: true, email: 'ana@exem
 
 it('shows the administration tab to admins only', async () => {
   vi.spyOn(adminApi, 'accounts').mockResolvedValue([]);
+  vi.spyOn(adminApi, 'featureFlags').mockResolvedValue({ glm_flash: false, glm_flash_available: true });
   const view = mount('/settings');
   expect(screen.queryByRole('button', { name: 'ADMINISTRATION' })).toBeNull();
   view.unmount();

@@ -4,7 +4,7 @@ from time import monotonic
 
 from langchain.agents.middleware import AgentMiddleware
 
-from arete.agent.models.responses import EmptyModelResponseError
+from arete.agent.models.responses import InvalidModelResponseError
 from arete.observability.agent import record_model_call, served_models
 
 
@@ -38,7 +38,7 @@ class ModelTelemetryMiddleware(AgentMiddleware):
                 request,
                 started,
                 response=exc.response
-                if isinstance(exc, EmptyModelResponseError)
+                if isinstance(exc, InvalidModelResponseError)
                 else None,
                 error=type(exc).__name__,
             )
@@ -55,7 +55,7 @@ class ModelTelemetryMiddleware(AgentMiddleware):
                 request,
                 started,
                 response=exc.response
-                if isinstance(exc, EmptyModelResponseError)
+                if isinstance(exc, InvalidModelResponseError)
                 else None,
                 error=type(exc).__name__,
             )

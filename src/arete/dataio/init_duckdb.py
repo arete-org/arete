@@ -471,6 +471,11 @@ CREATE TABLE IF NOT EXISTS app.slack_execution (
 );
 INSERT INTO app.slack_execution (id) VALUES (1) ON CONFLICT DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS app.feature_flags (
+    name VARCHAR PRIMARY KEY,
+    enabled BOOLEAN NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS app.system_skills (
     bundle VARCHAR NOT NULL,
     path VARCHAR NOT NULL,
@@ -771,6 +776,12 @@ def _m40_slack_athletes(con) -> None:
     con.execute(DDL[start : DDL.index(");", start) + 2])
 
 
+def _m41_feature_flags(con) -> None:
+    # Global rollout state contains neither credentials nor athlete data.
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.feature_flags (")
+    con.execute(DDL[start : DDL.index(");", start) + 2])
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -801,6 +812,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (38, _m38_system_skills),
     (39, _m39_user_roles),
     (40, _m40_slack_athletes),
+    (41, _m41_feature_flags),
 ]
 
 

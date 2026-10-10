@@ -42,10 +42,12 @@ def _set_lease(athlete_id: int, expression: str) -> None:
 def _clean_users():
     con = connect()
     con.execute("DELETE FROM app.users")
+    con.execute("DELETE FROM app.feature_flags")
     con.close()
     yield
     con = connect()
     con.execute("DELETE FROM app.users")
+    con.execute("DELETE FROM app.feature_flags")
     con.close()
 
 
@@ -126,6 +128,49 @@ def test_administration_is_closed_to_athletes(client, athletes, monkeypatch):
 def test_without_sign_in_the_instance_owner_administers(client, monkeypatch):
     monkeypatch.delenv("ARETE_AUTH", raising=False)
     assert client.get("/admin/accounts").status_code == 200
+
+
+def test_feature_flags_are_admin_only_and_persist_across_admins(
+    client, athletes, monkeypatch
+):
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    path = "/admin/feature-flags"
+    for headers, status in (({}, 401), (_bearer("ana-token"), 403)):
+        assert client.get(path, headers=headers).status_code == status
+        assert (
+            client.put(path, headers=headers, json={"glm_flash": True}).status_code
+            == status
+        )
+    admin = _bearer("admin-token")
+    owner = _bearer("owner-token")
+    assert client.get(path, headers=admin).json() == {
+        "glm_flash": False,
+        "glm_flash_available": True,
+    }
+    assert client.put(path, headers=admin, json={"glm_flash": True}).status_code == 200
+    assert client.get(path, headers=owner).json()["glm_flash"] is True
+    for body in ({}, {"glm_flash": "false"}, {"glm_flash": 1}, {"model": "arbitrary"}):
+        assert client.put(path, headers=owner, json=body).status_code == 422
+    assert client.get(path, headers=admin).json()["glm_flash"] is True
+    assert client.put(path, headers=owner, json={"glm_flash": False}).status_code == 200
+    assert client.get(path, headers=admin).json()["glm_flash"] is False
+
+
+def test_feature_flag_needs_openrouter_but_can_always_be_disabled(client, monkeypatch):
+    monkeypatch.setenv("ARETE_AUTH", "off")
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    path = "/admin/feature-flags"
+    assert client.get(path).json()["glm_flash_available"] is False
+    assert client.put(path, json={"glm_flash": True}).status_code == 409
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    assert client.put(path, json={"glm_flash": True}).status_code == 409
+    assert client.get(path).json()["glm_flash"] is False
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    assert client.put(path, json={"glm_flash": True}).status_code == 200
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    assert client.put(path, json={"glm_flash": False}).status_code == 200
 
 
 def test_the_list_shows_each_athlete_with_its_login_and_daily_sync(client, athletes):

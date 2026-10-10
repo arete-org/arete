@@ -32,7 +32,7 @@ reuses them. Business code imports neither the HTTP routes nor agent frameworks.
 
 `coaching.py` resolves configuration and supplies the concrete model and memory
 adapter to the factory. Graph creation is serialized
-on first access and cached per athlete and profile (32 athletes per profile).
+on first access and cached per athlete, profile and model rollout flag (32 graphs per profile).
 Memory roots are captured at construction, so sharing a compiled graph across
 athletes would expose the wrong ledger. `services/athlete_scope.py` carries the
 trusted identity through HTTP, workers, tools and scheduled jobs; clients cannot
@@ -59,7 +59,10 @@ candidates in order (at most three, including the primary). The composition root
 constructs each fallback candidate with zero SDK retries and no provider-side fallback list,
 so one graph turn costs at most three requests, 72 per run. Completions with neither visible text nor a valid tool call are
 rejected inside that same fallback boundary, including reasoning-only output
-that exhausts the token allowance. With no usable candidate the run fails
+that exhausts the token allowance. Responses ending in `length` (including
+concatenated streaming metadata such as `lengthlength`) are also rejected, even
+with visible text or parsed tool calls. Their usage remains in telemetry and
+their tool calls never execute. With no usable candidate the run fails
 explicitly; no empty answer is committed. Each attempt retains its usage and is
 measured separately. Context validation precedes
 fallback, cancellation propagates, and no tool or entire run is replayed. With a pinned model and no alternatives, the existing two SDK retries remain;
@@ -72,6 +75,46 @@ marked as error ToolMessages with their complete payload preserved. Writes,
 Garmin reconciliation (which changes local operation state), validation failures
 and failed runs are never automatically replayed. Already-started
 synchronous operations cannot be forcibly cancelled or rolled back.
+
+### Admin model rollout
+
+Settings → Administration exposes the instance-wide `glm_flash` feature flag,
+off by default. `GET/PUT /admin/feature-flags` require the server's admin role;
+the PUT requires a strict boolean and rejects unknown arguments. Migration 41
+creates `app.feature_flags`, independent of athlete preferences. Enabling requires
+`LLM_PROVIDER=openrouter` and an API key. Local mode without sign-in uses the
+instance owner, matching the backend's existing authorization.
+
+The composition root reads the flag once per invocation. Enabled, it overrides
+`LLM_MODEL` and its fallbacks with `z-ai/glm-5.3-flash`, reasoning effort `low`,
+providers sorted by latency, and same-model provider fallback under a hard OpenRouter tariff
+cap of $0.15/M input and $0.50/M output tokens. There are zero SDK retries and no
+fallback to a different model. This is an experimental route, not a reliability
+guarantee or a total-spend cap. The existing 4096 output-token, context, tool and
+run limits still apply. Disabled, the configured route and zero-price cap return.
+Changing to a non-OpenRouter provider makes the flag inactive.
+
+The persisted value is read across workers, with no process-local flag cache.
+Each compiled graph keeps its route and tracing metadata, so ongoing requests
+remain consistent while the next invocation sees the toggle. For local validation,
+run `make dev`, enable **Coach GLM Flash (payant)** in Administration, then ask
+“Liste mes séances prévues cette semaine, sans rien modifier.” Verify GLM in the
+trace, disable the switch, and repeat to verify the configured model returns.
+Use a database copy for live evaluations that can write training data.
+
+`ProviderAffinityMiddleware` adds OpenRouter's top-level `session_id` inside
+each model attempt, including fallbacks, without mutating cached clients. It is
+the SHA-256 of a versioned tuple of trusted athlete id, profile and thread id
+(or the invocation id for jobs without a thread). The same conversation keeps
+its key across user turns; different athletes, profiles and conversations do not
+share it. No new conversation state or local provider cache is introduced.
+Both free and paid OpenRouter policies use `provider.sort: "latency"` without
+`provider.order`, which would override sticky routing. Other providers receive
+neither this identifier nor OpenRouter-specific routing settings. Pricing caps,
+reasoning and existing request settings are preserved. This is best-effort
+provider affinity, not a promise of cached tokens or a latency bound; check usage
+telemetry for actual cache reads. See [OpenRouter sticky routing](https://openrouter.ai/docs/guides/best-practices/prompt-caching)
+and [provider sorting](https://openrouter.ai/docs/guides/routing/provider-selection).
 
 ## Capability and context ownership
 

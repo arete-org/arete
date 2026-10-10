@@ -25,6 +25,7 @@ from arete.agent.middlewares.events import ToolEventMiddleware
 from arete.agent.middlewares.limits import execution_limits
 from arete.agent.middlewares.observability import ModelTelemetryMiddleware
 from arete.agent.middlewares.policy import ProfilePolicyMiddleware
+from arete.agent.middlewares.provider_affinity import ProviderAffinityMiddleware
 from arete.agent.middlewares.responses import ModelResponseMiddleware
 from arete.agent.profiles.models import AgentProfile
 from arete.agent.prompts.coach import SYSTEM_SKILL
@@ -106,6 +107,7 @@ def build_agent(
     # measured separately; model fallback never encloses tool execution.
     if fallback_models:
         middleware.append(ModelFallbackMiddleware(*fallback_models))
+    middleware.append(ProviderAffinityMiddleware())
     middleware.append(ModelTelemetryMiddleware())
     middleware.append(ModelResponseMiddleware())
     return create_agent(

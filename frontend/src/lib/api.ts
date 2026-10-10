@@ -433,7 +433,18 @@ export interface AdminAccount {
 }
 
 /** Admins and the owner; the server enforces who may do what and answers a French `detail` otherwise. */
+export interface AdminFeatureFlags {
+  glm_flash: boolean;
+  glm_flash_available: boolean;
+}
+
 export const adminApi = {
+  featureFlags: () => fetchAPI<AdminFeatureFlags>("/admin/feature-flags"),
+  setFeatureFlags: (glmFlash: boolean) =>
+    fetchAPI<AdminFeatureFlags>("/admin/feature-flags", {
+      method: "PUT",
+      body: JSON.stringify({ glm_flash: glmFlash }),
+    }),
   accounts: () => fetchAPI<AdminAccount[]>("/admin/accounts"),
 
   /** Owner only, never on an owner's row. */

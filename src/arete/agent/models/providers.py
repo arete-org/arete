@@ -11,6 +11,7 @@ from arete.agent.models.registry import (
     AGENT_TEMPERATURE,
     AGENT_TIMEOUT_SEC,
     OPENROUTER_FREE_ONLY,
+    OPENROUTER_GLM_FLASH,
     ModelRoute,
 )
 from arete.agent.models.routing import resolve_route
@@ -34,8 +35,14 @@ def build_chat_model(
         # OpenRouter's model fallbacks: same request, next model on failure.
         extra_body["models"] = models
     if urlsplit(route.base_url).hostname == "openrouter.ai":
-        extra_body["provider"] = OPENROUTER_FREE_ONLY
-        if openrouter_reasoning is not None:
+        if route.openrouter_policy == "glm_flash":
+            extra_body["provider"] = OPENROUTER_GLM_FLASH
+            # GLM requires reasoning; choose low explicitly so its default
+            # max effort does not consume most of the useful output budget.
+            extra_body["reasoning"] = {"effort": "low"}
+        else:
+            extra_body["provider"] = OPENROUTER_FREE_ONLY
+        if openrouter_reasoning is not None and route.openrouter_policy == "free":
             extra_body["reasoning"] = {"enabled": openrouter_reasoning}
     return ChatOpenAI(
         model=route.model,
