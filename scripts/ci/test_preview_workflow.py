@@ -31,6 +31,14 @@ class PreviewWorkflowTests(unittest.TestCase):
             self.assertIn("cancel-in-progress: false", block[1])
         self.assertEqual(groups[0], groups[1])
 
+    def test_a_label_never_cancels_the_commit_s_checks_in_flight(self):
+        block = re.search(r"^concurrency:\n((?:  .+\n)+)", CI, re.M)
+        self.assertIsNotNone(block)
+        cancel = re.search(r"cancel-in-progress: (.+)", block[1])
+        self.assertIsNotNone(cancel)
+        self.assertIn("github.event.action != 'labeled'", cancel[1])
+        self.assertIn("github.event_name == 'pull_request'", cancel[1])
+
     def test_closed_pr_skips_deployment_and_open_pr_publishes(self):
         for state, gh_exit, expected_exit, deploys in (
             ("OPEN", "0", 0, True),

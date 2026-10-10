@@ -81,7 +81,9 @@ the emoji is textual feedback, not an undocumented LangSmith UI reaction endpoin
    summary and `ci-plan` artifact list the files, selected tests and reason.
    See [CI and code review](ci.md) to reproduce the plan locally. A PR with the
    `preview` label also gets a deployment when deployable inputs changed,
-   commented on the PR and replaced on each push.
+   commented on the PR and replaced on each push. A push cancels the PR's run
+   in flight; a label never does: its run waits for the current one, so no
+   required check is left `CANCELLED` on the commit.
 2. **Merge.** `main` only takes pull requests; `gh pr merge --auto --merge`
    merges once the checks pass, and nobody has to approve. The checks are not
    strict (a PR green on an older `main` still merges): GitHub's merge queue,
