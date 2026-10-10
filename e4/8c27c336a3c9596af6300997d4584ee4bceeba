@@ -1,0 +1,27 @@
+tests/test_auth.py
+  s_ae2eec6921d568::t_a2ed497110e4ff 70,72-78
+  s_ae2eec6921d568::t_18ee24512e17bd 71
+.env.example
+  s_ae2eec6921d568::t_daf739c31e1f49 61-65
+  s_ae2eec6921d568::t_65c5544805ad81 9-11
+docs/deployment.md
+  s_ae2eec6921d568::t_dbb3a37e657167 10
+  s_ae2eec6921d568::t_f1c53859f5f3a5 183-185
+  s_ae2eec6921d568::t_8e9bf6894eefe8 15-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e48c27c336a3c9596af6300997d4584ee4bceeba",
+  "prompts": {},
+  "sessions": {
+    "s_ae2eec6921d568": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6dc0d54-eeb3-4620-9a6e-b2a6ed9a099f",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Nicolas Edmond <nicolas@mac-1.home>"
+    }
+  }
+}
