@@ -16,9 +16,14 @@ permissions:
 
 # A new push to a PR supersedes its run in flight. A main run completes: the
 # "Deploy preview" workflow follows it (workflow_run) and needs its verdict.
+# A label leaves the commit unchanged, so its run queues behind the one in
+# flight instead: a run cancelled mid-flight leaves its required checks
+# CANCELLED on the commit, and GitHub may then block the PR although a later
+# run passed. A queued run replaced by a newer one never starts and leaves no
+# check. Dependabot opens its PRs without labels (`dependabot.yml`).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
 
 jobs:
   lint:
