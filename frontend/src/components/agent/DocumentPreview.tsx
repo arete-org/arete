@@ -32,7 +32,9 @@ function SourceView({ blob, name, group }: { blob: Blob; name: string; group: st
   useEffect(() => {
     const url = URL.createObjectURL(blob);
     if (image.current) image.current.src = url;
-    if (frame.current) frame.current.src = `${url}#page=${/^Page (\d+)$/.exec(group)?.[1] ?? 1}&toolbar=0`;
+    // A number, not the group's text: only a page index may reach the frame's URL.
+    const page = Number(/^Page (\d+)$/.exec(group)?.[1] ?? 1);
+    if (frame.current) frame.current.src = `${url}#page=${page}&toolbar=0`;
     return () => URL.revokeObjectURL(url);
   }, [blob, group]);
   return <div className="flex h-full min-h-0 flex-col">
