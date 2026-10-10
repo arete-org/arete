@@ -1,0 +1,18 @@
+# Security updates only: a limit of 0 disables version-update PRs, while the
+# options below still apply to the security PRs Dependabot opens.
+# No labels: each `labeled` event starts a CI run (`ci.yml` reacts to it for
+# `preview`), so Dependabot's two default labels tripled every PR's runs.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    labels: []
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    labels: []
