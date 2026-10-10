@@ -20,10 +20,13 @@ paths so previews keep the assets from their own branch.
 
 - [Light-background SVG](arete-laurel.svg): Pierre ink, `#1C2927`.
 - [Dark-background SVG](arete-laurel-dark.svg): Prune cream, `#F2E8DA`.
+- [Prune badge SVG](arete-laurel-prune.svg): cream laurel on a rounded Prune
+  plum tile, `#57394E` (contrast 8.25:1), scaled to 60% of the tile height.
 
 The dark-background export has exactly the same geometry as the approved source;
-only its fill changes. Keep both paths in sync when updating the source logo.
-Both files are transparent vectors with no external fonts or resources.
+only its fill changes. The badge reuses the same path. Keep all three in sync
+when updating the source logo. The first two are transparent vectors; none uses
+external fonts or resources.
 
 ## Browser icons
 
