@@ -283,7 +283,8 @@ reconciliation and removal with durable reservations and no ambiguous write repl
 Explicit prescriptions remain excluded from automatic daily adaptation/export.
 Legacy sessions use deterministic conversion, and existing Garmin identifiers must
 be verified before adoption. Updates require the current revision and mark the
-export dirty without transmitting it. See [conversational workouts](conversational-workouts.md).
+export dirty without transmitting it; a status change alone (done, skipped) keeps
+the export state, since Garmin holds no status. See [conversational workouts](conversational-workouts.md).
 Only `GarminClient` touches the remote service. See [documents](document-imports.md)
 for resource bounds, frontend worker assets, unsupported conversions and acceptance.
 

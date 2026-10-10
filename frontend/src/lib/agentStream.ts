@@ -17,6 +17,8 @@ export interface ToolPart {
   output?: Preview;
   status: ToolStatus;
   elapsed_ms?: number;
+  /** Id of the failed identical call this one repeats, known when it starts. */
+  retryOf?: string;
 }
 export interface TextPart {
   kind: 'text';
@@ -190,6 +192,7 @@ export function applyEvent(
   }
   const idx = parts.findIndex((p) => p.kind === 'tool' && p.id === event.id);
   const previous = idx < 0 ? undefined : parts[idx];
+  const retryOf = event.type === 'tool_start' ? failedCall(parts, event.name, event.args) : undefined;
   const part: ToolPart =
     event.type === 'tool_start'
       ? {
@@ -198,6 +201,7 @@ export function applyEvent(
           name: event.name,
           args: event.args,
           status: 'running',
+          ...(retryOf && { retryOf }),
         }
       : {
           ...(previous?.kind === 'tool' ? previous : {}),
@@ -211,6 +215,17 @@ export function applyEvent(
   if (idx < 0) parts.push(part);
   else parts[idx] = part;
   return { ...message, parts };
+}
+
+/** A parallel duplicate starts before its twin ends, so it is never a retry. */
+function failedCall(parts: ChatPart[], name: string, args: Preview): string | undefined {
+  if (args.truncated) return undefined;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i];
+    if (part.kind === 'tool' && part.status === 'error' && part.name === name
+      && part.args?.truncated === false && part.args.text === args.text) return part.id;
+  }
+  return undefined;
 }
 
 /** Bounded SSE decoder, also used in tests with deliberately split network chunks. */

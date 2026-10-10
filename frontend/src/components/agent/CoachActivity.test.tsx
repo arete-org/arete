@@ -51,6 +51,35 @@ it('does not let one completed parallel action conceal another pending or failed
   expect(screen.getByRole('status').textContent).toBe('Une action a échoué');
 });
 
+it('reports the final outcome once the coach repeats a failed call after fixing its cause', () => {
+  const update = { text: '{"session_id":112,"revision":3,"changes":{"status":"skipped"}}', truncated: false };
+  const failure = { text: '{"error":"Réconcilie l’export Garmin avant de modifier la séance."}', truncated: false };
+  const call = (id: string, name: string, args: typeof preview, status: 'done' | 'error', output = preview) => {
+    message = applyEvent(message, { type: 'tool_start', id, name, args });
+    message = applyEvent(message, { type: 'tool_end', id, name, status, output, elapsed_ms: 5 });
+  };
+  call('skip', 'update_planned_session', update, 'error', failure);
+  call('check', 'reconcile_garmin_session', { text: '{"session_id":112}', truncated: false }, 'done');
+  const { rerender } = render(<CoachActivity message={message} />);
+  expect(screen.getByRole('status').textContent).toBe('Une action a échoué');
+  call('retry', 'update_planned_session', update, 'done');
+  rerender(<CoachActivity message={settleMessage({ ...message, content: 'Séances mises à jour.' })} />);
+  expect(screen.getByRole('status').textContent).toBe('Séance mise à jour');
+  expect(screen.getByText('Échec · repris')).toBeTruthy();
+  expect(screen.queryByText('Activité · erreur')).toBeNull();
+});
+
+it('never treats a parallel duplicate or a different call as a recovery', () => {
+  for (const id of ['one', 'two']) message = applyEvent(message, { type: 'tool_start', id, name: 'reconcile_garmin_session', args: preview });
+  message = applyEvent(message, { type: 'tool_end', id: 'one', name: 'reconcile_garmin_session', status: 'error', output: preview, elapsed_ms: 5 });
+  message = applyEvent(message, { type: 'tool_end', id: 'two', name: 'reconcile_garmin_session', status: 'done', output: preview, elapsed_ms: 5 });
+  message = applyEvent(message, { type: 'tool_start', id: 'list', name: 'list_planned', args: preview });
+  message = applyEvent(message, { type: 'tool_end', id: 'list', name: 'list_planned', status: 'done', output: preview, elapsed_ms: 5 });
+  render(<CoachActivity message={settleMessage(message)} />);
+  expect(screen.getByRole('status').textContent).toBe('Une action a échoué');
+  expect(screen.getByText('Échec')).toBeTruthy();
+});
+
 it('keeps an interrupted action uncertain and does not claim it was rolled back', () => {
   message = applyEvent(message, { type: 'tool_start', id: 'edit', name: 'edit_file', args: preview });
   render(<CoachActivity message={settleMessage(message, undefined, true)} />);
