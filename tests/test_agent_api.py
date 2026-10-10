@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -386,7 +387,8 @@ def test_chat_stream_endpoint_error_event(client):
         if line.startswith("data: ")
     ]
     assert events[-1]["type"] == "error"
-    assert "boom" in events[-1]["detail"]
+    # The exception's text stays in the server logs, out of the response.
+    assert events[-1]["detail"] == "Agent run failed"
 
 
 # ---------------------------------------------------------------------------
@@ -450,6 +452,21 @@ class TestBuildChatModel:
         ]
         # The free router once answered a briefing with a safety classifier.
         assert "openrouter/free" not in payload["extra_body"]["models"]
+
+    def test_free_only_routing_requires_the_openrouter_host(self, monkeypatch):
+        from dataclasses import replace
+
+        from arete.agent.models.providers import build_chat_model
+        from arete.agent.models.routing import resolve_route
+
+        self._openrouter(monkeypatch)
+        lookalike = replace(
+            resolve_route(), base_url="https://openrouter.ai.example.com/api/v1"
+        )
+        assert (
+            "provider"
+            not in self._payload(build_chat_model(route=lookalike))["extra_body"]
+        )
 
     def test_only_auxiliary_openrouter_calls_disable_reasoning(self, monkeypatch):
         from arete import coaching
@@ -548,7 +565,9 @@ class TestBuildChatModel:
         monkeypatch.delenv("LLM_MODEL", raising=False)
         model = build_chat_model()
         assert model.model_name == DEFAULT_GITHUB_MODEL
-        assert "models.inference.ai.azure.com" in model.openai_api_base
+        assert urlsplit(model.openai_api_base).hostname == (
+            "models.inference.ai.azure.com"
+        )
 
     def test_github_without_a_token_is_actionable(self, monkeypatch):
         import pytest

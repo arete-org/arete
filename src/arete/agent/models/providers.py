@@ -1,5 +1,7 @@
 """Translate a resolved model route into the OpenAI-compatible adapter."""
 
+from urllib.parse import urlsplit
+
 from langchain_openai import ChatOpenAI
 
 from arete.agent.models.registry import (
@@ -31,7 +33,7 @@ def build_chat_model(
     if len(models) > 1:
         # OpenRouter's model fallbacks: same request, next model on failure.
         extra_body["models"] = models
-    if route.base_url.startswith("https://openrouter.ai"):
+    if urlsplit(route.base_url).hostname == "openrouter.ai":
         extra_body["provider"] = OPENROUTER_FREE_ONLY
         if openrouter_reasoning is not None:
             extra_body["reasoning"] = {"enabled": openrouter_reasoning}

@@ -225,8 +225,9 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         # Model misconfiguration (missing key, unknown provider).
         raise HTTPException(status_code=500, detail=str(exc)) from None
     except Exception as exc:
+        # The details stay in the logs: provider errors may quote requests.
         logger.exception("Agent run failed")
-        raise HTTPException(status_code=502, detail=f"Agent run failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="Agent run failed") from exc
 
     messages = result.get("messages", [])
     if not messages:
@@ -307,9 +308,9 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
         yield _sse({"type": "error", "detail": LIMIT_MESSAGE})
     except ValueError as exc:
         yield _sse({"type": "error", "detail": str(exc)})
-    except Exception as exc:
+    except Exception:
         logger.exception("Agent stream failed")
-        yield _sse({"type": "error", "detail": f"Agent run failed: {exc}"})
+        yield _sse({"type": "error", "detail": "Agent run failed"})
 
 
 @router.post("/chat/stream")

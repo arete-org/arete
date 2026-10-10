@@ -296,8 +296,10 @@ def sync(body: SyncRequest | None = None):
             if (imported + merged) % 45 == 0:
                 logger.info("Approaching rate limit, pausing 60s...")
                 time.sleep(60)
-        except Exception as exc:
-            errors.append(f"Activity {act_id}: {exc}")
+        except Exception:
+            # The exception may quote URLs or SQL: keep it in the server logs.
+            logger.exception("Strava activity %s failed to import", act_id)
+            errors.append(f"Activity {act_id}: import failed")
 
     return {
         "success": True,
