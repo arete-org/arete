@@ -24,3 +24,10 @@ paths so previews keep the assets from their own branch.
 The dark-background export has exactly the same geometry as the approved source;
 only its fill changes. Keep both paths in sync when updating the source logo.
 Both files are transparent vectors with no external fonts or resources.
+
+## Browser icons
+
+`frontend/public/favicon.svg` reuses the same path, ink on light tabs and cream
+on dark ones. The PNG icons (`favicon.png`, `apple-touch-icon.png`, `pwa-*.png`)
+render it in cream on the theme background `#0A0A0F`, at 55% of the icon height
+so the maskable crop keeps the whole laurel. Regenerate them with the SVG.
