@@ -85,13 +85,13 @@ the emoji is textual feedback, not an undocumented LangSmith UI reaction endpoin
    in flight; a label never does: its run waits for the current one, so no
    required check is left `CANCELLED` on the commit. Dependabot only opens
    security PRs, without labels (`.github/dependabot.yml`), so each gets one run.
-2. **Merge.** `main` only takes pull requests; `gh pr merge --auto --merge`
-   merges once the checks pass, and nobody has to approve. The checks are not
-   strict (a PR green on an older `main` still merges): GitHub's merge queue,
-   which would re-run CI on the exact merge result, is only offered to
-   repositories owned by an organisation. With two people the window is short,
-   and a merge that breaks `main` shows up at once as a red "Deploy preview".
-   Rebase or merge `main` into a long-lived branch before merging it.
+2. **Merge.** `main` only takes pull requests, through the merge queue (the
+   repository belongs to the `arete-org` organisation, which GitHub requires
+   for it). `gh pr merge --auto --merge` enqueues once the checks pass, and
+   nobody has to approve. The queue re-runs CI on the exact result of merging,
+   in order, so a PR green on an older `main` cannot break `main`, and a
+   conflict surfaces before the merge. A merge that still breaks something
+   shows up at once as a red "Deploy preview".
 3. **Preview of main.** A green CI run on `main` deploys to the fixed preview
    URL only when its verified `ci-plan` includes a deployable change. README,
    documentation, tests and CI tooling alone keep the existing healthy preview.

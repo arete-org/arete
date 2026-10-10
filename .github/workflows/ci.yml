@@ -8,6 +8,8 @@ on:
     branches: [main]
     # `labeled`: adding the `preview` label deploys the PR's preview.
     types: [opened, synchronize, reopened, labeled]
+  # The merge queue checks each entry merged onto main before it lands.
+  merge_group:
   # Full verification remains available before opening a PR.
   workflow_dispatch:
 
@@ -47,7 +49,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PUSH_BASE: ${{ github.event.before }}
         run: |
-          if [[ "$EVENT_NAME" == pull_request ]]; then
+          if [[ "$EVENT_NAME" == pull_request || "$EVENT_NAME" == merge_group ]]; then
             mode=(--base HEAD^1)
           elif [[ "$EVENT_NAME" == push && "$PUSH_BASE" != 0000000000000000000000000000000000000000 ]]; then
             mode=(--base "$PUSH_BASE" --full-tests)
