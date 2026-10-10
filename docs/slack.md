@@ -29,10 +29,11 @@ thread. The coach's prompt says who will read the answer.
 
 1. At <https://api.slack.com/apps>, choose **Create New App → From a manifest**,
    select workspace `T0C7ZT5V0F7`, and paste [`slack-manifest.json`](../slack-manifest.json).
-   Bot scopes: `chat:write`, `assistant:write` (suggested prompts), `im:history`, `im:write` (DM answers to channel
+   Bot scopes: `chat:write`, `reactions:write` (logo acknowledgment), `assistant:write` (suggested prompts), `im:history`, `im:write` (DM answers to channel
    mentions), `users:read` and `users:read.email` (identity), `channels:history`
    and `groups:history` (channels Arete is invited to). No user token, no Socket Mode.
 2. Install the app from **OAuth & Permissions** (reinstall after a scope change).
+   The workspace's custom logo emoji must be named `image-5`.
    Set these variables on the Arete Vercel project, in Production only:
 
    | Variable | Value |
@@ -83,10 +84,13 @@ History is read from Slack, at most 60 messages (16,000 characters per user
 message, 39,000 per answer). Partial,
 paginated or stale history, and other members' messages in a DM, are rejected
 explicitly, never truncated.
-The session is marked `processing` before the coach starts. One native Slack
-stream displays provisional answer text and task cards with French labels, never
-tool arguments or raw tool results. Appends are batched at most once per second,
-with hard limits of 240 appends, 100 pending chunks, 10,000 characters per batch,
+The session is marked `processing` before the coach starts. Arete adds the
+`image-5` reaction to the original user message; a failed reaction is logged and
+does not block coaching or trigger a retry. The reaction remains as acknowledgment.
+One native Slack stream starts with the first tool or text event, without a
+placeholder message. It displays provisional answer text and task cards with
+French labels, never tool arguments or raw tool results. Stream writes are batched
+at most once per second, with hard limits of 240 writes, 100 pending chunks, 10,000 characters per batch,
 64,000 streamed characters and 50 distinct task cards (Slack's plan limit).
 The shared runtime projection accepts at most 12,000 events and 64,000 text
 characters. Exceeding a bound fails explicitly; nothing is silently dropped.
@@ -98,8 +102,11 @@ history. Answers up to 12,000 escaped characters use a native Markdown block;
 longer answers retain the full plain text, up to 39,000 characters. Mentions are
 escaped in rich output and automatic mention parsing is disabled in final text.
 The final `text` field serves both accessibility and subsequent Slack history.
-Provisional messages carry a marker; history containing one is rejected, including
-when a failed final update left partial text behind. Cleanup explicitly clears the
+If the provider produces no stream events, the completed answer is posted directly.
+The delivery ledger records the destination thread before streaming. Threads with
+an earlier running or failed delivery are rejected, including when a failed final
+update left partial text behind. Legacy provisional markers are still recognized.
+Cleanup explicitly clears the
 session status before releasing the athlete's admission reservation.
 
 For a channel request without public consent, Arete creates a DM root quoting the
@@ -119,7 +126,8 @@ cover stream delivery, final-answer reconciliation, private routing, interruptio
 deduplication, payload bounds and cleanup failures. No live Slack messages are sent.
 
 After local validation and an authorized deployment, send a DM asking for a
-read-only planning summary. Check the loading indicator, streamed text/task cards,
+read-only planning summary. Check the logo reaction, native loading indicator
+without a placeholder message, streamed text/task cards,
 the final formatted answer, and a follow-up in the same thread. Repeat from a
 channel with public replies disabled: all progress must appear in a private DM.
 Check one `Agent run:` log for each answered prompt. The production webhook still
@@ -127,7 +135,8 @@ points to production; local code changes alone do not change the installed app.
 
 Migration 37 adds `app.slack_deliveries` (and `app.slack_execution`, unused since
 migration 40). Migration 40 adds `app.slack_athletes`: per athlete, the public-reply
-consent and the run reservation.
+consent and the run reservation. Migration 42 adds nullable destination thread IDs
+to deliveries, keeping interrupted output out of history without a visible marker.
 The ledger stops accepting new events at 100,000 records, requiring operator
 review rather than silently forgetting duplicate IDs.
 

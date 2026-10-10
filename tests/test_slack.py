@@ -28,7 +28,9 @@ def mock_slack_client():
 
 def final_update(client):
     return [
-        c.args[1] for c in client.call.await_args_list if c.args[0] == "chat.update"
+        c.args[1]
+        for c in client.call.await_args_list
+        if c.args[0] in ("chat.update", "chat.postMessage")
     ][-1]
 
 
@@ -325,7 +327,7 @@ def test_failed_send_is_not_retried(ledger, message):
     client = mock_slack_client()
 
     async def fail_update(method, payload):
-        if method == "chat.update":
+        if method == "chat.postMessage":
             raise slack.SlackError("uncertain send")
         return {"ok": True, "ts": "1700000001.000001"}
 
@@ -335,7 +337,8 @@ def test_failed_send_is_not_retried(ledger, message):
         asyncio.run(slack.dispatch(message, client=client, produce=produce))
     asyncio.run(slack.dispatch(message, client=client, produce=produce))
     assert (
-        len([c for c in client.call.await_args_list if c.args[0] == "chat.update"]) == 1
+        len([c for c in client.call.await_args_list if c.args[0] == "chat.postMessage"])
+        == 1
     )
     assert produce.await_count == 1
     assert slack.reserve(replace(message, event_id="Ev2")) == "running"
@@ -698,7 +701,7 @@ def test_top_level_channel_chatter_costs_no_slack_call(ledger, message):
     client.author_email.assert_not_awaited()
 
 
-def test_stream_batches_progress_and_replaces_provisional_answer(ledger, message):
+def test_tool_progress_and_logo_reaction_without_placeholder(ledger, message):
     requests = []
 
     def respond(request):
@@ -741,19 +744,35 @@ def test_stream_batches_progress_and_replaces_provisional_answer(ledger, message
     methods = [method for method, _ in requests]
     assert methods == [
         "agents.sessions.setStatus",
+        "reactions.add",
         "chat.startStream",
-        "chat.appendStream",
         "chat.stopStream",
         "chat.update",
         "agents.sessions.setStatus",
     ]
+    assert requests[1][1] == {
+        "channel": message.channel,
+        "timestamp": message.ts,
+        "name": "image-5",
+    }
     assert requests[0][1]["status"] == "processing"
     assert requests[-1][1]["status"] == "active"
-    start = requests[1][1]
+    start = requests[2][1]
     assert start["thread_ts"] == message.thread_ts
     assert start["recipient_team_id"] == message.team
     assert start["recipient_user_id"] == message.user
-    assert requests[2][1]["chunks"][0]["title"] == "Lecture du planning"
+    assert start["chunks"] == [
+        {"type": "plan_update", "title": "Analyse en cours"},
+        {
+            "type": "task_update",
+            "id": "task-1",
+            "title": "Lecture du planning",
+            "status": "in_progress",
+        },
+    ]
+    assert "⏳" not in str(requests)
+    assert "Arete travaille" not in str(requests)
+    assert "arete_pending" not in str(requests)
     update = requests[-2][1]
     assert update["text"] == "**Repos** <@U999>"
     assert update["blocks"] == [{"type": "markdown", "text": "**Repos** &lt;@U999&gt;"}]
@@ -772,7 +791,10 @@ def test_stream_batches_progress_and_replaces_provisional_answer(ledger, message
         "chat.update",
     ],
 )
-def test_stream_failures_are_not_replayed_and_clear_status(ledger, message, method):
+def test_stream_failures_are_not_replayed_and_clear_status(
+    ledger, message, method, monkeypatch
+):
+    monkeypatch.setattr(slack, "STREAM_FLUSH_SECONDS", 0)
     client = mock_slack_client()
     failed = False
 
@@ -786,7 +808,8 @@ def test_stream_failures_are_not_replayed_and_clear_status(ledger, message, meth
     client.call.side_effect = call
 
     async def produce(*args):
-        await args[-1]({"type": "token", "id": "answer", "text": "Bonjour"})
+        await args[-1]({"type": "token", "id": "answer", "text": "Bon"})
+        await args[-1]({"type": "token", "id": "answer", "text": "jour"})
         return "Bonjour"
 
     producer = AsyncMock(side_effect=produce)
@@ -802,14 +825,12 @@ def test_stream_failures_are_not_replayed_and_clear_status(ledger, message, meth
             "status": "active",
         },
     )
-    assert producer.await_count == (
-        0 if method in ("agents.sessions.setStatus", "chat.startStream") else 1
-    )
+    assert producer.await_count == (0 if method == "agents.sessions.setStatus" else 1)
     if method != "agents.sessions.setStatus":
         assert sum(c.args[0] == method for c in calls) == 1
     client.reply.assert_not_awaited()
     assert slack.reserve(replace(message, event_id="Ev2")) == (
-        "busy" if method == "chat.appendStream" else "running"
+        "busy" if method in ("chat.startStream", "chat.appendStream") else "running"
     )
 
 
@@ -919,3 +940,150 @@ def test_slack_tokens_without_completed_answer_fail_and_close_stream(monkeypatch
     with pytest.raises(RuntimeError, match="empty Slack answer"):
         asyncio.run(coaching.run_slack_coach([], "slack:T:D:1", "private", AsyncMock()))
     assert closed == [True]
+
+
+def test_waiting_shows_only_native_status(message):
+    client = mock_slack_client()
+    output = slack.SlackStream(client, message)
+
+    async def run():
+        await output.start()
+
+    asyncio.run(run())
+    client.call.assert_awaited_once_with(
+        "agents.sessions.setStatus",
+        {
+            "channel_id": message.channel,
+            "thread_ts": message.thread_ts,
+            "status": "processing",
+        },
+    )
+    assert not output.ts
+
+
+@pytest.mark.parametrize(
+    "error", ["already_reacted", "invalid_name", "missing_scope", "timeout"]
+)
+def test_logo_reaction_failure_never_blocks_coaching(ledger, message, error, caplog):
+    methods = []
+
+    def respond(request):
+        method = request.url.path.rsplit("/", 1)[-1]
+        methods.append(method)
+        if method == "reactions.add":
+            if error == "timeout":
+                raise httpx.ReadTimeout("uncertain reaction")
+            return httpx.Response(200, json={"ok": False, "error": error})
+        return httpx.Response(200, json={"ok": True, "ts": "1700000001.000001"})
+
+    producer = AsyncMock(return_value="Repos.")
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+            await slack.dispatch(
+                message, client=slack.SlackClient(http), produce=producer
+            )
+            await slack.dispatch(
+                message, client=slack.SlackClient(http), produce=producer
+            )
+
+    asyncio.run(run())
+    assert methods.count("reactions.add") == 1
+    assert methods.count("chat.postMessage") == 1
+    assert producer.await_count == 1
+    assert ("reaction" in caplog.text) == (error != "already_reacted")
+
+
+def test_logo_reaction_targets_user_reply_not_thread_root(ledger, message):
+    reply = replace(message, ts="1700000002.000001")
+    client = mock_slack_client()
+    asyncio.run(
+        slack.dispatch(reply, client=client, produce=AsyncMock(return_value="Repos."))
+    )
+    client.react.assert_awaited_once_with(reply)
+    requests = []
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda req: (
+                    requests.append(json.loads(req.content))
+                    or httpx.Response(200, json={"ok": True})
+                )
+            )
+        ) as http:
+            await slack.SlackClient(http).react(reply)
+
+    asyncio.run(run())
+    assert requests == [
+        {"channel": message.channel, "timestamp": reply.ts, "name": "image-5"}
+    ]
+
+
+@pytest.mark.parametrize("status", ["running", "failed"])
+def test_incomplete_delivery_rejects_unmarked_history(ledger, message, status):
+    slack.reserve(message)
+    if status == "failed":
+        slack.finish(message, "failed", release=True)
+    reply = replace(message, event_id="Ev2", ts="1700000002.000001")
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda req: pytest.fail("Incomplete history must not reach Slack")
+            )
+        ) as http:
+            await slack.SlackClient(http).history(reply)
+
+    with pytest.raises(slack.HistoryError, match="interrompue ou en cours"):
+        asyncio.run(run())
+
+
+def test_successful_and_current_deliveries_do_not_block_thread(ledger, message):
+    slack.reserve(message)
+    slack.check_thread_delivery(message)
+    slack.finish(message, "sent", release=True)
+    reply = replace(message, event_id="Ev2", ts="1700000002.000001")
+    slack.reserve(reply)
+    slack.check_thread_delivery(reply)
+
+
+def test_private_output_records_destination_before_stream(ledger, message):
+    client = mock_slack_client()
+    client.open_dm.return_value = "D777"
+    mention = replace(message, channel="C123", in_channel=True, mentioned=True)
+
+    async def produce(*args):
+        with db_connection() as con:
+            assert con.execute(
+                "SELECT thread_id FROM app.slack_deliveries WHERE event_key = ?",
+                [message.key],
+            ).fetchone() == ("slack:T123:D777:1700000001.000001",)
+        raise RuntimeError("interrupted")
+
+    with pytest.raises(RuntimeError, match="interrupted"):
+        asyncio.run(slack.dispatch(mention, client=client, produce=produce))
+    client.react.assert_awaited_once_with(mention)
+    followup = replace(
+        message,
+        event_id="Ev2",
+        channel="D777",
+        thread_ts="1700000001.000001",
+        ts="1700000002.000001",
+    )
+    with pytest.raises(slack.HistoryError, match="interrompue"):
+        slack.check_thread_delivery(followup)
+
+
+def test_delivery_thread_migration_preserves_existing_records(ledger, message):
+    slack.reserve(message)
+    slack.finish(message, "sent", release=True)
+    with db_connection() as con:
+        con.execute("ALTER TABLE app.slack_deliveries DROP COLUMN thread_id")
+        con.execute("DELETE FROM app.schema_version WHERE version = 42")
+    init_db()
+    with db_connection() as con:
+        assert con.execute(
+            "SELECT event_key, status, thread_id FROM app.slack_deliveries"
+        ).fetchone() == (message.key, "sent", None)
+    assert slack.reserve(replace(message, event_id="Ev2")) == "running"

@@ -308,8 +308,11 @@ dictionaries and never imports the agent framework. `coaching.run_slack_coach`
 uses the shared runtime stream and projection; a completed tool-free model update
 supplies the canonical final answer, while token events remain provisional.
 Private channel replies select their DM destination before any progress is sent.
-Finalization replaces provisional content, and interrupted stream markers cannot
-be consumed as valid thread history. The per-athlete reservation remains held
+The stream starts on the first text or tool event without a placeholder; the
+original user message receives the logo reaction. Finalization replaces provisional
+content. Migration 42 records destination thread IDs in the existing delivery
+ledger so interrupted output cannot be consumed as valid thread history, even
+without a visible marker. The per-athlete reservation remains held
 through status cleanup. No new model call, persistence layer or background queue
 is introduced.
 

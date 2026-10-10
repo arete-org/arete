@@ -37,6 +37,7 @@
     "scopes": {
       "bot": [
         "chat:write",
+        "reactions:write",
         "assistant:write",
         "im:history",
         "im:write",

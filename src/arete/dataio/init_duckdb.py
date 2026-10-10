@@ -463,6 +463,7 @@ CREATE TABLE IF NOT EXISTS app.activity_weather (
 CREATE TABLE IF NOT EXISTS app.slack_deliveries (
     event_key VARCHAR PRIMARY KEY,
     status VARCHAR NOT NULL,
+    thread_id VARCHAR,
     updated_at TIMESTAMP DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS app.slack_execution (
@@ -782,6 +783,14 @@ def _m41_feature_flags(con) -> None:
     con.execute(DDL[start : DDL.index(");", start) + 2])
 
 
+def _m42_slack_delivery_threads(con) -> None:
+    # Track interrupted output without rendering a technical marker in Slack.
+    # Nullable preserves existing deliveries and compatibility with older releases.
+    con.execute(
+        "ALTER TABLE app.slack_deliveries ADD COLUMN IF NOT EXISTS thread_id VARCHAR"
+    )
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -813,6 +822,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (39, _m39_user_roles),
     (40, _m40_slack_athletes),
     (41, _m41_feature_flags),
+    (42, _m42_slack_delivery_threads),
 ]
 
 
