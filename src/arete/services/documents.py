@@ -396,14 +396,9 @@ def extract_text(name: str, raw: bytes) -> Extraction | None:
                     )
                 )
     elif suffix == ".pdf":
-        from pypdf import PdfReader
+        from arete.services.pdf_extraction import extract_pdf
 
-        reader = PdfReader(io.BytesIO(raw))
-        if reader.is_encrypted:
-            raise DocumentError("Les PDF chiffrés ne sont pas acceptés.")
-        if len(reader.pages) > MAX_PAGES:
-            raise DocumentError("Maximum 100 pages par PDF.")
-        return None  # The browser provides position-aware text/OCR, never a model call.
+        return extract_pdf(raw)
     else:
         from PIL import Image
 
@@ -431,7 +426,7 @@ def finalize(
         raise DocumentError(f"Lecture du document impossible : {exc}") from exc
     if extraction is None:
         if browser_extraction is None:
-            raise DocumentError("L’extraction du PDF ou de l’image est manquante.")
+            raise DocumentError("L’extraction de l’image est manquante.")
         extraction = browser_extraction
     encoded = extraction.model_dump_json()
     if len(encoded.encode()) > MAX_EXTRACT_BYTES:

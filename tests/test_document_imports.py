@@ -7,10 +7,10 @@ import json
 from datetime import date
 from uuid import uuid4
 
+import pymupdf
 import pytest
 from openpyxl import Workbook
 from PIL import Image
-from pypdf import PdfWriter
 
 from arete.dataio.db import db_connection
 from arete.dataio.init_duckdb import main
@@ -142,13 +142,49 @@ def test_scanned_image_preserves_ocr_provenance_and_pdf_rejects_encryption(docum
         ),
     )
     assert documents.extraction_for(document_db, doc["id"]).blocks[0].confidence == 51
-    writer = PdfWriter()
-    writer.add_blank_page(width=100, height=100)
-    writer.encrypt("secret")
-    buffer = io.BytesIO()
-    writer.write(buffer)
+    with pymupdf.open() as pdf:
+        pdf.new_page(width=100, height=100)
+        raw = pdf.tobytes(
+            encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="secret", owner_pw="owner"
+        )
     with pytest.raises(DocumentError, match="chiffrés"):
-        uploaded(document_db, "locked.pdf", buffer.getvalue())
+        uploaded(document_db, "locked.pdf", raw)
+
+
+def test_pdf_finalization_uses_server_text_and_retains_sources(document_db):
+    with pymupdf.open() as pdf:
+        pdf.new_page().insert_text((30, 70), "Course 45 minutes")
+        raw = pdf.tobytes()
+    untrusted = Extraction(
+        blocks=[SourceBlock(locator="page 1", text="Wrong browser text")]
+    )
+    doc = uploaded(document_db, "plan.pdf", raw, untrusted)
+    extraction = documents.extraction_for(document_db, doc["id"])
+    assert [(b.locator, b.text) for b in extraction.blocks] == [
+        ("page 1, ligne 1", "Course 45 minutes")
+    ]
+    assert (
+        "Course 45 minutes"
+        in documents.filesystem(document_db)[f"/attachments/{doc['id']}.md"]
+    )
+
+
+def test_pdf_failure_never_finalizes_partial_or_browser_text(document_db, monkeypatch):
+    def failed(raw):
+        raise DocumentError("OCR interrompu")
+
+    monkeypatch.setattr("arete.services.pdf_extraction.extract_pdf", failed)
+    with pytest.raises(DocumentError, match="OCR interrompu"):
+        uploaded(
+            document_db,
+            "scan.pdf",
+            b"pdf",
+            Extraction(blocks=[SourceBlock(locator="page 1", text="partial")]),
+        )
+    doc = documents.list_documents(document_db)[0]
+    assert doc["status"] == "uploading"
+    with pytest.raises(DocumentError, match="pas prêt"):
+        documents.extraction_for(document_db, doc["id"])
 
 
 def test_statebackend_reads_documents_and_rejects_writes(

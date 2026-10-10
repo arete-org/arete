@@ -72,29 +72,22 @@ test('file drop creates sessions directly and preserves attachments on reload', 
 });
 
 
-test('textual, scanned and mixed PDF pages retain all source pages', async ({ page, context }) => {
-  const source = await context.newPage();
-  const scan = await source.evaluate(() => {
-    const canvas = document.createElement('canvas'); canvas.width = 1000; canvas.height = 240;
-    const ctx = canvas.getContext('2d')!; ctx.fillStyle = 'white'; ctx.fillRect(0,0,1000,240);
-    ctx.fillStyle = 'black'; ctx.font = '40px Arial'; ctx.fillText('Natation 8 x 100 m repos 30 secondes', 20,100);
-    return canvas.toDataURL();
+test('PDF upload delegates extraction to the server without a browser OCR worker', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', request => requests.push(request.url()));
+  await page.route('**/api/**', route => {
+    if (route.request().url().endsWith('/finalize')) expect(route.request().postDataJSON()).toBeNull();
+    return route.fulfill({ json: { id: 'pdf', status: 'ready' } });
   });
-  await source.setContent(`<style>section{break-after:page;font:28px Arial}img{width:600px}</style><section>Course 12 janvier 2027 : 45 minutes</section><section><img src="${scan}" /></section><section>Vélo 13 janvier 2027 : 60 minutes<img src="${scan}" /></section>`);
-  const pdf = await source.pdf();
-  await source.close();
-  await page.route('**/api/**', route => route.fulfill({ json: {} }));
   await page.goto('/');
-  const result = await page.evaluate(async bytes => {
-    const modulePath = '/src/lib/documentExtraction.ts';
-    const { extractDocument } = await import(/* @vite-ignore */ modulePath);
-    return extractDocument(new File([new Uint8Array(bytes)], 'reference.pdf', { type: 'application/pdf' }), new AbortController().signal, () => {});
-  }, Array.from(pdf));
-  const pages = (n: number) => result.blocks.filter((b: { locator: string }) => b.locator.startsWith(`page ${n},`));
-  expect(pages(1).some((b: { text: string; method: string }) => b.text.includes('45 minutes') && b.method === 'text')).toBe(true);
-  expect(pages(2).some((b: { text: string; method: string }) => b.text.includes('100') && b.method === 'ocr')).toBe(true);
-  expect(pages(3).map((b: { text: string }) => b.text).join(' ')).toContain('60 minutes');
-  expect(pages(3).map((b: { text: string }) => b.text).join(' ')).toContain('100');
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/lib/documents.ts';
+    const { uploadDocument } = await import(/* @vite-ignore */ modulePath);
+    return uploadDocument('thread', new File(['%PDF-server-validation'], 'scan.pdf'), new AbortController().signal, () => {});
+  });
+  expect(result.status).toBe('ready');
+  expect(requests.some(url => url.includes('/finalize'))).toBe(true);
+  expect(requests.some(url => url.includes('/ocr/') || url.includes('documentExtraction'))).toBe(false);
 });
 
 test('Garmin export is an explicit selected action and never claims watch delivery', async ({ page }) => {

@@ -11,7 +11,7 @@
       "functions": {
         "asgi.py": { "maxDuration": 300 }
       },
-      "buildCommand": "python scripts/bundle_duckdb_extensions.py"
+      "buildCommand": "python scripts/bundle_duckdb_extensions.py && python scripts/bundle_ocr_data.py"
     },
     "frontend": {
       "root": "frontend",

@@ -25,7 +25,7 @@ FRONTEND_CMD = cd frontend && node scripts/prepare-ocr.mjs && VITE_API_TARGET=ht
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
 
-install: .env .venv frontend/node_modules hooks ## Python + npm dependencies, .env from the example
+install: .env .venv frontend/node_modules hooks ocr-data ## Python + npm dependencies, .env from the example
 
 hooks: ## Use the versioned git hooks (pre-push: format + lint)
 	@git config core.hooksPath .githooks
@@ -54,13 +54,13 @@ dev: install ## API (auto-reload) + frontend (Vite HMR); Ctrl-C stops both
 	while kill -0 $$backend 2>/dev/null && kill -0 $$frontend 2>/dev/null; do sleep 1; done; \
 	echo "make dev: a server exited, stopping the other" >&2; exit 1
 
-backend: .venv ## API only (auto-reload), /docs on BACKEND_PORT
+backend: .venv ocr-data ## API only (auto-reload), /docs on BACKEND_PORT
 	$(BACKEND_CMD)
 
 frontend: frontend/node_modules ## Vite dev server only (HMR) on FRONTEND_PORT
 	$(FRONTEND_CMD)
 
-test: .venv ## pytest
+test: .venv ocr-data ## pytest
 	uv run pytest tests/ --tb=short --durations=20
 
 lint: .venv frontend/node_modules ## ruff + eslint
@@ -85,3 +85,7 @@ check-changed: ## Run affected PR checks (dependencies must already be installed
 
 docker: .env ## Production-like stack: frontend :3080, API :8001
 	docker compose up --build
+
+.PHONY: ocr-data
+ocr-data: ## Prepare checksum-verified server OCR languages
+	python3 scripts/bundle_ocr_data.py

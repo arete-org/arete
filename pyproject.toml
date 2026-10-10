@@ -22,7 +22,7 @@ dependencies = [
     "openpyxl>=3.1.5,<4",
     "pillow>=11,<13",
     "pydantic>=2",
-    "pypdf>=6,<7",
+    "pymupdf==1.28.2",
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.31",
     "pywebpush>=2.0",

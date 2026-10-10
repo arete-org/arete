@@ -67,12 +67,12 @@ export async function uploadDocument(thread: string, file: File, signal: AbortSi
     await documentRequest(`${root(thread)}/documents/${doc.id}/chunks/${position}`, { method: 'PUT', signal, headers: { 'Content-Type': 'application/octet-stream' }, body: file.slice(position * CHUNK_BYTES, (position + 1) * CHUNK_BYTES) }, 60_000);
   }
   let extraction: Extraction | null = null;
-  if (['.pdf', '.png', '.jpg', '.jpeg', '.webp'].includes(suffix)) {
+  if (['.png', '.jpg', '.jpeg', '.webp'].includes(suffix)) {
     const { extractDocument } = await import('./documentExtraction');
     extraction = await extractDocument(file, signal, progress);
   }
-  progress('Vérification et conservation…');
-  return documentRequest<CoachDocument>(`${root(thread)}/documents/${doc.id}/finalize`, { method: 'POST', signal, body: JSON.stringify(extraction) }, 120_000);
+  progress(suffix === '.pdf' ? 'Lecture du PDF et reconnaissance de texte…' : 'Vérification et conservation…');
+  return documentRequest<CoachDocument>(`${root(thread)}/documents/${doc.id}/finalize`, { method: 'POST', signal, body: JSON.stringify(extraction) }, suffix === '.pdf' ? 270_000 : 120_000);
 }
 
 export async function originalDocument(thread: string, doc: CoachDocument, signal?: AbortSignal): Promise<Blob> {

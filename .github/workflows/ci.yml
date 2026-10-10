@@ -91,6 +91,7 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen --extra dev
+      - run: python3 scripts/bundle_ocr_data.py
       # Two bounded workers, each with its own temporary DuckDB from conftest.
       # Keep each file together to preserve module fixtures and test ordering.
       - uses: actions/download-artifact@v4

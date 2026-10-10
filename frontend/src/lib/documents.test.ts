@@ -5,13 +5,13 @@ import { restoreConversation } from './agentConversation';
 
 afterEach(() => vi.unstubAllGlobals());
 
-it('uploads exact blocks, finalizes separately and never sends file bytes in chat', async () => {
+it.each(['plan.md', 'scan.pdf'])('uploads %s and delegates extraction to the server', async name => {
   const calls: { path: string; body: unknown; method: string }[] = [];
   vi.stubGlobal('fetch', vi.fn(async (path, init) => {
     calls.push({ path: String(path), body: init.body, method: init.method });
     return new Response(JSON.stringify({ id: 'doc', status: 'ready' }), { status: 200 });
   }));
-  const file = new File(['# Course\n30 minutes'], 'plan.md');
+  const file = new File(['# Course\n30 minutes'], name);
   await uploadDocument('thread', file, new AbortController().signal, () => {});
   expect(calls.map(c => c.method)).toEqual(['POST', 'PUT', 'POST']);
   expect(calls[1].path).toContain('/chunks/0');
