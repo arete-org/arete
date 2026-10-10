@@ -67,6 +67,15 @@ def test_open_by_default(client, monkeypatch):
     assert (me["athlete_id"], me["is_owner"], me["email"]) == (1, True, "")
 
 
+def test_the_guard_is_off_outside_production(client, monkeypatch):
+    # Only VERCEL_ENV=production requires Clerk and a cron secret.
+    monkeypatch.setenv("VERCEL_ENV", "preview")
+    monkeypatch.delenv("ARETE_AUTH", raising=False)
+    monkeypatch.delenv("CRON_SECRET", raising=False)
+    assert client.get("/settings").status_code == 200
+    assert client.get("/health").status_code == 200
+
+
 def test_enforced_mode_requires_a_credential(client, enforced):
     refused = client.get("/settings")
     assert refused.status_code == 401
