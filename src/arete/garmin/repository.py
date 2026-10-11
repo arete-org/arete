@@ -808,7 +808,9 @@ class GarminRepository:
         within [start, end] and not after today. Without a window, everything
         planned up to today counts. Skipped = due, still pending, date before today.
         """
-        today = date.today()
+        from arete.services.settings import athlete_today
+
+        today = athlete_today()
         end_due = min(end, today) if end else today
         due = "date <= ?" + (" AND date >= ?" if start else "")
         due_params: list = [end_due] + ([start] if start else [])

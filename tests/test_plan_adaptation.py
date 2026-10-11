@@ -134,12 +134,11 @@ def test_the_api_lists_adapts_and_reverts(tempo, router_client):
     from arete.api.plan import router
 
     client = router_client(router)
-    with patch("arete.services.plan_adaptation.date") as fake_date:
-        fake_date.today.return_value = DAY
-        with patch(
-            "arete.services.coaching_rules.rule_facts", return_value=_facts(50.0)
-        ):
-            adapted = client.post("/plan/today/adapt").json()
+    with (
+        patch("arete.api.plan.athlete_today", return_value=DAY),
+        patch("arete.services.coaching_rules.rule_facts", return_value=_facts(50.0)),
+    ):
+        adapted = client.post("/plan/today/adapt").json()
     assert [d["decision"] for d in adapted["decisions"]] == ["replace_easy"]
     decision_id = adapted["decisions"][0]["id"]
     assert client.post(f"/plan/decisions/{decision_id}/revert").status_code == 200

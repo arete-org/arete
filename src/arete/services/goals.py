@@ -7,6 +7,7 @@ from datetime import date, datetime
 from typing import Any
 
 from arete.dataio.db import connect
+from arete.services.settings import athlete_today
 
 PRIORITIES = ("A", "B", "C")
 STATUSES = ("active", "done", "cancelled")
@@ -30,7 +31,7 @@ class Goal:
     created_at: datetime | None
 
     def days_left(self, today: date | None = None) -> int:
-        return (self.race_date - (today or date.today())).days
+        return (self.race_date - (today or athlete_today())).days
 
     def to_dict(self, today: date | None = None) -> dict[str, Any]:
         return {
@@ -69,9 +70,11 @@ def _validate(fields: dict[str, Any]) -> None:
 def list_goals(*, include_past: bool = False) -> list[Goal]:
     con = connect()
     try:
-        where = "" if include_past else "AND race_date >= CURRENT_DATE"
+        # The athlete's day, not the database clock's (UTC on Vercel).
+        where = "" if include_past else "AND race_date >= ?"
         rows = con.execute(
-            f"SELECT {_COLUMNS} FROM app.visible_goals WHERE user_id = getvariable('arete_athlete_id') {where} ORDER BY race_date, id"
+            f"SELECT {_COLUMNS} FROM app.visible_goals WHERE user_id = getvariable('arete_athlete_id') {where} ORDER BY race_date, id",
+            [] if include_past else [athlete_today()],
         ).fetchall()
     finally:
         con.close()
@@ -91,7 +94,7 @@ def get_goal(goal_id: int) -> Goal | None:
 
 def next_goal(today: date | None = None) -> Goal | None:
     """The race the plan works towards: the soonest active A race, else any."""
-    today = today or date.today()
+    today = today or athlete_today()
     upcoming = [
         g
         for g in list_goals(include_past=True)
@@ -154,7 +157,7 @@ def delete_goal(goal_id: int) -> bool:
 
     if get_goal(goal_id) is None:
         return False
-    _delete_future(goal_id, date.today())
+    _delete_future(goal_id, athlete_today())
     con = connect()
     try:
         con.execute(

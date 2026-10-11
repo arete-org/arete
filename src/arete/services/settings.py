@@ -1,6 +1,7 @@
 """Athlete settings and shared validation, independent of HTTP."""
 
-from datetime import date
+import logging
+from datetime import UTC, date, datetime
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -8,6 +9,48 @@ from pydantic import BaseModel, Field, field_validator
 
 from arete.dataio import settings as repo
 from arete.services.athlete_scope import resolve_athlete_id
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_TIMEZONE = "Europe/Paris"
+
+
+# ---------- The athlete's day ----------
+def utc_now() -> datetime:
+    """The current instant, timezone-aware. Tests freeze time here."""
+    return datetime.now(UTC)
+
+
+def zone_of(name: str | None) -> ZoneInfo:
+    """A stored timezone name; the default for an empty or unknown one."""
+    try:
+        return ZoneInfo(name or DEFAULT_TIMEZONE)
+    except (ZoneInfoNotFoundError, ValueError):
+        # The settings form validates the zone; only a hand-edited row lands here.
+        logger.warning("Unknown timezone %r, using %s", name, DEFAULT_TIMEZONE)
+        return ZoneInfo(DEFAULT_TIMEZONE)
+
+
+def athlete_now() -> datetime:
+    """Now on the scoped athlete's clock (their configured timezone).
+
+    The server runs on UTC (Vercel): its own date is the athlete's yesterday
+    for a few hours after their midnight. Whatever means "the athlete's day"
+    (plan, briefing, review week, metric windows) reads this instead.
+    """
+    return utc_now().astimezone(
+        zone_of((repo.get_user_settings() or {}).get("timezone"))
+    )
+
+
+def athlete_today() -> date:
+    """The scoped athlete's calendar date."""
+    return athlete_now().date()
+
+
+def today_in(zone: str | None) -> date:
+    """The calendar date in a timezone already read with the settings."""
+    return utc_now().astimezone(zone_of(zone)).date()
 
 
 # ---------- User Settings ----------

@@ -10,6 +10,7 @@ from typing import Any
 import duckdb
 
 from arete.dataio.db import db_connection, transaction
+from arete.services.settings import athlete_today
 
 KINDS = ("injury", "constraint", "preference", "goal", "other")
 STATUSES = ("active", "resolved")
@@ -116,7 +117,7 @@ def add_fact(
     valid_until: date | None = None,
 ) -> Fact:
     _validate(kind, text, None, evidence, source_ref)
-    since = since or date.today()
+    since = since or athlete_today()
     if valid_until is not None and valid_until < since:
         raise ValueError("La fin de validité précède le début.")
     with db_connection() as con:
@@ -230,7 +231,7 @@ def fact_history(fact_id: int) -> list[dict[str, Any]]:
 
 def facts_block(current_date: date | None = None) -> str:
     """Keep every currently valid fact; the complete-request guard owns token bounds."""
-    today = current_date or date.today()
+    today = current_date or athlete_today()
     facts = [
         f
         for f in list_facts(active_only=True)

@@ -25,6 +25,7 @@ from typing import Any, Literal
 
 from arete.dataio.db import db_connection
 from arete.services.memory import ledger_lock, memory_root
+from arete.services.settings import athlete_today
 
 #: Vercel's response cap is 4.5 MB; headers and rounding need the margin.
 EXPORT_LIMIT_BYTES = 4_000_000
@@ -247,6 +248,6 @@ def build(
         raise ExportTooLarge(len(content))
     return ExportFile(
         content=content,
-        filename=_filename(data, fmt, today or date.today()),
+        filename=_filename(data, fmt, today or athlete_today()),
         media_type="application/zip" if fmt == "zip" else "application/json",
     )

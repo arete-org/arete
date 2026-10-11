@@ -10,13 +10,14 @@ from pydantic import BaseModel
 
 from arete.services import plan_adaptation as service
 from arete.services.plan_repository import PlanDecisionRepository
+from arete.services.settings import athlete_today
 
 router = APIRouter(prefix="/plan", tags=["plan"])
 
 
-def _today(decisions: list) -> dict[str, Any]:
+def _today(decisions: list, day: date) -> dict[str, Any]:
     return {
-        "date": date.today().isoformat(),
+        "date": day.isoformat(),
         "decisions": [d.to_dict() for d in decisions],
     }
 
@@ -24,13 +25,15 @@ def _today(decisions: list) -> dict[str, Any]:
 @router.get("/today")
 def get_today() -> dict[str, Any]:
     """What this morning's readiness did to today's plan."""
-    return _today(PlanDecisionRepository().list_for_day(date.today()))
+    day = athlete_today()
+    return _today(PlanDecisionRepository().list_for_day(day), day)
 
 
 @router.post("/today/adapt")
 def adapt_today() -> dict[str, Any]:
     """Decide now for today's sessions without a decision (ignores the switch)."""
-    return _today(service.adapt_today(respect_setting=False))
+    day = athlete_today()
+    return _today(service.adapt_today(day, respect_setting=False), day)
 
 
 @router.post("/decisions/{decision_id}/revert")
@@ -55,7 +58,7 @@ def get_review() -> dict[str, Any] | None:
     """Last week's review, if it was written."""
     from arete.services.weekly_review import get_review, last_monday
 
-    review = get_review(last_monday(date.today()))
+    review = get_review(last_monday(athlete_today()))
     return review.to_dict() if review else None
 
 

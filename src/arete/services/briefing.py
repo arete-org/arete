@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from arete.dataio.settings import get_user_settings
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.coaching_repository import Briefing, BriefingRepository
+from arete.services.settings import athlete_today
 
 if TYPE_CHECKING:
     from arete.services.coaching_rules import RuleFacts
@@ -258,7 +259,7 @@ def generate_briefing(
     the agent is disabled or fails, or when there is nothing to coach on.
     """
     user_id = resolve_athlete_id(user_id)
-    target_date = target_date or date.today()
+    target_date = target_date or athlete_today()
     repo = BriefingRepository()
     rule_text, priority, facts = _rule_floor(target_date)
 
@@ -364,7 +365,7 @@ def get_or_create_briefing(
 ) -> Briefing:
     """The day's briefing, producing it once if the day has none."""
     user_id = resolve_athlete_id(user_id)
-    target_date = target_date or date.today()
+    target_date = target_date or athlete_today()
     existing = BriefingRepository().get_for_day(target_date, user_id=user_id)
     if existing is not None:
         return existing

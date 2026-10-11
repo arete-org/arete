@@ -21,6 +21,7 @@ from arete.dataio.db import connect
 from arete.dataio.queries import RUNNING_SPORTS, sql_in
 from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
+from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
@@ -332,7 +333,7 @@ def generate_review(
     refresh: bool = False,
 ) -> Review:
     """Last week's review, produced once (``refresh`` writes it again)."""
-    today = today or date.today()
+    today = today or athlete_today()
     week_start = last_monday(today)
     existing = get_review(week_start)
     if existing is not None and not refresh:

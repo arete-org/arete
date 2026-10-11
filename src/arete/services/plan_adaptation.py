@@ -23,6 +23,7 @@ from arete.services.plan_repository import (
     PlanDecision,
     PlanDecisionRepository,
 )
+from arete.services.settings import athlete_today
 
 if TYPE_CHECKING:
     from arete.garmin.client import GarminClient
@@ -70,7 +71,7 @@ def adapt_today(
     """
     from arete.services.coaching_rules import rule_facts
 
-    day = target_date or date.today()
+    day = target_date or athlete_today()
     decisions = PlanDecisionRepository()
     if respect_setting and not auto_adapt_enabled():
         return decisions.list_for_day(day)
@@ -253,7 +254,7 @@ def push_today(client: GarminClient, target_date: date | None = None) -> str:
     """The daily run's push: today's sessions not on Garmin yet. Never raises."""
     if not bool((get_user_settings() or {}).get("push_to_garmin_enabled", False)):
         return "disabled"
-    day = target_date or date.today()
+    day = target_date or athlete_today()
     sent, skipped, failed = 0, 0, 0
     try:
         sessions = GarminRepository().list_planned_sessions(

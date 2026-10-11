@@ -17,6 +17,7 @@ import duckdb
 from arete.dataio.db import connect, db_connection
 from arete.dataio.ownership import require_owned
 from arete.services.athlete_scope import resolve_athlete_id
+from arete.services.settings import athlete_today
 
 Priority = Literal["info", "warning", "alert"]
 Source = Literal["agent", "rules"]
@@ -102,7 +103,7 @@ class BriefingRepository:
                 """,
                 [
                     user_id,
-                    briefing_date or date.today(),
+                    briefing_date or athlete_today(),
                     text,
                     priority,
                     source,
@@ -137,7 +138,7 @@ class BriefingRepository:
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """,
-                [user_id, briefing_date or date.today()],
+                [user_id, briefing_date or athlete_today()],
             ).fetchone()
         finally:
             conn.close()

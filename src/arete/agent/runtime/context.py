@@ -52,6 +52,12 @@ class RunStats:
     served_models: list[str] = field(default_factory=list)
 
 
+def _athlete_today() -> date:
+    from arete.services.settings import athlete_today
+
+    return athlete_today()
+
+
 @dataclass
 class AgentContext:
     """Per-run context handed to ``create_agent(context_schema=...)``.
@@ -75,7 +81,8 @@ class AgentContext:
     # Slack only: who reads the answer. None for the browser and missions.
     slack_visibility: Literal["private", "public"] | None = None
     attachment_paths: tuple[str, ...] = ()
-    current_date: date = field(default_factory=date.today)
+    # The athlete's calendar day (their timezone), fixed for the invocation.
+    current_date: date = field(default_factory=_athlete_today)
     deadline: float | None = field(default=None, init=False)
     started_at: float | None = field(default=None, init=False)
     stats: RunStats = field(default_factory=RunStats, init=False, repr=False)

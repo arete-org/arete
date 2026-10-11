@@ -14,6 +14,7 @@ from pathlib import Path
 from threading import RLock
 
 from arete.config import config
+from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def rotate_sessions_ledger(now: date | None = None) -> Path | None:
             return None
     head, tail = content[:boundary], content[boundary + 1 :]
 
-    archive = archive_path(root, now or date.today())
+    archive = archive_path(root, now or athlete_today())
     with archive.open("a", encoding="utf-8") as fh:
         fh.write(head.rstrip() + "\n")
     path.write_text(tail, encoding="utf-8")
@@ -99,7 +100,7 @@ def append_entry(file: str, title: str, body: str, when: date | None = None) -> 
     """
     if file not in (SESSIONS_LEDGER, NOTES_LEDGER):
         raise ValueError(f"Unknown ledger: {file}")
-    day = (when or date.today()).isoformat()
+    day = (when or athlete_today()).isoformat()
     title = " ".join(title.split())
     path = memory_root() / file
     existing = path.read_text(encoding="utf-8") if path.exists() else ""

@@ -1,8 +1,10 @@
 """Read the same domain data used by each UI page."""
 
 import re
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
+
+from arete.services.settings import athlete_today
 
 
 def _strength_sessions(**filters: Any) -> list[dict[str, Any]]:
@@ -38,7 +40,7 @@ def _dashboard() -> dict[str, Any]:
     from arete.services.plan_repository import PlanDecisionRepository
     from arete.services.planning import _session_to_dict
 
-    today = date.today()
+    today = athlete_today()
     planned = GarminRepository().list_planned_sessions(
         start_date=today, end_date=today, status=None, limit=10
     )
@@ -119,7 +121,7 @@ def _planning() -> dict[str, Any]:
     from arete.services.analytics import list_sessions
     from arete.services.planning import _session_to_dict
 
-    today = date.today()
+    today = athlete_today()
     start = today - timedelta(days=PLANNING_PAST_DAYS)
     end = today + timedelta(days=PLANNING_AHEAD_DAYS)
     # API default params are FastAPI Query objects; call with plain values.
