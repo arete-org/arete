@@ -58,8 +58,8 @@ test('file drop creates sessions directly and preserves attachments on reload', 
     data.items.add(new File(['Footing 30 minutes'], 'plan.md', { type: 'text/markdown' }));
     return data;
   });
-  await page.locator('aside').filter({ has: page.getByLabel('Documents du coach') }).dispatchEvent('drop', { dataTransfer: transfer });
-  await expect(page.getByText('Prêt', { exact: true })).toBeVisible();
+  await page.getByRole('complementary', { name: 'Coach IA' }).dispatchEvent('drop', { dataTransfer: transfer });
+  await expect(page.getByRole('button', { name: 'Fichiers du fil (1)' })).toHaveText('1');
   await page.getByLabel('Message au coach').fill('Crée cette séance');
   await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
   await expect(page.getByText('Séance créée dans le planning.')).toBeVisible();
@@ -155,6 +155,7 @@ test('OCR preview compares the original, filters uncertain passages and works on
   });
   await page.goto('/planning');
   await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
+  await page.getByRole('button', { name: 'Fichiers du fil (1)' }).click();
   await page.getByRole('button', { name: `Consulter ${doc.name}` }).click();
   const preview = page.getByRole('dialog', { name: `Aperçu de ${doc.name}` });
   await expect(preview.getByRole('img', { name: `Original : ${doc.name}` })).toBeVisible();

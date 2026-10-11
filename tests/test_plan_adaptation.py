@@ -39,6 +39,13 @@ def tempo(monkeypatch):
 
     monkeypatch.setattr("arete.dataio.settings.athlete_zone_model", zones)
     monkeypatch.setattr("arete.services.plan_adaptation.athlete_zone_model", zones)
+
+    class Clock(date):
+        @classmethod
+        def today(cls):
+            return DAY
+
+    monkeypatch.setattr(plan_adaptation, "date", Clock)
     repo = GarminRepository()
     session_id = repo.create_planned_session(
         PlannedSession(
@@ -68,6 +75,11 @@ def _adapt(readiness, **kwargs):
 def test_a_middling_morning_eases_the_tempo_and_keeps_the_original(tempo):
     decisions = _adapt(70.0)
     assert [d.decision for d in decisions] == ["ease"]
+    before = GarminRepository().get_planned_session(tempo)
+    assert before.session_type == SessionType.TEMPO
+    assert decisions[0].applied_at is None
+    applied = plan_adaptation.respond(decisions[0].id, decisions[0].revision, "apply")
+    assert applied.applied_at is not None
     session = GarminRepository().get_planned_session(tempo)
     assert session is not None
     assert session.session_type == SessionType.ENDURANCE
@@ -75,7 +87,7 @@ def test_a_middling_morning_eases_the_tempo_and_keeps_the_original(tempo):
     assert session.status == SessionStatus.MODIFIED
     assert decisions[0].original is not None
     assert decisions[0].original["session_type"] == "tempo"
-    assert decisions[0].applied_at is not None
+    assert decisions[0].state == "pending"
 
 
 def test_a_second_run_the_same_day_decides_nothing_new(tempo):
@@ -86,6 +98,7 @@ def test_a_second_run_the_same_day_decides_nothing_new(tempo):
 
 def test_revert_restores_the_session(tempo):
     decision = _adapt(70.0)[0]
+    plan_adaptation.respond(decision.id, decision.revision, "apply")
     reverted = plan_adaptation.revert(decision.id)
     assert reverted.reverted_at is not None
     session = GarminRepository().get_planned_session(tempo)
@@ -97,14 +110,16 @@ def test_revert_restores_the_session(tempo):
 
 
 def test_a_bad_morning_skips_the_session(tempo):
-    assert [d.decision for d in _adapt(30.0)] == ["rest"]
+    proposal = _adapt(30.0)[0]
+    assert proposal.decision == "rest"
+    plan_adaptation.respond(proposal.id, proposal.revision, "apply")
     session = GarminRepository().get_planned_session(tempo)
     assert session is not None and session.status == SessionStatus.SKIPPED
 
 
 def test_the_switch_off_writes_nothing_unless_asked(tempo):
     with patch.object(plan_adaptation, "auto_adapt_enabled", return_value=False):
-        assert _adapt(30.0, respect_setting=True) == []
+        assert [d.state for d in _adapt(30.0, respect_setting=True)] == ["pending"]
         assert [d.decision for d in _adapt(30.0, respect_setting=False)] == ["rest"]
 
 
@@ -130,20 +145,16 @@ def test_an_adapted_session_still_matches_the_run(tempo):
         con.close()
 
 
-def test_the_api_lists_adapts_and_reverts(tempo, router_client):
+def test_the_old_api_refuses_implicit_application(tempo, router_client):
     from arete.api.plan import router
 
     client = router_client(router)
-    with patch("arete.services.plan_adaptation.date") as fake_date:
-        fake_date.today.return_value = DAY
-        with patch(
-            "arete.services.coaching_rules.rule_facts", return_value=_facts(50.0)
-        ):
-            adapted = client.post("/plan/today/adapt").json()
-    assert [d["decision"] for d in adapted["decisions"]] == ["replace_easy"]
-    decision_id = adapted["decisions"][0]["id"]
-    assert client.post(f"/plan/decisions/{decision_id}/revert").status_code == 200
-    assert client.post(f"/plan/decisions/{decision_id}/revert").status_code == 409
+    assert client.post("/plan/today/adapt").status_code == 409
+    proposal = _adapt(50.0)[0]
+    assert client.post(f"/plan/decisions/{proposal.id}/revert").status_code == 409
+    plan_adaptation.respond(proposal.id, proposal.revision, "apply")
+    assert client.post(f"/plan/decisions/{proposal.id}/revert").status_code == 200
+    assert client.post(f"/plan/decisions/{proposal.id}/revert").status_code == 409
     assert client.post("/plan/decisions/999999/revert").status_code == 404
 
 
@@ -205,7 +216,8 @@ def test_the_daily_push_sends_once_and_only_when_enabled(tempo):
 
 def test_an_adaptation_after_a_push_marks_the_copy_stale(tempo):
     plan_adaptation.push_session(_garmin(), tempo)
-    _adapt(70.0)
+    proposal = _adapt(70.0)[0]
+    plan_adaptation.respond(proposal.id, proposal.revision, "apply")
     session = GarminRepository().get_planned_session(tempo)
     assert session is not None
     assert session.garmin_pushed_at is None and session.garmin_workout_id == "1"

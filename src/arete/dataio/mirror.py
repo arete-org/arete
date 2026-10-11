@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-MIRRORED_DIRS = ("garmin_tokens", "agent/memory")
+MIRRORED_DIRS = ("garmin_tokens",)
 MIRRORED_FILES = ("dictation_misses.jsonl", "last_daily_sync.json")
 
 _MIRRORED_PREDICATE = " OR ".join(
@@ -69,9 +69,10 @@ _dirty: ContextVar[list[bool] | None] = ContextVar("mirror_dirty", default=None)
 def mark_dirty() -> None:
     """Flush the data directory after the current request: it wrote a mirrored file.
 
-    Writers of mirrored paths call it (Garmin tokens, the coach's ledgers, the
-    sync marker). Methods other than GET/HEAD/OPTIONS flush anyway; outside a
-    request it does nothing.
+    Writers that can run during a GET call it: the Garmin client, whose SDK
+    rewrites the token file when it refreshes. The scheduler flushes the sync
+    marker itself; dictation misses come from a POST. Methods other than
+    GET/HEAD/OPTIONS flush anyway; outside a request it does nothing.
     """
     flag = _dirty.get()
     if flag is not None:

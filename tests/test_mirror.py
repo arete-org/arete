@@ -47,10 +47,10 @@ def _stored(store) -> dict[str, bytes]:
 def test_new_files_are_stored(store, tmp_path, monkeypatch):
     root = _use_data_dir(monkeypatch, tmp_path / "data")
     mirror.hydrate()
-    (root / "agent/memory").mkdir(parents=True)
-    (root / "agent/memory/profile.md").write_text("seuil 176")
+    (root / "garmin_tokens").mkdir(parents=True)
+    (root / "garmin_tokens/profile.json").write_text("seuil 176")
     assert mirror.flush() == 1
-    assert _stored(store) == {"agent/memory/profile.md": b"seuil 176"}
+    assert _stored(store) == {"garmin_tokens/profile.json": b"seuil 176"}
 
 
 def test_a_fresh_instance_gets_the_stored_files(store, tmp_path, monkeypatch):
@@ -77,16 +77,16 @@ def test_unchanged_files_are_not_written_again(store, tmp_path, monkeypatch):
 
 def test_stale_copy_does_not_overwrite_another_instance(store, tmp_path, monkeypatch):
     root = _use_data_dir(monkeypatch, tmp_path / "data")
-    (root / "agent/memory").mkdir(parents=True)
-    (root / "agent/memory/notes.md").write_text("v1")
+    (root / "garmin_tokens").mkdir(parents=True)
+    (root / "garmin_tokens/notes.json").write_text("v1")
     mirror.hydrate()
     mirror.flush()
     with store() as con:  # another instance stores v2 meanwhile
         con.execute(
-            "UPDATE app.files SET content = 'v2' WHERE path = 'agent/memory/notes.md'"
+            "UPDATE app.files SET content = 'v2' WHERE path = 'garmin_tokens/notes.json'"
         )
     assert mirror.flush() == 0
-    assert _stored(store) == {"agent/memory/notes.md": b"v2"}
+    assert _stored(store) == {"garmin_tokens/notes.json": b"v2"}
 
 
 def test_deleted_files_are_removed(store, tmp_path, monkeypatch):
@@ -176,23 +176,11 @@ def _remote_app(monkeypatch, path: str, handler) -> TestClient:
     return TestClient(app)
 
 
-def test_a_get_that_writes_the_journal_stores_it(store, tmp_path, monkeypatch):
-    from arete.services.memory import NOTES_LEDGER, append_entry
-
-    _use_data_dir(monkeypatch, tmp_path / "data")
-
-    def write() -> str:  # sync: runs in a worker thread, in a copied context
-        append_entry(NOTES_LEDGER, "Seuil", "176 bpm")
-        return "ok"
-
-    assert _remote_app(monkeypatch, "/write", write).get("/write").status_code == 200
-    stored = _stored(store)
-    assert set(stored) == {"agent/memory/notes.md"}
-    assert b"Seuil : 176 bpm" in stored["agent/memory/notes.md"]
-
-
 def test_a_get_that_refreshes_garmin_tokens_stores_them(store, tmp_path, monkeypatch):
-    """The SDK rewrites the token file when it refreshes, during any request."""
+    """The SDK rewrites the token file when it refreshes, during any request.
+
+    The handler is sync: it runs in a worker thread, in a copied context.
+    """
     from arete.garmin.client import TOKEN_FILE, GarminClient
 
     _use_data_dir(monkeypatch, tmp_path / "data")

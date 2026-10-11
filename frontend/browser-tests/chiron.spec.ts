@@ -93,16 +93,22 @@ test('Chiron composer: inline file picker, draft removal and reuse before sendin
     const picker = page.waitForEvent('filechooser');
     await attach.click();
     await (await picker).setFiles({ name: doc.name, mimeType: 'text/markdown', buffer: Buffer.from('Footing 30 minutes') });
-    await expect(composer.getByRole('button', { name: `Consulter ${doc.name}` })).toBeVisible();
-    expect(stream.requests()).toBe(0);
-    await composer.getByRole('button', { name: `Retirer ${doc.name} du brouillon` }).click();
-    await expect(composer.getByLabel('Pièces jointes du brouillon')).toHaveCount(0);
-    expect(deleted).toBe(false);
     const library = composer.getByRole('button', { name: 'Fichiers du fil (1)' });
-    await library.click();
-    await composer.getByRole('checkbox', { name: doc.name }).check();
+    await expect(library).toHaveText('1');
+    await expect(composer.getByRole('button', { name: `Consulter ${doc.name}` })).toHaveCount(0);
+    const inlineHeight = (await composer.boundingBox())!.height;
     await library.click();
     await expect(composer.getByRole('button', { name: `Consulter ${doc.name}` })).toBeVisible();
+    expect((await composer.boundingBox())!.height).toBe(inlineHeight);
+    expect(stream.requests()).toBe(0);
+    await composer.getByRole('checkbox', { name: doc.name }).uncheck();
+    await expect(library).toHaveText('');
+    expect(deleted).toBe(false);
+    await composer.getByRole('checkbox', { name: doc.name }).check();
+    await page.keyboard.press('Escape');
+    await expect(library).toBeFocused();
+    await expect(library).toHaveText('1');
+    await expect(composer.getByRole('button', { name: `Consulter ${doc.name}` })).toHaveCount(0);
     await expect(composer.getByLabel('Message au coach')).toHaveValue('Adapte ce programme à ma semaine.');
     for (const theme of ['pierre', 'prune']) {
       await page.setViewportSize({ width: 390, height: 844 });
@@ -111,6 +117,9 @@ test('Chiron composer: inline file picker, draft removal and reuse before sendin
       await expect(composer.getByRole('button', { name: 'Envoyer', exact: true })).toBeInViewport();
       expect(await composer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
       await expectInlineAttachment();
+      const inputBounds = (await composer.getByLabel('Message au coach').boundingBox())!;
+      const fileBounds = (await library.boundingBox())!;
+      expect(fileBounds.y + fileBounds.height).toBe(inputBounds.y + inputBounds.height);
       await page.screenshot({ path: `../.context/chiron-composer-${theme}-mobile.png` });
     }
     await composer.getByRole('button', { name: 'Envoyer', exact: true }).click();
@@ -307,13 +316,13 @@ test('Arete: file drop, inline draft and active SSE survive tab navigation', asy
     await expect(panel.getByText('Dépose tes fichiers ici')).toBeVisible();
     await panel.dispatchEvent('drop', { dataTransfer: transfer });
     await expect(panel.getByText('Dépose tes fichiers ici')).toHaveCount(0);
-    await expect(panel.locator('footer').getByRole('button', { name: 'Consulter Plan.md' })).toBeVisible();
+    await expect(panel.locator('footer').getByRole('button', { name: 'Fichiers du fil (1)' })).toHaveText('1');
     expect(stream.requests()).toBe(0);
     const navigation = page.getByRole('navigation', { name: 'Navigation principale' });
     await navigation.getByRole('link', { name: 'Réglages', exact: true }).click();
     await expect(page).toHaveURL(/settings/);
     await expect(input).toHaveValue('Adapte ma semaine avec ce fichier.');
-    await expect(panel.locator('footer').getByRole('button', { name: 'Consulter Plan.md' })).toBeVisible();
+    await expect(panel.locator('footer').getByRole('button', { name: 'Fichiers du fil (1)' })).toHaveText('1');
     expect(await inputNode!.evaluate(node => node === document.querySelector('[aria-label="Message au coach"]'))).toBe(true);
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await expect.poll(() => stream.requests()).toBe(1);
@@ -335,5 +344,52 @@ test('Arete: file drop, inline draft and active SSE survive tab navigation', asy
     await expect(input).toHaveValue('Garde mon dimanche libre.');
     expect(stream.requests()).toBe(1);
     await page.screenshot({ path: '../.context/arete-brand/verified-navigation.png', animations: 'disabled' });
+  } finally { await stream.close(); }
+});
+
+test('classic coach: one memory receipt, inline files, drafts and reload', async ({ page }) => {
+  const stream = await fixture(page, false);
+  const fact = { id: 12, kind: 'preference', text: 'Je préfère courir le matin', since: '2026-10-11', source: 'coach', source_ref: 'Déclaration dans cette conversation', status: 'active', evidence: 'explicit', revision: 1, valid_until: null };
+  await page.route('**/api/athlete-facts', route => route.fulfill({ json: [fact] }));
+  try {
+    const panel = await openCoach(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => document.documentElement.dataset.theme = 'prune');
+    await expect(panel.getByRole('region', { name: 'Documents du coach' })).toHaveCount(0);
+    await expect(panel.locator('footer').getByRole('button', { name: 'Joindre un fichier', exact: true })).toBeVisible();
+    await panel.getByLabel('Message au coach').fill('Je préfère courir le matin.');
+    await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
+    await expect.poll(() => stream.requests()).toBe(1);
+    stream.send({ type: 'tool_start', id: 'save', name: 'remember_fact', args: preview });
+    stream.send({ type: 'tool_end', id: 'save', name: 'remember_fact', status: 'done', output: preview, elapsed_ms: 20 });
+    for (let i = 0; i < 2; i++) stream.send({ type: 'coach_card', id: 'fact:12', ref_kind: 'fact', ref_id: 12 });
+    stream.send({ type: 'message', id: 'answer', text: 'D’accord, je privilégierai le matin pour tes séances.' });
+    stream.send({ type: 'done', message: { role: 'assistant', content: 'D’accord, je privilégierai le matin pour tes séances.' } });
+    const receipt = panel.getByRole('button', { name: 'Voir la mémoire mise à jour' });
+    await expect(receipt).toHaveCount(1);
+    await expect(receipt).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel.getByRole('status')).toHaveCount(0);
+    await expect(panel.getByText('RETENU', { exact: true })).toHaveCount(0);
+    await panel.getByLabel('Message au coach').fill('Mon brouillon');
+    await panel.getByRole('button', { name: 'Ce que Chiron sait de moi' }).click();
+    await expect(panel.getByText('Ce que je retiens de toi')).toBeVisible();
+    await expect(panel.getByLabel('Nouveau fait')).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Ce que Chiron sait de moi' }).click();
+    await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon');
+    expect(stream.requests()).toBe(1);
+    expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await page.screenshot({ path: '../.context/chiron-inline-local-mobile.png' });
+    await expect.poll(() => page.evaluate(() => Object.values(localStorage).some(v => v.includes('Mon brouillon')))).toBe(true);
+    await page.reload();
+    const toggle = page.getByRole('button', { name: 'Ouvrir le coach' }).filter({ visible: true });
+    if (await toggle.count()) await toggle.click();
+    await expect(receipt).toHaveCount(1);
+    await receipt.click();
+    const saved = panel.locator('summary').filter({ hasText: fact.text });
+    await expect(saved).toBeVisible();
+    await saved.click();
+    await expect(panel.getByRole('button', { name: 'Corriger', exact: true })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Résolu', exact: true })).toHaveCount(0);
+    expect(stream.requests()).toBe(1);
   } finally { await stream.close(); }
 });
