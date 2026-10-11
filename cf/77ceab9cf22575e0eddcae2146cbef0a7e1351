@@ -1,0 +1,23 @@
+src/arete/observability/scrubbing.py
+  s_8b20e6e82c7436::t_65cef4b803fb50 118-119
+  s_8b20e6e82c7436::t_250f847cfe8267 75-84
+tests/test_observability_scrubbing.py
+  s_8b20e6e82c7436::t_4dd205a380c772 261
+  s_8b20e6e82c7436::t_50d87e13faf564 254-258,262-272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cf77ceab9cf22575e0eddcae2146cbef0a7e1351",
+  "prompts": {},
+  "sessions": {
+    "s_8b20e6e82c7436": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5a8da930-1134-4282-a86f-cc7fb07ac009",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "Nicolas Edmond <nicolas@mac-1.home>"
+    }
+  }
+}
