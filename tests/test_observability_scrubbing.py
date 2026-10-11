@@ -272,6 +272,23 @@ def test_a_bare_filename_key_with_no_path_separator_is_still_redacted():
     assert key.startswith("[REDACTED:")
 
 
+def test_two_equal_length_redacted_keys_do_not_collide():
+    """Review finding: two distinct dict keys that redact to the exact same
+    marker would collide, silently dropping one of the two entries."""
+    payload = {
+        "plan genou.md": {"content": "a"},
+        "plan coeur.md": {"content": "b"},
+    }
+    scrubbed = scrub(payload)
+    assert len(scrubbed) == 2
+
+
+def test_an_unhashable_value_under_an_enum_key_is_redacted_not_raised():
+    """A non-string value must not reach `in` on the enum frozenset: a set,
+    unlike a str, is unhashable and would raise there."""
+    assert scrub({"status": {1, 2, 3}}) == {"status": "[REDACTED:set]"}
+
+
 def test_allowlisted_key_with_a_nested_value_is_still_walked():
     """Review finding: trusting an allowlisted key's value outright, without
     recursing, would let content hide inside an unexpectedly nested value."""

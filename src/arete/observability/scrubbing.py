@@ -119,13 +119,11 @@ MAX_ALLOWED_VALUE_CHARS = 200
 
 
 def _is_trusted_field(key: Any, value: Any) -> bool:
-    if isinstance(value, (dict, list, tuple)):
-        return False
+    if not isinstance(value, str):
+        return not isinstance(value, (dict, list, tuple)) and key in ALLOWED_KEYS
     if key in ALLOWED_ENUM_VALUES:
         return value in ALLOWED_ENUM_VALUES[key]
-    if key in ALLOWED_KEYS:
-        return len(value) <= MAX_ALLOWED_VALUE_CHARS if isinstance(value, str) else True
-    return False
+    return key in ALLOWED_KEYS and len(value) <= MAX_ALLOWED_VALUE_CHARS
 
 
 #: A schema field name (content, tool_calls, additional_kwargs, ...) is a
@@ -136,9 +134,11 @@ def _is_trusted_field(key: Any, value: Any) -> bool:
 _SAFE_KEY = re.compile(r"^(?:[a-z][a-z0-9_]{0,39}|\d+)$")
 
 
-def _redact_key(key: Any) -> Any:
+def _redact_key(key: Any, index: int) -> Any:
     if isinstance(key, str) and not _SAFE_KEY.match(key):
-        return _redact_string(key)
+        # Position, not content, disambiguates two redacted keys of equal
+        # length: a plain length marker would collide and drop an entry.
+        return f"[REDACTED:{len(key)} chars, item {index}]"
     return key
 
 
@@ -175,10 +175,10 @@ def _walk(value: Any, *, depth: int, nodes_left: list[int]) -> Any:
         return _redact_message(value, depth=depth, nodes_left=nodes_left)
     if isinstance(value, dict):
         return {
-            _redact_key(key): child
+            _redact_key(key, index): child
             if _is_trusted_field(key, child)
             else _walk(child, depth=depth + 1, nodes_left=nodes_left)
-            for key, child in value.items()
+            for index, (key, child) in enumerate(value.items())
         }
     if isinstance(value, (list, tuple)):
         return type(value)(
