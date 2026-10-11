@@ -32,7 +32,7 @@ interface RpeBadgeProps {
 export function RpeBadge({ rpe, showEmpty = false, className }: RpeBadgeProps) {
   if (rpe == null && !showEmpty) return null;
   return (
-    <span className={cn('px-2 py-0.5 rounded text-xs font-mono', RPE_BADGE[rpeTone(rpe)], className)}>
+    <span className={cn('px-2 py-0.5 rounded text-xs font-sans', RPE_BADGE[rpeTone(rpe)], className)}>
       RPE {rpe ?? '—'}
     </span>
   );

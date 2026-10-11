@@ -150,7 +150,7 @@ export function AdminTab() {
       {notice && (
         <p
           role={notice.role}
-          className={cn('text-xs font-mono', notice.role === 'alert' ? 'text-danger-red' : 'text-success-green')}
+          className={cn('text-xs font-sans', notice.role === 'alert' ? 'text-danger-red' : 'text-success-green')}
         >
           {notice.text}
         </p>
@@ -164,7 +164,7 @@ export function AdminTab() {
         <Panel variant="inset" className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="font-mono text-[11px] tracking-wider text-text-muted">
+              <tr className="font-sans text-[11px] tracking-wider text-text-muted">
                 {COLUMNS.map((column) => (
                   <th key={column} scope="col" className="pb-2 pr-4 font-normal whitespace-nowrap">
                     {column}
@@ -183,7 +183,7 @@ export function AdminTab() {
                         <span className="text-text-muted">Aucun compte (athlète {account.athlete_id})</span>
                       ) : (
                         <>
-                          <div className="font-mono text-text-primary whitespace-nowrap">{account.email}</div>
+                          <div className="font-sans text-text-primary whitespace-nowrap">{account.email}</div>
                           {account.name && <div className="text-text-muted">{account.name}</div>}
                         </>
                       )}

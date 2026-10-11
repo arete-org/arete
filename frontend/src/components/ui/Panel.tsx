@@ -7,7 +7,7 @@ interface PanelProps {
   className?: string;
   /** Tailwind text color class for the title (default text-text-muted). */
   titleTone?: string;
-  /** glass = translucent card (pages), inset = darker inner block (settings). */
+  /** glass = primary card surface, inset = quieter nested surface. */
   variant?: 'glass' | 'inset';
   /** Entrance animation delay in seconds (0 disables the stagger). */
   delay?: number;
@@ -34,7 +34,7 @@ export function Panel({
       className={cn(
         variant === 'glass'
           ? 'glass-panel p-3 sm:p-4'
-          : 'p-4 bg-abyss/50 rounded border border-text-muted/20',
+          : 'ui-inset p-4',
         animate && 'animate-fade-up',
         className
       )}
@@ -43,7 +43,7 @@ export function Panel({
       {title && (
         <h3
           className={cn(
-            'font-mono uppercase tracking-wider',
+            'font-sans font-medium tracking-wide',
             variant === 'glass' ? 'text-xs sm:text-sm mb-4' : 'text-xs mb-3',
             titleTone
           )}

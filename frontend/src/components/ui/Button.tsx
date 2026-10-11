@@ -26,7 +26,7 @@ const TINT: Record<ButtonVariant, string> = {
   ghost: 'text-text-muted hover:text-text-primary',
 };
 
-/** Strong button: bg/20 border/50, hover bg/30 (primary actions in modals). */
+/** Variant classes supply fallbacks; index.css owns the solid primary treatment. */
 const STRONG: Record<ButtonVariant, string> = {
   cyan: 'bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30',
   purple: 'bg-neon-purple/20 border border-neon-purple/50 text-neon-purple hover:bg-neon-purple/30',
@@ -71,7 +71,7 @@ export function Button({
       data-strong={strong}
       disabled={disabled || loading}
       className={cn(
-        'ui-button inline-flex items-center justify-center gap-2 rounded font-mono transition-colors duration-150 motion-reduce:transition-none',
+        'ui-button inline-flex items-center justify-center gap-2 rounded font-sans transition-colors duration-150 motion-reduce:transition-none',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         SIZES[size],
         strong ? STRONG[variant] : TINT[variant],

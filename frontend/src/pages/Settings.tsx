@@ -128,7 +128,7 @@ export function SettingsPage() {
     <div className="page-shell bg-void">
       <div className="page-content">
         <header className="flex justify-between items-center mb-4 sm:mb-8 animate-fade-down">
-          <h1 className="page-title text-lg sm:text-2xl font-sans font-bold text-text-primary tracking-wider">RÉGLAGES</h1>
+          <h1 className="page-title">Réglages</h1>
           {hasChanges && (
             <Button
               variant="green"
@@ -144,16 +144,17 @@ export function SettingsPage() {
 
         {/* Below md the tabs become one scrolling row above the panel. */}
         <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-          <nav className="md:w-48 md:shrink-0 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto animate-fade-left">
+          <nav aria-label="Sections des réglages" className="settings-nav md:w-48 md:shrink-0 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto animate-fade-left">
             <div className="flex md:flex-col gap-1">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
+                  aria-current={activeTab === tab.id ? 'page' : undefined}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
                     'shrink-0 md:w-full flex items-center gap-2 md:gap-3 px-3 py-2 md:px-4 md:py-3 rounded',
-                    'text-sm font-mono transition-all text-left whitespace-nowrap',
+                    'text-sm font-sans transition-all text-left whitespace-nowrap',
                     activeTab === tab.id
                       ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30'
                       : 'text-text-muted hover:text-text-secondary hover:bg-abyss'

@@ -15,11 +15,11 @@ const SOURCE_LABEL: Record<NonNullable<TrainingPaces['source']>, string> = {
 function PaceCell({ letter, label, value }: { letter: string; label: string; value: string }) {
   return (
     <div className="rounded border border-text-muted/20 bg-abyss p-2">
-      <p className="text-[11px] font-mono text-text-muted">
+      <p className="text-[11px] font-sans text-text-muted">
         <span className="text-neon-cyan mr-1">{letter}</span>
         {label}
       </p>
-      <p className="text-sm font-mono text-text-primary">{value}</p>
+      <p className="text-sm font-sans text-text-primary">{value}</p>
     </div>
   );
 }
@@ -45,7 +45,7 @@ export function TrainingPacesPanel() {
       {data && paces && (
         <div className="space-y-3">
           <p className="text-sm text-text-secondary">
-            VDOT <span className="font-mono text-neon-cyan">{paces.vdot.toLocaleString('fr-FR')}</span>
+            VDOT <span className="font-sans text-neon-cyan">{paces.vdot.toLocaleString('fr-FR')}</span>
             {data.source && <span className="text-xs text-text-muted"> · {SOURCE_LABEL[data.source]}</span>}
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -61,12 +61,12 @@ export function TrainingPacesPanel() {
           </div>
           {equivalents && (
             <div>
-              <p className="text-xs font-mono text-text-muted uppercase mb-1">Équivalences de course</p>
+              <p className="text-xs font-sans text-text-muted uppercase mb-1">Équivalences de course</p>
               <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
                 {(Object.keys(RACE_LABEL) as RaceKey[]).map((key) => (
                   <div key={key} className="flex justify-between gap-2">
                     <dt className="text-text-muted">{RACE_LABEL[key]}</dt>
-                    <dd className="font-mono text-text-primary">{formatRaceTime(equivalents[key])}</dd>
+                    <dd className="font-sans text-text-primary">{formatRaceTime(equivalents[key])}</dd>
                   </div>
                 ))}
               </dl>

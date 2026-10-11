@@ -30,7 +30,7 @@ export function PlayerSummary() {
   return (
     <Link
       to="/profile"
-      className="flex min-w-0 items-center gap-3 border-b border-text-muted/20 py-3 font-mono"
+      className="flex min-w-0 items-center gap-3 border-b border-text-muted/20 py-3 font-sans"
     >
       <img
         src={characterAsset(p.athlete_class, p.equipped, p.level)}

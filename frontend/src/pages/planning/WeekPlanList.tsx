@@ -42,7 +42,7 @@ export function WeekPlanList({
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className="text-xs font-mono text-neon-cyan hover:underline"
+          className="text-xs font-sans text-neon-cyan hover:underline"
         >
           ← Toute la semaine
         </button>
@@ -63,7 +63,7 @@ export function WeekPlanList({
           <section key={date}>
             <h3
               className={cn(
-                'text-xs font-mono uppercase tracking-wider mb-2 flex items-center gap-2',
+                'text-xs font-sans uppercase tracking-wider mb-2 flex items-center gap-2',
                 isToday ? 'text-neon-cyan' : 'text-text-muted'
               )}
             >
@@ -71,7 +71,7 @@ export function WeekPlanList({
               {isToday && <span className="text-[11px] border border-neon-cyan/40 rounded px-1">aujourd&apos;hui</span>}
             </h3>
             {empty ? (
-              <p className="text-xs font-mono text-text-muted/70 pl-1">
+              <p className="text-xs font-sans text-text-muted/70 pl-1">
                 {isRestDay ? 'Repos prévu' : 'Repos'}
               </p>
             ) : (

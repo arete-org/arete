@@ -140,6 +140,8 @@ do not add tests that merely repeat an implementation. Live model evaluations in
 - `data/`, Garmin tokens, FIT files, `PROG_*.md` and `.context/` stay untracked.
   Secrets live in `.env`; use `.env.example` to discover configuration names.
 - UI text is French. Code, comments and commit messages are English.
+- UI identity follows [design.md](design.md): reuse the shared tokens and components;
+  `font-sans` is interface text, `font-display` is brand/headings, and `font-mono` is code.
 - Workout parsing uses the Lark grammars, not an LLM. A new spoken phrase needs a
   grammar change and an example in `tests/data/dictations.jsonl`.
 - Heart-rate zones come from the athlete's threshold refreshed by Garmin sync.

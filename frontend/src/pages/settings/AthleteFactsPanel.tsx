@@ -36,7 +36,7 @@ function FactRow({ fact, busyId, onSave, onToggle, onDelete, onConfirm }: FactAc
       data-status={fact.status}
       className={cn('rounded border border-text-muted/20 p-3 space-y-2', resolved && 'opacity-50')}
     >
-      <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans">
         <span className="text-neon-purple uppercase">{FACT_KIND_LABEL[fact.kind] ?? fact.kind}</span>
         <span className="text-text-muted">
           depuis le {parseLocalDate(fact.since).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}

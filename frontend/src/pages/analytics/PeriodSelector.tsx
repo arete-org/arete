@@ -20,7 +20,7 @@ export function PeriodSelector({
           aria-pressed={period === p}
           title={PERIOD_LABEL[p]}
           className={cn(
-            'px-3 py-1 text-xs font-mono rounded border transition-colors',
+            'px-3 py-1 text-xs font-sans rounded border transition-colors',
             period === p
               ? 'bg-neon-cyan/20 text-neon-cyan border-neon-cyan/50'
               : 'bg-abyss text-text-secondary border-text-muted/30 hover:text-text-primary hover:border-text-muted/60'

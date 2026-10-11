@@ -161,7 +161,7 @@ function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
         </SettingSwitch>
 
         <div className="border-t border-text-muted/10 pt-3 space-y-2">
-          <p className="text-xs font-mono uppercase tracking-wider text-text-muted">Cet appareil</p>
+          <p className="text-xs font-sans uppercase tracking-wider text-text-muted">Cet appareil</p>
           {hint ? (
             <p className="text-sm text-text-secondary">{hint}</p>
           ) : vapid && !vapidKey ? (

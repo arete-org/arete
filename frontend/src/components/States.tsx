@@ -10,7 +10,7 @@ export function LoadingState({ message = 'CHARGEMENT…' }: LoadingStateProps) {
   return (
     <div role="status" className="flex flex-col items-center justify-center py-12 animate-fade-in">
       <AretePresence size={40} />
-      <span className="mt-4 font-mono text-sm text-neon-cyan">{message}</span>
+      <span className="mt-4 font-sans text-sm text-neon-cyan">{message}</span>
     </div>
   );
 }
@@ -26,13 +26,13 @@ export function ErrorState({ message = 'CONNEXION PERDUE', onRetry }: ErrorState
       <div className="p-4 rounded-full bg-danger-red/20 mb-4">
         <WifiOff className="w-8 h-8 text-danger-red" />
       </div>
-      <span className="font-mono text-sm text-danger-red mb-2">{message}</span>
+      <span className="font-sans text-sm text-danger-red mb-2">{message}</span>
       {onRetry && (
         <button
           type="button"
           onClick={onRetry}
           className={cn(
-            'mt-4 px-4 py-2 font-mono text-sm',
+            'mt-4 px-4 py-2 font-sans text-sm',
             'bg-abyss border border-text-muted/30 rounded',
             'hover:border-neon-cyan/50 hover:text-neon-cyan',
             'transition-all duration-200'
@@ -56,8 +56,8 @@ export function EmptyState({ message = 'AUCUNE DONNÉE', action }: EmptyStatePro
       <div className="p-4 rounded-full bg-shadow mb-4">
         <AlertTriangle className="w-8 h-8 text-text-muted" />
       </div>
-      <span className="font-mono text-sm text-text-muted">{message}</span>
-      {action && <span className="mt-2 text-xs text-text-muted/70 font-mono">{action}</span>}
+      <span className="font-sans text-sm text-text-muted">{message}</span>
+      {action && <span className="mt-2 text-xs text-text-muted/70 font-sans">{action}</span>}
     </div>
   );
 }
@@ -86,7 +86,7 @@ export function SystemAlert({ type, message, onDismiss }: SystemAlertProps) {
         styles.border
       )}
     >
-      <span className={cn('font-mono text-sm', styles.text)}>{message}</span>
+      <span className={cn('font-sans text-sm', styles.text)}>{message}</span>
       {onDismiss && (
         <button type="button" onClick={onDismiss} className={cn('ml-4 text-xs hover:underline', styles.text)}>
           FERMER

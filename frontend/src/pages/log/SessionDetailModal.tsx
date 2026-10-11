@@ -38,7 +38,7 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
   return (
     <Modal open={open} onClose={onClose} className="max-w-2xl max-h-[80vh] overflow-y-auto">
       <ModalHeader
-        title={<span className="font-mono uppercase tracking-wider">DÉTAIL DE LA SÉANCE</span>}
+        title={<span className="font-sans uppercase tracking-wider">DÉTAIL DE LA SÉANCE</span>}
         tone="text-neon-gold"
         onClose={onClose}
       />
@@ -49,7 +49,7 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
         <div className="space-y-6">
           <div className="flex items-center justify-between border-b border-text-muted/20 pb-4">
             <div>
-              <div className="text-sm font-mono text-text-muted">
+              <div className="text-sm font-sans text-text-muted">
                 {parseLocalDate(session.date).toLocaleDateString('fr-FR', {
                   weekday: 'long',
                   day: 'numeric',
@@ -57,14 +57,14 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
                   year: 'numeric',
                 })}
               </div>
-              <div className="text-xl font-mono text-text-primary mt-1">{session.name || 'Séance'}</div>
+              <div className="text-xl font-sans text-text-primary mt-1">{session.name || 'Séance'}</div>
             </div>
             <div className="text-right">
               {session.duration_min && (
-                <div className="text-sm font-mono text-text-muted">{session.duration_min} min</div>
+                <div className="text-sm font-sans text-text-muted">{session.duration_min} min</div>
               )}
               {session.overall_rpe && (
-                <div className={cn('text-sm font-mono mt-1', RPE_TEXT[rpeTone(session.overall_rpe)])}>
+                <div className={cn('text-sm font-sans mt-1', RPE_TEXT[rpeTone(session.overall_rpe)])}>
                   RPE {session.overall_rpe}
                 </div>
               )}
@@ -83,15 +83,15 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
 
           {session.exercises && session.exercises.length > 0 && (
             <div>
-              <h3 className="text-sm font-mono text-text-muted uppercase tracking-wider mb-3">Exercices</h3>
+              <h3 className="text-sm font-sans text-text-muted uppercase tracking-wider mb-3">Exercices</h3>
               <div className="space-y-3">
                 {session.exercises.map((ex, idx) => (
                   <div key={idx} className="p-3 bg-abyss rounded border border-text-muted/20">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-mono text-text-primary">
+                      <span className="font-sans text-text-primary">
                         {ex.exercise?.name || `Exercice n°${ex.exercise_id}`}
                       </span>
-                      <span className="text-xs font-mono text-text-muted">{ex.sets?.length || 0} séries</span>
+                      <span className="text-xs font-sans text-text-muted">{ex.sets?.length || 0} séries</span>
                     </div>
                     {ex.sets && ex.sets.length > 0 && (
                       <div className="flex flex-wrap gap-2">
@@ -99,7 +99,7 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
                           <div
                             key={setIdx}
                             className={cn(
-                              'px-2 py-1 rounded text-xs font-mono',
+                              'px-2 py-1 rounded text-xs font-sans',
                               set.is_warmup ? 'bg-info-blue/20 text-info-blue' : 'bg-neon-gold/10 text-neon-gold'
                             )}
                           >
@@ -118,13 +118,13 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
 
           {session.notes && (
             <div>
-              <h3 className="text-sm font-mono text-text-muted uppercase tracking-wider mb-2">Notes</h3>
-              <p className="text-sm text-text-secondary font-mono">{session.notes}</p>
+              <h3 className="text-sm font-sans text-text-muted uppercase tracking-wider mb-2">Notes</h3>
+              <p className="text-sm text-text-secondary font-sans">{session.notes}</p>
             </div>
           )}
 
           <div className="border-t border-text-muted/20 pt-4">
-            <h3 className="text-sm font-mono text-text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-sans text-text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
               <Link className="w-4 h-4" />
               Synchro Garmin
             </h3>
@@ -133,7 +133,7 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
               <div className="flex items-center justify-between p-3 bg-success-green/10 rounded border border-success-green/30">
                 <div className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-success-green" />
-                  <span className="text-sm font-mono text-success-green">
+                  <span className="text-sm font-sans text-success-green">
                     Liée à l'activité Garmin n°{session.garmin_activity_id}
                   </span>
                 </div>
@@ -149,7 +149,7 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
               </div>
             ) : garminCandidates?.candidates && garminCandidates.candidates.length > 0 ? (
               <div className="space-y-2">
-                <p className="text-xs text-text-muted font-mono mb-2">
+                <p className="text-xs text-text-muted font-sans mb-2">
                   {garminCandidates.candidates.length === 1
                     ? '1 activité Garmin correspondante :'
                     : `${garminCandidates.candidates.length} activités Garmin correspondantes :`}
@@ -164,19 +164,19 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="text-sm font-mono text-text-primary">{candidate.date}</span>
-                        <span className="text-xs font-mono text-text-muted ml-2">
+                        <span className="text-sm font-sans text-text-primary">{candidate.date}</span>
+                        <span className="text-xs font-sans text-text-muted ml-2">
                           ({Math.round(candidate.duration_seconds / 60)} min)
                         </span>
                       </div>
-                      <span className="text-xs font-mono text-neon-cyan uppercase">[LIER]</span>
+                      <span className="text-xs font-sans text-neon-cyan uppercase">[LIER]</span>
                     </div>
                   </button>
                 ))}
               </div>
             ) : (
               <div className="p-3 bg-abyss rounded border border-text-muted/20">
-                <p className="text-sm font-mono text-text-muted text-center">Aucune activité Garmin correspondante</p>
+                <p className="text-sm font-sans text-text-muted text-center">Aucune activité Garmin correspondante</p>
               </div>
             )}
           </div>
@@ -191,8 +191,8 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
 function Stat({ value, label, tone }: { value: number | string; label: string; tone: string }) {
   return (
     <div className="text-center p-2 sm:p-3 bg-abyss rounded border border-text-muted/20">
-      <div className={cn('text-lg sm:text-2xl font-mono', tone)}>{value}</div>
-      <div className="text-[10px] sm:text-xs font-mono text-text-muted uppercase">{label}</div>
+      <div className={cn('text-lg sm:text-2xl font-sans', tone)}>{value}</div>
+      <div className="text-[10px] sm:text-xs font-sans text-text-muted uppercase">{label}</div>
     </div>
   );
 }

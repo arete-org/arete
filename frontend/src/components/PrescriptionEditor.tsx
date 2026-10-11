@@ -1,8 +1,9 @@
+import { inputClasses } from '@/components/ui/Input';
 import { useId } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { documentRequest, type Prescription, type WorkoutStep, type Target } from '@/lib/documents';
 
-const inputClass = 'w-full rounded border border-text-muted/30 bg-void p-2 text-sm';
+const inputClass = inputClasses('cyan', 'text-sm');
 const kinds = { warmup: 'Échauffement', effort: 'Effort', recovery: 'Récupération', cooldown: 'Retour au calme', rest: 'Repos', repeat: 'Répéter un bloc' };
 const units = { seconds: 'Secondes', meters: 'Mètres', reps: 'Répétitions', lap: 'Appui sur Lap' };
 const targets = { pace_sec_km: 'Allure (secondes/km)', heart_rate_bpm: 'FC (bpm)', power_w: 'Puissance (W)', cadence_rpm: 'Cadence (/min)', hr_zone: 'Zone FC (1 à 5)' };

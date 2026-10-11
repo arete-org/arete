@@ -131,13 +131,13 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
         )}
 
         {recorder.autoStopped && !sending && (
-          <p className="text-xs text-warning-orange font-mono">
+          <p className="text-xs text-warning-orange font-sans">
             Enregistrement arrêté à 2 min.
           </p>
         )}
 
         {transcribeMutation.isSuccess && !sending && !failure && (
-          <p className={cn('text-xs font-mono text-success-green flex items-center gap-1')}>
+          <p className={cn('text-xs font-sans text-success-green flex items-center gap-1')}>
             <Check className="w-3 h-3" aria-hidden />
             Dictée transcrite
             {lastDurationMs ? ` · ${clock(lastDurationMs)}` : ''}
@@ -147,7 +147,7 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
         {failure && (
           <p
             role="alert"
-            className="text-xs font-mono text-danger-red flex items-center gap-1"
+            className="text-xs font-sans text-danger-red flex items-center gap-1"
           >
             <AlertCircle className="w-3 h-3 shrink-0" aria-hidden />
             {failure}

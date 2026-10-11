@@ -36,7 +36,7 @@ export function GarminSyncProgress({ progress, isPending, result, error }: {
       <div className={`flex items-center gap-2 text-sm ${color}`} role="status" aria-live="polite">
         <Icon aria-hidden="true" className={`w-4 h-4 shrink-0 ${isPending ? 'animate-spin motion-reduce:animate-none' : ''}`} />
         <span>{label}</span>
-        <span className="ml-auto font-mono text-xs tabular-nums">{percent} %</span>
+        <span className="ml-auto font-sans text-xs tabular-nums">{percent} %</span>
       </div>
       <div role="progressbar" aria-label="Synchronisation Garmin" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-valuetext={label} className="h-2 overflow-hidden rounded-full bg-text-muted/15">
         <div className={`h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none ${failed || partial ? 'bg-neon-gold' : finished ? 'bg-success-green' : 'bg-neon-cyan'}`} style={{ width: `${percent}%` }} />

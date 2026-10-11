@@ -53,7 +53,7 @@ export function PlanCalendarSync({
       aria-label="Plan d’entraînement dans Google Calendar"
       className="space-y-2 border-t border-text-muted/10 pt-3 text-xs"
     >
-      <div className="font-mono text-sm text-text-primary">
+      <div className="font-sans text-sm text-text-primary">
         Plan d’entraînement
       </div>
       <p className="text-text-muted">

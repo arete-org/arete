@@ -97,7 +97,7 @@ export function CoachActivity({ message }: { message: ChatMessage }) {
           Voir l’activité <ChevronRight aria-hidden="true" className="size-3 transition-transform group-open/activity:rotate-90 motion-reduce:transition-none" />
         </summary>
         <div className="mt-1 border-l border-text-muted/20 pl-3">
-          {pending && <p className="mb-2 font-mono text-[11px] text-text-muted" aria-live="off">En cours depuis {elapsed} s · le temps restant n’est pas estimé.</p>}
+          {pending && <p className="mb-2 font-sans text-[11px] text-text-muted" aria-live="off">En cours depuis {elapsed} s · le temps restant n’est pas estimé.</p>}
           {tools.length ? <ToolActivity tools={tools} compact /> : <p className="text-text-muted">Aucune action reçue.</p>}
         </div>
       </details>

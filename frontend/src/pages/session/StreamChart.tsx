@@ -58,7 +58,7 @@ export function StreamChart({ rows, dataKey, label, color, format, reversed, are
   );
   return (
     <figure>
-      <figcaption className="text-xs font-mono text-text-muted uppercase tracking-wider mb-1">{label}</figcaption>
+      <figcaption className="text-xs font-sans text-text-muted uppercase tracking-wider mb-1">{label}</figcaption>
       <ResponsiveContainer width="100%" height={150}>
         {area ? (
           <AreaChart {...common}>

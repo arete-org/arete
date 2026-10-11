@@ -29,7 +29,7 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback;
       return (
         <div className="min-h-[400px] flex flex-col items-center justify-center gap-4 p-8">
-          <div className="text-red-500 font-mono text-sm uppercase tracking-wider">
+          <div className="text-red-500 font-sans text-sm uppercase tracking-wider">
             Erreur d'affichage
           </div>
           <p className="text-text-muted text-sm text-center max-w-md">
@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
-            className="px-4 py-2 text-xs font-mono bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 rounded hover:bg-neon-cyan/20 transition-colors"
+            className="px-4 py-2 text-xs font-sans bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 rounded hover:bg-neon-cyan/20 transition-colors"
           >
             Réessayer
           </button>

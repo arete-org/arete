@@ -37,7 +37,7 @@ export function PlanWeekList({ weeks }: { weeks: PlanWeek[] }) {
       {weeks.map((week) => (
         <li key={week.start}>
           <details className="rounded border border-text-muted/20 bg-abyss/50 group">
-            <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono">
+            <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-sans">
               <span className="text-text-secondary">
                 {shortDate(week.start)} – {weekEnd(week.start)}
               </span>
@@ -52,13 +52,13 @@ export function PlanWeekList({ weeks }: { weeks: PlanWeek[] }) {
             <ul className="border-t border-text-muted/10 px-3 py-2 space-y-1.5">
               {week.sessions.map((s, i) => (
                 <li key={`${s.date}-${i}`} className="text-xs">
-                  <span className="font-mono text-text-muted mr-2">
+                  <span className="font-sans text-text-muted mr-2">
                     {parseLocalDate(s.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })}
                   </span>
                   <span className="text-text-primary">{SESSION_TYPE_LABEL[s.session_type] ?? s.session_type}</span>
-                  {s.duration_min != null && <span className="font-mono text-text-secondary"> · {s.duration_min} min</span>}
-                  {s.distance_km != null && <span className="font-mono text-text-secondary"> · {formatKm(s.distance_km)} km</span>}
-                  {s.hr_zone && <span className="font-mono text-neon-cyan"> · {s.hr_zone}</span>}
+                  {s.duration_min != null && <span className="font-sans text-text-secondary"> · {s.duration_min} min</span>}
+                  {s.distance_km != null && <span className="font-sans text-text-secondary"> · {formatKm(s.distance_km)} km</span>}
+                  {s.hr_zone && <span className="font-sans text-neon-cyan"> · {s.hr_zone}</span>}
                   {s.description && <p className="text-text-muted mt-0.5">{s.description}</p>}
                 </li>
               ))}
@@ -119,7 +119,7 @@ export function PlanPreviewModal({ goal, onClose }: { goal: Goal; onClose: () =>
 
       {preview.data && inputs && (
         <div className="space-y-4">
-          <p className="text-xs font-mono text-text-muted">
+          <p className="text-xs font-sans text-text-muted">
             Départ : {inputs.weekly_minutes_now} min/sem · {inputs.sessions_per_week} séances/sem
             {inputs.rest_days.length > 0 && ` · repos ${inputs.rest_days.map((d) => WEEKDAYS[d]).join(', ')}`}
             {inputs.vdot != null && ` · VDOT ${inputs.vdot.toLocaleString('fr-FR')}`}

@@ -44,7 +44,7 @@ export function ProfilePage() {
   if (!pref.data?.enabled)
     return (
       <div className="page-shell space-y-4">
-        <h1 className="page-title text-2xl font-bold">Mon profil</h1>
+        <h1 className="page-title">Mon profil</h1>
         <p>
           Active la gamification pour retrouver ton personnage, tes succès et
           tes tenues.
@@ -104,9 +104,9 @@ function ActiveProfile() {
   return (
     <div className="page-shell space-y-5">
       <header className="flex items-center justify-between gap-3">
-        <h1 className="page-title font-sans text-2xl font-bold">Mon profil</h1>
+        <h1 className="page-title">Mon profil</h1>
         <Link
-          className="font-mono text-xs text-neon-cyan py-3"
+          className="font-sans text-xs text-neon-cyan py-3"
           to="/settings?tab=gamification"
         >
           Réglages →
@@ -124,7 +124,7 @@ function ActiveProfile() {
             className="size-20 sm:size-28 object-contain"
           />
         </button>
-        <div className="min-w-0 flex-1 font-mono space-y-2">
+        <div className="min-w-0 flex-1 font-sans space-y-2">
           <p className="text-xs sm:text-sm text-neon-cyan uppercase break-words">
             {settings.data?.display_name ?? 'Athlète'} /{' '}
             {classes.find((c) => c.id === p.athlete_class)?.name}
@@ -146,7 +146,7 @@ function ActiveProfile() {
           />
         </div>
       </div>
-      <div className="flex items-center gap-4 sm:gap-20 font-mono">
+      <div className="flex items-center gap-4 sm:gap-20 font-sans">
         <span className="flex items-center gap-2 text-neon-gold font-bold">
           <Diamond size={16} />
           {number(p.shards)}
@@ -175,7 +175,7 @@ function ActiveProfile() {
       )}
       <nav
         aria-label="Onglets du profil"
-        className="flex border-b border-text-muted/20 gap-1 sm:gap-2 pb-5 font-mono text-[11px] sm:text-xs"
+        className="flex border-b border-text-muted/20 gap-1 sm:gap-2 pb-5 font-sans text-[11px] sm:text-xs"
       >
         {tabs.map(([id, short, long]) => (
           <Link
@@ -191,7 +191,7 @@ function ActiveProfile() {
       </nav>
       {tab === 'overview' && (
         <>
-          <section className="rpg-surface p-4 font-mono space-y-3">
+          <section className="rpg-surface p-4 font-sans space-y-3">
             <p className="text-xs text-text-muted">CETTE SEMAINE</p>
             <h3 className="text-lg font-bold text-neon-cyan">
               {p.week.complete
@@ -209,7 +209,7 @@ function ActiveProfile() {
               récupération reste indépendante de ton niveau.
             </p>
           </section>
-          <h3 className="text-xs font-mono text-text-muted">
+          <h3 className="text-xs font-sans text-text-muted">
             DERNIERS ACCOMPLISSEMENTS
           </h3>
           {!p.history.length && (
@@ -221,7 +221,7 @@ function ActiveProfile() {
           <Receipts player={p} compact />
           <button
             onClick={() => setParams({ tab: 'achievements' })}
-            className="text-neon-cyan text-xs font-mono min-h-11"
+            className="text-neon-cyan text-xs font-sans min-h-11"
           >
             Voir tous mes succès →
           </button>
@@ -238,7 +238,7 @@ function ActiveProfile() {
                   size={24}
                 />
                 <div className="flex-1">
-                  <p className="font-mono text-sm">
+                  <p className="font-sans text-sm">
                     {b.sessions} séances accomplies
                   </p>
                   <p className="text-xs text-text-muted mt-1">
@@ -264,7 +264,7 @@ function ActiveProfile() {
                   className="size-16 object-contain"
                 />
                 <div>
-                  <p className="font-mono text-xs text-neon-gold">{r.name}</p>
+                  <p className="font-sans text-xs text-neon-gold">{r.name}</p>
                   <p className="text-xs text-text-muted">Niveau {r.level}</p>
                   <p className="text-[10px] text-text-muted">
                     {p.level >= r.level
@@ -323,7 +323,7 @@ function Receipts({
   });
   const data = offset ? older.data : player;
   return (
-    <div className="font-mono">
+    <div className="font-sans">
       {older.error && (
         <p role="alert" className="text-danger-red">
           {older.error.message}
@@ -409,7 +409,7 @@ function Collection({
               alt={s.name}
               className="w-full aspect-square object-contain"
             />
-            <p className="font-mono text-sm">{s.name}</p>
+            <p className="font-sans text-sm">{s.name}</p>
             <p className="text-xs text-neon-gold">
               {p.equipped === s.id
                 ? 'Équipée'
@@ -535,7 +535,7 @@ function CharacterEditor({
               src={characterAsset(c.id, p.equipped, p.level)}
               className="size-24 mx-auto"
             />
-            <p className="font-mono text-sm">{c.name}</p>
+            <p className="font-sans text-sm">{c.name}</p>
             <p className="text-xs text-text-muted">{c.detail}</p>
           </button>
         ))}
@@ -578,7 +578,7 @@ function ActivityHistory() {
         <Link
           to={`/log?session=${s.id}`}
           key={s.id}
-          className="flex justify-between gap-3 border-b border-text-muted/15 py-3 font-mono text-xs"
+          className="flex justify-between gap-3 border-b border-text-muted/15 py-3 font-sans text-xs"
         >
           <span>
             {s.name ?? 'Force'}
