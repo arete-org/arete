@@ -119,8 +119,13 @@ MAX_ALLOWED_VALUE_CHARS = 200
 
 
 def _is_trusted_field(key: Any, value: Any) -> bool:
+    # Only a plain scalar is ever trusted outright; a dict, list, tuple, or
+    # an object of an unrecognized type must still fall through to _walk,
+    # which is the only place that redacts an object by its class name.
+    if value is None or isinstance(value, (bool, int, float)):
+        return key in ALLOWED_KEYS
     if not isinstance(value, str):
-        return not isinstance(value, (dict, list, tuple)) and key in ALLOWED_KEYS
+        return False
     if key in ALLOWED_ENUM_VALUES:
         return value in ALLOWED_ENUM_VALUES[key]
     return key in ALLOWED_KEYS and len(value) <= MAX_ALLOWED_VALUE_CHARS
@@ -164,6 +169,36 @@ def _redact_message(
     return value.model_copy(update=updates)
 
 
+def _walk_dict(value: dict, *, depth: int, nodes_left: list[int]) -> dict:
+    """Bounded by item, not just by recursion: a huge dict of cheap,
+    trusted-looking entries must still stop at the node budget, the same as
+    one that recurses on every entry."""
+    result: dict[Any, Any] = {}
+    for index, (key, child) in enumerate(value.items()):
+        if nodes_left[0] <= 0:
+            result[...] = REDACTED_TRUNCATED
+            break
+        nodes_left[0] -= 1
+        value_out = (
+            child
+            if _is_trusted_field(key, child)
+            else _walk(child, depth=depth + 1, nodes_left=nodes_left)
+        )
+        result[_redact_key(key, index)] = value_out
+    return result
+
+
+def _walk_sequence(value: list | tuple, *, depth: int, nodes_left: list[int]):
+    result = []
+    for item in value:
+        if nodes_left[0] <= 0:
+            result.append(REDACTED_TRUNCATED)
+            break
+        nodes_left[0] -= 1
+        result.append(_walk(item, depth=depth + 1, nodes_left=nodes_left))
+    return type(value)(result)
+
+
 def _walk(value: Any, *, depth: int, nodes_left: list[int]) -> Any:
     assert depth >= 0
     assert nodes_left[0] >= 0
@@ -174,16 +209,9 @@ def _walk(value: Any, *, depth: int, nodes_left: list[int]) -> Any:
     if isinstance(value, BaseMessage):
         return _redact_message(value, depth=depth, nodes_left=nodes_left)
     if isinstance(value, dict):
-        return {
-            _redact_key(key, index): child
-            if _is_trusted_field(key, child)
-            else _walk(child, depth=depth + 1, nodes_left=nodes_left)
-            for index, (key, child) in enumerate(value.items())
-        }
+        return _walk_dict(value, depth=depth, nodes_left=nodes_left)
     if isinstance(value, (list, tuple)):
-        return type(value)(
-            _walk(item, depth=depth + 1, nodes_left=nodes_left) for item in value
-        )
+        return _walk_sequence(value, depth=depth, nodes_left=nodes_left)
     if isinstance(value, str):
         return _redact_string(value)
     if value is None or isinstance(value, (bool, int, float)):

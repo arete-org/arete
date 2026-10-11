@@ -130,6 +130,17 @@ def test_bound_reached_on_node_count_redacts_instead_of_raising():
     assert REDACTED_TRUNCATED in scrubbed.values()
 
 
+def test_bound_reached_on_many_entries_stops_iterating_early():
+    """Review finding: a dict comprehension always builds every entry
+    regardless of the budget; a trusted-looking value skipped the recursive
+    call that used to be the only place enforcing it. The dict walker must
+    stop the loop itself once the budget runs out, not just cheapen it."""
+    payload = {str(i): i for i in range(scrubbing.WALK_NODES_MAX + 50)}
+    scrubbed = scrub(payload)
+    assert REDACTED_TRUNCATED in scrubbed.values()
+    assert len(scrubbed) <= scrubbing.WALK_NODES_MAX + 1
+
+
 def test_scrub_never_raises_even_on_a_broken_message_copy():
     broken = Mock()
     broken.__class__ = ToolMessage  # isinstance() matches BaseMessage's check...
@@ -137,6 +148,18 @@ def test_scrub_never_raises_even_on_a_broken_message_copy():
     broken.additional_kwargs = {}
     broken.model_copy.side_effect = RuntimeError("boom")
     assert scrub({"output": broken}) == {}
+
+
+def test_an_unrecognized_object_under_an_allowlisted_key_is_still_redacted():
+    """Review finding: an allowlisted key name was enough to skip redaction
+    outright for a non-string value, even an object this walker has never
+    seen, the exact class of leak the unknown-type fallback exists for."""
+
+    class _BoundModel:
+        pass
+
+    scrubbed = scrub({"model": _BoundModel()})
+    assert scrubbed["model"] == "[REDACTED:_BoundModel]"
 
 
 def test_non_dict_payload_passes_through():
