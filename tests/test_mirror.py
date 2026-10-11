@@ -147,6 +147,63 @@ def test_middleware_hydrates_then_flushes_on_a_remote_database(monkeypatch):
     monkeypatch.setattr(mirror, "flush", lambda: calls.append("flush"))
     app = FastAPI()
     app.add_middleware(mirror.MirrorMiddleware)
-    app.get("/ping")(lambda: calls.append("handler") or "pong")
-    assert TestClient(app).get("/ping").status_code == 200
+    app.post("/ping")(lambda: calls.append("handler") or "pong")
+    assert TestClient(app).post("/ping").status_code == 200
     assert calls == ["hydrate", "handler", "flush"]
+
+
+def test_a_read_only_request_skips_the_flush(monkeypatch):
+    """The dashboard's GETs paid a walk and a hash of every mirrored file each."""
+    calls: list[str] = []
+    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))
+    monkeypatch.setattr(mirror, "flush", lambda: calls.append("flush"))
+    app = FastAPI()
+    app.add_middleware(mirror.MirrorMiddleware)
+    app.get("/ping")(lambda: calls.append("handler") or "pong")
+    client = TestClient(app)
+    assert client.get("/ping").status_code == 200
+    assert client.head("/ping").status_code in (200, 405)
+    assert calls == ["hydrate", "handler", "hydrate"]
+
+
+def _remote_app(monkeypatch, path: str, handler) -> TestClient:
+    """A remote database whose mirror writes to the local store fixture."""
+    monkeypatch.setenv("ARETE_DB", "md:arete")
+    app = FastAPI()
+    app.add_middleware(mirror.MirrorMiddleware)
+    app.get(path)(handler)
+    return TestClient(app)
+
+
+def test_a_get_that_writes_the_journal_stores_it(store, tmp_path, monkeypatch):
+    from arete.services.memory import NOTES_LEDGER, append_entry
+
+    _use_data_dir(monkeypatch, tmp_path / "data")
+
+    def write() -> str:  # sync: runs in a worker thread, in a copied context
+        append_entry(NOTES_LEDGER, "Seuil", "176 bpm")
+        return "ok"
+
+    assert _remote_app(monkeypatch, "/write", write).get("/write").status_code == 200
+    stored = _stored(store)
+    assert set(stored) == {"agent/memory/notes.md"}
+    assert b"Seuil : 176 bpm" in stored["agent/memory/notes.md"]
+
+
+def test_a_get_that_refreshes_garmin_tokens_stores_them(store, tmp_path, monkeypatch):
+    """The SDK rewrites the token file when it refreshes, during any request."""
+    from arete.garmin.client import TOKEN_FILE, GarminClient
+
+    _use_data_dir(monkeypatch, tmp_path / "data")
+
+    def status() -> dict:
+        client = GarminClient(config.garmin_tokens_dir)
+        present = client.has_tokens()
+        client.token_dir.mkdir(parents=True, exist_ok=True)
+        client.token_file.write_text('{"refreshed": true}')  # the SDK's dump
+        return {"present": present}
+
+    client = _remote_app(monkeypatch, "/garmin/status", status)
+    assert client.get("/garmin/status").status_code == 200
+    assert _stored(store) == {f"garmin_tokens/{TOKEN_FILE}": b'{"refreshed": true}'}

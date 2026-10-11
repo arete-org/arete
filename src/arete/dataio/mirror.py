@@ -8,7 +8,9 @@ request and back onto disk the first time an instance serves one.
 
 An instance only writes back the files it changed itself (compared with what
 it last read or wrote), so two instances do not overwrite each other's work
-with stale copies. Only the paths listed below are mirrored: anything else in
+with stale copies. A GET, HEAD or OPTIONS request flushes only when a writer
+called ``mark_dirty``: the dashboard's reads skip the walk and the hashing.
+Only the paths listed below are mirrored: anything else in
 the data directory (FIT files, a local database file, plans) is neither read
 nor hashed, and foreign rows already in ``app.files`` stay on the server.
 """
@@ -21,13 +23,17 @@ import logging
 import threading
 from collections.abc import Iterator
 from contextlib import closing
+from contextvars import ContextVar
 from pathlib import Path
-
-from starlette.types import ASGIApp, Receive, Scope, Send
+from typing import TYPE_CHECKING
 
 from arete.config import config
 from arete.dataio.db import connect
 from arete.services.athlete_scope import current_athlete_id, database_athlete_id
+
+if TYPE_CHECKING:
+    # Annotations only: the writers in services/ import this module.
+    from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +59,23 @@ MAX_MIRRORED_ATHLETES = 256
 _known: dict[int, dict[str, str]] = {}
 _hydrated: set[int] = set()
 _lock = threading.Lock()
+
+READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+#: Whether the current request must flush. A one-item list rather than a bool:
+#: a worker thread runs in a copy of the context and must reach the same flag.
+_dirty: ContextVar[list[bool] | None] = ContextVar("mirror_dirty", default=None)
+
+
+def mark_dirty() -> None:
+    """Flush the data directory after the current request: it wrote a mirrored file.
+
+    Writers of mirrored paths call it (Garmin tokens, the coach's ledgers, the
+    sync marker). Methods other than GET/HEAD/OPTIONS flush anyway; outside a
+    request it does nothing.
+    """
+    flag = _dirty.get()
+    if flag is not None:
+        flag[0] = True
 
 
 def _digest(data: bytes) -> str:
@@ -141,7 +164,7 @@ def reset() -> None:
 
 
 class MirrorMiddleware:
-    """Hydrate before the first request, flush after each one.
+    """Hydrate before the first request, flush after each one that can write.
 
     Pure ASGI rather than ``BaseHTTPMiddleware`` so the flush runs once the
     whole body has been sent: the coach writes its memory while it streams.
@@ -168,10 +191,14 @@ class MirrorMiddleware:
         except Exception:
             logger.exception("Could not restore the data directory")
             raise
+        dirty = [scope.get("method") not in READ_ONLY_METHODS]
+        token = _dirty.set(dirty)
         try:
             await self.app(scope, receive, send)
         finally:
-            try:
-                await asyncio.to_thread(flush)
-            except Exception:
-                logger.exception("Could not store the data directory")
+            _dirty.reset(token)
+            if dirty[0]:
+                try:
+                    await asyncio.to_thread(flush)
+                except Exception:
+                    logger.exception("Could not store the data directory")

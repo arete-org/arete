@@ -93,8 +93,9 @@ def build_memory_filesystem(
 ) -> FilesystemMiddleware:
     """Editable current ledgers and read-only archives/invocation documents."""
     root = memory_root()
-    for name in (SESSIONS_LEDGER, NOTES_LEDGER):
-        (root / name).touch(exist_ok=True)
+    with ledger_lock():  # a ledger write: serialized, and flushed by the mirror
+        for name in (SESSIONS_LEDGER, NOTES_LEDGER):
+            (root / name).touch(exist_ok=True)
     middleware = FilesystemMiddleware(
         backend=CompositeBackend(
             default=LedgerBackend(root_dir=root, virtual_mode=True, max_file_size_mb=5),

@@ -23,6 +23,7 @@ from urllib.parse import parse_qsl, urlsplit
 from garminconnect import Garmin
 
 from arete.config import config
+from arete.dataio import mirror
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,9 @@ class GarminClient:
         return self.token_dir / TOKEN_FILE
 
     def has_tokens(self) -> bool:
+        # Every token use starts here, and the SDK rewrites the file whenever it
+        # refreshes the session, even during a GET: have the request flush it.
+        mirror.mark_dirty()
         if self._durable_auth and config.is_remote_db:
             from arete.garmin import token_store
 
@@ -141,6 +145,7 @@ class GarminClient:
         self._save(api)
 
     def _save(self, api: Garmin) -> None:
+        mirror.mark_dirty()
         self.token_dir.mkdir(parents=True, exist_ok=True)
         api.client.dump(str(self.token_dir))
         if self.token_file.exists():
@@ -155,6 +160,7 @@ class GarminClient:
         logger.info("Garmin tokens saved to %s", self.token_file)
 
     def logout(self) -> None:
+        mirror.mark_dirty()
         if self._durable_auth:
             from arete.garmin import auth_state
 

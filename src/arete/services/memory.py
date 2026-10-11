@@ -14,6 +14,7 @@ from pathlib import Path
 from threading import RLock
 
 from arete.config import config
+from arete.dataio import mirror
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,13 @@ _ledger_lock = RLock()
 
 @contextmanager
 def ledger_lock() -> Iterator[None]:
-    """Protect local read/modify/write operations, including nested rotation."""
+    """Protect local read/modify/write operations, including nested rotation.
+
+    Every ledger write holds it, so it also has the request flush the mirror.
+    """
     if not _ledger_lock.acquire(timeout=LEDGER_LOCK_TIMEOUT_SECONDS):
         raise TimeoutError("Timed out waiting for the journal write lock")
+    mirror.mark_dirty()
     try:
         yield
     finally:
