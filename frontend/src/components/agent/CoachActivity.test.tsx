@@ -155,3 +155,12 @@ it('turns the laurel while Chiron thinks and drops it once the answer is written
   rerender(<CoachActivity message={applyEvent(message, { type: 'token', id: 'answer', text: 'Repos.' })} />);
   expect(screen.getAllByRole('status')[0].querySelector('.arete-mark')).toBeNull();
 });
+
+it('lets the inline receipt own a completed memory confirmation while retaining the audit', () => {
+  message = applyEvent(message, { type: 'tool_start', id: 'fact', name: 'remember_fact', args: preview });
+  message = applyEvent(message, { type: 'tool_end', id: 'fact', name: 'remember_fact', status: 'done', output: preview, elapsed_ms: 10 });
+  message = applyEvent(message, { type: 'coach_card', id: 'fact:1', ref_kind: 'fact', ref_id: 1 });
+  render(<CoachActivity message={settleMessage({ ...message, content: 'D’accord.' })} />);
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(screen.getByText('Voir l’activité')).toBeTruthy();
+});

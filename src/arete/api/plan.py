@@ -32,8 +32,10 @@ def get_today() -> dict[str, Any]:
 @router.post("/today/adapt")
 def adapt_today() -> dict[str, Any]:
     """Decide now for today's sessions without a decision (ignores the switch)."""
-    day = athlete_today()
-    return _today(service.adapt_today(day, respect_setting=False), day)
+    raise HTTPException(
+        409,
+        "L’adaptation nécessite maintenant une proposition à valider. Recharge l’application.",
+    )
 
 
 @router.post("/decisions/{decision_id}/revert")

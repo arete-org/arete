@@ -29,7 +29,8 @@ export interface CalendarActionPart {
   kind: 'calendar_action';
   id: string;
 }
-export type ChatPart = ToolPart | TextPart | CalendarActionPart;
+export interface CoachCardPart { kind: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
+export type ChatPart = ToolPart | TextPart | CalendarActionPart | CoachCardPart;
 export interface ChatMessage {
   trace?: TraceReceipt;
   feedback?: MessageFeedback;
@@ -48,6 +49,7 @@ export interface ChatMessage {
 export type StreamEvent =
   | WorkoutUpdate
   | { type: 'calendar_action'; id: string }
+  | { type: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
   | { type: 'token'; id: string; text: string }
   | { type: 'message'; id: string; text: string }
   | { type: 'tool_start'; id: string; name: string; args: Preview }
@@ -98,6 +100,7 @@ export function parseEvent(data: string): StreamEvent | null {
   if (!record(e)) throw new Error('Événement du coach invalide.');
   if (isWorkoutUpdate(e)) return e;
   if (e.type === 'suggestion') return null;
+  if (e.type === 'coach_card' && (e.ref_kind === 'fact' || e.ref_kind === 'followup') && Number.isSafeInteger(e.ref_id) && Number(e.ref_id) > 0 && e.id === `${e.ref_kind}:${e.ref_id}`) return e as StreamEvent;
 
   const identified = typeof e.id === 'string' && e.id.length > 0;
   if (
@@ -173,6 +176,10 @@ export function applyEvent(
   if (event.type === 'done')
     return settleMessage({ ...message, content: event.message.content, trace: event.trace });
   const parts = [...(message.parts ?? [])];
+  if (event.type === 'coach_card') {
+    if (!parts.some(p => p.kind === 'coach_card' && p.id === event.id)) parts.push({ kind: 'coach_card', id: event.id, ref_kind: event.ref_kind, ref_id: event.ref_id });
+    return { ...message, parts };
+  }
   if (event.type === 'calendar_action') {
     if (!parts.some((p) => p.kind === 'calendar_action' && p.id === event.id))
       parts.push({ kind: 'calendar_action', id: event.id });

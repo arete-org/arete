@@ -32,6 +32,7 @@ export function restoreConversation(raw: string | null): ChatMessage[] {
       parts = m.parts.map((p: ChatPart) => {
         if (!p || typeof p.id !== 'string')
           throw new Error('Activité sauvegardée invalide.');
+        if (p.kind === 'coach_card' && (p.ref_kind === 'fact' || p.ref_kind === 'followup') && Number.isSafeInteger(p.ref_id) && p.ref_id > 0 && p.id === `${p.ref_kind}:${p.ref_id}`) return p;
         if (p.kind === 'text' && typeof p.text === 'string') return p;
         if (p.kind === 'calendar_action' && /^[a-f0-9]{32}$/.test(p.id))
           return { kind: 'calendar_action', id: p.id };

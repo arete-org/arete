@@ -38,7 +38,7 @@ const SESSION_WRITE_TOOLS = new Set([
   'delete_planned_session',
   'save_workout',
 ]);
-const FACT_WRITE_TOOLS = new Set(['remember_fact']);
+const FACT_WRITE_TOOLS = new Set(['remember_fact', 'forget_fact']);
 
 export function useCoachThreads(context: PanelPageContext, selectedDocuments = false) {
   const queryClient = useQueryClient();

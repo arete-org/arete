@@ -150,9 +150,14 @@ bounded). Its filesystem also exposes `edit_file` for targeted corrections/remov
 and `delete` for forgetting an entire current ledger (`notes.md` or `sessions.md`).
 Archives and `/attachments/` remain read-only, with an explicit deny for every
 other write path. New entries still use `append_journal`; arbitrary file creation
-is not exposed. Appends, rotation, edits and deletion share a bounded process-local
-lock so overlapping turns in one server cannot overwrite each other's writes.
-Client messages and page metadata cannot change these policies.
+is not exposed. Migration 43 makes the database journal authoritative behind
+the Deep Agents backend. All consumers read through `services/memory.py`;
+transactional writes check revisions and report conflicts without replay.
+A one-time import reads the MotherDuck mirror or local DuckDB ledger files.
+Deletion leaves a tombstone, so an old copy cannot resurrect forgotten content.
+Stop legacy file-writing processes before the first import; there is no automatic
+fallback to those copies after import. Client messages and page metadata cannot
+change these policies.
 
 System skills live in `agent/skills/system/<name>/SKILL.md`, versioned with Git.
 Migration 38 creates the shared `app.system_skills` table (no athlete data).
@@ -196,8 +201,8 @@ exceed the envelope.
 Set it to the actual server/model limit. It is a configured constraint, not a claim
 about a dynamically routed provider. Counting is approximate. There is no
 server-side compaction: the browser sends the last 30 messages of a thread (it
-keeps the whole thread locally) and the journal in `data/agent/memory` is the
-long-term memory. Summarizing per request cost a model request on every turn of a
+keeps the whole thread locally). Durable facts and the transactional journal are
+long-term memory; `data/agent/memory` is only a legacy import source. Summarizing per request cost a model request on every turn of a
 long thread, since nothing persists the summary between requests.
 
 ## Native training operations
@@ -443,6 +448,28 @@ runs a bounded sync after the response and the daily sync runs one too, both
 through `calendar.sync_training_plan`, which rebuilds the provider from the Clerk
 user id stored on the connection.
 See [Google Calendar setup](google-calendar.md) for activation and live testing.
+
+## Proactive coaching
+
+`services/coach_today.py` projects the existing briefing, pending planning
+proposals and session follow-ups for `GET /coach/today`. Displaying or responding
+to these cards makes no model request. Scheduled sync and relevant writes prepare
+deduplicated records. A proposal never changes the plan until the athlete accepts:
+the service checks the session revision, status and Garmin reservations, then
+updates the same session and the decision in one transaction. Structured
+prescriptions stay in chat. The former immediate adaptation endpoint refuses writes.
+
+`services/coach_followup.py` owns one question per day and per session, its
+48-hour expiry, snooze/skip state and revision-checked RPE response. References
+in HTTP/SSE and browser storage contain identifiers; the server reloads the
+authorized record. Recent responses contribute to chat and the weekly review,
+without treating the coach's interpretation as athlete evidence.
+
+The panel exposes sourced memory through one receipt after a successful write.
+Files attach through the composer; a paperclip counter opens their details
+without adding a document section or replacing the draft. Four versioned skills
+cover athlete learning, session debriefs, adjustments and follow-up; their bodies
+are read only when needed.
 
 ## Personal memory
 

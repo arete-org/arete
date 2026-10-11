@@ -48,7 +48,7 @@ export function messageTools(message: ChatMessage): ToolPart[] {
  * one whose reply was lost. Follow-up messages retain the original evidence. */
 export function canRetryMessage(message: ChatMessage): boolean {
   return !message.workouts?.length
-    && !message.parts?.some(part => part.kind === 'tool' || part.kind === 'calendar_action');
+    && !message.parts?.some(part => part.kind === 'tool' || part.kind === 'calendar_action' || part.kind === 'coach_card');
 }
 
 export function hasAnswerText(message: ChatMessage): boolean {

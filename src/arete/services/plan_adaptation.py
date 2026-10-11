@@ -73,8 +73,6 @@ def adapt_today(
 
     day = target_date or athlete_today()
     decisions = PlanDecisionRepository()
-    if respect_setting and not auto_adapt_enabled():
-        return decisions.list_for_day(day)
 
     planned_repo = GarminRepository()
     sessions = planned_repo.list_planned_sessions(
@@ -83,11 +81,7 @@ def adapt_today(
     decided = {d.planned_session_id for d in decisions.list_for_day(day)}
     # Imported prescriptions were explicitly reviewed; summary-field adaptation
     # cannot faithfully rewrite their steps or their source evidence.
-    pending = [
-        s
-        for s in sessions
-        if s.id is not None and s.id not in decided and s.prescription is None
-    ]
+    pending = [s for s in sessions if s.id is not None and s.id not in decided]
     if not pending:
         return decisions.list_for_day(day)
 
@@ -110,7 +104,7 @@ def adapt_today(
                 fitness_goal=facts.fitness_goal,
             )
         )
-        if outcome is None:
+        if outcome is None or outcome.decision == Decision.KEEP:
             continue
         try:
             decision = decisions.create(
@@ -123,34 +117,13 @@ def adapt_today(
                 acwr=facts.acwr,
                 original=_snapshot(session),
                 adapted=outcome.adapted or None,
+                state="discussion" if session.prescription is not None else "pending",
+                session_revision=session.revision,
+                readiness_measured_on=facts.readiness_measured_on,
             )
         except AlreadyDecided:
             continue  # another run claimed it first: its decision stands
-        if outcome.decision in (Decision.EASE, Decision.REPLACE_EASY):
-            # garmin_pushed_at cleared: a copy sent before the change is stale,
-            # the next push replaces it.
-            planned_repo.update_planned_session_fields(
-                session.id,
-                **outcome.adapted,
-                status=SessionStatus.MODIFIED,
-                garmin_pushed_at=None,
-            )
-        elif outcome.decision == Decision.REST:
-            planned_repo.update_planned_session_fields(
-                session.id, status=SessionStatus.SKIPPED, garmin_pushed_at=None
-            )
-        decisions.mark(decision.id, "applied_at")
-        if respect_setting and outcome.decision != Decision.KEEP:
-            # The daily run changed the plan before the athlete looked: say so.
-            from arete.services.notifications import notify
-
-            notify("Séance adaptée", outcome.reason, "/")
-        logger.info(
-            "Plan decision for session %s: %s (%s)",
-            session.id,
-            outcome.decision.value,
-            outcome.reason,
-        )
+        logger.info("Plan proposal %s: %s", decision.id, outcome.decision.value)
     return decisions.list_for_day(day)
 
 
@@ -170,7 +143,11 @@ def revert(decision_id: int) -> PlanDecision:
     decision = decisions.get(decision_id)
     if decision is None:
         raise LookupError(f"decision {decision_id}")
-    if decision.reverted_at is not None or decision.decision == Decision.KEEP.value:
+    if (
+        decision.applied_at is None
+        or decision.reverted_at is not None
+        or decision.decision == Decision.KEEP.value
+    ):
         raise NothingToRevert(f"decision {decision_id}")
     session = GarminRepository().get_planned_session(decision.planned_session_id)
     if session is not None and session.prescription is not None:
@@ -310,3 +287,88 @@ def _withdraw(client: GarminClient, session: PlannedSession) -> None:
         logger.warning(
             "Could not withdraw session %s from Garmin", session.id, exc_info=True
         )
+
+
+class ProposalConflict(ValueError):
+    """A stale proposal must be inspected again, never blindly replayed."""
+
+
+def respond(decision_id: int, revision: int, action: str) -> PlanDecision:
+    """Apply and record together, using the same guards as manual plan edits."""
+    from datetime import timedelta
+
+    import duckdb
+
+    from arete.dataio import plan_changes
+    from arete.dataio.db import transaction
+
+    if action not in {"apply", "keep", "snooze"}:
+        raise ValueError("Action inconnue")
+    repo = PlanDecisionRepository()
+    decision = repo.get(decision_id)
+    if decision is None:
+        raise LookupError("Proposition introuvable")
+    terminal = "applied" if action == "apply" else "dismissed"
+    if action != "snooze" and decision.state == terminal:
+        return decision
+    if decision.revision != revision or decision.state not in {"pending", "discussion"}:
+        raise ProposalConflict("Cette proposition a changé. Recharge-la.")
+    if decision.date != athlete_today():
+        raise ProposalConflict("Cette proposition a expiré.")
+    if action == "apply" and decision.state == "discussion":
+        raise ProposalConflict("Discute des étapes de cette séance avec le coach.")
+    try:
+        with transaction() as con:
+            session = con.execute(
+                "SELECT revision,status,prescription,date FROM app.visible_planned_sessions WHERE id=?",
+                [decision.planned_session_id],
+            ).fetchone()
+            if action == "apply" and (
+                not session
+                or session[0] != decision.session_revision
+                or session[1] not in {"pending", "modified"}
+                or session[2]
+                or session[3] != decision.date
+            ):
+                raise ProposalConflict(
+                    "La séance a changé : examine une nouvelle proposition."
+                )
+            state = decision.state if action == "snooze" else terminal
+            claimed = con.execute(
+                "UPDATE app.plan_decisions SET state=?,revision=revision+1,snoozed_until=?,applied_at=CASE WHEN ?='applied' THEN now() ELSE applied_at END "
+                "WHERE user_id=getvariable('arete_athlete_id') AND deleted_at IS NULL AND id=? AND revision=? AND state IN ('pending','discussion') RETURNING id",
+                [
+                    state,
+                    athlete_today() + timedelta(days=1) if action == "snooze" else None,
+                    state,
+                    decision_id,
+                    revision,
+                ],
+            ).fetchone()
+            if claimed is None:
+                raise ProposalConflict("Cette proposition vient de changer.")
+            if action == "apply":
+                fields = dict(decision.adapted or {})
+                fields["status"] = (
+                    SessionStatus.SKIPPED
+                    if decision.decision == Decision.REST
+                    else SessionStatus.MODIFIED
+                )
+                fields["garmin_pushed_at"] = None
+                changed = GarminRepository().update_planned_session_fields(
+                    decision.planned_session_id,
+                    expected_revision=decision.session_revision,
+                    connection=con,
+                    **fields,
+                )
+                if not changed:
+                    raise ProposalConflict("La séance a changé.")
+    except duckdb.TransactionException as exc:
+        raise ProposalConflict(
+            "Modification concurrente : recharge la proposition."
+        ) from exc
+    if action == "apply":
+        plan_changes.touch()
+    result = repo.get(decision_id)
+    assert result is not None
+    return result

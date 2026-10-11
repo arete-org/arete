@@ -294,7 +294,7 @@ def test_answer_uses_no_auxiliary_model_even_for_old_clients(
             calls.append(True)
             return super()._generate(*args, **kwargs)
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     monkeypatch.setattr(
         "arete.coaching.build_chat_model",
         lambda **kwargs: Model(

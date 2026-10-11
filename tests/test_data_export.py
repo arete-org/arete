@@ -58,6 +58,7 @@ def stored():
         [SECRETS[2], SECRETS[2]],
     )
     con.close()
+    memory_root().mkdir(parents=True, exist_ok=True)
     archive = memory_root() / ARCHIVE
     archive.write_text("## 2001-01-10 — Footing\nBonnes jambes.\n", encoding="utf-8")
     yield

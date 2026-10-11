@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useRef, useState, type ReactNode } from 'react';
+import type { CoachReference } from '@/lib/coachToday';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigation, ErrorBoundary } from '@/components';
@@ -42,6 +43,17 @@ function App() {
   // Panel state lives above the router so the drawer survives page navigation
   // (the agent's panel_context follows the route, the conversation too).
   const [agentOpen, setAgentOpen] = useState(false);
+  const [coachReference, setCoachReference] = useState<CoachReference | null>(null);
+  useEffect(() => {
+    const discuss = (event: Event) => {
+      const reference = (event as CustomEvent<CoachReference>).detail;
+      if (!reference || !['proposal', 'followup'].includes(reference.kind) || !Number.isSafeInteger(reference.id)) return;
+      setCoachReference(reference);
+      setAgentOpen(true);
+    };
+    window.addEventListener('arete:coach-discuss', discuss);
+    return () => window.removeEventListener('arete:coach-discuss', discuss);
+  }, []);
   const [agentBusy, setAgentBusy] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const closeAgent = useCallback(() => {
@@ -122,6 +134,8 @@ function App() {
               </main>
 
               <AgentSidePanel
+                reference={coachReference}
+                onClearReference={() => setCoachReference(null)}
                 open={agentOpen}
                 onClose={closeAgent}
                 onBusyChange={setAgentBusy}
