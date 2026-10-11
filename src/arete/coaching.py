@@ -11,7 +11,7 @@ from datetime import date
 from functools import lru_cache, wraps
 from pathlib import Path
 from threading import Lock
-from typing import Literal
+from typing import Any, Literal
 
 from arete.agent.backends.memory import build_memory_filesystem
 from arete.agent.backends.skills import SystemSkillsBackend
@@ -238,7 +238,7 @@ def run_feedback_batch(facts: str, count: int) -> str:
     )
 
 
-def write_sync_feedback(session_ids: list[int]) -> dict[str, int]:
+def write_sync_feedback(session_ids: list[int]) -> dict[str, Any]:
     """Feedback on the sessions a sync imported, in one model request."""
     return coaching_rules.sync_feedback(session_ids, produce=run_feedback_batch)
 

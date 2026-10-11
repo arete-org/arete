@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ActivityDetail } from '@/types';
 import { analyticsApi } from '@/lib/api';
 import { SessionDetailPage } from './SessionDetail';
 
-vi.mock('@/lib/api', () => ({ analyticsApi: { getSessionDetail: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ analyticsApi: { getSessionDetail: vi.fn(), updateSession: vi.fn() } }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 const session: ActivityDetail['session'] = {
   id: 12,
@@ -140,4 +143,31 @@ it('rejects an id that is not a number without asking the server', () => {
   renderAt('/log/sessions/abc');
   expect(screen.getByText('SÉANCE INTROUVABLE')).toBeTruthy();
   expect(analyticsApi.getSessionDetail).not.toHaveBeenCalled();
+});
+
+it('asks for the RPE in one tap from the notification link, then hides', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({ ...detail, session: { ...session, rpe: null } });
+  vi.mocked(analyticsApi.updateSession).mockResolvedValue({ success: true });
+  renderAt('/log/sessions/12?rpe=1');
+  const first = await screen.findByRole('button', { name: '1 — très facile' });
+  await waitFor(() => expect(document.activeElement).toBe(first));
+  fireEvent.click(screen.getByRole('button', { name: '7 — très dur' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Effort ressenti' })).toBeNull());
+  expect(analyticsApi.updateSession).toHaveBeenCalledWith(12, { rpe: 7 });
+});
+
+it('keeps the RPE picker away once rated or dismissed', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue(detail); // rpe 8
+  renderAt('/log/sessions/12');
+  await screen.findByText('Fractionné 5×1000');
+  expect(screen.queryByRole('region', { name: 'Effort ressenti' })).toBeNull();
+  cleanup();
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({ ...detail, session: { ...session, rpe: null } });
+  renderAt('/log/sessions/12');
+  fireEvent.click(await screen.findByRole('button', { name: 'Ne pas noter cette séance' }));
+  expect(screen.queryByRole('region', { name: 'Effort ressenti' })).toBeNull();
+  cleanup();
+  renderAt('/log/sessions/12');
+  await screen.findByText('Fractionné 5×1000');
+  expect(screen.queryByRole('region', { name: 'Effort ressenti' })).toBeNull();
 });

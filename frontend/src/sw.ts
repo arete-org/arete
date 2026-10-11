@@ -59,7 +59,9 @@ self.addEventListener('notificationclick', (event) => {
       const open = windows.find((w) => new URL(w.url).origin === target.origin);
       if (open) {
         await open.focus();
-        if (new URL(open.url).pathname !== target.pathname) await open.navigate(target.href);
+        // Compare the query too: ?rpe=1 on the page already open must still apply.
+        const current = new URL(open.url);
+        if (current.pathname + current.search !== target.pathname + target.search) await open.navigate(target.href);
         return;
       }
       await self.clients.openWindow(target.href);

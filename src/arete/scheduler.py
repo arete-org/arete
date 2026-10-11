@@ -87,6 +87,7 @@ def daily_sync() -> dict[str, str]:
     status: dict[str, str] = {}
     imported = 0  # new sessions from any source, for the notification
     synced_ids: list[int] = []  # Garmin's, for the coach's feedback
+    feedback: list[dict] | None = None  # stored by this run; None = not run
 
     from arete.garmin.client import GarminClient
 
@@ -165,27 +166,24 @@ def daily_sync() -> dict[str, str]:
     # Before the briefing that reads the journal the feedback files; after the
     # bounded calendar run, so a slow model cannot starve it.
     if synced_ids:
-        status["feedback"] = write_sync_feedback(synced_ids)
+        status["feedback"], feedback = write_sync_feedback(synced_ids)
 
-    if imported:
-        from arete.services.notifications import notify
-
-        notify(
-            "Arete",
-            f"{imported} séance(s) importée(s)",
-            "/log?tab=cardio",
-            kind="imports",
-        )
+    # Garmin sessions are announced with their feedback, once; the rest (Strava,
+    # or a failed feedback run) by the import count.
+    unannounced = imported - (len(synced_ids) if feedback is not None else 0)
+    if (announced := announce_sync(feedback or [], unannounced)) is not None:
+        status["notification"] = announced
     logger.info("Daily sync: %s", status)
     _last_status[current_athlete_id()] = dict(status)
     return status
 
 
-def write_sync_feedback(session_ids: list[int]) -> str:
+def write_sync_feedback(session_ids: list[int]) -> tuple[str, list[dict] | None]:
     """The coach's word on the sessions the sync imported. Never raises.
 
     One model request for the whole batch (``coaching.write_sync_feedback``);
-    the rule text stands in for a failed or unusable answer.
+    the rule text stands in for a failed or unusable answer. Returns the
+    status and the feedback stored by this run (None when the run failed).
     """
     try:
         from arete.coaching import write_sync_feedback as write
@@ -193,8 +191,40 @@ def write_sync_feedback(session_ids: list[int]) -> str:
         outcome = write(session_ids)
     except Exception as e:  # noqa: BLE001 - background job must not die
         logger.warning("Sync feedback failed: %s", e)
-        return f"failed: {e}"
-    return f"{outcome['sessions']} sessions ({outcome['agent']} by the coach)"
+        return f"failed: {e}", None
+    status = f"{outcome['sessions']} sessions ({outcome['agent']} by the coach)"
+    return status, list(outcome.get("written", []))
+
+
+def announce_sync(feedback: list[dict], unannounced: int) -> str | None:
+    """At most one notification per sync: the coach's sentence, else the count.
+
+    ``feedback`` is what this run stored, so a session is announced once: a
+    later sync finds its feedback and writes none. No model request here; the
+    sentence was already paid for. The body stays short for the lock screen.
+    """
+    from arete.services.notifications import first_sentence, notify
+
+    if feedback:
+        latest = max(feedback, key=lambda f: (f["date"], f["session_id"]))
+        url = f"/log/sessions/{latest['session_id']}?rpe=1"
+        if len(feedback) == 1:
+            title, body = "Séance analysée", first_sentence(latest["text"])
+        else:
+            prefix = f"{len(feedback)} séances analysées. "
+            title = "Séances analysées"
+            body = prefix + first_sentence(latest["text"], 160 - len(prefix))
+        result = notify(title, body, url, kind="post_session")
+    elif unannounced > 0:
+        result = notify(
+            "Arete",
+            f"{unannounced} séance(s) importée(s)",
+            "/log?tab=cardio",
+            kind="imports",
+        )
+    else:
+        return None  # nothing new: no notification
+    return result.skipped_reason or f"{result.sent} sent"
 
 
 def write_daily_briefing() -> str:
