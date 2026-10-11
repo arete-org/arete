@@ -121,6 +121,15 @@ class SlackMessage:
         return f"slack:{self.team}:{self.channel}:{self.thread_ts}"
 
 
+@dataclass
+class SlackPreparation:
+    produce: Producer
+    product: bool = False
+    private: bool = False
+    account_id: str = ""
+    finalize: Callable[[], None] | None = None
+
+
 class SlackError(RuntimeError):
     """An operating error, without token or message contents."""
 
@@ -215,11 +224,17 @@ def finish(message: SlackMessage, status: str, *, release: bool) -> None:
 class SlackClient:
     def __init__(self, http: httpx.AsyncClient) -> None:
         self.http = http
+        self.author_timezone = "Europe/Paris"
 
     async def call(self, method: str, payload: dict) -> dict:
         # No SDK retries: an uncertain chat.postMessage must not be replayed.
         url = f"https://slack.com/api/{method}"
-        if method in ("conversations.replies", "users.info"):
+        if method in (
+            "conversations.replies",
+            "users.info",
+            "users.list",
+            "conversations.members",
+        ):
             response = await self.http.get(url, params=payload)
         else:
             response = await self.http.post(url, json=payload)
@@ -304,6 +319,7 @@ class SlackClient:
             or user.get("is_email_confirmed") is False
         ):
             return None
+        self.author_timezone = user.get("tz") or "Europe/Paris"
         email = (user.get("profile") or {}).get("email")
         return email if isinstance(email, str) and email.strip() else None
 
@@ -582,13 +598,28 @@ async def resolve(message: SlackMessage, *, client: SlackClient) -> int | None:
         if email
         else None
     )
+    if athlete_id is not None and email:
+        from arete.services.slack_identity import link
+
+        zone = getattr(client, "author_timezone", "Europe/Paris")
+        await to_thread.run_sync(
+            link,
+            message.team,
+            message.user,
+            email,
+            zone if isinstance(zone, str) else "Europe/Paris",
+        )
     if athlete_id is None:
         await client.reply(message, UNLINKED_MESSAGE)
     return athlete_id
 
 
 async def dispatch(
-    message: SlackMessage, *, client: SlackClient, produce: Producer
+    message: SlackMessage,
+    *,
+    client: SlackClient,
+    produce: Producer,
+    prepare: Callable[..., Awaitable[SlackPreparation]] | None = None,
 ) -> None:
     """Answer one message; the caller holds the author's athlete scope."""
     try:
@@ -606,18 +637,29 @@ async def dispatch(
     completed_coach = False
     output: SlackStream | None = None
     delivery_status = "failed"
+    prepared: SlackPreparation | None = None
     try:
         async with asyncio.timeout(MAX_JOB_SECONDS):
             if not message.text.strip() or len(message.text) > MAX_MESSAGE_CHARS:
                 raise HistoryError("Envoie un message texte de 1 à 16 000 caractères.")
-            # A channel answer is public only with the athlete's consent.
+            history = await client.history(message)
+            prepared = (
+                await prepare(history, message, client)
+                if prepare
+                else SlackPreparation(produce)
+            )
+            produce = prepared.produce
+            # Product coordination is public; athlete coaching still requires consent.
             visibility: Visibility = (
                 "public"
                 if message.in_channel
-                and await to_thread.run_sync(slack_athletes.public_replies)
+                and not prepared.private
+                and (
+                    prepared.product
+                    or await to_thread.run_sync(slack_athletes.public_replies)
+                )
                 else "private"
             )
-            history = await client.history(message)
             destination = message
             if message.in_channel and visibility == "private":
                 channel = await client.open_dm(message.user)
@@ -626,6 +668,12 @@ async def dispatch(
                 )
                 destination = replace(message, channel=channel, thread_ts=root)
                 await to_thread.run_sync(set_delivery_thread, message, destination)
+            if prepared.private:
+                from arete.services.slack_identity import mark_private
+
+                await to_thread.run_sync(
+                    mark_private, destination.thread_id, prepared.account_id
+                )
             output = SlackStream(client, destination)
             await output.start()
             await client.react(message)
@@ -634,7 +682,12 @@ async def dispatch(
             completed_coach = True
             await output.finish(answer)
             if message.in_channel and visibility == "private":
-                await client.reply(message, PRIVATE_NOTE.format(user=message.user))
+                await client.reply(
+                    message,
+                    "Je t’ai répondu en DM administrateur."
+                    if prepared.private
+                    else PRIVATE_NOTE.format(user=message.user),
+                )
         delivery_status = "sent"
     except HistoryError as exc:
         delivery_status = "rejected"
@@ -655,6 +708,8 @@ async def dispatch(
                 logger.exception("Slack failure display failed: %s", message.key)
         raise
     finally:
+        if prepared and prepared.finalize:
+            prepared.finalize()
         if output is not None:
             await output.cleanup()
         # Keep admission locked through status cleanup: an older run must not
