@@ -1,11 +1,12 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ErrorState } from '@/components/States';
 import { authApi, type AuthConfig } from '@/lib/api';
 import { AUTH_DISABLED, AuthStateContext } from './authState';
+import { buildAuthConfig } from './buildConfig';
 import { GateScreen, GateSpinner } from './GateScreen';
 
-// The Clerk SDK is only fetched when the server asks for sign-in.
+// The Clerk SDK is only fetched when sign-in is on (main.tsx preloads it when the build says so).
 const ClerkGate = lazy(() => import('./ClerkGate'));
 
 // Without sign-in the server's require_admin resolves the instance owner.
@@ -25,15 +26,24 @@ interface AuthGateProps {
 }
 
 /**
- * Decides, from `GET /api/auth/config`, whether the app renders as before or
- * behind Clerk's sign-in. Mounted above the query client so the sign-in page
- * needs nothing else.
+ * Decides whether the app renders as before or behind Clerk's sign-in: from
+ * the build when it carries the configuration (no backend round trip before
+ * Clerk starts), from `GET /api/auth/config` otherwise. Mounted above the query
+ * client so the sign-in page needs nothing else.
  */
 export function AuthGate({ children, onSessionEnd }: AuthGateProps) {
-  const [state, setState] = useState<ConfigState>({ status: 'loading' });
+  const [built] = useState(buildAuthConfig);
+  const [state, setState] = useState<ConfigState>(
+    built ? { status: 'ready', config: built } : { status: 'loading' }
+  );
   const [attempt, setAttempt] = useState(0);
+  const keyMatchesServer = useMemo(
+    () => (built ? () => serverExpects(built.publishable_key) : undefined),
+    [built]
+  );
 
   useEffect(() => {
+    if (built) return;
     let cancelled = false;
     authApi.config().then(
       (config) => {
@@ -46,9 +56,13 @@ export function AuthGate({ children, onSessionEnd }: AuthGateProps) {
     return () => {
       cancelled = true;
     };
-  }, [attempt]);
+  }, [attempt, built]);
 
   const retry = () => {
+    if (built) {
+      window.location.reload(); // a build without its key stays so until redeployed
+      return;
+    }
     setState({ status: 'loading' });
     setAttempt((n) => n + 1);
   };
@@ -76,10 +90,26 @@ export function AuthGate({ children, onSessionEnd }: AuthGateProps) {
   return (
     <ErrorBoundary>
       <Suspense fallback={<GateSpinner />}>
-        <ClerkGate publishableKey={config.publishable_key} onSessionEnd={onSessionEnd}>
+        <ClerkGate
+          publishableKey={config.publishable_key}
+          onSessionEnd={onSessionEnd}
+          keyMatchesServer={keyMatchesServer}
+        >
           {children}
         </ClerkGate>
       </Suspense>
     </ErrorBoundary>
+  );
+}
+
+/**
+ * Whether the server verifies sessions of the Clerk instance this build signs
+ * into. Asked only after the server refused a session: a build key from another
+ * instance is a misconfiguration, not an ended session. Unreachable: assume yes.
+ */
+function serverExpects(publishableKey: string | null): Promise<boolean> {
+  return authApi.config().then(
+    (server) => !server.enabled || server.publishable_key === publishableKey,
+    () => true
   );
 }

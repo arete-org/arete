@@ -2,7 +2,8 @@ import { claimPushDevice } from './pushSession';
 /**
  * Session tokens for the API transports.
  *
- * Sign-in is optional server-side (`GET /api/auth/config`). When it is on, the
+ * Sign-in is optional server-side (`GET /api/auth/config`, or the build's
+ * `VITE_AUTH_ENABLED`, see components/auth/buildConfig.ts). When it is on, the
  * auth gate registers Clerk's `getToken` here and every `/api/` request carries
  * `Authorization: Bearer <token>`; when it is off nothing is registered and the
  * requests go out exactly as before. The Clerk SDK itself never enters this

@@ -28,6 +28,33 @@ Environment variables live in the Vercel project, per environment. `ARETE_DB`
 differs between Production and Preview, and `dataio/db.py` refuses to open
 `md:arete` from a preview deployment. Names are listed in `.env.example`.
 
+## Sign-in in the browser
+
+The browser decides whether to show Clerk's sign-in before it has heard from
+the API: on a cold instance `GET /api/auth/config` took seconds, during which
+Clerk had not even started downloading. Two build-time variables carry the
+answer instead, set in the Vercel project for each environment whose server runs
+`ARETE_AUTH=clerk`:
+
+```dotenv
+VITE_AUTH_ENABLED=true
+VITE_CLERK_PUBLISHABLE_KEY=<the same value as CLERK_PUBLISHABLE_KEY>
+```
+
+- **Build-time.** Vite bakes them into the bundle when Vercel builds the
+  deployment: changing them takes a new deployment, not a restart. Each
+  environment takes the key of its own Clerk instance; moving Production to its
+  own instance changes this key together with the server's.
+- **Only `true` counts.** Unset (a self-hosted or Docker build) or any other
+  value, the browser asks `/api/auth/config` as before. The build can add
+  sign-in, never remove it, and the API refuses unauthenticated requests
+  whatever the bundle says.
+- **Mistakes.** `VITE_AUTH_ENABLED=true` without a key shows *AUTHENTIFICATION
+  MAL CONFIGURÉE*. A key from another Clerk instance than the server's lets
+  people sign in, then the server refuses the session; the browser only then
+  asks `/api/auth/config`, sees the different key and shows the same error
+  instead of signing out in a loop.
+
 ## LangSmith agent tracing
 
 The shared coach already traces chat, briefings, feedback and weekly reviews.

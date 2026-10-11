@@ -35,6 +35,12 @@ interface ClerkGateProps {
   publishableKey: string;
   /** Runs when a session ends, before the page reloads. */
   onSessionEnd?: () => void;
+  /**
+   * With a build-time key only: resolves false when the server expects another
+   * Clerk instance, so its 401 shows a misconfiguration instead of signing out
+   * into the same refusal again.
+   */
+  keyMatchesServer?: () => Promise<boolean>;
   children: ReactNode;
 }
 
@@ -43,10 +49,12 @@ interface ClerkGateProps {
  * account check and the account menu. AuthGate loads this module lazily, only
  * when the server requires sign-in, so the SDK stays out of the main bundle.
  */
-export default function ClerkGate({ publishableKey, onSessionEnd, children }: ClerkGateProps) {
+export default function ClerkGate({ publishableKey, onSessionEnd, keyMatchesServer, children }: ClerkGateProps) {
   return (
     <ClerkProvider publishableKey={publishableKey} localization={frFR} appearance={appearance}>
-      <SessionGate onSessionEnd={onSessionEnd}>{children}</SessionGate>
+      <SessionGate onSessionEnd={onSessionEnd} keyMatchesServer={keyMatchesServer}>
+        {children}
+      </SessionGate>
     </ClerkProvider>
   );
 }
@@ -62,14 +70,14 @@ type Account =
   | { status: 'refused'; detail: string | null }
   | { status: 'ready'; me: AuthMe };
 
-function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishableKey'>) {
+function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGateProps, 'publishableKey'>) {
   const { isLoaded, isSignedIn, sessionId, getToken, signOut } = useAuth();
   const { user } = useUser();
   const [attempt, setAttempt] = useState(0);
   // The account answer belongs to the session and attempt it was asked for; any other is still loading.
   const key = `${sessionId ?? ''}#${attempt}`;
   const [account, setAccount] = useState<{ key: string; value: Account } | null>(null);
-  const [leaving, setLeaving] = useState<'no' | 'yes' | 'failed'>('no');
+  const [leaving, setLeaving] = useState<'no' | 'yes' | 'failed' | 'misconfigured'>('no');
   const leavingRef = useRef(false);
 
   // Clerk's getToken may change identity; the registry gets one function that reads the latest.
@@ -133,9 +141,11 @@ function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishab
         if (leavingRef.current) return;
         leavingRef.current = true;
         setLeaving('yes');
-        leave().catch(() => setLeaving('failed'));
+        (keyMatchesServer?.() ?? Promise.resolve(true))
+          .then((matches) => (matches ? leave() : setLeaving('misconfigured')))
+          .catch(() => setLeaving('failed'));
       }),
-    [leave]
+    [leave, keyMatchesServer]
   );
 
   const grantGoogleScopes = useCallback(
@@ -174,6 +184,19 @@ function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishab
 
   if (!isLoaded) return <GateSpinner />;
   if (!isSignedIn) return <SignInPage />;
+  if (leaving === 'misconfigured') {
+    return (
+      <GateScreen>
+        <ErrorState
+          message="AUTHENTIFICATION MAL CONFIGURÉE"
+          onRetry={() => {
+            setLeaving('yes');
+            leave().catch(() => setLeaving('failed'));
+          }}
+        />
+      </GateScreen>
+    );
+  }
   if (leaving === 'failed') {
     return (
       <GateScreen>
