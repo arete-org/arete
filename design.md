@@ -107,3 +107,33 @@ La vérification locale comprend `make check`, les scénarios Playwright existan
 et `frontend/browser-tests/design-system.spec.ts` pour les huit thèmes à 390, 430,
 768 et 1440 px : polices calculées, couleurs des aperçus, focus clavier, absence de
 débordement horizontal et retour à la préférence enregistrée après rechargement.
+
+## Chiron : chat compact optionnel
+
+La [maquette compacte approuvée](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=62-143)
+et ses [états de croissance et de changement de mode](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=82-324)
+prolongent la même identité. Le panneau latéral classique reste le mode par défaut.
+Dans « Options du coach », « Chat flottant » active une préférence locale au navigateur ;
+« Panneau latéral classique » permet de revenir au mode précédent, même pendant une réponse.
+Si le stockage est indisponible, le choix fonctionne pour la session avec une explication visible.
+
+- Chat flottant de 360 px, à 24 px du bas et du bord droit sur bureau. Sur mobile,
+  marges latérales de 12 px, dégagement de la navigation, prise en compte du clavier visuel.
+- Hauteur naturelle : la réponse fait grandir la fenêtre jusqu’à 560 px, plafonnée à
+  65 % de la hauteur mobile et à l’espace visible. Ensuite, seul le fil défile.
+  Lire les anciens messages suspend le suivi ; « Derniers messages » le rétablit.
+- Surface à 90 % d’opacité et flou de 18 px ; texte opaque, bordure fine et rayon de 16 px.
+  Cette transparence est réservée au chat flottant, les autres surfaces restent opaques.
+- En-tête réduit au laurier, à Chiron en Cormorant, au contexte et aux commandes.
+  Deux amorces fixes liées à la page ; aucun appel de suggestion supplémentaire.
+- Champ de saisie, ajout de fichier et envoi sur une ligne ; croissance du brouillon
+  plafonnée à 144 px. Le contour de focus appartient au composite, sans rectangle imbriqué.
+- Un même propriétaire de conversation et les mêmes composants de saisie et de documents
+  servent les deux modes. Le changement de mode ne relance pas de requête et conserve
+  le brouillon, les pièces jointes et la réponse en cours.
+
+Propriétaires : `useCoachDisplay` pour la préférence locale, `App` pour l’espace réservé
+et le lanceur, `AgentSidePanel` pour la présentation, `index.css` pour les surfaces et limites.
+Les contrôles Playwright de `chiron.spec.ts` utilisent un flux SSE local contrôlé pour
+vérifier la croissance, le plafond, le défilement manuel et le changement de mode en cours
+de réponse, puis le retour au choix sauvegardé après rechargement.
