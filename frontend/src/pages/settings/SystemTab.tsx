@@ -146,11 +146,11 @@ export function SystemTab() {
             <div className="p-3 rounded border border-success-green/30">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-success-green font-mono flex items-center gap-2">
+                  <div className="text-sm text-success-green font-sans flex items-center gap-2">
                     <CheckCircle className="w-4 h-4" />
                     {syncStatus.user_email ? `Connecté en tant que ${syncStatus.user_email}` : 'Connecté'}
                   </div>
-                  <div className="text-xs text-text-muted mt-1 font-mono">
+                  <div className="text-xs text-text-muted mt-1 font-sans">
                     Dernière sync : {syncStatus.last_sync ? new Date(syncStatus.last_sync).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }) : 'jamais'}
                     {' · '}
                     Activités : {syncStatus.activities_synced}
@@ -176,8 +176,8 @@ export function SystemTab() {
 
             <div className="p-3 rounded border border-neon-purple/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="text-sm text-neon-purple font-mono">Données santé (VFC, sommeil, batterie corporelle)</div>
-                <div className="text-xs text-text-muted mt-1 font-mono">
+                <div className="text-sm text-neon-purple font-sans">Données santé (VFC, sommeil, batterie corporelle)</div>
+                <div className="text-xs text-text-muted mt-1 font-sans">
                   {healthStatus?.days_stored
                     ? `${healthStatus.days_stored} jours stockés, dernier le ${healthStatus.last_date}`
                     : 'Aucune donnée santé pour le moment'}
@@ -196,7 +196,7 @@ export function SystemTab() {
         ) : (
           <div className="p-4 rounded border border-text-muted/30 text-center">
             <XCircle className="w-6 h-6 text-danger-red mx-auto mb-2" />
-            <div className="text-sm text-text-muted font-mono">NON CONNECTÉ</div>
+            <div className="text-sm text-text-muted font-sans">NON CONNECTÉ</div>
             <Button className="mt-3" onClick={() => setShowLoginModal(true)}>
               CONNECTER
             </Button>
@@ -207,7 +207,7 @@ export function SystemTab() {
       <Panel variant="inset" title="SEUIL ET ZONES">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-4">
-            <p className="text-xs text-text-muted font-mono">
+            <p className="text-xs text-text-muted font-sans">
               Chaque synchro reprend le seuil mesuré par Garmin et l'applique aux séances suivantes.
             </p>
             <Button
@@ -220,7 +220,7 @@ export function SystemTab() {
             </Button>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-xs text-text-muted font-mono">
+            <p className="text-xs text-text-muted font-sans">
               Recalcule le temps par zone sur toutes les séances déjà enregistrées, seuil actuel compris.
             </p>
             <Button size="sm" onClick={() => zonesMutation.mutate()} loading={zonesMutation.isPending}>

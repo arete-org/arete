@@ -126,7 +126,7 @@ it('shows the sign-in page when signed out', async () => {
   const requests = server(enabled);
   mount();
   expect(await screen.findByText('Formulaire Clerk')).toBeTruthy();
-  expect(screen.getByRole('heading', { name: '[ARETE]' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'ARETE' })).toBeTruthy();
   expect(screen.queryByText('Tableau de bord')).toBeNull();
   expect(requests.map((r) => r.url)).toEqual(['/api/auth/config']);
 });

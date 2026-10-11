@@ -1,12 +1,12 @@
 export const THEMES = [
-  { value: 'pierre', label: 'PIERRE', color: '#F6F3ED' },
-  { value: 'prune', label: 'PRUNE', color: '#291E29' },
-  { value: 'light', label: 'CLAIR', color: '#F4F7FA' },
-  { value: 'dark', label: 'SOMBRE', color: '#0A0A0F' },
-  { value: 'darker', label: 'PLUS SOMBRE', color: '#050508' },
-  { value: 'abyss', label: 'ABYSSE', color: '#000000' },
-  { value: 'performance', label: 'PERFORMANCE', color: '#F4F5EF' },
-  { value: 'odyssey', label: 'ODYSSEY', color: '#F5EBDD' },
+  { value: 'pierre', label: 'PIERRE', color: '#F6F3ED', foreground: '#1C2927' },
+  { value: 'prune', label: 'PRUNE', color: '#291E29', foreground: '#F2E8DA' },
+  { value: 'light', label: 'CLAIR', color: '#F4F7FA', foreground: '#172B3A' },
+  { value: 'dark', label: 'SOMBRE', color: '#0A0A0F', foreground: '#E8E8E8' },
+  { value: 'darker', label: 'PLUS SOMBRE', color: '#050508', foreground: '#E8E8E8' },
+  { value: 'abyss', label: 'ABYSSE', color: '#000000', foreground: '#E8E8E8' },
+  { value: 'performance', label: 'PERFORMANCE', color: '#F4F5EF', foreground: '#17281E' },
+  { value: 'odyssey', label: 'ODYSSEY', color: '#F5EBDD', foreground: '#3B3432' },
 ] as const;
 
 export type Theme = (typeof THEMES)[number]['value'];

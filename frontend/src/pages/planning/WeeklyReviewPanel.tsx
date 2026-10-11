@@ -44,7 +44,7 @@ export function ReviewProposals({
                 onChange={() => onToggle(p.index)}
               />
               <span className="min-w-0 space-y-0.5">
-                <span className="block text-xs font-mono text-text-muted">
+                <span className="block text-xs font-sans text-text-muted">
                   {dayLabel(p.date)} · <span className="text-text-primary">{p.session}</span>
                   {done && <span className="ml-2 text-success-green">Appliquée</span>}
                 </span>
@@ -83,7 +83,7 @@ function ReviewBody({ review, refreshing }: { review: WeeklyReview; refreshing: 
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] font-mono text-text-muted">
+      <p className="text-[11px] font-sans text-text-muted">
         Semaine du {parseLocalDate(review.week_start).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
         {' · '}
         {review.source === 'agent' ? 'Le coach' : 'Calculé'}

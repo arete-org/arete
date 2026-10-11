@@ -87,7 +87,7 @@ export function CardioTab() {
       </Panel>
 
       {feedbackPending && (
-        <p className="text-sm font-mono text-text-muted flex items-center gap-2">
+        <p className="text-sm font-sans text-text-muted flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin text-neon-cyan" />
           Le coach regarde ta séance…
         </p>
@@ -103,11 +103,11 @@ export function CardioTab() {
           }
           titleTone="text-neon-cyan"
         >
-          <p className="text-sm font-mono text-text-secondary mb-3">{feedback.feedback}</p>
+          <p className="text-sm font-sans text-text-secondary mb-3">{feedback.feedback}</p>
           {feedback.highlights.length > 0 && (
             <ul className="space-y-1">
               {feedback.highlights.map((h, i) => (
-                <li key={i} className="text-xs font-mono text-text-muted flex items-start gap-2">
+                <li key={i} className="text-xs font-sans text-text-muted flex items-start gap-2">
                   <span className="text-neon-cyan mt-0.5">▸</span>
                   {h}
                 </li>
@@ -118,7 +118,7 @@ export function CardioTab() {
       )}
 
       {feedbackError && (
-        <p className="text-xs font-mono text-text-muted">Le coach n'a pas pu commenter cette séance.</p>
+        <p className="text-xs font-sans text-text-muted">Le coach n'a pas pu commenter cette séance.</p>
       )}
 
       <RecentSessions />

@@ -156,7 +156,7 @@ export function ManualCardioModal({
         </Field>
 
         {createMutation.isError && (
-          <p className="text-xs font-mono text-danger-red">
+          <p className="text-xs font-sans text-danger-red">
             Enregistrement impossible : {createMutation.error?.message}
           </p>
         )}

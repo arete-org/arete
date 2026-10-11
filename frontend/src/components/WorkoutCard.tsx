@@ -1,3 +1,4 @@
+import { inputClasses } from '@/components/ui/Input';
 import { Link } from 'react-router-dom';
 import { markWorkout, measureWorkout } from '@/lib/workoutPerformance';
 import { useEffect, useRef, useState } from 'react';
@@ -10,7 +11,7 @@ import { exportLabel, mergeWorkout, workoutApi, workoutKey, type WorkoutSession,
 import { parseLocalDate } from '@/lib/dates';
 import type { Prescription } from '@/lib/documents';
 
-const input = 'w-full rounded-lg border border-text-muted/25 bg-void px-3 py-2 text-sm';
+const input = inputClasses('cyan', 'text-sm');
 const sports: Record<string, string> = { running: 'Course', cycling: 'Vélo', swimming: 'Natation', strength: 'Musculation', walking: 'Marche', hiking: 'Randonnée' };
 
 function EditWorkout({ session, onClose, onResult }: { session: WorkoutSession; onClose: () => void; onResult?: (text: string) => void }) {

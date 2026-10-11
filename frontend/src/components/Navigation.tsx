@@ -67,7 +67,7 @@ export function Navigation({
                   end={item.path === '/'}
                   className={({ isActive }) =>
                     cn(
-                      'flex items-center gap-2 px-3 py-2 rounded text-sm font-mono',
+                      'navigation-item flex items-center gap-2 px-3 py-2 text-sm font-sans',
                       'border border-transparent transition-colors duration-150 motion-reduce:transition-none',
                       isActive
                         ? 'text-neon-cyan bg-neon-cyan/10 border-neon-cyan/30'
@@ -125,7 +125,7 @@ export function Navigation({
               end={item.path === '/'}
               className={({ isActive }) =>
                 cn(
-                  'relative flex flex-1 flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-lg',
+                  'navigation-item relative flex flex-1 flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-lg',
                   'transition-colors duration-150 motion-reduce:transition-none min-w-0',
                   isActive
                     ? 'text-neon-cyan'
@@ -141,7 +141,7 @@ export function Navigation({
                       isActive && 'stroke-[2.25]'
                     )}
                   />
-                  <span className="text-[9px] font-mono">
+                  <span className="text-[9px] font-sans">
                     {item.path === '/' ? 'Accueil' : item.label}
                   </span>
                   {/* Active indicator; the NavLink is `relative` so it sits on this tab */}
@@ -170,7 +170,7 @@ export function Navigation({
               <AreteMark size={24} />
               {agentBusy && <span className="absolute -right-1 top-0 size-1.5 rounded-full bg-neon-cyan" />}
             </span>
-            <span className="text-[9px] font-mono">{rpg ? 'Chiron' : 'Coach'}</span>
+            <span className="text-[9px] font-sans">{rpg ? 'Chiron' : 'Coach'}</span>
           </button>
         </div>
       </nav>

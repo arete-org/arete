@@ -26,13 +26,13 @@ export function SessionRow({
       <StrengthIcon size="md" className="text-warning-orange" />
       <div className="flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-mono text-text-primary">
+          <span className="text-sm font-sans text-text-primary">
             {parseLocalDate(session.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
           </span>
           <span className="text-text-muted">—</span>
-          <span className="text-sm font-mono text-text-secondary">{session.name || 'Séance'}</span>
+          <span className="text-sm font-sans text-text-secondary">{session.name || 'Séance'}</span>
         </div>
-        <div className="flex flex-wrap gap-x-3 text-xs font-mono text-text-muted mt-1">
+        <div className="flex flex-wrap gap-x-3 text-xs font-sans text-text-muted mt-1">
           {session.duration_min ? <span>{session.duration_min} min</span> : null}
           <span>{(session.total_volume / 1000).toFixed(1)}k kg</span>
           <span>{session.total_sets} séries</span>

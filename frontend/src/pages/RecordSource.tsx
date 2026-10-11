@@ -30,7 +30,7 @@ export function RecordSource({ id, close }: { id: number; close: () => void }) {
       {a && (
         <div className="space-y-4">
           <h3 className="text-lg font-bold">{a.name ?? a.sport}</h3>
-          <p className="font-mono text-xs text-text-muted">
+          <p className="font-sans text-xs text-text-muted">
             {a.date} · {a.source} · activité #{a.id}
           </p>
           <dl className="space-y-3 text-sm">

@@ -4,7 +4,7 @@ import { toLocalISODate } from '@/lib/dates';
 import type { SyncOptions } from '@/lib/garminSync';
 
 const COMPACT_INPUT =
-  'w-full bg-shadow border border-text-muted/30 rounded px-2 py-1 text-text-primary font-mono';
+  'w-full bg-shadow border border-text-muted/30 rounded px-2 py-1 text-text-primary font-sans';
 
 export function SyncOptionsForm({
   onSync,
@@ -32,7 +32,7 @@ export function SyncOptionsForm({
       <fieldset disabled={isLoading}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div>
-            <label htmlFor="garminSyncPeriod" className="text-xs text-text-muted font-mono block mb-1">Période</label>
+            <label htmlFor="garminSyncPeriod" className="text-xs text-text-muted font-sans block mb-1">Période</label>
             <select id="garminSyncPeriod" value={days} onChange={(e) => setDays(Number(e.target.value))} className={COMPACT_INPUT}>
               <option value={7}>7 derniers jours</option>
               <option value={30}>30 derniers jours</option>
@@ -41,7 +41,7 @@ export function SyncOptionsForm({
             </select>
           </div>
           <div>
-            <label htmlFor="garminSyncMax" className="text-xs text-text-muted font-mono block mb-1">Activités maximum</label>
+            <label htmlFor="garminSyncMax" className="text-xs text-text-muted font-sans block mb-1">Activités maximum</label>
             <input
               id="garminSyncMax"
               type="number"
@@ -61,7 +61,7 @@ export function SyncOptionsForm({
               onChange={(e) => setDownloadFit(e.target.checked)}
               className="accent-neon-cyan"
             />
-            <label htmlFor="systemDownloadFit" className="text-xs text-text-muted font-mono">
+            <label htmlFor="systemDownloadFit" className="text-xs text-text-muted font-sans">
               Télécharger les fichiers FIT
             </label>
           </div>

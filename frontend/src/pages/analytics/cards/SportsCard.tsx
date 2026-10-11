@@ -42,7 +42,7 @@ export function SportsCard({
             return (
               <li key={s.sport} className="flex items-center gap-3">
                 <Icon className={`w-4 h-4 shrink-0 ${getSportColor(s.sport)}`} size="sm" />
-                <span className="w-28 shrink-0 text-xs font-mono text-text-secondary truncate">
+                <span className="w-28 shrink-0 text-xs font-sans text-text-secondary truncate">
                   {SPORT_LABEL[s.sport] ?? s.sport}
                 </span>
                 <div className="flex-1 h-2 rounded bg-shadow overflow-hidden">
@@ -51,10 +51,10 @@ export function SportsCard({
                     style={{ width: `${s.pct}%`, backgroundColor: getSportHex(s.sport) }}
                   />
                 </div>
-                <span className="w-24 shrink-0 text-right text-xs font-mono text-text-primary tabular-nums">
+                <span className="w-24 shrink-0 text-right text-xs font-sans text-text-primary tabular-nums">
                   {hoursLabel(s.hours)} · {s.pct.toFixed(0)} %
                 </span>
-                <span className="w-16 shrink-0 text-right text-xs font-mono text-text-muted tabular-nums">
+                <span className="w-16 shrink-0 text-right text-xs font-sans text-text-muted tabular-nums">
                   {s.count} séance{s.count > 1 ? 's' : ''}
                 </span>
               </li>

@@ -84,7 +84,7 @@ const getWeekStart = (offset: number) => {
   return toLocalISODate(new Date(today.setDate(diff)));
 };
 
-const CHIP = 'px-3 py-1.5 rounded text-xs font-mono transition-all border';
+const CHIP = 'px-3 py-1.5 rounded text-xs font-sans transition-all border';
 const CHIP_IDLE = 'bg-abyss border-text-muted/30 text-text-muted hover:border-text-muted/50';
 
 export function PlanningPage() {
@@ -224,7 +224,7 @@ export function PlanningPage() {
     <div className="page-shell bg-void">
       <div className="page-content">
         <header className="flex justify-between items-center mb-4 sm:mb-8 animate-fade-down">
-          <h1 className="page-title text-lg sm:text-2xl font-sans font-bold text-neon-cyan tracking-wider">PLANNING</h1>
+          <h1 className="page-title">Planning</h1>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -258,7 +258,7 @@ export function PlanningPage() {
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-3">
-            <span className="font-mono text-xs sm:text-sm text-text-secondary">
+            <span className="font-sans text-xs sm:text-sm text-text-secondary">
               {parseLocalDate(weekStart).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
               {' — '}
               {parseLocalDate(weekEnd).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -270,7 +270,7 @@ export function PlanningPage() {
                   setWeekOffset(0);
                   setSelectedDate(null);
                 }}
-                className="text-xs font-mono text-neon-cyan hover:underline"
+                className="text-xs font-sans text-neon-cyan hover:underline"
               >
                 Aujourd&apos;hui
               </button>
@@ -318,16 +318,16 @@ export function PlanningPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-text-muted font-mono">Taux d&apos;adhérence</span>
-                <span className="text-base sm:text-lg font-mono text-text-primary">{stats.rate}%</span>
+                <span className="text-xs text-text-muted font-sans">Taux d&apos;adhérence</span>
+                <span className="text-base sm:text-lg font-sans text-text-primary">{stats.rate}%</span>
               </div>
               <AdherenceBar score={stats.rate} size="lg" showLabel={false} />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-text-muted font-mono">Faites / dues à ce jour</span>
-                <span className="text-sm font-mono text-text-secondary">
+                <span className="text-xs text-text-muted font-sans">Faites / dues à ce jour</span>
+                <span className="text-sm font-sans text-text-secondary">
                   {stats.done} / {stats.due}
                 </span>
               </div>
@@ -341,13 +341,13 @@ export function PlanningPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-6 text-xs font-mono">
+            <div className="flex items-center gap-6 text-xs font-sans">
               <div>
-                <div className="text-xl sm:text-2xl font-mono font-bold text-danger-red">{stats.missed}</div>
+                <div className="text-xl sm:text-2xl font-sans font-bold text-danger-red">{stats.missed}</div>
                 <div className="text-text-muted">manquées</div>
               </div>
               <div>
-                <div className="text-xl sm:text-2xl font-mono font-bold text-warning-orange">{stats.offPlan}</div>
+                <div className="text-xl sm:text-2xl font-sans font-bold text-warning-orange">{stats.offPlan}</div>
                 <div className="text-text-muted">hors plan</div>
               </div>
             </div>
@@ -502,7 +502,7 @@ export function PlanningPage() {
           </Field>
 
           {createQuestMutation.isError && (
-            <p className="text-xs font-mono text-danger-red">
+            <p className="text-xs font-sans text-danger-red">
               Création impossible : {createQuestMutation.error?.message}
             </p>
           )}
@@ -522,7 +522,7 @@ export function PlanningPage() {
 
       <Modal open={toDelete !== null} onClose={() => setToDelete(null)} className="max-w-sm p-4 sm:p-6">
         <ModalHeader title="SUPPRIMER LA SÉANCE" onClose={() => setToDelete(null)} className="mb-4" />
-        <p className="text-sm font-mono text-text-secondary mb-6">
+        <p className="text-sm font-sans text-text-secondary mb-6">
           Supprimer la séance prévue le{' '}
           {toDelete && parseLocalDate(toDelete.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} ?
         </p>

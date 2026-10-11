@@ -76,7 +76,15 @@
 
   /* Fonts */
   --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Cormorant Garamond', Georgia, serif;
   --font-mono: 'JetBrains Mono', monospace;
+  --radius-control: 9px;
+  --radius-panel: 16px;
+  --color-border: color-mix(in srgb, var(--color-text-muted) 25%, transparent);
+  --color-selection: color-mix(in srgb, var(--color-neon-cyan) 10%, transparent);
+  --color-on-accent: #0A0A0F;
+  --color-on-purple: #FFFFFF;
+  --color-on-strava: #0A0A0F;
 }
 
 /* ========================= */
@@ -88,6 +96,18 @@ html {
   background-color: var(--color-void);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
+}
+
+/* A theme changes the palette, never the brand's typographic hierarchy. */
+.page-title { font-family: var(--font-display); font-size: clamp(30px, 3vw, 42px); font-weight: 600; line-height: 1.1; letter-spacing: 0; text-transform: none; color: var(--color-text-primary); }
+.coach-title { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.1; }
+
+code, kbd, samp, pre { font-family: var(--font-mono); }
+
+/* Keyboard focus must remain visible on every palette, including custom controls. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 3px;
 }
 
 html[data-theme='darker'] {
@@ -104,6 +124,8 @@ html[data-theme='abyss'] {
 
 /* Darker accents keep text and chart labels readable on pale surfaces. */
 html[data-theme='light'] {
+  --color-on-accent: #FFFFFF;
+  --color-on-strava: #FFFFFF;
   color-scheme: light;
   --color-void: #F4F7FA;
   --color-abyss: #FFFFFF;
@@ -152,11 +174,50 @@ body {
 /* GLASSMORPHISM PANEL      */
 /* ========================= */
 
-.glass-panel {
-  background: color-mix(in srgb, var(--color-abyss) 70%, transparent);
-  backdrop-filter: blur(12px);
-  border: 1px solid color-mix(in srgb, var(--color-neon-cyan) 15%, transparent);
-  border-radius: 4px;
+.glass-panel, .rpg-surface {
+  background: var(--color-abyss);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+}
+
+.ui-inset { border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-void); }
+.ui-input, .ui-button, .navigation-item, .settings-nav button { border-radius: var(--radius-control); }
+.ui-button { font-weight: 500; }
+.ui-button[data-variant='cyan'] { --button-accent: var(--color-neon-cyan); }
+.ui-button[data-variant='purple'] { --button-accent: var(--color-neon-purple); --button-on-accent: var(--color-on-purple); }
+.ui-button[data-variant='gold'] { --button-accent: var(--color-neon-gold); }
+.ui-button[data-variant='green'] { --button-accent: var(--color-success-green); }
+.ui-button[data-variant='danger'] { --button-accent: var(--color-danger-red); }
+.ui-button[data-variant='strava'] { --button-accent: var(--color-strava); --button-on-accent: var(--color-on-strava); }
+.ui-button[data-strong='true']:not([data-variant='outline'], [data-variant='ghost']) {
+  background: var(--button-accent);
+  border-color: var(--button-accent);
+  color: var(--button-on-accent, var(--color-on-accent));
+}
+.ui-button[data-strong='true']:enabled:hover { filter: brightness(.94); }
+.navigation-item[aria-current='page'], .settings-nav button[aria-current='page'] {
+  background: var(--color-selection);
+  border-color: transparent;
+  color: var(--color-neon-cyan);
+}
+.theme-option { border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
+.theme-option[aria-pressed='true'] { border-color: var(--color-neon-cyan); box-shadow: 0 0 0 1px var(--color-neon-cyan); }
+.theme-option:hover { border-color: var(--color-neon-cyan); }
+.theme-preview { border-radius: var(--radius-control); }
+/* The docked coach reduces available space without changing the viewport. */
+.theme-picker { container-type: inline-size; container-name: theme-picker; }
+.theme-options { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@container theme-picker (min-width: 420px) {
+  .theme-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container theme-picker (min-width: 860px) {
+  .theme-options { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Data views stay still; only the route entrance carries a short transition. */
+.animate-fade-up, .animate-fade-down, .animate-fade-left {
+  animation: fade-in .16s ease-out both;
+  animation-delay: 0s !important;
 }
 
 /* ========================= */
@@ -290,7 +351,11 @@ body {
 }
 
 /* Original Figma palettes; preserve the existing UI's semantic token owners. */
-html[data-theme='performance'], html[data-theme='odyssey'] { color-scheme: light; }
+html[data-theme='performance'], html[data-theme='odyssey'] {
+  color-scheme: light;
+  --color-on-accent: #FFFFFF;
+  --color-selection: var(--rpg-selection);
+}
 html[data-theme='performance'] {
   --color-void: #F4F5EF; --color-abyss: #FFFFFF; --color-shadow: #E8EBDF;
   --color-text-primary: #17281E; --color-text-secondary: #56665A; --color-text-muted: #56665A;
@@ -309,8 +374,7 @@ html[data-theme='odyssey'] {
   --color-chart-surface: #FFF9EF; --color-chart-grid: #D9C3A9; --color-chart-axis: #6B594C;
   --color-chart-label: #6B594C; --color-chart-text: #3B3432;
 }
-.rpg-tab[aria-current='page'] { background: var(--rpg-selection, color-mix(in srgb, var(--color-neon-cyan) 10%, transparent)); color: var(--color-neon-cyan); }
-.rpg-surface { background: var(--color-abyss); border: 1px solid color-mix(in srgb, var(--color-text-muted) 25%, transparent); border-radius: 4px; }
+.rpg-tab[aria-current='page'] { background: var(--color-selection); color: var(--color-neon-cyan); }
 
 /* Arete's editorial identity uses a local font: no third-party font request. */
 @font-face {
@@ -321,7 +385,7 @@ html[data-theme='odyssey'] {
   font-display: swap;
 }
 .arete-mark { display: inline-block; flex-shrink: 0; background: currentColor; mask: url('./assets/brand/arete-laurel.svg') center / contain no-repeat; }
-.arete-wordmark { display: inline-flex; align-items: center; gap: 9px; font: 600 32px/1 'Cormorant Garamond', Georgia, serif; letter-spacing: 1.1px; }
+.arete-wordmark { display: inline-flex; align-items: center; gap: 9px; font: 600 32px/1 var(--font-display); letter-spacing: 1.1px; }
 .activity-presence { display: inline-flex; position: relative; align-items: center; justify-content: center; flex-shrink: 0; color: var(--color-neon-cyan); }
 /* A bounded 310 s orbit matches the transport deadline; real events remove it earlier. */
 .activity-orbit { position: absolute; inset: 0; border: 1px solid currentColor; border-left-color: transparent; border-bottom-color: transparent; border-radius: 50%; animation: activity-orbit 310s linear both; }
@@ -332,6 +396,8 @@ html[data-theme='odyssey'] {
 
 /* Keep existing semantic owners: abyss is a card surface throughout the app. */
 html[data-theme='pierre'] {
+  --color-on-accent: #FFFCF5;
+  --color-on-strava: #FFFCF5;
   color-scheme: light;
   --color-void: #F6F3ED; --color-abyss: #FFFCF5; --color-shadow: #EEE8DD;
   --color-text-primary: #1C2927; --color-text-secondary: #586158; --color-text-muted: #696C62;
@@ -344,6 +410,9 @@ html[data-theme='pierre'] {
   --color-outline-dim: #B7B4A8; --color-outline: #797D70;
 }
 html[data-theme='prune'] {
+  --color-on-accent: #291E29;
+  --color-on-purple: #291E29;
+  --color-on-strava: #291E29;
   color-scheme: dark;
   --color-void: #291E29; --color-abyss: #342636; --color-shadow: #57394E;
   --color-text-primary: #F2E8DA; --color-text-secondary: #D2BBCB; --color-text-muted: #BBA8B5;
@@ -356,25 +425,14 @@ html[data-theme='prune'] {
   --color-outline-dim: #806879; --color-outline: #BBA8B5;
 }
 html[data-theme='pierre'], html[data-theme='prune'] {
-  --font-mono: 'Inter', system-ui, sans-serif;
+  --color-border: var(--arete-border);
+  --color-selection: var(--rpg-selection);
   --color-chart-surface: var(--color-abyss); --color-chart-grid: var(--arete-border);
   --color-chart-axis: var(--color-text-secondary); --color-chart-label: var(--color-text-muted); --color-chart-text: var(--color-text-primary);
   --color-chart-blue: var(--color-info-blue); --color-chart-green: var(--color-success-green); --color-chart-yellow: var(--color-neon-gold);
   --color-chart-orange: var(--color-warning-orange); --color-chart-red: var(--color-danger-red); --color-chart-grey: var(--color-text-muted);
 }
-html:is([data-theme='pierre'], [data-theme='prune']) {
-  .glass-panel, .rpg-surface { background: var(--color-abyss); border-color: var(--arete-border); border-radius: 16px; backdrop-filter: none; }
-  .page-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: clamp(30px, 3vw, 42px); font-weight: 600; line-height: 1.1; letter-spacing: 0; text-transform: none; color: var(--color-text-primary); }
-  .coach-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 600; line-height: 1.1; }
-  .ui-button { border-radius: 9px; }
-  .ui-button[data-strong='true'][data-variant='cyan'] { background: var(--color-neon-cyan); color: var(--arete-accent-text); }
-  .ui-button[data-strong='true'][data-variant='cyan']:hover { filter: brightness(.94); }
-  nav a[aria-current='page'] { background: var(--rpg-selection); border-color: transparent; border-radius: 8px; }
-  .coach-panel { background: var(--color-abyss); border-color: var(--arete-border); box-shadow: -8px 0 32px color-mix(in srgb, var(--color-text-primary) 4%, transparent); }
-  .coach-markdown code { font-family: 'JetBrains Mono', monospace; }
-  /* Data should be readable immediately; don't stagger the panels on every tab. */
-  .animate-fade-up, .animate-fade-down, .animate-fade-left { animation: fade-in .16s ease-out both; animation-delay: 0s !important; }
-}
+.coach-panel { background: var(--color-abyss); border-color: var(--color-border); box-shadow: -8px 0 32px color-mix(in srgb, var(--color-text-primary) 4%, transparent); }
 @media (prefers-reduced-motion: reduce) {
   .activity-orbit, .coach-panel, .route-content,
   .animate-fade-in, .animate-fade-out, .animate-fade-up, .animate-fade-down, .animate-fade-left, .animate-scale-in, .animate-scale-out { animation: none !important; }

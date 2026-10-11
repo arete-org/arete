@@ -68,7 +68,7 @@ export function ProjectionChart({ series, today }: { series: ProjectionPoint[]; 
           />
         </ComposedChart>
       </ResponsiveContainer>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] font-mono text-text-muted">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] font-sans text-text-muted">
         {LEGEND.map((item) => (
           <span key={item.label} className="inline-flex items-center gap-1.5">
             <span className={`inline-block w-3 h-1.5 rounded-sm ${item.className}`} />

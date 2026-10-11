@@ -55,7 +55,7 @@ export function SessionDetailPage() {
       <div className="page-content space-y-4 sm:space-y-6">
         <Link
           to="/log?tab=cardio"
-          className="inline-flex items-center gap-1 text-xs font-mono text-text-muted hover:text-neon-cyan"
+          className="inline-flex items-center gap-1 text-xs font-sans text-text-muted hover:text-neon-cyan"
         >
           <ArrowLeft className="w-4 h-4" />
           JOURNAL
@@ -95,10 +95,10 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
       <header className="flex items-start gap-3 animate-fade-down">
         {icon}
         <div className="min-w-0 flex-1">
-          <h1 className="page-title text-lg sm:text-2xl font-sans font-bold text-neon-cyan tracking-wide break-words">
+          <h1 className="page-title break-words">
             {session.name || sportLabel(session.sport)}
           </h1>
-          <p className="text-xs sm:text-sm font-mono text-text-muted mt-1">
+          <p className="text-xs sm:text-sm font-sans text-text-muted mt-1">
             {day}
             {start && ` · ${start}`} · {sportLabel(session.sport)} · {SOURCE_LABEL[session.source] ?? session.source}
           </p>
@@ -131,13 +131,13 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
           }
           titleTone="text-neon-cyan"
         >
-          <p className="text-sm font-mono text-text-secondary whitespace-pre-line">{detail.feedback.text}</p>
+          <p className="text-sm font-sans text-text-secondary whitespace-pre-line">{detail.feedback.text}</p>
         </Panel>
       )}
 
       {session.notes && (
         <Panel title="NOTES">
-          <p className="text-sm font-mono text-text-secondary whitespace-pre-line">{session.notes}</p>
+          <p className="text-sm font-sans text-text-secondary whitespace-pre-line">{session.notes}</p>
         </Panel>
       )}
 
@@ -197,9 +197,9 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="p-2 sm:p-3 bg-abyss rounded border border-text-muted/20 min-w-0">
-      <div className="text-[10px] sm:text-xs font-mono text-text-muted uppercase truncate">{label}</div>
-      <div className="text-base sm:text-lg font-mono text-text-primary mt-0.5 truncate">{value}</div>
-      {sub && <div className="text-[11px] sm:text-xs font-mono text-neon-gold truncate">{sub}</div>}
+      <div className="text-[10px] sm:text-xs font-sans text-text-muted uppercase truncate">{label}</div>
+      <div className="text-base sm:text-lg font-sans text-text-primary mt-0.5 truncate">{value}</div>
+      {sub && <div className="text-[11px] sm:text-xs font-sans text-neon-gold truncate">{sub}</div>}
     </div>
   );
 }
@@ -208,10 +208,10 @@ function Row({ label, value, hint }: { label: string; value: ReactNode; hint?: s
   return (
     <div className="py-2 border-b border-text-muted/10 last:border-0">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-xs font-mono text-text-secondary">{label}</span>
-        <span className="text-sm font-mono text-text-primary text-right">{value}</span>
+        <span className="text-xs font-sans text-text-secondary">{label}</span>
+        <span className="text-sm font-sans text-text-primary text-right">{value}</span>
       </div>
-      {hint && <p className="text-[11px] font-mono text-text-muted mt-0.5">{hint}</p>}
+      {hint && <p className="text-[11px] font-sans text-text-muted mt-0.5">{hint}</p>}
     </div>
   );
 }
@@ -302,7 +302,7 @@ function Weather({ weather }: { weather: ActivityWeather }) {
           hint={altitude >= HIGH_M ? "Altitude : moins d'oxygène, l'allure seuil baisse." : undefined}
         />
       )}
-      <p className="text-[11px] font-mono text-text-muted mt-2">Open-Meteo, relevé de {hour}.</p>
+      <p className="text-[11px] font-sans text-text-muted mt-2">Open-Meteo, relevé de {hour}.</p>
     </Panel>
   );
 }
@@ -310,13 +310,13 @@ function Weather({ weather }: { weather: ActivityWeather }) {
 function Intervals({ intervals, foot }: { intervals: ActivityIntervals; foot: boolean }) {
   return (
     <Panel title="FRACTIONNÉ DÉTECTÉ">
-      <p className="text-sm font-mono text-text-secondary mb-3">
+      <p className="text-sm font-sans text-text-secondary mb-3">
         {intervals.count} × {formatElapsed(intervals.work_avg_sec)}
         {intervals.rest_avg_sec ? ` · récup ${formatElapsed(intervals.rest_avg_sec)}` : ''}
         {intervals.warmup_sec ? ` · échauffement ${formatElapsed(intervals.warmup_sec)}` : ''}
       </p>
       <div className="overflow-x-auto">
-        <table className="w-full text-xs font-mono">
+        <table className="w-full text-xs font-sans">
           <thead className="text-text-muted">
             <tr className="text-left">
               <th className="py-1 pr-2 font-normal">N°</th>
@@ -339,7 +339,7 @@ function Intervals({ intervals, foot }: { intervals: ActivityIntervals; foot: bo
           </tbody>
         </table>
       </div>
-      <div className="mt-2 space-y-0.5 text-[11px] font-mono text-text-muted">
+      <div className="mt-2 space-y-0.5 text-[11px] font-sans text-text-muted">
         {intervals.pace_cv_pct !== null && <p>Régularité des allures : {intervals.pace_cv_pct.toLocaleString('fr-FR')} % d'écart.</p>}
         {intervals.hr_progression_pct !== null && (
           <p>FC de la dernière répétition vs la première : {pct(intervals.hr_progression_pct)}.</p>
@@ -354,7 +354,7 @@ function LapsTable({ laps, foot }: { laps: ActivityLap[]; foot: boolean }) {
   return (
     <Panel title={`TOURS (${laps.length})`}>
       <div className="overflow-x-auto">
-        <table className="w-full text-xs font-mono whitespace-nowrap">
+        <table className="w-full text-xs font-sans whitespace-nowrap">
           <thead className="text-text-muted">
             <tr className="text-left">
               <th className="py-1 pr-3 font-normal">N°</th>
@@ -393,7 +393,7 @@ function SplitsTable({ splits }: { splits: ActivitySplit[] }) {
   return (
     <Panel title="KILOMÈTRES">
       <div className="overflow-x-auto">
-        <table className="w-full text-xs font-mono whitespace-nowrap">
+        <table className="w-full text-xs font-sans whitespace-nowrap">
           <thead className="text-text-muted">
             <tr className="text-left">
               <th className="py-1 pr-3 font-normal">Km</th>
@@ -434,7 +434,7 @@ function Zones({ zones }: { zones: NonNullable<ActivityDetail['zones']> }) {
       </div>
       <ul className="space-y-1">
         {values.map((sec, i) => (
-          <li key={i} className="flex items-center justify-between gap-2 text-xs font-mono">
+          <li key={i} className="flex items-center justify-between gap-2 text-xs font-sans">
             <span className="flex items-center gap-2 text-text-secondary">
               <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: HR_ZONE_COLORS[i] }} />
               {ZONE_NAME[i]}

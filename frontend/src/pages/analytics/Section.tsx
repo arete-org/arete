@@ -28,7 +28,7 @@ export function SectionNav({ active, onJump }: { active: string; onJump: (id: st
               onClick={() => onJump(s.id)}
               aria-current={active === s.id ? 'true' : undefined}
               className={cn(
-                'px-3 py-1 text-xs font-mono uppercase tracking-wider rounded transition-colors',
+                'px-3 py-1 text-xs font-sans uppercase tracking-wider rounded transition-colors',
                 active === s.id
                   ? 'bg-neon-cyan/15 text-neon-cyan'
                   : 'text-text-secondary hover:text-text-primary'
@@ -47,7 +47,7 @@ export function Section({ def, children }: { def: SectionDef; children: ReactNod
   return (
     <section id={def.id} className="space-y-3">
       <header>
-        <h2 className="text-lg font-bold font-mono text-text-primary tracking-wider uppercase">{def.title}</h2>
+        <h2 className="text-lg font-bold font-sans text-text-primary tracking-wider uppercase">{def.title}</h2>
         <p className="text-sm text-text-muted">{def.intro}</p>
       </header>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">{children}</div>

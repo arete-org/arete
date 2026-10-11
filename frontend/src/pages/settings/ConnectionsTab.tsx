@@ -107,7 +107,7 @@ export function ConnectionsTab() {
         >
           <Watch className="w-6 h-6 text-text-muted" />
           <div className="flex-1">
-            <div className="font-mono text-sm text-text-primary">Garmin Connect</div>
+            <div className="font-sans text-sm text-text-primary">Garmin Connect</div>
             {syncStatus?.user_email && (
               <div className="text-xs text-neon-cyan">{syncStatus.user_email}</div>
             )}
@@ -136,15 +136,15 @@ export function ConnectionsTab() {
         >
           <Target className="w-6 h-6 text-text-muted" />
           <div className="flex-1">
-            <div className="font-mono text-sm text-text-primary">Strava</div>
+            <div className="font-sans text-sm text-text-primary">Strava</div>
             {stravaConnected && stravaStatus?.athlete_name && (
               <div className="text-xs text-strava">{stravaStatus.athlete_name}</div>
             )}
             {stravaError && (
-              <div className="text-xs text-danger-red mt-1 font-mono">État indisponible</div>
+              <div className="text-xs text-danger-red mt-1 font-sans">État indisponible</div>
             )}
             {syncResult && (
-              <div className="text-xs text-text-muted mt-1 font-mono">{syncResult}</div>
+              <div className="text-xs text-text-muted mt-1 font-sans">{syncResult}</div>
             )}
           </div>
           {stravaConnected ? (

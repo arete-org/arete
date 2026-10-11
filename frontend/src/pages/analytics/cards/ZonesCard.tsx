@@ -72,7 +72,7 @@ export function ZonesCard({
             onClick={() => setMode(m)}
             aria-pressed={mode === m}
             className={cn(
-              'px-2 py-0.5 text-[10px] font-mono rounded border transition-colors',
+              'px-2 py-0.5 text-[10px] font-sans rounded border transition-colors',
               mode === m
                 ? 'bg-neon-cyan/20 text-neon-cyan border-neon-cyan/50'
                 : 'bg-abyss text-text-secondary border-text-muted/30'

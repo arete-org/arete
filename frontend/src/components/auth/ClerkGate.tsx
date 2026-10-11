@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { ClerkProvider, SignIn, UserButton, useAuth, useUser } from '@clerk/react';
 import { frFR } from '@clerk/localizations/fr-FR';
 import { ErrorState } from '@/components/States';
+import { AreteWordmark } from '@/components/AreteBrand';
 import { ApiError, authApi, type AuthMe } from '@/lib/api';
 import { clearApiCache, endSession, onUnauthorized, setTokenGetter } from '@/lib/auth';
 import { AuthStateContext, type AuthState } from './authState';
@@ -13,7 +14,7 @@ import { claimPushDevice } from '@/lib/pushSession';
 const appearance = {
   variables: {
     colorPrimary: 'var(--color-neon-cyan)',
-    colorPrimaryForeground: 'var(--color-void)',
+    colorPrimaryForeground: 'var(--color-on-accent)',
     colorBackground: 'var(--color-abyss)',
     colorForeground: 'var(--color-text-primary)',
     colorMutedForeground: 'var(--color-text-secondary)',
@@ -21,12 +22,12 @@ const appearance = {
     colorNeutral: 'var(--color-text-primary)',
     colorInput: 'var(--color-void)',
     colorInputForeground: 'var(--color-text-primary)',
-    colorBorder: 'color-mix(in srgb, var(--color-text-muted) 30%, transparent)',
+    colorBorder: 'var(--color-border)',
     colorDanger: 'var(--color-danger-red)',
     colorSuccess: 'var(--color-success-green)',
     colorWarning: 'var(--color-warning-orange)',
     fontFamily: 'var(--font-sans)',
-    borderRadius: '4px',
+    borderRadius: 'var(--radius-control)',
   },
 };
 
@@ -216,8 +217,8 @@ function SignInPage() {
     <GateScreen>
       <div className="flex flex-col items-center gap-6 animate-fade-up">
         <div className="text-center">
-          <h1 className="text-3xl font-bold font-mono tracking-wider text-neon-cyan">[ARETE]</h1>
-          <p className="mt-2 text-sm font-mono text-text-secondary">
+          <h1 className="text-text-primary"><AreteWordmark /></h1>
+          <p className="mt-2 text-sm font-sans text-text-secondary">
             Connecte-toi pour retrouver ton entraînement.
           </p>
         </div>
@@ -240,10 +241,10 @@ function AccountNotice({
   return (
     <GateScreen>
       <div className="glass-panel w-full max-w-md p-6 space-y-4 animate-fade-up">
-        <h1 className="text-xl font-bold font-mono tracking-wider text-neon-cyan">[ARETE]</h1>
+        <h1 className="text-text-primary"><AreteWordmark /></h1>
         <p className="text-sm text-text-primary">{message}</p>
         {email && (
-          <p className="text-xs font-mono text-text-muted">
+          <p className="text-xs font-sans text-text-muted">
             Connecté en tant que <span className="text-text-secondary">{email}</span>
           </p>
         )}

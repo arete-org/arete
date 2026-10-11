@@ -29,24 +29,24 @@ export function WeeklyVolumeTracker({
     <Panel title="VOLUME DE LA SEMAINE" delay={0.1}>
       <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4">
         <div className="text-center">
-          <div className="text-lg sm:text-2xl font-mono font-bold text-neon-cyan">{(volume / 1000).toFixed(1)}k</div>
-          <div className="text-xs text-text-muted font-mono">Tonnage (kg)</div>
+          <div className="text-lg sm:text-2xl font-sans font-bold text-neon-cyan">{(volume / 1000).toFixed(1)}k</div>
+          <div className="text-xs text-text-muted font-sans">Tonnage (kg)</div>
         </div>
         <div className="text-center">
-          <div className="text-lg sm:text-2xl font-mono font-bold text-neon-purple">{sets}</div>
-          <div className="text-xs text-text-muted font-mono">Séries</div>
+          <div className="text-lg sm:text-2xl font-sans font-bold text-neon-purple">{sets}</div>
+          <div className="text-xs text-text-muted font-sans">Séries</div>
         </div>
         <div className="text-center">
-          <div className="text-lg sm:text-2xl font-mono font-bold text-warning-orange">
+          <div className="text-lg sm:text-2xl font-sans font-bold text-warning-orange">
             {avgRpe === null ? '—' : avgRpe.toFixed(1)}
           </div>
-          <div className="text-xs text-text-muted font-mono">RPE moyen</div>
+          <div className="text-xs text-text-muted font-sans">RPE moyen</div>
         </div>
       </div>
       <div className="h-2 bg-shadow rounded overflow-hidden">
         <div className="h-full bg-neon-cyan transition-all duration-500" style={{ width: `${Math.min(100, pct)}%` }} />
       </div>
-      <div className="text-xs text-text-muted font-mono mt-2 text-right">
+      <div className="text-xs text-text-muted font-sans mt-2 text-right">
         {pct.toFixed(0)} % de l&apos;objectif hebdo ({targetKg.toLocaleString('fr-FR')} kg)
       </div>
     </Panel>

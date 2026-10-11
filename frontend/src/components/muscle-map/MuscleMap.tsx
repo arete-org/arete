@@ -72,7 +72,7 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
 
   const renderView = (view: View) => (
     <figure className="flex flex-col items-center gap-2 m-0">
-      <figcaption className="text-[10px] font-mono text-text-muted uppercase tracking-wider">
+      <figcaption className="text-[10px] font-sans text-text-muted uppercase tracking-wider">
         {VIEW_LABEL[view]}
       </figcaption>
       <svg viewBox="0 0 200 400" className="w-[150px] h-[300px]" role="img" aria-label={`Silhouette ${VIEW_LABEL[view]}`}>
@@ -115,8 +115,8 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
       <div className="min-h-[3.25rem] text-center">
         {detail ? (
           <div className="animate-fade-up">
-            <p className="text-sm font-mono text-text-primary uppercase tracking-wider">{detail.label}</p>
-            <p className="text-xs font-mono text-text-secondary">
+            <p className="text-sm font-sans text-text-primary uppercase tracking-wider">{detail.label}</p>
+            <p className="text-xs font-sans text-text-secondary">
               {volumeLabel(detail.volume)}
               {detail.sets > 0 && ` · ${detail.sets} série${detail.sets > 1 ? 's' : ''}`}
             </p>
@@ -127,7 +127,7 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
         )}
       </div>
 
-      <div className="flex justify-center items-center gap-3 text-[10px] font-mono">
+      <div className="flex justify-center items-center gap-3 text-[10px] font-sans">
         <span className="text-text-muted">Moins</span>
         {HEAT_BG.map((bg, level) => (
           <span key={bg} className={cn('w-5 h-3 rounded-sm', bg)} aria-label={`Niveau ${level}`} />

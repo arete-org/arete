@@ -57,7 +57,7 @@ export function StrengthRecords() {
         </p>
       )}
       {r && (
-        <dl className="font-mono text-sm space-y-3">
+        <dl className="font-sans text-sm space-y-3">
           <div>
             <dt className="text-text-muted text-xs">Série réalisée</dt>
             <dd>
@@ -91,7 +91,7 @@ export function StrengthRecords() {
       {id && (
         <Link
           to={`/log?exercise=${id}`}
-          className="inline-block font-mono text-xs text-neon-cyan"
+          className="inline-block font-sans text-xs text-neon-cyan"
         >
           Voir la progression →
         </Link>

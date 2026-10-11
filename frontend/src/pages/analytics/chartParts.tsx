@@ -49,7 +49,7 @@ export function ChartTooltip(props: TooltipProps<any, any>) {
 export function TooltipBox({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="bg-chart-surface border border-chart-grid rounded p-2 text-xs text-chart-text space-y-0.5">
-      <div className="font-mono text-text-primary">{title}</div>
+      <div className="font-sans text-text-primary">{title}</div>
       {children}
     </div>
   );

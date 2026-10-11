@@ -25,7 +25,7 @@ export function RecordsCard({ onOpen }: { onOpen?: (id: number) => void } = {}) 
     <section className="bg-abyss rounded-lg border border-text-muted/20 p-4 flex flex-col gap-3">
       <header className="flex items-center gap-2">
         <Trophy className="w-4 h-4 text-neon-gold" aria-hidden />
-        <h3 className="text-sm font-mono text-neon-cyan uppercase tracking-wider">Records</h3>
+        <h3 className="text-sm font-sans text-neon-cyan uppercase tracking-wider">Records</h3>
         <div className="flex gap-1 ml-auto" role="group" aria-label="Sport des records">
           {RECORD_SPORTS.map((s) => (
             <button
@@ -34,7 +34,7 @@ export function RecordsCard({ onOpen }: { onOpen?: (id: number) => void } = {}) 
               onClick={() => setSport(s.value)}
               aria-pressed={sport === s.value}
               className={cn(
-                'px-2 py-0.5 text-[10px] font-mono rounded border transition-colors',
+                'px-2 py-0.5 text-[10px] font-sans rounded border transition-colors',
                 sport === s.value
                   ? 'bg-neon-cyan/20 text-neon-cyan border-neon-cyan/50'
                   : 'bg-abyss text-text-secondary border-text-muted/30'
@@ -57,7 +57,7 @@ export function RecordsCard({ onOpen }: { onOpen?: (id: number) => void } = {}) 
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-text-muted font-mono">
+            <tr className="text-[10px] uppercase tracking-wider text-text-muted font-sans">
               <th className="text-left font-normal pb-1">Distance</th>
               <th className="text-right font-normal pb-1">Temps</th>
               <th className="text-right font-normal pb-1">Date</th>
@@ -66,9 +66,9 @@ export function RecordsCard({ onOpen }: { onOpen?: (id: number) => void } = {}) 
           <tbody>
             {records.map((r) => (
               <tr key={r.name} className="border-t border-text-muted/10">
-                <td className="py-1.5 font-mono text-text-secondary">{r.name}</td>
-                <td className="py-1.5 text-right font-mono text-text-primary tabular-nums">{onOpen && r.activity_id ? <button className="min-h-11 text-neon-cyan underline underline-offset-4" aria-label={`Voir la séance du record ${r.name}`} onClick={() => onOpen(r.activity_id!)}>{r.time_display}</button> : r.time_display}</td>
-                <td className="py-1.5 text-right font-mono text-text-muted tabular-nums" title={r.activity_name}>
+                <td className="py-1.5 font-sans text-text-secondary">{r.name}</td>
+                <td className="py-1.5 text-right font-sans text-text-primary tabular-nums">{onOpen && r.activity_id ? <button className="min-h-11 text-neon-cyan underline underline-offset-4" aria-label={`Voir la séance du record ${r.name}`} onClick={() => onOpen(r.activity_id!)}>{r.time_display}</button> : r.time_display}</td>
+                <td className="py-1.5 text-right font-sans text-text-muted tabular-nums" title={r.activity_name}>
                   {new Date(`${r.date}T00:00:00`).toLocaleDateString('fr-FR', {
                     day: 'numeric',
                     month: 'short',

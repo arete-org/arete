@@ -53,7 +53,7 @@ export function ExerciseProgress({
 
   return (
     <Panel title="PROGRESSION PAR EXERCICE" delay={0.2}>
-      <label className="block text-xs font-mono text-text-muted">
+      <label className="block text-xs font-sans text-text-muted">
         Exercice
         <select
           value={exerciseId ?? ''}
@@ -70,20 +70,20 @@ export function ExerciseProgress({
       </label>
 
       {failed && (
-        <p role="alert" className="mt-3 text-sm font-mono text-danger-red">
+        <p role="alert" className="mt-3 text-sm font-sans text-danger-red">
           Progression indisponible.
         </p>
       )}
 
       {enabled && history.isSuccess && (
         <div className="mt-4">
-          <h4 className="text-[11px] font-mono text-text-muted uppercase mb-2">1RM estimé (Epley)</h4>
+          <h4 className="text-[11px] font-sans text-text-muted uppercase mb-2">1RM estimé (Epley)</h4>
           {points.length > 1 ? (
             <Suspense fallback={<div className="h-[180px]" />}>
               <E1rmChart points={points} />
             </Suspense>
           ) : (
-            <p className="text-xs font-mono text-text-muted">
+            <p className="text-xs font-sans text-text-muted">
               {points.length === 1
                 ? `Une seule séance chargée : ${formatKg(points[0].e1rm)}.`
                 : 'Pas de série chargée de 1 à 12 répétitions.'}
@@ -97,7 +97,7 @@ export function ExerciseProgress({
       )}
 
       {enabled && r && (
-        <dl className="mt-4 space-y-2 font-mono text-sm">
+        <dl className="mt-4 space-y-2 font-sans text-sm">
           <div>
             <dt className="text-[11px] text-text-muted">Charge la plus lourde</dt>
             <dd>
