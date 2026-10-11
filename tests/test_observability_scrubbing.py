@@ -289,6 +289,17 @@ def test_allowlisted_key_with_a_long_string_is_redacted_anyway():
     assert scrub(payload)["name"].startswith("[REDACTED:")
 
 
+def test_a_short_word_under_a_closed_vocabulary_key_is_not_a_free_pass():
+    """Review finding: being short and lowercase does not make a value an
+    enum member. "genou" (knee) and "success" are the same shape; only the
+    latter is an actual status."""
+    payload = {"status": "genou", "type": "ai", "role": "escalier"}
+    scrubbed = scrub(payload)
+    assert scrubbed["status"].startswith("[REDACTED:")
+    assert scrubbed["type"] == "ai"
+    assert scrubbed["role"].startswith("[REDACTED:")
+
+
 # --- Tracer: redacts every run's error to its type, which scrub() cannot reach. ---
 
 

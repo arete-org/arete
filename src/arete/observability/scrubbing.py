@@ -25,16 +25,21 @@ WALK_NODES_MAX = 2_000
 REDACTED = "[REDACTED]"
 REDACTED_TRUNCATED = "[REDACTED:truncated]"
 
-# Keys whose value is structural or operational, never athlete content:
-# a run/tool/message's own name, type and identifiers, and model/finish
-# bookkeeping. Kept verbatim wherever they appear, at any depth. Token usage
-# and timings need no entry here: they are already numbers, and only string
-# values are ever redacted below.
+# Keys whose value is structural or operational, never athlete content: a
+# run/tool/message's own name, type and identifiers, and model/finish
+# bookkeeping. Kept verbatim wherever they appear, at any depth (bounded by
+# _is_safe_allowlisted_value below). Token usage and timings need no entry
+# here: they are already numbers, and only string values are ever redacted.
+#
+# "name"/"id"/"model"/"trace_id" stay open-ended: a tool, run or model name
+# is developer- or framework-chosen, never athlete free text in this
+# codebase, but it cannot be checked against a closed set without the
+# scrubber knowing every tool and middleware name, which would make it an
+# agent-aware allowlist again. A handful of genuinely closed vocabularies
+# (below) are checked exactly instead of trusted by shape.
 ALLOWED_KEYS = frozenset(
     {
         "name",
-        "type",
-        "role",
         "id",
         "tool_call_id",
         "run_id",
@@ -43,12 +48,47 @@ ALLOWED_KEYS = frozenset(
         "lc",
         "model",
         "model_name",
-        "finish_reason",
-        "status",
-        "object",
-        "chunk_position",
     }
 )
+
+# Values for a key with a genuinely small, closed vocabulary: checked
+# exactly, so a short athlete word (an injury, a body part) cannot pass
+# merely for being short and lowercase like a real enum member.
+ALLOWED_ENUM_VALUES: dict[str, frozenset[str]] = {
+    "type": frozenset(
+        {
+            "human",
+            "ai",
+            "system",
+            "tool",
+            "function",
+            "chat",
+            "constructor",
+            "not_implemented",
+            "chain",
+            "llm",
+            "tool_call",
+            "undefined",
+            # BaseMessage subclasses report their own class name while
+            # streaming, not the lowercase type above.
+            "HumanMessageChunk",
+            "AIMessageChunk",
+            "SystemMessageChunk",
+            "ToolMessageChunk",
+            "FunctionMessageChunk",
+            "ChatMessageChunk",
+        }
+    ),
+    "role": frozenset({"user", "assistant", "system", "tool", "function"}),
+    "status": frozenset({"success", "error", "pending"}),
+    "finish_reason": frozenset(
+        {"stop", "length", "tool_calls", "content_filter", "function_call"}
+    ),
+    "object": frozenset(
+        {"chat.completion", "chat.completion.chunk", "text_completion"}
+    ),
+    "chunk_position": frozenset({"first", "middle", "last"}),
+}
 
 _ERROR_TYPE = re.compile(r"^[A-Za-z_][\w.]*")
 
@@ -78,8 +118,14 @@ def _redact_string(value: str) -> str:
 MAX_ALLOWED_VALUE_CHARS = 200
 
 
-def _is_safe_allowlisted_value(value: Any) -> bool:
-    return len(value) <= MAX_ALLOWED_VALUE_CHARS if isinstance(value, str) else True
+def _is_trusted_field(key: Any, value: Any) -> bool:
+    if isinstance(value, (dict, list, tuple)):
+        return False
+    if key in ALLOWED_ENUM_VALUES:
+        return value in ALLOWED_ENUM_VALUES[key]
+    if key in ALLOWED_KEYS:
+        return len(value) <= MAX_ALLOWED_VALUE_CHARS if isinstance(value, str) else True
+    return False
 
 
 #: A schema field name (content, tool_calls, additional_kwargs, ...) is a
@@ -130,9 +176,7 @@ def _walk(value: Any, *, depth: int, nodes_left: list[int]) -> Any:
     if isinstance(value, dict):
         return {
             _redact_key(key): child
-            if key in ALLOWED_KEYS
-            and not isinstance(child, (dict, list, tuple))
-            and _is_safe_allowlisted_value(child)
+            if _is_trusted_field(key, child)
             else _walk(child, depth=depth + 1, nodes_left=nodes_left)
             for key, child in value.items()
         }
