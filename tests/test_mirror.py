@@ -47,10 +47,10 @@ def _stored(store) -> dict[str, bytes]:
 def test_new_files_are_stored(store, tmp_path, monkeypatch):
     root = _use_data_dir(monkeypatch, tmp_path / "data")
     mirror.hydrate()
-    (root / "agent/memory").mkdir(parents=True)
-    (root / "agent/memory/profile.md").write_text("seuil 176")
+    (root / "garmin_tokens").mkdir(parents=True)
+    (root / "garmin_tokens/profile.json").write_text("seuil 176")
     assert mirror.flush() == 1
-    assert _stored(store) == {"agent/memory/profile.md": b"seuil 176"}
+    assert _stored(store) == {"garmin_tokens/profile.json": b"seuil 176"}
 
 
 def test_a_fresh_instance_gets_the_stored_files(store, tmp_path, monkeypatch):
@@ -77,16 +77,16 @@ def test_unchanged_files_are_not_written_again(store, tmp_path, monkeypatch):
 
 def test_stale_copy_does_not_overwrite_another_instance(store, tmp_path, monkeypatch):
     root = _use_data_dir(monkeypatch, tmp_path / "data")
-    (root / "agent/memory").mkdir(parents=True)
-    (root / "agent/memory/notes.md").write_text("v1")
+    (root / "garmin_tokens").mkdir(parents=True)
+    (root / "garmin_tokens/notes.json").write_text("v1")
     mirror.hydrate()
     mirror.flush()
     with store() as con:  # another instance stores v2 meanwhile
         con.execute(
-            "UPDATE app.files SET content = 'v2' WHERE path = 'agent/memory/notes.md'"
+            "UPDATE app.files SET content = 'v2' WHERE path = 'garmin_tokens/notes.json'"
         )
     assert mirror.flush() == 0
-    assert _stored(store) == {"agent/memory/notes.md": b"v2"}
+    assert _stored(store) == {"garmin_tokens/notes.json": b"v2"}
 
 
 def test_deleted_files_are_removed(store, tmp_path, monkeypatch):

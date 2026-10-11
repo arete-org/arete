@@ -10,6 +10,7 @@ import pytest
 from arete.garmin.models import ActivitySource, ActualSession
 from arete.garmin.repository import GarminRepository
 from arete.services.coaching_repository import SessionFeedbackRepository
+from arete.services.memory import read_file as read_memory_file
 from arete.services.session_feedback import (
     MAX_BATCH_SESSIONS,
     SessionEvidence,
@@ -68,9 +69,12 @@ class TestBatch:
         produce.assert_called_once()
         message, count = produce.call_args.args
         assert count == 2 and message.startswith("### 1\nSéance du 2026-10-01")
-        ledger = (memory / "sessions.md").read_text()
+        ledger = read_memory_file("sessions.md").content
         assert ledger.count("## 2026-10-0") == 2
-        assert "Retour du coach : Bien géré." in ledger
+        assert (
+            "Interprétation du coach (non confirmée, jamais une preuve) : Bien géré."
+            in ledger
+        )
 
     def test_a_single_session_needs_no_section(self, memory):
         produce = MagicMock(return_value="Belle sortie.")
@@ -84,7 +88,7 @@ class TestBatch:
         out = batch_session_feedback([_facts(1), _facts(2)], produce=produce)
         assert [source for _, source in out] == ["rules", "rules"]
         assert out[0][0] == "Séance 1 terminée."
-        assert "Retour du coach" not in (memory / "sessions.md").read_text()
+        assert "Retour du coach" not in read_memory_file("sessions.md").content
 
     def test_a_failed_request_keeps_every_rule_text(self, memory):
         produce = MagicMock(side_effect=RuntimeError("quota"))
@@ -103,7 +107,7 @@ class TestBatch:
         produce.assert_called_once()
         assert [source for _, source in out].count("agent") == MAX_BATCH_SESSIONS
         assert out[-1] == (f"Séance {n} terminée.", "rules")
-        assert (memory / "sessions.md").read_text().count("## 2026-10-") == n
+        assert read_memory_file("sessions.md").content.count("## 2026-10-") == n
 
     def test_nothing_to_say_costs_nothing(self):
         produce = MagicMock()

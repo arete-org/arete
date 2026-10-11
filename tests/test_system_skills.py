@@ -56,7 +56,7 @@ def test_oversized_bundle_fails_before_publication(tmp_path):
 def test_native_discovery_and_tools_read_db_snapshot_but_cannot_change_it(
     tmp_path, monkeypatch, async_mode
 ):
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     snapshot = publish_bundle(BUNDLE)
     backend = SystemSkillsBackend(snapshot)
     filesystem = build_memory_filesystem(system_skills=backend)
@@ -175,7 +175,7 @@ def test_malformed_skill_fails_even_with_forged_discovery_state(async_mode):
 
 
 def skill_stack(monkeypatch, tmp_path, files=None):
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     snapshot = publish_bundle(BUNDLE) if files is None else files
     backend = SystemSkillsBackend(snapshot)
     filesystem = build_memory_filesystem(system_skills=backend)

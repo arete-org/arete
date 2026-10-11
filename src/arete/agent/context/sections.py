@@ -61,9 +61,13 @@ def _panel_payload(context) -> dict | None:
 
 def _page_data(page: str, params: dict) -> str:
     try:
-        rendered = json.dumps(
-            get_page_data(page, params=params), ensure_ascii=False, default=str
-        )
+        data = get_page_data(page, params=params)
+        raw = params.get("param_coach_ref")
+        if isinstance(raw, str):
+            from arete.services.coach_today import reference
+
+            data = {**data, "point_selectionne": reference(raw)}
+        rendered = json.dumps(data, ensure_ascii=False, default=str)
     except Exception as exc:
         # A failed read must not fail the turn: the coach can still answer,
         # or reach the data through its tools.

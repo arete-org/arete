@@ -1,4 +1,5 @@
-import { AreteMark, AretePresence } from '@/components/AreteBrand';
+import { CoachTodayPanel } from '@/components/agent/CoachToday';
+import { AretePresence } from '@/components/AreteBrand';
 import { PlayerSummary } from '@/components/PlayerSummary';
 import { useGamePreference } from '@/lib/gamification';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,11 +26,7 @@ const readinessTone = (score: number, threshold: number) =>
       : 'text-danger-red border-danger-red';
 const stressTone = (avg: number) => (avg > 40 ? 'text-danger-red' : avg > 25 ? 'text-neon-gold' : 'text-success-green');
 
-const TIP_BORDER: Record<string, string> = {
-  alert: 'border-danger-red',
-  warning: 'border-warning-orange',
-  info: 'border-neon-cyan',
-};
+
 
 function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
@@ -103,7 +100,6 @@ function TodaySession({
 
 export function DashboardPage() {
   const game = useGamePreference();
-  const queryClient = useQueryClient();
   const today = toLocalISODate();
 
   const { data: userSettings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
@@ -129,15 +125,8 @@ export function DashboardPage() {
 
   const { data: planToday } = useQuery({ queryKey: qk.planToday, queryFn: planApi.getToday });
   const decisionFor = (sessionId: number) =>
-    planToday?.decisions.find((d) => d.planned_session_id === sessionId) ?? null;
-  const adapt = useMutation({
-    mutationFn: planApi.adaptNow,
-    onSuccess: () => invalidateAfterSession(queryClient),
-  });
-  const canAdapt =
-    planToday != null &&
-    planToday.decisions.length === 0 &&
-    todayLink.planned.some((row) => row.state === 'pending');
+    planToday?.decisions.find((d) => d.planned_session_id === sessionId && d.applied_at) ?? null;
+
 
   const {
     data: playerStats,
@@ -229,21 +218,6 @@ export function DashboardPage() {
                     <OffPlanRow key={a.id} session={a} />
                   ))}
                   <div className="flex justify-end items-center gap-4 pt-1 text-xs font-sans">
-                    {adapt.data?.decisions.length === 0 && (
-                      <span className="text-text-muted">Rien à adapter aujourd&apos;hui.</span>
-                    )}
-                    {adapt.isError && <span className="text-danger-red">Recalcul impossible.</span>}
-                    {canAdapt && adapt.data == null && (
-                      <button
-                        type="button"
-                        disabled={adapt.isPending}
-                        onClick={() => adapt.mutate()}
-                        title="Adapter la séance du jour à ta préparation et à ta charge"
-                        className="text-neon-purple hover:underline disabled:opacity-40"
-                      >
-                        {adapt.isPending ? 'Recalcul…' : 'Recalculer'}
-                      </button>
-                    )}
                     <Link to="/planning" className="text-neon-cyan hover:underline">
                       Semaine →
                     </Link>
@@ -269,28 +243,7 @@ export function DashboardPage() {
                 Le coach écrit ton briefing…
               </p>
             )}
-            {tip && (
-              <section
-                className={cn('glass-panel p-4 border-l-4 animate-scale-in', TIP_BORDER[tip.priority] ?? 'border-neon-cyan')}
-              >
-                <div className="flex items-start gap-3">
-                  <AreteMark size={20} className="text-text-muted mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-sans text-text-primary leading-relaxed">{tip.tip}</p>
-                    <span className="text-[11px] font-sans text-text-muted mt-2 inline-block opacity-60">
-                      {tip.source === 'agent' ? 'Briefing du coach' : 'Calculé à partir de tes métriques'}
-                      {tip.generated_at &&
-                        ` · ${new Date(tip.generated_at).toLocaleString('fr-FR', {
-                          day: 'numeric',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}`}
-                    </span>
-                  </div>
-                </div>
-              </section>
-            )}
+            <CoachTodayPanel briefing={tip?.tip} />
 
             {/* Quick Actions Footer */}
             <div className="flex gap-3 animate-fade-in" style={{ animationDelay: '0.3s' }}>

@@ -1,3 +1,6 @@
+import { CoachMemory, MemoryReceipt } from './agent/CoachMemory';
+import { CoachReferenceCard } from './agent/CoachReferenceCard';
+import type { CoachReference } from '@/lib/coachToday';
 import { MessageFeedback } from './agent/MessageFeedback';
 import { SkillInput } from './agent/SkillInput';
 import { useGamePreference } from '@/lib/gamification';
@@ -12,7 +15,7 @@ import {
   Send,
   X,
   Plus,
-  History,
+  Ellipsis,
   ChevronDown,
   RotateCcw,
   Square,
@@ -72,7 +75,7 @@ const MessageSurfaces = memo(function MessageSurfaces({
   for (const part of parts) {
     if (part.kind === 'text') {
       if (part.text.trim()) groups.push(part);
-    } else if (part.kind === 'calendar_action') groups.push(part);
+    } else if (part.kind === 'calendar_action' || (part.kind === 'coach_card' && part.ref_kind !== 'fact')) groups.push(part);
     else if (!chiron && part === tools[0]) groups.push(tools);
   }
   return (
@@ -83,10 +86,11 @@ const MessageSurfaces = memo(function MessageSurfaces({
         ) : part.kind === 'text' ? (
           chiron ? <div key={`text-${part.id}`} className="coach-answer-part"><AgentMarkdown text={part.text} /></div>
             : <AgentMarkdown key={`text-${part.id}`} text={part.text} />
-        ) : part.kind === 'calendar_action' ? (
+        ) : part.kind === 'coach_card' ? <CoachReferenceCard key={part.id} reference={part} /> : part.kind === 'calendar_action' ? (
           <CalendarActionCard key={`calendar-${part.id}`} id={part.id} />
         ) : null
       )}
+      {parts.some(p => p.kind === 'coach_card' && p.ref_kind === 'fact') && <MemoryReceipt factIds={parts.flatMap(p => p.kind === 'coach_card' && p.ref_kind === 'fact' ? [p.ref_id] : [])} />}
       {!!message.workouts?.length && <WorkoutSelection sessions={message.workouts} onResult={onAction} locked={locked} />}
       {message.error && (
         <div
@@ -105,21 +109,27 @@ const MessageSurfaces = memo(function MessageSurfaces({
 });
 
 export function AgentSidePanel({
+  reference,
+  onClearReference,
   open,
   onClose,
   onBusyChange,
 }: {
+  reference?: CoachReference | null;
+  onClearReference?: () => void;
   open: boolean;
   onClose: () => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
-  const panelContext = usePanelContext();
+  const pageContext = usePanelContext();
+  const panelContext = { ...pageContext, params: { ...pageContext.params, ...(reference ? { coach_ref: `${reference.kind}:${reference.id}` } : {}) } };
+  const [showMemory, setShowMemory] = useState(false);
   const { data: preference } = useGamePreference();
   const rpg = preference?.enabled === true;
   const [expanded, setExpanded] = useState(false);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
-  const coach = useCoachThreads(panelContext, rpg);
+  const coach = useCoachThreads(panelContext, true);
   const { active, store, runningId } = coach;
   const messages = active.messages;
   const attachmentsRef = useRef<AttachmentsHandle>(null);
@@ -139,7 +149,7 @@ export function AgentSidePanel({
 
   useLayoutEffect(() => {
     const input = inputRef.current;
-    if (!rpg || !input) return;
+    if (!input) return;
     // Grow the draft between the inline actions, then scroll at the height limit.
     const resize = () => {
       input.style.height = 'auto';
@@ -198,8 +208,8 @@ export function AgentSidePanel({
   const page = PAGE_LABELS[panelContext.page] ?? panelContext.page;
   return (
     <aside
-      onDragEnter={event => { if (rpg && event.dataTransfer.types.includes('Files')) { event.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
-      onDragLeave={event => { if (rpg && event.dataTransfer.types.includes('Files')) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
+      onDragEnter={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
+      onDragLeave={event => { if (event.dataTransfer.types.includes('Files')) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
       onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
       onDrop={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); dragDepth.current = 0; setDragging(false); if (!busy) attachmentsRef.current?.upload(Array.from(event.dataTransfer.files)); }}
       id="coach-panel"
@@ -207,32 +217,25 @@ export function AgentSidePanel({
       role="complementary"
       aria-label="Coach IA"
     >
-      {dragging && rpg && <div className="absolute inset-3 z-50 pointer-events-none flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-neon-cyan bg-abyss/95 p-6 text-center"><p className="text-xl font-bold">Dépose tes fichiers ici</p><p className="mt-3 text-sm text-text-secondary">Ils seront joints au brouillon, sans envoyer le message.</p><p className="mt-2 text-xs text-text-muted">5 fichiers maximum · 20 Mio par fichier</p></div>}
-      <header className="flex shrink-0 items-center gap-3 border-b border-text-muted/15 px-5 py-4">
+      {dragging && <div className="absolute inset-3 z-50 pointer-events-none flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-neon-cyan bg-abyss/95 p-6 text-center"><p className="text-xl font-bold">Dépose tes fichiers ici</p><p className="mt-3 text-sm text-text-secondary">Ils seront joints au brouillon, sans envoyer le message.</p><p className="mt-2 text-xs text-text-muted">5 fichiers maximum · 20 Mio par fichier</p></div>}
+      <header className="flex shrink-0 items-center gap-2 border-b border-text-muted/15 px-4 py-3">
         <div className={cn('flex size-9 shrink-0 items-center justify-center', !rpg && 'rounded-xl border border-neon-cyan/15 bg-neon-cyan/5')}>
           <AreteMark size={36} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="coach-title text-sm font-semibold">{rpg ? 'Chiron — Coach Arete' : 'Coach Arete'}</h2>
+          <h2 className="coach-title text-sm font-semibold">{rpg ? 'Chiron' : 'Coach Arete'}</h2>
           {rpg ? <button onClick={() => setShowHistory(true)} aria-label="Changer de conversation" className="mt-0.5 flex max-w-full items-center gap-1 text-[11px] text-text-muted hover:text-text-primary"><span className="truncate">{active.title}</span><ChevronDown className="size-3 shrink-0" /></button> : <p className="mt-0.5 text-[11px] text-text-muted">{page}</p>}
         </div>
+        <button className="min-h-11 rounded px-2 text-xs text-text-muted hover:text-text-primary" aria-label="Ce que Chiron sait de moi" aria-expanded={showMemory} onClick={() => { setShowMemory(value => !value); setShowHistory(false); }}>Mémoire</button>
         {rpg && <button aria-label={expanded ? 'Réduire la conversation' : 'Agrandir la conversation'} onClick={() => setExpanded(!expanded)} className="ml-auto hidden md:flex size-11 items-center justify-center text-text-muted">{expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>}
         <button
-          onClick={() => setShowHistory((v) => !v)}
-          className="ml-auto rounded-lg p-2 text-text-muted hover:bg-text-muted/10"
+          onClick={() => { setShowHistory((v) => !v); setShowMemory(false); }}
+          className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-text-muted/10"
           aria-label="Historique des conversations"
           aria-expanded={showHistory}
           title="Historique des conversations"
         >
-          <History className="size-4" />
-        </button>
-        <button
-          onClick={newThread}
-          className="rounded-lg p-2 text-text-muted hover:bg-text-muted/10"
-          aria-label="Nouvelle conversation"
-          title="Nouvelle conversation"
-        >
-          <Plus className="size-4" />
+          <Ellipsis className="size-4" />
         </button>
         <button
           onClick={onClose}
@@ -284,7 +287,10 @@ export function AgentSidePanel({
           </div>
         </div>
       )}
-      {showHistory ? (
+      {reference && <div className="border-b border-text-muted/15 px-4 py-2">
+        {reference && <p className="text-xs text-text-secondary">{reference.kind === 'proposal' ? 'Proposition' : 'Suivi'} sélectionné · prêt à en parler <button className="min-h-11 px-2 underline" onClick={onClearReference}>Retirer</button></p>}
+      </div>}
+      {showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
         <ThreadHistory
           threads={store.threads}
           activeId={active.id}
@@ -340,7 +346,6 @@ export function AgentSidePanel({
             }}
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6"
           >
-            {!rpg && <DocumentAttachments key={active.id} threadId={active.id} collapsed={active.messages.length > 0} disabled={runningId !== null} ref={attachmentsRef} onBusy={setDocumentsBusy} onDocuments={coach.attachments} />}
             {!messages.length && (
               <div className="mx-auto mt-10 max-w-sm">
                 <AreteMark size={48} />
@@ -429,25 +434,25 @@ export function AgentSidePanel({
             </button>
           )}
           <footer className={cn('shrink-0 px-4 pb-4 pt-3', !rpg && 'border-t border-text-muted/15 bg-abyss')}>
-            <div className={cn('relative rounded-xl border border-text-muted/20 p-2 focus-within:border-neon-cyan/40', rpg ? 'grid grid-cols-[24px_minmax(0,1fr)_auto_32px] items-end gap-x-1 bg-abyss' : 'bg-void/40')}>
-              {rpg && <DocumentAttachments key={active.id} threadId={active.id} compact selectedIds={active.attachmentIds ?? []} disabled={runningId !== null} ref={attachmentsRef} onBusy={setDocumentsBusy} onDocuments={coach.attachments} />}
-              <div className={rpg ? 'contents' : 'flex items-end gap-2'}>
-                {rpg && <button
+            <div className="relative grid grid-cols-[44px_minmax(0,1fr)_auto_44px] items-end gap-x-1 rounded-[var(--radius-control)] border border-[var(--arete-border)] bg-void px-2 py-1 focus-within:border-neon-cyan/40">
+              <DocumentAttachments key={active.id} threadId={active.id} selectedIds={active.attachmentIds ?? []} disabled={runningId !== null} ref={attachmentsRef} onBusy={setDocumentsBusy} onDocuments={coach.attachments} />
+              <div className="contents">
+                <button
                   type="button"
                   disabled={busy}
                   aria-label="Joindre un fichier"
                   title="Joindre un fichier · PDF, Excel, images, texte · 20 Mio par fichier"
                   onClick={() => attachmentsRef.current?.choose()}
-                  className="col-start-1 row-start-2 flex h-8 w-6 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-text-primary focus-visible:outline-2 focus-visible:outline-neon-cyan disabled:opacity-30"
-                ><Plus className="size-4" aria-hidden="true" /></button>}
+                  className="col-start-1 row-start-1 flex size-11 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-text-primary focus-visible:outline-2 focus-visible:outline-neon-cyan disabled:opacity-30"
+                ><Plus className="size-4" aria-hidden="true" /></button>
                 <SkillInput
                   key={active.id}
                   inputRef={inputRef}
                   aria-label="Message au coach"
                   value={active.draft}
                   onValueChange={coach.draft}
-                  onPaste={event => { if (rpg && event.clipboardData.files.length) { event.preventDefault(); if (!busy) attachmentsRef.current?.upload(Array.from(event.clipboardData.files)); } }}
-                  rows={rpg ? 1 : 2}
+                  onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); if (!busy) attachmentsRef.current?.upload(Array.from(event.clipboardData.files)); } }}
+                  rows={1}
                   wrap="soft"
                   maxLength={MAX_MESSAGE_CHARS}
                   onKeyDown={(e) => {
@@ -462,12 +467,12 @@ export function AgentSidePanel({
                     }
                   }}
                   placeholder="Pose ta question… / skills"
-                  className={cn('coach-composer-input block max-h-36 min-w-0 flex-1 resize-none appearance-none overflow-x-hidden overflow-y-auto bg-transparent py-1.5 text-sm leading-relaxed outline-none', rpg ? 'col-start-2 row-start-2 w-full px-1' : 'px-2')}
+                  className={cn('coach-composer-input block min-h-11 max-h-36 min-w-0 flex-1 resize-none appearance-none overflow-x-hidden overflow-y-auto bg-transparent py-1.5 text-sm leading-relaxed outline-none', 'col-start-2 row-start-1 w-full px-1')}
                 />
                 {streaming ? (
                   <button
                     onClick={coach.stop}
-                    className={cn('flex items-center justify-center gap-2 rounded-lg bg-text-muted/10 hover:bg-text-muted/20', rpg ? 'col-start-4 row-start-2 size-8' : 'min-h-11 min-w-11 px-3')}
+                    className={cn('flex items-center justify-center gap-2 rounded-lg bg-text-muted/10 hover:bg-text-muted/20', 'col-start-4 row-start-1 size-11')}
                     aria-label="Arrêter la réponse"
                   >
                     <Square className="size-4" />
@@ -476,7 +481,7 @@ export function AgentSidePanel({
                   <button
                     onClick={() => send()}
                     disabled={busy || !active.draft.trim()}
-                    className={cn('flex shrink-0 items-center justify-center rounded-lg bg-neon-cyan/15 text-neon-cyan hover:bg-neon-cyan/25 disabled:opacity-30', rpg ? 'col-start-4 row-start-2 size-8' : 'p-2.5')}
+                    className={cn('flex shrink-0 items-center justify-center rounded-lg bg-neon-cyan/15 text-neon-cyan hover:bg-neon-cyan/25 disabled:opacity-30', 'col-start-4 row-start-1 size-11')}
                     aria-label="Envoyer"
                   >
                     <Send className="size-4" />

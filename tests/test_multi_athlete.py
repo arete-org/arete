@@ -289,7 +289,7 @@ def test_mirror_keeps_identical_paths_private(athletes):
         for user in athletes:
             with athlete_scope(user.athlete_id):
                 assert mirror.hydrate() == 0
-                path = config.data_dir / "agent/memory/notes.md"
+                path = config.data_dir / "garmin_tokens/test.json"
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(user.email)
                 assert mirror.flush() == 1
@@ -299,7 +299,7 @@ def test_mirror_keeps_identical_paths_private(athletes):
             with athlete_scope(user.athlete_id):
                 assert mirror.hydrate() == 1
                 assert (
-                    config.data_dir / "agent/memory/notes.md"
+                    config.data_dir / "garmin_tokens/test.json"
                 ).read_text() == user.email
     finally:
         mirror.reset()

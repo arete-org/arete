@@ -376,6 +376,7 @@ def _generate_cardio_feedback(
             )
         ),
         session_ref=f"actual:{session_id}",
+        sport=session.sport,
         rpe=session.rpe,
         notes=session.notes,
     )
@@ -388,8 +389,14 @@ def _generate_cardio_feedback(
 
     feedback_parts.append(f"Séance de {sport} terminée ({duration_min} min).")
 
-    # HR feedback
-    if session.avg_hr and session.max_hr:
+    # Imported strength activities often contain only HR, not mechanical load.
+    is_strength = sport in {"strength", "strength_training", "musculation"}
+    if is_strength:
+        feedback_parts.append(
+            "Le cardio seul ne permet pas de juger ce renforcement. "
+            "Précise les exercices, séries, charges ou ton ressenti."
+        )
+    if not is_strength and session.avg_hr and session.max_hr:
         zone_num, zone_desc = _hr_zone_label(int(session.avg_hr))
         highlights.append(
             f"FC moyenne à {session.avg_hr:.0f} bpm, zone {zone_num} {zone_desc}"

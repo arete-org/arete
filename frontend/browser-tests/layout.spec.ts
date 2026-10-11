@@ -8,6 +8,7 @@ test('desktop aligns the brand and content, uses the workspace and reflows besid
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'odyssey', display_name: 'HUNTER' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
+    if (path === '/api/coach/today') return route.fulfill({ json: { date: '2026-10-11', items: [], remaining: 0, briefing: null } });
     if (path === '/api/plan/today') return route.fulfill({ json: { decisions: [] } });
     if (path === '/api/metrics/player-stats') return route.fulfill({ json: {
       level: 0, weeks_at_goal: 0,

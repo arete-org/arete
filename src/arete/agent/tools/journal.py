@@ -108,3 +108,39 @@ def remember_fact(
     except ValueError as e:
         return json.dumps({"error": str(e)})
     return json.dumps({"saved": True, "fact": fact.to_dict()}, ensure_ascii=False)
+
+
+@typed_tool
+def forget_fact(
+    fact_id: Annotated[int, Field(gt=0)],
+    expected_revision: Annotated[int, Field(ge=1)],
+) -> str:
+    """Oublie un fait et toutes ses versions à la demande explicite de l'athlète.
+    Utilise l'id et la révision joints ; ne supprime ni séance ni journal.
+    """
+    try:
+        removed = athlete_facts.delete_fact(
+            fact_id, expected_revision=expected_revision
+        )
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)}, ensure_ascii=False)
+    return json.dumps({"forgotten": removed, "fact_id": fact_id})
+
+
+@typed_tool
+def respond_coach_followup(
+    followup_id: Annotated[int, Field(gt=0)],
+    revision: Annotated[int, Field(ge=1)],
+    rpe: Annotated[int, Field(ge=1, le=10)],
+    notes: Annotated[str, Field(max_length=2_000)] = "",
+) -> str:
+    """Consigne le ressenti explicitement déclaré pour le suivi joint au contexte.
+    N'invente jamais un RPE. Une réponse déjà enregistrée n'est pas écrasée.
+    """
+    from arete.services.coach_followup import respond
+
+    try:
+        result = respond(followup_id, revision, "answer", rpe=rpe, notes=notes or None)
+    except (ValueError, LookupError) as exc:
+        return json.dumps({"error": str(exc)}, ensure_ascii=False)
+    return json.dumps({"saved": True, "followup": result}, ensure_ascii=False)

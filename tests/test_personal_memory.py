@@ -269,6 +269,7 @@ def test_journal_archive_search_and_explicit_bound(monkeypatch):
     from arete.services.memory import memory_root
 
     root = memory_root()
+    root.mkdir(parents=True, exist_ok=True)
     (root / "sessions-2025-01.md").write_text(
         "## 2025-01-08 — décision\nReporter la traversée des Bauges."
     )
