@@ -134,6 +134,7 @@ def _expire_profiles() -> None:
     con = connect()
     con.execute("UPDATE app.users SET profile_synced_at = now() - INTERVAL 2 HOUR")
     con.close()
+    auth.forget_accounts()  # two hours later, no cached resolution is left
 
 
 def test_a_burst_of_stale_requests_refreshes_the_profile_once(enforced, monkeypatch):
@@ -266,3 +267,83 @@ def test_http_workers_enforce_private_plans(client, enforced):
         assert (
             client.delete(f"/garmin/planned/{own}", headers=headers).status_code == 200
         )
+
+
+class TestAccountCache:
+    """One account read per burst; revocation bounded by ACCOUNT_TTL_SECONDS."""
+
+    @pytest.fixture
+    def clock(self, monkeypatch):
+        now = [1000.0]
+        monkeypatch.setattr(auth, "_clock", lambda: now[0])
+        return now
+
+    def test_a_burst_of_requests_reads_the_account_once(
+        self, client, enforced, monkeypatch, statement_log
+    ):
+        auth.resolve_user("Bearer owner-token")  # provisioned from Clerk
+        auth.forget_accounts()
+        connect_ = users.connect
+        monkeypatch.setattr(users, "connect", lambda: statement_log.wrap(connect_()))
+        for _ in range(10):
+            response = client.get("/settings", headers=_bearer("owner-token"))
+            assert response.status_code == 200
+        # One query for the login and its athlete together, then the cache.
+        assert len(statement_log) == 1
+        assert "app.athletes" in statement_log[0]
+
+    def test_deactivation_applies_at_once_here_and_within_the_ttl_elsewhere(
+        self, client, enforced, clock
+    ):
+        owner, other = _bearer("owner-token"), _bearer("other-token")
+        athlete = client.get("/auth/me", headers=other).json()["athlete_id"]
+        client.get("/auth/me", headers=owner)
+        # Through this instance's administration: refused at the next request.
+        deactivate = f"/admin/athletes/{athlete}/deactivate"
+        assert client.post(deactivate, headers=owner).status_code == 204
+        assert client.get("/settings", headers=other).status_code == 403
+        reactivate = f"/admin/athletes/{athlete}/reactivate"
+        assert client.post(reactivate, headers=owner).status_code == 204
+        assert client.get("/settings", headers=other).status_code == 200
+        # Through another instance (a direct write here): within the TTL.
+        users.deactivate_athlete(athlete, actor=auth.resolve_user("Bearer owner-token"))
+        clock[0] += auth.ACCOUNT_TTL_SECONDS - 1
+        assert client.get("/settings", headers=other).status_code == 200
+        clock[0] += 1
+        assert client.get("/settings", headers=other).status_code == 403
+        assert auth.ACCOUNT_TTL_SECONDS <= 60
+
+    def test_the_cache_is_bounded_and_keeps_subjects_apart(
+        self, enforced, monkeypatch, statement_log
+    ):
+        monkeypatch.setitem(TOKENS, "third-token", "user_third")
+        monkeypatch.setitem(PROFILES, "user_third", ("third@example.com", None, True))
+        monkeypatch.setattr(auth, "ACCOUNT_CACHE_SIZE", 2)
+        owner = auth.resolve_user("Bearer owner-token")
+        other = auth.resolve_user("Bearer other-token")
+        assert owner.athlete_id == 1 and other.athlete_id not in (None, 1)
+        connect_ = users.connect
+        monkeypatch.setattr(users, "connect", lambda: statement_log.wrap(connect_()))
+        # Served from the cache, each subject its own account.
+        assert auth.resolve_user("Bearer other-token") == other
+        assert auth.resolve_user("Bearer owner-token") == owner
+        assert statement_log == []
+        auth.resolve_user("Bearer third-token")
+        # The least recently used (other) made room; the owner stayed.
+        assert list(auth._accounts) == [OWNER, "user_third"]
+
+    def test_a_read_overtaken_by_an_administration_change_is_not_kept(
+        self, enforced, monkeypatch
+    ):
+        auth.resolve_user("Bearer other-token")
+        auth.forget_accounts()
+        read = users.get_account
+
+        def overtaken(subject):
+            account = read(subject)
+            auth.forget_accounts()  # an admin acted while this read was in flight
+            return account
+
+        monkeypatch.setattr(users, "get_account", overtaken)
+        auth.resolve_user("Bearer other-token")
+        assert OTHER not in auth._accounts

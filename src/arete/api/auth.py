@@ -8,7 +8,9 @@ server use. Each Clerk account owns a private athlete. The first verified
 configured owner email keeps the original athlete; other accounts get empty
 training data. The scope wraps the entire response, including SSE and workers.
 Administration routes need an administrator (the owner is one by right);
-naming administrators needs the owner.
+naming administrators needs the owner. A resolved account is reused for
+``ACCOUNT_TTL_SECONDS`` (30 s): a deactivation or role change applies at once
+on the instance that made it and within that bound on every other instance.
 
 Pure ASGI middleware, like the mirror's: the coach streams, and a
 ``BaseHTTPMiddleware`` would sit between the stream and the client. The Clerk
@@ -20,6 +22,8 @@ from __future__ import annotations
 import hmac
 import logging
 import threading
+import time
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -160,15 +164,64 @@ def resolve_user(authorization: str | None) -> AppUser:
     subject = claims.get("sub")
     if not isinstance(subject, str) or not subject:
         raise AuthError(401, "Session invalide ou expirée.")
-    user = user_service.get_user(subject)
-    if user is None or _profile_is_stale(user):
-        user = _refresh_profile(subject)
+    user, athlete_active = _resolve_account(subject)
     if user.deleted_at is not None or (
-        user.athlete_id is not None
-        and not user_service.athlete_is_active(user.athlete_id)
+        user.athlete_id is not None and not athlete_active
     ):
         raise AuthError(403, "Ce compte a été désactivé.")
     return user
+
+
+# ------------------------------------------------------- account cache --
+#: How long a resolved account is reused. A dashboard sends a dozen requests
+#: at once, and each used to read the login and its athlete. This is also the
+#: bound for revocation: a deactivation or role change made on another
+#: instance is refused or applied here within this many seconds; on the
+#: instance that made it, at once (``forget_accounts``). Keep it <= 60 s.
+ACCOUNT_TTL_SECONDS = 30.0
+#: Entries kept per instance; the least recently used goes first.
+ACCOUNT_CACHE_SIZE = 256
+_clock = time.monotonic
+_accounts: OrderedDict[str, tuple[float, AppUser, bool]] = OrderedDict()
+_accounts_lock = threading.Lock()
+#: Bumped by ``forget_accounts`` so a read that started before an
+#: administration change cannot store its now stale answer afterwards.
+_accounts_generation = 0
+
+
+def forget_accounts() -> None:
+    """Drop every cached account, after an administration change here."""
+    global _accounts_generation
+    with _accounts_lock:
+        _accounts.clear()
+        _accounts_generation += 1
+
+
+def _resolve_account(subject: str) -> tuple[AppUser, bool]:
+    """(login, athlete is live) for a verified subject: cached, or one query.
+
+    A new or stale profile is refreshed from Clerk first, then read back.
+    """
+    now = _clock()
+    with _accounts_lock:
+        entry = _accounts.get(subject)
+        if entry is not None and now - entry[0] < ACCOUNT_TTL_SECONDS:
+            _accounts.move_to_end(subject)
+            return entry[1], entry[2]
+        generation = _accounts_generation
+    account = user_service.get_account(subject)
+    if account is None or _profile_is_stale(account[0]):
+        _refresh_profile(subject)
+        account = user_service.get_account(subject)
+        assert account is not None, "a refreshed account must exist"
+    with _accounts_lock:
+        if generation == _accounts_generation:
+            # Timed from before the read: the TTL bounds the data's age.
+            _accounts[subject] = (now, *account)
+            _accounts.move_to_end(subject)
+            while len(_accounts) > ACCOUNT_CACHE_SIZE:
+                _accounts.popitem(last=False)
+    return account
 
 
 #: One profile refresh at a time per instance: a dashboard sends a dozen

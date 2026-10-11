@@ -48,6 +48,16 @@ def offline_weather(monkeypatch) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def fresh_account_cache() -> Generator[None, None, None]:
+    """Tests rewrite app.users directly: never serve a previous test's account."""
+    from arete.api.auth import forget_accounts
+
+    forget_accounts()
+    yield
+    forget_accounts()
+
+
 class _CountingConnection:
     """A DuckDB connection that records every statement it runs."""
 

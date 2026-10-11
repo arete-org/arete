@@ -23,6 +23,11 @@ _COLUMNS = (
     "id, clerk_user_id, email, name, athlete_id, email_verified_at, "
     "profile_synced_at, deleted_at, coalesce(role, 'athlete')"
 )
+#: The same columns, qualified for a query that joins ``app.athletes``.
+_JOINED_COLUMNS = (
+    "u.id, u.clerk_user_id, u.email, u.name, u.athlete_id, u.email_verified_at, "
+    "u.profile_synced_at, u.deleted_at, coalesce(u.role, 'athlete')"
+)
 
 
 class AccountError(Exception):
@@ -98,6 +103,26 @@ def get_user(clerk_user_id: str) -> AppUser | None:
     finally:
         con.close()
     return _from_row(row) if row else None
+
+
+def get_account(clerk_user_id: str) -> tuple[AppUser, bool] | None:
+    """The login and whether its athlete is live, in one query; None if unknown.
+
+    The flag is False for a deactivated or missing athlete, and True for a
+    login with no athlete yet (nothing to deactivate).
+    """
+    con = connect()
+    try:
+        row = con.execute(
+            f"SELECT {_JOINED_COLUMNS}, u.athlete_id IS NULL OR "
+            "(a.id IS NOT NULL AND a.deleted_at IS NULL) "
+            "FROM app.users u LEFT JOIN app.athletes a ON a.id = u.athlete_id "
+            "WHERE u.clerk_user_id = ?",
+            [clerk_user_id],
+        ).fetchone()
+    finally:
+        con.close()
+    return (_from_row(row[:-1]), bool(row[-1])) if row else None
 
 
 def upsert_user(
