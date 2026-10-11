@@ -12,13 +12,18 @@ naming administrators needs the owner.
 
 Pure ASGI middleware, like the mirror's: the coach streams, and a
 ``BaseHTTPMiddleware`` would sit between the stream and the client. The Clerk
-SDK is imported inside the verification so a cold boot does not pay for it.
+SDK and PyJWT are imported inside the verification so a cold boot does not pay
+for them. With ``CLERK_JWT_KEY`` (the instance's PEM public key) a session token
+is verified offline; without it the SDK fetches Clerk's JWKS on each new
+instance and every five minutes. A key that does not load fails closed (503).
 """
 
 from __future__ import annotations
 
+import functools
 import hmac
 import logging
+import re
 import threading
 from datetime import datetime, timedelta
 from typing import Any
@@ -79,7 +84,27 @@ def auth_misconfigured() -> str | None:
         return "CLERK_SECRET_KEY manquante"
     if not config.clerk_publishable_key:
         return "clé publique Clerk manquante"
+    if config.clerk_jwt_key and not _jwt_key_is_usable(config.clerk_jwt_key):
+        return "CLERK_JWT_KEY illisible (clé publique PEM RSA attendue)"
     return None
+
+
+@functools.lru_cache(maxsize=4)
+def _jwt_key_is_usable(pem: str) -> bool:
+    """Whether the SDK can verify with this key, parsed as it will parse it.
+
+    A key that does not load would turn every session into a 401 that looks
+    like a sign-in problem: refuse it as a misconfiguration instead.
+    """
+    from jwt.algorithms import RSAAlgorithm
+    from jwt.exceptions import InvalidKeyError
+
+    try:
+        # The SDK strips line breaks before handing the key to PyJWT.
+        RSAAlgorithm(RSAAlgorithm.SHA256).prepare_key(re.sub(r"[\r\n]", "", pem))
+    except (InvalidKeyError, ValueError, TypeError):
+        return False
+    return True
 
 
 def is_public(path: str) -> bool:
@@ -103,8 +128,11 @@ def _verify_session_token(token: str) -> dict[str, Any]:
         verify_token,
     )
 
+    # With the instance's public key the SDK verifies offline; without it,
+    # it fetches Clerk's JWKS on each new instance and every five minutes.
     options = VerifyTokenOptions(
         secret_key=config.clerk_secret_key,
+        jwt_key=config.clerk_jwt_key or None,
         authorized_parties=list(config.auth_origins) or None,
     )
     try:
@@ -229,8 +257,9 @@ class AuthMiddleware:
             return
         authorization = Headers(scope=scope).get("authorization")
         try:
-            # Token verification may fetch Clerk's keys, and the account read
-            # is a database round trip: both leave the event loop free.
+            # Token verification may fetch Clerk's keys (without CLERK_JWT_KEY),
+            # and the account read is a database round trip: both leave the
+            # event loop free.
             user = await anyio.to_thread.run_sync(resolve_user, authorization)
         except AuthError as e:
             headers = {"WWW-Authenticate": "Bearer"} if e.status == 401 else None

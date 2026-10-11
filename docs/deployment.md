@@ -168,6 +168,26 @@ dashboard:
   for the preview health check), `OPENROUTER_API_KEY` (the wiki workflow);
   variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
 
+## Clerk session verification
+
+With `ARETE_AUTH=clerk`, the API verifies each Clerk session token itself.
+Without `CLERK_JWT_KEY` the Clerk SDK first fetches the instance's JWKS from
+Clerk, on every new function instance and again every five minutes, which
+delays the first request of a dashboard burst. With it, verification is
+offline:
+
+- **Where to copy it.** Clerk dashboard → *Configure* → *API keys* → *JWT
+  public key*, the PEM block (`-----BEGIN PUBLIC KEY-----` … `-----END PUBLIC
+  KEY-----`). Paste it whole in the Vercel variable; line breaks may stay or go.
+- **One key per Clerk instance.** Each Vercel environment takes the key of the
+  instance whose `CLERK_SECRET_KEY` it holds. Production and Preview use
+  different keys as soon as they use different instances: moving Production to
+  its own Clerk instance changes this key together with the two others.
+- **Failure modes.** A key that does not load answers 503 on every protected
+  route, logged as `Authentication enabled but unusable: CLERK_JWT_KEY
+  illisible …`. A readable key from another instance refuses every session with
+  401. Removing the variable restores the JWKS fetch.
+
 ## Keeping production warm
 
 A function instance idles out after a few minutes, and the first request then
