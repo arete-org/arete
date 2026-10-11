@@ -251,13 +251,25 @@ def test_response_metadata_keeps_model_and_finish_reason_redacts_the_rest():
     assert scrubbed["system_fingerprint"].startswith("[REDACTED:")
 
 
-def test_attachment_state_content_is_redacted_like_any_other_content():
-    """Review finding: the files dict carries extracted text under "content"
-    with no tool name; a key-name/tool-name allowlist would miss it, but the
-    default-deny net redacts any unlisted key regardless."""
+def test_attachment_state_content_and_path_are_both_redacted():
+    """Review findings: the files dict carries extracted text under
+    "content" with no tool name, and is itself keyed by the attachment's
+    path, which can carry an athlete-chosen filename. A value-side allowlist
+    protects neither; the dict is walked by its shape, not a known key."""
     payload = {"files": {"/attachments/plan.md": {"content": FIXTURE_SENTENCE}}}
     scrubbed = scrub(payload)
-    assert scrubbed["files"]["/attachments/plan.md"]["content"].startswith("[REDACTED:")
+    ((key, entry),) = scrubbed["files"].items()
+    assert key.startswith("[REDACTED:")
+    assert entry["content"].startswith("[REDACTED:")
+
+
+def test_allowlisted_key_with_a_nested_value_is_still_walked():
+    """Review finding: trusting an allowlisted key's value outright, without
+    recursing, would let content hide inside an unexpectedly nested value."""
+    payload = {"model": {"name": "gpt-test", "system_prompt": FIXTURE_SENTENCE}}
+    scrubbed = scrub(payload)
+    assert scrubbed["model"]["name"] == "gpt-test"
+    assert scrubbed["model"]["system_prompt"].startswith("[REDACTED:")
 
 
 # --- Tracer: redacts every run's error to its type, which scrub() cannot reach. ---

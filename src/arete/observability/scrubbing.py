@@ -72,6 +72,16 @@ def _redact_string(value: str) -> str:
     return f"[REDACTED:{len(value)} chars]" if value else REDACTED
 
 
+def _redact_key(key: Any) -> Any:
+    # A schema field name (content, args, tool_calls, ...) is never a path;
+    # a dict acting as a lookup table (state["files"], keyed by an
+    # athlete-chosen filename) is. The value-side allowlist cannot protect a
+    # key, so redact it here instead of trusting every dict key by default.
+    if isinstance(key, str) and "/" in key:
+        return _redact_string(key)
+    return key
+
+
 def _redact_message(
     value: BaseMessage, *, depth: int, nodes_left: list[int]
 ) -> BaseMessage:
@@ -105,8 +115,8 @@ def _walk(value: Any, *, depth: int, nodes_left: list[int]) -> Any:
         return _redact_message(value, depth=depth, nodes_left=nodes_left)
     if isinstance(value, dict):
         return {
-            key: child
-            if key in ALLOWED_KEYS
+            _redact_key(key): child
+            if key in ALLOWED_KEYS and not isinstance(child, (dict, list, tuple))
             else _walk(child, depth=depth + 1, nodes_left=nodes_left)
             for key, child in value.items()
         }
