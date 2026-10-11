@@ -19,7 +19,9 @@ from arete.agent.models.registry import OPENROUTER_FREE_ONLY, OPENROUTER_GLM_FLA
 from arete.agent.profiles.catalog import get_profile
 from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.execution import invoke_agent, run_config, stream_agent
+from arete.dataio.init_duckdb import main as init_schema
 from arete.services.athlete_scope import athlete_scope
+from arete.services.users import upsert_user
 
 
 @pytest.fixture
@@ -149,7 +151,17 @@ def test_sdk_sends_stable_hash_and_keeps_caps_on_each_fallback_attempt(provider,
     assert "session_id" not in fallback.extra_body
 
 
-def test_concurrent_conversations_do_not_share_affinity(provider):
+def test_concurrent_conversations_do_not_share_affinity(
+    provider, tmp_path, monkeypatch
+):
+    # Live journal views require a provisioned athlete. A hard-coded id 2 only
+    # worked when an earlier test happened to create it in the shared database.
+    monkeypatch.setenv("ARETE_DB", str(tmp_path / "affinity.duckdb"))
+    monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path / "files"))
+    init_schema()
+    second = upsert_user("affinity-second", "affinity@example.test").athlete_id
+    assert second is not None and second != 1
+    conversations = ((1, "same"), (second, "same"), (1, "different"))
     model, bodies = provider
     agent = graph(model())
 
@@ -162,12 +174,22 @@ def test_concurrent_conversations_do_not_share_affinity(provider):
             )
 
     async def concurrent():
-        await asyncio.gather(run(1, "same"), run(2, "same"), run(1, "different"))
+        await asyncio.gather(
+            *(run(athlete, thread) for athlete, thread in conversations)
+        )
 
     asyncio.run(concurrent())
     assert len(bodies) == 6
     keys = [body["session_id"] for body in bodies]
-    assert len(set(keys)) == 3
+    assert set(keys) == {
+        hashlib.sha256(
+            json.dumps(
+                ["arete-provider-affinity-v1", athlete, "chat", thread],
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        for athlete, thread in conversations
+    }
     assert all(keys.count(key) == 2 for key in keys)
 
 
