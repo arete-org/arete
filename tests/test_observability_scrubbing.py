@@ -329,6 +329,23 @@ def test_allowlisted_key_with_a_long_string_is_redacted_anyway():
     assert scrub(payload)["name"].startswith("[REDACTED:")
 
 
+def test_allowlisted_key_with_any_whitespace_is_redacted_even_if_short():
+    """Review finding: a short string can still be athlete content (a brief
+    answer, a body part). A real tool/run/model name or id never contains a
+    space; any multi-word answer does, so that alone is enough to redact,
+    regardless of length."""
+    payload = {"name": "mal au genou"}
+    assert scrub(payload)["name"].startswith("[REDACTED:")
+
+
+def test_node_budget_truncation_marker_is_a_valid_json_key():
+    """Review finding: Ellipsis as a dict key is not JSON-serializable and
+    would break downstream, after scrub()'s own try/except already returned."""
+    payload = {str(i): i for i in range(scrubbing.WALK_NODES_MAX + 5)}
+    scrubbed = scrub(payload)
+    assert all(isinstance(key, str) for key in scrubbed)
+
+
 def test_a_short_word_under_a_closed_vocabulary_key_is_not_a_free_pass():
     """Review finding: being short and lowercase does not make a value an
     enum member. "genou" (knee) and "success" are the same shape; only the

@@ -28,8 +28,8 @@ REDACTED_TRUNCATED = "[REDACTED:truncated]"
 # Keys whose value is structural or operational, never athlete content: a
 # run/tool/message's own name, type and identifiers, and model/finish
 # bookkeeping. Kept verbatim wherever they appear, at any depth (bounded by
-# _is_safe_allowlisted_value below). Token usage and timings need no entry
-# here: they are already numbers, and only string values are ever redacted.
+# _is_trusted_field below). Token usage and timings need no entry here:
+# they are already numbers, and only string values are ever redacted.
 #
 # "name"/"id"/"model"/"trace_id" stay open-ended: a tool, run or model name
 # is developer- or framework-chosen, never athlete free text in this
@@ -112,10 +112,11 @@ def _redact_string(value: str) -> str:
     return f"[REDACTED:{len(value)} chars]" if value else REDACTED
 
 
-#: An identifier (name, id, status, model) never needs more than this; a
-#: longer string under an allowlisted key is free text wearing that key's
-#: name, not the identifier the allowlist was meant for.
-MAX_ALLOWED_VALUE_CHARS = 200
+#: A real tool/run/model name or id never contains whitespace and is short;
+#: an athlete sentence (or a single free-text word long enough to matter)
+#: reliably fails one of the two. Shape, not just length, is the check: a
+#: multi-word answer about an injury or a mood always has a space.
+_IDENTIFIER_SHAPED = re.compile(r"^\S{1,64}$")
 
 
 def _is_trusted_field(key: Any, value: Any) -> bool:
@@ -128,7 +129,7 @@ def _is_trusted_field(key: Any, value: Any) -> bool:
         return False
     if key in ALLOWED_ENUM_VALUES:
         return value in ALLOWED_ENUM_VALUES[key]
-    return key in ALLOWED_KEYS and len(value) <= MAX_ALLOWED_VALUE_CHARS
+    return key in ALLOWED_KEYS and bool(_IDENTIFIER_SHAPED.match(value))
 
 
 #: A schema field name (content, tool_calls, additional_kwargs, ...) is a
@@ -176,7 +177,10 @@ def _walk_dict(value: dict, *, depth: int, nodes_left: list[int]) -> dict:
     result: dict[Any, Any] = {}
     for index, (key, child) in enumerate(value.items()):
         if nodes_left[0] <= 0:
-            result[...] = REDACTED_TRUNCATED
+            # A JSON-safe string key: Ellipsis or any non-string key would
+            # break serialization downstream, which scrub()'s own try/except
+            # cannot see since it happens after this payload is returned.
+            result[REDACTED_TRUNCATED] = len(value) - index
             break
         nodes_left[0] -= 1
         value_out = (
