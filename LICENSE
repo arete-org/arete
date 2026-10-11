@@ -1,21 +1,47 @@
-MIT License
+Arete Proprietary License
 
-Copyright (c) 2025 gregoire-petit1
+Copyright (c) 2025-2026 Grégoire Petit, Arthur Edmond and Nicolas Edmond.
+All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This repository and everything it contains, including source code,
+documentation, prompts, grammars, designs, logos and other assets (the
+"Software"), belong to the copyright holders named above.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. No license granted. Except as stated in section 2, no right or license is
+   granted, expressly or by implication, to use, run, copy, modify, merge,
+   publish, distribute, sublicense, sell, host or offer as a service the
+   Software or any work derived from it, without the prior written permission
+   of all the copyright holders.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Public visibility. Making this repository publicly visible grants only the
+   license that GitHub's Terms of Service require: to view the Software and to
+   reproduce it on GitHub through GitHub's own features, such as forking. Such
+   a copy carries no other right; in particular, it may not be run, deployed,
+   modified or distributed outside GitHub.
+
+3. Contributions. By submitting a contribution to this repository (a commit,
+   pull request, patch or suggestion), the contributor grants the copyright
+   holders a perpetual, worldwide, irrevocable, royalty-free license to use,
+   modify, sublicense and relicense that contribution, unless a separate
+   written agreement with the copyright holders says otherwise.
+
+4. Third-party components. Third-party components included in or used by the
+   Software remain under their own licenses, as stated in their packages and
+   notice files (for example, the fonts under the SIL Open Font License). This
+   license does not change those terms.
+
+5. Earlier versions. Versions of the Software published before 11 October 2026
+   were distributed under the MIT License. That license continues to apply to
+   those versions only, and to no later version.
+
+6. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+   EVENT SHALL THE COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+7. Governing law. This license is governed by French law. Any dispute relating
+   to it falls under the jurisdiction of the competent French courts.
+
+Requests for permission: open a discussion with the copyright holders through
+the arete-org organization on GitHub.

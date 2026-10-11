@@ -3,6 +3,8 @@ name = "arete"
 version = "0.1.0"
 description = "Training assistant: Garmin/Strava analytics, strength log and LLM coaching tips"
 readme = "README.md"
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "anyio>=4.14.2",
