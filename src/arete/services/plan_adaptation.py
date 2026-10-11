@@ -144,7 +144,7 @@ def adapt_today(
             # The daily run changed the plan before the athlete looked: say so.
             from arete.services.notifications import notify
 
-            notify("Séance adaptée", outcome.reason, "/")
+            notify("Séance adaptée", outcome.reason, "/", kind="adapted_session")
         logger.info(
             "Plan decision for session %s: %s (%s)",
             session.id,

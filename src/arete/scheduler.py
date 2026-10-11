@@ -166,7 +166,12 @@ def daily_sync() -> dict[str, str]:
     if imported:
         from arete.services.notifications import notify
 
-        notify("Arete", f"{imported} séance(s) importée(s)", "/log?tab=cardio")
+        notify(
+            "Arete",
+            f"{imported} séance(s) importée(s)",
+            "/log?tab=cardio",
+            kind="imports",
+        )
     logger.info("Daily sync: %s", status)
     _last_status[current_athlete_id()] = dict(status)
     return status
@@ -215,7 +220,7 @@ def write_daily_briefing() -> str:
     logger.info("Daily briefing: %s", briefing.source)
     from arete.services.notifications import first_sentence, notify
 
-    notify("Briefing du coach", first_sentence(briefing.text), "/")
+    notify("Briefing du coach", first_sentence(briefing.text), "/", kind="briefing")
     return briefing.source
 
 
@@ -229,7 +234,12 @@ def write_weekly_review(today: date | None = None) -> str:
         from arete.services.notifications import first_sentence, notify
 
         review = generate_weekly_review()
-        notify("Bilan de la semaine", first_sentence(review.text), "/planning")
+        notify(
+            "Bilan de la semaine",
+            first_sentence(review.text),
+            "/planning",
+            kind="weekly_review",
+        )
     except Exception as e:  # noqa: BLE001 - background job must not die
         logger.warning("Weekly review failed: %s", e)
         return f"failed: {e}"

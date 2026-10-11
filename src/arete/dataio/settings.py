@@ -43,7 +43,21 @@ def _settings_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
         # Migration 11: the morning adaptation and its Garmin push.
         "auto_adapt_enabled": row[17] if len(row) > 17 else True,
         "push_to_garmin_enabled": row[18] if len(row) > 18 else False,
+        # Migration 44: per-kind choices and quiet hours, JSON; None = defaults.
+        "notification_preferences": _json_or_none(row[19] if len(row) > 19 else None),
     }
+
+
+def _json_or_none(raw: Any) -> dict[str, Any] | None:
+    import json as _json
+
+    if not raw:
+        return None
+    try:
+        value = _json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return value if isinstance(value, dict) else None
 
 
 def get_user_settings(user_id: int | None = None) -> dict[str, Any] | None:
@@ -58,7 +72,8 @@ def get_user_settings(user_id: int | None = None) -> dict[str, Any] | None:
                    notifications_enabled, theme, exercise_abbreviations,
                    weekly_volume_target_kg, lthr, max_hr, threshold_pace_sec_km,
                    lthr_measured_on, coach_briefing_enabled,
-                   auto_adapt_enabled, push_to_garmin_enabled
+                   auto_adapt_enabled, push_to_garmin_enabled,
+                   notification_preferences
             FROM app.visible_user_settings
             WHERE user_id = ?
             """,
@@ -90,8 +105,13 @@ def upsert_user_settings(
     coach_briefing_enabled: bool = True,
     auto_adapt_enabled: bool = True,
     push_to_garmin_enabled: bool = False,
+    notification_preferences: str | None = None,
 ) -> dict[str, Any]:
-    """Create or update user settings."""
+    """Create or update user settings.
+
+    ``notification_preferences`` is JSON; None keeps the stored choice (an
+    older client that does not send it must not reset it).
+    """
     user_id = resolve_athlete_id(user_id)
     import json as _json
 
@@ -109,13 +129,16 @@ def upsert_user_settings(
                 weekly_volume_target_kg = ?, lthr = ?, max_hr = ?,
                 threshold_pace_sec_km = ?, lthr_measured_on = ?,
                 coach_briefing_enabled = ?, auto_adapt_enabled = ?,
-                push_to_garmin_enabled = ?, updated_at = CURRENT_TIMESTAMP
+                push_to_garmin_enabled = ?,
+                notification_preferences = COALESCE(?, notification_preferences),
+                updated_at = CURRENT_TIMESTAMP
             WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (user_id = ?) RETURNING user_id, display_name, email, timezone, weekly_training_goal,
                       rest_day_preference, fatigue_threshold, fitness_goal,
                       notifications_enabled, theme, exercise_abbreviations,
                       weekly_volume_target_kg, lthr, max_hr, threshold_pace_sec_km,
                       lthr_measured_on, coach_briefing_enabled,
-                   auto_adapt_enabled, push_to_garmin_enabled
+                   auto_adapt_enabled, push_to_garmin_enabled,
+                   notification_preferences
             """,
             [
                 display_name,
@@ -136,6 +159,7 @@ def upsert_user_settings(
                 coach_briefing_enabled,
                 auto_adapt_enabled,
                 push_to_garmin_enabled,
+                notification_preferences,
                 user_id,
             ],
         ).fetchone()
@@ -152,15 +176,17 @@ def upsert_user_settings(
                 notifications_enabled, theme, exercise_abbreviations,
                 weekly_volume_target_kg, lthr, max_hr, threshold_pace_sec_km,
                 lthr_measured_on, coach_briefing_enabled,
-                   auto_adapt_enabled, push_to_garmin_enabled
+                   auto_adapt_enabled, push_to_garmin_enabled,
+                   notification_preferences
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING user_id, display_name, email, timezone, weekly_training_goal,
                       rest_day_preference, fatigue_threshold, fitness_goal,
                       notifications_enabled, theme, exercise_abbreviations,
                       weekly_volume_target_kg, lthr, max_hr, threshold_pace_sec_km,
                       lthr_measured_on, coach_briefing_enabled,
-                   auto_adapt_enabled, push_to_garmin_enabled
+                   auto_adapt_enabled, push_to_garmin_enabled,
+                   notification_preferences
             """,
             [
                 user_id,
@@ -182,6 +208,7 @@ def upsert_user_settings(
                 coach_briefing_enabled,
                 auto_adapt_enabled,
                 push_to_garmin_enabled,
+                notification_preferences,
             ],
         ).fetchone()
         if row is None:

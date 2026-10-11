@@ -1,11 +1,12 @@
 """Athlete settings and shared validation, independent of HTTP."""
 
+import json
 import logging
-from datetime import UTC, date, datetime
-from typing import Literal
+from datetime import UTC, date, datetime, time
+from typing import Literal, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from arete.dataio import settings as repo
 from arete.services.athlete_scope import resolve_athlete_id
@@ -53,6 +54,70 @@ def today_in(zone: str | None) -> date:
     return utc_now().astimezone(zone_of(zone)).date()
 
 
+# ---------- Notification preferences ----------
+#: Every push the server sends names one of these. The last three are planned
+#: (UX 2): their choice is stored now so the athlete sets it once.
+NotificationKind = Literal[
+    "briefing",
+    "post_session",
+    "weekly_review",
+    "adapted_session",
+    "imports",
+    "checkin",
+    "evening",
+    "eve_reminder",
+]
+NOTIFICATION_KINDS: tuple[NotificationKind, ...] = get_args(NotificationKind)
+_CLOCK = r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
+
+
+class QuietHours(BaseModel):
+    """Local hours without pushes; may span midnight. Equal bounds mean none."""
+
+    start: str = Field(default="21:30", pattern=_CLOCK)
+    end: str = Field(default="07:00", pattern=_CLOCK)
+
+    def covers(self, moment: time) -> bool:
+        start, end = time.fromisoformat(self.start), time.fromisoformat(self.end)
+        if start == end:
+            return False
+        if start < end:
+            return start <= moment < end
+        return moment >= start or moment < end
+
+
+class NotificationPreferences(BaseModel):
+    """Which pushes the athlete gets. A kind absent from ``kinds`` is on."""
+
+    kinds: dict[NotificationKind, bool] = {}
+    quiet_hours: QuietHours | None = Field(default_factory=QuietHours)
+
+    def allows(self, kind: NotificationKind) -> bool:
+        return self.kinds.get(kind, True)
+
+    def complete(self) -> "NotificationPreferences":
+        """Every kind spelled out, for the settings form."""
+        kinds = {kind: self.allows(kind) for kind in NOTIFICATION_KINDS}
+        return self.model_copy(update={"kinds": kinds})
+
+
+def stored_preferences(raw: dict | None) -> NotificationPreferences:
+    """The stored JSON, defaults when absent; a kind no longer known is ignored."""
+    if not raw:
+        return NotificationPreferences()
+    stored = raw.get("kinds")
+    kinds: dict = stored if isinstance(stored, dict) else {}
+    cleaned = {
+        **raw,
+        "kinds": {k: v for k, v in kinds.items() if k in NOTIFICATION_KINDS},
+    }
+    try:
+        return NotificationPreferences.model_validate(cleaned)
+    except ValidationError:
+        logger.warning("Unreadable notification preferences, using the defaults")
+        return NotificationPreferences()
+
+
 # ---------- User Settings ----------
 class UserSettingsUpdate(BaseModel):
     display_name: str = "HUNTER"
@@ -76,6 +141,8 @@ class UserSettingsUpdate(BaseModel):
     threshold_pace_sec_km: int | None = Field(ge=120, le=900, default=None)
     # Set by the Garmin sync; sent back untouched by the settings form.
     lthr_measured_on: date | None = None
+    # None keeps the stored choice: a client that predates it cannot reset it.
+    notification_preferences: NotificationPreferences | None = None
 
     @field_validator("timezone")
     @classmethod
@@ -108,6 +175,14 @@ class UserSettingsOut(BaseModel):
     max_hr: int | None
     threshold_pace_sec_km: int | None
     lthr_measured_on: date | None
+    notification_preferences: NotificationPreferences = Field(
+        default_factory=lambda: NotificationPreferences().complete()
+    )
+
+
+def _settings_out(settings: dict) -> UserSettingsOut:
+    prefs = stored_preferences(settings.get("notification_preferences"))
+    return UserSettingsOut(**{**settings, "notification_preferences": prefs.complete()})
 
 
 def get_settings():
@@ -134,7 +209,7 @@ def get_settings():
             threshold_pace_sec_km=None,
             lthr_measured_on=None,
         )
-    return UserSettingsOut(**settings)
+    return _settings_out(settings)
 
 
 def update_settings(payload: UserSettingsUpdate):
@@ -159,5 +234,10 @@ def update_settings(payload: UserSettingsUpdate):
         max_hr=payload.max_hr,
         threshold_pace_sec_km=payload.threshold_pace_sec_km,
         lthr_measured_on=payload.lthr_measured_on,
+        notification_preferences=(
+            json.dumps(payload.notification_preferences.model_dump())
+            if payload.notification_preferences is not None
+            else None
+        ),
     )
-    return UserSettingsOut(**settings)
+    return _settings_out(settings)

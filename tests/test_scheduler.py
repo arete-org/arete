@@ -140,7 +140,9 @@ class TestWriteDailyBriefing:
             patch("arete.services.notifications.notify") as notify,
         ):
             scheduler.write_daily_briefing()
-        notify.assert_called_once_with("Briefing du coach", "Footing 45'.", "/")
+        notify.assert_called_once_with(
+            "Briefing du coach", "Footing 45'.", "/", kind="briefing"
+        )
 
     def test_a_briefing_written_before_the_sync_is_rewritten(self):
         fresh = self._existing("scheduler")
@@ -245,7 +247,7 @@ class TestDailySync:
         ):
             scheduler.daily_sync()
         notify.assert_called_once_with(
-            "Arete", "2 séance(s) importée(s)", "/log?tab=cardio"
+            "Arete", "2 séance(s) importée(s)", "/log?tab=cardio", kind="imports"
         )
 
     def test_last_status_is_a_copy(self):

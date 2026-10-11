@@ -4,6 +4,12 @@ Bounded and quiet by design: at most ``MAX_SUBSCRIPTIONS`` browsers, a
 10-second timeout per send, no retry, and a subscription the push service
 reports gone (404/410) is dropped. ``notify`` never raises: a notification is
 never worth failing the sync, the briefing or a decision for.
+
+Every scheduled push names its kind; the athlete can turn each kind off, and
+nothing is sent during their quiet hours (21:30-07:00 by default, in their
+timezone). A push that falls in quiet hours is dropped, not delayed: there is
+no durable queue to hold it, and each kind is either repeated in the app
+(briefing, review, decisions, imports) or obsolete by morning.
 """
 
 from __future__ import annotations
@@ -17,6 +23,12 @@ from datetime import datetime
 from arete.config import config
 from arete.dataio.db import connect
 from arete.dataio.settings import get_user_settings
+from arete.services.settings import (
+    NotificationKind,
+    stored_preferences,
+    utc_now,
+    zone_of,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +107,32 @@ def _status_of(error: Exception) -> int | None:
     return getattr(response, "status_code", None)
 
 
-def notify(title: str, body: str, url: str = "/") -> NotifyResult:
-    """Send one notification to every subscribed browser. Never raises."""
+def _withheld(settings: dict, kind: NotificationKind) -> str | None:
+    """Why the athlete's preferences hold this kind back now, None to send."""
+    prefs = stored_preferences(settings.get("notification_preferences"))
+    if not prefs.allows(kind):
+        return "type de notification désactivé"
+    local = utc_now().astimezone(zone_of(settings.get("timezone")))
+    if prefs.quiet_hours is not None and prefs.quiet_hours.covers(local.time()):
+        return "heures calmes"
+    return None
+
+
+def notify(
+    title: str, body: str, url: str = "/", *, kind: NotificationKind | None
+) -> NotifyResult:
+    """Send one notification to every subscribed browser. Never raises.
+
+    ``kind`` None is the athlete's own request (the test button): it ignores
+    the per-kind choice and quiet hours, never the master switch.
+    """
     try:
-        if not bool((get_user_settings() or {}).get("notifications_enabled", True)):
+        settings = get_user_settings() or {}
+        if not bool(settings.get("notifications_enabled", True)):
             return NotifyResult(0, 0, "notifications désactivées")
+        reason = _withheld(settings, kind) if kind is not None else None
+        if reason is not None:
+            return NotifyResult(0, 0, reason)
         if not configured():
             return NotifyResult(0, 0, "clés Web Push absentes du serveur")
         subscriptions = _subscriptions()

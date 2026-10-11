@@ -208,6 +208,7 @@ CREATE TABLE IF NOT EXISTS app.user_settings (
     max_hr                  INTEGER,                   -- fallback reference when no threshold
     threshold_pace_sec_km   INTEGER,                   -- pace held at threshold, seconds per km
     lthr_measured_on        DATE,                      -- when Garmin measured that threshold
+    notification_preferences VARCHAR,                  -- JSON kinds + quiet hours, NULL = all on, 21:30-07:00
     updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -791,6 +792,22 @@ def _m42_slack_delivery_threads(con) -> None:
     )
 
 
+def _m44_notification_preferences(con) -> None:
+    """Per-kind notification choices and quiet hours (ARE-57).
+
+    Nullable: NULL reads as every kind on with the default quiet hours, so
+    existing athletes keep receiving what they received.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute(
+        "ALTER TABLE app.user_settings "
+        "ADD COLUMN IF NOT EXISTS notification_preferences VARCHAR"
+    )
+    # DuckDB binds a view's columns at creation: refresh the private projection.
+    _view(con, "user_settings")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -823,6 +840,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (40, _m40_slack_athletes),
     (41, _m41_feature_flags),
     (42, _m42_slack_delivery_threads),
+    (44, _m44_notification_preferences),
 ]
 
 
