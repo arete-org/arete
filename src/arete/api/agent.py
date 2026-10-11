@@ -26,7 +26,7 @@ from arete.agent.runtime.context import (
 from arete.api.agent_feedback import TraceReceipt, chat_trace
 from arete.api.agent_feedback import router as feedback_router
 from arete.api.auth import clerk_account
-from arete.services.memory import NOTES_LEDGER, SESSIONS_LEDGER, memory_root
+from arete.services.memory import NOTES_LEDGER, SESSIONS_LEDGER, read_file
 
 if TYPE_CHECKING:
     from langchain_core.messages import BaseMessage as LangchainMessage
@@ -107,6 +107,7 @@ class ChatMessageOut(BaseModel):
 class ChatResponse(BaseModel):
     message: ChatMessageOut
     trace: TraceReceipt | None = None
+    cards: list[dict] = Field(default_factory=list)
 
 
 def _to_langchain(role: str, content: str) -> LangchainMessage:
@@ -232,8 +233,11 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     messages = result.get("messages", [])
     if not messages:
         raise HTTPException(status_code=502, detail="Agent returned no messages")
+    from arete.agent.runtime.events import coach_card
+
     final = messages[-1]
     return ChatResponse(
+        cards=[card for message in messages if (card := coach_card(message))],
         trace=chat_trace(context.run_id, context.thread_id, context.account_id),
         message=ChatMessageOut(
             role="assistant",
@@ -346,14 +350,9 @@ _LEDGER_FILES = (NOTES_LEDGER, SESSIONS_LEDGER)
 @router.get("/memory", response_model=LedgerResponse)
 def get_memory() -> LedgerResponse:
     """Read the agent's memory ledger (bounded files, 64k chars each)."""
-    root = memory_root().resolve()
     files: list[LedgerFile] = []
     for name in _LEDGER_FILES:
-        path = (root / name).resolve()
-        # Defense in depth: the frontend only ever asks for the two known
-        # names, but assert the path stays inside the memory root anyway.
-        assert path.parent == root, f"ledger path escaped memory root: {name}"
-        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        content = read_file(name).content
         if len(content) > MAX_PANEL_CONTEXT_CHARS:
             content = (
                 content[:MAX_PANEL_CONTEXT_CHARS] + "\n\n… (tronqué à l'affichage)"

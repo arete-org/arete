@@ -71,19 +71,20 @@ export function CoachActivity({ message }: { message: ChatMessage }) {
           : pending && hasText ? 'Réponse en cours'
             : confirmed ? pending ? `${toolLabel(last)} · préparation de la réponse` : toolLabel(last)
               : message.streamAccepted ? 'Chiron prépare sa réponse' : 'Demande envoyée';
+  const memoryReceipt = !pending && !interrupted && !failed && !uncertain && message.parts?.some(p => p.kind === 'coach_card' && p.ref_kind === 'fact');
   const statusKey = `${running?.id ?? last?.id ?? 'response'}:${label}`;
 
   if (!pending && !tools.length && !interrupted) return null;
   return (
     <div className="coach-activity mb-3 min-w-0 space-y-2 text-[13px] leading-relaxed">
-      <p role="status" aria-atomic="true" className={cn('flex min-h-8 items-center gap-2 text-text-secondary', !pending && confirmed && !interrupted && 'text-success-green')}>
+      {!memoryReceipt && <p role="status" aria-atomic="true" className={cn('flex min-h-8 items-center gap-2 text-text-secondary', !pending && confirmed && !interrupted && 'text-success-green')}>
         {/* While Chiron thinks, its laurel turns here and the message has no header;
             once text arrives the header shows it, so this line keeps no icon. */}
         {pending && !interrupted ? !hasText && <CoachPresence active={online && !failed && !uncertain && elapsed < STREAM_TIMEOUT_MS / CLOCK_TICK_MS} />
           : confirmed && !interrupted ? <span key={`confirmation:${statusKey}`} className="coach-confirmation" aria-hidden="true" />
             : <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-text-muted" />}
         <span key={`label:${statusKey}`} className="coach-status-label min-w-0">{label}</span>
-      </p>
+      </p>}
       {pending && (!online || (!hasText && elapsed >= LONG_WAIT_SECONDS)) && (
         <p role="status" className="max-w-prose text-xs text-text-muted">
           {!online ? 'Connexion perdue. Tu peux arrêter la réponse ; ton brouillon reste conservé.'

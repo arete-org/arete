@@ -95,3 +95,13 @@ def router_client() -> Callable[[APIRouter], TestClient]:
         return TestClient(app)
 
     return make
+
+
+@pytest.fixture(autouse=True)
+def isolated_coach_records():
+    """Durable memory replaces per-test filesystem isolation."""
+    from arete.dataio.db import db_connection
+
+    with db_connection() as con:
+        for table in ("coach_memory_files", "coach_memory_imports", "coach_followups"):
+            con.execute(f"DELETE FROM app.{table}")

@@ -2,8 +2,14 @@
 
 from typing import Literal
 
-from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
-from deepagents.backends.protocol import DeleteResult, EditResult
+from deepagents.backends import CompositeBackend, StateBackend
+from deepagents.backends.protocol import (
+    DeleteResult,
+    EditResult,
+    FileUploadResponse,
+    WriteResult,
+)
+from deepagents.backends.utils import create_file_data
 from deepagents.middleware.filesystem import (
     FilesystemMiddleware,
     FilesystemPermission,
@@ -18,8 +24,9 @@ from arete.agent.backends.skills import SYSTEM_SKILLS_ROUTE, SystemSkillsBackend
 from arete.services.memory import (
     NOTES_LEDGER,
     SESSIONS_LEDGER,
-    ledger_lock,
-    memory_root,
+    delete_file,
+    edit_file,
+    list_files,
 )
 
 # Permissions default to allow in Deep Agents: the trailing deny is essential.
@@ -50,22 +57,37 @@ LEDGER_TOOL_DESCRIPTIONS = {
 }
 
 
-class LedgerBackend(FilesystemBackend):
-    """Serialize corrections with appends so concurrent turns cannot lose entries."""
+class LedgerBackend(StateBackend):
+    """Native search/read semantics over authoritative DB content, never graph files."""
 
-    def edit(
-        self,
-        file_path: str,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,
-    ) -> EditResult:
-        with ledger_lock():
-            return super().edit(file_path, old_string, new_string, replace_all)
+    def __init__(self):
+        pass
+
+    def _read_files(self):
+        return {"/" + f.name: create_file_data(f.content) for f in list_files()}
+
+    def _send_files_update(self, update):
+        raise PermissionError("permission denied: use the journal service")
+
+    def edit(self, file_path, old_string, new_string, replace_all=False) -> EditResult:
+        try:
+            count = edit_file(file_path, old_string, new_string, replace_all)
+            return EditResult(path=file_path, occurrences=count)
+        except (ValueError, PermissionError) as exc:
+            return EditResult(error=str(exc))
 
     def delete(self, file_path: str) -> DeleteResult:
-        with ledger_lock():
-            return super().delete(file_path)
+        try:
+            delete_file(file_path)
+            return DeleteResult(path=file_path)
+        except (ValueError, PermissionError) as exc:
+            return DeleteResult(error=str(exc))
+
+    def write(self, file_path: str, content: str) -> WriteResult:
+        return WriteResult(error="permission denied: use append_journal")
+
+    def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
+        return [FileUploadResponse(path=p, error="permission_denied") for p, _ in files]
 
 
 class PortableGlob(GlobSchema):
@@ -92,12 +114,9 @@ def build_memory_filesystem(
     *, system_skills: SystemSkillsBackend | None = None
 ) -> FilesystemMiddleware:
     """Editable current ledgers and read-only archives/invocation documents."""
-    root = memory_root()
-    for name in (SESSIONS_LEDGER, NOTES_LEDGER):
-        (root / name).touch(exist_ok=True)
     middleware = FilesystemMiddleware(
         backend=CompositeBackend(
-            default=LedgerBackend(root_dir=root, virtual_mode=True, max_file_size_mb=5),
+            default=LedgerBackend(),
             routes={
                 ATTACHMENTS_ROUTE: StateBackend(),
                 **({SYSTEM_SKILLS_ROUTE: system_skills} if system_skills else {}),

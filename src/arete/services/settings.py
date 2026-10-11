@@ -21,7 +21,7 @@ class UserSettingsUpdate(BaseModel):
     fitness_goal: Literal["maintenance", "build", "peak", "recovery"] = "build"
     notifications_enabled: bool = True
     coach_briefing_enabled: bool = True
-    auto_adapt_enabled: bool = True
+    auto_adapt_enabled: bool = False
     push_to_garmin_enabled: bool = False
     theme: Literal[
         "light", "dark", "darker", "abyss", "performance", "odyssey", "pierre", "prune"
@@ -56,7 +56,7 @@ class UserSettingsOut(BaseModel):
     fitness_goal: str
     notifications_enabled: bool
     coach_briefing_enabled: bool
-    auto_adapt_enabled: bool = True
+    auto_adapt_enabled: bool = False
     push_to_garmin_enabled: bool = False
     theme: str
     exercise_abbreviations: dict[str, str]

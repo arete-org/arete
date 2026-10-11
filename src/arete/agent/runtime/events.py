@@ -132,3 +132,34 @@ def workout_updates(result: Any) -> list[dict]:
         and isinstance(session.get("id"), int)
         and isinstance(session.get("revision"), int)
     ]
+
+
+def coach_card(result: Any) -> dict | None:
+    """References only, emitted after a confirmed domain write."""
+    if (
+        not isinstance(result, ToolMessage)
+        or result.status == "error"
+        or not isinstance(result.content, str)
+    ):
+        return None
+    try:
+        payload = json.loads(result.content)
+    except ValueError:
+        return None
+    if not isinstance(payload, dict) or payload.get("error"):
+        return None
+    kind, ident = None, None
+    if result.name == "remember_fact" and payload.get("saved"):
+        kind, ident = "fact", payload.get("fact", {}).get("id")
+    elif result.name == "forget_fact" and payload.get("forgotten"):
+        kind, ident = "fact", payload.get("fact_id")
+    elif result.name == "respond_coach_followup" and payload.get("saved"):
+        kind, ident = "followup", payload.get("followup", {}).get("id")
+    if kind is None or type(ident) is not int or ident <= 0:
+        return None
+    return {
+        "type": "coach_card",
+        "id": f"{kind}:{ident}",
+        "ref_kind": kind,
+        "ref_id": ident,
+    }
