@@ -13,8 +13,6 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Any, Literal, TypedDict
 
-import numpy as np
-
 from arete.features import insights
 from arete.features.hr_drift import analyze_runs
 from arete.features.insights import Insight
@@ -478,6 +476,7 @@ def build_pace_card(rows: Sequence[PaceRow], window: PeriodWindow) -> Card:
     ``graded`` marks a pace that is the grade-adjusted one (a hilly run with
     kept streams): the trend then compares efforts, not the terrain.
     """
+    import numpy as np  # here, not at module level: the API boot skips numpy
 
     def keep(subset: Sequence[PaceRow]):
         return [
@@ -774,6 +773,7 @@ def build_cadence_card(
     Stride length (metres per step) is speed over cadence: with the cadence it
     tells whether a faster pace comes from quicker or longer steps.
     """
+    import numpy as np  # here, not at module level: the API boot skips numpy
 
     def keep(subset):
         return [r for r in subset if MIN_RUN_CADENCE <= r[1] <= MAX_RUN_CADENCE]

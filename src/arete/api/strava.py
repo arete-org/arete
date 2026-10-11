@@ -7,7 +7,6 @@ import secrets
 import time
 from typing import TYPE_CHECKING
 
-import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -148,6 +147,8 @@ RATE_LIMIT_BACKOFF_SEC = 300  # Strava: 100 requests / 15 min
 
 def _with_backoff(fn, *args, retries: int = 2):
     """Call fn, sleeping through Strava 429s up to ``retries`` times."""
+    import httpx  # here, not at module level: the API boot skips httpx
+
     for attempt in range(retries + 1):
         try:
             return fn(*args)

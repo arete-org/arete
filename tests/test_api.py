@@ -87,7 +87,8 @@ def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
     The agent stack (LangChain, LangGraph, Deep Agents, LangSmith) took 1.4 s
     of the 1.5 s, and every route paid for it, /health included. It loads on
     the first coach request; Garmin's client and the workout grammars on
-    their own routes.
+    their own routes. numpy and httpx (0.2 s together) load with the
+    analytics and the outbound HTTP calls that use them.
     """
     import os
     import subprocess
@@ -110,6 +111,8 @@ def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
         "aiohttp",
         "clerk_backend_api",
         "jwt",
+        "numpy",
+        "httpx",
     ]
     code = (
         "import sys, arete.api.main; "
