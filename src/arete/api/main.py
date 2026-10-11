@@ -41,6 +41,14 @@ from arete.dataio.init_duckdb import main as init_schema
 from arete.dataio.init_duckdb import pending_migrations
 from arete.dataio.mirror import MirrorMiddleware
 from arete.dataio.ownership import OwnershipError
+from arete.observability.http import (
+    AUTHORIZED,
+    HANDLER,
+    HANDLER_END,
+    MIRROR_END,
+    PhaseMark,
+    RequestTimingMiddleware,
+)
 from arete.services.documents import DocumentError
 
 logger = logging.getLogger(__name__)
@@ -88,9 +96,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Arete API", version="0.1.0", lifespan=lifespan)
 # Innermost: follows the plan into Google Calendar once the response is sent.
 app.add_middleware(PlanSyncMiddleware)
+# Phase marks for the request timing: the handler runs between these two.
+app.add_middleware(PhaseMark, enter=HANDLER, leave=HANDLER_END)
 app.add_middleware(MirrorMiddleware)
-# Added last, so it runs first: a refused request never reaches the mirror.
+app.add_middleware(PhaseMark, enter=AUTHORIZED, leave=MIRROR_END)
+# Runs before the mirror: a refused request never reaches it.
 app.add_middleware(AuthMiddleware)
+# Added last, so it runs first: times every request, refused ones included.
+app.add_middleware(RequestTimingMiddleware)
 
 
 @app.exception_handler(duckdb.TransactionException)

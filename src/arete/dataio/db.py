@@ -24,6 +24,7 @@ from contextlib import contextmanager
 import duckdb
 
 from arete.config import config
+from arete.observability.requests import counted
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
     # Concurrent opens can race DuckDB's instance-cache cleanup when the last
     # connection closes. Serialize opening only; queries keep separate connections.
     with _local_connect_lock:
-        con = duckdb.connect(str(db_path), read_only=read_only)
+        con = counted(duckdb.connect(str(db_path), read_only=read_only))
     con.execute("PRAGMA threads=4;")
     con.execute(f"PRAGMA temp_directory='{db_path.parent}';")
     configure_athlete(con)
@@ -125,7 +126,7 @@ def _remote_cursor() -> duckdb.DuckDBPyConnection:
                 _remote = _open_remote()
             parent = _remote
         try:
-            cursor = parent.cursor()
+            cursor = counted(parent.cursor())
             cursor.execute(f"USE {database}")
             return cursor
         except duckdb.Error:
