@@ -92,7 +92,7 @@ def main() -> None:
     today = datetime.date.today().isoformat()
 
     print(
-        f"{'path':52} {'status':>6} {'n':>3} {'first_ms':>9} {'p50_ms':>8} "
+        f"{'path':58} {'status':>6} {'n':>3} {'first_ms':>9} {'p50_ms':>8} "
         f"{'max_ms':>8} {'stmts':>6} {'db_ms':>6} {'srv_ms':>7}"
     )
     with httpx.Client(base_url=args.base, headers=headers, timeout=120) as client:
@@ -103,7 +103,7 @@ def main() -> None:
             responses = [response for _, response in calls]
             statements, db_ms, server_ms = server_timings(responses)
             print(
-                f"{path:52} {responses[-1].status_code:>6} {len(timings):>3} "
+                f"{path:58} {responses[-1].status_code:>6} {len(timings):>3} "
                 f"{timings[0]:>9.0f} {statistics.median(timings):>8.0f} "
                 f"{max(timings):>8.0f} {statements:>6} {db_ms:>6} {server_ms:>7}"
             )
