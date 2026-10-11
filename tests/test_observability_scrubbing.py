@@ -272,6 +272,14 @@ def test_allowlisted_key_with_a_nested_value_is_still_walked():
     assert scrubbed["model"]["system_prompt"].startswith("[REDACTED:")
 
 
+def test_allowlisted_key_with_a_long_string_is_redacted_anyway():
+    """Review finding: an allowlisted key name does not guarantee its value
+    is actually an identifier; a free-text sentence under "name" is content
+    wearing that key's name, not the short tag the allowlist expects."""
+    payload = {"name": FIXTURE_SENTENCE * 5}
+    assert scrub(payload)["name"].startswith("[REDACTED:")
+
+
 # --- Tracer: redacts every run's error to its type, which scrub() cannot reach. ---
 
 

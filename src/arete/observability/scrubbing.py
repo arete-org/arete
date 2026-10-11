@@ -72,6 +72,16 @@ def _redact_string(value: str) -> str:
     return f"[REDACTED:{len(value)} chars]" if value else REDACTED
 
 
+#: An identifier (name, id, status, model) never needs more than this; a
+#: longer string under an allowlisted key is free text wearing that key's
+#: name, not the identifier the allowlist was meant for.
+MAX_ALLOWED_VALUE_CHARS = 200
+
+
+def _is_safe_allowlisted_value(value: Any) -> bool:
+    return len(value) <= MAX_ALLOWED_VALUE_CHARS if isinstance(value, str) else True
+
+
 def _redact_key(key: Any) -> Any:
     # A schema field name (content, args, tool_calls, ...) is never a path;
     # a dict acting as a lookup table (state["files"], keyed by an
@@ -116,7 +126,9 @@ def _walk(value: Any, *, depth: int, nodes_left: list[int]) -> Any:
     if isinstance(value, dict):
         return {
             _redact_key(key): child
-            if key in ALLOWED_KEYS and not isinstance(child, (dict, list, tuple))
+            if key in ALLOWED_KEYS
+            and not isinstance(child, (dict, list, tuple))
+            and _is_safe_allowlisted_value(child)
             else _walk(child, depth=depth + 1, nodes_left=nodes_left)
             for key, child in value.items()
         }
