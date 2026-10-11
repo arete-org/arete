@@ -82,12 +82,16 @@ def _is_safe_allowlisted_value(value: Any) -> bool:
     return len(value) <= MAX_ALLOWED_VALUE_CHARS if isinstance(value, str) else True
 
 
+#: A schema field name (content, tool_calls, additional_kwargs, ...) is a
+#: short snake_case identifier or a plain index; a dict acting as a lookup
+#: table (state["files"], keyed by an athlete-chosen filename) is not. The
+#: value-side allowlist cannot protect a key, so a key failing this pattern
+#: is redacted like any other free-text value instead of trusted by default.
+_SAFE_KEY = re.compile(r"^(?:[a-z][a-z0-9_]{0,39}|\d+)$")
+
+
 def _redact_key(key: Any) -> Any:
-    # A schema field name (content, args, tool_calls, ...) is never a path;
-    # a dict acting as a lookup table (state["files"], keyed by an
-    # athlete-chosen filename) is. The value-side allowlist cannot protect a
-    # key, so redact it here instead of trusting every dict key by default.
-    if isinstance(key, str) and "/" in key:
+    if isinstance(key, str) and not _SAFE_KEY.match(key):
         return _redact_string(key)
     return key
 

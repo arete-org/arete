@@ -263,6 +263,15 @@ def test_attachment_state_content_and_path_are_both_redacted():
     assert entry["content"].startswith("[REDACTED:")
 
 
+def test_a_bare_filename_key_with_no_path_separator_is_still_redacted():
+    """An athlete-chosen filename need not contain a slash to be content:
+    a French, spaced or accented name is not a snake_case schema field."""
+    payload = {"genou blessure resultats irm.pdf": {"content": FIXTURE_SENTENCE}}
+    scrubbed = scrub(payload)
+    (key,) = scrubbed.keys()
+    assert key.startswith("[REDACTED:")
+
+
 def test_allowlisted_key_with_a_nested_value_is_still_walked():
     """Review finding: trusting an allowlisted key's value outright, without
     recursing, would let content hide inside an unexpectedly nested value."""
