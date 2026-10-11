@@ -114,7 +114,7 @@ class _Request:
 
 
 def test_it_ends_the_system_prompt_and_leaves_the_caller_alone(journal, monkeypatch):
-    import arete.services.journal as module
+    import arete.services.memory as module
 
     (journal / "notes.md").write_text("- Objectif: semi en 1h35")
     monkeypatch.setattr(module, "memory_root", lambda: journal)
@@ -129,7 +129,7 @@ def test_it_ends_the_system_prompt_and_leaves_the_caller_alone(journal, monkeypa
 
 
 def test_no_journal_means_an_untouched_request(journal, monkeypatch):
-    import arete.services.journal as module
+    import arete.services.memory as module
 
     monkeypatch.setattr(module, "memory_root", lambda: journal)
     request = _Request(SystemMessage("Tu es le coach."))

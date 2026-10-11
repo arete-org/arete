@@ -158,6 +158,10 @@ def daily_sync() -> dict[str, str]:
 
     status["google_calendar"] = sync_training_plan(DAILY)
 
+    from arete.services.coach_followup import prepare as prepare_followup
+
+    prepare_followup()
+
     # Before the briefing that reads the journal the feedback files; after the
     # bounded calendar run, so a slow model cannot starve it.
     if synced_ids:

@@ -56,7 +56,8 @@ def today_in(zone: str | None) -> date:
 
 # ---------- Notification preferences ----------
 #: Every push the server sends names one of these. The last three are planned
-#: (UX 2): their choice is stored now so the athlete sets it once.
+#: (UX 2), and ``adapted_session`` has no sender since adaptations became
+#: proposals to validate: their choice is stored now so the athlete sets it once.
 NotificationKind = Literal[
     "briefing",
     "post_session",
@@ -129,7 +130,7 @@ class UserSettingsUpdate(BaseModel):
     fitness_goal: Literal["maintenance", "build", "peak", "recovery"] = "build"
     notifications_enabled: bool = True
     coach_briefing_enabled: bool = True
-    auto_adapt_enabled: bool = True
+    auto_adapt_enabled: bool = False
     push_to_garmin_enabled: bool = False
     theme: Literal[
         "light", "dark", "darker", "abyss", "performance", "odyssey", "pierre", "prune"
@@ -166,7 +167,7 @@ class UserSettingsOut(BaseModel):
     fitness_goal: str
     notifications_enabled: bool
     coach_briefing_enabled: bool
-    auto_adapt_enabled: bool = True
+    auto_adapt_enabled: bool = False
     push_to_garmin_enabled: bool = False
     theme: str
     exercise_abbreviations: dict[str, str]

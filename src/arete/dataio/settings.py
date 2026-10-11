@@ -41,7 +41,7 @@ def _settings_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
         # from a database that has not migrated yet is simply shorter.
         "coach_briefing_enabled": row[16] if len(row) > 16 else True,
         # Migration 11: the morning adaptation and its Garmin push.
-        "auto_adapt_enabled": row[17] if len(row) > 17 else True,
+        "auto_adapt_enabled": row[17] if len(row) > 17 else False,
         "push_to_garmin_enabled": row[18] if len(row) > 18 else False,
         # Migration 44: per-kind choices and quiet hours, JSON; None = defaults.
         "notification_preferences": _json_or_none(row[19] if len(row) > 19 else None),
@@ -103,7 +103,7 @@ def upsert_user_settings(
     threshold_pace_sec_km: int | None = None,
     lthr_measured_on: date | None = None,
     coach_briefing_enabled: bool = True,
-    auto_adapt_enabled: bool = True,
+    auto_adapt_enabled: bool = False,
     push_to_garmin_enabled: bool = False,
     notification_preferences: str | None = None,
 ) -> dict[str, Any]:

@@ -155,6 +155,7 @@ def briefing_facts(
                     f"{s.target_duration_min} min" if s.target_duration_min else None,
                     s.target_hr_zone,
                     s.description,
+                    f"statut : {s.status.value}",
                 )
                 if part
             )
@@ -167,6 +168,9 @@ def briefing_facts(
 
         lines = []
         for d in PlanDecisionRepository().list_for_day(target_date):
+            if d.state in {"pending", "discussion", "dismissed"}:
+                lines.append(f"Proposition {d.state}, non appliquée : {d.reason}")
+                continue
             if d.reverted_at is not None:
                 lines.append(f"décision annulée par l'athlète : {d.reason}")
                 continue

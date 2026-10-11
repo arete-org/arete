@@ -55,6 +55,9 @@ PRIVATE_TABLES = (
     "calendar_actions",
     "files",
     "garmin_login_challenges",
+    "coach_memory_files",
+    "coach_memory_imports",
+    "coach_followups",
 )
 # Natural keys must be unique within an athlete, not across the deployment.
 SCOPED_KEYS = {
@@ -91,11 +94,13 @@ def owner_column(table: str) -> str:
 
 def migrate(con: duckdb.DuckDBPyConnection) -> None:
     """Rebuild atomically: DuckDB cannot add NOT NULL after updating indexed rows."""
+    from arete.dataio.coaching_schema import DDL as coaching_ddl
     from arete.dataio.mirror import DDL as files_ddl
     from arete.garmin.auth_state import DDL as challenges_ddl
 
     con.execute("BEGIN TRANSACTION")
     try:
+        con.execute(coaching_ddl)
         con.execute(files_ddl)
         con.execute(challenges_ddl)
         for table in PRIVATE_TABLES:

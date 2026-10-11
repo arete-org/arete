@@ -499,7 +499,7 @@ export interface UserSettings {
   notification_preferences: NotificationPreferences;
 }
 
-/** Mirrors services/settings.NotificationKind; the last three are planned. */
+/** Mirrors services/settings.NotificationKind; `soon` kinds in CoachTab are not sent yet. */
 export type NotificationKind =
   | 'briefing'
   | 'post_session'

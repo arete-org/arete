@@ -28,7 +28,7 @@ const FILE_META: Record<string, { label: string; icon: typeof Brain; hint: strin
   'notes.md': {
     label: 'Notes durables',
     icon: Brain,
-    hint: 'Observations long terme : blessures, préférences, objectifs.',
+    hint: 'Observations du coach, à distinguer des faits déclarés ci-dessus.',
   },
 };
 
@@ -72,19 +72,12 @@ function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
     <Panel
       title={
         <span className="flex items-center gap-2">
-          <Wand2 className="size-4 text-neon-purple" /> Adaptation automatique
+          <Wand2 className="size-4 text-neon-purple" /> Propositions du coach
         </span>
       }
     >
       <div className="space-y-3">
-        <SettingSwitch
-          checked={settings.auto_adapt_enabled}
-          onChange={(value) => updateSetting('auto_adapt_enabled', value)}
-          hint="Lit la préparation Garmin du matin, sinon ta récupération Arete ou ta forme estimée par la charge. Tu peux toujours rétablir la séance prévue depuis le tableau de bord."
-        >
-          Chaque matin, après la synchronisation, adapter la séance du jour : maintenue, allégée,
-          remplacée par une récupération ou repos.
-        </SettingSwitch>
+        <p className="text-sm text-text-secondary">Chiron propose des ajustements sur l’accueil. Ton planning change uniquement après ta validation ou ta demande explicite dans le chat.</p>
         <SettingSwitch
           checked={settings.push_to_garmin_enabled}
           onChange={(value) => updateSetting('push_to_garmin_enabled', value)}
@@ -107,7 +100,7 @@ const KINDS: { kind: NotificationKind; label: string; soon?: boolean }[] = [
   { kind: 'briefing', label: 'Briefing du matin' },
   { kind: 'post_session', label: 'Retour du coach après une séance' },
   { kind: 'weekly_review', label: 'Bilan de la semaine (lundi)' },
-  { kind: 'adapted_session', label: 'Séance du jour adaptée' },
+  { kind: 'adapted_session', label: 'Adaptation de la séance du jour', soon: true },
   { kind: 'imports', label: 'Séances importées' },
   { kind: 'checkin', label: 'Check-in du matin', soon: true },
   { kind: 'evening', label: 'Message du soir', soon: true },
@@ -317,9 +310,11 @@ export function CoachTab({ settings, updateSetting }: SettingsTabProps) {
       <AdaptationPanel settings={settings} updateSetting={updateSetting} />
       <NotificationsPanel settings={settings} updateSetting={updateSetting} />
       <AthleteFactsPanel />
+      <details>
+      <summary className="min-h-11 cursor-pointer text-sm text-text-muted">Consulter le journal du coach</summary>
       <div className="flex items-center justify-between">
         <p className="text-sm text-text-muted">
-          Le coach tient son journal en markdown dans <code>data/agent/memory/</code>. Lecture seule.
+          Journal du coach : observations et décisions, distinctes de tes déclarations.
         </p>
         <Button variant="ghost" onClick={() => refetch()} disabled={isRefetching}>
           <RefreshCw className={`size-4 ${isRefetching ? 'animate-spin' : ''}`} /> Rafraîchir
@@ -362,6 +357,7 @@ export function CoachTab({ settings, updateSetting }: SettingsTabProps) {
           </Panel>
         );
       })}
+      </details>
     </div>
   );
 }

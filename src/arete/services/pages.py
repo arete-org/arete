@@ -60,6 +60,13 @@ def _dashboard() -> dict[str, Any]:
         "plan_decisions_today": [
             {
                 "planned_session_id": d.planned_session_id,
+                "id": d.id,
+                "revision": d.revision,
+                "state": d.state,
+                "applied_at": d.applied_at.isoformat() if d.applied_at else None,
+                "readiness_measured_on": str(d.readiness_measured_on)
+                if d.readiness_measured_on
+                else None,
                 "decision": d.decision,
                 "reason": d.reason,
                 "reverted": d.reverted_at is not None,
