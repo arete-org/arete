@@ -359,7 +359,7 @@ def test_inference_errors_close_the_root_and_model_spans(
         else:
             invoke(state(), context=AgentContext())
     runs, roots = assert_trace_tree(recorder)
-    assert "inference unavailable" in roots[0]["error"]
+    assert roots[0]["error"] == "RuntimeError: [REDACTED]"
     assert any(r["run_type"] == "llm" and r.get("error") for r in runs)
 
 
@@ -503,8 +503,8 @@ def test_dynamic_tool_exception_is_traced_and_propagated(
             invoke(state(), context=AgentContext())
     runs, roots = assert_trace_tree(recorder)
     tool_span = next(r for r in runs if r["name"] == "get_workload")
-    assert "tool unavailable" in tool_span["error"]
-    assert "tool unavailable" in roots[0]["error"]
+    assert tool_span["error"] == "RuntimeError: [REDACTED]"
+    assert roots[0]["error"] == "RuntimeError: [REDACTED]"
 
 
 @pytest.mark.parametrize(

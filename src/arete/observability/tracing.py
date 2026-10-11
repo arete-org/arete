@@ -14,11 +14,7 @@ from langsmith import Client, tracing_context
 from urllib3.util import Retry
 
 from arete.config import config
-from arete.observability.scrubbing import (
-    SENSITIVE_TOOL_NAMES,
-    redact_sensitive_tool_run,
-    scrub,
-)
+from arete.observability.scrubbing import redact_error, scrub
 
 logger = logging.getLogger(__name__)
 
@@ -38,22 +34,30 @@ def _export_error(error: Exception) -> None:
 
 
 class _ScrubbingTracer(LangChainTracer):
-    """Redacts a known-sensitive tool's result or error by the run's own name.
+    """Redacts every run's error to its exception type before the client sees it.
 
-    `scrub()` (the client's hide_outputs) only ever sees a run's outputs
-    dict, never its name; a tool result that reaches LangSmith as a bare
-    string, with no key to gate on, would pass through it unredacted.
+    `scrub()` (the client's hide_inputs/hide_outputs) never runs on a run's
+    error string: `langsmith.Client` only routes that through a separate
+    `anonymizer` hook this codebase does not use. An error message can echo
+    its own input (e.g. edit_file's "String '<old_string>' appears N times"),
+    so it needs the same default-deny treatment as inputs and outputs.
     """
 
-    def _on_tool_end(self, run: Run) -> None:
-        if run.name in SENSITIVE_TOOL_NAMES:
-            run.outputs = {"output": redact_sensitive_tool_run(run.name)}
-        super()._on_tool_end(run)
+    def _on_llm_error(self, run: Run) -> None:
+        run.error = redact_error(run.error)
+        super()._on_llm_error(run)
+
+    def _on_chain_error(self, run: Run) -> None:
+        run.error = redact_error(run.error)
+        super()._on_chain_error(run)
 
     def _on_tool_error(self, run: Run) -> None:
-        if run.name in SENSITIVE_TOOL_NAMES and run.error:
-            run.error = redact_sensitive_tool_run(run.name)
+        run.error = redact_error(run.error)
         super()._on_tool_error(run)
+
+    def _on_retriever_error(self, run: Run) -> None:
+        run.error = redact_error(run.error)
+        super()._on_retriever_error(run)
 
 
 def get_tracing_client() -> Client | None:
@@ -106,7 +110,7 @@ def agent_tracing():
         # model spans left open by LangChain's cancelled agenerate() gather.
         # The callback manager reuses this tracer; no second instrumentation.
         # Reimplements tracing_v2_enabled(), which cannot take a tracer
-        # subclass, to run our name-based redaction ahead of the client.
+        # subclass, to redact every run's error ahead of the client.
         tracer = _ScrubbingTracer(project_name=config.langsmith_project, client=client)
         token = tracing_v2_callback_var.set(tracer)
         try:

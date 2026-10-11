@@ -210,18 +210,20 @@ names the scoped athlete (`athlete_id`), so model requests can be counted per
 athlete. Provider usage logs
 retain reported cache/input/output details and model timing without logging the
 athlete's prompts. Opt-in LangSmith traces include full inputs, outputs and tool
-results, scrubbed first by `observability/scrubbing.py`: known journal/memory
-field names (`title`, `body`, `text`, `old_string`, `new_string`, `source_ref`),
-the result of `append_journal`, `remember_fact`, `read_file`, `grep`,
-`edit_file`, `delete` and `ls` (shared with the read-only attachments and
-system-skills routes of the same filesystem middleware, so their reads are
-redacted too), and any system prompt from `facts_block()`/`journal_block()`
-onward (the context builder appends attachments, page, surface and retrieved
-memory passages after them, so this also drops those) are replaced by
-`[REDACTED:<label>]` before the client sends them. This does not scrub the
-athlete's own chat turns: a question typed straight into chat can still name
-an injury or a mood in clear, since redacting human/model conversation text
-generally would defeat tracing's purpose; setup and exported data are
+results, scrubbed by `observability/scrubbing.py` before the client sends
+them. It redacts by default rather than naming each leak path: every string
+value is replaced by `[REDACTED:<n> chars]` unless its key is one of a short
+structural allowlist (a run/tool/message's own name, type, id, tool/trace
+id, model identification, status; token usage and timings are already
+numbers, never redacted). This covers message content (system, human, AI,
+tool, any profile: chat, briefing, feedback, review), tool call/result
+arguments, attachments and other graph state carried as plain dicts, and any
+object of a type the walker does not recognize, redacted by its class name
+rather than passed through unexamined. A run's error string reaches
+LangSmith through a different path the client's `hide_inputs`/`hide_outputs`
+cannot touch, so `_ScrubbingTracer` (`observability/tracing.py`) keeps only
+its exception type and redacts the rest, since an error can echo its own
+input. Setup and exported data are
 described in the
 [deployment runbook](deployment.md#langsmith-agent-tracing). Missing usage remains
 unknown, not zero.

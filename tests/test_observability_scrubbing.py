@@ -1,4 +1,5 @@
-"""The scrubber must redact journal/memory content without touching the model's copy."""
+"""The scrubber must redact by default and touch neither the model's copy nor
+the handful of structural/operational fields a trace stays useful without."""
 
 from __future__ import annotations
 
@@ -6,16 +7,23 @@ import asyncio
 import json
 import uuid
 from datetime import date
+from unittest.mock import Mock
 
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from langchain_core.outputs import ChatGenerationChunk
 from langsmith import Client
+from pydantic import PrivateAttr
 
 from arete.observability import scrubbing
-from arete.observability.scrubbing import REDACTED_TRUNCATED, scrub
+from arete.observability.scrubbing import REDACTED_TRUNCATED, redact_error, scrub
 from arete.observability.tracing import _ScrubbingTracer
-from arete.services.athlete_facts import FACTS_HEADING
-from arete.services.journal import JOURNAL_HEADING
 
 FIXTURE_SENTENCE = "Sharp pain in the left knee after the long run, mood is low."
 
@@ -34,214 +42,75 @@ class _RecordingTracerClient(Client):
         self.recorded[str(run_id)].update(kwargs)
 
 
-def test_scrubbing_tracer_redacts_a_bare_string_tool_result_by_run_name():
-    """A tool result that reaches the tracer as a plain string (no ToolMessage
-    wrapper, no "name" key of its own) carries no signal `scrub()` can use;
-    only the tracer, which still has the run's own name, can redact it."""
-    client = _RecordingTracerClient()
-    tracer = _ScrubbingTracer(project_name="test-project", client=client)
-    run_id = uuid.uuid4()
-    tracer.on_tool_start(
-        {"name": "read_file"}, "/notes.md", run_id=run_id, name="read_file"
-    )
-    tracer.on_tool_end(FIXTURE_SENTENCE, run_id=run_id)
-    assert client.recorded[str(run_id)]["outputs"] == {"output": "[REDACTED:read_file]"}
+# --- scrub(): allowlisted keys kept, everything else redacted. ---
 
 
-def test_scrubbing_tracer_redacts_a_tool_error_that_echoes_its_input():
-    client = _RecordingTracerClient()
-    tracer = _ScrubbingTracer(project_name="test-project", client=client)
-    run_id = uuid.uuid4()
-    tracer.on_tool_start(
-        {"name": "edit_file"}, "/notes.md", run_id=run_id, name="edit_file"
-    )
-    tracer.on_tool_error(
-        ValueError(f"String '{FIXTURE_SENTENCE}' appears 2 times"), run_id=run_id
-    )
-    assert client.recorded[str(run_id)]["error"] == "[REDACTED:edit_file]"
-
-
-def test_unrelated_tool_bare_string_result_is_left_alone_by_the_tracer():
-    client = _RecordingTracerClient()
-    tracer = _ScrubbingTracer(project_name="test-project", client=client)
-    run_id = uuid.uuid4()
-    tracer.on_tool_start(
-        {"name": "get_workload"}, "{}", run_id=run_id, name="get_workload"
-    )
-    tracer.on_tool_end("12 sessions this week", run_id=run_id)
-    assert client.recorded[str(run_id)]["outputs"] == {
-        "output": "12 sessions this week"
-    }
-
-
-def test_system_prompt_is_cut_at_the_journal_heading():
-    prompt = f"Tu es Chiron.\n\nInstructions stables.\n\n{JOURNAL_HEADING}\n{FIXTURE_SENTENCE}"
-    scrubbed = scrub({"messages": [[SystemMessage(prompt)]]})
-    content = scrubbed["messages"][0][0].content
-    assert content.startswith("Tu es Chiron.\n\nInstructions stables.\n\n")
-    assert FIXTURE_SENTENCE not in content
-    assert JOURNAL_HEADING not in content
-
-
-def test_system_prompt_is_cut_at_the_earliest_of_facts_or_journal_heading():
-    prompt = (
-        f"Stable.\n\n{FACTS_HEADING}\nfact\n\n{JOURNAL_HEADING}\n{FIXTURE_SENTENCE}"
-    )
-    scrubbed = scrub({"messages": [[SystemMessage(prompt)]]})
-    content = scrubbed["messages"][0][0].content
-    assert content == "Stable.\n\n[REDACTED:personal_context]"
-
-
-def test_serialized_system_message_is_also_cut_at_the_journal_heading():
+def test_allowlisted_keys_are_kept_verbatim():
     payload = {
-        "messages": [
-            [
-                {
-                    "kwargs": {
-                        "content": f"Stable.\n\n{JOURNAL_HEADING}\n{FIXTURE_SENTENCE}",
-                        "type": "system",
-                    }
-                }
-            ]
-        ]
+        "name": "read_file",
+        "type": "tool",
+        "id": "msg-1",
+        "tool_call_id": "call-1",
+        "run_id": "run-1",
+        "model_name": "gpt-test",
+        "finish_reason": "stop",
+        "status": "success",
     }
+    assert scrub(payload) == payload
+
+
+def test_unlisted_keys_are_redacted_with_their_length():
+    payload = {"title": "t", "body": FIXTURE_SENTENCE, "day": "2026-01-01"}
     scrubbed = scrub(payload)
-    content = scrubbed["messages"][0][0]["kwargs"]["content"]
-    assert FIXTURE_SENTENCE not in content
-    assert content.startswith("Stable.\n\n")
+    assert scrubbed["title"] == "[REDACTED:1 chars]"
+    assert scrubbed["body"] == f"[REDACTED:{len(FIXTURE_SENTENCE)} chars]"
+    assert scrubbed["day"] == "[REDACTED:10 chars]"
 
 
-def test_prompt_without_personal_sections_is_left_untouched():
-    prompt = "Tu es Chiron.\n\nInstructions stables."
-    scrubbed = scrub({"messages": [[SystemMessage(prompt)]]})
-    assert scrubbed["messages"][0][0].content == prompt
+def test_grep_pattern_and_remember_fact_fields_are_redacted():
+    """Review finding: these previously survived because nothing recognized
+    the key names; the new default-deny net needs no such list."""
+    assert scrub({"pattern": "genou"})["pattern"] == "[REDACTED:5 chars]"
+    payload = {"kind": "injury", "since": "2026-01-01", "valid_until": "2026-02-01"}
+    scrubbed = scrub(payload)
+    assert all(v.startswith("[REDACTED:") for v in scrubbed.values())
 
 
-def test_key_name_net_redacts_known_journal_fields():
-    payload = {"title": "knee pain", "body": FIXTURE_SENTENCE, "day": "2026-01-01"}
-    assert scrub(payload) == {
-        "title": "[REDACTED:title]",
-        "body": "[REDACTED:body]",
-        "day": "2026-01-01",
-    }
+def test_numeric_values_pass_through_regardless_of_key():
+    payload = {"usage_metadata": {"input_tokens": 10, "output_tokens": 2}}
+    assert scrub(payload) == payload
 
 
-def test_key_name_net_reaches_nested_structures():
+def test_empty_string_redacts_to_the_bare_marker():
+    assert scrub({"body": ""})["body"] == "[REDACTED]"
+
+
+def test_nested_structures_are_walked():
     payload = {"fact": {"id": 1, "kind": "injury", "text": FIXTURE_SENTENCE}}
-    assert scrub(payload) == {
-        "fact": {"id": 1, "kind": "injury", "text": "[REDACTED:text]"}
-    }
+    scrubbed = scrub(payload)
+    assert scrubbed["fact"]["id"] == 1
+    assert scrubbed["fact"]["kind"].startswith("[REDACTED:")
+    assert scrubbed["fact"]["text"].startswith("[REDACTED:")
 
 
-def test_tool_name_net_redacts_the_whole_args_of_a_requested_tool_call():
+def test_lists_are_walked_and_tool_call_names_and_ids_kept():
     payload = {
         "tool_calls": [
-            {"name": "append_journal", "args": {"title": "t", "body": FIXTURE_SENTENCE}}
-        ]
-    }
-    scrubbed = scrub(payload)
-    assert scrubbed["tool_calls"][0]["args"] == "[REDACTED:append_journal]"
-
-
-def test_key_name_net_still_redacts_unlisted_tool_calls_by_field_name():
-    payload = {"tool_calls": [{"name": "some_other_tool", "args": {"title": "t"}}]}
-    scrubbed = scrub(payload)
-    assert scrubbed["tool_calls"][0]["args"] == {"title": "[REDACTED:title]"}
-
-
-def test_sensitive_tool_name_redacts_a_live_tool_message():
-    message = ToolMessage(content=FIXTURE_SENTENCE, name="read_file", tool_call_id="r1")
-    scrubbed = scrub({"output": message})
-    assert scrubbed["output"].content == "[REDACTED:read_file]"
-    assert message.content == FIXTURE_SENTENCE  # The original is never mutated.
-
-
-def test_live_ai_message_requesting_a_sensitive_tool_has_its_args_redacted():
-    message = AIMessage(
-        content="",
-        tool_calls=[
             {
                 "name": "append_journal",
                 "args": {"title": "t", "body": FIXTURE_SENTENCE},
                 "id": "c1",
                 "type": "tool_call",
             }
-        ],
-    )
-    scrubbed = scrub({"output": message})
-    assert scrubbed["output"].tool_calls[0]["args"] == "[REDACTED:append_journal]"
-    assert message.tool_calls[0]["args"]["body"] == FIXTURE_SENTENCE  # Unmutated.
-
-
-def test_serialized_raw_provider_function_call_arguments_are_redacted():
-    """A provider's raw tool call (additional_kwargs) carries its args as a
-    JSON-encoded string under "arguments", a different field name than the
-    normalized tool_calls LangChain also attaches."""
-    payload = {
-        "additional_kwargs": {
-            "tool_calls": [
-                {
-                    "id": "c1",
-                    "type": "function",
-                    "function": {
-                        "name": "append_journal",
-                        "arguments": json.dumps(
-                            {"title": "t", "body": FIXTURE_SENTENCE}
-                        ),
-                    },
-                }
-            ]
-        }
-    }
-    scrubbed = scrub(payload)
-    function = scrubbed["additional_kwargs"]["tool_calls"][0]["function"]
-    assert function["arguments"] == "[REDACTED:append_journal]"
-
-
-def test_live_ai_message_raw_additional_kwargs_tool_call_is_redacted():
-    message = AIMessage(
-        content="",
-        additional_kwargs={
-            "tool_calls": [
-                {
-                    "id": "c1",
-                    "type": "function",
-                    "function": {
-                        "name": "remember_fact",
-                        "arguments": json.dumps({"text": FIXTURE_SENTENCE}),
-                    },
-                }
-            ]
-        },
-    )
-    scrubbed = scrub({"output": message})
-    function = scrubbed["output"].additional_kwargs["tool_calls"][0]["function"]
-    assert function["arguments"] == "[REDACTED:remember_fact]"
-    original_function = message.additional_kwargs["tool_calls"][0]["function"]
-    assert FIXTURE_SENTENCE in original_function["arguments"]  # Unmutated.
-
-
-def test_sensitive_tool_name_redacts_a_serialized_tool_message():
-    payload = {
-        "messages": [
-            {
-                "lc": 1,
-                "type": "constructor",
-                "id": ["langchain", "schema", "messages", "ToolMessage"],
-                "kwargs": {"content": FIXTURE_SENTENCE, "name": "read_file"},
-            }
         ]
     }
     scrubbed = scrub(payload)
-    assert scrubbed["messages"][0]["kwargs"]["content"] == "[REDACTED:read_file]"
-
-
-def test_unrelated_tool_output_is_not_redacted():
-    message = ToolMessage(
-        content="12 sessions this week", name="get_workload", tool_call_id="r1"
-    )
-    scrubbed = scrub({"output": message})
-    assert scrubbed["output"].content == "12 sessions this week"
+    call = scrubbed["tool_calls"][0]
+    assert call["name"] == "append_journal"
+    assert call["id"] == "c1"
+    assert call["type"] == "tool_call"
+    assert call["args"]["title"].startswith("[REDACTED:")
+    assert call["args"]["body"].startswith("[REDACTED:")
 
 
 def test_bound_reached_on_depth_redacts_instead_of_raising():
@@ -261,11 +130,164 @@ def test_bound_reached_on_node_count_redacts_instead_of_raising():
     assert REDACTED_TRUNCATED in scrubbed.values()
 
 
+def test_scrub_never_raises_even_on_a_broken_message_copy():
+    broken = Mock()
+    broken.__class__ = ToolMessage  # isinstance() matches BaseMessage's check...
+    broken.content = FIXTURE_SENTENCE
+    broken.additional_kwargs = {}
+    broken.model_copy.side_effect = RuntimeError("boom")
+    assert scrub({"output": broken}) == {}
+
+
 def test_non_dict_payload_passes_through():
     assert scrub("not a dict") == "not a dict"
 
 
-# --- Capture test: the real tool path, against a fixture journal. ---
+def test_redact_error_keeps_only_the_exception_type():
+    assert redact_error("ValueError: tool unavailable") == "ValueError: [REDACTED]"
+    assert (
+        redact_error("RuntimeError('tool unavailable')") == "RuntimeError: [REDACTED]"
+    )
+    assert redact_error(None) is None
+
+
+# --- Messages: content always redacted; type/name/id/tool_call_id kept. ---
+
+
+def test_system_message_content_is_fully_redacted():
+    prompt = "Tu es Chiron.\n\n# Ton journal\nSharp pain, mood is low."
+    scrubbed = scrub({"messages": [[SystemMessage(prompt)]]})
+    content = scrubbed["messages"][0][0].content
+    assert content == f"[REDACTED:{len(prompt)} chars]"
+
+
+def test_serialized_system_message_content_is_also_redacted():
+    payload = {
+        "messages": [
+            [
+                {
+                    "kwargs": {
+                        "content": "Tu es Chiron. " + FIXTURE_SENTENCE,
+                        "type": "system",
+                    }
+                }
+            ]
+        ]
+    }
+    scrubbed = scrub(payload)
+    kwargs = scrubbed["messages"][0][0]["kwargs"]
+    assert kwargs["type"] == "system"
+    assert kwargs["content"].startswith("[REDACTED:")
+
+
+def test_tool_message_content_is_redacted_regardless_of_tool_name():
+    """The new design redacts every tool result, not only a known-sensitive
+    one: there is no such thing as a harmless tool result by default."""
+    message = ToolMessage(
+        content="12 sessions this week", name="get_workload", tool_call_id="r1"
+    )
+    scrubbed = scrub({"output": message})
+    assert scrubbed["output"].name == "get_workload"
+    assert scrubbed["output"].tool_call_id == "r1"
+    assert scrubbed["output"].content.startswith("[REDACTED:")
+
+
+def test_live_ai_message_tool_calls_keep_name_and_id_but_redact_args():
+    message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "append_journal",
+                "args": {"title": "t", "body": FIXTURE_SENTENCE},
+                "id": "c1",
+                "type": "tool_call",
+            }
+        ],
+    )
+    scrubbed = scrub({"output": message})
+    call = scrubbed["output"].tool_calls[0]
+    assert call["name"] == "append_journal"
+    assert call["id"] == "c1"
+    assert call["args"]["body"].startswith("[REDACTED:")
+    assert message.tool_calls[0]["args"]["body"] == FIXTURE_SENTENCE  # Unmutated.
+
+
+def test_raw_provider_function_call_arguments_are_redacted_name_kept():
+    message = AIMessage(
+        content="",
+        additional_kwargs={
+            "tool_calls": [
+                {
+                    "id": "c1",
+                    "type": "function",
+                    "function": {
+                        "name": "remember_fact",
+                        "arguments": json.dumps({"text": FIXTURE_SENTENCE}),
+                    },
+                }
+            ]
+        },
+    )
+    scrubbed = scrub({"output": message})
+    function = scrubbed["output"].additional_kwargs["tool_calls"][0]["function"]
+    assert function["name"] == "remember_fact"
+    assert function["arguments"].startswith("[REDACTED:")
+    original = message.additional_kwargs["tool_calls"][0]["function"]
+    assert FIXTURE_SENTENCE in original["arguments"]  # Unmutated.
+
+
+def test_response_metadata_keeps_model_and_finish_reason_redacts_the_rest():
+    message = AIMessage(
+        content="",
+        response_metadata={
+            "model_name": "gpt-test",
+            "finish_reason": "stop",
+            "system_fingerprint": "fp_" + FIXTURE_SENTENCE,
+        },
+    )
+    scrubbed = scrub({"output": message})["output"].response_metadata
+    assert scrubbed["model_name"] == "gpt-test"
+    assert scrubbed["finish_reason"] == "stop"
+    assert scrubbed["system_fingerprint"].startswith("[REDACTED:")
+
+
+def test_attachment_state_content_is_redacted_like_any_other_content():
+    """Review finding: the files dict carries extracted text under "content"
+    with no tool name; a key-name/tool-name allowlist would miss it, but the
+    default-deny net redacts any unlisted key regardless."""
+    payload = {"files": {"/attachments/plan.md": {"content": FIXTURE_SENTENCE}}}
+    scrubbed = scrub(payload)
+    assert scrubbed["files"]["/attachments/plan.md"]["content"].startswith("[REDACTED:")
+
+
+# --- Tracer: redacts every run's error to its type, which scrub() cannot reach. ---
+
+
+def test_scrubbing_tracer_redacts_a_tool_error_to_its_type():
+    client = _RecordingTracerClient()
+    tracer = _ScrubbingTracer(project_name="test-project", client=client)
+    run_id = uuid.uuid4()
+    tracer.on_tool_start(
+        {"name": "edit_file"}, "/notes.md", run_id=run_id, name="edit_file"
+    )
+    tracer.on_tool_error(
+        ValueError(f"String '{FIXTURE_SENTENCE}' appears 2 times"), run_id=run_id
+    )
+    assert client.recorded[str(run_id)]["error"] == "ValueError: [REDACTED]"
+
+
+def test_scrubbing_tracer_leaves_a_run_with_no_error_alone():
+    client = _RecordingTracerClient()
+    tracer = _ScrubbingTracer(project_name="test-project", client=client)
+    run_id = uuid.uuid4()
+    tracer.on_tool_start(
+        {"name": "read_file"}, "/notes.md", run_id=run_id, name="read_file"
+    )
+    tracer.on_tool_end("content", run_id=run_id)
+    assert client.recorded[str(run_id)].get("error") is None
+
+
+# --- Real end-to-end: drive the actual langsmith.Client hide_* path. ---
 
 
 def tool_call(name, args, call_id):
@@ -275,22 +297,104 @@ def tool_call(name, args, call_id):
     )
 
 
+class _ResponseFeed:
+    """A consumable response feed that reveals nothing when listed/serialized.
+
+    LangSmith's own JSON encoder, with the real (non-overridden) Client, can
+    fall back to dumping a run's `serialized` model repr via pydantic, which
+    iterates any `Iterator`-typed field to represent it as a JSON array. A
+    plain `iter([...])` of the real scripted responses would therefore both
+    get drained before `_generate` ever saw them (breaking the test) and
+    place the fixture's sentinels straight into that unscrubbed field (a
+    test-only artifact: a real provider model's config has no such field).
+    `__next__` serves the real items for generation; `__iter__` hands out
+    only their count, independent of `__next__`'s own cursor.
+    """
+
+    def __init__(self, items):
+        self._items = list(items)
+        self._index = 0
+
+    def __next__(self):
+        if self._index >= len(self._items):
+            raise StopIteration
+        item = self._items[self._index]
+        self._index += 1
+        return item
+
+    def __iter__(self):
+        return iter([f"<scripted response {i}>" for i in range(len(self._items))])
+
+
 class FakeCoach(GenericFakeChatModel):
+    _seen: list = PrivateAttr(default_factory=list)
+
     def bind_tools(self, tools, **kwargs):
         return self
 
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        self._seen.append(messages)
+        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
-def test_read_file_tool_path_leaves_no_fixture_sentence_in_the_scrubbed_trace(
-    monkeypatch, tmp_path
-):
-    """Run the real journal write and read_file tool, scrub what langsmith would
-    have received, and confirm the fixture sentence never survives, while
-    confirming the model's own history still carries it unredacted."""
-    from arete import coaching as agent
-    from arete.agent.runtime import execution
-    from arete.agent.runtime.context import AgentContext
-    from arete.services.memory import append_entry
+    def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+        # A tracing callback makes LangChain prefer streaming; without this,
+        # GenericFakeChatModel's own _stream consumes self.messages on a
+        # separate path that drops tool_calls and desyncs from _generate.
+        message = self._generate(messages, **kwargs).generations[0].message
+        chunk = ChatGenerationChunk(
+            message=AIMessageChunk(**message.model_dump(exclude={"type"}))
+        )
+        if run_manager:
+            run_manager.on_llm_new_token(chunk.text, chunk=chunk)
+        yield chunk
 
+
+def _capture_requests(monkeypatch):
+    """Patch the HTTP transport, not the Client: every captured body has
+    already gone through the real hide_inputs/hide_outputs, exactly as a
+    real LangSmith upload would."""
+    import requests
+
+    bodies: list[bytes] = []
+
+    def fake_request(self, method, url, **kwargs):
+        data = kwargs.get("data")
+        if data is not None:
+            bodies.append(data if isinstance(data, bytes) else data.encode())
+        response = requests.Response()
+        response.status_code = 200
+        response._content = b"{}"
+        return response
+
+    monkeypatch.setattr(requests.sessions.Session, "request", fake_request)
+    return bodies
+
+
+def _no_sentinel_leaked(bodies: list[bytes], *sentinels: str) -> None:
+    blob = b"\n".join(bodies).decode("utf-8", errors="replace")
+    for sentinel in sentinels:
+        assert sentinel not in blob, f"{sentinel!r} leaked in a captured request body"
+
+
+def _enable_real_tracing(monkeypatch):
+    """A real langsmith.Client, synchronous so each run posts immediately,
+    with the production hide_inputs/hide_outputs wired exactly as
+    get_tracing_client() would."""
+    from arete.observability import tracing
+
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
+    client = Client(
+        api_key="test-key",
+        auto_batch_tracing=False,
+        hide_inputs=scrub,
+        hide_outputs=scrub,
+    )
+    monkeypatch.setattr(tracing, "_client", client)
+    return client
+
+
+def _init_isolated_db(monkeypatch, tmp_path):
     monkeypatch.setenv("ARETE_DB", str(tmp_path / "agent.duckdb"))
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
     monkeypatch.setenv("LLM_MODEL", "test-coach")
@@ -298,72 +402,158 @@ def test_read_file_tool_path_leaves_no_fixture_sentence_in_the_scrubbed_trace(
     from arete.dataio.init_duckdb import main as init_db
 
     init_db()
-    append_entry("notes.md", "knee check", FIXTURE_SENTENCE, when=date(2026, 1, 1))
+
+
+def test_real_hide_path_leaks_no_sentinel_with_facts_journal_and_attachment(
+    monkeypatch, tmp_path
+):
+    from arete import coaching as agent
+    from arete.agent.backends.attachments import attachment_files
+    from arete.agent.runtime import execution
+    from arete.agent.runtime.context import AgentContext
+    from arete.services.athlete_facts import add_fact
+    from arete.services.memory import append_entry
+
+    _init_isolated_db(monkeypatch, tmp_path)
+    journal_sentence = "SENTINEL_JOURNAL knee pain during squats"
+    fact_sentence = "SENTINEL_FACT chronic knee injury since 2020"
+    attachment_sentence = "SENTINEL_ATTACH low ferritin"
+    grep_pattern = "SENTINEL_PATTERN"
+    append_entry("notes.md", "knee check", journal_sentence, when=date(2026, 1, 1))
+    add_fact("injury", fact_sentence, since=date(2026, 1, 1))
     agent.get_agent.cache_clear()
 
     model = FakeCoach(
-        messages=iter(
+        messages=_ResponseFeed(
             [
-                tool_call("read_file", {"file_path": "/notes.md"}, "r1"),
+                tool_call("grep", {"pattern": grep_pattern}, "g1"),
+                tool_call(
+                    "remember_fact",
+                    {
+                        "kind": "injury",
+                        "text": "new injury text",
+                        "evidence": "explicit",
+                        "source_ref": "athlete said so",
+                    },
+                    "r1",
+                ),
                 AIMessage(content="Finished."),
             ]
         )
     )
-    monkeypatch.setattr(agent, "build_chat_model", lambda **kw: model)
+    monkeypatch.setattr(
+        agent,
+        "build_chat_model",
+        lambda **kw: FakeCoach(messages=_ResponseFeed([]))
+        if kw.get("max_tokens") == 512
+        else model,
+    )
 
-    runs: dict[str, dict] = {}
+    bodies = _capture_requests(monkeypatch)
+    _enable_real_tracing(monkeypatch)
 
-    class CapturingClient(Client):
-        def __init__(self):
-            super().__init__(api_key="test-key", auto_batch_tracing=False)
-
-        def create_run(self, name, inputs, run_type, **kwargs):
-            runs[str(kwargs["id"])] = {
-                "name": name,
-                "run_type": run_type,
-                "inputs": inputs,
-            }
-
-        def update_run(self, run_id, **kwargs):
-            runs[str(run_id)].update(kwargs)
-
-    from arete.observability import tracing
-
-    monkeypatch.setattr(tracing, "_client", CapturingClient())
-    monkeypatch.setenv("LANGSMITH_TRACING", "true")
-    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
-
+    attachment_path = "/attachments/plan.md"
+    state = {
+        "messages": [HumanMessage("Comment va mon genou ?")],
+        "files": attachment_files({attachment_path: attachment_sentence}),
+    }
+    context = AgentContext(attachment_paths=(attachment_path,))
     result = asyncio.run(
-        execution.invoke_agent(
-            agent.get_agent(),
-            {"messages": [HumanMessage("hello")]},
-            context=AgentContext(),
-        )
+        execution.invoke_agent(agent.get_agent(), state, context=context)
     )
     assert result["messages"][-1].content == "Finished."
 
-    # The tracer itself already redacted the tool run's result by name,
-    # before the client ever saw it: proof _ScrubbingTracer, not some other
-    # LangChainTracer, received this run's callbacks.
-    read_file_run = next(r for r in runs.values() if r["name"] == "read_file")
-    assert read_file_run["outputs"] == {"output": "[REDACTED:read_file]"}
-
-    scrubbed = {
-        "inputs": scrub(read_file_run["inputs"]),
-        "outputs": scrub(read_file_run["outputs"]),
-    }
-    assert FIXTURE_SENTENCE not in json.dumps(scrubbed, default=str)
-
-    # The model's own history kept the real content, untouched.
-    tool_message = next(
-        m
-        for m in result["messages"]
-        if isinstance(m, ToolMessage) and m.name == "read_file"
+    _no_sentinel_leaked(
+        bodies,
+        journal_sentence,
+        fact_sentence,
+        attachment_sentence,
+        grep_pattern,
+        "new injury text",
+        "athlete said so",
     )
-    assert FIXTURE_SENTENCE in tool_message.content
 
-    # The context builder injects the journal into every system prompt; the
-    # LLM run's own inputs carry it too, and must be scrubbed the same way.
-    llm_run = next(r for r in runs.values() if r["run_type"] == "llm")
-    scrubbed_llm_inputs = scrub(llm_run["inputs"])
-    assert FIXTURE_SENTENCE not in json.dumps(scrubbed_llm_inputs, default=str)
+    # The model's own history still carries the real content, untouched.
+    prompt = model._seen[0][0].content
+    assert journal_sentence in prompt
+    assert fact_sentence in prompt
+
+
+def test_real_hide_path_leaks_no_sentinel_with_headingless_archive_retrieval(
+    monkeypatch, tmp_path
+):
+    """Review finding: a hit from an archive alone (no current facts/journal)
+    carries no FACTS/JOURNAL heading, so a heading-based cut would miss it.
+    The default-deny net does not depend on where in the prompt it sits."""
+    from arete import coaching as agent
+    from arete.agent.runtime import execution
+    from arete.agent.runtime.context import AgentContext
+    from arete.services.memory import memory_root
+
+    _init_isolated_db(monkeypatch, tmp_path)
+    archive_sentence = "SENTINEL_ARCHIVE genou tendinite"
+    root = memory_root()
+    (root / "sessions-2026-08.md").write_text(
+        f"## 2026-08-03 outing\n{archive_sentence}\n", encoding="utf-8"
+    )
+    agent.get_agent.cache_clear()
+
+    model = FakeCoach(messages=_ResponseFeed([AIMessage(content="Finished.")]))
+    monkeypatch.setattr(
+        agent,
+        "build_chat_model",
+        lambda **kw: FakeCoach(messages=_ResponseFeed([]))
+        if kw.get("max_tokens") == 512
+        else model,
+    )
+
+    bodies = _capture_requests(monkeypatch)
+    _enable_real_tracing(monkeypatch)
+
+    state = {"messages": [HumanMessage("mon genou me fait mal, que faire ?")]}
+    result = asyncio.run(
+        execution.invoke_agent(agent.get_agent(), state, context=AgentContext())
+    )
+    assert result["messages"][-1].content == "Finished."
+
+    _no_sentinel_leaked(bodies, archive_sentence)
+
+    prompt = model._seen[0][0].content
+    assert archive_sentence in prompt  # Confirms retrieval actually fired.
+
+
+def test_real_hide_path_leaks_no_sentinel_in_a_feedback_run(monkeypatch, tmp_path):
+    """Review finding: briefing/feedback/review runs restate the journal in
+    their own HumanMessage/AIMessage, which the old design never touched."""
+    from arete import coaching as agent
+    from arete.agent.runtime import execution
+    from arete.agent.runtime.context import AgentContext
+
+    _init_isolated_db(monkeypatch, tmp_path)
+    feedback_sentence = "SENTINEL_FEEDBACK sore hamstring, low motivation"
+    answer_sentence = "SENTINEL_ANSWER recommends an easy week"
+
+    model = FakeCoach(messages=_ResponseFeed([AIMessage(content=answer_sentence)]))
+    monkeypatch.setattr(
+        agent,
+        "build_chat_model",
+        lambda **kw: FakeCoach(messages=_ResponseFeed([]))
+        if kw.get("max_tokens") == 512
+        else model,
+    )
+    agent.build_feedback_agent.cache_clear()
+
+    bodies = _capture_requests(monkeypatch)
+    _enable_real_tracing(monkeypatch)
+
+    state = {"messages": [HumanMessage(feedback_sentence)]}
+    result = asyncio.run(
+        execution.invoke_agent(
+            agent.build_feedback_agent(),
+            state,
+            context=AgentContext(profile="feedback"),
+        )
+    )
+    assert result["messages"][-1].content == answer_sentence
+
+    _no_sentinel_leaked(bodies, feedback_sentence, answer_sentence)
