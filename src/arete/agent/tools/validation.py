@@ -1,5 +1,6 @@
 """Strict argument schemas for validation and native provider binding."""
 
+import inspect
 import json
 from collections.abc import Callable
 from copy import deepcopy
@@ -28,7 +29,11 @@ class TypedTool(StructuredTool):
 
 
 def typed_tool(function: Callable[..., Any]) -> BaseTool:
-    result = TypedTool.from_function(function)
+    result = (
+        TypedTool.from_function(coroutine=function)
+        if inspect.iscoroutinefunction(function)
+        else TypedTool.from_function(function)
+    )
     schema = result.args_schema
     assert isinstance(schema, type) and issubclass(schema, BaseModel)
     result.args_schema = _strict(schema)
