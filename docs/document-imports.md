@@ -50,15 +50,17 @@ grammar and exercise matching; supplied steps must agree with recognized sets.
 Existing sessions are reused by id. Writes are never automatically retried.
 
 
-PDF extraction runs on the server with pinned PyMuPDF. Native text is extracted
-without OCR; pages with images (including a native header above a scan), unreadable
-characters, or no text use French/English Tesseract OCR at 200 dpi. Partial OCR
-preserves readable native text. Each line retains its page, bounding box in PDF
-points, and `text`/`ocr` method. PyMuPDF supplies no confidence score: OCR confidence
+PDF extraction runs on the server with pinned pypdfium2 (PDFium) for native text and
+rendering, and pinned tesserocr, whose wheel bundles Tesseract, for OCR; both carry
+permissive licenses. Native text is extracted without OCR; pages with images (including
+a native header above a scan), unreadable characters, or no text are rendered at 200 dpi
+and read by French/English Tesseract. Partial OCR preserves readable native lines and
+keeps only the recognized lines that do not overlap them. Each line retains its page,
+bounding box in PDF points from the top left, and `text`/`ocr` method. OCR confidence
 stays null and appears in the preview's uncertain-text filter. An OCR warning asks
 the athlete to verify dates, numbers and units.
 
-One disposable subprocess per API process isolates MuPDF from concurrent request
+One disposable subprocess per API process isolates PDFium and Tesseract from concurrent request
 threads. Another extraction fails explicitly while it is occupied; there is no
 queue or automatic retry. A 240-second timeout kills and reaps the subprocess.
 The browser waits up to 270 seconds for finalization. Closing or cancelling the
@@ -139,7 +141,8 @@ server language data with `scripts/bundle_ocr_data.py`. Docker, Vercel backend b
 and backend CI run this same script. It downloads only French and English from
 `tesseract-ocr/tessdata_fast` 4.1.0, verifies pinned SHA-256 digests, and reuses verified
 files. No OCR download happens during an upload. The language data is Apache-2.0
-licensed; PyMuPDF is AGPL-3.0/commercial licensed.
+licensed; pypdfium2 is Apache-2.0/BSD-3-Clause, tesserocr MIT and Tesseract Apache-2.0.
+Do not add a copyleft (GPL/AGPL) PDF library: Arete is proprietary.
 
 Browser image OCR resources still come from pinned npm packages during `predev` and
 `prebuild`. Both sets of generated OCR assets are ignored by Git and Vercel upload.
@@ -157,7 +160,7 @@ and exercise drop → direct creation → reload with scripted coach responses.
 They also cover separate Garmin confirmation and the document preview on desktop and
 mobile (original rendering, OCR confidence filtering, zoom/source controls and Escape
 focus restoration). Browser checks run in the frontend CI job.
-Backend tests exercise actual PyMuPDF/Tesseract extraction on textual/scanned/mixed
+Backend tests exercise actual PDFium/Tesseract extraction on textual/scanned/mixed
 PDFs, encrypted/malformed files, missing languages, limits, timeouts and concurrent
 requests. They also cover actual workbook bytes, formulas, merged sheets, French units,
 quotas, isolation, interrupted uploads, typed source validation, direct creation/export,

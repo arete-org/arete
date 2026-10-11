@@ -7,9 +7,9 @@ import json
 from datetime import date
 from uuid import uuid4
 
-import pymupdf
 import pytest
 from openpyxl import Workbook
+from pdf_samples import encrypted, text_pdf
 from PIL import Image
 
 from arete.dataio.db import db_connection
@@ -142,19 +142,13 @@ def test_scanned_image_preserves_ocr_provenance_and_pdf_rejects_encryption(docum
         ),
     )
     assert documents.extraction_for(document_db, doc["id"]).blocks[0].confidence == 51
-    with pymupdf.open() as pdf:
-        pdf.new_page(width=100, height=100)
-        raw = pdf.tobytes(
-            encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="secret", owner_pw="owner"
-        )
+    raw = encrypted(text_pdf(""), "secret")
     with pytest.raises(DocumentError, match="chiffrés"):
         uploaded(document_db, "locked.pdf", raw)
 
 
 def test_pdf_finalization_uses_server_text_and_retains_sources(document_db):
-    with pymupdf.open() as pdf:
-        pdf.new_page().insert_text((30, 70), "Course 45 minutes")
-        raw = pdf.tobytes()
+    raw = text_pdf("Course 45 minutes")
     untrusted = Extraction(
         blocks=[SourceBlock(locator="page 1", text="Wrong browser text")]
     )
