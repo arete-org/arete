@@ -37,6 +37,12 @@ def setup_test_db() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def no_inherited_clerk_jwt_key(monkeypatch) -> None:
+    """A developer's .env may hold the real Clerk key: tests set their own."""
+    monkeypatch.delenv("CLERK_JWT_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def offline_weather(monkeypatch) -> None:
     """Sync and upload paths enrich sessions: Open-Meteo is never called.
 

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+import time
+from typing import Any
+
 import pytest
 
 from arete.api import auth
@@ -119,6 +123,97 @@ def test_misconfiguration_fails_closed(client, monkeypatch):
     monkeypatch.setenv("ARETE_AUTH", "clerk")
     monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)
     assert client.get("/settings").status_code == 503
+    assert client.get("/health").status_code == 200
+
+
+def _rsa_key() -> tuple[Any, str]:
+    """A throwaway signing key and its PEM public key, as Clerk shows it."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = private.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return private, pem.decode()
+
+
+def _session_token(key: Any, subject: str = OWNER, **claims: Any) -> str:
+    import jwt
+
+    now = int(time.time())
+    payload = {"sub": subject, "iat": now, "nbf": now, "exp": now + 60, **claims}
+    return jwt.encode(payload, key, algorithm="RS256", headers={"kid": "ins_test"})
+
+
+@pytest.fixture
+def real_verifier(monkeypatch):
+    """Clerk mode through the SDK's real verification; Clerk itself is a stub."""
+    from clerk_backend_api.security import verifytoken
+
+    monkeypatch.setenv("ARETE_AUTH", "clerk")
+    monkeypatch.setenv("CLERK_SECRET_KEY", f"sk_test_{time.time_ns()}")
+    monkeypatch.setenv("CLERK_PUBLISHABLE_KEY", "pk_test_fake")
+    monkeypatch.setenv("ARETE_OWNER_EMAIL", "owner@example.com")
+    for name in ("ARETE_API_KEY", "ARETE_AUTH_ORIGINS", "CLERK_JWT_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(auth, "_fetch_clerk_profile", lambda s: PROFILES[s])
+    jwks_fetches: list[Any] = []
+    monkeypatch.setattr(
+        verifytoken, "_fetch_jwks", lambda options: jwks_fetches.append(options)
+    )
+    return jwks_fetches
+
+
+def test_the_jwt_key_verifies_sessions_without_fetching_clerk(
+    client, real_verifier, monkeypatch
+):
+    signing, pem = _rsa_key()
+    monkeypatch.setenv("CLERK_JWT_KEY", pem)
+    token = _session_token(signing)
+    assert auth._verify_session_token(token)["sub"] == OWNER
+    me = client.get("/auth/me", headers=_bearer(token))
+    assert me.status_code == 200 and me.json()["is_owner"] is True
+    assert real_verifier == []  # no JWKS request, not even on a cold process
+    # Signed by another key (another Clerk instance, a forgery): refused.
+    forged = _session_token(_rsa_key()[0])
+    assert client.get("/settings", headers=_bearer(forged)).status_code == 401
+    # The authorized parties are still checked offline.
+    monkeypatch.setenv("ARETE_AUTH_ORIGINS", "https://arete.example")
+    assert client.get("/settings", headers=_bearer(token)).status_code == 401
+    allowed = _session_token(signing, azp="https://arete.example")
+    assert client.get("/settings", headers=_bearer(allowed)).status_code == 200
+    assert real_verifier == []
+
+
+def test_without_the_jwt_key_sessions_are_verified_against_clerk_jwks(
+    client, real_verifier, monkeypatch
+):
+    from clerk_backend_api.security import verifytoken
+    from jwt.algorithms import RSAAlgorithm
+
+    signing, _pem = _rsa_key()
+    jwk = {**RSAAlgorithm.to_jwk(signing.public_key(), as_dict=True), "kid": "ins_test"}
+
+    def jwks(options):
+        real_verifier.append(options)
+        return {"keys": [jwk]}
+
+    monkeypatch.setattr(verifytoken, "_fetch_jwks", jwks)
+    token = _session_token(signing)
+    assert client.get("/settings", headers=_bearer(token)).status_code == 200
+    assert len(real_verifier) == 1
+
+
+def test_an_unreadable_jwt_key_fails_closed(client, real_verifier, monkeypatch, caplog):
+    signing, pem = _rsa_key()
+    monkeypatch.setenv("CLERK_JWT_KEY", pem.replace("MII", "MIX", 1))
+    with caplog.at_level(logging.ERROR, logger="arete.api.auth"):
+        refused = client.get("/settings", headers=_bearer(_session_token(signing)))
+    assert refused.status_code == 503
+    assert "CLERK_JWT_KEY" in caplog.text
+    assert real_verifier == []
+    # The public paths stay up, so the fix can be deployed and probed.
     assert client.get("/health").status_code == 200
 
 
