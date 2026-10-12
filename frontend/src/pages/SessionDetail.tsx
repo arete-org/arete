@@ -1,8 +1,9 @@
 import { createElement, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
+import { RpePicker } from '@/components/RpePicker';
 import { Panel, RpeBadge } from '@/components/ui';
 import { analyticsApi } from '@/lib/api';
 import { chartRows, formatElapsed, intensityLabel, isFootSport } from '@/lib/activity';
@@ -76,6 +77,8 @@ export function SessionDetailPage() {
 
 function SessionView({ detail }: { detail: ActivityDetail }) {
   const { session } = detail;
+  // The post-session notification opens /log/sessions/{id}?rpe=1.
+  const [params] = useSearchParams();
   const foot = isFootSport(session.sport);
   const icon = createElement(getSportIconComponent(session.sport), { size: 'lg', className: getSportColor(session.sport) });
   const rows = detail.streams ? chartRows(detail.streams, session.sport) : [];
@@ -105,6 +108,8 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
         </div>
         <RpeBadge rpe={session.rpe} />
       </header>
+
+      {session.rpe == null && <RpePicker sessionId={session.id} autoFocus={params.get('rpe') === '1'} />}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         <Stat label="Durée" value={formatDurationCompact(session.moving_time_sec ?? session.duration_sec)} />

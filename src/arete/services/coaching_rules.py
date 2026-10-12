@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -444,12 +444,14 @@ def sync_feedback(
     session_ids: list[int],
     *,
     produce: Callable[[str, int], str],
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """The coach's word on the sessions a sync imported: one model request.
 
     Strava rows stay out of the model's input, and a session that already has
     a stored feedback is not paid for twice. Each answer is stored for the
     session page (``trigger='sync'``). Never raises for one session's error.
+    ``written`` lists the feedback stored by this run, which is what the
+    post-session push announces: a session gets it once, like its feedback.
     """
     repo = GarminRepository()
     feedback_repo = SessionFeedbackRepository()
@@ -472,12 +474,18 @@ def sync_feedback(
     answers = batch_session_feedback(
         [facts for _, facts in candidates], produce=produce
     )
-    for (session_id, _), (text, source) in zip(candidates, answers, strict=True):
+    written: list[dict[str, Any]] = []
+    for (session_id, facts), (text, source) in zip(candidates, answers, strict=True):
         try:
             feedback_repo.save(session_id, text=text, source=source, trigger="sync")
         except Exception:
             logger.warning("Could not store feedback of %s", session_id, exc_info=True)
+            continue
+        written.append(
+            {"session_id": session_id, "date": facts.evidence.date, "text": text}
+        )
     return {
         "sessions": len(candidates),
         "agent": sum(1 for _, source in answers if source == "agent"),
+        "written": written,
     }

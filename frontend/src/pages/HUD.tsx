@@ -1,6 +1,7 @@
 import { CoachTodayPanel } from '@/components/agent/CoachToday';
 import { AretePresence } from '@/components/AreteBrand';
 import { PlayerSummary } from '@/components/PlayerSummary';
+import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -94,7 +95,10 @@ function TodaySession({
           ? { text: structure.text, onPush: () => push.mutate(), pending: push.isPending, error: pushError }
           : undefined
       }
-    />
+    >
+      {/* Cardio only: strength rows carry negative ids and their own RPE. */}
+      {realised && realised.id > 0 && realised.rpe == null && <RpePicker sessionId={realised.id} className="mt-2" />}
+    </SessionCard>
   );
 }
 
