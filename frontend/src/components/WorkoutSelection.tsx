@@ -1,13 +1,14 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { Send, Watch, X } from 'lucide-react';
 import { exportApi } from '@/lib/documents';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
-import { type WorkoutSession, type WorkoutView, workoutApi, workoutKey } from '@/lib/workouts';
+import { type WorkoutSession, type WorkoutView, workoutApi, workoutKey, mergeWorkout } from '@/lib/workouts';
 import { WorkoutCard } from './WorkoutCard';
 
 /** Selection is local; cards and direct API mutations are shared by chat and Planning. */
-export function WorkoutSelection({ sessions, children, onResult, locked = false }: {
+export function WorkoutSelection({ sessions, children, onResult, locked = false, renderWorkout }: {
+  renderWorkout?: (props: ComponentProps<typeof WorkoutCard>) => ReactNode;
   sessions: WorkoutView[]; children?: (render: (id: number) => ReactNode) => ReactNode;
   onResult?: (text: string) => void; locked?: boolean;
 }) {
@@ -18,7 +19,7 @@ export function WorkoutSelection({ sessions, children, onResult, locked = false 
   const actions = useWorkoutActions(text => { setCompleted(text); onResult?.(text); });
   const devices = useQuery({ queryKey: ['garmin-workout-devices'], queryFn: exportApi.devices, enabled: watch, retry: false });
   const views = useQueries({ queries: sessions.map(v => ({ queryKey: workoutKey(v.session.id), queryFn: () => workoutApi.inspect(v.session.id), enabled: false })) });
-  const latest = sessions.map((v, i) => views[i].data ?? v);
+  const latest = sessions.map((v, i) => mergeWorkout(views[i].data, v));
   const scheduled = latest.filter(v => ['scheduled', 'transfer_requested'].includes(v.export?.state ?? '')).length;
   const working = latest.some(v => v.export?.state === 'working');
   const visible = new Set(sessions.map(v => v.session.id));
@@ -27,11 +28,23 @@ export function WorkoutSelection({ sessions, children, onResult, locked = false 
     const current = latest.find(v => v.session.id === s.id);
     return !current || current.session.revision !== s.revision || current.session.exportable === false || ['working', 'uncertain', 'conflict'].includes(current.export?.state ?? '');
   });
-  const render = (id: number) => <WorkoutCard key={id} sessionId={id} initial={sessions.find(v => v.session.id === id)} compact={!!children}
-    selected={selected.has(id)} locked={locked} onResult={text => { setCompleted(text); onResult?.(text); }} onSelect={(session, checked) => {
-      setSelected(previous => { const next = new Map(previous); if (checked) next.set(session.id, session); else next.delete(session.id); return next; });
-      setCompleted('');
-    }} />;
+  const render = (id: number) => {
+    const props: ComponentProps<typeof WorkoutCard> = {
+      sessionId: id, initial: latest.find(v => v.session.id === id), compact: !!children,
+      selected: selected.has(id), locked,
+      onResult: text => { setCompleted(text); onResult?.(text); },
+      onSelect: (session, checked) => {
+        if (checked && selected.size >= 50) { setCompleted('Maximum 50 séances par envoi.'); return; }
+        setSelected(previous => {
+          const next = new Map(previous);
+          if (checked) next.set(session.id, session); else next.delete(session.id);
+          return next;
+        });
+        setCompleted('');
+      },
+    };
+    return renderWorkout ? renderWorkout(props) : <WorkoutCard key={id} {...props} />;
+  };
   const send = async () => {
     if (await actions.run({ kind: 'export', sessions: effective, deviceId: watch ? deviceId : null })) setSelected(new Map());
   };

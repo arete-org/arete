@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -12,13 +13,15 @@ interface ModalProps {
   className?: string;
   padded?: boolean;
   label?: string;
+  /** Bottom sheet on narrow screens; keeps the same focus and dismissal contract. */
+  mobileSheet?: boolean;
 }
 
 /**
  * Overlay + glass panel with CSS enter/exit transitions.
  * Stays mounted for EXIT_MS after `open` turns false so the exit animation plays.
  */
-export function Modal({ open, onClose, children, className, padded = true, label }: ModalProps) {
+export function Modal({ open, onClose, children, className, padded = true, label, mobileSheet = false }: ModalProps) {
   // Selecting text inside the panel and releasing outside it used to close the
   // modal: the click lands on the overlay. Only a press that *starts* on the
   // overlay counts.
@@ -73,10 +76,11 @@ export function Modal({ open, onClose, children, className, padded = true, label
   if (!open && !exiting) return null;
   const closing = !open;
 
-  return (
+  return createPortal(
     <div
       className={cn(
-        'fixed inset-0 bg-void/80 backdrop-blur-sm z-50 flex items-center justify-center p-4',
+        'fixed inset-0 bg-void/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4',
+        mobileSheet && 'mobile-sheet',
         closing ? 'animate-fade-out' : 'animate-fade-in'
       )}
       onMouseDown={(e) => {
@@ -102,7 +106,8 @@ export function Modal({ open, onClose, children, className, padded = true, label
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

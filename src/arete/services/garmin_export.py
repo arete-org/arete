@@ -113,21 +113,33 @@ def _update(session_id: int, operation_id: str, **fields) -> dict:
 def statuses() -> list[dict]:
     with db_connection() as con:
         rows = con.execute(
-            "SELECT session_id FROM app.visible_garmin_exports ORDER BY updated_at DESC LIMIT ?",
+            "SELECT e.session_id, s.description, s.date FROM app.visible_garmin_exports e "
+            "LEFT JOIN app.visible_planned_sessions s ON s.id=e.session_id "
+            "ORDER BY e.updated_at DESC LIMIT ?",
             [MAX_STATUS_ROWS + 1],
         ).fetchall()
         if len(rows) > MAX_STATUS_ROWS:
             raise DocumentError(
                 "Plus de 500 exports : réduis l’historique avant de continuer."
             )
-        return [
-            {
-                k: v
-                for k, v in (_get(con, row[0]) or {}).items()
-                if k not in {"remote_snapshot", "intended_payload"}
-            }
-            for row in rows
-        ]
+        result = []
+        for session_id, description, day in rows:
+            state = _get(con, session_id)
+            assert state is not None, "A listed export must be readable"
+            effective_day = day or state.get("intended_date")
+            result.append(
+                {
+                    **{
+                        k: v
+                        for k, v in state.items()
+                        if k not in {"remote_snapshot", "intended_payload"}
+                    },
+                    "description": description
+                    or (state.get("intended_payload") or {}).get("workoutName"),
+                    "date": effective_day.isoformat() if effective_day else None,
+                }
+            )
+        return result
 
 
 class Exchange:

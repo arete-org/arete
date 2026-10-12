@@ -1,0 +1,448 @@
+/* Proposal A: use shared surfaces and type tokens; the board owns only its layout. */
+.planning-shell {
+  padding: 40px;
+}
+.planning-content {
+  container-type: inline-size;
+}
+.planning-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.planning-content button,
+.planning-dialog button,
+.planning-dialog input:not([type='checkbox']),
+.planning-dialog select {
+  min-height: 44px;
+}
+.planning-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 260px) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.planning-eyebrow {
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.planning-toolbar,
+.planning-week-controls,
+.planning-extra-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.planning-toolbar {
+  justify-content: space-between;
+  padding-bottom: 24px;
+}
+.planning-week-controls h2 {
+  font-size: 21px;
+}
+.planning-toolbar .ui-input {
+  width: auto;
+  background: var(--color-abyss);
+  color: var(--color-text-primary);
+}
+.planning-week-board {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+}
+.planning-day {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.planning-day-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+.planning-session {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-abyss);
+  border-radius: var(--radius-control);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.planning-session-active {
+  border: 2px solid var(--color-neon-cyan);
+  padding: 11px 13px;
+}
+.planning-session[draggable='true'] {
+  cursor: grab;
+}
+.planning-session[draggable='true']:active {
+  cursor: grabbing;
+}
+/* The whole card is the hit target; its title retains the reference's natural height. */
+.planning-content .planning-card-title,
+.planning-content .planning-card-open {
+  min-height: 0;
+}
+.planning-card-title::after,
+.planning-card-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-control);
+}
+.planning-card-title:focus-visible,
+.planning-card-open:focus-visible {
+  outline: none;
+}
+/* The focus contour replaces the card border so their rounded corners cannot double up. */
+.planning-session:has(.planning-card-title:focus-visible),
+.planning-session:has(.planning-card-open:focus-visible) { border-color: transparent; }
+/* Merge keyboard focus with the selection border, avoiding nested orange rectangles. */
+.planning-card-title:focus-visible::after,
+.planning-card-open:focus-visible::after {
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 0;
+  border-radius: calc(var(--radius-control) - 2px);
+}
+.planning-session label {
+  position: relative;
+  z-index: 1;
+}
+.planning-day-strip,
+.planning-card-open,
+.planning-mobile-title,
+.planning-mobile-summary,
+.planning-mobile-day-heading,
+.planning-card-cta,
+.planning-mobile-create {
+  display: none;
+}
+.planning-active {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px;
+  margin: 24px 0;
+}
+.planning-analysis {
+  margin: 24px 0;
+}
+.planning-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 0;
+}
+.planning-field input,
+.planning-field select {
+  font-size: 14px;
+  font-weight: 400;
+}
+.planning-steps {
+  margin-top: 12px;
+}
+.planning-dialog-footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+/* The compact board also applies beside the docked coach. */
+@container (max-width:1050px) {
+  .planning-desktop-title,
+  .planning-header > div > p,
+  .planning-desktop-create,
+  .planning-summary,
+  .planning-active,
+  .planning-today,
+  .planning-sport-filter,
+  .planning-day-heading,
+  .planning-day-add,
+  .planning-card-title {
+    display: none;
+  }
+  .planning-mobile-title,
+  .planning-card-open {
+    display: block;
+  }
+  .planning-title {
+    font-size: 34px;
+  }
+  .planning-header {
+    margin-bottom: 20px;
+  }
+  .planning-toolbar {
+    position: relative;
+    padding-bottom: 20px;
+  }
+  .planning-week-controls {
+    flex: 1;
+    gap: 6px;
+  }
+  .planning-week-controls h2 {
+    margin-right: auto;
+    font-size: 18px;
+  }
+  .planning-week-controls button {
+    width: 44px;
+    padding-inline: 0;
+  }
+  /* Advanced controls stay beside the title, preserving the reference's week row. */
+  .planning-extra-controls {
+    position: absolute;
+    right: 0;
+    top: -64px;
+  }
+  .planning-extra-controls button {
+    width: 44px;
+    padding-inline: 0;
+    color: var(--color-text-muted);
+  }
+  .planning-week-board {
+    display: block;
+  }
+  .planning-day {
+    display: none;
+  }
+  .planning-day-selected {
+    display: flex;
+    gap: 20px;
+  }
+  .planning-mobile-day-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .planning-mobile-day-heading button {
+    padding-inline: 16px;
+    font-size: 14px;
+  }
+  .planning-day-strip {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .planning-day-strip button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 10px 2px;
+    border-radius: var(--radius-control);
+    border: 1px solid transparent;
+  }
+  .planning-day-strip button[aria-pressed='true'] {
+    background: var(--color-neon-cyan);
+    color: var(--color-on-accent);
+  }
+  .planning-day-strip button[aria-current='date']:not([aria-pressed='true']) {
+    border-color: var(--color-neon-cyan);
+  }
+  .planning-mobile-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 20px 0;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+  }
+  .planning-mobile-summary > span {
+    padding: 4px 8px;
+  }
+  .planning-session {
+    touch-action: pan-y;
+  }
+  .planning-card-cta {
+    display: inline-flex;
+    margin-top: 20px;
+  }
+  .planning-mobile-create {
+    display: inline-flex;
+    margin-top: 20px;
+  }
+  .planning-calendar > p {
+    display: none;
+  }
+}
+.planning-brand-header {
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--color-abyss);
+}
+.planning-desktop-nav {
+  background: var(--color-abyss);
+  border-bottom: 0;
+}
+.planning-desktop-nav .navigation-shell {
+  padding-inline: 40px;
+}
+.planning-desktop-nav .navigation-shell > div {
+  height: 76px;
+}
+.planning-desktop-nav .navigation-item {
+  min-height: 44px;
+  font-weight: 500;
+}
+.planning-desktop-nav .navigation-item > svg {
+  display: none;
+}
+.planning-desktop-nav .navigation-item > span {
+  display: inline;
+}
+.planning-mobile-nav {
+  background: var(--color-abyss);
+  border-top: 0;
+}
+.planning-mobile-nav > div {
+  padding: 8px 20px;
+  gap: 4px;
+  height: 60px;
+}
+.planning-mobile-nav .navigation-item,
+.planning-mobile-nav button {
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.planning-mobile-nav .navigation-item > svg,
+.planning-mobile-nav .navigation-item > span[aria-hidden],
+.planning-mobile-nav button > span:first-child {
+  display: none;
+}
+.planning-mobile-nav span.font-sans {
+  font-size: 14px;
+}
+.planning-mobile-nav .navigation-item[aria-current='page'] {
+  background: var(--color-selection);
+}
+@media (max-width: 767px) {
+  .planning-shell {
+    padding: 20px;
+  }
+  .planning-brand-header {
+    display: flex;
+  }
+}
+@media (max-width: 640px) {
+  .planning-dialog {
+    padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+  }
+  .planning-dialog input:not([type='checkbox']),
+  .planning-dialog select {
+    font-size: 16px;
+  }
+  .planning-dialog-footer {
+    position: sticky;
+    bottom: -20px;
+    background: var(--color-abyss);
+    padding-bottom: 20px;
+    margin-bottom: -20px;
+  }
+  .planning-dialog-footer > button:last-child {
+    flex: 1;
+  }
+}
+.planning-dialog details > summary::after {
+  content: '⌄';
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--color-text-muted);
+}
+.planning-dialog details[open] > summary::after {
+  transform: rotate(180deg);
+  padding-left: 0;
+  padding-right: 12px;
+}
+.planning-next {
+  align-self: center;
+}
+.planning-active-summary {
+  flex: 1;
+}
+.planning-active > div:first-child {
+  flex: 0 1 345px;
+}
+.planning-desktop-nav .navigation-shell > div {
+  gap: 32px;
+}
+.planning-desktop-nav .navigation-shell > div > div:nth-child(2) {
+  flex: 1;
+  gap: 20px;
+}
+.planning-desktop-nav button[aria-controls='coach-panel'] {
+  border-color: transparent;
+  color: var(--color-neon-cyan);
+}
+.planning-desktop-nav button[aria-controls='coach-panel'] > span:first-child {
+  display: none;
+}
+.planning-mobile-day-heading h3::first-letter {
+  text-transform: uppercase;
+}
+@container (min-width:1051px) {
+  .planning-week-controls > button:first-of-type {
+    order: -1;
+  }
+}
+.planning-cleanup {
+  margin-top: 20px;
+  padding: 16px;
+  border-color: color-mix(in srgb, var(--color-warning-orange) 30%, var(--color-border));
+}
+@media (min-width: 768px) and (max-width: 1100px) {
+  .planning-desktop-nav .navigation-shell {
+    padding-inline: 24px;
+  }
+  .planning-desktop-nav .navigation-shell > div {
+    gap: 16px;
+  }
+  .planning-desktop-nav .navigation-shell > div > div:nth-child(2) {
+    gap: 4px;
+  }
+  .planning-desktop-nav .navigation-item > span {
+    display: none;
+  }
+  .planning-desktop-nav .navigation-item > svg {
+    display: block;
+  }
+}
+.planning-next {
+  position: relative;
+}
+.planning-content .planning-next-link {
+  min-height: 0;
+}
+.planning-next-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-panel);
+}
+.planning-summary .text-\[26px\] {
+  line-height: 1.2;
+}
+.planning-content .ui-button[data-variant='ghost'] {
+  color: var(--color-neon-cyan);
+}
+.planning-mobile-nav .navigation-item,
+.planning-mobile-nav button {
+  color: var(--color-neon-cyan);
+}
+.planning-mobile-create {
+  background: var(--color-selection);
+  border-color: transparent;
+}
