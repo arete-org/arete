@@ -143,7 +143,7 @@ export function SystemTab() {
       <Panel variant="inset" title="SYNCHRONISATION GARMIN">
         {syncStatus?.garmin_authenticated ? (
           <div className="space-y-4">
-            <div className="p-3 rounded border border-success-green/30">
+            <div className="ui-inset p-3">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm text-success-green font-sans flex items-center gap-2">
@@ -174,7 +174,7 @@ export function SystemTab() {
 
             <SyncOptionsForm onSync={(options) => syncMutation.mutate(options)} isLoading={syncMutation.isPending} />
 
-            <div className="p-3 rounded border border-neon-purple/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="ui-inset p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="text-sm text-neon-purple font-sans">Données santé (VFC, sommeil, batterie corporelle)</div>
                 <div className="text-xs text-text-muted mt-1 font-sans">

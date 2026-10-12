@@ -11,7 +11,7 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from arete.garmin.repository import GarminRepository
 
@@ -37,6 +37,27 @@ class SyncRequest(BaseModel):
     end_date: date | None = None
     download_fit: bool = True
     max_activities: int = Field(50, ge=1, le=200)
+    history_offset: int | None = Field(None, ge=0, le=20_000)
+    history_anchor: int | None = Field(None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_period(self) -> SyncRequest:
+        if self.start_date and self.start_date > (self.end_date or date.today()):
+            raise ValueError("La date de fin doit suivre ou égaler la date de début.")
+        if self.history_offset is not None:
+            if self.start_date or self.end_date or self.max_activities != 20:
+                raise ValueError(
+                    "L’historique complet utilise des lots de 20 sans dates."
+                )
+            if (self.history_offset > 0) != (self.history_anchor is not None):
+                raise ValueError(
+                    "Le lot suivant requiert la dernière activité du précédent."
+                )
+        elif self.history_anchor is not None:
+            raise ValueError(
+                "Une activité de reprise requiert un import de l’historique."
+            )
+        return self
 
 
 class SyncResponse(BaseModel):
@@ -49,6 +70,8 @@ class SyncResponse(BaseModel):
     activities_skipped: int
     errors: list[str]
     last_activity_date: str | None = None
+    next_history_offset: int | None = None
+    history_anchor: int | None = None
 
 
 class GarminLoginRequest(BaseModel):
@@ -172,6 +195,8 @@ def sync_activities(request: SyncRequest):
         end_date=request.end_date,
         download_fit=request.download_fit,
         max_activities=request.max_activities,
+        history_offset=request.history_offset,
+        history_anchor=request.history_anchor,
     )
     from arete.services.session_conditions import enrich_sessions
 
@@ -187,6 +212,8 @@ def sync_activities(request: SyncRequest):
         last_activity_date=str(result.last_activity_date)
         if result.last_activity_date
         else None,
+        next_history_offset=result.next_history_offset,
+        history_anchor=result.history_anchor,
     )
 
 

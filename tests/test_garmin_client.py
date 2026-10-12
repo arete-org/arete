@@ -102,6 +102,20 @@ class TestGarminClientData:
         client.activities(date(2026, 1, 1), date(2026, 1, 31))
         api.get_activities_by_date.assert_called_once_with("2026-01-01", "2026-01-31")
 
+    def test_history_reads_one_bounded_page(self, token_dir):
+        client, api = self._client(token_dir)
+        api.get_activities.return_value = [{"activityId": 12}]
+        assert client.activity_page(19, 21) == [{"activityId": 12}]
+        api.get_activities.assert_called_once_with(start=19, limit=21)
+        api.get_activities_by_date.assert_not_called()
+
+    @pytest.mark.parametrize("raw", [{"error": "failed"}, [None], [{}] * 22])
+    def test_invalid_history_is_not_an_empty_archive(self, token_dir, raw):
+        client, api = self._client(token_dir)
+        api.get_activities.return_value = raw
+        with pytest.raises(ValueError, match="Invalid Garmin"):
+            client.activity_page(19, 21)
+
     def test_training_readiness_uses_the_morning_reading(self, token_dir):
         client, api = self._client(token_dir)
         api.get_morning_training_readiness.return_value = {"score": 70}
