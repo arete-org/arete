@@ -51,9 +51,10 @@ def test_remote_connection_is_opened_once(opened):
 
 def test_each_remote_caller_gets_a_cursor_on_the_database(opened):
     cursor = db.connect()
-    assert cursor is opened[0].cursor.return_value
-    cursor.execute.assert_any_call("USE arete")
-    cursor.execute.assert_called_with("SET VARIABLE arete_athlete_id = ?", [1])
+    raw = opened[0].cursor.return_value
+    assert cursor._con is raw  # wrapped to count the request's statements
+    raw.execute.assert_any_call("USE arete")
+    raw.execute.assert_called_with("SET VARIABLE arete_athlete_id = ?", [1])
 
 
 def test_a_dead_remote_connection_is_reopened(opened):
@@ -61,7 +62,7 @@ def test_a_dead_remote_connection_is_reopened(opened):
     opened[0].cursor.side_effect = duckdb.ConnectionException("gone")
     cursor = db.connect()
     assert len(opened) == 2
-    assert cursor is opened[1].cursor.return_value
+    assert cursor._con is opened[1].cursor.return_value
 
 
 def test_a_remote_that_stays_down_raises(opened):
@@ -119,5 +120,5 @@ def test_preview_cannot_open_production_motherduck(monkeypatch):
 def test_preview_can_open_a_separate_database(monkeypatch, opened):
     monkeypatch.setenv("VERCEL_ENV", "preview")
     monkeypatch.setenv("ARETE_DB", "md:arete_preview")
-    cursor = db.connect()
-    cursor.execute.assert_any_call("USE arete_preview")
+    db.connect()
+    opened[0].cursor.return_value.execute.assert_any_call("USE arete_preview")

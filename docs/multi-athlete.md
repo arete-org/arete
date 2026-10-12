@@ -74,8 +74,8 @@ lists each athlete with its logins, role, last activity (refreshed hourly with t
 Clerk profile) and daily sync, and acts on the account tables only, never on an
 athlete's private data:
 
-- **Désactiver / Réactiver** an athlete: its logins are refused at once and its
-  data is hidden, then restored as it was. Nobody deactivates athlete 1, and only
+- **Désactiver / Réactiver** an athlete: its logins are refused (within the
+  bound below) and its data is hidden, then restored as it was. Nobody deactivates athlete 1, and only
   the owner deactivates an administrator's athlete.
 - **Libérer la synchro**: clears a lease kept by a failed or stopped daily run, so
   the next window runs the day again. Check first what that run already did at
@@ -83,7 +83,10 @@ athlete's private data:
   in progress and is not released.
 - **Nommer admin / Retirer admin**: the owner only, never on its own logins.
 
-A change applies at the account's next request: every request reads its row.
+A change applies at the account's next request on the instance that made it.
+Each instance reuses a resolved account (the login and whether its athlete is
+live, read in one query) for 30 seconds (`ACCOUNT_TTL_SECONDS` in
+`api/auth.py`, at most 60), so other instances follow within that bound.
 
 ## Migrations and deployment
 

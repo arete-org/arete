@@ -22,8 +22,6 @@ import json
 from collections import defaultdict
 from typing import Any, TypedDict
 
-import numpy as np
-
 MIN_RUNS_FOR_BASELINE = 10
 KM_LAP_MIN_M = 900
 KM_LAP_MAX_M = 1100
@@ -189,6 +187,8 @@ def fit_baseline(runs: list[Run]) -> dict[str, Any] | None:
     """OLS of decoupling on (distance_km, elev_per_km, avg_pace_sec_km)."""
     if len(runs) < MIN_RUNS_FOR_BASELINE:
         return None
+    import numpy as np  # here, not at module level: the API boot skips numpy
+
     X = np.array([_features(r) for r in runs], dtype=float)
     y = np.array([r["decoupling_pct"] for r in runs], dtype=float)
 

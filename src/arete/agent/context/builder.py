@@ -8,7 +8,11 @@ import duckdb
 from langchain.agents.middleware import ModelRequest
 from langchain_core.messages import SystemMessage
 
-from arete.agent.capabilities.discovery import _profile, tool_instructions_suffix
+from arete.agent.capabilities.discovery import (
+    _profile,
+    tool_available,
+    tool_instructions_suffix,
+)
 from arete.agent.context.attachments import attachment_section
 from arete.agent.context.sections import ContextSection, page_section, surface_section
 from arete.agent.runtime.budget import MAX_MODEL_CALLS
@@ -68,12 +72,24 @@ def build_context(
     profile = resolve_policy(profile_id).profile
     state = getattr(request, "state", {})
     tools = list(getattr(request, "tools", []))
+    if profile.id == "slack":
+        tools = [
+            tool
+            for tool in tools
+            if tool_available(
+                profile, tool["name"] if isinstance(tool, dict) else tool.name
+            )
+        ]
     # Reserve the last allowed request for an answer using the complete evidence.
     # Otherwise a successful last tool call strands its result behind the hard cap.
     completed_calls = state.get("run_model_call_count", 0)
     assert isinstance(completed_calls, int) and completed_calls >= 0
     final_call = completed_calls >= MAX_MODEL_CALLS - 1
     system = getattr(request, "system_message", None)
+    # Filesystem middleware belongs to the shared graph, but its instructions
+    # must not advertise private ledger access in product/clarification turns.
+    if profile.id == "slack" and not profile.journal_tools:
+        system = SystemMessage(profile.system_prompt or "")
     instructions = profile.instructions
     context = getattr(getattr(request, "runtime", None), "context", None)
     date_instruction = ""
@@ -127,7 +143,9 @@ def build_context(
             "attachments",
             attachment_section(
                 state.get("files", {}), context.attachment_paths if context else ()
-            ),
+            )
+            if profile.journal_tools
+            else "",
             "server",
         ),
         ContextSection(
@@ -144,7 +162,7 @@ def build_context(
     )
     if final_call:
         base = base.override(tool_choice=None)
-    if not isinstance(context, AgentContext) or profile.id != "chat":
+    if not isinstance(context, AgentContext) or not profile.journal_tools:
         return base
     # Mandatory preferences/history are checked first, never displaced by retrieval.
     available = MAX_RETRIEVED_TOKENS

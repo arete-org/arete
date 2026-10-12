@@ -14,15 +14,17 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import duckdb
-import httpx
 from anyio import to_thread
 
 from arete.dataio.db import transaction
 from arete.services import slack_athletes
 from arete.services.athlete_scope import current_athlete_id
+
+if TYPE_CHECKING:
+    import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +251,8 @@ class SlackClient:
 
     async def react(self, message: SlackMessage) -> None:
         """Acknowledge once; a cosmetic failure must not cancel the coach."""
+        import httpx  # here, not at module level: the API boot skips httpx
+
         try:
             await self.call(
                 "reactions.add",
@@ -620,7 +624,7 @@ async def dispatch(
     client: SlackClient,
     produce: Producer,
     prepare: Callable[..., Awaitable[SlackPreparation]] | None = None,
-) -> None:
+) -> str | None:
     """Answer one message; the caller holds the author's athlete scope."""
     try:
         status = await to_thread.run_sync(reserve, message)
@@ -629,10 +633,10 @@ async def dispatch(
         # recorded or executed, so say so rather than dropping the message.
         status = "busy"
     if status == "duplicate":
-        return
+        return None
     if status == "busy":
         await client.reply(message, BUSY_MESSAGE)
-        return
+        return None
     started_coach = False
     completed_coach = False
     output: SlackStream | None = None
@@ -689,6 +693,7 @@ async def dispatch(
                     else PRIVATE_NOTE.format(user=message.user),
                 )
         delivery_status = "sent"
+        return answer
     except HistoryError as exc:
         delivery_status = "rejected"
         await client.reply(message, str(exc))
@@ -719,3 +724,4 @@ async def dispatch(
                 message, delivery_status, release=not started_coach or completed_coach
             )
         )
+    return None

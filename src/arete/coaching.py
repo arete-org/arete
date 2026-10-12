@@ -13,6 +13,8 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Literal
 
+from langsmith import traceable
+
 from arete.agent.backends.memory import build_memory_filesystem
 from arete.agent.backends.skills import SystemSkillsBackend
 from arete.agent.factory import build_agent
@@ -288,10 +290,44 @@ def enrich_session_feedback(
     )
 
 
-@lru_cache(maxsize=MAX_CACHED_ATHLETES * 2)
-def _slack_graph(athlete_id: int, profile_id: str, glm_flash: bool):
+@lru_cache(maxsize=MAX_CACHED_ATHLETES)
+def _slack_graph(athlete_id: int, glm_flash: bool):
     assert athlete_id == current_athlete_id()
-    return _assemble(profile_id, glm_flash=glm_flash, calendar_enabled=False)
+    return _assemble("slack", glm_flash=glm_flash, calendar_enabled=False)
+
+
+async def dispatch_slack_message(message, *, client):
+    """Keep classification, delivery selection and streamed execution in one trace."""
+    from arete.observability.tracing import agent_tracing
+
+    with agent_tracing():
+        return await _dispatch_slack_message(
+            message,
+            client=client,
+            langsmith_extra={
+                "metadata": {
+                    "thread_id": message.thread_id,
+                    "athlete_id": current_athlete_id(),
+                    "task": "slack",
+                }
+            },
+        )
+
+
+@traceable(
+    name="arete_coach",
+    process_inputs=lambda inputs: {
+        "messages": [{"role": "user", "content": inputs["message"].text}]
+    },
+)
+async def _dispatch_slack_message(message, *, client):
+    from arete.services.slack import dispatch
+
+    # The outer trace must survive prepare() returning: transport picks the
+    # private destination before it invokes the prepared streaming producer.
+    return await dispatch(
+        message, client=client, produce=run_slack_coach, prepare=prepare_slack_agent
+    )
 
 
 async def prepare_slack_agent(messages, message, client):
@@ -324,7 +360,9 @@ async def prepare_slack_agent(messages, message, client):
         raise HistoryError("Ce fil privé exige son administrateur Arete actif.")
     if actor is None or not actor.is_admin:
         return SlackPreparation(run_slack_coach)
-    context = AgentContext(thread_id=message.thread_id, account_id=actor.clerk_user_id)
+    context = AgentContext(
+        profile="slack", thread_id=message.thread_id, account_id=actor.clerk_user_id
+    )
     context.started_at = monotonic()
     context.deadline = context.started_at + MAX_JOB_SECONDS
 
@@ -358,38 +396,20 @@ async def prepare_slack_agent(messages, message, client):
                 classifier, context_tokens=route.context_tokens
             ).prepare(messages, context)
         context.classifier_calls = 1
-        if decision.surface == "clarify" or (private_owner and decision.outbound):
-
-            async def clarify(history, thread_id, visibility, emit):
-                return "Précise si tu veux une consultation privée des données d’un athlète ou une action produit. Pour une analyse privée et un ping, utilise deux fils distincts."
-
-            return SlackPreparation(
-                clarify,
-                product=True,
-                private=bool(private_owner),
-                account_id=actor.clerk_user_id,
-                finalize=finalize,
-            )
         private = decision.private_data or bool(private_owner)
-        context.profile = (
-            "admin_data"
-            if private
-            else "product"
-            if decision.surface == "product"
-            else "chat"
+        context.slack_decision = decision
+        assert identity is not None
+        context.slack_product = SlackProduct(
+            client,
+            message,
+            actor.clerk_user_id,
+            valid_timezone(identity[1]),
+            private=private,
         )
-        if context.profile != "chat":
-            assert identity is not None
-            context.slack_product = SlackProduct(
-                client,
-                message,
-                actor.clerk_user_id,
-                valid_timezone(identity[1]),
-                private=private,
-            )
-        # A cached graph captures its profile and route, never a Slack client.
+        # All intents share one graph. Its policy is resolved per invocation;
+        # neither classification nor the Slack client enters the graph cache.
         with _graph_lock:
-            graph = _slack_graph(current_athlete_id(), context.profile, glm_flash)
+            graph = _slack_graph(current_athlete_id(), glm_flash)
 
         async def produce(history, thread_id, visibility, emit):
             await to_thread.run_sync(
@@ -404,7 +424,7 @@ async def prepare_slack_agent(messages, message, client):
 
         return SlackPreparation(
             produce,
-            product=context.profile != "chat",
+            product=private or decision.surface != "coach",
             private=private,
             account_id=actor.clerk_user_id,
             finalize=finalize,

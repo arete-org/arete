@@ -7,6 +7,15 @@ toolkit inspects, exports and reconciles it without OCR or an import draft. Miss
 required parameters are requested; an explicit export request supplies intent.
 Attached documents use the same direct creation tool, with typed source references checked against the current thread. No import preview or extra confirmation is required.
 
+The planning toolkit owns translation from shorthand to typed steps: `20x300 r100`
+means 20 repeats of a 300 m effort and a 100 m recovery. Repeat counts and children
+belong to the group; duration/distance and targets belong to each child. Cardio
+prescriptions preserve existing warmup/cooldown blocks, adding missing ones by
+default unless the athlete requests otherwise. Unspecified edges end on manual lap,
+without invented durations or targets. A validation failure calls for correcting
+the full prescription; a description-only edit does not fulfill a step change.
+These are coach instructions, not server-side insertion into explicit prescriptions.
+
 ## Execution and UI
 
 - A local acknowledgement requires no model request. Created sessions and export

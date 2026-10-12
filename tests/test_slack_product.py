@@ -351,16 +351,30 @@ def test_private_reads_restore_scope_and_recheck_revocation(setup):
 
 def test_profiles_exclude_training_and_private_public_tools():
     from arete.agent.capabilities.discovery import authorized_tools
-    from arete.agent.profiles.catalog import get_profile
+    from arete.agent.runtime.policy import slack_policy
 
-    product = {t.name for t in authorized_tools("product")}
-    private = {t.name for t in authorized_tools("admin_data")}
+    context = AgentContext(
+        profile="slack",
+        slack_visibility="private",
+        slack_product=SimpleNamespace(private=False),
+        slack_decision=SurfaceDecision(
+            surface="product", private_data=False, outbound=True
+        ),
+    )
+    product_policy = slack_policy(context)
+    context.slack_product.private = True
+    context.slack_decision = SurfaceDecision(
+        surface="product", private_data=True, outbound=False
+    )
+    private_policy = slack_policy(context)
+    product = {t.name for t in authorized_tools(product_policy)}
+    private = {t.name for t in authorized_tools(private_policy)}
     assert "ping_slack_member" in product
     assert "read_athlete_data" not in product
     assert private == {"list_athlete_accounts", "read_athlete_data"}
-    assert not get_profile("product").personal_context
-    assert not get_profile("admin_data").training_writes
-    for t in authorized_tools("product") + authorized_tools("admin_data"):
+    assert not product_policy.personal_context
+    assert not private_policy.training_writes
+    for t in authorized_tools(product_policy) + authorized_tools(private_policy):
         assert "runtime" not in t.tool_call_schema["properties"]
 
 
@@ -463,14 +477,19 @@ def test_product_graph_executes_native_tool_without_personal_context(
         )
     )
     graph = build_agent(
-        get_profile("product"),
+        get_profile("slack"),
         model=model,
         filesystem=AgentMiddleware(),
         context_tokens=65536,
         output_tokens=4096,
     )
     context = AgentContext(
-        profile="product", slack_visibility="public", slack_product=service
+        profile="slack",
+        slack_visibility="public",
+        slack_product=service,
+        slack_decision=SurfaceDecision(
+            surface="product", private_data=False, outbound=True
+        ),
     )
     context.stats.model_calls = 1
     context.classifier_calls = 1
@@ -487,19 +506,21 @@ def test_product_graph_executes_native_tool_without_personal_context(
     tools = [m for m in result["messages"] if m.type == "tool"]
     assert len(tools) == 1 and tools[0].status == "success"
     assert json.loads(tools[0].content)["status"] == "sent"
-    assert "Chiron" not in captured[0][0].text
+    assert "Tu es Chiron" in captured[0][0].text
 
 
 @pytest.mark.parametrize(
-    "route,private,expected",
+    "route,private",
     [
-        ("coach", False, "chat"),
-        ("product", False, "product"),
-        ("product", True, "admin_data"),
+        ("coach", False),
+        ("product", False),
+        ("product", True),
+        ("clarify", False),
+        ("clarify", True),
     ],
 )
 def test_composition_selects_route_and_keeps_classifier_budget(
-    setup, monkeypatch, route, private, expected
+    setup, monkeypatch, route, private
 ):
     from arete import coaching
     from arete.agent.runtime import execution
@@ -547,9 +568,10 @@ def test_composition_selects_route_and_keeps_classifier_budget(
         and calls[0]["max_tokens"] == 1024
         and calls[0]["temperature"] == 0
     )
-    assert graph_calls[0][1] == expected
+    assert len(graph_calls[0]) == 2
     assert captured["context"].classifier_calls == 1
-    assert captured["context"].profile == expected
+    assert captured["context"].profile == "slack"
+    assert captured["context"].slack_decision.surface == route
 
 
 def test_nonadmin_has_no_classifier_and_revoked_private_thread_is_denied(
@@ -586,17 +608,27 @@ def test_private_thread_cannot_regain_outbound_tools(setup, monkeypatch):
             '{"surface":"product","private_data":false,"outbound":true}'
         ),
     )
-    assemble = AsyncMock()
-    monkeypatch.setattr(coaching, "_slack_graph", assemble)
+    monkeypatch.setattr(coaching, "_slack_graph", lambda *args: object())
+
+    async def produce(history, thread_id, visibility, emit, *, graph, context):
+        from arete.agent.runtime.policy import slack_policy
+
+        context.slack_visibility = visibility
+        policy = slack_policy(context)
+        assert not policy.capabilities
+        assert not policy.journal_tools
+        assert "deux fils" in policy.instructions
+        return "Ouvre un fil distinct pour ce message."
+
+    monkeypatch.setattr(coaching, "run_slack_coach", produce)
 
     async def run():
         p = await coaching.prepare_slack_agent([], service.message, service.client)
         assert p.private
-        assert "deux fils" in await p.produce([], "", "private", AsyncMock())
+        assert "fil distinct" in await p.produce([], "", "private", AsyncMock())
 
     with athlete_scope(admin.athlete_id):
         asyncio.run(run())
-    assemble.assert_not_called()
 
 
 def test_directory_members_without_accounts_ambiguity_and_page_bound(setup):
@@ -761,3 +793,147 @@ def test_failed_classifier_is_reported_and_releases_admission(setup, monkeypatch
     assert model.ainvoke.await_count == 1
     assert "aucune action" in service.client.reply.call_args.args[1]
     assert not service.client.call.called
+
+
+def test_shared_graph_isolates_concurrent_intents_and_denies_unbound_tools(
+    setup, monkeypatch
+):
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import HumanMessage, ToolMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+
+    from arete.agent.backends.memory import build_memory_filesystem
+    from arete.agent.backends.skills import SystemSkillsBackend
+    from arete.agent.context import builder
+    from arete.agent.factory import build_agent
+    from arete.agent.middlewares.skills import SystemSkillsMiddleware
+    from arete.agent.profiles.catalog import get_profile
+    from arete.agent.runtime.execution import invoke_agent
+
+    admin, _, service = setup
+    captured = {}
+    for name in ("facts_block", "journal_block", "followup_block"):
+        monkeypatch.setattr(builder, name, lambda *a: "PERSONAL_SECRET")
+    monkeypatch.setattr(builder, "personal_context_section", lambda *a: "MEMORY_SECRET")
+
+    # The fake deliberately emits tools absent from its binding. The compiled
+    # ToolNode knows them, so execution must still check this run's policy.
+    forbidden_calls = {
+        "coach": [("ping_slack_member", {"target": "UTARGET", "text": "bad"})],
+        "product": [
+            ("read_file", {"file_path": "/notes.md"}),
+            ("append_journal", {"file": "notes.md", "title": "bad", "body": "bad"}),
+            ("read_athlete_data", {"athlete_id": 1, "section": "facts"}),
+        ],
+        "private": [
+            ("ping_slack_member", {"target": "UTARGET", "text": "bad"}),
+            ("list_athlete_accounts", {}),
+        ],
+        "clarify": [("find_slack_member", {"query": "Arthur"})],
+    }
+
+    class Model(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self.bind(available_tools=[tool.name for tool in tools])
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            intent = next(m.text for m in messages if isinstance(m, HumanMessage))
+            if isinstance(messages[-1], ToolMessage):
+                answer = AIMessage(content="Réponse adaptée à la demande.")
+            else:
+                captured[intent] = (
+                    messages[0].text,
+                    set(kwargs.get("available_tools", [])),
+                )
+                answer = AIMessage(
+                    content="",
+                    tool_calls=[
+                        {"name": name, "args": args, "id": f"{intent}-{i}"}
+                        for i, (name, args) in enumerate(forbidden_calls[intent])
+                    ],
+                )
+            return ChatResult(generations=[ChatGeneration(message=answer)])
+
+    snapshot = {
+        "/training/SKILL.md": "---\nname: training\ndescription: TRAINING_SKILL\n---\nRead training facts."
+    }
+    filesystem = build_memory_filesystem(system_skills=SystemSkillsBackend(snapshot))
+    graph = build_agent(
+        get_profile("slack"),
+        model=Model(messages=iter(()), disable_streaming=True),
+        filesystem=filesystem,
+        skills=SystemSkillsMiddleware(backend=filesystem.backend, paths=set(snapshot)),
+        context_tokens=65536,
+        output_tokens=4096,
+    )
+    contexts = {
+        intent: AgentContext(
+            profile="slack",
+            slack_visibility="private" if intent == "private" else "public",
+            slack_product=SlackProduct(
+                service.client,
+                service.message,
+                admin.clerk_user_id,
+                "Europe/Paris",
+                private=intent == "private",
+            ),
+            slack_decision=SurfaceDecision(
+                surface="product" if intent == "private" else intent,
+                private_data=intent == "private",
+                outbound=False,
+            ),
+        )
+        for intent in forbidden_calls
+    }
+
+    async def run():
+        return await asyncio.gather(
+            *(
+                invoke_agent(
+                    graph, {"messages": [HumanMessage(intent)]}, context=context
+                )
+                for intent, context in contexts.items()
+            )
+        )
+
+    with athlete_scope(admin.athlete_id):
+        results = asyncio.run(run())
+    for result in results:
+        tool_results = [m for m in result["messages"] if isinstance(m, ToolMessage)]
+        denied = [m for m in tool_results if m.name != "list_athlete_accounts"]
+        assert denied and all(m.status == "error" for m in denied)
+        for message in tool_results:
+            if message.name == "list_athlete_accounts":
+                assert message.status == "success"
+                assert admin.email in message.content
+        assert result["messages"][-1].text == "Réponse adaptée à la demande."
+    service.client.call.assert_not_called()
+    for intent, (prompt, names) in captured.items():
+        assert "Tu es Chiron" in prompt
+        assert ("PERSONAL_SECRET" in prompt) == (intent == "coach")
+        assert ("TRAINING_SKILL" in prompt) == (intent == "coach")
+        assert ("MEMORY_SECRET" in prompt) == (intent == "coach")
+        assert ("read_file" in names) == (intent == "coach")
+        assert ("append_journal" in names) == (intent == "coach")
+        assert ("ping_slack_member" in names) == (intent == "product")
+        assert ("read_athlete_data" in names) == (intent == "private")
+    assert not captured["clarify"][1]
+    assert "une seule question ciblée" in captured["clarify"][0]
+    assert len({id(c.resolved_profile) for c in contexts.values()}) == len(contexts)
+
+
+def test_shared_graph_refuses_missing_preflight_and_private_channel():
+    from arete.agent.middlewares.policy import ProfilePolicyMiddleware
+    from arete.agent.profiles.catalog import get_profile
+
+    middleware = ProfilePolicyMiddleware("slack", profile=get_profile("slack"))
+    context = AgentContext(profile="slack")
+    with pytest.raises(AssertionError, match="preflight"):
+        middleware.before_agent({}, SimpleNamespace(context=context))
+    context.slack_decision = SurfaceDecision(
+        surface="product", private_data=True, outbound=False
+    )
+    context.slack_product = SimpleNamespace(private=True)
+    context.slack_visibility = "public"
+    with pytest.raises(AssertionError, match="requires DM"):
+        middleware.before_agent({}, SimpleNamespace(context=context))

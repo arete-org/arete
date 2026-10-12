@@ -5,14 +5,15 @@ one short-lived token only for the current operation, so disconnects/revocations
 are checked on the next operation even across separate serverless instances.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from time import monotonic
+from typing import TYPE_CHECKING
 from urllib.parse import quote
-
-import httpx
 
 from arete.services.calendar_models import (
     HTTP_TIMEOUT_SECONDS,
@@ -28,6 +29,9 @@ from arete.services.google_tokens import (
     google_access_token,
 )
 
+if TYPE_CHECKING:
+    import httpx
+
 logger = logging.getLogger(__name__)
 
 #: The token works but lacks the calendar scopes: the browser must ask Google.
@@ -40,6 +44,8 @@ class CalendarHTTP:
         self.deadline = deadline
 
     def request(self, method: str, url: str, *, write: bool = False, **kwargs) -> dict:
+        import httpx  # here, not at module level: the API boot skips httpx
+
         remaining = self.deadline - monotonic()
         if remaining <= 0:
             raise CalendarError("Délai Calendar dépassé.", 504)
@@ -108,6 +114,8 @@ class ClerkProvider:
 
     @contextmanager
     def session(self, deadline: float | None = None) -> Iterator[CalendarHTTP]:
+        import httpx  # here, not at module level: the API boot skips httpx
+
         limit = min(deadline or float("inf"), monotonic() + MAX_OPERATION_SECONDS)
         with httpx.Client(
             transport=self.transport,

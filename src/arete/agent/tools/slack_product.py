@@ -18,16 +18,13 @@ from arete.services.slack_product import SlackProduct
 def _service(runtime: ToolRuntime[Any], *, private: bool = False) -> SlackProduct:
     context = runtime.context
     service = getattr(context, "slack_product", None)
-    if not isinstance(service, SlackProduct) or context.profile not in (
-        "product",
-        "admin_data",
-    ):
+    if not isinstance(service, SlackProduct) or context.profile != "slack":
         raise PermissionError("Outils administrateur indisponibles pour cette mission.")
-    if private and (
-        context.profile != "admin_data"
-        or context.slack_visibility != "private"
-        or not service.private
-    ):
+    policy = context.resolved_profile
+    capability = "admin_data" if private else "slack_product"
+    if policy is None or capability not in policy.capabilities:
+        raise PermissionError("Outil indisponible pour cette demande.")
+    if private and (context.slack_visibility != "private" or not service.private):
         raise PermissionError("Lecture privée uniquement en DM administrateur.")
     return service
 
