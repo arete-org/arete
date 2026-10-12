@@ -45,6 +45,20 @@ def record_model_call(
     )
 
 
+def record_decision_call(
+    *, model: str, elapsed_ms: int, response: Any = None, error: str | None = None
+) -> None:
+    """Decisions reports its own token/cost schema, without chat messages."""
+    logger.info(
+        "Agent model call: model=%s served=%s elapsed_ms=%d usage=%s error=%s",
+        model,
+        response.model if response is not None else None,
+        elapsed_ms,
+        response.usage.model_dump(exclude_none=True) if response is not None else None,
+        error,
+    )
+
+
 def record_run(
     *, profile: str, stats: Any, total_ms: int, error: str | None = None
 ) -> None:
