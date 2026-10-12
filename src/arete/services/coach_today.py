@@ -1,12 +1,12 @@
 """Read projection shared by the home card and chat; writes are explicit."""
 
-from datetime import date
 from typing import Any
 
 from arete.services import coach_followup
 from arete.services.coaching_repository import BriefingRepository
 from arete.services.plan_adaptation import adapt_today
 from arete.services.plan_repository import PlanDecisionRepository
+from arete.services.settings import athlete_today
 
 MAX_VISIBLE_ITEMS = 3
 
@@ -17,7 +17,7 @@ def prepare() -> None:
 
 
 def today() -> dict[str, Any]:
-    day = date.today()
+    day = athlete_today()
     proposals = [
         d.to_dict()
         for d in PlanDecisionRepository().list_for_day(day)

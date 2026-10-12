@@ -9,6 +9,7 @@ from typing import Any
 import duckdb
 
 from arete.dataio.db import db_connection, transaction
+from arete.services.settings import athlete_today
 
 MAX_FOLLOWUP_HOURS = 48
 LONG_SESSION_SECONDS = 90 * 60
@@ -31,7 +32,7 @@ def _record(row) -> dict[str, Any]:
 
 def prepare(today: date | None = None) -> None:
     """At most one new question a day, and one for each actual session forever."""
-    today = today or date.today()
+    today = today or athlete_today()
     with transaction() as con:
         if con.execute(
             "SELECT 1 FROM app.visible_coach_followups WHERE requested_on=?", [today]
@@ -75,7 +76,7 @@ def get(followup_id: int) -> dict[str, Any] | None:
 
 
 def pending(today: date | None = None) -> list[dict[str, Any]]:
-    today = today or date.today()
+    today = today or athlete_today()
     with db_connection() as con:
         rows = con.execute(
             f"SELECT {_COLUMNS} FROM app.visible_coach_followups WHERE state='pending' AND expires_at>? AND (snoozed_until IS NULL OR snoozed_until<=?) ORDER BY requested_on,id LIMIT 2",
@@ -139,7 +140,7 @@ def respond(
                     state,
                     rpe,
                     notes,
-                    date.today() + timedelta(days=1) if action == "snooze" else None,
+                    athlete_today() + timedelta(days=1) if action == "snooze" else None,
                     state,
                     followup_id,
                     revision,

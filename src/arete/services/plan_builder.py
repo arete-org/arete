@@ -21,6 +21,7 @@ from arete.features.running import training_paces
 from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services.goals import Goal, get_goal
+from arete.services.settings import athlete_today
 
 _WEEKDAYS = (
     "monday",
@@ -54,7 +55,7 @@ def _recent_running(con, today: date) -> tuple[float, int]:
 def plan_inputs(goal: Goal, today: date | None = None) -> PlanInputs:
     from arete.services.metrics import current_vdot
 
-    today = today or date.today()
+    today = today or athlete_today()
     settings = get_user_settings() or {}
     con = connect()
     try:
@@ -193,7 +194,7 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
 def remove(goal_id: int, today: date | None = None) -> int:
     """Delete the goal's generated sessions still to come; how many."""
     _goal_or_raise(goal_id)
-    return _delete_future(goal_id, (today or date.today()) + timedelta(days=1))
+    return _delete_future(goal_id, (today or athlete_today()) + timedelta(days=1))
 
 
 # --------------------------------------------------------------------------- #
@@ -222,7 +223,7 @@ def projection(goal_id: int, today: date | None = None) -> dict[str, Any]:
     from arete.services.metrics import fitness_series
 
     goal = _goal_or_raise(goal_id)
-    today = today or date.today()
+    today = today or athlete_today()
     con = connect()
     try:
         history = {d: t for d, t in daily_tss_by_date(con).items() if d <= today}

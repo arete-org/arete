@@ -35,6 +35,7 @@ from arete.garmin.readiness import (
     training_readiness_from_rows,
 )
 from arete.services.athlete_scope import resolve_athlete_id
+from arete.services.settings import athlete_today, today_in
 
 logger = logging.getLogger(__name__)
 TSS_PER_SESSION = 50.0
@@ -239,7 +240,7 @@ def load_form(
     today: date | None = None,
 ) -> tuple[PerformanceModel | None, Readiness | None]:
     """The fitness model and the readiness for ``today``, on one connection."""
-    today = today or date.today()
+    today = today or athlete_today()
     con = connect()
     try:
         window = fetch_window(con, today)
@@ -302,8 +303,8 @@ def get_player_stats():
     Four statements: settings, the readiness window, the daily TSS series
     (whole history, ~one row per training day) and the Banister coefficients.
     """
-    today = date.today()
     settings = get_user_settings(user_id=resolve_athlete_id()) or {}
+    today = today_in(settings.get("timezone"))
     goal_tss = _weekly_goal_tss(settings)
 
     con = connect()
@@ -362,8 +363,8 @@ def get_workload_metrics(
     - Monotony: Training load variability
     - Strain: Accumulated fatigue
     """
-    loads = training_loads(days=days)
-    target_date = date.today()
+    target_date = athlete_today()
+    loads = training_loads(days=days, end=target_date)
 
     # Check if there's any training data
     has_data = any(load.duration_min > 0 for load in loads)
@@ -411,7 +412,7 @@ def get_fitness_metrics(
     ``days`` only bounds ``days_analyzed``: the averages always walk the whole
     history, so this endpoint and every other surface read the same numbers.
     """
-    target_date = date.today()
+    target_date = athlete_today()
     con = connect()
     try:
         window = fetch_window(con, target_date)
@@ -460,13 +461,13 @@ def get_recommendations(
 
     Analyzes workload and fitness metrics to provide actionable advice.
     """
-    target_date = date.today()
+    target_date = athlete_today()
 
     # Get current metrics
     workload = None
     loads = None
     try:
-        loads = training_loads(days=28)
+        loads = training_loads(days=28, end=target_date)
         if any(load.duration_min > 0 for load in loads):
             workload = compute_workload_metrics(loads, target_date)
     except Exception:

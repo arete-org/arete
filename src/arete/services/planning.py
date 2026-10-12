@@ -27,6 +27,7 @@ from arete.services.prescriptions import (
     conversation_prescription,
     describe,
 )
+from arete.services.settings import athlete_today
 
 _MAX_LIST = 50
 _HORIZON_DAYS = 120
@@ -82,14 +83,14 @@ def list_planned(
     start = (
         _parse_iso(start_date, "start_date")
         if start_date
-        else date.today() - timedelta(days=7)
+        else athlete_today() - timedelta(days=7)
     )
     if isinstance(start, str):
         return start
     end = (
         _parse_iso(end_date, "end_date")
         if end_date
-        else date.today() + timedelta(days=_HORIZON_DAYS)
+        else athlete_today() + timedelta(days=_HORIZON_DAYS)
     )
     if isinstance(end, str):
         return end

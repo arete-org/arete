@@ -19,6 +19,7 @@ import duckdb
 
 from arete.config import config
 from arete.dataio.db import db_connection, transaction
+from arete.services.settings import athlete_today
 
 MEMORY_DIR_NAME = "agent/memory"
 SESSIONS_LEDGER = "sessions.md"
@@ -227,12 +228,12 @@ def _rotate(con, now: date) -> str | None:
 def rotate_sessions_ledger(now: date | None = None) -> str | None:
     ensure_imported()
     with ledger_lock(), transaction() as con:
-        return _rotate(con, now or date.today())
+        return _rotate(con, now or athlete_today())
 
 
 def append_entry(file: str, title: str, body: str, when: date | None = None) -> bool:
     name = _name(file, writable=True)
-    day = when or date.today()
+    day = when or athlete_today()
     title = " ".join(title.split())
     if not title or not body.strip() or len(title) > 120 or len(body) > 8_000:
         raise ValueError("Invalid or oversized journal entry")

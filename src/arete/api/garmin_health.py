@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from arete.dataio.db import connect, db_connection
 from arete.dataio.queries import daily_metrics_range
 from arete.garmin.readiness import update_readiness_range
+from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +72,8 @@ class DailyMetricsResponse(BaseModel):
 
 @router.post("/sync", response_model=SyncResultResponse)
 def trigger_sync(
-    start: date = Query(default_factory=lambda: date.today() - timedelta(days=7)),
-    end: date = Query(default_factory=date.today),
+    start: date = Query(default_factory=lambda: athlete_today() - timedelta(days=7)),
+    end: date = Query(default_factory=athlete_today),
 ) -> SyncResultResponse:
     """Trigger a sync of Garmin health metrics for [start, end] range.
 
@@ -186,8 +187,8 @@ def get_daily_metrics(
 
 @router.get("/range")
 def get_metrics_range(
-    start: date = Query(default_factory=lambda: date.today() - timedelta(days=30)),
-    end: date = Query(default_factory=date.today),
+    start: date = Query(default_factory=lambda: athlete_today() - timedelta(days=30)),
+    end: date = Query(default_factory=athlete_today),
 ) -> dict:
     """Get metrics for a range (e.g. for chart visualization)."""
     with db_connection() as con:

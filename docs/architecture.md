@@ -141,7 +141,10 @@ go to the model. The on-demand briefing is produced once per athlete and day
 under a per-athlete lock, so athletes never wait for each other's run. The
 server files the feedback's ledger entry itself (`services/memory.append_entry`,
 dated heading, never twice), so neither mission can mutate training data or
-forget to write. Every profile receives the current date. Chat adds new journal
+forget to write. Every profile receives the current date: the athlete's, in
+the timezone of their settings (`services/settings.athlete_today`), which every
+server path meaning "today" shares (plan decisions, briefing, weekly review,
+metric windows, the daily batch's marker). Chat adds new journal
 entries through `append_journal` (server-dated heading, deduplicated,
 bounded). Its filesystem also exposes `edit_file` for targeted corrections/removal
 and `delete` for forgetting an entire current ledger (`notes.md` or `sessions.md`).

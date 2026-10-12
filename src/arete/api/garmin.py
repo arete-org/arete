@@ -28,6 +28,7 @@ from arete.garmin.models import (
 )
 from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import from_time_series
+from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
@@ -364,7 +365,7 @@ def upload_fit_file(
 
     # Convert parsed activity to ActualSession
     actual = ActualSession(
-        date=parsed.start_time.date() if parsed.start_time else date.today(),
+        date=parsed.start_time.date() if parsed.start_time else athlete_today(),
         sport=canonical_sport(parsed.sport or "running"),
         session_type=parsed.sub_sport or parsed.infer_session_type(),
         duration_sec=parsed.duration_sec or parsed.elapsed_time_sec or 0,
