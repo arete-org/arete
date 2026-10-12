@@ -81,6 +81,7 @@ it('creates a thread without erasing the old one and retains a stream when hidde
     target: { value: 'Préparer mon trail' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Historique des conversations' }));
   fireEvent.click(
     screen.getByRole('button', { name: 'Nouvelle conversation' })
   );

@@ -147,9 +147,14 @@ bounded). Its filesystem also exposes `edit_file` for targeted corrections/remov
 and `delete` for forgetting an entire current ledger (`notes.md` or `sessions.md`).
 Archives and `/attachments/` remain read-only, with an explicit deny for every
 other write path. New entries still use `append_journal`; arbitrary file creation
-is not exposed. Appends, rotation, edits and deletion share a bounded process-local
-lock so overlapping turns in one server cannot overwrite each other's writes.
-Client messages and page metadata cannot change these policies.
+is not exposed. Migration 43 makes the database journal authoritative behind
+the Deep Agents backend. All consumers read through `services/memory.py`;
+transactional writes check revisions and report conflicts without replay.
+A one-time import reads the MotherDuck mirror or local DuckDB ledger files.
+Deletion leaves a tombstone, so an old copy cannot resurrect forgotten content.
+Stop legacy file-writing processes before the first import; there is no automatic
+fallback to those copies after import. Client messages and page metadata cannot
+change these policies.
 
 System skills live in `agent/skills/system/<name>/SKILL.md`, versioned with Git.
 Migration 38 creates the shared `app.system_skills` table (no athlete data).
@@ -193,8 +198,8 @@ exceed the envelope.
 Set it to the actual server/model limit. It is a configured constraint, not a claim
 about a dynamically routed provider. Counting is approximate. There is no
 server-side compaction: the browser sends the last 30 messages of a thread (it
-keeps the whole thread locally) and the journal in `data/agent/memory` is the
-long-term memory. Summarizing per request cost a model request on every turn of a
+keeps the whole thread locally). Durable facts and the transactional journal are
+long-term memory; `data/agent/memory` is only a legacy import source. Summarizing per request cost a model request on every turn of a
 long thread, since nothing persists the summary between requests.
 
 ## Native training operations
@@ -441,6 +446,28 @@ through `calendar.sync_training_plan`, which rebuilds the provider from the Cler
 user id stored on the connection.
 See [Google Calendar setup](google-calendar.md) for activation and live testing.
 
+## Proactive coaching
+
+`services/coach_today.py` projects the existing briefing, pending planning
+proposals and session follow-ups for `GET /coach/today`. Displaying or responding
+to these cards makes no model request. Scheduled sync and relevant writes prepare
+deduplicated records. A proposal never changes the plan until the athlete accepts:
+the service checks the session revision, status and Garmin reservations, then
+updates the same session and the decision in one transaction. Structured
+prescriptions stay in chat. The former immediate adaptation endpoint refuses writes.
+
+`services/coach_followup.py` owns one question per day and per session, its
+48-hour expiry, snooze/skip state and revision-checked RPE response. References
+in HTTP/SSE and browser storage contain identifiers; the server reloads the
+authorized record. Recent responses contribute to chat and the weekly review,
+without treating the coach's interpretation as athlete evidence.
+
+The panel exposes sourced memory through one receipt after a successful write.
+Files attach through the composer; a paperclip counter opens their details
+without adding a document section or replacing the draft. Four versioned skills
+cover athlete learning, session debriefs, adjustments and follow-up; their bodies
+are read only when needed.
+
 ## Personal memory
 
 Migration 20 versions athlete facts and distinguishes explicit declarations,
@@ -465,3 +492,29 @@ built in memory and refused above 4 MB, under Vercel's response limit.
 `services/year_review.py` derives a calendar year from the shared TSS estimate
 and fitness series, with no model request. Both are plain HTTP reads
 (`api/data_export.py`, `api/year_review.py`); the coach never receives them.
+
+## Slack product and private administration
+
+Slack administrators have a measured, bounded OpenRouter classification step
+before graph selection. `middlewares/surface.py` is a thin pre-invocation adapter;
+`runtime/surface.py` owns the decision and accounting, and `coaching.py` constructs
+its client and selects the cached graph. The `product` and `admin_data` profiles
+have their own system identity and disable automatic personal-context injection.
+The latter exposes only private administrator reads. A trusted preflight budget
+hook charges classification against the model-turn limit; graph-private counters
+are not accepted as invocation input.
+
+The capability catalog declares Slack writes separately from training writes.
+`services/slack_identity.py` owns verified account bindings and current admin
+checks; `services/slack_product.py` owns bounded member lookup, external-operation
+receipts and scheduling; `services/admin_athlete_data.py` authorizes and audits a
+read before temporarily entering its target athlete's scope. Tools adapt these
+contracts and never select a graph or provider. Cached graphs hold no Slack client.
+
+Transport receives a prepared producer before it chooses the output destination.
+Private reads force an administrator DM before any model answer/tool progress;
+a durable thread ownership marker prevents a later topic change from restoring
+outbound tools or granting another participant access. Slack remains the source
+of conversation history. The new operation receipts contain outgoing bodies,
+not copies of conversations. Existing non-admin Slack and browser coaching,
+background missions, Calendar approvals and training-write policies are preserved.

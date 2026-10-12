@@ -44,6 +44,8 @@
         "users:read",
         "users:read.email",
         "channels:history",
+        "channels:read",
+        "groups:read",
         "groups:history"
       ]
     },

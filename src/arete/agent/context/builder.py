@@ -15,6 +15,7 @@ from arete.agent.runtime.budget import MAX_MODEL_CALLS
 from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.policy import resolve_policy
 from arete.services.athlete_facts import facts_block
+from arete.services.coach_followup import context_block as followup_block
 from arete.services.journal import journal_block
 from arete.services.personal_context import search_personal_context
 from arete.services.system_skills import MAX_SYSTEM_SKILLS
@@ -111,10 +112,17 @@ def build_context(
             "facts",
             facts_block(
                 context.current_date if isinstance(context, AgentContext) else None
-            ),
+            )
+            if profile.personal_context
+            else "",
             "ledger",
         ),
-        ContextSection("journal", journal_block(), "ledger"),
+        ContextSection(
+            "journal", journal_block() if profile.personal_context else "", "ledger"
+        ),
+        ContextSection(
+            "followups", followup_block() if profile.personal_context else "", "ledger"
+        ),
         ContextSection(
             "attachments",
             attachment_section(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date, datetime
+from datetime import date as Date
 from typing import Any
 
 import duckdb
@@ -15,7 +16,7 @@ from arete.services.athlete_scope import resolve_athlete_id
 _COLUMNS = (
     "id, date, planned_session_id, decision, reason, readiness_score, "
     "readiness_source, acwr, original_json, adapted_json, applied_at, "
-    "reverted_at, created_at"
+    "reverted_at, created_at, state, revision, session_revision, readiness_measured_on, snoozed_until"
 )
 
 
@@ -38,6 +39,11 @@ class PlanDecision:
     applied_at: datetime | None
     reverted_at: datetime | None
     created_at: datetime | None
+    state: str = "applied"
+    revision: int = 1
+    session_revision: int | None = None
+    readiness_measured_on: Date | None = None
+    snoozed_until: Date | None = None
 
     def to_dict(self) -> dict[str, Any]:
         def iso(value: date | datetime | None) -> str | None:
@@ -57,6 +63,11 @@ class PlanDecision:
             "applied_at": iso(self.applied_at),
             "reverted_at": iso(self.reverted_at),
             "created_at": iso(self.created_at),
+            "state": self.state,
+            "revision": self.revision,
+            "session_revision": self.session_revision,
+            "readiness_measured_on": iso(self.readiness_measured_on),
+            "snoozed_until": iso(self.snoozed_until),
         }
 
 
@@ -79,6 +90,11 @@ def _from_row(row: tuple) -> PlanDecision:
         applied_at=row[10],
         reverted_at=row[11],
         created_at=row[12],
+        state=row[13],
+        revision=row[14],
+        session_revision=row[15],
+        readiness_measured_on=row[16],
+        snoozed_until=row[17],
     )
 
 
@@ -98,6 +114,9 @@ class PlanDecisionRepository:
         original: dict[str, Any],
         adapted: dict[str, Any] | None,
         user_id: int | None = None,
+        state: str = "pending",
+        session_revision: int | None = None,
+        readiness_measured_on: Date | None = None,
     ) -> PlanDecision:
         """Claim the day's decision for that session; raises ``AlreadyDecided``."""
         user_id = resolve_athlete_id(user_id)
@@ -108,8 +127,8 @@ class PlanDecisionRepository:
                 INSERT INTO app.plan_decisions
                     (user_id, date, planned_session_id, decision, reason,
                      readiness_score, readiness_source, acwr, original_json,
-                     adapted_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     adapted_json, state, session_revision, readiness_measured_on)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING {_COLUMNS}
                 """,
                 [
@@ -123,6 +142,9 @@ class PlanDecisionRepository:
                     acwr,
                     json.dumps(original, ensure_ascii=False, default=str),
                     json.dumps(adapted, ensure_ascii=False) if adapted else None,
+                    state,
+                    session_revision,
+                    readiness_measured_on,
                 ],
             ).fetchone()
         except duckdb.ConstraintException as e:

@@ -20,7 +20,7 @@ interface FactActions {
   onConfirm: (fact: AthleteFact) => void;
 }
 
-function FactRow({ fact, busyId, onSave, onToggle, onDelete, onConfirm }: FactActions & { fact: AthleteFact }) {
+function FactRow({ fact, compact = false, busyId, onSave, onToggle, onDelete, onConfirm }: FactActions & { fact: AthleteFact; compact?: boolean }) {
   const [showHistory, setShowHistory] = useState(false);
   const [draft, setDraft] = useState<{ text: string; revision: number } | null>(null);
   const resolved = fact.status === 'resolved';
@@ -36,7 +36,7 @@ function FactRow({ fact, busyId, onSave, onToggle, onDelete, onConfirm }: FactAc
       data-status={fact.status}
       className={cn('rounded border border-text-muted/20 p-3 space-y-2', resolved && 'opacity-50')}
     >
-      <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans">
+      {!compact && <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans">
         <span className="text-neon-purple uppercase">{FACT_KIND_LABEL[fact.kind] ?? fact.kind}</span>
         <span className="text-text-muted">
           depuis le {parseLocalDate(fact.since).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -54,7 +54,8 @@ function FactRow({ fact, busyId, onSave, onToggle, onDelete, onConfirm }: FactAc
         <span className="text-text-muted">{fact.evidence === 'explicit' ? 'déclaration explicite' : fact.evidence === 'hypothesis' ? 'hypothèse à confirmer' : 'provenance indéterminée'}</span>
         {fact.valid_until && <span className="text-text-muted">jusqu’au {parseLocalDate(fact.valid_until).toLocaleDateString('fr-FR')}</span>}
         {resolved && <span className="text-text-muted">résolu</span>}
-      </div>
+      </div>}
+      {compact && <p className="text-xs text-text-muted">{parseLocalDate(fact.since).toLocaleDateString('fr-FR')}{fact.valid_until ? ` · Jusqu’au ${parseLocalDate(fact.valid_until).toLocaleDateString('fr-FR')}` : ''}</p>}
       {draft === null ? (
         <p className="text-sm text-text-primary break-words">{fact.text}</p>
       ) : (
@@ -89,14 +90,14 @@ function FactRow({ fact, busyId, onSave, onToggle, onDelete, onConfirm }: FactAc
         <Button variant="ghost" size="sm" onClick={() => setShowHistory(!showHistory)}>Historique</Button>
         {draft === null && (
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDraft({ text: fact.text, revision: fact.revision })}>
-            <Pencil className="size-3.5" /> Modifier
+            <Pencil className="size-3.5" /> Corriger
           </Button>
         )}
-        <Button variant={resolved ? 'cyan' : 'green'} size="sm" disabled={busy} onClick={() => onToggle(fact)}>
+        {!compact && <Button variant={resolved ? 'cyan' : 'green'} size="sm" disabled={busy} onClick={() => onToggle(fact)}>
           {resolved ? 'Réactiver' : 'Résolu'}
-        </Button>
+        </Button>}
         <Button variant="ghost" size="sm" disabled={busy} aria-label="Supprimer le fait" onClick={() => onDelete(fact)}>
-          <Trash2 className="size-3.5" />
+          <Trash2 className="size-3.5" /> {fact.evidence === 'hypothesis' ? 'Écarter' : 'Oublier'}
         </Button>
       </div>
       {showHistory && <FactHistory factId={fact.id} revision={fact.revision} />}
@@ -114,7 +115,7 @@ function FactHistory({ factId, revision }: { factId: number; revision: number })
 }
 
 /** Active facts first, then resolved ones, dimmed; server order within each. */
-export function FactList({ facts, ...actions }: FactActions & { facts: AthleteFact[] }) {
+export function FactList({ facts, compact, ...actions }: FactActions & { facts: AthleteFact[]; compact?: boolean }) {
   const ordered = [
     ...facts.filter((f) => f.status === 'active'),
     ...facts.filter((f) => f.status !== 'active'),
@@ -122,7 +123,7 @@ export function FactList({ facts, ...actions }: FactActions & { facts: AthleteFa
   return (
     <ul className="space-y-2">
       {ordered.map((fact) => (
-        <FactRow key={fact.id} fact={fact} {...actions} />
+        <FactRow key={fact.id} fact={fact} compact={compact} {...actions} />
       ))}
     </ul>
   );
@@ -183,9 +184,9 @@ function AddFactForm() {
 }
 
 /** The durable facts the coach reads every turn; editable at once, apart from the form's save. */
-export function AthleteFactsPanel() {
+export function AthleteFactsPanel({ factId, embedded = false }: { factId?: number; embedded?: boolean } = {}) {
   const queryClient = useQueryClient();
-  const facts = useQuery({ queryKey: qk.athleteFacts, queryFn: athleteFactsApi.list });
+  const facts = useQuery({ queryKey: qk.athleteFacts, queryFn: athleteFactsApi.list, refetchOnMount: 'always' });
   const [busyId, setBusyId] = useState<number | null>(null);
   const settle = {
     onSettled: () => {
@@ -200,26 +201,21 @@ export function AthleteFactsPanel() {
   });
   const remove = useMutation({ mutationFn: (fact: AthleteFact) => athleteFactsApi.remove(fact.id, fact.revision), ...settle });
   const error = update.error ?? remove.error;
+  const selected = factId ? facts.data?.filter(f => f.id === factId) : facts.data;
 
-  return (
-    <Panel
-      title={
-        <span className="flex items-center gap-2">
-          <UserRound className="size-4 text-neon-purple" /> Ce que le coach sait de toi
-        </span>
-      }
-    >
+  const content = (
       <div className="space-y-3">
-        <p className="text-xs text-text-muted">
+        {!factId && <p className="text-xs text-text-muted">
           Blessures, contraintes et préférences que le coach garde en tête à chaque échange. Il en ajoute
           quand tu lui en parles ; tu peux les corriger ici. Les hypothèses restent séparées de tes déclarations. Confirmer indique que le fait est exact ; supprimer efface aussi son historique.
-        </p>
+        </p>}
         {facts.isLoading && <p className="text-sm text-text-muted">Chargement…</p>}
         {facts.isError && <p className="text-sm text-danger-red">Faits indisponibles.</p>}
-        {facts.data?.length === 0 && <p className="text-sm text-text-muted italic">Rien pour le moment.</p>}
-        {facts.data && facts.data.length > 0 && (
+        {selected?.length === 0 && <p className="text-sm text-text-muted italic">Ce souvenir n’est plus disponible.</p>}
+        {selected && selected.length > 0 && (
           <FactList
-            facts={facts.data}
+            compact={embedded}
+            facts={selected}
             busyId={busyId}
             onSave={(fact, text) => {
               setBusyId(fact.id);
@@ -240,8 +236,9 @@ export function AthleteFactsPanel() {
           />
         )}
         {error && <p className="text-xs text-danger-red">{readableError(error)}</p>}
-        <AddFactForm />
+        {!factId && <AddFactForm />}
       </div>
-    </Panel>
   );
+  if (embedded) return content;
+  return <Panel title={<span className="flex items-center gap-2"><UserRound className="size-4 text-neon-purple" />{factId ? selected?.[0]?.evidence === 'hypothesis' ? 'À confirmer' : 'Retenu' : 'Ce que Chiron sait de moi'}</span>}>{content}</Panel>;
 }

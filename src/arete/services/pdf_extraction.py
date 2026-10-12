@@ -1,4 +1,4 @@
-"""PDF text/OCR in a disposable process: MuPDF is not safe across API threads."""
+"""PDF text/OCR in a disposable process: PDFium is not safe across API threads."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 from threading import BoundedSemaphore
+from typing import Literal
 
 from arete.services.documents import (
     MAX_EXTRACT_BYTES,
@@ -69,71 +70,67 @@ def extract_pdf(raw: bytes) -> Extraction:
 
 
 def _extract_pdf(raw: bytes) -> Extraction:
-    import pymupdf
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfium_c
 
+    try:
+        document = pdfium.PdfDocument(raw)
+    except pdfium.PdfiumError as exc:
+        if exc.err_code == pdfium_c.FPDF_ERR_PASSWORD:
+            raise DocumentError("Les PDF chiffrés ne sont pas acceptés.") from exc
+        raise
     blocks: list[SourceBlock] = []
     encoded_bytes = 0
-    with pymupdf.open(stream=raw, filetype="pdf") as document:
+    try:
         # Encryption with an empty password is still encryption.
-        if document.needs_pass or document.metadata.get("encryption"):
+        if pdfium_c.FPDF_GetSecurityHandlerRevision(document.raw) != -1:
             raise DocumentError("Les PDF chiffrés ne sont pas acceptés.")
-        if document.page_count > MAX_PAGES:
+        if len(document) > MAX_PAGES:
             raise DocumentError("Maximum 100 pages par PDF.")
-        for index in range(document.page_count):
+        for index in range(len(document)):
             page = document[index]
-            textpage = page.get_textpage(flags=0)
-            text = textpage.extractText()
+            native = _native_lines(page)
+            text = "".join(line_text for line_text, _ in native)
             # A native header must not hide a scan. Vector-only pages also need
             # OCR; ordinary text pages avoid its cost entirely.
-            needs_ocr = (
-                not text.strip() or bool(page.get_image_info()) or "\ufffd" in text
+            has_image = (
+                next(page.get_objects(filter=[pdfium_c.FPDF_PAGEOBJ_IMAGE]), None)
+                is not None
             )
-            if needs_ocr:
-                width = math.ceil(page.rect.width * OCR_DPI / 72)
-                height = math.ceil(page.rect.height * OCR_DPI / 72)
-                if width * height > MAX_PAGE_PIXELS:
-                    raise DocumentError(
-                        "Page trop grande pour la reconnaissance (25 mégapixels)."
-                    )
-                if not all(
-                    (TESSDATA / f"{lang}.traineddata").is_file()
-                    for lang in OCR_LANGUAGES.split("+")
-                ):
-                    raise DocumentError(
-                        "Ressources OCR français/anglais manquantes sur le serveur."
-                    )
-                textpage = page.get_textpage_ocr(
-                    flags=0,
-                    language=OCR_LANGUAGES,
-                    dpi=OCR_DPI,
-                    full=not text.strip(),
-                    tessdata=str(TESSDATA),
-                )
+            lines: list[tuple[str, list[float], Literal["text", "ocr"]]] = [
+                (t, box, "text") for t, box in native if "\ufffd" not in t
+            ]
+            if not text.strip() or has_image or "\ufffd" in text:
+                # Partial OCR keeps readable native lines and adds only what the
+                # recognizer finds elsewhere on the page.
+                kept = [box for _, box, _ in lines]
+                lines += [
+                    (t, box, "ocr")
+                    for t, box in _ocr_lines(page)
+                    if not any(_overlaps(box, other) for other in kept)
+                ]
+            lines.sort(key=lambda line: (round(line[1][1]), line[1][0]))
             line_number = 0
-            for block in textpage.extractDICT(sort=True)["blocks"]:
-                for line in block.get("lines", []):
-                    line_text = "".join(span["text"] for span in line["spans"])
-                    if not line_text.strip():
-                        continue
-                    line_number += 1
-                    if line_number > MAX_PAGE_LINES:
-                        raise DocumentError("Plus de 5 000 lignes sur une page PDF.")
-                    source = SourceBlock(
-                        locator=f"page {index + 1}, ligne {line_number}",
-                        text=line_text,
-                        method="ocr"
-                        if any(
-                            span["font"] == "GlyphLessFont" for span in line["spans"]
-                        )
-                        else "text",
-                        box=list(line["bbox"]),
+            for line_text, box, method in lines:
+                if not line_text.strip():
+                    continue
+                line_number += 1
+                if line_number > MAX_PAGE_LINES:
+                    raise DocumentError("Plus de 5 000 lignes sur une page PDF.")
+                source = SourceBlock(
+                    locator=f"page {index + 1}, ligne {line_number}",
+                    text=line_text,
+                    method=method,
+                    box=box,
+                )
+                encoded_bytes += len(source.model_dump_json().encode()) + 1
+                if encoded_bytes > MAX_EXTRACT_BYTES - 4096:
+                    raise DocumentError(
+                        "Extraction trop volumineuse (2 Mio). Sépare le document."
                     )
-                    encoded_bytes += len(source.model_dump_json().encode()) + 1
-                    if encoded_bytes > MAX_EXTRACT_BYTES - 4096:
-                        raise DocumentError(
-                            "Extraction trop volumineuse (2 Mio). Sépare le document."
-                        )
-                    blocks.append(source)
+                blocks.append(source)
+    finally:
+        document.close()
     if not blocks:
         raise DocumentError("Aucun texte lisible dans ce PDF.")
     return Extraction(
@@ -142,13 +139,73 @@ def _extract_pdf(raw: bytes) -> Extraction:
     )
 
 
-def main() -> None:
-    import pymupdf
+def _native_lines(page) -> list[tuple[str, list[float]]]:
+    """PDFium's text rectangles, one per line segment, boxed from the top left."""
+    height = page.get_height()
+    textpage = page.get_textpage()
+    lines = []
+    for i in range(textpage.count_rects()):
+        left, bottom, right, top = textpage.get_rect(i)
+        lines.append(
+            (
+                textpage.get_text_bounded(left, bottom, right, top),
+                [left, height - top, right, height - bottom],
+            )
+        )
+    return lines
 
-    # Native diagnostics otherwise pollute the JSON protocol; exceptions remain
-    # explicit on stderr and fail finalization without persisting partial text.
-    pymupdf.TOOLS.mupdf_display_errors(False)
-    pymupdf.TOOLS.mupdf_display_warnings(False)
+
+def _ocr_lines(page) -> list[tuple[str, list[float]]]:
+    import tesserocr
+
+    width, height = page.get_size()
+    if (
+        math.ceil(width * OCR_DPI / 72) * math.ceil(height * OCR_DPI / 72)
+        > MAX_PAGE_PIXELS
+    ):
+        raise DocumentError("Page trop grande pour la reconnaissance (25 mégapixels).")
+    if not all(
+        (TESSDATA / f"{lang}.traineddata").is_file()
+        for lang in OCR_LANGUAGES.split("+")
+    ):
+        raise DocumentError(
+            "Ressources OCR français/anglais manquantes sur le serveur."
+        )
+    image = page.render(scale=OCR_DPI / 72, grayscale=True).to_pil()
+    points = 72 / OCR_DPI
+    level = tesserocr.RIL.TEXTLINE
+    lines: list[tuple[str, list[float]]] = []
+    with tesserocr.PyTessBaseAPI(path=str(TESSDATA), lang=OCR_LANGUAGES) as api:
+        # Tesseract's diagnostics would otherwise reach the user-facing error.
+        api.SetVariable("debug_file", os.devnull)
+        api.SetImage(image)
+        api.SetSourceResolution(OCR_DPI)
+        api.Recognize()
+        iterator = api.GetIterator()
+        if iterator is None:
+            return lines
+        for item in tesserocr.iterate_level(iterator, level):
+            try:
+                text = item.GetUTF8Text(level).strip()
+            except RuntimeError:  # tesserocr's "No text returned": a blank page
+                continue
+            bbox = item.BoundingBox(level)
+            if text and bbox:
+                lines.append((text, [value * points for value in bbox]))
+    return lines
+
+
+def _overlaps(box: list[float], other: list[float]) -> bool:
+    """Whether most of an OCR line lies on a native line already extracted."""
+    width = min(box[2], other[2]) - max(box[0], other[0])
+    height = min(box[3], other[3]) - max(box[1], other[1])
+    area = (box[2] - box[0]) * (box[3] - box[1])
+    return width > 0 and height > 0 and width * height > area / 2
+
+
+def main() -> None:
+    # Exceptions remain explicit on stderr and fail finalization without
+    # persisting partial text; stdout carries only the JSON result.
     try:
         raw = sys.stdin.buffer.read(MAX_FILE_BYTES + 1)
         if not 0 < len(raw) <= MAX_FILE_BYTES:

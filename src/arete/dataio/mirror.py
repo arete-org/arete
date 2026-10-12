@@ -31,7 +31,7 @@ from arete.services.athlete_scope import current_athlete_id, database_athlete_id
 
 logger = logging.getLogger(__name__)
 
-MIRRORED_DIRS = ("garmin_tokens", "agent/memory")
+MIRRORED_DIRS = ("garmin_tokens",)
 MIRRORED_FILES = ("dictation_misses.jsonl", "last_daily_sync.json")
 
 _MIRRORED_PREDICATE = " OR ".join(

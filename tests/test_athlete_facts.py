@@ -113,3 +113,35 @@ def test_the_routes(router_client):
         client.post("/athlete-facts", json={"kind": "mood", "text": "x"}).status_code
         == 422
     )
+
+
+def test_repeated_declaration_reuses_the_fact_without_inventing_more_evidence():
+    original = athlete_facts.add_fact(
+        "preference",
+        "Je préfère m’entraîner le matin",
+        evidence="explicit",
+        source_ref="message original",
+    )
+    repeated = athlete_facts.add_fact(
+        "preference",
+        "  je préfère m'entraîner  le matin ",
+        evidence="explicit",
+        source_ref="autre mention",
+    )
+    assert repeated.id == original.id
+    assert repeated.revision == 1
+    assert repeated.source_ref == "message original"
+    assert len(athlete_facts.list_facts()) == 1
+    hypothesis = athlete_facts.add_fact(
+        "preference", original.text, evidence="hypothesis"
+    )
+    assert hypothesis.id != original.id
+    assert hypothesis.evidence == "hypothesis"
+
+
+def test_resolved_fact_cannot_be_recreated_by_repeating_a_tool_call():
+    original = athlete_facts.add_fact("preference", "Matin", evidence="explicit")
+    athlete_facts.update_fact(original.id, status="resolved", expected_revision=1)
+    with pytest.raises(athlete_facts.FactConflict, match="désactivé"):
+        athlete_facts.add_fact("preference", "Matin", evidence="explicit")
+    assert len(athlete_facts.list_facts()) == 1

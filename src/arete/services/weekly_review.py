@@ -347,7 +347,9 @@ def generate_review(
         ascending=True,
     )
     proposals = propose(facts, upcoming)
-    facts_message = facts_text(facts, proposals)
+    from arete.services.coach_followup import context_block
+
+    facts_message = facts_text(facts, proposals) + "\n\n" + context_block()
     text, source = rule_text(facts, proposals), "rules"
     if facts.is_empty:
         # The rule sentence already says all there is: no model request.
