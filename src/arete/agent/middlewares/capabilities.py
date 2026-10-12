@@ -11,7 +11,7 @@ from langchain_core.messages import ToolMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.config import get_stream_writer
 
-from arete.agent.capabilities.discovery import _profile, authorized_tools
+from arete.agent.capabilities.discovery import _profile, tool_available
 from arete.agent.capabilities.registry import CAPABILITIES, validate_registry
 from arete.agent.middlewares.observability import run_stats
 from arete.agent.runtime.budget import MAX_TOOL_CALLS
@@ -100,10 +100,7 @@ class ToolkitMiddleware(AgentMiddleware):
     @staticmethod
     def _denied(request):
         name = request.tool_call["name"]
-        domain_names = {t.name for tk in CAPABILITIES.values() for t in tk.tools}
-        if name in domain_names and name not in {
-            t.name for t in authorized_tools(_profile(request.runtime))
-        }:
+        if not tool_available(_profile(request.runtime), name):
             return ToolMessage(
                 content="Tool unavailable for this mission.",
                 name=name,

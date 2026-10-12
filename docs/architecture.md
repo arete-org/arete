@@ -1,7 +1,8 @@
 # Coaching stack: responsibilities and dependencies
 
-Arete gives each behavior one owner, with one coaching runtime and four
-server-selected profiles. Browser-owned conversations, HTTP endpoints, tool names,
+Arete gives each behavior one owner, with one coaching runtime, browser chat,
+three background missions and one shared Slack administrator graph. Browser-owned
+conversations, HTTP endpoints, tool names,
 DuckDB tables and ledger paths remain compatible. There are no placeholder layers
 for delegation, MCP, authentication or providers Arete does not use.
 
@@ -509,13 +510,27 @@ and fitness series, with no model request. Both are plain HTTP reads
 ## Slack product and private administration
 
 Slack administrators have a measured, bounded OpenRouter classification step
-before graph selection. `middlewares/surface.py` is a thin pre-invocation adapter;
-`runtime/surface.py` owns the decision and accounting, and `coaching.py` constructs
-its client and selects the cached graph. The `product` and `admin_data` profiles
-have their own system identity and disable automatic personal-context injection.
-The latter exposes only private administrator reads. A trusted preflight budget
-hook charges classification against the model-turn limit; graph-private counters
-are not accepted as invocation input.
+before delivery selection. `middlewares/surface.py` is a thin pre-invocation adapter;
+`runtime/surface.py` owns the decision and accounting. `coaching.py` selects one
+cached Slack graph per athlete and effective model flag, independent of intent.
+`ProfilePolicyMiddleware` resolves an invocation-local policy through
+`runtime/policy.py`: personal coaching, product coordination, private administrator
+reads, or a tool-free clarification. The graph keeps one Chiron identity; these
+policies select instructions, context and tools, not another agent.
+
+The context builder filters tool schemas before accounting and binding. Capability
+middleware checks the same policy again at execution, including filesystem and
+journal tools that remain registered in the shared graph. Product, private and
+ambiguous turns neither inject nor retrieve personal context or coaching skills.
+Ambiguity reaches the agent for a contextual answer/question, rather than returning
+a fixed role-selection message. Classification failure still aborts without an action.
+A trusted preflight budget hook charges classification against the model-turn limit;
+graph-private counters are not accepted as invocation input.
+The Slack composition opens one `arete_coach` trace around dispatch, so the
+`@traceable` classifier (`classify_slack_intent`, including its typed decision)
+and the streamed graph/tools share one root. The parent stays open across private
+destination selection and delivery cleanup. Tracing remains optional; provider
+and Slack clients are excluded from the decorated functions' exported inputs.
 
 The capability catalog declares Slack writes separately from training writes.
 `services/slack_identity.py` owns verified account bindings and current admin

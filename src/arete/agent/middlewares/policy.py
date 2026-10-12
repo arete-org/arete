@@ -6,6 +6,7 @@ from langchain.agents.middleware import AgentMiddleware
 
 from arete.agent.profiles.models import AgentProfile
 from arete.agent.runtime.context import AgentContext
+from arete.agent.runtime.policy import slack_policy
 from arete.services.calendar import CalendarService
 
 
@@ -27,7 +28,9 @@ class ProfilePolicyMiddleware(AgentMiddleware):
         assert context.profile == self.profile_id, (
             "Invocation profile differs from compiled policy"
         )
-        context.resolved_profile = self.profile
+        context.resolved_profile = (
+            slack_policy(context) if self.profile_id == "slack" else self.profile
+        )
         # The calendar is the caller's own: built per run from the verified
         # account, absent for the API key and for background missions.
         context.calendar = (

@@ -1,4 +1,4 @@
-"""Opt-in synthetic routing evaluation: ten requests, no tools or Slack messages."""
+"""Opt-in synthetic routing evaluation: twelve requests, no tools or Slack messages."""
 
 import asyncio
 import json
@@ -11,6 +11,8 @@ from time import monotonic
 import pytest
 
 CASES = (
+    (["Que peux-tu faire ?"], "product", False),
+    (["Action produit exemple"], "product", False),
     (["Quelle séance me conseilles-tu aujourd'hui ?"], "coach", False),
     (["Ajoute un footing de 30 minutes demain."], "coach", False),
     (["Ping <@UARTHUR> pour qu'il fasse ses tickets front."], "product", False),

@@ -9,6 +9,7 @@ from typing import Literal
 from langchain.agents.middleware.types import ModelResponse
 from langchain_core.messages import SystemMessage, convert_to_messages
 from langchain_core.messages.utils import count_tokens_approximately
+from langsmith import traceable
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from arete.agent.models.responses import validate_model_response
@@ -36,6 +37,13 @@ class SurfaceDecision(BaseModel):
         return self
 
 
+@traceable(
+    name="classify_slack_intent",
+    # Invocation context and provider clients contain execution dependencies,
+    # not classifier inputs. Export only the conversation and typed decision.
+    process_inputs=lambda inputs: {"messages": inputs["messages"]},
+    process_outputs=lambda decision: decision.model_dump() if decision else {},
+)
 async def detect_surface(
     model, messages: list[dict[str, str]], context: AgentContext, context_tokens: int
 ) -> SurfaceDecision:

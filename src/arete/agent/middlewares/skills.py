@@ -44,18 +44,32 @@ class SystemSkillsMiddleware(SkillsMiddleware):
             )
             context.requested_skills = (
                 requested_skill_paths(question.text, update["skills_metadata"])
-                if context.profile == "chat" and question is not None
+                if question is not None
                 else ()
             )
         return update
 
     def before_agent(self, state, runtime, config):
+        context = getattr(runtime, "context", None)
+        if (
+            context
+            and context.resolved_profile
+            and not context.resolved_profile.journal_tools
+        ):
+            return {"skills_metadata": []}
         # Rediscover trusted metadata, never bodies or browser-supplied instructions.
         return self._prepare(
             state, runtime, self._validated(super().before_agent({}, runtime, config))
         )
 
     async def abefore_agent(self, state, runtime, config):
+        context = getattr(runtime, "context", None)
+        if (
+            context
+            and context.resolved_profile
+            and not context.resolved_profile.journal_tools
+        ):
+            return {"skills_metadata": []}
         return self._prepare(
             state,
             runtime,
