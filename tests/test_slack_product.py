@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from langchain_core.messages import AIMessage
+from pydantic import SecretStr
 
 from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.surface import SurfaceDecision, detect_surface
@@ -17,6 +18,7 @@ from arete.dataio.db import db_connection
 from arete.dataio.init_duckdb import main as init_db
 from arete.services import admin_athlete_data, slack, slack_identity, users
 from arete.services.athlete_scope import athlete_scope, current_athlete_id
+from arete.services.jev import JEV_MODEL, JEV_TIMEOUT, JevService
 from arete.services.slack_product import SlackProduct, schedule_time
 
 
@@ -68,14 +70,8 @@ def setup(tmp_path, monkeypatch):
     )
 
 
-def model_for(text, **metadata):
-    return SimpleNamespace(
-        extra_body={"provider": {"max_price": {"prompt": 0}}},
-        model_name="fake",
-        ainvoke=AsyncMock(
-            return_value=AIMessage(content=text, response_metadata=metadata)
-        ),
-    )
+def classifier():
+    return JevService(api_key=SecretStr("test"), model=JEV_MODEL, timeout=JEV_TIMEOUT)
 
 
 @pytest.mark.parametrize(
@@ -87,87 +83,118 @@ def model_for(text, **metadata):
         ("clarify", False, False),
     ],
 )
-def test_classifier_typed_and_measured(surface, private, outbound):
-    model = model_for(
-        json.dumps({"surface": surface, "private_data": private, "outbound": outbound})
-    )
+def test_classifier_typed_and_measured(jev_api, surface, private, outbound, caplog):
+    import logging
+
+    for key, value in {
+        "surface": surface,
+        "private_data": "yes" if private else "no",
+        "outbound": "yes" if outbound else "no",
+    }.items():
+        jev_api.payload["answers"][key]["choice"] = value
     context = AgentContext(thread_id="thread")
-    decision = asyncio.run(
-        detect_surface(model, [{"role": "user", "content": "Question"}], context, 8192)
-    )
-    assert decision.surface == surface
+    with caplog.at_level(logging.INFO):
+        decision = asyncio.run(
+            detect_surface(
+                classifier(), [{"role": "user", "content": "Question"}], context, 8192
+            )
+        )
+    assert decision.model_dump() == {
+        "surface": surface,
+        "private_data": private,
+        "outbound": outbound,
+    }
     assert context.stats.model_calls == 1
-    assert model.ainvoke.await_count == 1
-    assert (
-        model.ainvoke.call_args.kwargs["extra_body"]["provider"]
-        == model.extra_body["provider"]
-    )
-    assert "session_id" not in model.extra_body
+    assert context.stats.served_models == [jev_api.payload["model"]]
+    assert len(jev_api.requests) == 1
+    body = json.loads(jev_api.requests[0].content)
+    assert body["provider"]["max_price"] == {"prompt": 0.042, "completion": 0}
+    assert "input_tokens" in caplog.text and "cost" in caplog.text
+    assert jev_api.transport.call_args.kwargs == {"retries": 0}
 
 
 @pytest.mark.parametrize(
-    "content",
-    [
-        "not json",
-        '{"surface":"root","private_data":false,"outbound":false}',
-        '{"surface":"coach","private_data":true,"outbound":false}',
-        '{"surface":"product","private_data":false,"outbound":false,"tools":["delete"]}',
-    ],
+    "failure",
+    ["json", "unknown", "inconsistent", "missing", "extra", "probability", "boolean"],
 )
-def test_classifier_invalid_fails_once(content):
-    model = model_for(content)
+def test_classifier_invalid_fails_once(jev_api, failure):
+    answers = jev_api.payload["answers"]
+    if failure == "json":
+        jev_api.payload = "not an object"
+    elif failure == "unknown":
+        answers["surface"]["choice"] = "root"
+    elif failure == "inconsistent":
+        answers["surface"]["choice"] = "coach"
+        answers["private_data"]["choice"] = "yes"
+    elif failure == "missing":
+        del answers["private_data"]
+    elif failure == "extra":
+        answers["tools"] = {"type": "choice", "choice": "delete"}
+    elif failure == "probability":
+        answers["surface"]["confidence"] = 1.5
+    else:
+        answers["private_data"]["choice"] = "maybe"
     context = AgentContext()
     with pytest.raises(ValueError):
-        asyncio.run(detect_surface(model, [], context, 8192))
+        asyncio.run(detect_surface(classifier(), [], context, 8192))
     assert context.stats.model_calls == 1
-    assert model.ainvoke.await_count == 1
+    assert len(jev_api.requests) == 1
 
 
-def test_classifier_mixed_request_clarifies():
-    assert (
-        SurfaceDecision(surface="product", private_data=True, outbound=True).surface
-        == "clarify"
-    )
+def test_classifier_mixed_request_clarifies(jev_api):
+    jev_api.payload["answers"]["private_data"]["choice"] = "yes"
+    jev_api.payload["answers"]["outbound"]["choice"] = "yes"
+    decision = asyncio.run(detect_surface(classifier(), [], AgentContext(), 8192))
+    assert decision.surface == "clarify"
+    assert decision.private_data and decision.outbound
 
 
-def test_classifier_timeout_and_truncation(monkeypatch):
-    from arete.agent.models.responses import TruncatedModelResponseError
-    from arete.agent.runtime import surface
-
+@pytest.mark.parametrize("status", [401, 402, 429, 500, 503])
+def test_classifier_http_failure_is_not_retried(jev_api, status):
+    jev_api.status = status
     context = AgentContext()
-    with pytest.raises(TruncatedModelResponseError):
-        asyncio.run(
-            detect_surface(
-                model_for(
-                    '{"surface":"coach","private_data":false,"outbound":false}',
-                    finish_reason="length",
-                ),
-                [],
-                context,
-                8192,
-            )
-        )
-    model = model_for("")
+    with pytest.raises(httpx.HTTPStatusError):
+        asyncio.run(detect_surface(classifier(), [], context, 8192))
+    assert len(jev_api.requests) == context.stats.model_calls == 1
 
-    async def slow(*args, **kwargs):
+
+def test_classifier_timeout(jev_api):
+    async def slow(request):
         await asyncio.sleep(1)
 
-    model.ainvoke.side_effect = slow
-    monkeypatch.setattr(surface, "CLASSIFIER_TIMEOUT", 0.001)
+    jev_api.handler = slow
+    context = AgentContext()
     with pytest.raises(TimeoutError):
-        asyncio.run(detect_surface(model, [], context, 8192))
-    assert context.stats.model_calls == 2
+        asyncio.run(
+            detect_surface(replace(classifier(), timeout=0.01), [], context, 8192)
+        )
+    assert len(jev_api.requests) == context.stats.model_calls == 1
 
 
-def test_classifier_oversized_history_never_calls_provider():
-    model = model_for("")
+@pytest.mark.parametrize("window,size", [(8192, 40000), (64000, 150000)])
+def test_classifier_oversized_history_never_calls_provider(jev_api, window, size):
     with pytest.raises(ValueError, match="volumineux"):
         asyncio.run(
             detect_surface(
-                model, [{"role": "user", "content": "x" * 40000}], AgentContext(), 8192
+                classifier(),
+                [{"role": "user", "content": "x" * size}],
+                AgentContext(),
+                window,
             )
         )
-    model.ainvoke.assert_not_called()
+    assert not jev_api.requests
+
+
+def test_classifier_rejects_oversized_response(jev_api):
+    from arete.services.jev import JEV_MAX_RESPONSE_BYTES
+
+    async def large(request):
+        return httpx.Response(200, content=b"x" * (JEV_MAX_RESPONSE_BYTES + 1))
+
+    jev_api.handler = large
+    with pytest.raises(ValueError, match="volumineuse"):
+        asyncio.run(detect_surface(classifier(), [], AgentContext(), 8192))
+    assert len(jev_api.requests) == 1
 
 
 def test_ping_mentions_only_validated_target_and_deduplicates(setup):
@@ -520,7 +547,7 @@ def test_product_graph_executes_native_tool_without_personal_context(
     ],
 )
 def test_composition_selects_route_and_keeps_classifier_budget(
-    setup, monkeypatch, route, private
+    setup, monkeypatch, jev_api, route, private
 ):
     from arete import coaching
     from arete.agent.runtime import execution
@@ -528,13 +555,8 @@ def test_composition_selects_route_and_keeps_classifier_budget(
     admin, _, service = setup
     monkeypatch.setenv("LLM_PROVIDER", "openrouter")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
-    model = model_for(
-        json.dumps({"surface": route, "private_data": private, "outbound": False})
-    )
-    calls = []
-    monkeypatch.setattr(
-        coaching, "build_chat_model", lambda **kwargs: (calls.append(kwargs) or model)
-    )
+    jev_api.payload["answers"]["surface"]["choice"] = route
+    jev_api.payload["answers"]["private_data"]["choice"] = "yes" if private else "no"
     graph_calls = []
     monkeypatch.setattr(
         coaching, "_slack_graph", lambda *args: (graph_calls.append(args) or object())
@@ -562,12 +584,8 @@ def test_composition_selects_route_and_keeps_classifier_budget(
 
     with athlete_scope(admin.athlete_id):
         asyncio.run(run())
-    assert calls[0]["max_retries"] == 0 and calls[0]["route"].fallbacks == ()
-    assert (
-        calls[0]["timeout"] == 15
-        and calls[0]["max_tokens"] == 1024
-        and calls[0]["temperature"] == 0
-    )
+    assert len(jev_api.requests) == 1
+    assert json.loads(jev_api.requests[0].content)["model"] == JEV_MODEL
     assert len(graph_calls[0]) == 2
     assert captured["context"].classifier_calls == 1
     assert captured["context"].profile == "slack"
@@ -575,7 +593,7 @@ def test_composition_selects_route_and_keeps_classifier_budget(
 
 
 def test_nonadmin_has_no_classifier_and_revoked_private_thread_is_denied(
-    setup, monkeypatch
+    setup, monkeypatch, jev_api
 ):
     from arete import coaching
 
@@ -586,14 +604,16 @@ def test_nonadmin_has_no_classifier_and_revoked_private_thread_is_denied(
     message = replace(service.message, user="UOTHER")
     asyncio.run(coaching.prepare_slack_agent([], message, service.client))
     model.assert_not_called()
+    assert not jev_api.requests
     slack_identity.mark_private(service.message.thread_id, admin.clerk_user_id)
     users.set_role(admin.id, "athlete")
     with pytest.raises(slack.HistoryError):
         asyncio.run(coaching.prepare_slack_agent([], service.message, service.client))
     model.assert_not_called()
+    assert not jev_api.requests
 
 
-def test_private_thread_cannot_regain_outbound_tools(setup, monkeypatch):
+def test_private_thread_cannot_regain_outbound_tools(setup, monkeypatch, jev_api):
     from arete import coaching
 
     admin, _, service = setup
@@ -601,13 +621,7 @@ def test_private_thread_cannot_regain_outbound_tools(setup, monkeypatch):
     slack_identity.mark_private(service.message.thread_id, admin.clerk_user_id)
     monkeypatch.setenv("LLM_PROVIDER", "openrouter")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
-    monkeypatch.setattr(
-        coaching,
-        "build_chat_model",
-        lambda **kw: model_for(
-            '{"surface":"product","private_data":false,"outbound":true}'
-        ),
-    )
+    jev_api.payload["answers"]["outbound"]["choice"] = "yes"
     monkeypatch.setattr(coaching, "_slack_graph", lambda *args: object())
 
     async def produce(history, thread_id, visibility, emit, *, graph, context):
@@ -769,14 +783,15 @@ def test_cancellation_in_final_minute_does_not_call_slack(setup):
     )
 
 
-def test_failed_classifier_is_reported_and_releases_admission(setup, monkeypatch):
+def test_failed_classifier_is_reported_and_releases_admission(
+    setup, monkeypatch, jev_api
+):
     from arete import coaching
 
     admin, _, service = setup
     monkeypatch.setenv("LLM_PROVIDER", "openrouter")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
-    model = model_for("invalid")
-    monkeypatch.setattr(coaching, "build_chat_model", lambda **kw: model)
+    jev_api.payload = "invalid"
     service.client.history.return_value = [{"role": "user", "content": "Ping Arthur"}]
     produce = AsyncMock()
     with athlete_scope(admin.athlete_id):
@@ -790,7 +805,7 @@ def test_failed_classifier_is_reported_and_releases_admission(setup, monkeypatch
         )
         assert slack.reserve(replace(service.message, event_id="EV2")) == "running"
     produce.assert_not_called()
-    assert model.ainvoke.await_count == 1
+    assert len(jev_api.requests) == 1
     assert "aucune action" in service.client.reply.call_args.args[1]
     assert not service.client.call.called
 

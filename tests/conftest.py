@@ -147,3 +147,40 @@ def memory_tool():
         return asyncio.run(remember_fact.ainvoke({**args, "runtime": runtime}))
 
     return invoke
+
+
+@pytest.fixture
+def jev_api(monkeypatch):
+    """Mock only HTTP so routing tests exercise Jev parsing and real trace spans."""
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import httpx
+
+    api = SimpleNamespace(
+        payload={
+            "model": "typesafe/jev-1.13-20260917",
+            "answers": {
+                "surface": {"type": "choice", "choice": "product"},
+                "private_data": {"type": "choice", "choice": "no"},
+                "outbound": {"type": "choice", "choice": "no"},
+            },
+            "usage": {"input_tokens": 476, "output_tokens": 70, "cost": 0.000019992},
+        },
+        requests=[],
+        status=200,
+        handler=None,
+    )
+
+    async def handle(request):
+        api.requests.append(request)
+        assert request.url == "https://openrouter.ai/api/alpha/decisions"
+        assert json.loads(request.content)["model"] == "typesafe/jev-1.13"
+        if api.handler is not None:
+            return await api.handler(request)
+        return httpx.Response(api.status, json=api.payload)
+
+    api.transport = Mock(side_effect=lambda **kw: httpx.MockTransport(handle))
+    monkeypatch.setattr(httpx, "AsyncHTTPTransport", api.transport)
+    return api

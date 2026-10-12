@@ -650,27 +650,13 @@ def slack_dispatch(monkeypatch):
     agent._slack_graph.cache_clear()
 
 
-class FakeClassifier(FakeCoach):
-    extra_body: dict | None = None
-    model_name: str = "test-classifier"
-
-
 @pytest.mark.parametrize("enabled", [False, True])
 def test_slack_classifier_and_native_tools_share_the_agent_trace(
-    monkeypatch, recorder, slack_dispatch, enabled
+    monkeypatch, recorder, slack_dispatch, jev_api, enabled
 ):
     from langsmith.run_helpers import get_tracing_context
 
     monkeypatch.setenv("LANGSMITH_TRACING", "true" if enabled else "false")
-    classifier = FakeClassifier(
-        messages=iter(
-            [
-                AIMessage(
-                    content='{"surface":"product","private_data":false,"outbound":false}'
-                )
-            ]
-        )
-    )
     coach = FakeCoach(
         messages=iter(
             [
@@ -682,7 +668,7 @@ def test_slack_classifier_and_native_tools_share_the_agent_trace(
     monkeypatch.setattr(
         agent,
         "build_chat_model",
-        lambda **kw: (classifier if kw.get("max_tokens") == 1024 else coach),
+        lambda **kw: coach,
     )
 
     async def run():
@@ -712,6 +698,20 @@ def test_slack_classifier_and_native_tools_share_the_agent_trace(
         next(r for r in llms if r["name"] == "slack_surface")["parent_run_id"]
         == classification["id"]
     )
+    jev = next(r for r in llms if r["name"] == "slack_surface")
+    assert jev["inputs"]["model"] == "typesafe/jev-1.13"
+    assert jev["outputs"]["answers"] == jev_api.payload["answers"]
+    assert jev["extra"]["metadata"]["ls_provider"] == "openrouter"
+    assert jev["extra"]["metadata"]["ls_model_name"] == "typesafe/jev-1.13"
+    assert jev["outputs"]["usage_metadata"] == {
+        "input_tokens": 476,
+        "output_tokens": 70,
+        "total_tokens": 546,
+        "total_cost": 0.000019992,
+    }
+    assert "api_key" not in str(jev["inputs"]) and "Authorization" not in str(
+        jev["inputs"]
+    )
     assert len([r for r in runs if r["run_type"] == "tool"]) == 1
     assert all(
         r["extra"]["metadata"]["thread_id"] == root["extra"]["metadata"]["thread_id"]
@@ -721,22 +721,22 @@ def test_slack_classifier_and_native_tools_share_the_agent_trace(
 
 @pytest.mark.parametrize("failure", ["invalid", "cancelled"])
 def test_slack_classifier_failure_closes_spans_without_running_agent(
-    monkeypatch, recorder, slack_dispatch, failure
+    monkeypatch, recorder, slack_dispatch, jev_api, failure
 ):
     from langsmith.run_helpers import get_tracing_context
 
     started = asyncio.Event()
 
-    class Classifier(FakeClassifier):
-        async def _agenerate(self, *args, **kwargs):
-            if failure == "cancelled":
-                started.set()
-                async with asyncio.timeout(5):
-                    await asyncio.Event().wait()
-            return await super()._agenerate(*args, **kwargs)
+    import httpx
 
-    classifier = Classifier(messages=iter([AIMessage(content="invalid JSON")]))
-    monkeypatch.setattr(agent, "build_chat_model", lambda **kw: classifier)
+    async def respond(request):
+        if failure == "cancelled":
+            started.set()
+            async with asyncio.timeout(5):
+                await asyncio.Event().wait()
+        return httpx.Response(200, content="invalid JSON")
+
+    jev_api.handler = respond
 
     async def run():
         before = get_tracing_context().copy()
@@ -755,29 +755,31 @@ def test_slack_classifier_failure_closes_spans_without_running_agent(
     runs, _ = assert_trace_tree(recorder)
     classification = next(r for r in runs if r["name"] == "classify_slack_intent")
     assert classification["error"]
-    assert len([r for r in runs if r["run_type"] == "llm"]) == 1
+    llms = [r for r in runs if r["run_type"] == "llm"]
+    assert len(llms) == 1
+    assert llms[0]["error"]
+    assert llms[0]["end_time"]
     assert not [r for r in runs if r["run_type"] == "tool"]
 
 
 def test_concurrent_slack_classifiers_keep_separate_parent_traces(
-    monkeypatch, recorder, slack_dispatch
+    monkeypatch, recorder, slack_dispatch, jev_api
 ):
-    classifier = FakeClassifier(
-        messages=iter(
-            [
-                AIMessage(
-                    content='{"surface":"product","private_data":false,"outbound":false}'
-                )
-            ]
-            * 2
-        )
-    )
-    classifier._barrier = Barrier(2)
+    import httpx
+
+    barrier = asyncio.Barrier(2)
+
+    async def respond(request):
+        async with asyncio.timeout(5):
+            await barrier.wait()
+        return httpx.Response(200, json=jev_api.payload)
+
+    jev_api.handler = respond
     coach = FakeCoach(messages=iter([AIMessage(content="Réponse.")] * 2))
     monkeypatch.setattr(
         agent,
         "build_chat_model",
-        lambda **kw: (classifier if kw.get("max_tokens") == 1024 else coach),
+        lambda **kw: coach,
     )
 
     async def run():
@@ -876,3 +878,36 @@ def test_memory_classifier_stays_in_native_tool_trace_without_credentials(
     assert decision["outputs"]["choice"] == "create"
     assert decision["extra"]["metadata"]["thread_id"] == "memory-thread"
     assert "never-export-this" not in str(recorder.recorded_runs)
+
+
+def test_jev_service_has_a_generic_llm_trace_without_slack(recorder, jev_api):
+    from pydantic import SecretStr
+
+    from arete.services.jev import JEV_MODEL, JEV_TIMEOUT, JevService
+
+    jev_api.payload["answers"] = {"category": {"type": "choice", "choice": "billing"}}
+    service = JevService(SecretStr("hidden-secret"), JEV_MODEL, JEV_TIMEOUT)
+    request = service.build_request(
+        state={"ticket": "Refund request"},
+        questions={
+            "category": {
+                "type": "choice",
+                "instructions": "Classify the ticket",
+                "criteria": {"billing": "Payment", "other": "Other"},
+            }
+        },
+    )
+
+    async def run():
+        with tracing.agent_tracing():
+            return await service.decide(request)
+
+    asyncio.run(run())
+    runs = list(recorder.recorded_runs.values())
+    assert len(runs) == 1
+    span = runs[0]
+    assert span["name"] == "jev_decision" and span["run_type"] == "llm"
+    assert span["inputs"] == request
+    assert span["outputs"]["answers"] == jev_api.payload["answers"]
+    assert span["extra"]["metadata"]["ls_model_name"] == JEV_MODEL
+    assert "hidden-secret" not in str(span)

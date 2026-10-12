@@ -352,10 +352,10 @@ async def prepare_slack_agent(messages, message, client):
     from anyio import to_thread
 
     from arete.agent.middlewares.surface import SurfaceDetectionMiddleware
-    from arete.agent.runtime.surface import CLASSIFIER_MAX_TOKENS, CLASSIFIER_TIMEOUT
     from arete.observability.agent import record_run
     from arete.observability.tracing import agent_tracing
     from arete.services import slack_identity
+    from arete.services.jev import JEV_MODEL, JEV_TIMEOUT, JevService
     from arete.services.slack import MAX_JOB_SECONDS, HistoryError, SlackPreparation
     from arete.services.slack_product import SlackProduct, valid_timezone
 
@@ -398,13 +398,8 @@ async def prepare_slack_agent(messages, message, client):
         route = resolve_route(glm_flash=glm_flash)
         if route.base_url != "https://openrouter.ai/api/v1":
             raise ValueError("Le classement Slack administrateur exige OpenRouter.")
-        classifier = build_chat_model(
-            route=replace(route, fallbacks=()),
-            max_tokens=CLASSIFIER_MAX_TOKENS,
-            temperature=0,
-            timeout=CLASSIFIER_TIMEOUT,
-            max_retries=0,
-            openrouter_reasoning=False,
+        classifier = JevService(
+            api_key=route.api_key, model=JEV_MODEL, timeout=JEV_TIMEOUT
         )
         with agent_tracing():
             decision = await SurfaceDetectionMiddleware(

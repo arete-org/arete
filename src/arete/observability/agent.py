@@ -45,6 +45,20 @@ def record_model_call(
     )
 
 
+def record_decision_call(
+    *, model: str, elapsed_ms: int, payload: dict | None, error: str | None
+) -> None:
+    # Both decision callers report usage without logging the athlete's source text.
+    logger.info(
+        "Agent model call: model=%s served=%s elapsed_ms=%d usage=%s error=%s",
+        model,
+        payload.get("model") if payload else None,
+        elapsed_ms,
+        payload.get("usage") if payload else None,
+        error,
+    )
+
+
 def record_run(
     *, profile: str, stats: Any, total_ms: int, error: str | None = None
 ) -> None:
@@ -69,18 +83,4 @@ def record_run(
         stats.memory_tokens,
         stats.memory_decision_calls,
         stats.memory_decision_ms,
-    )
-
-
-def record_decision_call(
-    *, model: str, elapsed_ms: int, payload: dict | None, error: str | None
-) -> None:
-    # Decisions usage includes cost; never log the athlete's source text here.
-    logger.info(
-        "Agent decision call: model=%s served=%s elapsed_ms=%d usage=%s error=%s",
-        model,
-        payload.get("model") if payload else None,
-        elapsed_ms,
-        payload.get("usage") if payload else None,
-        error,
     )

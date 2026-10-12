@@ -31,8 +31,8 @@ DEFAULT_OPENROUTER_FALLBACKS = (
     "nvidia/nemotron-3-ultra-550b-a55b:free",
 )
 #: Default OpenRouter policy: a model that stops being free is skipped
-#: instead of billed. The explicit admin GLM rollout permits paid chat requests.
-#: Memory decisions use their own bounded Jev route.
+#: instead of billed. Only the explicit admin GLM rollout permits paid chat
+#: requests; Jev surface and memory decisions have separately bounded paid routes.
 OPENROUTER_FREE_ONLY = {
     "sort": "latency",
     "max_price": {"prompt": 0, "completion": 0},

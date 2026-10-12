@@ -6,20 +6,21 @@ import json
 from time import monotonic
 from typing import Literal
 
-from langchain.agents.middleware.types import ModelResponse
-from langchain_core.messages import SystemMessage, convert_to_messages
+from langchain_core.messages import HumanMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langsmith import traceable
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from arete.agent.models.responses import validate_model_response
-from arete.agent.prompts.product import ROUTER_PROMPT
+from arete.agent.prompts.product import SURFACE_QUESTIONS
 from arete.agent.runtime.context import AgentContext
-from arete.observability.agent import record_model_call, served_models
 from arete.services.athlete_scope import current_athlete_id
+from arete.services.jev import (
+    JEV_CONTEXT_TOKENS,
+    ChoiceAnswer,
+    JevService,
+)
 
-CLASSIFIER_MAX_TOKENS = 1024
-CLASSIFIER_TIMEOUT = 15
+CLASSIFIER_OUTPUT_RESERVE = 1024
 
 
 class SurfaceDecision(BaseModel):
@@ -45,17 +46,11 @@ class SurfaceDecision(BaseModel):
     process_outputs=lambda decision: decision.model_dump() if decision else {},
 )
 async def detect_surface(
-    model, messages: list[dict[str, str]], context: AgentContext, context_tokens: int
+    model: JevService,
+    messages: list[dict[str, str]],
+    context: AgentContext,
+    context_tokens: int,
 ) -> SurfaceDecision:
-    request = [SystemMessage(ROUTER_PROMPT), *convert_to_messages(messages)]
-    tokens = count_tokens_approximately(request)
-    if (
-        tokens + CLASSIFIER_MAX_TOKENS + max(1024, context_tokens // 10)
-        > context_tokens
-    ):
-        raise ValueError(
-            "Historique trop volumineux pour le classement ; ouvre un nouveau fil."
-        )
     identity = json.dumps(
         [
             "arete-provider-affinity-v1",
@@ -65,39 +60,55 @@ async def detect_surface(
         ],
         separators=(",", ":"),
     )
-    extra = {
-        **(model.extra_body or {}),
-        "session_id": hashlib.sha256(identity.encode()).hexdigest(),
-    }
+    request = model.build_request(
+        state={"messages": messages},
+        questions=SURFACE_QUESTIONS,
+        session_id=hashlib.sha256(identity.encode()).hexdigest(),
+    )
+    # Account for every question and the whole history before sending anything.
+    tokens = count_tokens_approximately(
+        [HumanMessage(content=json.dumps(request, ensure_ascii=False))]
+    )
+    window = min(context_tokens, JEV_CONTEXT_TOKENS)
+    if tokens + CLASSIFIER_OUTPUT_RESERVE + max(1024, window // 10) > window:
+        raise ValueError(
+            "Historique trop volumineux pour le classement ; ouvre un nouveau fil."
+        )
     started = monotonic()
     response = None
-    error = None
     try:
-        async with asyncio.timeout(CLASSIFIER_TIMEOUT):
-            message = await model.ainvoke(
+        # The invocation deadline includes preparation, not just graph execution.
+        remaining = (
+            context.deadline - monotonic() if context.deadline else model.timeout
+        )
+        async with asyncio.timeout(min(model.timeout, remaining)):
+            response = await model.decide(
                 request,
-                config={
-                    "run_name": "slack_surface",
+                langsmith_extra={
+                    "name": "slack_surface",
                     "metadata": {
                         "thread_id": context.thread_id,
                         "athlete_id": current_athlete_id(),
                     },
                 },
-                extra_body=extra,
             )
-        response = ModelResponse(result=[message])
-        validate_model_response(response)
-        if message.tool_calls:
-            raise ValueError("Le classifieur ne peut pas appeler d'outil.")
-        return SurfaceDecision.model_validate_json(message.text)
-    except BaseException as exc:
-        error = type(exc).__name__
-        raise
+        answers = response.answers
+        assert all(isinstance(answer, ChoiceAnswer) for answer in answers.values())
+        choices = {
+            name: answer.choice
+            for name, answer in answers.items()
+            if isinstance(answer, ChoiceAnswer)
+        }
+        return SurfaceDecision.model_validate(
+            {
+                "surface": choices["surface"],
+                "private_data": choices["private_data"] == "yes",
+                "outbound": choices["outbound"] == "yes",
+            }
+        )
     finally:
         elapsed = round((monotonic() - started) * 1000)
         context.stats.model_calls += 1
         context.stats.model_ms += elapsed
-        context.stats.served_models.extend(served_models(response))
-        record_model_call(
-            model=model.model_name, elapsed_ms=elapsed, response=response, error=error
-        )
+        if response is not None:
+            context.stats.served_models.append(response.model)
