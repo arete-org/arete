@@ -122,6 +122,13 @@ class Config:
         return _env("OPENROUTER_API_KEY", "") or ""
 
     @property
+    def memory_jev_enabled(self) -> bool:
+        raw = (_env("MEMORY_JEV_ENABLED", "true") or "true").lower().strip()
+        if raw not in ("true", "false"):
+            raise ValueError("MEMORY_JEV_ENABLED must be true or false")
+        return raw == "true"
+
+    @property
     def github_token(self) -> str:
         return _env("GITHUB_TOKEN", "") or ""
 

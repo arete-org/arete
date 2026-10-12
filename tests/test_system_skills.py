@@ -10,7 +10,6 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from arete.agent.backends.memory import build_memory_filesystem
 from arete.agent.backends.skills import SystemSkillsBackend
 from arete.agent.context.builder import system_skills_section
 from arete.agent.middlewares.capabilities import ToolkitMiddleware
@@ -19,6 +18,7 @@ from arete.agent.middlewares.context import (
 )
 from arete.agent.middlewares.skills import SystemSkillsMiddleware
 from arete.agent.runtime.context import AgentContext
+from arete.coaching import build_agent_filesystem
 from arete.dataio.db import db_connection
 from arete.services.system_skills import MAX_SKILL_BYTES, publish_bundle
 
@@ -59,7 +59,7 @@ def test_native_discovery_and_tools_read_db_snapshot_but_cannot_change_it(
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     snapshot = publish_bundle(BUNDLE)
     backend = SystemSkillsBackend(snapshot)
-    filesystem = build_memory_filesystem(system_skills=backend)
+    filesystem = build_agent_filesystem(system_skills=backend)
     skills = SystemSkillsMiddleware(backend=filesystem.backend, paths=set(snapshot))
     catalogs = []
 
@@ -178,7 +178,7 @@ def skill_stack(monkeypatch, tmp_path, files=None):
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     snapshot = publish_bundle(BUNDLE) if files is None else files
     backend = SystemSkillsBackend(snapshot)
-    filesystem = build_memory_filesystem(system_skills=backend)
+    filesystem = build_agent_filesystem(system_skills=backend)
     skills = SystemSkillsMiddleware(backend=filesystem.backend, paths=set(snapshot))
     return snapshot, filesystem, skills
 

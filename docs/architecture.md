@@ -53,7 +53,9 @@ across short-lived event loops. Async callers use `invoke_agent` directly.
 
 The execution envelope is five minutes, 24 main graph model turns (the last binds
 no tools and asks for an answer stating any incomplete work), 96 tool calls,
-and four simultaneous tool executions per invocation. There is no auxiliary suggestion call. Framework recursion is a
+and four simultaneous tool executions per invocation. Up to four Jev memory
+decisions share the 24-call budget, each bounded to 10 seconds without retries;
+the last call remains reserved for an answer. There is no auxiliary suggestion call. Framework recursion is a
 separate 200-step backstop. A model call gives up after 60 s, or 30 s without a
 streamed chunk. Native LangChain `ModelFallbackMiddleware` tries the configured
 candidates in order (at most three, including the primary). The composition root
@@ -496,6 +498,38 @@ workers, with a fresh corpus at each model boundary and no extra model request.
 Optional traversal follows only authoritative source links and remains disabled
 pending behavior evaluations. See [personal memory](personal-memory.md) for
 contracts, bounds, migration compatibility and the synthetic evaluation harness.
+
+`FactMemoryMiddleware` (`agent/middlewares/fact_memory.py`) binds the durable-fact
+tools and adapts runtime provenance and budget hooks. `JournalMiddleware`
+(`agent/middlewares/journal.py`) binds only dated `append_journal` operations.
+The native `FilesystemMiddleware` receives any `BackendProtocol`; its configuration
+helper owns only bounded read/search schemas, with no journal or skill dependencies.
+The composition root mounts the DB-backed `LedgerBackend`, thread-local attachment
+`StateBackend` and immutable `SystemSkillsBackend` through `CompositeBackend` and
+passes that same filesystem to skills discovery. Ledger and skill text backends
+implement the public backend protocol, including typed results and inherited async
+workers, without overriding private `StateBackend` methods. Their read-only base
+rejects mutations; only the ledger explicitly implements transactional edits/deletes.
+The profile selects `fact_memory_tools`, `journal_tools` and `filesystem_tools`
+independently; the capability gate checks them at execution too. No filesystem or
+memory middleware appends personal context: the central context builder still owns
+facts, journal excerpts, retrieval and token accounting.
+
+This follows the [Deep Agents backend contract](https://docs.langchain.com/oss/python/deepagents/backends#custom-backends)
+and native filesystem middleware composition, checked against pinned Deep Agents
+0.7.4. The pinned middleware accepts permissions through `_permissions`; the helper
+isolates that version-specific setting. Automatic history/tool eviction stays off
+because the context builder accounts for the complete request.
+
+New-fact writes use a bounded Jev decision to detect semantic duplicates or
+contradictions among up to seven complete candidates. `services/fact_memory.py`
+owns reconciliation; `agent/models/jev.py` owns the Decisions API adapter and
+`agent/runtime/fact_memory.py` owns provenance, budget and telemetry. Composition
+injects the client, without changing the cached chat route. This paid memory route
+is controlled by `MEMORY_JEV_ENABLED`, separately from GLM, with an explicit price
+cap. Exact duplicates and explicit revision-checked updates need no Jev call.
+Failed classification performs no write; a changed fact snapshot invalidates a
+decision without replay. See the memory document for thresholds and limitations.
 
 ## Data export and year in review
 

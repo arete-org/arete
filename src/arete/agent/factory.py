@@ -22,11 +22,14 @@ from arete.agent.middlewares.context import (
     ContextBuilderMiddleware,
 )
 from arete.agent.middlewares.events import ToolEventMiddleware
+from arete.agent.middlewares.fact_memory import FactMemoryMiddleware
+from arete.agent.middlewares.journal import JournalMiddleware
 from arete.agent.middlewares.limits import execution_limits
 from arete.agent.middlewares.observability import ModelTelemetryMiddleware
 from arete.agent.middlewares.policy import ProfilePolicyMiddleware
 from arete.agent.middlewares.provider_affinity import ProviderAffinityMiddleware
 from arete.agent.middlewares.responses import ModelResponseMiddleware
+from arete.agent.models.jev import JevClient
 from arete.agent.profiles.models import AgentProfile
 from arete.agent.prompts.coach import SYSTEM_SKILL
 from arete.agent.runtime.budget import (
@@ -35,12 +38,7 @@ from arete.agent.runtime.budget import (
     READ_TOOL_RETRY_DELAY_SECONDS,
 )
 from arete.agent.runtime.context import AgentContext
-from arete.agent.tools.journal import (
-    append_journal,
-    forget_fact,
-    remember_fact,
-    respond_coach_followup,
-)
+from arete.agent.tools.coach_followup import respond_coach_followup
 from arete.services.calendar import CalendarService
 
 #: Builds the calendar of one signed-in account (its Clerk user id).
@@ -55,12 +53,18 @@ def build_agent(
     output_tokens: int,
     filesystem: AgentMiddleware[Any, Any, Any],
     calendar: CalendarFactory | None = None,
+    memory_model: JevClient | None = None,
     fallback_models: tuple[BaseChatModel, ...] = (),
     skills: AgentMiddleware[Any, Any, Any] | None = None,
 ):
     assert len(fallback_models) <= MAX_MODEL_FALLBACKS, "Too many fallback models"
     middleware = [
         ProfilePolicyMiddleware(profile.id, profile=profile, calendar=calendar),
+        *(
+            [FactMemoryMiddleware(model=memory_model)]
+            if profile.fact_memory_tools
+            else []
+        ),
         *execution_limits(),
     ]
     if profile.page_context:
@@ -95,6 +99,8 @@ def build_agent(
     )
     middleware.append(ToolkitMiddleware())
     if profile.journal_tools:
+        middleware.append(JournalMiddleware())
+    if profile.filesystem_tools:
         middleware.append(filesystem)
         if skills is not None:
             middleware.append(skills)
@@ -119,11 +125,7 @@ def build_agent(
         model,
         tools=[
             *authorized_tools(profile),
-            *(
-                [append_journal, remember_fact, forget_fact, respond_coach_followup]
-                if profile.journal_tools
-                else []
-            ),
+            *([respond_coach_followup] if profile.journal_tools else []),
         ],
         middleware=middleware,
         system_prompt=profile.system_prompt or SYSTEM_SKILL,

@@ -8,7 +8,7 @@ from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 
-from arete.agent.backends.memory import build_memory_filesystem
+from arete.coaching import build_agent_filesystem
 from arete.services import memory
 from arete.services.journal import journal_block
 
@@ -47,7 +47,7 @@ def run_tools(request):
                 ]
             )
         )
-        graph = create_agent(model, middleware=[build_memory_filesystem()])
+        graph = create_agent(model, middleware=[build_agent_filesystem()])
         state = {
             "messages": [{"role": "user", "content": "Mets le journal à jour."}],
             "files": {"/attachments/source.md": create_file_data("keep\nobsolete\n")},

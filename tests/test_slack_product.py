@@ -817,13 +817,13 @@ def test_shared_graph_isolates_concurrent_intents_and_denies_unbound_tools(
     from langchain_core.messages import HumanMessage, ToolMessage
     from langchain_core.outputs import ChatGeneration, ChatResult
 
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.backends.skills import SystemSkillsBackend
     from arete.agent.context import builder
     from arete.agent.factory import build_agent
     from arete.agent.middlewares.skills import SystemSkillsMiddleware
     from arete.agent.profiles.catalog import get_profile
     from arete.agent.runtime.execution import invoke_agent
+    from arete.coaching import build_agent_filesystem
 
     admin, _, service = setup
     captured = {}
@@ -872,7 +872,7 @@ def test_shared_graph_isolates_concurrent_intents_and_denies_unbound_tools(
     snapshot = {
         "/training/SKILL.md": "---\nname: training\ndescription: TRAINING_SKILL\n---\nRead training facts."
     }
-    filesystem = build_memory_filesystem(system_skills=SystemSkillsBackend(snapshot))
+    filesystem = build_agent_filesystem(system_skills=SystemSkillsBackend(snapshot))
     graph = build_agent(
         get_profile("slack"),
         model=Model(messages=iter(()), disable_streaming=True),

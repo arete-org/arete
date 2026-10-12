@@ -124,6 +124,32 @@ def isolated_coach_records():
 
 
 @pytest.fixture
+def memory_tool():
+    """Exercise the async native tool with server-owned invocation context."""
+    import asyncio
+
+    from langchain.tools import ToolRuntime
+
+    from arete.agent.runtime.context import AgentContext
+    from arete.agent.tools.fact_memory import remember_fact
+
+    def invoke(args, *, message="Déclaration : je préfère le matin", context=None):
+        context = context or AgentContext(thread_id="memory-test")
+        context.memory_source_message = message
+        runtime = ToolRuntime(
+            state={},
+            context=context,
+            config={},
+            stream_writer=lambda _: None,
+            tool_call_id="memory",
+            store=None,
+        )
+        return asyncio.run(remember_fact.ainvoke({**args, "runtime": runtime}))
+
+    return invoke
+
+
+@pytest.fixture
 def jev_api(monkeypatch):
     """Mock only HTTP so routing tests exercise Jev parsing and real trace spans."""
     import json
