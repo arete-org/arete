@@ -176,6 +176,7 @@ def parse_workout_text(
     text: str,
     workout_date: date | None = None,
     abbreviations: dict[str, str] | None = None,
+    today: date | None = None,
 ) -> ParsedWorkout:
     """Parse workout text into structured data.
 
@@ -187,13 +188,14 @@ def parse_workout_text(
         text: Free-form workout text (can start with a date like "05/12/25:")
         workout_date: Date of workout (defaults to extracted date or today)
         abbreviations: User-defined abbreviation mapping (e.g. {"bp": "bench press"})
+        today: The athlete's day when the text names none (server date otherwise)
 
     Raises:
         ValueError: when no exercise could be extracted at all.
     """
     extracted_date, text = _extract_date_from_text(text)
     if workout_date is None:
-        workout_date = extracted_date or date.today()
+        workout_date = extracted_date or today or date.today()
 
     text = _expand_abbreviations(_normalize_workout_text(text), abbreviations or {})
 

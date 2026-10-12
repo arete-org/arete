@@ -23,7 +23,9 @@ import duckdb
 
 from arete.config import config
 from arete.dataio.db import db_connection
+from arete.dataio.settings import get_user_settings
 from arete.services.athlete_scope import athlete_scope, current_athlete_id
+from arete.services.settings import athlete_today, zone_of
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +113,7 @@ def daily_sync() -> dict[str, str]:
                 f"{conditions['terrain']} terrain, {conditions['weather']} weather"
             )
         try:
-            end = date.today()
+            end = athlete_today()  # Garmin's health days are the athlete's
             start = end - timedelta(days=HEALTH_LOOKBACK_DAYS)
             days = sync_range(start, end)
             update_readiness_range(start, end)
@@ -206,7 +208,7 @@ def write_daily_briefing() -> str:
     # A briefing the dashboard asked for before the sync is rewritten: it was
     # read off last night's missing data. One this job already wrote (a cron
     # that fires twice) is kept: the second run would pay for the same text.
-    existing = BriefingRepository().get_for_day(date.today())
+    existing = BriefingRepository().get_for_day(athlete_today())
     if existing is not None and existing.trigger == "scheduler":
         return existing.source
     try:
@@ -223,7 +225,7 @@ def write_daily_briefing() -> str:
 
 def write_weekly_review(today: date | None = None) -> str:
     """On Mondays, review the week that just ended. Never raises."""
-    today = today or date.today()
+    today = today or athlete_today()
     if today.weekday() != 0:
         return "not monday"
     try:
@@ -249,14 +251,48 @@ SCHEDULE_DISPATCH_SECONDS = 120
 SCHEDULE_MODEL_SECONDS = 210
 #: Nominal length of a claim; reclaiming goes by calendar day, not by this.
 SCHEDULE_LEASE_SECONDS = 900
-#: Owed today and not held by a run started today. A lease dated before today
-#: belongs to a run that failed or was stopped: the next day's dispatch starts
-#: a new day (every step is idempotent per day), the same day never retries.
-_DUE = (
-    "deleted_at IS NULL "
-    "AND (last_sync_at IS NULL OR CAST(last_sync_at AS DATE) < current_date) "
-    "AND (sync_lease_until IS NULL OR CAST(sync_lease_until AS DATE) < current_date)"
+#: Most athletes one dispatch reads to find those owed today (5-10 expected).
+MAX_SCANNED_ATHLETES = 500
+#: Markers are naive TIMESTAMPs written by ``current_timestamp`` in the
+#: session's timezone; casting back to TIMESTAMPTZ recovers the instant, which
+#: each athlete's own timezone turns into a calendar day.
+_CANDIDATES = (
+    "SELECT id, last_sync_at, sync_lease_until, "
+    "epoch(last_sync_at::TIMESTAMPTZ), epoch(sync_lease_until::TIMESTAMPTZ), "
+    "epoch(current_timestamp) "
+    "FROM app.athletes WHERE deleted_at IS NULL "
+    "ORDER BY last_sync_at NULLS FIRST, id LIMIT ?"
 )
+
+
+def owed_today(
+    last_sync: float | None, lease: float | None, now: float, zone: str | None
+) -> bool:
+    """Owed today and not held by a run started today, on the athlete's clock.
+
+    Epoch seconds in, so the database's and the server's timezones never
+    matter. A lease dated before today belongs to a run that failed or was
+    stopped: the next day's dispatch starts a new day (every step is
+    idempotent per day), the same day never retries.
+    """
+    tz = zone_of(zone)
+    today = datetime.fromtimestamp(now, tz).date()
+
+    def before_today(epoch: float | None) -> bool:
+        return epoch is None or datetime.fromtimestamp(epoch, tz).date() < today
+
+    return before_today(last_sync) and before_today(lease)
+
+
+def _athlete_owed(
+    athlete_id: int, last_sync: float | None, lease: float | None, now: float
+) -> bool:
+    if last_sync is None and lease is None:
+        return True  # never ran: owed on any clock
+    # The settings projection is private: read the zone in the athlete's scope.
+    with athlete_scope(athlete_id):
+        zone = (get_user_settings() or {}).get("timezone")
+    return owed_today(last_sync, lease, now, zone)
 
 
 def run_scheduled_batch() -> dict:
@@ -269,18 +305,19 @@ def run_scheduled_batch() -> dict:
     """
     started = monotonic()
     with db_connection() as con:
-        rows = con.execute(
-            f"SELECT id, sync_lease_until FROM app.athletes WHERE {_DUE} "
-            "ORDER BY last_sync_at NULLS FIRST, id LIMIT ?",
-            [MAX_SCHEDULED_ATHLETES + 1],
-        ).fetchall()
+        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    if len(candidates) == MAX_SCANNED_ATHLETES:
+        logger.warning("Dispatch read %d athletes, the scan bound", len(candidates))
+    rows = [
+        row[:3] for row in candidates if _athlete_owed(row[0], row[3], row[4], row[5])
+    ]
     outcomes: dict[str, dict] = {}
     deferred = len(rows) > MAX_SCHEDULED_ATHLETES
-    for athlete_id, stale_lease in rows[:MAX_SCHEDULED_ATHLETES]:
+    for athlete_id, last_sync, stale_lease in rows[:MAX_SCHEDULED_ATHLETES]:
         if monotonic() - started >= SCHEDULE_DISPATCH_SECONDS:
             deferred = True
             break
-        if not _claim(athlete_id):
+        if not _claim(athlete_id, last_sync, stale_lease):
             continue
         if stale_lease is not None:
             logger.warning(
@@ -292,15 +329,21 @@ def run_scheduled_batch() -> dict:
     return {"athletes": outcomes, "deferred": deferred}
 
 
-def _claim(athlete_id: int) -> bool:
-    """Take the athlete's lease, unless another dispatch took it first."""
+def _claim(athlete_id: int, last_sync: datetime | None, lease: datetime | None) -> bool:
+    """Take the athlete's lease, unless another dispatch took it first.
+
+    Compare-and-set on the markers this dispatch read as owed: a concurrent
+    dispatch that claimed or finished the athlete has changed one of them.
+    """
     try:
         with db_connection() as con:
             row = con.execute(
                 "UPDATE app.athletes "
                 "SET sync_lease_until=current_timestamp + ? * INTERVAL '1 second' "
-                f"WHERE id=? AND {_DUE} RETURNING id",
-                [SCHEDULE_LEASE_SECONDS, athlete_id],
+                "WHERE id=? AND deleted_at IS NULL "
+                "AND last_sync_at IS NOT DISTINCT FROM ? "
+                "AND sync_lease_until IS NOT DISTINCT FROM ? RETURNING id",
+                [SCHEDULE_LEASE_SECONDS, athlete_id, last_sync, lease],
             ).fetchone()
     except duckdb.TransactionException:
         logger.info("Athlete %s claimed by a concurrent dispatch", athlete_id)
@@ -322,6 +365,7 @@ def _run_athlete(athlete_id: int, started: float) -> dict:
             ):
                 late = monotonic() - started >= SCHEDULE_MODEL_SECONDS
                 status[step] = "deferred" if late else write()
+            # Self-hosted status marker (``/sync/status``): server clock on purpose.
             record_run(datetime.now())
             if config.is_remote_db:
                 mirror.flush()
@@ -347,6 +391,8 @@ async def run_forever(hour: int, tick_seconds: int = TICK_SECONDS) -> None:
     )
     # This task intentionally lives as long as the server; each dispatch is bounded.
     while True:
+        # ARETE_AUTO_SYNC_HOUR is the server's wall clock (the Docker host);
+        # which athletes are owed is decided per athlete's day by the batch.
         if datetime.now().hour >= hour:
             try:
                 await to_thread.run_sync(run_scheduled_batch)

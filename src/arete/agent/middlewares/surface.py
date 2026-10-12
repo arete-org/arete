@@ -1,4 +1,4 @@
-"""Pre-invocation middleware: classification happens before graph/context selection."""
+"""Classify before delivery; the shared graph resolves invocation policy afterward."""
 
 from arete.agent.runtime.surface import detect_surface
 

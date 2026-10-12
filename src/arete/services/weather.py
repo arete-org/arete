@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import httpx
 
+from arete.services.settings import athlete_today
+
 logger = logging.getLogger(__name__)
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -92,7 +94,7 @@ def fetch_weather(
     and returns None.
     """
     hour = _hour(start)
-    today = today or date.today()
+    today = today or athlete_today()
     recent = hour.date() >= today - timedelta(days=ARCHIVE_LAG_DAYS)
     url, source = (
         (FORECAST_URL, "open-meteo-forecast")

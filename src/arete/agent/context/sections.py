@@ -117,7 +117,12 @@ _SLACK_PARTICIPANTS = (
 
 def surface_section(context: AgentContext | None) -> str:
     """Where a Slack answer appears, so the coach measures what it discloses."""
-    if context and context.slack_product:
+    if (
+        context
+        and context.slack_product
+        and context.resolved_profile
+        and not context.resolved_profile.personal_context
+    ):
         from datetime import datetime
         from zoneinfo import ZoneInfo
 

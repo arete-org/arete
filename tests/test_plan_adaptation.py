@@ -40,12 +40,7 @@ def tempo(monkeypatch):
     monkeypatch.setattr("arete.dataio.settings.athlete_zone_model", zones)
     monkeypatch.setattr("arete.services.plan_adaptation.athlete_zone_model", zones)
 
-    class Clock(date):
-        @classmethod
-        def today(cls):
-            return DAY
-
-    monkeypatch.setattr(plan_adaptation, "date", Clock)
+    monkeypatch.setattr(plan_adaptation, "athlete_today", lambda: DAY)
     repo = GarminRepository()
     session_id = repo.create_planned_session(
         PlannedSession(

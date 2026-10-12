@@ -1,7 +1,8 @@
 # Coaching stack: responsibilities and dependencies
 
-Arete gives each behavior one owner, with one coaching runtime and four
-server-selected profiles. Browser-owned conversations, HTTP endpoints, tool names,
+Arete gives each behavior one owner, with one coaching runtime, browser chat,
+three background missions and one shared Slack administrator graph. Browser-owned
+conversations, HTTP endpoints, tool names,
 DuckDB tables and ledger paths remain compatible. There are no placeholder layers
 for delegation, MCP, authentication or providers Arete does not use.
 
@@ -20,7 +21,7 @@ arete/
 │   ├── profiles/            Declarative chat, briefing and feedback configurations
 │   └── prompts/             Versioned general/mission instructions
 ├── services/                Metrics, analytics, planning, settings, pages, coaching, memory
-├── observability/           Provider usage and model-boundary timing
+├── observability/           Provider usage, model-boundary and HTTP request timing
 └── api/                     HTTP contracts and SSE projection
 ```
 
@@ -141,7 +142,10 @@ go to the model. The on-demand briefing is produced once per athlete and day
 under a per-athlete lock, so athletes never wait for each other's run. The
 server files the feedback's ledger entry itself (`services/memory.append_entry`,
 dated heading, never twice), so neither mission can mutate training data or
-forget to write. Every profile receives the current date. Chat adds new journal
+forget to write. Every profile receives the current date: the athlete's, in
+the timezone of their settings (`services/settings.athlete_today`), which every
+server path meaning "today" shares (plan decisions, briefing, weekly review,
+metric windows, the daily batch's marker). Chat adds new journal
 entries through `append_journal` (server-dated heading, deduplicated,
 bounded). Its filesystem also exposes `edit_file` for targeted corrections/removal
 and `delete` for forgetting an entire current ledger (`notes.md` or `sessions.md`).
@@ -250,6 +254,16 @@ model calls, tool calls, model time, time to first token and served models.
 `first_result_ms` measures the first successful domain tool result, or completion
 of an answer when no domain tool succeeds. Preparatory file reads and narration do
 not count as a useful domain result; it is a latency proxy, not a quality score.
+
+Every HTTP request logs one `HTTP request:` line (`observability/http.py`, the
+outermost pure-ASGI middleware): status, total time to the last body byte, database
+statements and their time, auth/mirror-hydrate/handler/mirror-flush phases and
+whether it was the process's first request. The path is logged without its query
+string, never a statement's text. `dataio/db.py` wraps each connection it hands out
+so `execute`/`executemany` count in a request-local ContextVar, which AnyIO worker
+threads inherit. A response whose length is known also carries `Server-Timing`
+(`auth`, `hydrate`, `db` with its statement count, `app`, `total`); a stream is only
+logged, so it is never buffered.
 
 Completed chat answers carry their `trace_id` and a signed feedback receipt
 in both HTTP and SSE `done`. The runtime supplies that UUID as the graph's
@@ -496,13 +510,27 @@ and fitness series, with no model request. Both are plain HTTP reads
 ## Slack product and private administration
 
 Slack administrators have a measured, bounded OpenRouter classification step
-before graph selection. `middlewares/surface.py` is a thin pre-invocation adapter;
-`runtime/surface.py` owns the decision and accounting, and `coaching.py` constructs
-its client and selects the cached graph. The `product` and `admin_data` profiles
-have their own system identity and disable automatic personal-context injection.
-The latter exposes only private administrator reads. A trusted preflight budget
-hook charges classification against the model-turn limit; graph-private counters
-are not accepted as invocation input.
+before delivery selection. `middlewares/surface.py` is a thin pre-invocation adapter;
+`runtime/surface.py` owns the decision and accounting. `coaching.py` selects one
+cached Slack graph per athlete and effective model flag, independent of intent.
+`ProfilePolicyMiddleware` resolves an invocation-local policy through
+`runtime/policy.py`: personal coaching, product coordination, private administrator
+reads, or a tool-free clarification. The graph keeps one Chiron identity; these
+policies select instructions, context and tools, not another agent.
+
+The context builder filters tool schemas before accounting and binding. Capability
+middleware checks the same policy again at execution, including filesystem and
+journal tools that remain registered in the shared graph. Product, private and
+ambiguous turns neither inject nor retrieve personal context or coaching skills.
+Ambiguity reaches the agent for a contextual answer/question, rather than returning
+a fixed role-selection message. Classification failure still aborts without an action.
+A trusted preflight budget hook charges classification against the model-turn limit;
+graph-private counters are not accepted as invocation input.
+The Slack composition opens one `arete_coach` trace around dispatch, so the
+`@traceable` classifier (`classify_slack_intent`, including its typed decision)
+and the streamed graph/tools share one root. The parent stays open across private
+destination selection and delivery cleanup. Tracing remains optional; provider
+and Slack clients are excluded from the decorated functions' exported inputs.
 
 The capability catalog declares Slack writes separately from training writes.
 `services/slack_identity.py` owns verified account bindings and current admin

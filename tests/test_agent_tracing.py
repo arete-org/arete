@@ -94,7 +94,10 @@ class RecordingClient(Client):
 
     def update_run(self, run_id, **kwargs):
         with self.lock:
-            self.recorded_runs[str(run_id)].update(kwargs)
+            # SDK patches use inputs=None to leave the original input intact.
+            self.recorded_runs[str(run_id)].update(
+                {k: v for k, v in kwargs.items() if k != "inputs" or v is not None}
+            )
 
 
 @pytest.fixture(autouse=True)
@@ -602,3 +605,197 @@ def test_chat_turns_share_thread_metadata_without_reusing_trace_or_date(
     assert all(
         r["extra"]["metadata"]["thread_id"] == threads[r["trace_id"]] for r in runs
     )
+
+
+@pytest.fixture
+def slack_dispatch(monkeypatch):
+    from types import SimpleNamespace
+
+    from arete.services import slack, slack_identity
+
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    actor = SimpleNamespace(is_admin=True, clerk_user_id="admin")
+    monkeypatch.setattr(slack_identity, "identity", lambda *a: (actor, "Europe/Paris"))
+    monkeypatch.setattr(slack_identity, "private_owner", lambda *a: None)
+    monkeypatch.setattr(slack_identity, "require_admin", lambda *a: actor)
+    # Admission is tested in the service tests; allow concurrent trace lifetimes.
+    monkeypatch.setattr(slack, "reserve", lambda *a: "running")
+    monkeypatch.setattr(slack, "finish", lambda *a, **kw: None)
+    agent._slack_graph.cache_clear()
+    client = AsyncMock(spec=slack.SlackClient)
+    client.call.return_value = {"ok": True, "ts": "2.000001", "members": []}
+
+    async def history(message):
+        return [{"role": "user", "content": message.text}]
+
+    client.history.side_effect = history
+
+    async def run(thread="1.000001"):
+        message = slack.SlackMessage(
+            "T123",
+            thread,
+            "A123",
+            "C123",
+            "U123",
+            thread,
+            thread,
+            "Trouve Arthur",
+            in_channel=True,
+            mentioned=True,
+        )
+        return await agent.dispatch_slack_message(message, client=client)
+
+    yield run
+    agent._slack_graph.cache_clear()
+
+
+class FakeClassifier(FakeCoach):
+    extra_body: dict | None = None
+    model_name: str = "test-classifier"
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_slack_classifier_and_native_tools_share_the_agent_trace(
+    monkeypatch, recorder, slack_dispatch, enabled
+):
+    from langsmith.run_helpers import get_tracing_context
+
+    monkeypatch.setenv("LANGSMITH_TRACING", "true" if enabled else "false")
+    classifier = FakeClassifier(
+        messages=iter(
+            [
+                AIMessage(
+                    content='{"surface":"product","private_data":false,"outbound":false}'
+                )
+            ]
+        )
+    )
+    coach = FakeCoach(
+        messages=iter(
+            [
+                tool_call("find_slack_member", {"query": "Arthur"}, "find"),
+                AIMessage(content="Aucun Arthur trouvé."),
+            ]
+        )
+    )
+    monkeypatch.setattr(
+        agent,
+        "build_chat_model",
+        lambda **kw: (classifier if kw.get("max_tokens") == 1024 else coach),
+    )
+
+    async def run():
+        before = get_tracing_context().copy()
+        assert await slack_dispatch() == "Aucun Arthur trouvé."
+        assert get_tracing_context() == before
+
+    asyncio.run(run())
+    if not enabled:
+        assert not recorder.recorded_runs
+        return
+    runs, roots = assert_trace_tree(recorder)
+    root = roots[0]
+    assert root["outputs"] == {"output": "Aucun Arthur trouvé."}
+    assert root["extra"]["metadata"]["thread_id"] == "slack:T123:C123:1.000001"
+    classification = next(r for r in runs if r["name"] == "classify_slack_intent")
+    assert classification["parent_run_id"] == root["id"]
+    assert set(classification["inputs"]) == {"messages"}
+    assert classification["outputs"] == {
+        "surface": "product",
+        "private_data": False,
+        "outbound": False,
+    }
+    llms = [r for r in runs if r["run_type"] == "llm"]
+    assert len(llms) == 3
+    assert (
+        next(r for r in llms if r["name"] == "slack_surface")["parent_run_id"]
+        == classification["id"]
+    )
+    assert len([r for r in runs if r["run_type"] == "tool"]) == 1
+    assert all(
+        r["extra"]["metadata"]["thread_id"] == root["extra"]["metadata"]["thread_id"]
+        for r in runs
+    )
+
+
+@pytest.mark.parametrize("failure", ["invalid", "cancelled"])
+def test_slack_classifier_failure_closes_spans_without_running_agent(
+    monkeypatch, recorder, slack_dispatch, failure
+):
+    from langsmith.run_helpers import get_tracing_context
+
+    started = asyncio.Event()
+
+    class Classifier(FakeClassifier):
+        async def _agenerate(self, *args, **kwargs):
+            if failure == "cancelled":
+                started.set()
+                async with asyncio.timeout(5):
+                    await asyncio.Event().wait()
+            return await super()._agenerate(*args, **kwargs)
+
+    classifier = Classifier(messages=iter([AIMessage(content="invalid JSON")]))
+    monkeypatch.setattr(agent, "build_chat_model", lambda **kw: classifier)
+
+    async def run():
+        before = get_tracing_context().copy()
+        if failure == "cancelled":
+            task = asyncio.create_task(slack_dispatch())
+            async with asyncio.timeout(5):
+                await started.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            assert await slack_dispatch() is None
+        assert get_tracing_context() == before
+
+    asyncio.run(run())
+    runs, _ = assert_trace_tree(recorder)
+    classification = next(r for r in runs if r["name"] == "classify_slack_intent")
+    assert classification["error"]
+    assert len([r for r in runs if r["run_type"] == "llm"]) == 1
+    assert not [r for r in runs if r["run_type"] == "tool"]
+
+
+def test_concurrent_slack_classifiers_keep_separate_parent_traces(
+    monkeypatch, recorder, slack_dispatch
+):
+    classifier = FakeClassifier(
+        messages=iter(
+            [
+                AIMessage(
+                    content='{"surface":"product","private_data":false,"outbound":false}'
+                )
+            ]
+            * 2
+        )
+    )
+    classifier._barrier = Barrier(2)
+    coach = FakeCoach(messages=iter([AIMessage(content="Réponse.")] * 2))
+    monkeypatch.setattr(
+        agent,
+        "build_chat_model",
+        lambda **kw: (classifier if kw.get("max_tokens") == 1024 else coach),
+    )
+
+    async def run():
+        async with asyncio.timeout(10):
+            return await asyncio.gather(
+                slack_dispatch("1.000001"), slack_dispatch("2.000001")
+            )
+
+    assert asyncio.run(run()) == ["Réponse.", "Réponse."]
+    runs, roots = assert_trace_tree(recorder, roots=2)
+    assert len({r["extra"]["metadata"]["thread_id"] for r in roots}) == 2
+    for root in roots:
+        children = [r for r in runs if r["trace_id"] == root["trace_id"]]
+        assert all(
+            r["extra"]["metadata"]["thread_id"]
+            == root["extra"]["metadata"]["thread_id"]
+            for r in children
+        )
+        classification = [r for r in children if r["name"] == "classify_slack_intent"]
+        assert len(classification) == 1
+        assert classification[0]["parent_run_id"] == root["id"]

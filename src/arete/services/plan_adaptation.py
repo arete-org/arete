@@ -23,6 +23,7 @@ from arete.services.plan_repository import (
     PlanDecision,
     PlanDecisionRepository,
 )
+from arete.services.settings import athlete_today
 
 if TYPE_CHECKING:
     from arete.garmin.client import GarminClient
@@ -70,7 +71,7 @@ def adapt_today(
     """
     from arete.services.coaching_rules import rule_facts
 
-    day = target_date or date.today()
+    day = target_date or athlete_today()
     decisions = PlanDecisionRepository()
 
     planned_repo = GarminRepository()
@@ -230,7 +231,7 @@ def push_today(client: GarminClient, target_date: date | None = None) -> str:
     """The daily run's push: today's sessions not on Garmin yet. Never raises."""
     if not bool((get_user_settings() or {}).get("push_to_garmin_enabled", False)):
         return "disabled"
-    day = target_date or date.today()
+    day = target_date or athlete_today()
     sent, skipped, failed = 0, 0, 0
     try:
         sessions = GarminRepository().list_planned_sessions(
@@ -312,7 +313,7 @@ def respond(decision_id: int, revision: int, action: str) -> PlanDecision:
         return decision
     if decision.revision != revision or decision.state not in {"pending", "discussion"}:
         raise ProposalConflict("Cette proposition a changé. Recharge-la.")
-    if decision.date != date.today():
+    if decision.date != athlete_today():
         raise ProposalConflict("Cette proposition a expiré.")
     if action == "apply" and decision.state == "discussion":
         raise ProposalConflict("Discute des étapes de cette séance avec le coach.")
@@ -338,7 +339,7 @@ def respond(decision_id: int, revision: int, action: str) -> PlanDecision:
                 "WHERE user_id=getvariable('arete_athlete_id') AND deleted_at IS NULL AND id=? AND revision=? AND state IN ('pending','discussion') RETURNING id",
                 [
                     state,
-                    date.today() + timedelta(days=1) if action == "snooze" else None,
+                    athlete_today() + timedelta(days=1) if action == "snooze" else None,
                     state,
                     decision_id,
                     revision,
