@@ -14,7 +14,9 @@ class RunPolicy:
         self, capability: str, tool_name: str, read_tools: frozenset[str]
     ) -> bool:
         return capability in self.profile.capabilities and (
-            self.profile.training_writes or tool_name in read_tools
+            self.profile.training_writes
+            or tool_name in read_tools
+            or tool_name in self.profile.external_write_tools
         )
 
 

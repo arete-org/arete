@@ -3,10 +3,31 @@
 from arete.agent.profiles.models import AgentProfile, ProfileId
 from arete.agent.prompts.briefing import BRIEFING_PROMPT
 from arete.agent.prompts.coach import CHAT_INSTRUCTIONS
+from arete.agent.prompts.product import PRODUCT_INSTRUCTIONS, PRODUCT_SYSTEM
 from arete.agent.prompts.session_feedback import FEEDBACK_PROMPT
 from arete.agent.prompts.weekly_review import REVIEW_PROMPT
 
 PROFILES: dict[ProfileId, AgentProfile] = {
+    "product": AgentProfile(
+        "product",
+        "arete_product",
+        PRODUCT_INSTRUCTIONS,
+        ("slack_product",),
+        system_prompt=PRODUCT_SYSTEM,
+        personal_context=False,
+        external_write_tools=frozenset(
+            {"ping_slack_member", "schedule_slack_reminder", "cancel_slack_reminder"}
+        ),
+    ),
+    "admin_data": AgentProfile(
+        "admin_data",
+        "arete_admin_data",
+        PRODUCT_INSTRUCTIONS
+        + "\nConsultation privée en lecture seule : aucune action sortante. Pour contacter un tiers, demander un nouveau fil produit sans données privées.",
+        ("admin_data",),
+        system_prompt=PRODUCT_SYSTEM,
+        personal_context=False,
+    ),
     "chat": AgentProfile(
         "chat",
         "arete_coach",

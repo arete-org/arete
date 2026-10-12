@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-ProfileId = Literal["chat", "briefing", "feedback", "review"]
+ProfileId = Literal["chat", "briefing", "feedback", "review", "product", "admin_data"]
 
 
 @dataclass(frozen=True)
@@ -17,3 +17,7 @@ class AgentProfile:
     #: Filesystem tools on the coach's journal; missions get it in the prompt
     #: and the server files their entries.
     journal_tools: bool = False
+
+    system_prompt: str | None = None
+    personal_context: bool = True
+    external_write_tools: frozenset[str] = frozenset()

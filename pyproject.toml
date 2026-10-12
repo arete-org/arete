@@ -22,13 +22,14 @@ dependencies = [
     "openpyxl>=3.1.5,<4",
     "pillow>=11,<13",
     "pydantic>=2",
-    "pymupdf==1.28.2",
+    "pypdfium2==5.14.0",
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.31",
     "pywebpush>=2.0",
     "rank-bm25==0.2.2",
     "rapidfuzz>=3.14.6",
     "regex>=2024.11.6",
+    "tesserocr==2.11.0",
     "text2num>=3.1.0",
     "urllib3>=2.8.0",
     "uvicorn>=0.37.0",
@@ -45,6 +46,7 @@ packages = ["src/arete"]
 [project.optional-dependencies]
 dev = [
     "mypy>=1.19.0",
+    "pypdf>=6.1,<7",
     "pytest>=9.0.3",
     "pytest-xdist>=3.8,<4",
     "ruff>=0.14.7,<0.15",
