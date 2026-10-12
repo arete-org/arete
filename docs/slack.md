@@ -204,9 +204,12 @@ have accepted the message before the connection failed.
 ## Administrator product assistant
 
 Verified Arete administrators use the same Slack bot for product coordination.
-Each of their messages is classified before graph selection or personal-data reads:
+Each of their messages is classified before delivery selection or personal-data reads:
 **coach** for their training, **product** for coordination, or a clarification when
-intent is ambiguous. Other athletes incur no classification request. This feature
+intent is ambiguous. All intents use one cached agent with invocation-local tool and
+context permissions. Ambiguous turns receive a contextual answer or question without
+tools or personal data; greetings and capability questions can be answered directly.
+Other athletes incur no classification request. This feature
 requires `LLM_PROVIDER=openrouter`; an unavailable or invalid classification performs
 no action and reports the failure. Slack workspace administrator status grants no
 Arete privileges.
@@ -219,7 +222,8 @@ Examples:
 - `Lis les données d’entraînement et le journal de Grégoire` opens an administrator
   DM before reading any data or streaming any progress.
 
-The product identity uses a versioned brief about Arete, plus the current thread.
+For product questions, the shared Chiron identity uses a versioned brief about Arete,
+plus the current thread.
 It has no live GitHub connector, ticket status, code-writing access, recurrent
 reminders or autonomous monitoring. Human active Slack members can be contacted
 without an Arete account. Names with multiple matches require clarification.
@@ -246,9 +250,9 @@ privileged operations; already scheduled messages remain with Slack until cancel
 The classifier uses the effective OpenRouter route and price cap, 1024 output
 tokens, temperature 0, a 15-second timeout, and no SDK retry or model fallback.
 One classification consumes one of the existing 24 model turns; stats include
-it in the same `Agent run:` record. Graphs are cached by athlete, selected profile
-and the effective GLM flag. Clients and Slack execution dependencies stay local to
-the invocation; Slack never gains the browser's Calendar approval capability.
+it in the same `Agent run:` record. The Slack graph is cached by athlete
+and the effective GLM flag, never by classified intent. Clients and Slack execution
+dependencies stay local to the invocation; Slack never gains the browser's Calendar approval capability.
 
 Slack accepts reminders at most 120 days ahead. The author's Slack timezone is
 used, falling back to Europe/Paris (announced in the context and confirmation).

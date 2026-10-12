@@ -620,7 +620,7 @@ async def dispatch(
     client: SlackClient,
     produce: Producer,
     prepare: Callable[..., Awaitable[SlackPreparation]] | None = None,
-) -> None:
+) -> str | None:
     """Answer one message; the caller holds the author's athlete scope."""
     try:
         status = await to_thread.run_sync(reserve, message)
@@ -629,10 +629,10 @@ async def dispatch(
         # recorded or executed, so say so rather than dropping the message.
         status = "busy"
     if status == "duplicate":
-        return
+        return None
     if status == "busy":
         await client.reply(message, BUSY_MESSAGE)
-        return
+        return None
     started_coach = False
     completed_coach = False
     output: SlackStream | None = None
@@ -689,6 +689,7 @@ async def dispatch(
                     else PRIVATE_NOTE.format(user=message.user),
                 )
         delivery_status = "sent"
+        return answer
     except HistoryError as exc:
         delivery_status = "rejected"
         await client.reply(message, str(exc))
@@ -719,3 +720,4 @@ async def dispatch(
                 message, delivery_status, release=not started_coach or completed_coach
             )
         )
+    return None
