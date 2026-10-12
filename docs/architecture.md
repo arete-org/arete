@@ -509,8 +509,23 @@ and fitness series, with no model request. Both are plain HTTP reads
 
 ## Slack product and private administration
 
-Slack administrators have a measured, bounded OpenRouter classification step
-before delivery selection. `middlewares/surface.py` is a thin pre-invocation adapter;
+Slack administrators have a measured, bounded Jev classification step before
+delivery selection. `services/jev.py` is the reusable OpenRouter Decisions service:
+request construction, typed Choice/Noul/Score responses, common usage/error logs,
+one request with zero retries, a 15 s deadline,
+at most 32 questions with 64 criteria each, a 256 KiB request and 64 KiB response.
+`JevService.build_request()` snapshots state, questions, session identity and the
+bounded provider policy; `decide()` validates, sends and traces that same payload.
+It has no Slack or agent dependency; callers own questions, token accounting and
+how decisions affect behavior. It never constructs an agent or grants permission.
+The surface adapter sends three Choice questions together to `typesafe/jev-1.13`,
+independently of the coach's model/GLM flag. This explicitly paid classifier has
+its own $0.042/M input and $0/M output price cap, with no provider fallback.
+The complete request must fit the smaller of the deployment window and 32,000
+tokens (the conservative published Decisions limit), with output/safety reserves;
+history is never trimmed. Decisions exposes no temperature or max_tokens setting.
+
+`middlewares/surface.py` is a thin pre-invocation adapter;
 `runtime/surface.py` owns the decision and accounting. `coaching.py` selects one
 cached Slack graph per athlete and effective model flag, independent of intent.
 `ProfilePolicyMiddleware` resolves an invocation-local policy through
@@ -528,7 +543,11 @@ A trusted preflight budget hook charges classification against the model-turn li
 graph-private counters are not accepted as invocation input.
 The Slack composition opens one `arete_coach` trace around dispatch, so the
 `@traceable` classifier (`classify_slack_intent`, including its typed decision)
-and the streamed graph/tools share one root. The parent stays open across private
+and the streamed graph/tools share one root. The Jev service uses
+`@traceable(run_type="llm")`, named `slack_surface` for this caller and
+`jev_decision` otherwise; it exports the request, typed answers, served model,
+token usage and reported cost. Failed/cancelled requests close their spans with
+an error. Credentials and HTTP clients never enter trace inputs. The parent stays open across private
 destination selection and delivery cleanup. Tracing remains optional; provider
 and Slack clients are excluded from the decorated functions' exported inputs.
 

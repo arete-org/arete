@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 import shutil
-from dataclasses import replace
 from pathlib import Path
 from time import monotonic
 
@@ -60,22 +59,15 @@ def test_live_surface_accuracy(tmp_path, monkeypatch, record_property):
     shutil.copy2(source, copied)
     monkeypatch.setenv("ARETE_DB", str(copied))
     monkeypatch.setenv("LLM_PROVIDER", "openrouter")
-    from arete.agent.models.providers import build_chat_model
     from arete.agent.models.routing import resolve_route
     from arete.agent.runtime.context import AgentContext
     from arete.agent.runtime.surface import detect_surface
     from arete.services.athlete_scope import athlete_scope
+    from arete.services.jev import JEV_MODEL, JEV_TIMEOUT, JevService
 
     async def run():
-        route = replace(resolve_route(), fallbacks=())
-        model = build_chat_model(
-            route=route,
-            max_tokens=1024,
-            timeout=15,
-            temperature=0,
-            max_retries=0,
-            openrouter_reasoning=False,
-        )
+        route = resolve_route()
+        model = JevService(api_key=route.api_key, model=JEV_MODEL, timeout=JEV_TIMEOUT)
         results = []
         for index, (texts, expected, private) in enumerate(CASES):
             context = AgentContext(thread_id=f"synthetic:{index}")

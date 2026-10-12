@@ -37,6 +37,8 @@ Read [docs/architecture.md](docs/architecture.md) before changing the coaching s
 - `services/` owns shared domain operations and their contracts. It may use the
   existing `features/`, `dataio/`, `garmin/`, `strava/` and `strength/` modules. It
   must not import FastAPI, LangChain, LangGraph, Deep Agents or agent composition.
+  `services/jev.py` owns reusable Jev decision requests, validation and provider I/O;
+  surface-specific questions and decision policy remain in the agent layer.
 - `api/` owns HTTP schemas and SSE projection; `observability/` owns measurements.
   Put schemas beside their owner. Avoid global `schemas/` or catch-all `shared/`.
 
@@ -64,8 +66,10 @@ responsibility a testable owner. Do not create empty architectural scaffolding.
   a provider router. Budget system text, schemas, history, page data and output.
 - The admin-only `glm_flash` flag is global, persisted and off by default. Read
   it at invocation composition and key cached graphs by its effective value;
-  never change a running graph's route. Paid requests require the explicit
-  GLM price cap and low reasoning effort; disabling restores free-only routing.
+  never change a running graph's route. Paid chat requests require the explicit
+  GLM price cap and low reasoning effort; disabling restores free-only chat routing.
+  Slack surface detection independently uses the paid Jev service, with its own
+  explicit price cap, one request, no retries and an LLM-type LangSmith span.
   Reject truncated completions before executing their tool calls.
 - OpenRouter provider affinity is request-local: hash the trusted athlete,
   profile and thread/run identity into `session_id`; never mutate cached clients.
