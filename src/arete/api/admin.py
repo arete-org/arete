@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, StrictBool
 
 from arete import scheduler
-from arete.api.auth import require_admin, require_owner
+from arete.api.auth import forget_accounts, require_admin, require_owner
 from arete.services import users
 from arete.services.feature_flags import (
     FeatureFlags,
@@ -91,13 +91,16 @@ def list_accounts() -> list[dict[str, Any]]:
 @router.post("/accounts/{user_id}/role", dependencies=[Depends(require_owner)])
 def set_role(user_id: int, body: RoleUpdate) -> dict[str, Any]:
     with _rules():
-        return users.set_role(user_id, body.role).to_dict()
+        updated = users.set_role(user_id, body.role)
+    forget_accounts()  # other instances follow within ACCOUNT_TTL_SECONDS
+    return updated.to_dict()
 
 
 @router.post("/athletes/{athlete_id}/deactivate", status_code=204)
 def deactivate(athlete_id: int, actor: AppUser = Depends(require_admin)) -> Response:
     with _rules():
         users.deactivate_athlete(athlete_id, actor=actor)
+    forget_accounts()
     return Response(status_code=204)
 
 
@@ -105,6 +108,7 @@ def deactivate(athlete_id: int, actor: AppUser = Depends(require_admin)) -> Resp
 def reactivate(athlete_id: int) -> Response:
     with _rules():
         users.reactivate_athlete(athlete_id)
+    forget_accounts()
     return Response(status_code=204)
 
 
