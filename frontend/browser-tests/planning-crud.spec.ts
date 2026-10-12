@@ -5,6 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 // The browser talks to the actual HTTP handlers and a disposable DuckDB database.
 // Only unrelated page reads and external integrations are stubbed.
+const API_REQUEST_TIMEOUT_MS = 10_000;
 const API = 'http://127.0.0.1:18761';
 let server: ChildProcess;
 let directory: string;
@@ -56,6 +57,11 @@ test.beforeAll(async ({ request }) => {
     )
     .toBe(200);
 });
+test.afterEach(async ({ page }) => {
+  // React Query can still be fetching when the final assertion finishes. Drain
+  // routed API calls before Playwright disposes their request context.
+  await page.unrouteAll({ behavior: 'wait' });
+});
 test.afterAll(async () => {
   if (server?.exitCode === null) {
     const exited = new Promise<void>((resolve) => server.once('exit', () => resolve()));
@@ -77,6 +83,8 @@ async function connect(page: Page) {
     ) {
       return route.fulfill({
         response: await route.fetch({
+          timeout: API_REQUEST_TIMEOUT_MS,
+          maxRetries: 0,
           url: `${API}${path}${new URL(route.request().url()).search}`,
         }),
       });
