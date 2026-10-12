@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigation, ErrorBoundary } from '@/components';
 import { AgentSidePanel } from '@/components/AgentSidePanel';
+import { EnableNotifications } from '@/components/EnableNotifications';
+import { InstallPrompt } from '@/components/InstallPrompt';
 import { LoadingState } from '@/components/States';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { SettingsProvider } from '@/contexts';
@@ -161,6 +163,8 @@ function App() {
                 onClose={closeAgent}
                 onBusyChange={setAgentBusy}
               />
+              <InstallPrompt />
+              <EnableNotifications />
             </div>
           </BrowserRouter>
         </SettingsProvider>

@@ -495,6 +495,25 @@ export interface UserSettings {
   threshold_pace_sec_km: number | null;
   /** Date of the Garmin test the threshold comes from; null when typed by hand. */
   lthr_measured_on: string | null;
+  /** Which pushes arrive (every kind spelled out) and the local quiet hours. */
+  notification_preferences: NotificationPreferences;
+}
+
+/** Mirrors services/settings.NotificationKind; `soon` kinds in CoachTab are not sent yet. */
+export type NotificationKind =
+  | 'briefing'
+  | 'post_session'
+  | 'weekly_review'
+  | 'adapted_session'
+  | 'imports'
+  | 'checkin'
+  | 'evening'
+  | 'eve_reminder';
+
+export interface NotificationPreferences {
+  kinds: Record<NotificationKind, boolean>;
+  /** "HH:MM" in the athlete's timezone; null sends at any hour. */
+  quiet_hours: { start: string; end: string } | null;
 }
 
 /** The coach's word on a finished session, or the rule engine's when it is away. */
