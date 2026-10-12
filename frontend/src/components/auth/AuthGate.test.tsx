@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { authHeaders, setTokenGetter } from '@/lib/auth';
 import { AuthGate } from './AuthGate';
@@ -87,8 +87,16 @@ afterEach(() => {
   cleanup();
   setTokenGetter(null);
   clerk.signedIn = false;
+  clerk.signOut.mockClear();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
+
+/** Sign-in configuration baked into the build, as Vercel sets it per environment. */
+function built(key = 'pk_test_build') {
+  vi.stubEnv('VITE_AUTH_ENABLED', 'true');
+  vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', key);
+}
 
 // Runs first on purpose: the SDK module is loaded once per file, by the first gate that needs it.
 it('renders the app as before, without the Clerk SDK, when sign-in is off', async () => {
@@ -173,4 +181,53 @@ it('shows the refusal reason with a sign-out when the account is deactivated', a
   expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeTruthy();
   expect(screen.queryByText('Tableau de bord')).toBeNull();
   expect(screen.queryByText('COMPTE INJOIGNABLE')).toBeNull();
+});
+
+it('starts Clerk from the build configuration without asking the server', async () => {
+  built();
+  const requests = server(new Error('the server must not be asked'));
+  mount();
+  expect(await screen.findByText('Formulaire Clerk')).toBeTruthy();
+  expect(requests).toEqual([]);
+});
+
+it('never lets the build turn sign-in off: anything but true asks the server', async () => {
+  vi.stubEnv('VITE_AUTH_ENABLED', 'false');
+  const requests = server(enabled);
+  mount();
+  expect(await screen.findByText('Formulaire Clerk')).toBeTruthy();
+  expect(requests.map((r) => r.url)).toEqual(['/api/auth/config']);
+});
+
+it('reports a build that enables sign-in without its key', async () => {
+  built('');
+  const requests = server(enabled);
+  mount();
+  expect(await screen.findByText('AUTHENTIFICATION MAL CONFIGURÉE')).toBeTruthy();
+  expect(screen.queryByText('Tableau de bord')).toBeNull();
+  expect(requests).toEqual([]);
+});
+
+it('shows a misconfiguration, not a sign-out loop, when the server expects another Clerk instance', async () => {
+  built('pk_test_build');
+  clerk.signedIn = true;
+  const requests = server({ enabled: true, publishable_key: 'pk_test_server' });
+  mount();
+  expect(await screen.findByText('AUTHENTIFICATION MAL CONFIGURÉE')).toBeTruthy();
+  expect(screen.queryByText('Tableau de bord')).toBeNull();
+  expect(clerk.signOut).not.toHaveBeenCalled();
+  // The server was asked only after it refused the session.
+  expect(requests.map((r) => r.url)).toEqual(['/api/auth/me', '/api/auth/config']);
+});
+
+it('ends a refused session as before when the server expects the same instance', async () => {
+  built('pk_test_build');
+  clerk.signedIn = true;
+  const reload = vi.fn();
+  vi.stubGlobal('location', { ...window.location, reload });
+  server({ enabled: true, publishable_key: 'pk_test_build' });
+  mount();
+  await waitFor(() => expect(clerk.signOut).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(reload).toHaveBeenCalled());
+  expect(screen.queryByText('AUTHENTIFICATION MAL CONFIGURÉE')).toBeNull();
 });
