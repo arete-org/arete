@@ -122,6 +122,17 @@ def test_motherduck_gets_a_home_that_exists(tmp_path, monkeypatch, home):
     assert os.environ["HOME"] == str(tmp_path / "home")
 
 
+def test_a_read_only_home_is_replaced(tmp_path, monkeypatch):
+    read_only = tmp_path / "ro"
+    read_only.mkdir(mode=0o500)
+    monkeypatch.setattr(db, "REMOTE_HOME", tmp_path / "home")
+    monkeypatch.setattr(db, "BUNDLED_EXTENSIONS", tmp_path / "missing")
+    monkeypatch.setenv("HOME", str(read_only))
+    with patch.object(db.duckdb, "connect"):
+        db._open_remote()
+    assert os.environ["HOME"] == str(tmp_path / "home")
+
+
 def test_an_existing_home_is_kept(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "REMOTE_HOME", tmp_path / "home")
     monkeypatch.setattr(db, "BUNDLED_EXTENSIONS", tmp_path / "missing")
