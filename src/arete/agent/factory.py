@@ -23,6 +23,7 @@ from arete.agent.middlewares.context import (
 )
 from arete.agent.middlewares.events import ToolEventMiddleware
 from arete.agent.middlewares.fact_memory import FactMemoryMiddleware
+from arete.agent.middlewares.journal import JournalMiddleware
 from arete.agent.middlewares.limits import execution_limits
 from arete.agent.middlewares.observability import ModelTelemetryMiddleware
 from arete.agent.middlewares.policy import ProfilePolicyMiddleware
@@ -50,7 +51,7 @@ def build_agent(
     model: BaseChatModel,
     context_tokens: int,
     output_tokens: int,
-    journal: AgentMiddleware[Any, Any, Any],
+    filesystem: AgentMiddleware[Any, Any, Any],
     calendar: CalendarFactory | None = None,
     memory_model: JevClient | None = None,
     fallback_models: tuple[BaseChatModel, ...] = (),
@@ -98,7 +99,9 @@ def build_agent(
     )
     middleware.append(ToolkitMiddleware())
     if profile.journal_tools:
-        middleware.append(journal)
+        middleware.append(JournalMiddleware())
+    if profile.filesystem_tools:
+        middleware.append(filesystem)
         if skills is not None:
             middleware.append(skills)
     middleware.append(

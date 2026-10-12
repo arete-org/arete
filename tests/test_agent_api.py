@@ -844,8 +844,12 @@ class TestLedgerTools:
 
     def _tools(self):
         from arete.agent.middlewares.journal import JournalMiddleware
+        from arete.coaching import build_agent_filesystem
 
-        return {t.name: t for t in JournalMiddleware().tools}
+        return {
+            t.name: t
+            for t in [*build_agent_filesystem().tools, *JournalMiddleware().tools]
+        }
 
     def test_reading_points_at_the_end_of_the_journal(self):
         """`read_file` reads 100 lines from the top; new entries are appended.

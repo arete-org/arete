@@ -188,9 +188,9 @@ def test_statebackend_reads_documents_and_rejects_writes(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.runtime.context import AgentContext
     from arete.api.agent import _document_state
+    from arete.coaching import build_agent_filesystem
 
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     doc = uploaded(document_db)
@@ -214,7 +214,7 @@ def test_statebackend_reads_documents_and_rejects_writes(
     ]
     context = AgentContext(thread_id=document_db)
     state = _document_state(context)
-    filesystem = JournalMiddleware()
+    filesystem = build_agent_filesystem()
     assert {t.name for t in filesystem.tools} == {
         "read_file",
         "ls",
@@ -222,7 +222,6 @@ def test_statebackend_reads_documents_and_rejects_writes(
         "grep",
         "edit_file",
         "delete",
-        "append_journal",
     }
     for tool in filesystem.tools:
         assert "anyOf" not in json.dumps(tool.args_schema.model_json_schema())
@@ -250,8 +249,8 @@ def test_attachment_grep_returns_matching_lines_by_default(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.runtime.context import AgentContext
+    from arete.coaching import build_agent_filesystem
 
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
 
@@ -280,7 +279,7 @@ def test_attachment_grep_returns_matching_lines_by_default(
                 ]
             )
         ),
-        middleware=[JournalMiddleware()],
+        middleware=[build_agent_filesystem()],
         context_schema=AgentContext,
     )
     state = {
@@ -374,9 +373,9 @@ def test_chat_hydrates_extraction_before_first_model_and_reads_mounted_file(
     from langchain_core.messages import AIMessage
 
     from arete.agent.factory import build_agent
-    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.profiles.catalog import get_profile
     from arete.api.agent import router
+    from arete.coaching import build_agent_filesystem
 
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     if source == "xlsx":
@@ -441,7 +440,7 @@ def test_chat_hydrates_extraction_before_first_model_and_reads_mounted_file(
         ),
         context_tokens=65_536,
         output_tokens=4096,
-        journal=JournalMiddleware(),
+        filesystem=build_agent_filesystem(),
     )
     monkeypatch.setattr("arete.api.agent.get_agent", lambda: graph)
     client = router_client(router)
@@ -524,9 +523,9 @@ def test_concurrent_threads_keep_their_own_attachment_context(
     from langchain_core.messages import AIMessage, HumanMessage
 
     from arete.agent.middlewares.context import ContextBuilderMiddleware
-    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.runtime.context import AgentContext
     from arete.api.agent import _document_state
+    from arete.coaching import build_agent_filesystem
 
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     contexts = [
@@ -560,7 +559,7 @@ def test_concurrent_threads_keep_their_own_attachment_context(
 
         graph = create_agent(
             Model(messages=iter([AIMessage(content="OK"), AIMessage(content="OK")])),
-            middleware=[JournalMiddleware(), ContextBuilderMiddleware()],
+            middleware=[build_agent_filesystem(), ContextBuilderMiddleware()],
             context_schema=AgentContext,
         )
         results = await asyncio.wait_for(
@@ -658,9 +657,9 @@ def test_document_request_creates_and_exports_without_import_approval(
     from langchain_core.messages import AIMessage
 
     from arete.agent.factory import build_agent
-    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.profiles.catalog import get_profile
     from arete.api.agent import router
+    from arete.coaching import build_agent_filesystem
     from arete.garmin.repository import GarminRepository
 
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
@@ -744,7 +743,7 @@ def test_document_request_creates_and_exports_without_import_approval(
         model=Model(messages=responses(), disable_streaming=True),
         context_tokens=65_536,
         output_tokens=4096,
-        journal=JournalMiddleware(),
+        filesystem=build_agent_filesystem(),
     )
     monkeypatch.setattr("arete.api.agent.get_agent", lambda: graph)
     # Old pending rows are inert historical data, never a permission gate.

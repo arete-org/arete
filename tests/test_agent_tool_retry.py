@@ -29,7 +29,7 @@ class Model(GenericFakeChatModel):
 
 def graph_for(name, args):
     return build_agent(
-        replace(get_profile("chat"), journal_tools=False),
+        replace(get_profile("chat"), journal_tools=False, filesystem_tools=False),
         model=Model(
             disable_streaming=True,
             messages=iter(
@@ -44,7 +44,7 @@ def graph_for(name, args):
         ),
         context_tokens=65536,
         output_tokens=4096,
-        journal=AgentMiddleware(),
+        filesystem=AgentMiddleware(),
     )
 
 

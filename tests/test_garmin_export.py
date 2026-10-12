@@ -953,7 +953,7 @@ def test_read_then_strength_action_only_emits_the_created_workout(
         )
 
     graph = build_agent(
-        replace(get_profile("chat"), journal_tools=False),
+        replace(get_profile("chat"), journal_tools=False, filesystem_tools=False),
         model=Model(
             disable_streaming=True,
             messages=iter(
@@ -981,7 +981,7 @@ def test_read_then_strength_action_only_emits_the_created_workout(
         ),
         context_tokens=65536,
         output_tokens=4096,
-        journal=AgentMiddleware(),
+        filesystem=AgentMiddleware(),
     )
     context = AgentContext(source={PANEL_CONTEXT_KEY: '{"page":"planning"}'})
     state = {"messages": [{"role": "user", "content": "Prépare une musculation"}]}

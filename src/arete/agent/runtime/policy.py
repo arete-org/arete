@@ -67,6 +67,7 @@ def slack_policy(context: AgentContext) -> AgentProfile:
         instructions=instructions,
         training_writes=False,
         page_context=False,
+        filesystem_tools=False,
         journal_tools=False,
         fact_memory_tools=False,
         external_write_tools=(

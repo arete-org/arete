@@ -13,12 +13,19 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Literal
 
+from deepagents.backends import CompositeBackend, StateBackend
 from langsmith import traceable
 from pydantic import SecretStr
 
-from arete.agent.backends.skills import SystemSkillsBackend
+from arete.agent.backends.attachments import ATTACHMENTS_ROUTE
+from arete.agent.backends.journal import (
+    JOURNAL_PERMISSIONS,
+    LEDGER_TOOL_DESCRIPTIONS,
+    LedgerBackend,
+)
+from arete.agent.backends.skills import SYSTEM_SKILLS_ROUTE, SystemSkillsBackend
 from arete.agent.factory import build_agent
-from arete.agent.middlewares.journal import JournalMiddleware
+from arete.agent.middlewares.filesystem import build_filesystem_middleware
 from arete.agent.middlewares.skills import SystemSkillsMiddleware
 from arete.agent.models.jev import (
     JEV_MAX_RETRIES,
@@ -64,6 +71,26 @@ def _serialized(factory):
     return get
 
 
+def build_agent_filesystem(*, system_skills: SystemSkillsBackend | None = None):
+    """Compose the application's mounts; the filesystem middleware stays generic."""
+    backend = CompositeBackend(
+        default=LedgerBackend(),
+        routes={
+            ATTACHMENTS_ROUTE: StateBackend(),
+            **(
+                {SYSTEM_SKILLS_ROUTE: system_skills}
+                if system_skills is not None
+                else {}
+            ),
+        },
+    )
+    return build_filesystem_middleware(
+        backend,
+        permissions=JOURNAL_PERMISSIONS,
+        tool_descriptions=LEDGER_TOOL_DESCRIPTIONS,
+    )
+
+
 def _assemble(
     profile_id: str, *, glm_flash: bool = False, calendar_enabled: bool = True
 ):
@@ -93,13 +120,13 @@ def _assemble(
     model = models[0]
     skills_backend = None
     skill_files = {}
-    if profile.journal_tools:
+    if profile.filesystem_tools:
         skill_files = publish_bundle(SYSTEM_SKILLS_ROOT)
         skills_backend = SystemSkillsBackend(skill_files)
-    journal = JournalMiddleware(system_skills=skills_backend)
+    filesystem = build_agent_filesystem(system_skills=skills_backend)
     skills = (
         SystemSkillsMiddleware(
-            backend=journal.backend,
+            backend=filesystem.backend,
             paths=set(skill_files),
         )
         if skills_backend is not None
@@ -110,7 +137,7 @@ def _assemble(
         model=model,
         context_tokens=route.context_tokens,
         output_tokens=AGENT_MAX_TOKENS,
-        journal=journal,
+        filesystem=filesystem,
         calendar=calendar,
         memory_model=JevClient(
             api_key=SecretStr(config.openrouter_api_key),

@@ -8,6 +8,7 @@ from arete.agent.capabilities.models import Toolkit
 from arete.agent.capabilities.registry import (
     CAPABILITIES,
     FACT_MEMORY_TOOL_NAMES,
+    FILESYSTEM_TOOL_NAMES,
     JOURNAL_TOOL_NAMES,
 )
 from arete.agent.runtime.context import AgentContext
@@ -52,6 +53,8 @@ def tool_available(profile: ProfileSpec, name: str) -> bool:
     policy = resolve_policy(profile)
     if name in FACT_MEMORY_TOOL_NAMES:
         return policy.profile.fact_memory_tools
+    if name in FILESYSTEM_TOOL_NAMES:
+        return policy.profile.filesystem_tools
     if name in JOURNAL_TOOL_NAMES:
         return policy.profile.journal_tools
     domain_names = {t.name for tk in CAPABILITIES.values() for t in tk.tools}

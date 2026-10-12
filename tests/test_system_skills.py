@@ -16,9 +16,9 @@ from arete.agent.middlewares.capabilities import ToolkitMiddleware
 from arete.agent.middlewares.context import (
     ContextBuilderMiddleware,
 )
-from arete.agent.middlewares.journal import JournalMiddleware
 from arete.agent.middlewares.skills import SystemSkillsMiddleware
 from arete.agent.runtime.context import AgentContext
+from arete.coaching import build_agent_filesystem
 from arete.dataio.db import db_connection
 from arete.services.system_skills import MAX_SKILL_BYTES, publish_bundle
 
@@ -59,7 +59,7 @@ def test_native_discovery_and_tools_read_db_snapshot_but_cannot_change_it(
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     snapshot = publish_bundle(BUNDLE)
     backend = SystemSkillsBackend(snapshot)
-    filesystem = JournalMiddleware(system_skills=backend)
+    filesystem = build_agent_filesystem(system_skills=backend)
     skills = SystemSkillsMiddleware(backend=filesystem.backend, paths=set(snapshot))
     catalogs = []
 
@@ -178,7 +178,7 @@ def skill_stack(monkeypatch, tmp_path, files=None):
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     snapshot = publish_bundle(BUNDLE) if files is None else files
     backend = SystemSkillsBackend(snapshot)
-    filesystem = JournalMiddleware(system_skills=backend)
+    filesystem = build_agent_filesystem(system_skills=backend)
     skills = SystemSkillsMiddleware(backend=filesystem.backend, paths=set(snapshot))
     return snapshot, filesystem, skills
 

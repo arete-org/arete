@@ -98,10 +98,10 @@ def provider():
 
 def graph(model, fallbacks=()):
     return build_agent(
-        replace(get_profile("chat"), journal_tools=False),
+        replace(get_profile("chat"), journal_tools=False, filesystem_tools=False),
         model=model,
         fallback_models=fallbacks,
-        journal=AgentMiddleware(),
+        filesystem=AgentMiddleware(),
         context_tokens=65536,
         output_tokens=4096,
     )

@@ -18,6 +18,7 @@ CHAT_PROFILE = AgentProfile(
     # checked independently at execution, including cached graphs.
     training_writes=True,
     page_context=True,
+    filesystem_tools=True,
     journal_tools=True,
     fact_memory_tools=True,
 )

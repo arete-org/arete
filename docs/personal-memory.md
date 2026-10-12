@@ -91,9 +91,12 @@ Receipts distinguish `created`, `updated`, `already_present` and
 update card. Duplicate receipts return the real unchanged fact and source.
 
 `FactMemoryMiddleware` registers the fact tools; `JournalMiddleware` registers
-`append_journal` and the native ledger/filesystem tools. Profile flags select them
-independently. The central context builder remains the sole owner of memory
-injection and token accounting.
+only `append_journal`. Native `FilesystemMiddleware` operates over the injected
+`CompositeBackend` for journal files, attachments and skills. Its configuration
+accepts any `BackendProtocol`, while the composition root owns mounts and permissions.
+`fact_memory_tools`, `journal_tools` and `filesystem_tools` select these independently.
+The central context builder remains the sole owner of memory injection and token
+accounting.
 
 The composition root injects `agent/models/jev.py`; runtime owns provenance,
 deadlines, request accounting and the optional `classify_memory` LangSmith span.

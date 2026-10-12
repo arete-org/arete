@@ -501,12 +501,25 @@ contracts, bounds, migration compatibility and the synthetic evaluation harness.
 
 `FactMemoryMiddleware` (`agent/middlewares/fact_memory.py`) binds the durable-fact
 tools and adapts runtime provenance and budget hooks. `JournalMiddleware`
-(`agent/middlewares/journal.py`) binds dated appends and native filesystem tools
-for `notes.md`/`sessions.md`; its `agent/backends/journal.py` backend preserves
-read-only archive, attachment and skill mounts. The profile selects
-`fact_memory_tools` and `journal_tools` independently; the capability gate checks
-them at execution too. Neither middleware appends personal context: the central
-context builder still owns facts, journal excerpts, retrieval and token accounting.
+(`agent/middlewares/journal.py`) binds only dated `append_journal` operations.
+The native `FilesystemMiddleware` receives any `BackendProtocol`; its configuration
+helper owns only bounded read/search schemas, with no journal or skill dependencies.
+The composition root mounts the DB-backed `LedgerBackend`, thread-local attachment
+`StateBackend` and immutable `SystemSkillsBackend` through `CompositeBackend` and
+passes that same filesystem to skills discovery. Ledger and skill text backends
+implement the public backend protocol, including typed results and inherited async
+workers, without overriding private `StateBackend` methods. Their read-only base
+rejects mutations; only the ledger explicitly implements transactional edits/deletes.
+The profile selects `fact_memory_tools`, `journal_tools` and `filesystem_tools`
+independently; the capability gate checks them at execution too. No filesystem or
+memory middleware appends personal context: the central context builder still owns
+facts, journal excerpts, retrieval and token accounting.
+
+This follows the [Deep Agents backend contract](https://docs.langchain.com/oss/python/deepagents/backends#custom-backends)
+and native filesystem middleware composition, checked against pinned Deep Agents
+0.7.4. The pinned middleware accepts permissions through `_permissions`; the helper
+isolates that version-specific setting. Automatic history/tool eviction stays off
+because the context builder accounts for the complete request.
 
 New-fact writes use a bounded Jev decision to detect semantic duplicates or
 contradictions among up to seven complete candidates. `services/fact_memory.py`

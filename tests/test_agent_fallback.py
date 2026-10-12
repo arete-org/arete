@@ -55,12 +55,12 @@ class Model(GenericFakeChatModel):
 
 def graph_for(primary, fallbacks, *, context_tokens=65536):
     return build_agent(
-        replace(get_profile("chat"), journal_tools=False),
+        replace(get_profile("chat"), journal_tools=False, filesystem_tools=False),
         model=Model(messages=iter(primary), disable_streaming=True),
         fallback_models=tuple(
             Model(messages=iter(items), disable_streaming=True) for items in fallbacks
         ),
-        journal=AgentMiddleware(),
+        filesystem=AgentMiddleware(),
         context_tokens=context_tokens,
         output_tokens=4096,
     )
@@ -180,10 +180,10 @@ def test_reasoning_only_stream_falls_back_before_completing():
             )
 
     graph = build_agent(
-        replace(get_profile("chat"), journal_tools=False),
+        replace(get_profile("chat"), journal_tools=False, filesystem_tools=False),
         model=ReasoningStream(messages=iter([])),
         fallback_models=(Model(messages=iter([AIMessage(content="Séance lue.")])),),
-        journal=AgentMiddleware(),
+        filesystem=AgentMiddleware(),
         context_tokens=65536,
         output_tokens=4096,
     )
@@ -229,12 +229,12 @@ def test_failed_partial_stream_does_not_pollute_the_final_answer():
             raise ConnectionError("Stream interrupted")
 
     graph = build_agent(
-        replace(get_profile("chat"), journal_tools=False),
+        replace(get_profile("chat"), journal_tools=False, filesystem_tools=False),
         model=Interrupted(messages=iter([])),
         fallback_models=(
             Model(messages=iter([AIMessage(content="Réponse complète", id="success")])),
         ),
-        journal=AgentMiddleware(),
+        filesystem=AgentMiddleware(),
         context_tokens=65536,
         output_tokens=4096,
     )
@@ -258,10 +258,10 @@ def test_cancellation_does_not_start_a_fallback():
             return super()._generate(messages, *args, **kwargs)
 
     graph = build_agent(
-        replace(get_profile("chat"), journal_tools=False),
+        replace(get_profile("chat"), journal_tools=False, filesystem_tools=False),
         model=Cancelled(messages=iter([]), disable_streaming=True),
         fallback_models=(Fallback(messages=iter([AIMessage(content="Unexpected")])),),
-        journal=AgentMiddleware(),
+        filesystem=AgentMiddleware(),
         context_tokens=65536,
         output_tokens=4096,
     )

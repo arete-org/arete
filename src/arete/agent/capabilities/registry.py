@@ -163,14 +163,18 @@ Aucun accès aux conversations conservées uniquement dans les navigateurs ni au
 
 
 FACT_MEMORY_TOOL_NAMES = frozenset({"remember_fact", "forget_fact"})
-JOURNAL_TOOL_NAMES = frozenset(
-    {"read_file", "edit_file", "delete", "ls", "glob", "grep", "append_journal"}
+JOURNAL_TOOL_NAMES = frozenset({"append_journal"})
+FILESYSTEM_TOOL_NAMES = frozenset(
+    {"read_file", "edit_file", "delete", "ls", "glob", "grep"}
 )
 
 
 def validate_registry() -> None:
     names = set(
-        FACT_MEMORY_TOOL_NAMES | JOURNAL_TOOL_NAMES | {"respond_coach_followup"}
+        FACT_MEMORY_TOOL_NAMES
+        | JOURNAL_TOOL_NAMES
+        | FILESYSTEM_TOOL_NAMES
+        | {"respond_coach_followup"}
     )
     for tid, tk in CAPABILITIES.items():
         assert tid == tk.id, f"Toolkit id mismatch: {tid}"
