@@ -20,8 +20,8 @@ description: Consulter et interpréter un planning d’entraînement joint, nota
    D17 appartiennent à des jours différents. Par exemple, si B13 = 12 octobre et
    D13 = 14 octobre, « 20 x 300 r 100 » en B17 est le 12 ; « 1h15 » en D17 est
    le 14 et ne donne pas la durée du 12. Une alternative « ou » reste dans la même
-   colonne. Conserve l’échauffement et la récupération ; sans durée indiquée,
-   utilise une étape jusqu’au tour manuel (`duration_kind: lap`).
+   colonne. Conserve les indications d’échauffement et de récupération de la source ;
+   le toolkit planning définit leur traduction en étapes et les blocs par défaut.
 5. Vérifie la source avant de reprendre une affirmation de l’historique : une
    confirmation de l’athlète ne corrige pas une mauvaise lecture du tableau.
    Si plusieurs fichiers couvrent la date, utilise celui demandé, sans les mélanger.
