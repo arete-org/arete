@@ -117,6 +117,19 @@ _SLACK_PARTICIPANTS = (
 
 def surface_section(context: AgentContext | None) -> str:
     """Where a Slack answer appears, so the coach measures what it discloses."""
+    if context and context.slack_product:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        service = context.slack_product
+        now = datetime.now(ZoneInfo(service.timezone))
+        return (
+            f"Surface Slack administrateur ; visibilité : {context.slack_visibility}. "
+            f"Heure actuelle : {now.isoformat()}. Fuseau : {service.timezone} "
+            "(Europe/Paris si le profil Slack ne fournit pas de fuseau valide). "
+            "Les outils sont la seule source de confirmation des actions. "
+            + _SLACK_PARTICIPANTS
+        )
     visibility = getattr(context, "slack_visibility", None)
     if visibility == "public":
         return (

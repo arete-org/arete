@@ -495,3 +495,29 @@ built in memory and refused above 4 MB, under Vercel's response limit.
 `services/year_review.py` derives a calendar year from the shared TSS estimate
 and fitness series, with no model request. Both are plain HTTP reads
 (`api/data_export.py`, `api/year_review.py`); the coach never receives them.
+
+## Slack product and private administration
+
+Slack administrators have a measured, bounded OpenRouter classification step
+before graph selection. `middlewares/surface.py` is a thin pre-invocation adapter;
+`runtime/surface.py` owns the decision and accounting, and `coaching.py` constructs
+its client and selects the cached graph. The `product` and `admin_data` profiles
+have their own system identity and disable automatic personal-context injection.
+The latter exposes only private administrator reads. A trusted preflight budget
+hook charges classification against the model-turn limit; graph-private counters
+are not accepted as invocation input.
+
+The capability catalog declares Slack writes separately from training writes.
+`services/slack_identity.py` owns verified account bindings and current admin
+checks; `services/slack_product.py` owns bounded member lookup, external-operation
+receipts and scheduling; `services/admin_athlete_data.py` authorizes and audits a
+read before temporarily entering its target athlete's scope. Tools adapt these
+contracts and never select a graph or provider. Cached graphs hold no Slack client.
+
+Transport receives a prepared producer before it chooses the output destination.
+Private reads force an administrator DM before any model answer/tool progress;
+a durable thread ownership marker prevents a later topic change from restoring
+outbound tools or granting another participant access. Slack remains the source
+of conversation history. The new operation receipts contain outgoing bodies,
+not copies of conversations. Existing non-admin Slack and browser coaching,
+background missions, Calendar approvals and training-write policies are preserved.

@@ -94,7 +94,8 @@ def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
     import sys
 
     heavy = [
-        "pymupdf",
+        "pypdfium2",
+        "tesserocr",
         "deepagents",
         "langchain",
         "langchain_core",

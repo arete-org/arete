@@ -125,7 +125,7 @@ def test_an_impossible_quiet_hour_is_refused(client):
     assert client.put("/settings", json=payload).status_code == 422
 
 
-def test_migration_44_on_a_current_schema(tmp_path, monkeypatch):
+def test_migration_45_on_a_current_schema(tmp_path, monkeypatch):
     from arete.dataio import init_duckdb
     from arete.dataio.db import configure_athlete
 
@@ -137,7 +137,9 @@ def test_migration_44_on_a_current_schema(tmp_path, monkeypatch):
     configure_athlete(con)
     con.execute("DROP VIEW app.visible_user_settings")
     con.execute("ALTER TABLE app.user_settings DROP COLUMN notification_preferences")
-    con.execute("DELETE FROM app.schema_version WHERE version = 44")
+    con.execute("DELETE FROM app.schema_version WHERE version = 45")
+    # The schema main deploys today: everything up to 44, only 45 pending.
+    assert init_duckdb.pending_migrations(con) == [45]
     con.close()
 
     init_duckdb.main()
@@ -154,4 +156,4 @@ def test_migration_44_on_a_current_schema(tmp_path, monkeypatch):
     con.close()
     # Existing athletes read NULL: every kind on, as before the migration.
     assert row == (None, True)
-    assert 44 in versions
+    assert 45 in versions

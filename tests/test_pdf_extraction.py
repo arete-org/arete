@@ -4,33 +4,33 @@ import subprocess
 import sys
 from threading import Event, Thread
 
-import pymupdf
+import pypdfium2 as pdfium
 import pytest
+from pdf_samples import (
+    add_image,
+    add_text,
+    encrypted,
+    rendered_text,
+    text_pdf,
+    to_bytes,
+)
 
 from arete.services import pdf_extraction as pdf
 from arete.services.documents import DocumentError
 
 
-def text_pdf(*texts):
-    with pymupdf.open() as doc:
-        for text in texts:
-            doc.new_page().insert_text((30, 70), text)
-        return doc.tobytes()
-
-
 def mixed_pdf():
-    with pymupdf.open() as scan:
-        page = scan.new_page(width=600, height=180)
-        page.insert_text((30, 70), "Natation 8 x 100 m repos 30 secondes", fontsize=24)
-        image = page.get_pixmap(dpi=200).tobytes("png")
-    with pymupdf.open() as doc:
-        doc.new_page().insert_text((30, 70), "Course 12 janvier 2027 : 45 minutes")
-        for header in ("", "Velo 13 janvier 2027 : 60 minutes"):
-            page = doc.new_page()
-            if header:
-                page.insert_text((30, 70), header)
-            page.insert_image(pymupdf.Rect(30, 100, 570, 262), stream=image)
-        return doc.tobytes()
+    scan = rendered_text("Natation 8 x 100 m repos 30 secondes")
+    document = pdfium.PdfDocument.new()
+    add_text(
+        document, document.new_page(595, 842), "Course 12 janvier 2027 : 45 minutes"
+    )
+    for header in ("", "Velo 13 janvier 2027 : 60 minutes"):
+        page = document.new_page(595, 842)
+        if header:
+            add_text(document, page, header)
+        add_image(document, page, scan, 30, 100, 570, 262)
+    return to_bytes(document)
 
 
 def test_text_does_not_require_ocr_data(monkeypatch, tmp_path):
@@ -54,7 +54,8 @@ def test_real_worker_preserves_text_scan_and_mixed_pages():
         assert any(
             "8 x 100 m repos 30 secondes" in b.text and b.method == "ocr" for b in page
         )
-    assert any("60 minutes" in b.text and b.method == "text" for b in pages[2])
+    # Partial OCR keeps the native header and does not read it a second time.
+    assert [b.method for b in pages[2] if "60 minutes" in b.text] == ["text"]
     assert all(b.confidence is None for b in result.blocks)
     assert result.warnings == [pdf.OCR_WARNING]
 
@@ -67,10 +68,7 @@ def test_missing_languages_fail_even_with_native_header(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("password", ["secret", ""])
 def test_encrypted_pdf_is_rejected(password):
-    with pymupdf.open(stream=text_pdf("Private"), filetype="pdf") as doc:
-        raw = doc.tobytes(
-            encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw=password, owner_pw="owner"
-        )
+    raw = encrypted(text_pdf("Private"), password)
     with pytest.raises(DocumentError, match="chiffrés"):
         pdf.extract_pdf(raw)
 

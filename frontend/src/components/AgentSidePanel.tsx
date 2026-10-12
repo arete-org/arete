@@ -1,3 +1,5 @@
+import type { CoachDisplay } from '@/hooks/useCoachDisplay';
+import { CoachDisplayOptions } from './agent/CoachDisplayOptions';
 import { CoachMemory, MemoryReceipt } from './agent/CoachMemory';
 import { CoachReferenceCard } from './agent/CoachReferenceCard';
 import type { CoachReference } from '@/lib/coachToday';
@@ -11,6 +13,9 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import { WorkoutSelection } from './WorkoutSelection';
 import {
   ArrowDown,
+  ArrowUp,
+  ArrowUpRight,
+  Minus,
   CircleAlert,
   Send,
   X,
@@ -114,13 +119,20 @@ export function AgentSidePanel({
   open,
   onClose,
   onBusyChange,
+  display = 'sidebar',
+  onDisplayChange,
+  displayError,
 }: {
+  display?: CoachDisplay;
+  onDisplayChange?: (mode: CoachDisplay) => void;
+  displayError?: string | null;
   reference?: CoachReference | null;
   onClearReference?: () => void;
   open: boolean;
   onClose: () => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
+  const floating = display === 'floating';
   const pageContext = usePanelContext();
   const panelContext = { ...pageContext, params: { ...pageContext.params, ...(reference ? { coach_ref: `${reference.kind}:${reference.id}` } : {}) } };
   const [showMemory, setShowMemory] = useState(false);
@@ -146,6 +158,26 @@ export function AgentSidePanel({
   const followRef = useRef(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    if (!floating || !open) return;
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    // Mobile keyboards resize the visual viewport without resizing fixed layout.
+    const resize = () => {
+      panelRef.current?.style.setProperty('--coach-visible-height', `${viewport.height}px`);
+      panelRef.current?.style.setProperty('--coach-keyboard-inset', `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`);
+      if (followRef.current) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    };
+    resize();
+    viewport.addEventListener('resize', resize);
+    viewport.addEventListener('scroll', resize);
+    return () => {
+      viewport.removeEventListener('resize', resize);
+      viewport.removeEventListener('scroll', resize);
+    };
+  }, [floating, open]);
 
   useLayoutEffect(() => {
     const input = inputRef.current;
@@ -160,12 +192,12 @@ export function AgentSidePanel({
     resize();
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
-  }, [active.draft, active.id, rpg, open, showHistory, expanded]);
+  }, [active.draft, active.id, rpg, open, showHistory, showMemory, expanded, display]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (followRef.current)
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, open, showHistory]);
+  }, [messages, open, showHistory, showMemory, display, expanded]);
   useEffect(() => {
     onBusyChange?.(busy);
   }, [busy, onBusyChange]);
@@ -179,12 +211,13 @@ export function AgentSidePanel({
       if (e.key === 'Escape') {
         if (deleteId) setDeleteId(null);
         else if (showHistory) setShowHistory(false);
+        else if (showMemory) setShowMemory(false);
         else onClose();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose, showHistory, deleteId]);
+  }, [open, onClose, showHistory, showMemory, deleteId]);
 
   const followLatest = () => {
     followRef.current = true;
@@ -208,17 +241,25 @@ export function AgentSidePanel({
   const page = PAGE_LABELS[panelContext.page] ?? panelContext.page;
   return (
     <aside
+      ref={panelRef}
       onDragEnter={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
       onDragLeave={event => { if (event.dataTransfer.types.includes('Files')) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
       onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
       onDrop={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); dragDepth.current = 0; setDragging(false); if (!busy) attachmentsRef.current?.upload(Array.from(event.dataTransfer.files)); }}
       id="coach-panel"
-      className={cn("coach-panel fixed right-0 z-40 flex w-full flex-col border-l border-text-muted/20 shadow-2xl", rpg ? 'bg-void' : 'bg-abyss', rpg && expanded ? "max-w-none md:px-[max(24px,calc((100vw-800px)/2))]" : "max-w-[520px]")}
+      data-display={display}
+      data-view={showMemory || showHistory ? 'auxiliary' : 'conversation'}
+      className={cn("coach-panel fixed right-0 z-40 flex w-full flex-col border-l border-text-muted/20 shadow-2xl", rpg ? 'bg-void' : 'bg-abyss', !floating && rpg && expanded ? "max-w-none md:px-[max(24px,calc((100vw-800px)/2))]" : "max-w-[520px]")}
       role="complementary"
       aria-label="Coach IA"
     >
       {dragging && <div className="absolute inset-3 z-50 pointer-events-none flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-neon-cyan bg-abyss/95 p-6 text-center"><p className="text-xl font-bold">Dépose tes fichiers ici</p><p className="mt-3 text-sm text-text-secondary">Ils seront joints au brouillon, sans envoyer le message.</p><p className="mt-2 text-xs text-text-muted">5 fichiers maximum · 20 Mio par fichier</p></div>}
-      <header className="flex shrink-0 items-center gap-2 border-b border-text-muted/15 px-4 py-3">
+      <header className="coach-header flex shrink-0 items-center gap-2 border-b border-text-muted/15 px-4 py-3">
+        {floating ? <>
+          <AreteMark size={18} />
+          <h2 className="coach-title">Chiron</h2>
+          <span className="min-w-0 flex-1 truncate text-[11px] text-text-muted">{page}</span>
+        </> : <>
         <div className={cn('flex size-9 shrink-0 items-center justify-center', !rpg && 'rounded-xl border border-neon-cyan/15 bg-neon-cyan/5')}>
           <AreteMark size={36} />
         </div>
@@ -237,15 +278,21 @@ export function AgentSidePanel({
         >
           <Ellipsis className="size-4" />
         </button>
+        </>}
+        {onDisplayChange && <CoachDisplayOptions mode={display} onChange={onDisplayChange}
+          onHistory={() => { setShowHistory(value => !value); setShowMemory(false); }}
+          onMemory={() => { setShowMemory(value => !value); setShowHistory(false); }}
+          onCreate={() => { newThread(); setShowMemory(false); }} />}
         <button
           onClick={onClose}
           className="rounded-lg p-2 text-text-muted hover:bg-text-muted/10"
           aria-label="Masquer le coach"
           title="Masquer le coach"
         >
-          <X className="size-5" />
+          {floating ? <Minus className="size-4" /> : <X className="size-5" />}
         </button>
       </header>
+      {displayError && <p role="alert" className="px-4 py-2 text-xs text-warning-orange">{displayError}</p>}
       {coach.storageError && (
         <p
           role="alert"
@@ -302,7 +349,7 @@ export function AgentSidePanel({
         />
       ) : (
         <>
-          {!rpg && <button
+          {!rpg && !floating && <button
             onClick={() => setShowHistory(true)}
             className="flex shrink-0 items-center gap-2 border-b border-text-muted/10 px-5 py-2.5 text-left text-xs text-text-secondary hover:bg-shadow/40"
             aria-label="Changer de conversation"
@@ -344,25 +391,25 @@ export function AgentSidePanel({
               followRef.current = nearBottom;
               setFollowing(nearBottom);
             }}
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6"
+            className="coach-thread min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6"
           >
             {!messages.length && (
-              <div className="mx-auto mt-10 max-w-sm">
-                <AreteMark size={48} />
+              <div className="coach-empty mx-auto mt-10 max-w-sm">
+                {!floating && <AreteMark size={48} />}
                 <h3 className="text-lg font-semibold">On prépare la suite ?</h3>
-                <p className="mt-2 text-sm leading-relaxed text-text-muted">
+                {!floating && <p className="mt-2 text-sm leading-relaxed text-text-muted">
                   Ta forme, tes séances, tes objectifs. Pose une question, je
                   consulte les données utiles.
-                </p>
+                </p>}
                 <div className="mt-6 space-y-2">
-                  {starters(panelContext.page).map((prompt) => (
+                  {starters(panelContext.page).slice(0, floating ? 2 : 3).map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => send(prompt)}
                       disabled={busy}
                       className={cn('block w-full rounded-xl px-3.5 py-3 text-left text-sm text-text-secondary hover:bg-neon-cyan/5', !rpg && 'border border-text-muted/15 hover:border-neon-cyan/30')}
                     >
-                      {prompt}
+                      {prompt}{floating && <ArrowUpRight className="size-3.5 shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -433,8 +480,8 @@ export function AgentSidePanel({
               <ArrowDown className="size-3" /> Derniers messages
             </button>
           )}
-          <footer className={cn('shrink-0 px-4 pb-4 pt-3', !rpg && 'border-t border-text-muted/15 bg-abyss')}>
-            <div className="relative grid grid-cols-[44px_minmax(0,1fr)_auto_44px] items-end gap-x-1 rounded-[var(--radius-control)] border border-[var(--arete-border)] bg-void px-2 py-1 focus-within:border-neon-cyan/40">
+          <footer className={cn('shrink-0 px-4 pb-4 pt-3', !floating && !rpg && 'border-t border-text-muted/15 bg-abyss')}>
+            <div className="coach-composer relative grid grid-cols-[44px_minmax(0,1fr)_auto_44px] items-end gap-x-1 rounded-[var(--radius-control)] border border-[var(--arete-border)] bg-void px-2 py-1 focus-within:border-neon-cyan/40">
               <DocumentAttachments key={active.id} threadId={active.id} selectedIds={active.attachmentIds ?? []} disabled={runningId !== null} ref={attachmentsRef} onBusy={setDocumentsBusy} onDocuments={coach.attachments} />
               <div className="contents">
                 <button
@@ -466,7 +513,7 @@ export function AgentSidePanel({
                       send();
                     }
                   }}
-                  placeholder="Pose ta question… / skills"
+                  placeholder={floating ? 'Demander à Chiron…' : 'Pose ta question… / skills'}
                   className={cn('coach-composer-input block min-h-11 max-h-36 min-w-0 flex-1 resize-none appearance-none overflow-x-hidden overflow-y-auto bg-transparent py-1.5 text-sm leading-relaxed outline-none', 'col-start-2 row-start-1 w-full px-1')}
                 />
                 {streaming ? (
@@ -484,12 +531,12 @@ export function AgentSidePanel({
                     className={cn('flex shrink-0 items-center justify-center rounded-lg bg-neon-cyan/15 text-neon-cyan hover:bg-neon-cyan/25 disabled:opacity-30', 'col-start-4 row-start-1 size-11')}
                     aria-label="Envoyer"
                   >
-                    <Send className="size-4" />
+                    {floating ? <ArrowUp className="size-4" /> : <Send className="size-4" />}
                   </button>
                 )}
               </div>
             </div>
-            {(!rpg || streaming) && <p className="mt-2 text-center text-[10px] text-text-muted">
+            {!floating && (!rpg || streaming) && <p className="mt-2 text-center text-[10px] text-text-muted">
               {rpg && streaming ? 'Tu peux préparer ton prochain message.' : touchKeyboard()
                 ? 'Touche Envoyer pour envoyer'
                 : 'Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne'}
