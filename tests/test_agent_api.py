@@ -843,9 +843,9 @@ class TestLedgerTools:
     """The journal supports targeted corrections without arbitrary file creation."""
 
     def _tools(self):
-        from arete.agent.backends.memory import build_memory_filesystem
+        from arete.agent.middlewares.journal import JournalMiddleware
 
-        return {t.name: t for t in build_memory_filesystem().tools}
+        return {t.name: t for t in JournalMiddleware().tools}
 
     def test_reading_points_at_the_end_of_the_journal(self):
         """`read_file` reads 100 lines from the top; new entries are appended.
@@ -855,7 +855,7 @@ class TestLedgerTools:
         """
         assert "fin" in self._tools()["read_file"].description
 
-    def test_the_filesystem_can_correct_and_delete_but_not_create(self):
+    def test_journal_supports_dated_append_but_not_arbitrary_file_creation(self):
         assert set(self._tools()) == {
             "read_file",
             "ls",
@@ -863,6 +863,7 @@ class TestLedgerTools:
             "grep",
             "edit_file",
             "delete",
+            "append_journal",
         }
 
 

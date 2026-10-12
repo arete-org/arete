@@ -44,7 +44,7 @@ def graph_for(name, args):
         ),
         context_tokens=65536,
         output_tokens=4096,
-        filesystem=AgentMiddleware(),
+        journal=AgentMiddleware(),
     )
 
 

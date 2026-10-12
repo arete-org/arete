@@ -60,7 +60,7 @@ def graph_for(primary, fallbacks, *, context_tokens=65536):
         fallback_models=tuple(
             Model(messages=iter(items), disable_streaming=True) for items in fallbacks
         ),
-        filesystem=AgentMiddleware(),
+        journal=AgentMiddleware(),
         context_tokens=context_tokens,
         output_tokens=4096,
     )
@@ -183,7 +183,7 @@ def test_reasoning_only_stream_falls_back_before_completing():
         replace(get_profile("chat"), journal_tools=False),
         model=ReasoningStream(messages=iter([])),
         fallback_models=(Model(messages=iter([AIMessage(content="Séance lue.")])),),
-        filesystem=AgentMiddleware(),
+        journal=AgentMiddleware(),
         context_tokens=65536,
         output_tokens=4096,
     )
@@ -234,7 +234,7 @@ def test_failed_partial_stream_does_not_pollute_the_final_answer():
         fallback_models=(
             Model(messages=iter([AIMessage(content="Réponse complète", id="success")])),
         ),
-        filesystem=AgentMiddleware(),
+        journal=AgentMiddleware(),
         context_tokens=65536,
         output_tokens=4096,
     )
@@ -261,7 +261,7 @@ def test_cancellation_does_not_start_a_fallback():
         replace(get_profile("chat"), journal_tools=False),
         model=Cancelled(messages=iter([]), disable_streaming=True),
         fallback_models=(Fallback(messages=iter([AIMessage(content="Unexpected")])),),
-        filesystem=AgentMiddleware(),
+        journal=AgentMiddleware(),
         context_tokens=65536,
         output_tokens=4096,
     )

@@ -19,6 +19,7 @@ CHAT_PROFILE = AgentProfile(
     training_writes=True,
     page_context=True,
     journal_tools=True,
+    fact_memory_tools=True,
 )
 
 PROFILES: dict[ProfileId, AgentProfile] = {

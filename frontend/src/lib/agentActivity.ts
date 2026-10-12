@@ -27,8 +27,17 @@ const TOOL_LABELS: Record<string, [running: string, done: string]> = {
   delete_planned_session: ['Suppression d’une séance', 'Séance supprimée'],
 };
 
-export function toolLabel(tool: Pick<ToolPart, 'name' | 'status'>): string {
+export function toolLabel(tool: Pick<ToolPart, 'name' | 'status'> & Partial<Pick<ToolPart, 'output'>>): string {
   if (tool.status === 'error') return 'Action non aboutie';
+  if (tool.name === 'remember_fact' && tool.status === 'done' && tool.output) {
+    if (tool.output.truncated) return 'Vérification mémoire terminée';
+    try {
+      const result = JSON.parse(tool.output.text);
+      if (result.action === 'already_present') return 'Information déjà mémorisée';
+      if (result.action === 'needs_clarification') return 'Souvenir à clarifier';
+      if (result.action === 'updated') return 'Information corrigée';
+    } catch { return 'Vérification mémoire terminée'; }
+  }
   return TOOL_LABELS[tool.name]?.[tool.status === 'done' ? 1 : 0]
     ?? (tool.status === 'done' ? 'Action terminée' : 'Action en cours');
 }

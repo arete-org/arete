@@ -17,8 +17,10 @@ memory migration 19 receive both features without resetting existing game state.
 `evidence` is independent of `source` (the original writer):
 
 - `explicit`: a declaration by the athlete. New Settings entries and text
-  corrections are explicit. The coach must supply a source reference when
-  recording an explicit declaration.
+  corrections are explicit. The coach supplies an exact quotation from the latest human message when
+  recording an explicit declaration. The runtime checks that quotation and adds
+  hashed thread/message references; this establishes where the text appeared, not
+  whether the proposed fact is entailed by it. Browser history remains client-owned.
 - `hypothesis`: a coach inference. Repetition does not confirm it. Settings has an
   explicit confirmation action. This is the tool's conservative default.
 - `legacy`: existing evidence whose origin cannot be established retrospectively.
@@ -50,11 +52,83 @@ and coach tool send the displayed revision. PATCH with `valid_until: null` clear
 an expiry. Dates are inclusive, so an exception valid through October 10 is still
 applicable on October 10.
 
-`remember_fact` retains its name and adds evidence, source reference, revision and
-validity dates. A temporary exception is a separate fact, not a rewrite of a
+`remember_fact` retains its name, evidence, revision and validity dates. For an
+explicit declaration, `source_ref` is now the exact quotation to validate. A temporary exception is a separate fact, not a rewrite of a
 standing preference. Unresolved contradictions call for clarification when they
 affect a decision. These prompt rules guide advice; only domain validation can
 make a constraint an enforced prohibition on writes.
+
+## Jev-assisted writes
+
+`services/fact_memory.py` owns new-fact reconciliation. `remember_fact` still
+writes one typed fact per call; updates with a fact ID use the existing revision
+contract. First facts, exact duplicates and writes without comparable candidates
+need no classifier request. Journals, Settings writes and tool-free missions do
+not call Jev.
+
+For a new fact with comparable existing evidence:
+
+1. Load the athlete's bounded fact collection (10,000 maximum). Exclude resolved
+   facts, other evidence classifications and non-overlapping validity periods.
+   Temporary exceptions remain separate from standing facts.
+2. Rank with BM25Plus using the existing tokenizer, with same-kind/recent facts
+   breaking ties. Send up to seven **complete** facts, with opaque numeric IDs.
+   Source quotations, conversation history and credentials are not classifier data.
+3. Ask pinned `typesafe/jev-1.13` for one Choice: create, duplicate of a specific
+   candidate, or contradiction with a specific candidate. Python controls which
+   duplicate options are eligible by kind, evidence and validity.
+4. Reuse a named duplicate only at probability ≥0.9. A contradiction at ≥0.7
+   returns `needs_clarification` without writing; the agent must resolve it before
+   updating the existing fact by ID/revision. Otherwise create the new fact.
+   These thresholds are initial policy choices, not measured calibration.
+5. At commit, check the complete fact ID/revision snapshot under the same athlete
+   mutation lock used by creation, correction and deletion. A concurrent change
+   raises a conflict with no automatic replay. An old decision cannot recreate a
+   deleted fact or silently suppress a correction.
+
+Receipts distinguish `created`, `updated`, `already_present` and
+`needs_clarification`. Only actual writes set `saved=true` and produce a memory
+update card. Duplicate receipts return the real unchanged fact and source.
+
+`FactMemoryMiddleware` registers the fact tools; `JournalMiddleware` registers
+`append_journal` and the native ledger/filesystem tools. Profile flags select them
+independently. The central context builder remains the sole owner of memory
+injection and token accounting.
+
+The composition root injects `agent/models/jev.py`; runtime owns provenance,
+deadlines, request accounting and the optional `classify_memory` LangSmith span.
+The [OpenRouter Decisions API](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request)
+uses `/api/alpha/decisions`, not chat completions. It exposes neither temperature
+nor a generative output-token limit. Arete caps the complete request and response
+at 16 KiB each, one request per classification, four per run, 10 seconds per request
+within the run deadline, and zero retries/fallbacks. Each attempt consumes the
+shared 24-call turn budget, reserving the final answer. `Agent run:` includes
+`memory_decision_calls`/`memory_decision_ms`, and decision logs retain usage/cost
+when returned. This does not add a model call to recall.
+
+`MEMORY_JEV_ENABLED=true` is the deployment default and requires
+`OPENROUTER_API_KEY` when classification is needed. Jev is a **paid route separate
+from the chat GLM flag**, capped at $0.05/M input and $0/M output. Disabling it
+explicitly selects deterministic-only memory; provider errors never silently
+select that path. Restart the service after changing deployment configuration.
+No async HTTP connection pool is shared across event loops.
+
+The shortlist can miss paraphrases or contradictions outside its seven candidates.
+All fact text in that shortlist is sent to TypeSafe via OpenRouter. Probability
+thresholds do not prove semantic equivalence; full recall and temporal behavior
+remain governed by the typed fact store and context builder.
+
+Eight opt-in French smoke cases exercise the actual endpoint using synthetic
+facts, without reading or writing personal data:
+
+```sh
+ARETE_EVAL=1 uv run pytest tests/test_memory_jev_evals.py
+```
+
+Normal tests mock HTTP and cover complete payloads, thresholds, malformed replies,
+timeouts, cancellation, shared budgets, provenance, concurrency and the
+remember/use/correct/expire/forget lifecycle. The smoke cases are not a production
+quality or calibration benchmark.
 
 ## Retrieval
 

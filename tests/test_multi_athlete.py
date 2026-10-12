@@ -754,3 +754,56 @@ def test_a_released_lease_is_claimed_by_the_next_dispatch(athletes, monkeypatch)
     assert scheduler.release_sync_lease(second.athlete_id) is False
     scheduler.run_scheduled_batch()
     assert seen == [first.athlete_id, second.athlete_id]
+
+
+def test_concurrent_memory_decisions_only_see_their_athletes(athletes):
+    import asyncio
+
+    from arete.services import athlete_facts as facts
+    from arete.services.fact_memory import FactDraft, MemoryDecision, remember
+
+    first, second = athletes
+    for user in athletes:
+        with athlete_scope(user.athlete_id):
+            facts.add_fact(
+                "preference", f"Private {user.athlete_id}", evidence="explicit"
+            )
+
+    async def task(user):
+        with athlete_scope(user.athlete_id):
+
+            async def decide(state, choices):
+                assert list(state["candidates"].values()) == [
+                    f"Private {user.athlete_id}"
+                ]
+                await asyncio.sleep(0)
+                return MemoryDecision(
+                    type="choice",
+                    choice="create",
+                    confidence=1.0,
+                    probabilities={key: float(key == "create") for key in choices},
+                )
+
+            return await remember(
+                FactDraft(
+                    "preference",
+                    f"New {user.athlete_id}",
+                    "explicit",
+                    "synthetic",
+                    date(2026, 10, 12),
+                    None,
+                ),
+                classify=decide,
+            )
+
+    async def run():
+        return await asyncio.gather(task(first), task(second))
+
+    results = asyncio.run(run())
+    assert all(r["action"] == "created" for r in results)
+    for user in athletes:
+        with athlete_scope(user.athlete_id):
+            assert {f.text for f in facts.list_facts()} == {
+                f"Private {user.athlete_id}",
+                f"New {user.athlete_id}",
+            }

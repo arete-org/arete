@@ -45,16 +45,14 @@ def test_no_fact_no_block_and_bad_input_refused():
         athlete_facts.add_fact("other", "x" * 301)
 
 
-def test_the_tool_records_corrects_and_closes():
-    from arete.agent.tools.journal import remember_fact
-
+def test_the_tool_records_corrects_and_closes(memory_tool):
     saved = json.loads(
-        remember_fact.invoke({"kind": "injury", "text": "Tendon d'Achille sensible"})
+        memory_tool({"kind": "injury", "text": "Tendon d'Achille sensible"})
     )
     fact_id = saved["fact"]["id"]
     assert saved["fact"]["source"] == "coach"
     closed = json.loads(
-        remember_fact.invoke(
+        memory_tool(
             {
                 "kind": "injury",
                 "text": "Tendon d'Achille guéri",
@@ -65,10 +63,10 @@ def test_the_tool_records_corrects_and_closes():
     )
     assert closed["fact"]["status"] == "resolved"
     assert "error" in json.loads(
-        remember_fact.invoke({"kind": "injury", "text": "x", "fact_id": 999999})
+        memory_tool({"kind": "injury", "text": "x", "fact_id": 999999})
     )
     assert "error" in json.loads(
-        remember_fact.invoke({"kind": "goal", "text": "x", "status": "resolved"})
+        memory_tool({"kind": "goal", "text": "x", "status": "resolved"})
     )
 
 

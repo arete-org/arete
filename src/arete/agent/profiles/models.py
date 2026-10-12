@@ -17,6 +17,8 @@ class AgentProfile:
     #: Filesystem tools on the coach's journal; missions get it in the prompt
     #: and the server files their entries.
     journal_tools: bool = False
+    #: Typed durable facts, separate from the notes/session filesystem.
+    fact_memory_tools: bool = False
 
     system_prompt: str | None = None
     personal_context: bool = True

@@ -188,7 +188,7 @@ def test_statebackend_reads_documents_and_rejects_writes(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from arete.agent.backends.memory import build_memory_filesystem
+    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.runtime.context import AgentContext
     from arete.api.agent import _document_state
 
@@ -214,7 +214,7 @@ def test_statebackend_reads_documents_and_rejects_writes(
     ]
     context = AgentContext(thread_id=document_db)
     state = _document_state(context)
-    filesystem = build_memory_filesystem()
+    filesystem = JournalMiddleware()
     assert {t.name for t in filesystem.tools} == {
         "read_file",
         "ls",
@@ -222,6 +222,7 @@ def test_statebackend_reads_documents_and_rejects_writes(
         "grep",
         "edit_file",
         "delete",
+        "append_journal",
     }
     for tool in filesystem.tools:
         assert "anyOf" not in json.dumps(tool.args_schema.model_json_schema())
@@ -249,7 +250,7 @@ def test_attachment_grep_returns_matching_lines_by_default(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from arete.agent.backends.memory import build_memory_filesystem
+    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.runtime.context import AgentContext
 
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
@@ -279,7 +280,7 @@ def test_attachment_grep_returns_matching_lines_by_default(
                 ]
             )
         ),
-        middleware=[build_memory_filesystem()],
+        middleware=[JournalMiddleware()],
         context_schema=AgentContext,
     )
     state = {
@@ -372,8 +373,8 @@ def test_chat_hydrates_extraction_before_first_model_and_reads_mounted_file(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage
 
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.factory import build_agent
+    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.profiles.catalog import get_profile
     from arete.api.agent import router
 
@@ -440,7 +441,7 @@ def test_chat_hydrates_extraction_before_first_model_and_reads_mounted_file(
         ),
         context_tokens=65_536,
         output_tokens=4096,
-        filesystem=build_memory_filesystem(),
+        journal=JournalMiddleware(),
     )
     monkeypatch.setattr("arete.api.agent.get_agent", lambda: graph)
     client = router_client(router)
@@ -522,8 +523,8 @@ def test_concurrent_threads_keep_their_own_attachment_context(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.middlewares.context import ContextBuilderMiddleware
+    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.runtime.context import AgentContext
     from arete.api.agent import _document_state
 
@@ -559,7 +560,7 @@ def test_concurrent_threads_keep_their_own_attachment_context(
 
         graph = create_agent(
             Model(messages=iter([AIMessage(content="OK"), AIMessage(content="OK")])),
-            middleware=[build_memory_filesystem(), ContextBuilderMiddleware()],
+            middleware=[JournalMiddleware(), ContextBuilderMiddleware()],
             context_schema=AgentContext,
         )
         results = await asyncio.wait_for(
@@ -656,8 +657,8 @@ def test_document_request_creates_and_exports_without_import_approval(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage
 
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.factory import build_agent
+    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.profiles.catalog import get_profile
     from arete.api.agent import router
     from arete.garmin.repository import GarminRepository
@@ -743,7 +744,7 @@ def test_document_request_creates_and_exports_without_import_approval(
         model=Model(messages=responses(), disable_streaming=True),
         context_tokens=65_536,
         output_tokens=4096,
-        filesystem=build_memory_filesystem(),
+        journal=JournalMiddleware(),
     )
     monkeypatch.setattr("arete.api.agent.get_agent", lambda: graph)
     # Old pending rows are inert historical data, never a permission gate.

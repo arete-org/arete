@@ -799,3 +799,80 @@ def test_concurrent_slack_classifiers_keep_separate_parent_traces(
         classification = [r for r in children if r["name"] == "classify_slack_intent"]
         assert len(classification) == 1
         assert classification[0]["parent_run_id"] == root["id"]
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_memory_classifier_stays_in_native_tool_trace_without_credentials(
+    monkeypatch, recorder, enabled
+):
+    import json
+
+    import httpx
+    from pydantic import SecretStr
+
+    from arete.agent.models.jev import JEV_MODEL, JevClient
+    from arete.services import athlete_facts
+
+    monkeypatch.setenv("LANGSMITH_TRACING", "true" if enabled else "false")
+    monkeypatch.setenv("MEMORY_JEV_ENABLED", "true")
+
+    def handler(request):
+        choices = json.loads(request.content)["questions"]["memory"]["criteria"]
+        return httpx.Response(
+            200,
+            json={
+                "model": JEV_MODEL,
+                "answers": {
+                    "memory": {
+                        "type": "choice",
+                        "choice": "create",
+                        "confidence": 1.0,
+                        "probabilities": {
+                            key: float(key == "create") for key in choices
+                        },
+                    }
+                },
+                "usage": {"input_tokens": 100, "output_tokens": 10},
+            },
+        )
+
+    model = JevClient(
+        api_key=SecretStr("never-export-this"),
+        model=JEV_MODEL,
+        timeout=1,
+        max_retries=0,
+        transport=httpx.MockTransport(handler),
+    )
+    monkeypatch.setattr(agent, "JevClient", lambda **_: model)
+    athlete_facts.add_fact("preference", "Matin", evidence="explicit")
+    install_model(
+        monkeypatch,
+        [
+            tool_call(
+                "remember_fact",
+                {
+                    "kind": "preference",
+                    "text": "Forêt",
+                    "evidence": "explicit",
+                    "source_ref": "Je préfère la forêt",
+                },
+                "remember",
+            ),
+            AIMessage(content="C’est mémorisé."),
+        ],
+    )
+    context = AgentContext(thread_id="memory-thread")
+    result = invoke(state("Je préfère la forêt"), context=context)
+    assert result["messages"][-1].text == "C’est mémorisé."
+    assert context.stats.memory_decision_calls == 1
+    if not enabled:
+        assert not recorder.recorded_runs
+        return
+    runs, roots = assert_trace_tree(recorder)
+    decision = next(r for r in runs if r["name"] == "classify_memory")
+    tool = next(r for r in runs if r["run_type"] == "tool")
+    assert str(decision["parent_run_id"]) == str(tool["id"])
+    assert set(decision["inputs"]) == {"state", "choices"}
+    assert decision["outputs"]["choice"] == "create"
+    assert decision["extra"]["metadata"]["thread_id"] == "memory-thread"
+    assert "never-export-this" not in str(recorder.recorded_runs)

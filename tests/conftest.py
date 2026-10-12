@@ -121,3 +121,29 @@ def isolated_coach_records():
     with db_connection() as con:
         for table in ("coach_memory_files", "coach_memory_imports", "coach_followups"):
             con.execute(f"DELETE FROM app.{table}")
+
+
+@pytest.fixture
+def memory_tool():
+    """Exercise the async native tool with server-owned invocation context."""
+    import asyncio
+
+    from langchain.tools import ToolRuntime
+
+    from arete.agent.runtime.context import AgentContext
+    from arete.agent.tools.fact_memory import remember_fact
+
+    def invoke(args, *, message="Déclaration : je préfère le matin", context=None):
+        context = context or AgentContext(thread_id="memory-test")
+        context.memory_source_message = message
+        runtime = ToolRuntime(
+            state={},
+            context=context,
+            config={},
+            stream_writer=lambda _: None,
+            tool_call_id="memory",
+            store=None,
+        )
+        return asyncio.run(remember_fact.ainvoke({**args, "runtime": runtime}))
+
+    return invoke

@@ -479,7 +479,7 @@ def test_product_graph_executes_native_tool_without_personal_context(
     graph = build_agent(
         get_profile("slack"),
         model=model,
-        filesystem=AgentMiddleware(),
+        journal=AgentMiddleware(),
         context_tokens=65536,
         output_tokens=4096,
     )
@@ -802,10 +802,10 @@ def test_shared_graph_isolates_concurrent_intents_and_denies_unbound_tools(
     from langchain_core.messages import HumanMessage, ToolMessage
     from langchain_core.outputs import ChatGeneration, ChatResult
 
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.backends.skills import SystemSkillsBackend
     from arete.agent.context import builder
     from arete.agent.factory import build_agent
+    from arete.agent.middlewares.journal import JournalMiddleware
     from arete.agent.middlewares.skills import SystemSkillsMiddleware
     from arete.agent.profiles.catalog import get_profile
     from arete.agent.runtime.execution import invoke_agent
@@ -857,11 +857,11 @@ def test_shared_graph_isolates_concurrent_intents_and_denies_unbound_tools(
     snapshot = {
         "/training/SKILL.md": "---\nname: training\ndescription: TRAINING_SKILL\n---\nRead training facts."
     }
-    filesystem = build_memory_filesystem(system_skills=SystemSkillsBackend(snapshot))
+    filesystem = JournalMiddleware(system_skills=SystemSkillsBackend(snapshot))
     graph = build_agent(
         get_profile("slack"),
         model=Model(messages=iter(()), disable_streaming=True),
-        filesystem=filesystem,
+        journal=filesystem,
         skills=SystemSkillsMiddleware(backend=filesystem.backend, paths=set(snapshot)),
         context_tokens=65536,
         output_tokens=4096,

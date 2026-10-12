@@ -6,7 +6,7 @@ import json
 import unicodedata
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 import duckdb
 
@@ -63,7 +63,7 @@ class Fact:
         }
 
 
-def _validate(
+def validate_fact_fields(
     kind: str | None,
     text: str | None,
     status: str | None,
@@ -117,32 +117,81 @@ def add_fact(
     source_ref: str = "",
     valid_until: date | None = None,
 ) -> Fact:
-    _validate(kind, text, None, evidence, source_ref)
+    return create_fact(
+        kind,
+        text,
+        since=since,
+        source=source,
+        evidence=evidence,
+        source_ref=source_ref,
+        valid_until=valid_until,
+    ).fact
+
+
+@dataclass(frozen=True)
+class FactWrite:
+    action: Literal["created", "already_present"]
+    fact: Fact
+
+
+def fact_snapshot(facts: list[Fact]) -> tuple[tuple[int, int], ...]:
+    return tuple(sorted((fact.id, fact.revision) for fact in facts))
+
+
+def _lock_owner(con) -> None:
+    # All memory mutations share this conflict point across workers. Otherwise
+    # an edit/delete could race a classifier snapshot check and a new insert.
+    owner = con.execute(
+        "UPDATE app.athletes SET created_at=created_at WHERE id=getvariable('arete_athlete_id') AND deleted_at IS NULL RETURNING id"
+    ).fetchone()
+    if owner is None:
+        raise FactConflict("Athlète indisponible.")
+
+
+def create_fact(
+    kind: str,
+    text: str,
+    *,
+    since: date | None = None,
+    source: str = "coach",
+    evidence: str = "legacy",
+    source_ref: str = "",
+    valid_until: date | None = None,
+    expected_facts: tuple[tuple[int, int], ...] | None = None,
+    duplicate_id: int | None = None,
+) -> FactWrite:
+    """Commit a receipt atomically; a classifier's snapshot cannot outlive edits."""
+    validate_fact_fields(kind, text, None, evidence, source_ref)
     since = since or athlete_today()
     if valid_until is not None and valid_until < since:
         raise ValueError("La fin de validité précède le début.")
-    normalized = _identity(text)
+    normalized = fact_identity(text)
     try:
         with transaction() as con:
-            # Serialize the read/insert pair per athlete across instances. This
-            # unchanged owner row prevents two concurrent first inserts, without
-            # treating paraphrases or repeated hypotheses as fresh evidence.
-            owner = con.execute(
-                "UPDATE app.athletes SET created_at=created_at WHERE id=getvariable('arete_athlete_id') AND deleted_at IS NULL RETURNING id"
-            ).fetchone()
-            if owner is None:
-                raise FactConflict("Athlète indisponible.")
+            _lock_owner(con)
             rows = con.execute(
                 f"SELECT {_COLUMNS} FROM app.visible_athlete_facts ORDER BY id LIMIT ?",
                 [MAX_FACTS + 1],
             ).fetchall()
             if len(rows) > MAX_FACTS:
                 raise MemoryLimitExceeded("Trop de faits enregistrés.")
-            for values in rows:
-                old = Fact(*values)
+            facts = [Fact(*values) for values in rows]
+            if expected_facts is not None and fact_snapshot(facts) != expected_facts:
+                raise FactConflict(
+                    "La mémoire a changé pendant sa vérification. Relis-la."
+                )
+            if duplicate_id is not None:
+                assert expected_facts is not None, "Semantic reuse requires a snapshot"
+                duplicate = next((f for f in facts if f.id == duplicate_id), None)
+                if duplicate is None or not same_fact_scope(
+                    duplicate, kind, evidence, since, valid_until
+                ):
+                    raise FactConflict("Le souvenir proposé n'est plus réutilisable.")
+                return FactWrite("already_present", duplicate)
+            for old in facts:
                 if (
                     old.kind == kind
-                    and _identity(old.text) == normalized
+                    and fact_identity(old.text) == normalized
                     and old.evidence == evidence
                     and old.valid_until == valid_until
                     and (valid_until is None or old.since == since)
@@ -152,7 +201,7 @@ def add_fact(
                             f"Le souvenir #{old.id} est désactivé. Ne le recrée pas. "
                             "Sa réactivation nécessite une nouvelle demande explicite de l’athlète."
                         )
-                    return old
+                    return FactWrite("already_present", old)
             if len(rows) == MAX_FACTS:
                 raise MemoryLimitExceeded("Trop de faits enregistrés.")
             row = con.execute(
@@ -164,10 +213,24 @@ def add_fact(
     except duckdb.TransactionException as exc:
         raise FactConflict("Écriture concurrente : relis la mémoire.") from exc
     assert row is not None
-    return Fact(*row)
+    return FactWrite("created", Fact(*row))
 
 
-def _identity(text: str) -> str:
+def same_fact_scope(
+    fact: Fact, kind: str, evidence: str, since: date, valid_until: date | None
+) -> bool:
+    # A paraphrase must not turn a hypothesis into a declaration, reactivate a
+    # resolved fact, or absorb a temporary exception into a standing preference.
+    return (
+        fact.status == "active"
+        and fact.kind == kind
+        and fact.evidence == evidence
+        and fact.valid_until == valid_until
+        and (fact.since == since if valid_until is not None else fact.since <= since)
+    )
+
+
+def fact_identity(text: str) -> str:
     # Exact wording only: no fuzzy matching that might collapse distinct facts.
     return " ".join(
         unicodedata.normalize("NFKC", text).replace("’", "'").split()
@@ -193,7 +256,7 @@ def update_fact(
     clear_valid_until: bool = False,
     expected_revision: int | None = None,
 ) -> Fact | None:
-    _validate(kind, text, status, evidence, source_ref)
+    validate_fact_fields(kind, text, status, evidence, source_ref)
     fields: dict[str, Any] = {
         k: v
         for k, v in (
@@ -211,6 +274,7 @@ def update_fact(
         fields["valid_until"] = None
     try:
         with transaction() as con:
+            _lock_owner(con)
             old = _get(con, fact_id)
             if old is None:
                 return None
@@ -240,6 +304,7 @@ def update_fact(
 def delete_fact(fact_id: int, *, expected_revision: int | None = None) -> bool:
     try:
         with transaction() as con:
+            _lock_owner(con)
             old = _get(con, fact_id)
             if old is None:
                 return False

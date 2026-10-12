@@ -14,11 +14,18 @@ from threading import Lock
 from typing import Any, Literal
 
 from langsmith import traceable
+from pydantic import SecretStr
 
-from arete.agent.backends.memory import build_memory_filesystem
 from arete.agent.backends.skills import SystemSkillsBackend
 from arete.agent.factory import build_agent
+from arete.agent.middlewares.journal import JournalMiddleware
 from arete.agent.middlewares.skills import SystemSkillsMiddleware
+from arete.agent.models.jev import (
+    JEV_MAX_RETRIES,
+    JEV_MODEL,
+    JEV_TIMEOUT_SECONDS,
+    JevClient,
+)
 from arete.agent.models.providers import build_chat_model
 from arete.agent.models.registry import (
     AGENT_MAX_RETRIES,
@@ -89,10 +96,10 @@ def _assemble(
     if profile.journal_tools:
         skill_files = publish_bundle(SYSTEM_SKILLS_ROOT)
         skills_backend = SystemSkillsBackend(skill_files)
-    filesystem = build_memory_filesystem(system_skills=skills_backend)
+    journal = JournalMiddleware(system_skills=skills_backend)
     skills = (
         SystemSkillsMiddleware(
-            backend=filesystem.backend,
+            backend=journal.backend,
             paths=set(skill_files),
         )
         if skills_backend is not None
@@ -103,8 +110,16 @@ def _assemble(
         model=model,
         context_tokens=route.context_tokens,
         output_tokens=AGENT_MAX_TOKENS,
-        filesystem=filesystem,
+        journal=journal,
         calendar=calendar,
+        memory_model=JevClient(
+            api_key=SecretStr(config.openrouter_api_key),
+            model=JEV_MODEL,
+            timeout=JEV_TIMEOUT_SECONDS,
+            max_retries=JEV_MAX_RETRIES,
+        )
+        if profile.fact_memory_tools and config.memory_jev_enabled
+        else None,
         fallback_models=models[1:],
         skills=skills,
     )
