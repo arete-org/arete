@@ -12,9 +12,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import httpx
+if TYPE_CHECKING:
+    import httpx
 
 from arete.services.settings import athlete_today
 
@@ -111,6 +112,8 @@ def fetch_weather(
     }
     try:
         if client is None:
+            import httpx  # here, not at module level: the API boot skips httpx
+
             with httpx.Client(timeout=TIMEOUT_SEC) as own:
                 response = own.get(url, params=params)
         else:

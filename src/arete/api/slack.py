@@ -10,7 +10,6 @@ import logging
 import re
 import time
 
-import httpx
 from anyio import to_thread
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
@@ -30,6 +29,8 @@ SLACK_TIMESTAMP = re.compile(r"[0-9]{1,16}\.[0-9]{6}")
 async def process_message(message: SlackMessage, token: str) -> None:
     # Work stays attached to the ASGI response lifecycle, never create_task().
     # Slack's receipt must not wait on MotherDuck or the model stack.
+    import httpx  # here, not at module level: the API boot skips httpx
+
     from arete.coaching import dispatch_slack_message
     from arete.dataio import mirror
     from arete.services.athlete_scope import athlete_scope

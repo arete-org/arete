@@ -14,15 +14,17 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import duckdb
-import httpx
 from anyio import to_thread
 
 from arete.dataio.db import transaction
 from arete.services import slack_athletes
 from arete.services.athlete_scope import current_athlete_id
+
+if TYPE_CHECKING:
+    import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +251,8 @@ class SlackClient:
 
     async def react(self, message: SlackMessage) -> None:
         """Acknowledge once; a cosmetic failure must not cancel the coach."""
+        import httpx  # here, not at module level: the API boot skips httpx
+
         try:
             await self.call(
                 "reactions.add",
