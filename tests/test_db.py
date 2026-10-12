@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import duckdb
@@ -106,6 +107,28 @@ def test_without_a_bundle_nothing_is_seeded(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "REMOTE_HOME", tmp_path / "home")
     db._seed_extensions()
     assert not (tmp_path / "home/.duckdb").exists()
+
+
+@pytest.mark.parametrize("home", [None, "", "/home/vercel-missing"])
+def test_motherduck_gets_a_home_that_exists(tmp_path, monkeypatch, home):
+    monkeypatch.setattr(db, "REMOTE_HOME", tmp_path / "home")
+    monkeypatch.setattr(db, "BUNDLED_EXTENSIONS", tmp_path / "missing")
+    if home is None:
+        monkeypatch.delenv("HOME", raising=False)
+    else:
+        monkeypatch.setenv("HOME", home)
+    with patch.object(db.duckdb, "connect"):
+        db._open_remote()
+    assert os.environ["HOME"] == str(tmp_path / "home")
+
+
+def test_an_existing_home_is_kept(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "REMOTE_HOME", tmp_path / "home")
+    monkeypatch.setattr(db, "BUNDLED_EXTENSIONS", tmp_path / "missing")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with patch.object(db.duckdb, "connect"):
+        db._open_remote()
+    assert os.environ["HOME"] == str(tmp_path)
 
 
 def test_preview_cannot_open_production_motherduck(monkeypatch):
