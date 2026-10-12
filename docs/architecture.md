@@ -20,7 +20,7 @@ arete/
 │   ├── profiles/            Declarative chat, briefing and feedback configurations
 │   └── prompts/             Versioned general/mission instructions
 ├── services/                Metrics, analytics, planning, settings, pages, coaching, memory
-├── observability/           Provider usage and model-boundary timing
+├── observability/           Provider usage, model-boundary and HTTP request timing
 └── api/                     HTTP contracts and SSE projection
 ```
 
@@ -250,6 +250,16 @@ model calls, tool calls, model time, time to first token and served models.
 `first_result_ms` measures the first successful domain tool result, or completion
 of an answer when no domain tool succeeds. Preparatory file reads and narration do
 not count as a useful domain result; it is a latency proxy, not a quality score.
+
+Every HTTP request logs one `HTTP request:` line (`observability/http.py`, the
+outermost pure-ASGI middleware): status, total time to the last body byte, database
+statements and their time, auth/mirror-hydrate/handler/mirror-flush phases and
+whether it was the process's first request. The path is logged without its query
+string, never a statement's text. `dataio/db.py` wraps each connection it hands out
+so `execute`/`executemany` count in a request-local ContextVar, which AnyIO worker
+threads inherit. A response whose length is known also carries `Server-Timing`
+(`auth`, `hydrate`, `db` with its statement count, `app`, `total`); a stream is only
+logged, so it is never buffered.
 
 Completed chat answers carry their `trace_id` and a signed feedback receipt
 in both HTTP and SSE `done`. The runtime supplies that UUID as the graph's
