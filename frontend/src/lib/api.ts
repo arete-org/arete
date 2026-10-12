@@ -148,6 +148,7 @@ export const athleteFactsApi = {
 // ========================= //
 
 export interface PlannedSessionCreate {
+  prescription?: import("./documents").Prescription | null;
   date: string;
   sport?: string;
   session_type: string;
@@ -218,13 +219,18 @@ export const garminApi = {
       body: JSON.stringify(session),
     }),
 
-  deletePlanned: (id: number) =>
-    fetchAPI<{ message: string }>(`/garmin/planned/${id}`, { method: "DELETE" }),
+  updatePlanned: (id: number, revision: number, session: Omit<PlannedSessionCreate, 'source' | 'sport'>) =>
+    fetchAPI<import("@/types").PlannedSession>(`/garmin/planned/${id}`, {
+      method: "PUT", body: JSON.stringify({ ...session, revision }),
+    }),
 
-  setPlannedStatus: (id: number, status: "pending" | "completed" | "skipped") =>
+  deletePlanned: (id: number, revision?: number) =>
+    fetchAPI<{ message: string }>(`/garmin/planned/${id}${revision ? `?revision=${revision}` : ''}`, { method: "DELETE" }),
+
+  setPlannedStatus: (id: number, status: "pending" | "completed" | "skipped", revision?: number) =>
     fetchAPI<import("@/types").PlannedSession>(`/garmin/planned/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, revision }),
     }),
 
   /** Lazy: only asked for today's sessions, when Garmin is connected. */

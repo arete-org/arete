@@ -28,6 +28,22 @@
   font-display: swap;
 }
 
+/* Match Figma's actual Medium/SemiBold faces; never synthesize interface weights. */
+@font-face {
+  font-family: 'Inter';
+  src: url('./assets/fonts/Inter-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('./assets/fonts/Inter-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ========================= */
 /* TAILWIND THEME CONFIG    */
 /* ========================= */
@@ -513,4 +529,10 @@ html[data-theme='pierre'], html[data-theme='prune'] {
 }
 @media (prefers-reduced-transparency: reduce) {
   .coach-panel[data-display="floating"] { background: var(--color-abyss); backdrop-filter: none; }
+}
+
+/* Sheets preserve the shared modal's focus trap while putting mobile actions in reach. */
+@media (max-width:640px) {
+  .mobile-sheet { align-items:flex-end; padding:12px 0 0; }
+  .mobile-sheet > [role=dialog] { border-radius:var(--radius-panel) var(--radius-panel) 0 0; max-height:calc(100dvh - 12px); }
 }

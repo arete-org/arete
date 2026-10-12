@@ -25,12 +25,12 @@ async function mockApi(page: Page, getView: () => WorkoutView, streamUrl?: strin
       getView().export = state('scheduled');
       return route.fulfill({ json: { results: [getView().export], not_attempted: [] } });
     }
-    if (url.pathname.endsWith('/prescription') && method === 'PUT') {
+    if ((url.pathname.endsWith('/prescription') || url.pathname.endsWith('/planned/42')) && method === 'PUT') {
       counts.edits++;
       const data = route.request().postDataJSON();
       Object.assign(getView().session, { date: data.date, description: data.description, revision: 2, prescription: data.prescription });
       getView().export = state('dirty');
-      return route.fulfill({ json: { updated: true } });
+      return route.fulfill({ json: url.pathname.endsWith('/prescription') ? { updated: true } : getView().session });
     }
     if (url.pathname.endsWith('/workout-devices')) { counts.devices++; return route.fulfill({ json: [] }); }
     if (url.pathname.endsWith('/exports')) return route.fulfill({ json: getView().export ? [getView().export] : [] });
@@ -120,16 +120,19 @@ test('Planning selection, direct export and editing work on mobile without model
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/planning?date=2027-01-12');
   await page.evaluate(() => document.documentElement.dataset.theme = 'light');
+  await page.getByRole('button', { name: 'Options du planning', exact: true }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
   await page.getByLabel('Sélectionner Fractionné · 6 × 400 m').check();
   const send = page.getByRole('button', { name: 'Envoyer vers Garmin', exact: true });
   await expect(send).toBeEnabled();
   await send.click();
   await expect(page.getByTestId('workout-42').getByText('Programmée dans Garmin Connect', { exact: true })).toBeVisible();
   expect(counts.exports).toBe(1); expect(counts.model).toBe(0); expect(counts.devices).toBe(0);
-  await page.getByTestId('workout-42').getByRole('button', { name: 'Modifier', exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir la séance Fractionné · 6 × 400 m', exact: true }).click();
+  await page.getByRole('button', { name: 'Modifier', exact: true }).click();
   await page.getByRole('dialog').getByLabel('Date', { exact: true }).fill('2027-01-13');
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
-  await expect(page.getByText('À resynchroniser', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('workout-42').getByText('À resynchroniser', { exact: true })).toBeVisible();
   expect(counts.edits).toBe(1); expect(counts.exports).toBe(1); expect(counts.model).toBe(0);
   await page.screenshot({ path: '../.context/garmin-planning-mobile.png', fullPage: true });
 });
@@ -150,6 +153,8 @@ test('uncertain export survives reload and is verified without replaying the wri
     await route.fulfill({ json: view.export });
   });
   await page.goto('/planning?date=2027-01-12');
+  await page.getByRole('button', { name: 'Options du planning', exact: true }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
   await page.getByLabel('Sélectionner Fractionné · 6 × 400 m').check();
   await page.getByRole('button', { name: 'Envoyer vers Garmin', exact: true }).click();
   const card = page.getByTestId('workout-42');
@@ -157,8 +162,12 @@ test('uncertain export survives reload and is verified without replaying the wri
   await expect(page.getByRole('button', { name: 'Envoyer vers Garmin', exact: true })).toBeDisabled();
   await page.reload();
   await expect(card.getByText('Résultat indéterminé · vérifier Garmin', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Options du planning', exact: true }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
   await expect(page.getByLabel('Sélectionner Fractionné · 6 × 400 m')).toBeDisabled();
-  await card.getByRole('button', { name: 'Vérifier Garmin', exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir la séance', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Vérifier Garmin', exact: true }).click();
+  await page.keyboard.press('Escape');
   await expect(card.getByText('Vérifiée · prête à envoyer', { exact: true })).toBeVisible();
   expect(attempts).toBe(1); expect(checks).toBe(1); expect(counts.model).toBe(0);
 });
@@ -175,8 +184,48 @@ test('a run interrupted by closing the tab can be reconciled from its durable wo
   });
   await page.goto('/planning?date=2027-01-12');
   const card = page.getByTestId('workout-42');
+  await page.getByRole('button', { name: 'Options du planning', exact: true }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
   await expect(page.getByLabel('Sélectionner Fractionné · 6 × 400 m')).toBeDisabled();
-  await card.getByRole('button', { name: 'Vérifier Garmin', exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir la séance', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Vérifier Garmin', exact: true }).click();
+  await page.keyboard.press('Escape');
   await expect(card.getByText('Vérifiée · prête à envoyer', { exact: true })).toBeVisible();
   expect(checks).toBe(1); expect(counts.exports).toBe(0);
+});
+
+test('deletion commits once when Garmin removal fails and cleanup survives reload', async ({ page }) => {
+  const view: WorkoutView = { session: structuredClone(session), export: state('scheduled') };
+  await mockApi(page, () => view);
+  let deleted = false;
+  let deletions = 0;
+  let removals = 0;
+  await page.route(/\/api\/garmin\/planned(?:\?.*)?$/, route => route.fulfill({ json: deleted ? [] : [view.session] }));
+  await page.route(/\/api\/garmin\/planned\/42\?revision=1$/, route => {
+    deletions++;
+    deleted = true;
+    view.export = { ...state('pending_removal'), deleted: true };
+    return route.fulfill({ json: { message: 'Session deleted' } });
+  });
+  await page.route('**/api/garmin/exports/42/remove', route => {
+    removals++;
+    if (removals === 1) return route.fulfill({ status: 502, json: { detail: 'Garmin indisponible' } });
+    view.export = { ...state('removed'), deleted: true };
+    return route.fulfill({ json: view.export });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/planning?date=2027-01-12');
+  await page.getByRole('button', { name: 'Ouvrir la séance Fractionné · 6 × 400 m', exact: true }).click();
+  await page.getByRole('button', { name: 'Supprimer la séance', exact: true }).click();
+  await page.getByRole('button', { name: 'Supprimer', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Retrait Garmin à terminer' })).toBeVisible();
+  expect(deletions).toBe(1);
+  expect(removals).toBe(1);
+  await page.reload();
+  await expect(page.getByText('supprimée', { exact: false })).toBeVisible();
+  await page.locator('summary').filter({ hasText: 'Gérer le retrait' }).click();
+  await page.getByRole('button', { name: 'Retirer de Garmin Connect', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retirer de Garmin Connect', exact: true })).toHaveCount(0);
+  expect(deletions).toBe(1);
+  expect(removals).toBe(2);
 });

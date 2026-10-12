@@ -110,7 +110,9 @@ test('Garmin export is an explicit selected action and never claims watch delive
     return route.fulfill({ json: [] });
   });
   await page.goto('/planning');
-  const panel = page.getByRole('region', { name: 'Envoi des séances vers Garmin' });
+  await page.getByRole('button', { name: 'Options du planning' }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Planning hebdomadaire' });
   await panel.getByLabel('Sélectionner Footing de référence').check();
   await panel.getByLabel('Demander aussi le transfert vers une montre').check();
   await panel.getByLabel('Montre Garmin').selectOption('10');

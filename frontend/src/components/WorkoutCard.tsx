@@ -102,7 +102,7 @@ export function WorkoutCard({ sessionId, initial, compact = false, selected = fa
   </div>;
 }
 
-function StepList({ prescription }: { prescription: Prescription }) {
+export function StepList({ prescription }: { prescription: Prescription }) {
   const render = (steps: Prescription['steps'], depth: number): React.ReactNode => {
     if (depth > 2) return <li>Structure trop profonde.</li>;
     return steps.map((step, index) => <li key={index} className="my-1">
