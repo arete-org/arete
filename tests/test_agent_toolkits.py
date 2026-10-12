@@ -16,7 +16,10 @@ from arete.agent.middlewares.context import ContextBuilderMiddleware
 from arete.agent.runtime.context import AgentContext
 from arete.agent.tools.planning import create_planned_session, update_planned_session
 from arete.garmin.repository import GarminRepository
+from arete.garmin.workouts import convert
 from arete.services import planning
+from arete.services.garmin_export import inspect_session
+from arete.services.prescriptions import Prescription
 
 
 class Model(GenericFakeChatModel):
@@ -122,6 +125,71 @@ def test_prescription_replaces_stale_targets_and_cannot_be_downgraded():
         GarminRepository().get_planned_session(session["id"]).revision
         == updated["revision"]
     )
+
+
+@pytest.mark.parametrize("edge_seconds", [None, 600, 0])
+def test_incomplete_repeat_is_correctable_without_losing_workout_steps(edge_seconds):
+    """The failed trace dropped the prescription after this validation error.
+
+    Replay its invalid argument, then a complete correction through native tools.
+    This proves persistence/export, not the model's ability to choose the correction.
+    """
+    session = create(description="20x300")
+    bad = patch(
+        session,
+        description="20x300 r100",
+        prescription={"steps": [{"kind": "repeat", "duration_kind": "meters"}]},
+    )
+    assert "repeat (entier de 2 à 100)" in bad["error"]
+    assert "steps (sous-étapes non vides)" in bad["error"]
+    saved = GarminRepository().get_planned_session(session["id"])
+    assert saved.revision == session["revision"]
+    assert saved.description == "20x300" and saved.prescription is None
+
+    steps = [
+        {
+            "kind": "repeat",
+            "repeat": 20,
+            "steps": [
+                {"kind": "effort", "duration_kind": "meters", "value": 300},
+                {"kind": "recovery", "duration_kind": "meters", "value": 100},
+            ],
+        }
+    ]
+    if edge_seconds != 0:
+        duration = (
+            {"duration_kind": "seconds", "value": edge_seconds}
+            if edge_seconds
+            else {"duration_kind": "lap"}
+        )
+        steps = [
+            {"kind": "warmup", **duration},
+            *steps,
+            {"kind": "cooldown", **duration},
+        ]
+    expected = Prescription.model_validate({"steps": steps})
+    updated = patch(session, description="20x300 r100", prescription={"steps": steps})
+    assert updated["session"]["id"] == session["id"]
+    assert updated["session"]["revision"] == session["revision"] + 1
+    inspected = inspect_session(session["id"])["session"]
+    assert inspected["structured"] and inspected["exportable"]
+    assert inspected["target_duration_min"] is None
+    assert Prescription.model_validate(inspected["prescription"]) == expected
+    payload = convert(session["id"], "20x300 r100", "running", expected)
+    exported = payload["workoutSegments"][0]["workoutSteps"]
+    assert len(exported) == len(steps)
+    group = exported[1 if edge_seconds != 0 else 0]
+    assert group["numberOfIterations"] == 20
+    assert [s["endConditionValue"] for s in group["workoutSteps"]] == [300, 100]
+    assert all(
+        s["endCondition"]["conditionTypeKey"] == "distance"
+        for s in group["workoutSteps"]
+    )
+    if edge_seconds != 0:
+        for edge in (exported[0], exported[-1]):
+            assert edge["endCondition"]["conditionTypeKey"] == (
+                "time" if edge_seconds else "lap.button"
+            )
 
 
 @pytest.mark.parametrize(

@@ -66,7 +66,7 @@ def create_planned_session(
     """Create one session directly in Planning and return its real id.
 
     date_str is an ISO date. prescription is a structured object, never JSON text.
-    Use steps for intervals; an unspecified warmup ends on lap, without invented duration.
+    Use prescription.steps for workout structure, not description alone.
     For strength, strength_text supplies exercises, sets and rests to the grammar;
     any supplied prescription must match those sets. Zero targets mean unspecified.
     Cite document cells/quotes in provenance when using an attachment.
@@ -103,8 +103,9 @@ def update_planned_session(
     """Modify date, status, metadata or steps of one existing session, preserving its id.
 
     Use the revision from list_planned or inspect_planned_session. Omitted fields stay
-    unchanged; zero/empty clears a scalar target. For structured sessions change the
-    prescription instead of scalar targets. Never delete/recreate or export implicitly.
+    unchanged (omit them, never null); zero/empty clears a scalar target. To change
+    workout steps, supply the complete prescription, not just description or scalar
+    targets. Never delete/recreate or export implicitly.
     """
     return service.update_planned_session(session_id, revision, changes)
 

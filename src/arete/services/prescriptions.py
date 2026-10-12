@@ -61,7 +61,9 @@ class Step(StrictModel):
                 or self.stroke
             ):
                 raise ValueError(
-                    "Un bloc répété doit seulement définir ses répétitions et ses étapes."
+                    "Un bloc kind='repeat' exige repeat (entier de 2 à 100) et "
+                    "steps (sous-étapes non vides). Place durée, distance et cible "
+                    "sur chaque sous-étape, pas sur le bloc."
                 )
         elif self.steps or self.repeat:
             raise ValueError("Seul un bloc répété peut contenir des étapes.")

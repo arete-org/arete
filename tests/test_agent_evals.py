@@ -264,6 +264,62 @@ def test_a_sync_request_imports_and_never_exports(monkeypatch):
     assert not run.called("export_garmin_sessions"), f"exported instead: {run}"
 
 
+def test_interval_shorthand_updates_steps_before_export(monkeypatch):
+    """A real model must fill the repeat, not settle for a description-only edit."""
+    import json
+    from datetime import timedelta
+
+    from arete.garmin.repository import GarminRepository
+    from arete.services import garmin_export, planning
+    from arete.services.prescriptions import Prescription
+    from arete.services.settings import athlete_today
+
+    day = athlete_today() + timedelta(days=1)
+    session = json.loads(
+        planning.create_planned_session(
+            day.isoformat(), "intervals", description="20x300"
+        )
+    )["session"]
+    exported = []
+
+    def fake_export(session_ids, device_id=None, **kwargs):
+        # Keep the evaluation entirely off the real Garmin account, and check
+        # what was persisted at export time, not just the final answer.
+        for identifier in session_ids:
+            saved = GarminRepository().get_planned_session(identifier)
+            assert identifier == session["id"]
+            prescription = Prescription.model_validate(saved.prescription)
+            assert [s.kind for s in prescription.steps] == [
+                "warmup",
+                "repeat",
+                "cooldown",
+            ]
+            first, repeat, last = prescription.steps
+            assert first.duration_kind == last.duration_kind == "lap"
+            assert first.value is last.value is None
+            assert repeat.repeat == 20
+            assert [(s.kind, s.duration_kind, s.value) for s in repeat.steps] == [
+                ("effort", "meters", 300),
+                ("recovery", "meters", 100),
+            ]
+            exported.append(identifier)
+        return {
+            "complete": True,
+            "results": [{"session_id": session["id"], "state": "scheduled"}],
+        }
+
+    monkeypatch.setattr(garmin_export, "export_batch", fake_export)
+    run = ask(
+        f"Modifie la séance de demain (id {session['id']}) : 20x300 r100 et envoie sur Garmin.",
+        page="planning",
+    )
+    assert run.order("inspect_planned_session", "update_planned_session"), str(run)
+    assert run.order("update_planned_session", "export_garmin_sessions"), str(run)
+    assert not run.called("create_planned_session", "delete_planned_session"), str(run)
+    assert exported == [session["id"]], str(run)
+    assert run.model_calls <= 5, str(run)
+
+
 def test_a_capability_that_does_not_exist_is_not_invented():
     run = ask("Commande-moi une paire de chaussures.")
     assert not run.called(*WRITE_TOOLS), f"wrote something: {run}"

@@ -26,6 +26,10 @@ PLANNING_INSTRUCTIONS += """
 - Pour préparer une musculation, utilise create_planned_session avec sport="strength" et strength_text (ex. « Squat 3x10 20kg ») : exercices et séries sont requis, un titre seul ne suffit pas. Tu peux composer une séance demandée ; distingue tes prescriptions des performances réellement déclarées. Sans charge connue, laisse-la non précisée.
 - strength_text porte aussi les repos (ex. r1'30). prescription est optionnel pour des blocs répétés ou un nom Garmin exact (exercise, garmin_exercise, weight_kg) ; ses séries doivent correspondre au texte.
 - update_planned_session modifie date, statut, métadonnées ou prescription avec la révision lue. Pour les étapes, consulte inspect_planned_session ; pour un déplacement, la révision de list_planned suffit.
+- À toi de traduire la séance en prescription.steps, sans demander à l’athlète le format technique. « 20x300 r100 » en course signifie 20 répétitions de 300 m d’effort / 100 m de récupération ; une récupération notée en secondes ou minutes garde cette unité.
+- Un bloc répété contient kind="repeat", repeat (nombre) et steps (effort puis récupération). Exemple : {"kind":"repeat","repeat":20,"steps":[{"kind":"effort","duration_kind":"meters","value":300},{"kind":"recovery","duration_kind":"meters","value":100}]}. Les distances/durées appartiennent aux sous-étapes, pas au bloc.
+- Pour une prescription cardio, conserve l’échauffement et le retour au calme existants ; s’ils manquent, ajoute par défaut un warmup au début et un cooldown à la fin, sauf demande contraire. Sans durée précisée, duration_kind="lap", sans value ni cible inventée. La récupération entre répétitions reste dans le bloc repeat.
+- Si la validation refuse les étapes, corrige la prescription complète ; changer seulement description ne réalise pas la demande. Omet les champs inchangés, jamais null. Une durée totale ou une allure absente ne bloque pas des étapes en mètres ou au tour manuel.
 - Demande les détails indispensables manquants ; ne remplace pas une prescription explicite par des étapes dérivées.
 """
 
