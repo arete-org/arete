@@ -81,6 +81,22 @@ class TestCronDailySync:
         assert all(re.fullmatch(r"0 \d{1,2} \* \* \*", s) for s in schedules)
 
 
+def test_the_backend_bundle_ships_its_dependencies():
+    """Without a custom install command, Vercel's Python builder defers a
+    bundle over 225 MB with a ``uv.lock`` to a ``uv sync`` on every cold start
+    (3.5 s plus 13 wheel downloads). The command must install the lock as is.
+    """
+    import json
+    from pathlib import Path
+
+    backend = json.loads((Path(__file__).parents[1] / "vercel.json").read_text())[
+        "services"
+    ]["backend"]
+    command = backend["installCommand"].split()
+    assert command[:2] == ["uv", "sync"]
+    assert {"--frozen", "--no-dev"} <= set(command)
+
+
 def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
     """A cold serverless instance imports the app before its first request.
 
@@ -94,7 +110,8 @@ def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
     import sys
 
     heavy = [
-        "pymupdf",
+        "pypdfium2",
+        "tesserocr",
         "deepagents",
         "langchain",
         "langchain_core",

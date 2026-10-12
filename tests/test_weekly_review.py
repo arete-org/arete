@@ -160,7 +160,9 @@ def test_the_scheduler_reviews_on_mondays_only():
             1, TODAY, "Semaine tenue. Bravo.", "agent", [], [], None, None
         )
         assert scheduler.write_weekly_review(date(2026, 10, 12)) == "agent, 0 proposals"
-    notify.assert_called_once_with("Bilan de la semaine", "Semaine tenue.", "/planning")
+    notify.assert_called_once_with(
+        "Bilan de la semaine", "Semaine tenue.", "/planning", kind="weekly_review"
+    )
 
 
 def test_reviewed_prescriptions_are_left_alone():

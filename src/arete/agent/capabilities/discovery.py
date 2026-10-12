@@ -12,6 +12,8 @@ from arete.agent.runtime.policy import ProfileSpec, resolve_policy
 
 def _profile(runtime: Any) -> ProfileSpec:
     context = getattr(runtime, "context", None)
+    if isinstance(context, AgentContext) and context.profile == "slack":
+        assert context.resolved_profile is not None, "Slack invocation policy required"
     return (
         (context.resolved_profile or context.profile)
         if isinstance(context, AgentContext)
@@ -39,3 +41,12 @@ def authorized_tools(profile: ProfileSpec) -> list[BaseTool]:
 
 def tool_instructions_suffix(profile: ProfileSpec) -> str:
     return "\n\n".join(tk.instructions for tk in _registry(profile).values())
+
+
+def tool_available(profile: ProfileSpec, name: str) -> bool:
+    """Use the same gate for model binding and execution, including ledger tools."""
+    policy = resolve_policy(profile)
+    domain_names = {t.name for tk in CAPABILITIES.values() for t in tk.tools}
+    if name in domain_names:
+        return name in {t.name for t in authorized_tools(profile)}
+    return policy.profile.id != "slack" or policy.profile.journal_tools

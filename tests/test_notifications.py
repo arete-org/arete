@@ -53,11 +53,12 @@ def test_nothing_is_sent_without_keys_or_with_notifications_off(keys, monkeypatc
         return_value={"notifications_enabled": False},
     ):
         assert (
-            notifications.notify("t", "b").skipped_reason == "notifications désactivées"
+            notifications.notify("t", "b", kind=None).skipped_reason
+            == "notifications désactivées"
         )
     monkeypatch.setenv("WEB_PUSH_VAPID_PRIVATE_KEY", "")
     assert (
-        notifications.notify("t", "b").skipped_reason
+        notifications.notify("t", "b", kind=None).skipped_reason
         == "clés Web Push absentes du serveur"
     )
 
@@ -82,7 +83,7 @@ def test_one_push_per_device_and_gone_devices_are_dropped(keys):
         patch("arete.services.notifications.get_user_settings", return_value={}),
         patch("pywebpush.webpush", side_effect=push),
     ):
-        result = notifications.notify("Briefing", "Footing 45' en Z2.", "/")
+        result = notifications.notify("Briefing", "Footing 45' en Z2.", "/", kind=None)
     assert (result.sent, result.dropped) == (1, 1)
     assert set(_endpoints()) == {"https://push.test/ok", "https://push.test/flaky"}
 

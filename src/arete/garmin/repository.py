@@ -207,6 +207,7 @@ class GarminRepository:
         session_id: int,
         *,
         expected_revision: int | None = None,
+        connection: duckdb.DuckDBPyConnection | None = None,
         prescription: dict | None = None,
         **fields: Any,
     ) -> bool:
@@ -222,9 +223,12 @@ class GarminRepository:
             v.value if isinstance(v, SessionType | SessionStatus) else v
             for v in fields.values()
         ]
-        conn = self._get_connection()
+        conn = connection or self._get_connection()
+        if connection is not None:
+            conn.execute("SET search_path = 'app'")
         try:
-            conn.execute("BEGIN TRANSACTION")
+            if connection is None:
+                conn.execute("BEGIN TRANSACTION")
             require_owned(conn, "goals", fields.get("goal_id"))
             row = conn.execute(
                 "SELECT prescription,garmin_workout_id,garmin_schedule_id FROM visible_planned_sessions WHERE id=?",
@@ -272,7 +276,8 @@ class GarminRepository:
                 ],
             ).fetchone()
             if result is None:
-                conn.execute("ROLLBACK")
+                if connection is None:
+                    conn.execute("ROLLBACK")
                 return False
             # Garmin holds no status: marking a session done or skipped leaves
             # its verified export as is instead of asking for a re-export.
@@ -281,13 +286,17 @@ class GarminRepository:
                     "UPDATE garmin_exports SET state='dirty',updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=? AND state<>'removed') ",
                     [session_id],
                 )
-            conn.execute("COMMIT")
+            if connection is None:
+                conn.execute("COMMIT")
         except BaseException:
-            conn.execute("ROLLBACK")
+            if connection is None:
+                conn.execute("ROLLBACK")
             raise
         finally:
-            conn.close()
-        plan_changes.touch()
+            if connection is None:
+                conn.close()
+        if connection is None:
+            plan_changes.touch()
         return result is not None
 
     def delete_planned_session(self, session_id: int) -> bool:
@@ -808,7 +817,9 @@ class GarminRepository:
         within [start, end] and not after today. Without a window, everything
         planned up to today counts. Skipped = due, still pending, date before today.
         """
-        today = date.today()
+        from arete.services.settings import athlete_today
+
+        today = athlete_today()
         end_due = min(end, today) if end else today
         due = "date <= ?" + (" AND date >= ?" if start else "")
         due_params: list = [end_due] + ([start] if start else [])

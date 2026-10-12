@@ -7,9 +7,9 @@ import json
 from datetime import date
 from uuid import uuid4
 
-import pymupdf
 import pytest
 from openpyxl import Workbook
+from pdf_samples import encrypted, text_pdf
 from PIL import Image
 
 from arete.dataio.db import db_connection
@@ -142,19 +142,13 @@ def test_scanned_image_preserves_ocr_provenance_and_pdf_rejects_encryption(docum
         ),
     )
     assert documents.extraction_for(document_db, doc["id"]).blocks[0].confidence == 51
-    with pymupdf.open() as pdf:
-        pdf.new_page(width=100, height=100)
-        raw = pdf.tobytes(
-            encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="secret", owner_pw="owner"
-        )
+    raw = encrypted(text_pdf(""), "secret")
     with pytest.raises(DocumentError, match="chiffrés"):
         uploaded(document_db, "locked.pdf", raw)
 
 
 def test_pdf_finalization_uses_server_text_and_retains_sources(document_db):
-    with pymupdf.open() as pdf:
-        pdf.new_page().insert_text((30, 70), "Course 45 minutes")
-        raw = pdf.tobytes()
+    raw = text_pdf("Course 45 minutes")
     untrusted = Extraction(
         blocks=[SourceBlock(locator="page 1", text="Wrong browser text")]
     )
@@ -198,7 +192,7 @@ def test_statebackend_reads_documents_and_rejects_writes(
     from arete.agent.runtime.context import AgentContext
     from arete.api.agent import _document_state
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     doc = uploaded(document_db)
 
     class Model(GenericFakeChatModel):
@@ -258,7 +252,7 @@ def test_attachment_grep_returns_matching_lines_by_default(
     from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.runtime.context import AgentContext
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
 
     class Model(GenericFakeChatModel):
         def bind_tools(self, tools, **kwargs):
@@ -383,7 +377,7 @@ def test_chat_hydrates_extraction_before_first_model_and_reads_mounted_file(
     from arete.agent.profiles.catalog import get_profile
     from arete.api.agent import router
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     if source == "xlsx":
         book = Workbook()
         book.active.append([date(2026, 10, 12), "Footing après le 11", "45 minutes"])
@@ -533,7 +527,7 @@ def test_concurrent_threads_keep_their_own_attachment_context(
     from arete.agent.runtime.context import AgentContext
     from arete.api.agent import _document_state
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     contexts = [
         AgentContext(thread_id=document_db),
         AgentContext(thread_id=str(uuid4())),
@@ -668,7 +662,7 @@ def test_document_request_creates_and_exports_without_import_approval(
     from arete.api.agent import router
     from arete.garmin.repository import GarminRepository
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     doc = uploaded(document_db)
     seen = []
     exported = []

@@ -25,13 +25,14 @@ export function isSupported(): boolean {
   );
 }
 
-function isIos(): boolean {
+export function isIos(): boolean {
   const { userAgent, maxTouchPoints } = navigator;
   // iPadOS reports itself as a Mac; touch points give it away.
   return /iPad|iPhone|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
 }
 
-function isStandalone(): boolean {
+/** Launched from the home screen (the installed PWA), not from a browser tab. */
+export function isStandalone(): boolean {
   return (
     window.matchMedia?.('(display-mode: standalone)').matches === true ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true

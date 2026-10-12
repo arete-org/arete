@@ -4,8 +4,10 @@ import './index.css'
 import App from './App.tsx'
 import { initializeTheme } from './lib/theme'
 import { buildAuthConfig } from './components/auth/buildConfig'
+import { captureInstallPrompt } from './lib/install'
 
 initializeTheme()
+captureInstallPrompt()
 
 // Sign-in known from the build: fetch the Clerk chunk now, alongside the app's
 // first render, rather than once the gate mounts. A failure resurfaces there.

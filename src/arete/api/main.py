@@ -17,6 +17,7 @@ from arete.api.analytics import router as analytics_router
 from arete.api.athlete_facts import router as athlete_facts_router
 from arete.api.auth import AuthMiddleware, auth_misconfigured
 from arete.api.auth import router as auth_router
+from arete.api.coach import router as coach_router
 from arete.api.data_export import router as data_export_router
 from arete.api.documents import router as documents_router
 from arete.api.gamification import router as gamification_router
@@ -41,6 +42,14 @@ from arete.dataio.init_duckdb import main as init_schema
 from arete.dataio.init_duckdb import pending_migrations
 from arete.dataio.mirror import MirrorMiddleware
 from arete.dataio.ownership import OwnershipError
+from arete.observability.http import (
+    AUTHORIZED,
+    HANDLER,
+    HANDLER_END,
+    MIRROR_END,
+    PhaseMark,
+    RequestTimingMiddleware,
+)
 from arete.services.documents import DocumentError
 
 logger = logging.getLogger(__name__)
@@ -88,9 +97,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Arete API", version="0.1.0", lifespan=lifespan)
 # Innermost: follows the plan into Google Calendar once the response is sent.
 app.add_middleware(PlanSyncMiddleware)
+# Phase marks for the request timing: the handler runs between these two.
+app.add_middleware(PhaseMark, enter=HANDLER, leave=HANDLER_END)
 app.add_middleware(MirrorMiddleware)
-# Added last, so it runs first: a refused request never reaches the mirror.
+app.add_middleware(PhaseMark, enter=AUTHORIZED, leave=MIRROR_END)
+# Runs before the mirror: a refused request never reaches it.
 app.add_middleware(AuthMiddleware)
+# Added last, so it runs first: times every request, refused ones included.
+app.add_middleware(RequestTimingMiddleware)
 
 
 @app.exception_handler(duckdb.TransactionException)
@@ -180,6 +194,7 @@ def cron_daily_sync(authorization: str | None = Header(default=None)):
 
 
 for router in (
+    coach_router,
     gamification_router,
     auth_router,
     settings_router,

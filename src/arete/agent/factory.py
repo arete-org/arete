@@ -35,7 +35,12 @@ from arete.agent.runtime.budget import (
     READ_TOOL_RETRY_DELAY_SECONDS,
 )
 from arete.agent.runtime.context import AgentContext
-from arete.agent.tools.journal import append_journal, remember_fact
+from arete.agent.tools.journal import (
+    append_journal,
+    forget_fact,
+    remember_fact,
+    respond_coach_followup,
+)
 from arete.services.calendar import CalendarService
 
 #: Builds the calendar of one signed-in account (its Clerk user id).
@@ -114,10 +119,14 @@ def build_agent(
         model,
         tools=[
             *authorized_tools(profile),
-            *([append_journal, remember_fact] if profile.journal_tools else []),
+            *(
+                [append_journal, remember_fact, forget_fact, respond_coach_followup]
+                if profile.journal_tools
+                else []
+            ),
         ],
         middleware=middleware,
-        system_prompt=SYSTEM_SKILL,
+        system_prompt=profile.system_prompt or SYSTEM_SKILL,
         context_schema=AgentContext,
         name=profile.name,
     )

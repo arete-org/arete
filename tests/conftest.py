@@ -37,6 +37,12 @@ def setup_test_db() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def no_inherited_clerk_jwt_key(monkeypatch) -> None:
+    """A developer's .env may hold the real Clerk key: tests set their own."""
+    monkeypatch.delenv("CLERK_JWT_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def offline_weather(monkeypatch) -> None:
     """Sync and upload paths enrich sessions: Open-Meteo is never called.
 
@@ -46,6 +52,16 @@ def offline_weather(monkeypatch) -> None:
         "arete.services.session_conditions.fetch_weather",
         lambda *args, **kwargs: None,
     )
+
+
+@pytest.fixture(autouse=True)
+def fresh_account_cache() -> Generator[None, None, None]:
+    """Tests rewrite app.users directly: never serve a previous test's account."""
+    from arete.api.auth import forget_accounts
+
+    forget_accounts()
+    yield
+    forget_accounts()
 
 
 class _CountingConnection:
@@ -95,3 +111,13 @@ def router_client() -> Callable[[APIRouter], TestClient]:
         return TestClient(app)
 
     return make
+
+
+@pytest.fixture(autouse=True)
+def isolated_coach_records():
+    """Durable memory replaces per-test filesystem isolation."""
+    from arete.dataio.db import db_connection
+
+    with db_connection() as con:
+        for table in ("coach_memory_files", "coach_memory_imports", "coach_followups"):
+            con.execute(f"DELETE FROM app.{table}")

@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from arete.dataio.settings import get_user_settings
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.coaching_repository import Briefing, BriefingRepository
+from arete.services.settings import athlete_today
 
 if TYPE_CHECKING:
     from arete.services.coaching_rules import RuleFacts
@@ -154,6 +155,7 @@ def briefing_facts(
                     f"{s.target_duration_min} min" if s.target_duration_min else None,
                     s.target_hr_zone,
                     s.description,
+                    f"statut : {s.status.value}",
                 )
                 if part
             )
@@ -166,6 +168,9 @@ def briefing_facts(
 
         lines = []
         for d in PlanDecisionRepository().list_for_day(target_date):
+            if d.state in {"pending", "discussion", "dismissed"}:
+                lines.append(f"Proposition {d.state}, non appliquée : {d.reason}")
+                continue
             if d.reverted_at is not None:
                 lines.append(f"décision annulée par l'athlète : {d.reason}")
                 continue
@@ -258,7 +263,7 @@ def generate_briefing(
     the agent is disabled or fails, or when there is nothing to coach on.
     """
     user_id = resolve_athlete_id(user_id)
-    target_date = target_date or date.today()
+    target_date = target_date or athlete_today()
     repo = BriefingRepository()
     rule_text, priority, facts = _rule_floor(target_date)
 
@@ -364,7 +369,7 @@ def get_or_create_briefing(
 ) -> Briefing:
     """The day's briefing, producing it once if the day has none."""
     user_id = resolve_athlete_id(user_id)
-    target_date = target_date or date.today()
+    target_date = target_date or athlete_today()
     existing = BriefingRepository().get_for_day(target_date, user_id=user_id)
     if existing is not None:
         return existing

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 import duckdb
 
 from arete.dataio.db import db_connection, transaction
+from arete.services.settings import athlete_today
 
 KINDS = ("injury", "constraint", "preference", "goal", "other")
 STATUSES = ("active", "resolved")
@@ -116,18 +118,60 @@ def add_fact(
     valid_until: date | None = None,
 ) -> Fact:
     _validate(kind, text, None, evidence, source_ref)
-    since = since or date.today()
+    since = since or athlete_today()
     if valid_until is not None and valid_until < since:
         raise ValueError("La fin de validité précède le début.")
-    with db_connection() as con:
-        row = con.execute(
-            "INSERT INTO app.athlete_facts "
-            "(kind, text, since, source, evidence, source_ref, valid_until) "
-            f"VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING {_COLUMNS}",
-            [kind, text.strip(), since, source, evidence, source_ref, valid_until],
-        ).fetchone()
+    normalized = _identity(text)
+    try:
+        with transaction() as con:
+            # Serialize the read/insert pair per athlete across instances. This
+            # unchanged owner row prevents two concurrent first inserts, without
+            # treating paraphrases or repeated hypotheses as fresh evidence.
+            owner = con.execute(
+                "UPDATE app.athletes SET created_at=created_at WHERE id=getvariable('arete_athlete_id') AND deleted_at IS NULL RETURNING id"
+            ).fetchone()
+            if owner is None:
+                raise FactConflict("Athlète indisponible.")
+            rows = con.execute(
+                f"SELECT {_COLUMNS} FROM app.visible_athlete_facts ORDER BY id LIMIT ?",
+                [MAX_FACTS + 1],
+            ).fetchall()
+            if len(rows) > MAX_FACTS:
+                raise MemoryLimitExceeded("Trop de faits enregistrés.")
+            for values in rows:
+                old = Fact(*values)
+                if (
+                    old.kind == kind
+                    and _identity(old.text) == normalized
+                    and old.evidence == evidence
+                    and old.valid_until == valid_until
+                    and (valid_until is None or old.since == since)
+                ):
+                    if old.status != "active":
+                        raise FactConflict(
+                            f"Le souvenir #{old.id} est désactivé. Ne le recrée pas. "
+                            "Sa réactivation nécessite une nouvelle demande explicite de l’athlète."
+                        )
+                    return old
+            if len(rows) == MAX_FACTS:
+                raise MemoryLimitExceeded("Trop de faits enregistrés.")
+            row = con.execute(
+                "INSERT INTO app.athlete_facts "
+                "(kind, text, since, source, evidence, source_ref, valid_until) "
+                f"VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING {_COLUMNS}",
+                [kind, text.strip(), since, source, evidence, source_ref, valid_until],
+            ).fetchone()
+    except duckdb.TransactionException as exc:
+        raise FactConflict("Écriture concurrente : relis la mémoire.") from exc
     assert row is not None
     return Fact(*row)
+
+
+def _identity(text: str) -> str:
+    # Exact wording only: no fuzzy matching that might collapse distinct facts.
+    return " ".join(
+        unicodedata.normalize("NFKC", text).replace("’", "'").split()
+    ).casefold()
 
 
 def _expect(fact: Fact, expected_revision: int | None) -> None:
@@ -230,7 +274,7 @@ def fact_history(fact_id: int) -> list[dict[str, Any]]:
 
 def facts_block(current_date: date | None = None) -> str:
     """Keep every currently valid fact; the complete-request guard owns token bounds."""
-    today = current_date or date.today()
+    today = current_date or athlete_today()
     facts = [
         f
         for f in list_facts(active_only=True)

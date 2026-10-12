@@ -40,6 +40,7 @@ from arete.features.workload import (
     get_acwr_zone,
 )
 from arete.services.metrics import fitness_series
+from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +168,7 @@ def get_overview(period: str = "30d"):
     """
     with db_connection() as con:
         earliest = earliest_session_date(con)
-        window = resolve_period(period, date.today(), earliest)
+        window = resolve_period(period, athlete_today(), earliest)
         start = _fetch_start(window)
         # The form chart walks the whole history, as every other surface does.
         tss_start = min(earliest or start, start)

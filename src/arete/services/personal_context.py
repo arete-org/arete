@@ -13,13 +13,11 @@ import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
-from itertools import islice
-from pathlib import Path
 from time import perf_counter
 
 from arete.dataio.db import transaction
 from arete.services.athlete_facts import MemoryLimitExceeded
-from arete.services.memory import memory_root
+from arete.services.memory import list_files
 
 MAX_PASSAGES = 10_000
 MAX_CORPUS_BYTES = 20 * 1024 * 1024
@@ -209,26 +207,13 @@ def _database_corpus(corpus: Corpus, thread_id: str | None) -> None:
             )
 
 
-def _journal_corpus(corpus: Corpus, root: Path) -> None:
-    paths = list(islice(root.iterdir(), MAX_JOURNAL_FILES + 1))
-    if len(paths) > MAX_JOURNAL_FILES:
-        raise MemoryLimitExceeded("Trop de fichiers dans le journal.")
-    for path in sorted(paths):
-        if not re.fullmatch(r"(?:notes|sessions(?:-\d{4}-\d{2})?)\.md", path.name):
-            continue
-        if path.is_symlink():
-            raise ValueError("Lien symbolique interdit dans le corpus mémoire.")
-        size = path.stat().st_size
-        corpus.reserve(size)
-        with path.open("rb") as handle:
-            raw = handle.read(MAX_CORPUS_BYTES + 1)
-        if len(raw) > MAX_CORPUS_BYTES:
-            raise MemoryLimitExceeded("Journal trop volumineux.")
-        corpus.reserve(max(0, len(raw) - size))
-        text = raw.decode("utf-8")
+def _journal_corpus(corpus: Corpus) -> None:
+    for file in list_files():
+        text = file.content
+        corpus.reserve(len(text.encode()))
         entries = (
             text.splitlines()
-            if path.name == "notes.md"
+            if file.name == "notes.md"
             else re.split(r"(?m)(?=^## )", text)
         )
         for entry in entries:
@@ -239,7 +224,7 @@ def _journal_corpus(corpus: Corpus, root: Path) -> None:
             # Only an explicit typed reference establishes a relation, never a date/name.
             links = tuple(re.findall(r"\b(?:actual|strength|planned):\d+\b", entry))
             corpus.add(
-                f"journal:{path.name}:{digest}",
+                f"journal:{file.name}:{digest}",
                 day[0] if day else "",
                 entry,
                 links=links,
@@ -314,7 +299,7 @@ def search_personal_context(
     started = perf_counter()
     corpus = Corpus()
     _database_corpus(corpus, thread_id)
-    _journal_corpus(corpus, memory_root())
+    _journal_corpus(corpus)
     result = retrieve(corpus.passages, query, limits=limits)
     # Date is provided by the server. Historical dates remain visible, not rewritten.
     assert isinstance(current_date, date)

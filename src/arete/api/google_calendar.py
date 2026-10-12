@@ -173,6 +173,13 @@ class PlanSyncMiddleware:
             return
         with plan_changes.watch() as changed:
             await self.app(scope, receive, send)
+        if changed:
+            from arete.services.coach_today import prepare
+
+            try:
+                await asyncio.to_thread(prepare)
+            except Exception:
+                logger.exception("Coach proposals unavailable after plan change")
         if changed and config.google_calendar_configured:
             try:
                 await asyncio.to_thread(sync_training_plan, AFTER_PLAN_WRITE)

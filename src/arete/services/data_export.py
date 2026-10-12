@@ -24,7 +24,8 @@ from datetime import date, datetime
 from typing import Any, Literal
 
 from arete.dataio.db import db_connection
-from arete.services.memory import ledger_lock, memory_root
+from arete.services.memory import list_files
+from arete.services.settings import athlete_today
 
 #: Vercel's response cap is 4.5 MB; headers and rounding need the margin.
 EXPORT_LIMIT_BYTES = 4_000_000
@@ -143,12 +144,7 @@ def _selected(names: Sequence[str] | None) -> list[str]:
 
 def _journal() -> dict[str, str]:
     """The ledgers and their monthly archives, as the coach reads them."""
-    with ledger_lock():
-        return {
-            path.name: path.read_text(encoding="utf-8")
-            for path in sorted(memory_root().glob("*.md"))
-            if path.is_file()
-        }
+    return {file.name: file.content for file in list_files()}
 
 
 def collect(
@@ -247,6 +243,6 @@ def build(
         raise ExportTooLarge(len(content))
     return ExportFile(
         content=content,
-        filename=_filename(data, fmt, today or date.today()),
+        filename=_filename(data, fmt, today or athlete_today()),
         media_type="application/zip" if fmt == "zip" else "application/json",
     )

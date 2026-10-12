@@ -84,11 +84,13 @@ def parse_for_athlete(
     """
     user_id = resolve_athlete_id(user_id)
     from arete.llm.workout_parser import parse_workout_text
+    from arete.services.settings import athlete_today
 
     return parse_workout_text(
         text=text,
         workout_date=workout_date,
         abbreviations=athlete_abbreviations(user_id),
+        today=athlete_today() if workout_date is None else None,
     )
 
 

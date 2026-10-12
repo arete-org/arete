@@ -47,10 +47,10 @@ def _stored(store) -> dict[str, bytes]:
 def test_new_files_are_stored(store, tmp_path, monkeypatch):
     root = _use_data_dir(monkeypatch, tmp_path / "data")
     mirror.hydrate()
-    (root / "agent/memory").mkdir(parents=True)
-    (root / "agent/memory/profile.md").write_text("seuil 176")
+    (root / "garmin_tokens").mkdir(parents=True)
+    (root / "garmin_tokens/profile.json").write_text("seuil 176")
     assert mirror.flush() == 1
-    assert _stored(store) == {"agent/memory/profile.md": b"seuil 176"}
+    assert _stored(store) == {"garmin_tokens/profile.json": b"seuil 176"}
 
 
 def test_a_fresh_instance_gets_the_stored_files(store, tmp_path, monkeypatch):
@@ -77,16 +77,16 @@ def test_unchanged_files_are_not_written_again(store, tmp_path, monkeypatch):
 
 def test_stale_copy_does_not_overwrite_another_instance(store, tmp_path, monkeypatch):
     root = _use_data_dir(monkeypatch, tmp_path / "data")
-    (root / "agent/memory").mkdir(parents=True)
-    (root / "agent/memory/notes.md").write_text("v1")
+    (root / "garmin_tokens").mkdir(parents=True)
+    (root / "garmin_tokens/notes.json").write_text("v1")
     mirror.hydrate()
     mirror.flush()
     with store() as con:  # another instance stores v2 meanwhile
         con.execute(
-            "UPDATE app.files SET content = 'v2' WHERE path = 'agent/memory/notes.md'"
+            "UPDATE app.files SET content = 'v2' WHERE path = 'garmin_tokens/notes.json'"
         )
     assert mirror.flush() == 0
-    assert _stored(store) == {"agent/memory/notes.md": b"v2"}
+    assert _stored(store) == {"garmin_tokens/notes.json": b"v2"}
 
 
 def test_deleted_files_are_removed(store, tmp_path, monkeypatch):
@@ -147,6 +147,51 @@ def test_middleware_hydrates_then_flushes_on_a_remote_database(monkeypatch):
     monkeypatch.setattr(mirror, "flush", lambda: calls.append("flush"))
     app = FastAPI()
     app.add_middleware(mirror.MirrorMiddleware)
-    app.get("/ping")(lambda: calls.append("handler") or "pong")
-    assert TestClient(app).get("/ping").status_code == 200
+    app.post("/ping")(lambda: calls.append("handler") or "pong")
+    assert TestClient(app).post("/ping").status_code == 200
     assert calls == ["hydrate", "handler", "flush"]
+
+
+def test_a_read_only_request_skips_the_flush(monkeypatch):
+    """The dashboard's GETs paid a walk and a hash of every mirrored file each."""
+    calls: list[str] = []
+    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))
+    monkeypatch.setattr(mirror, "flush", lambda: calls.append("flush"))
+    app = FastAPI()
+    app.add_middleware(mirror.MirrorMiddleware)
+    app.get("/ping")(lambda: calls.append("handler") or "pong")
+    client = TestClient(app)
+    assert client.get("/ping").status_code == 200
+    assert client.head("/ping").status_code in (200, 405)
+    assert calls == ["hydrate", "handler", "hydrate"]
+
+
+def _remote_app(monkeypatch, path: str, handler) -> TestClient:
+    """A remote database whose mirror writes to the local store fixture."""
+    monkeypatch.setenv("ARETE_DB", "md:arete")
+    app = FastAPI()
+    app.add_middleware(mirror.MirrorMiddleware)
+    app.get(path)(handler)
+    return TestClient(app)
+
+
+def test_a_get_that_refreshes_garmin_tokens_stores_them(store, tmp_path, monkeypatch):
+    """The SDK rewrites the token file when it refreshes, during any request.
+
+    The handler is sync: it runs in a worker thread, in a copied context.
+    """
+    from arete.garmin.client import TOKEN_FILE, GarminClient
+
+    _use_data_dir(monkeypatch, tmp_path / "data")
+
+    def status() -> dict:
+        client = GarminClient(config.garmin_tokens_dir)
+        present = client.has_tokens()
+        client.token_dir.mkdir(parents=True, exist_ok=True)
+        client.token_file.write_text('{"refreshed": true}')  # the SDK's dump
+        return {"present": present}
+
+    client = _remote_app(monkeypatch, "/garmin/status", status)
+    assert client.get("/garmin/status").status_code == 200
+    assert _stored(store) == {f"garmin_tokens/{TOKEN_FILE}": b'{"refreshed": true}'}

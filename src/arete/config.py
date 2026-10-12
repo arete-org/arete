@@ -259,6 +259,12 @@ class Config:
         return _env("CLERK_SECRET_KEY", "") or ""
 
     @property
+    def clerk_jwt_key(self) -> str:
+        """The Clerk instance's PEM public key: session tokens are then verified
+        offline instead of fetching Clerk's JWKS. Empty = fetch (5 min cache)."""
+        return _env("CLERK_JWT_KEY", "") or ""
+
+    @property
     def clerk_publishable_key(self) -> str:
         """The Marketplace provisions it under the Next.js name; both are read."""
         return (

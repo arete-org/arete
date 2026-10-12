@@ -74,8 +74,8 @@ lists each athlete with its logins, role, last activity (refreshed hourly with t
 Clerk profile) and daily sync, and acts on the account tables only, never on an
 athlete's private data:
 
-- **Désactiver / Réactiver** an athlete: its logins are refused at once and its
-  data is hidden, then restored as it was. Nobody deactivates athlete 1, and only
+- **Désactiver / Réactiver** an athlete: its logins are refused (within the
+  bound below) and its data is hidden, then restored as it was. Nobody deactivates athlete 1, and only
   the owner deactivates an administrator's athlete.
 - **Libérer la synchro**: clears a lease kept by a failed or stopped daily run, so
   the next window runs the day again. Check first what that run already did at
@@ -83,7 +83,10 @@ athlete's private data:
   in progress and is not released.
 - **Nommer admin / Retirer admin**: the owner only, never on its own logins.
 
-A change applies at the account's next request: every request reads its row.
+A change applies at the account's next request on the instance that made it.
+Each instance reuses a resolved account (the login and whether its athlete is
+live, read in one query) for 30 seconds (`ACCOUNT_TTL_SECONDS` in
+`api/auth.py`, at most 60), so other instances follow within that bound.
 
 ## Migrations and deployment
 
@@ -144,3 +147,14 @@ external Garmin/Clerk calls and use temporary local databases. In particular,
 Garmin import/disconnect, shared storage, files, documents, coach memory and jobs.
 The browser connection test covers the visible form → MFA → sync → logout flow.
 A real Garmin login and a dedicated MotherDuck preview remain rollout checks.
+
+### Private administrator consultation in Slack
+
+The Slack product assistant additionally permits verified Arete administrators
+to read an active athlete's settings, training, health, facts, journal and stored
+document extraction. This is separate from the administration HTTP endpoints,
+which retain their account-management scope. Reads are restricted to an
+administrator-owned DM, audited by actor/target/section, and have no training
+writes or outbound communication tools. Revocation is checked at each privileged
+operation. A private consultation thread never becomes a public product thread.
+See [Slack administrator behavior](slack.md#administrator-product-assistant).

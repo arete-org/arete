@@ -23,6 +23,7 @@ from arete.dataio.queries import (
 )
 from arete.services.analytics import EFFORT_NAMES, best_efforts
 from arete.services.metrics import fitness_series
+from arete.services.settings import athlete_today
 
 #: Oldest year the page accepts; anything earlier is a typo, not a history.
 FIRST_YEAR = 2000
@@ -253,7 +254,7 @@ def _efforts(rows: Sequence[tuple], start: date, end: date) -> list[dict[str, An
 
 def year_review(year: int, today: date | None = None) -> dict[str, Any]:
     """Every number of the year-in-review page; ValueError outside 2000..this year."""
-    today = today or date.today()
+    today = today or athlete_today()
     start, end = _period(year, today)
     with db_connection() as con:
         sessions = [

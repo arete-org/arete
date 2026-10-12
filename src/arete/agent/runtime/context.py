@@ -14,7 +14,9 @@ from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
     from arete.agent.profiles.models import AgentProfile
+    from arete.agent.runtime.surface import SurfaceDecision
     from arete.services.calendar import CalendarService
+    from arete.services.slack_product import SlackProduct
 
 from arete.agent.runtime.budget import MAX_TOOL_CONCURRENCY
 
@@ -52,6 +54,12 @@ class RunStats:
     served_models: list[str] = field(default_factory=list)
 
 
+def _athlete_today() -> date:
+    from arete.services.settings import athlete_today
+
+    return athlete_today()
+
+
 @dataclass
 class AgentContext:
     """Per-run context handed to ``create_agent(context_schema=...)``.
@@ -63,19 +71,25 @@ class AgentContext:
 
     source: dict[str, Any] = field(default_factory=dict)
     # Selected by the server entrypoint, never from panel_context or messages.
-    profile: Literal["chat", "briefing", "feedback", "review"] = "chat"
+    profile: Literal["chat", "briefing", "feedback", "review", "slack"] = "chat"
     resolved_profile: AgentProfile | None = field(default=None, init=False, repr=False)
     calendar: CalendarService | None = field(default=None, init=False, repr=False)
     thread_id: str | None = None
-    # One root run per turn; message/model IDs identify children, not the answer.
+    # One graph run per turn; browser feedback uses this as its trace root.
+    # Slack has an outer trace covering classification and delivery as well.
     run_id: UUID = field(default_factory=uuid4, init=False)
     # Clerk user id from the verified request identity, never from the body.
     account_id: str = ""
     document_ids: tuple[str, ...] | None = None
     # Slack only: who reads the answer. None for the browser and missions.
     slack_visibility: Literal["private", "public"] | None = None
+    slack_product: SlackProduct | None = field(default=None, repr=False)
+    slack_decision: SurfaceDecision | None = field(default=None, repr=False)
+    classifier_calls: int = 0
+    run_logged: bool = False
     attachment_paths: tuple[str, ...] = ()
-    current_date: date = field(default_factory=date.today)
+    # The athlete's calendar day (their timezone), fixed for the invocation.
+    current_date: date = field(default_factory=_athlete_today)
     deadline: float | None = field(default=None, init=False)
     started_at: float | None = field(default=None, init=False)
     stats: RunStats = field(default_factory=RunStats, init=False, repr=False)

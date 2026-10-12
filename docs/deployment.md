@@ -16,7 +16,7 @@ One Vercel project, two services (`vercel.json`): the FastAPI backend behind
 `/api/*` and the Vite frontend. Vercel's Git integration deploys nothing
 (`git.deploymentEnabled: false`): every deployment comes from a workflow, with
 `vercel deploy --archive=tgz` and the `VERCEL_TOKEN` repository secret.
-Each deployment stores a ~430 MB function against the Hobby plan's 10 GB, so
+Each deployment stores a ~490 MB function against the Hobby plan's 10 GB, so
 the workflows prune: one PR preview per PR, one main preview, the two newest
 production deployments (the live one and its predecessor, for a rollback).
 PR deployment and close/merge cleanup share a concurrency group: cleanup waits
@@ -54,6 +54,42 @@ VITE_CLERK_PUBLISHABLE_KEY=<the same value as CLERK_PUBLISHABLE_KEY>
   people sign in, then the server refuses the session; the browser only then
   asks `/api/auth/config`, sees the different key and shows the same error
   instead of signing out in a loop.
+
+## Backend bundle and cold starts
+
+The backend function weighs ~490 MB uncompressed (dependencies, `src/`, the
+bundled MotherDuck extension and OCR data). Vercel's Python builder treats a
+bundle over 225 MB that has a `uv.lock` specially: unless told otherwise, it
+ships only part of it and runs a `uv sync` into `/tmp` on **every cold
+start** (`Installing runtime dependencies...`, 13 wheels, ~3.5 s plus the
+downloads; a cold `/api/auth/config` took 9.3 s against 160 ms warm).
+Two settings turn that off, and both are needed:
+
+- `services.backend.installCommand` in `vercel.json`
+  (`uv sync --frozen --no-dev --no-install-project`): a custom install
+  command disables the runtime install and installs exactly the lock into the
+  builder's environment. `src/` is not installed as a package; `asgi.py` puts
+  it on the path. `tests/test_api.py` guards the setting.
+- `VERCEL_SUPPORT_LARGE_FUNCTIONS=1` on the Vercel project, in **every**
+  environment that builds (Preview and Production). Without it, a custom install
+  command over 225 MB fails the build with `LAMBDA_SIZE_EXCEEDED`; with it the
+  builder packs every dependency into a large function (beta, up to 5 GB,
+  Fluid compute required). Large functions alone do not help: below 500 MB
+  the builder still prefers the runtime install.
+
+A custom install command also turns off the builder's bytecode
+precompilation, so measure cold starts rather than assume them. To check a
+deployment:
+
+```bash
+vercel --scope arete15 inspect <url> --logs | grep -iE "optimizing|large|bytecode|install"
+vercel --scope arete15 logs --project arete --environment preview --json | grep -c "Installing runtime dependencies"   # expect 0
+```
+
+The build log must announce a large function and no "optimizing dependencies";
+the runtime logs must never print `Installing runtime dependencies`. Do not
+drop `uv.lock` from `.vercelignore` as a workaround: the builder would then
+resolve versions itself instead of installing the reviewed lock.
 
 ## LangSmith agent tracing
 
@@ -195,10 +231,30 @@ dashboard:
   for the preview health check), `OPENROUTER_API_KEY` (the wiki workflow);
   variables `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
 
+## Clerk session verification
+
+With `ARETE_AUTH=clerk`, the API verifies each Clerk session token itself.
+Without `CLERK_JWT_KEY` the Clerk SDK first fetches the instance's JWKS from
+Clerk, on every new function instance and again every five minutes, which
+delays the first request of a dashboard burst. With it, verification is
+offline:
+
+- **Where to copy it.** Clerk dashboard → *Configure* → *API keys* → *JWT
+  public key*, the PEM block (`-----BEGIN PUBLIC KEY-----` … `-----END PUBLIC
+  KEY-----`). Paste it whole in the Vercel variable; line breaks may stay or go.
+- **One key per Clerk instance.** Each Vercel environment takes the key of the
+  instance whose `CLERK_SECRET_KEY` it holds. Production and Preview use
+  different keys as soon as they use different instances: moving Production to
+  its own Clerk instance changes this key together with the two others.
+- **Failure modes.** A key that does not load answers 503 on every protected
+  route, logged as `Authentication enabled but unusable: CLERK_JWT_KEY
+  illisible …`. A readable key from another instance refuses every session with
+  401. Removing the variable restores the JWKS fetch.
+
 ## Keeping production warm
 
 A function instance idles out after a few minutes, and the first request then
-pays a cold start (about 2 s with the bundled MotherDuck extension). An
+pays a cold start (see "Backend bundle and cold starts" above). An
 external pinger (cron-job.org or similar) calling
 `https://arete-arete15.vercel.app/api/health` every 5 minutes keeps an instance
 and the MotherDuck connection warm, and alerts on the 503 that a pending

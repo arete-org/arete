@@ -11,6 +11,7 @@
       "functions": {
         "asgi.py": { "maxDuration": 300 }
       },
+      "installCommand": "uv sync --frozen --no-dev --no-install-project",
       "buildCommand": "python scripts/bundle_duckdb_extensions.py && python scripts/bundle_ocr_data.py"
     },
     "frontend": {

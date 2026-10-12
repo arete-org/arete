@@ -33,7 +33,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from arete.services.memory import NOTES_LEDGER, SESSIONS_LEDGER, memory_root
+from arete.services.memory import NOTES_LEDGER, SESSIONS_LEDGER, read_file
 
 logger = logging.getLogger(__name__)
 
@@ -104,10 +104,13 @@ def _bounded_notes(text: str) -> tuple[str, bool]:
 
 def journal_block(root: Path | None = None) -> str:
     """The journal as it goes into the system prompt, or "" when it is empty."""
-    root = root or memory_root()
-    notes, notes_cut = _bounded_notes(_read(root / NOTES_LEDGER))
+    notes_text = _read(root / NOTES_LEDGER) if root else read_file(NOTES_LEDGER).content
+    sessions_text = (
+        _read(root / SESSIONS_LEDGER) if root else read_file(SESSIONS_LEDGER).content
+    )
+    notes, notes_cut = _bounded_notes(notes_text)
     sessions, sessions_cut = recent_entries(
-        _read(root / SESSIONS_LEDGER), RECENT_SESSION_ENTRIES, MAX_SESSIONS_CHARS
+        sessions_text, RECENT_SESSION_ENTRIES, MAX_SESSIONS_CHARS
     )
     if not notes and not sessions:
         return ""

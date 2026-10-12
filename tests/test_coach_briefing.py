@@ -21,6 +21,7 @@ from arete.services import briefing as briefing_service
 from arete.services.athlete_scope import athlete_scope
 from arete.services.coaching_repository import BriefingRepository
 from arete.services.coaching_rules import RuleFacts
+from arete.services.memory import read_file as read_memory_file
 
 #: An athlete with a training history: there is something to coach on.
 TRAINED = RuleFacts(
@@ -367,13 +368,13 @@ class TestLedgerRotation:
         ledger.write_text(self._entries(60), encoding="utf-8")
         archive = rotate_sessions_ledger()
 
-        assert archive is not None and archive.exists()
-        kept = ledger.read_text(encoding="utf-8")
+        assert archive is not None
+        kept = read_memory_file("sessions.md").content
         assert len(kept) < MAX_SESSIONS_LEDGER_CHARS
         # Never mid-entry: half a session reads as a different session.
         assert kept.startswith("## ")
         # Nothing is lost, it just moved.
-        assert "séance 1\n" in archive.read_text(encoding="utf-8")
+        assert "séance 1\n" in read_memory_file(archive).content
 
     def test_rotation_is_idempotent(self, ledger):
         from arete.services.memory import rotate_sessions_ledger
@@ -426,7 +427,10 @@ class TestSessionFeedback:
 
         with patch("arete.coaching.run_feedback", return_value="ok") as run:
             enrich_session_feedback("Séance terminée.", [])
-        assert run.call_args[0][0] == "Séance terminée."
+        assert (
+            run.call_args[0][0]
+            == "Observation calculée (pas une déclaration) : Séance terminée."
+        )
 
     def test_an_overlong_answer_is_refused(self):
         from arete.coaching import run_feedback as _run_agent
@@ -484,7 +488,7 @@ class TestAppendEntry:
         assert append_entry(
             "sessions.md", "trail — sortie longue", "20 km", date(2026, 10, 9)
         )
-        assert (memory / "sessions.md").read_text() == (
+        assert read_memory_file("sessions.md").content == (
             "## 2026-10-09 — trail — sortie longue\n20 km\n"
         )
 
@@ -494,7 +498,7 @@ class TestAppendEntry:
         day = date(2026, 10, 9)
         append_entry("sessions.md", "footing", "8 km", day)
         assert not append_entry("sessions.md", "footing", "8 km encore", day)
-        assert (memory / "sessions.md").read_text().count("## 2026-10-09") == 1
+        assert read_memory_file("sessions.md").content.count("## 2026-10-09") == 1
 
     def test_a_note_is_one_dated_line(self, memory):
         from arete.services.memory import append_entry
@@ -502,14 +506,14 @@ class TestAppendEntry:
         append_entry(
             "notes.md", "genou", "gêne au genou gauche\nen descente", date(2026, 10, 9)
         )
-        assert (memory / "notes.md").read_text() == (
+        assert read_memory_file("notes.md").content == (
             "- 2026-10-09 — genou : gêne au genou gauche en descente\n"
         )
 
     def test_an_unknown_ledger_is_refused(self, memory):
         from arete.services.memory import append_entry
 
-        with pytest.raises(ValueError):
+        with pytest.raises(PermissionError):
             append_entry("other.md", "x", "y")
 
 
@@ -525,6 +529,7 @@ class TestBriefingFacts:
                 "target_duration_min": 45,
                 "target_hr_zone": "Z3",
                 "description": "3x10' tempo",
+                "status": type("S", (), {"value": "pending"})(),
             },
         )()
         with patch(
@@ -685,9 +690,12 @@ class TestFeedbackFiling:
             )
         assert (text, source) == ("Belle séance.", "agent")
         assert "RPE ressenti : 7/10" in run.call_args.args[0]
-        ledger = (memory / "sessions.md").read_text()
+        ledger = read_memory_file("sessions.md").content
         assert ledger.startswith("## 2026-10-09 — trail — sortie longue\n")
-        assert "Retour du coach : Belle séance." in ledger
+        assert (
+            "Interprétation du coach (non confirmée, jamais une preuve) : Belle séance."
+            in ledger
+        )
 
     def test_a_repeated_request_files_nothing_more(self, memory):
         from arete.coaching import enrich_session_feedback
@@ -695,7 +703,7 @@ class TestFeedbackFiling:
         with patch("arete.coaching.run_feedback", return_value="ok"):
             enrich_session_feedback("20 km.", [], self._evidence())
             enrich_session_feedback("20 km.", [], self._evidence())
-        assert (memory / "sessions.md").read_text().count("## 2026-10-09") == 1
+        assert read_memory_file("sessions.md").content.count("## 2026-10-09") == 1
 
     def test_a_failed_model_still_files_the_facts(self, memory):
         from arete.coaching import enrich_session_feedback
@@ -703,5 +711,5 @@ class TestFeedbackFiling:
         with patch("arete.coaching.run_feedback", side_effect=RuntimeError("down")):
             text, source = enrich_session_feedback("20 km.", [], self._evidence())
         assert (text, source) == ("20 km.", "rules")
-        ledger = (memory / "sessions.md").read_text()
+        ledger = read_memory_file("sessions.md").content
         assert "20 km." in ledger and "Retour du coach" not in ledger
