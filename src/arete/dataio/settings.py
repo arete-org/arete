@@ -43,7 +43,7 @@ def _settings_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
         # Migration 11: the morning adaptation and its Garmin push.
         "auto_adapt_enabled": row[17] if len(row) > 17 else False,
         "push_to_garmin_enabled": row[18] if len(row) > 18 else False,
-        # Migration 44: per-kind choices and quiet hours, JSON; None = defaults.
+        # Migration 45: per-kind choices and quiet hours, JSON; None = defaults.
         "notification_preferences": _json_or_none(row[19] if len(row) > 19 else None),
     }
 

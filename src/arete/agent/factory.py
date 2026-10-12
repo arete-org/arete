@@ -126,7 +126,7 @@ def build_agent(
             ),
         ],
         middleware=middleware,
-        system_prompt=SYSTEM_SKILL,
+        system_prompt=profile.system_prompt or SYSTEM_SKILL,
         context_schema=AgentContext,
         name=profile.name,
     )

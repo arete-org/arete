@@ -112,11 +112,17 @@ def build_context(
             "facts",
             facts_block(
                 context.current_date if isinstance(context, AgentContext) else None
-            ),
+            )
+            if profile.personal_context
+            else "",
             "ledger",
         ),
-        ContextSection("journal", journal_block(), "ledger"),
-        ContextSection("followups", followup_block(), "ledger"),
+        ContextSection(
+            "journal", journal_block() if profile.personal_context else "", "ledger"
+        ),
+        ContextSection(
+            "followups", followup_block() if profile.personal_context else "", "ledger"
+        ),
         ContextSection(
             "attachments",
             attachment_section(

@@ -799,7 +799,13 @@ def _m43_proactive_coaching(con) -> None:
     _m36_private_relations(con)
 
 
-def _m44_notification_preferences(con) -> None:
+def _m44_slack_product(con) -> None:
+    from arete.dataio.slack_schema import migrate
+
+    migrate(con)
+
+
+def _m45_notification_preferences(con) -> None:
     """Per-kind notification choices and quiet hours (ARE-57).
 
     Nullable: NULL reads as every kind on with the default quiet hours, so
@@ -848,7 +854,8 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (41, _m41_feature_flags),
     (42, _m42_slack_delivery_threads),
     (43, _m43_proactive_coaching),
-    (44, _m44_notification_preferences),
+    (44, _m44_slack_product),
+    (45, _m45_notification_preferences),
 ]
 
 

@@ -144,3 +144,14 @@ external Garmin/Clerk calls and use temporary local databases. In particular,
 Garmin import/disconnect, shared storage, files, documents, coach memory and jobs.
 The browser connection test covers the visible form → MFA → sync → logout flow.
 A real Garmin login and a dedicated MotherDuck preview remain rollout checks.
+
+### Private administrator consultation in Slack
+
+The Slack product assistant additionally permits verified Arete administrators
+to read an active athlete's settings, training, health, facts, journal and stored
+document extraction. This is separate from the administration HTTP endpoints,
+which retain their account-management scope. Reads are restricted to an
+administrator-owned DM, audited by actor/target/section, and have no training
+writes or outbound communication tools. Revocation is checked at each privileged
+operation. A private consultation thread never becomes a public product thread.
+See [Slack administrator behavior](slack.md#administrator-product-assistant).

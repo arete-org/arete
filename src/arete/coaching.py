@@ -55,10 +55,12 @@ def _serialized(factory):
     return get
 
 
-def _assemble(profile_id: str, *, glm_flash: bool = False):
+def _assemble(
+    profile_id: str, *, glm_flash: bool = False, calendar_enabled: bool = True
+):
     profile = get_profile(profile_id)
     calendar = None
-    if profile_id == "chat" and config.google_calendar_configured:
+    if profile_id == "chat" and calendar_enabled and config.google_calendar_configured:
         calendar = get_calendar_service
         profile = replace(
             profile,
@@ -142,6 +144,9 @@ async def run_slack_coach(
     thread_id: str,
     visibility: Literal["private", "public"],
     emit: Callable[[dict], Awaitable[None]],
+    *,
+    graph=None,
+    context: AgentContext | None = None,
 ) -> str:
     """Slack supplies its own history; reuse the chat graph and runtime limits."""
     from langchain_core.messages import AIMessage
@@ -149,14 +154,16 @@ async def run_slack_coach(
     from arete.agent.runtime.execution import stream_agent
     from arete.agent.runtime.streaming import MAX_STREAM_EVENTS, StreamProjection
 
+    context = context or AgentContext(thread_id=thread_id, slack_visibility=visibility)
+    context.slack_visibility = visibility
     projection = StreamProjection()
     answer = ""
     count = 0
     async with aclosing(
         stream_agent(
-            get_agent(),
+            graph if graph is not None else get_agent(),
             {"messages": messages},
-            context=AgentContext(thread_id=thread_id, slack_visibility=visibility),
+            context=context,
         )
     ) as stream:
         async for part in stream:
@@ -279,3 +286,133 @@ def enrich_session_feedback(
     return session_feedback.enrich_session_feedback(
         rule_feedback, highlights, produce=run_feedback, evidence=evidence
     )
+
+
+@lru_cache(maxsize=MAX_CACHED_ATHLETES * 2)
+def _slack_graph(athlete_id: int, profile_id: str, glm_flash: bool):
+    assert athlete_id == current_athlete_id()
+    return _assemble(profile_id, glm_flash=glm_flash, calendar_enabled=False)
+
+
+async def prepare_slack_agent(messages, message, client):
+    """Compose before delivery starts, so private reads never stream to a channel."""
+    from time import monotonic
+
+    from anyio import to_thread
+
+    from arete.agent.middlewares.surface import SurfaceDetectionMiddleware
+    from arete.agent.runtime.surface import CLASSIFIER_MAX_TOKENS, CLASSIFIER_TIMEOUT
+    from arete.observability.agent import record_run
+    from arete.observability.tracing import agent_tracing
+    from arete.services import slack_identity
+    from arete.services.slack import MAX_JOB_SECONDS, HistoryError, SlackPreparation
+    from arete.services.slack_product import SlackProduct, valid_timezone
+
+    identity = await to_thread.run_sync(
+        slack_identity.identity, message.team, message.user
+    )
+    private_owner = await to_thread.run_sync(
+        slack_identity.private_owner, message.thread_id
+    )
+    actor = identity[0] if identity else None
+    if private_owner and (
+        not actor
+        or not actor.is_admin
+        or actor.clerk_user_id != private_owner
+        or message.in_channel
+    ):
+        raise HistoryError("Ce fil privé exige son administrateur Arete actif.")
+    if actor is None or not actor.is_admin:
+        return SlackPreparation(run_slack_coach)
+    context = AgentContext(thread_id=message.thread_id, account_id=actor.clerk_user_id)
+    context.started_at = monotonic()
+    context.deadline = context.started_at + MAX_JOB_SECONDS
+
+    def finalize():
+        if not context.run_logged:
+            context.run_logged = True
+            record_run(
+                profile=context.profile,
+                stats=context.stats,
+                total_ms=round((monotonic() - context.started_at) * 1000),
+                error="NoGraphCompletion",
+            )
+
+    try:
+        glm_flash = await to_thread.run_sync(
+            lambda: get_feature_flags().glm_flash and glm_flash_available()
+        )
+        route = resolve_route(glm_flash=glm_flash)
+        if route.base_url != "https://openrouter.ai/api/v1":
+            raise ValueError("Le classement Slack administrateur exige OpenRouter.")
+        classifier = build_chat_model(
+            route=replace(route, fallbacks=()),
+            max_tokens=CLASSIFIER_MAX_TOKENS,
+            temperature=0,
+            timeout=CLASSIFIER_TIMEOUT,
+            max_retries=0,
+            openrouter_reasoning=False,
+        )
+        with agent_tracing():
+            decision = await SurfaceDetectionMiddleware(
+                classifier, context_tokens=route.context_tokens
+            ).prepare(messages, context)
+        context.classifier_calls = 1
+        if decision.surface == "clarify" or (private_owner and decision.outbound):
+
+            async def clarify(history, thread_id, visibility, emit):
+                return "Précise si tu veux une consultation privée des données d’un athlète ou une action produit. Pour une analyse privée et un ping, utilise deux fils distincts."
+
+            return SlackPreparation(
+                clarify,
+                product=True,
+                private=bool(private_owner),
+                account_id=actor.clerk_user_id,
+                finalize=finalize,
+            )
+        private = decision.private_data or bool(private_owner)
+        context.profile = (
+            "admin_data"
+            if private
+            else "product"
+            if decision.surface == "product"
+            else "chat"
+        )
+        if context.profile != "chat":
+            assert identity is not None
+            context.slack_product = SlackProduct(
+                client,
+                message,
+                actor.clerk_user_id,
+                valid_timezone(identity[1]),
+                private=private,
+            )
+        # A cached graph captures its profile and route, never a Slack client.
+        with _graph_lock:
+            graph = _slack_graph(current_athlete_id(), context.profile, glm_flash)
+
+        async def produce(history, thread_id, visibility, emit):
+            await to_thread.run_sync(
+                slack_identity.require_admin,
+                message.team,
+                message.user,
+                actor.clerk_user_id,
+            )
+            return await run_slack_coach(
+                history, thread_id, visibility, emit, graph=graph, context=context
+            )
+
+        return SlackPreparation(
+            produce,
+            product=context.profile != "chat",
+            private=private,
+            account_id=actor.clerk_user_id,
+            finalize=finalize,
+        )
+    except BaseException as exc:
+        finalize()
+        if isinstance(exc, Exception):
+            raise HistoryError(
+                "Classement Slack indisponible ; aucune action exécutée. " + str(exc)
+            ) from exc
+        raise

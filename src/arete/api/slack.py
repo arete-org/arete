@@ -30,7 +30,7 @@ SLACK_TIMESTAMP = re.compile(r"[0-9]{1,16}\.[0-9]{6}")
 async def process_message(message: SlackMessage, token: str) -> None:
     # Work stays attached to the ASGI response lifecycle, never create_task().
     # Slack's receipt must not wait on MotherDuck or the model stack.
-    from arete.coaching import run_slack_coach
+    from arete.coaching import prepare_slack_agent, run_slack_coach
     from arete.dataio import mirror
     from arete.services.athlete_scope import athlete_scope
     from arete.services.slack import dispatch, resolve
@@ -51,7 +51,12 @@ async def process_message(message: SlackMessage, token: str) -> None:
                 if config.is_remote_db:
                     await to_thread.run_sync(mirror.hydrate)
                 try:
-                    await dispatch(message, client=client, produce=run_slack_coach)
+                    await dispatch(
+                        message,
+                        client=client,
+                        produce=run_slack_coach,
+                        prepare=prepare_slack_agent,
+                    )
                 finally:
                     if config.is_remote_db:
                         await to_thread.run_sync(mirror.flush)
