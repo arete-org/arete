@@ -86,7 +86,12 @@ def refresh_threshold(client: Any, user_id: int | None = None) -> dict[str, Any]
             "measured_on": stored_on.isoformat() if stored_on else None,
         }
 
-    payload = {k: v for k, v in settings.items() if k != "user_id"}
+    # The preferences come back parsed; omitted, the stored JSON is kept.
+    payload = {
+        k: v
+        for k, v in settings.items()
+        if k not in ("user_id", "notification_preferences")
+    }
     payload.update(
         lthr=reading.heart_rate or stored_hr,
         threshold_pace_sec_km=reading.pace_sec_km

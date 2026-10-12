@@ -157,3 +157,29 @@ def test_migration_45_on_a_current_schema(tmp_path, monkeypatch):
     # Existing athletes read NULL: every kind on, as before the migration.
     assert row == (None, True)
     assert 45 in versions
+
+
+def test_a_garmin_threshold_refresh_keeps_the_saved_choice(own_athlete):
+    from unittest.mock import MagicMock
+
+    from arete.garmin.threshold import refresh_threshold
+    from arete.services.settings import (
+        UserSettingsUpdate,
+        get_settings,
+        update_settings,
+    )
+
+    chosen = NotificationPreferences(kinds={"imports": False})
+    prefs = update_settings(
+        UserSettingsUpdate(notification_preferences=chosen)
+    ).notification_preferences
+    client = MagicMock()
+    client.lactate_threshold.return_value = {
+        "calendarDate": "2026-09-15T08:36:06.872",
+        "speed": 0.3888878,
+        "heartRate": 176,
+    }
+    # The refresh rewrites every stored setting: the parsed preferences must
+    # not reach the JSON column as a dict (it failed every Garmin sync).
+    assert refresh_threshold(client)["updated"] is True
+    assert get_settings().notification_preferences == prefs
