@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { toLocalISODate } from '../src/lib/dates';
 
 test('real OCR uses local resources and preserves numeric training instructions', async ({ page }) => {
   await page.route('**/api/**', route => route.fulfill({ json: {} }));
@@ -91,7 +92,8 @@ test('PDF upload delegates extraction to the server without a browser OCR worker
 });
 
 test('Garmin export is an explicit selected action and never claims watch delivery', async ({ page }) => {
-  const day = new Date().toISOString().slice(0, 10);
+  // The planning shows the browser's local week: the UTC day is yesterday just after midnight in Paris.
+  const day = toLocalISODate();
   const session = { id: 42, date: day, sport: 'running', session_type: 'endurance', description: 'Footing de référence', source: 'coach', status: 'pending', revision: 1, prescription: { version: 1, steps: [{ kind: 'effort', duration_kind: 'seconds', value: 1800, steps: [] }] } };
   let sent = 0;
   let statuses: object[] = [];
