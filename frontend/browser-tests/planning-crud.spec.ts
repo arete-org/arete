@@ -357,6 +357,11 @@ test('mobile prioritizes sessions, uses one focus ring and stays usable in every
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.locator('h1')).toHaveCSS('font-size', '42px');
+  // The weekday and the date read as a pair rather than at opposite ends of the column.
+  const heading = page.locator('.planning-day-heading').first();
+  const weekday = (await heading.locator('h3').boundingBox())!;
+  const date = (await heading.locator('span').boundingBox())!;
+  expect(date.x - (weekday.x + weekday.width)).toBeLessThan(16);
   await page.screenshot({
     path: '../.context/planning-a-1440.png',
     fullPage: false,

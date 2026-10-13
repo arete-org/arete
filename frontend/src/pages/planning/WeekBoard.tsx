@@ -182,7 +182,7 @@ export function WeekBoard({
             aria-label={dayLabel(date)}
             onClick={() => onDay(date)}
           >
-            <span className="text-[11px] font-medium">
+            <span className="text-[13px] font-medium">
               {parseLocalDate(date).toLocaleDateString('fr-FR', {
                 weekday: 'narrow',
               })}
@@ -244,7 +244,7 @@ export function WeekBoard({
                 </Button>
               </header>
               <header className="planning-day-heading">
-                <h3 className="text-[10px] uppercase font-semibold text-text-muted">
+                <h3 className="text-[13px] uppercase font-semibold text-text-muted">
                   {parseLocalDate(date).toLocaleDateString('fr-FR', {
                     weekday: 'long',
                   })}

@@ -46,6 +46,22 @@
   background: var(--color-abyss);
   color: var(--color-text-primary);
 }
+/* The sport filter draws its own chevron, inset from the border, and centers its label. */
+.planning-toolbar .ui-input,
+.planning-dialog select[aria-label='Filtrer par sport'] {
+  appearance: none;
+  padding-inline: 36px;
+  text-align: center;
+  text-align-last: center;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%),
+    linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 50%,
+    calc(100% - 12px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
 .planning-week-board {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -59,8 +75,8 @@
 }
 .planning-day-heading {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: baseline;
+  justify-content: flex-start;
   gap: 8px;
   padding-bottom: 12px;
 }
@@ -221,7 +237,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
+    gap: 2px;
     padding: 10px 2px;
     border-radius: var(--radius-control);
     border: 1px solid transparent;
