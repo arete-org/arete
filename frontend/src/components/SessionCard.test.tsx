@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { PlanDecision, PlannedSession } from '@/types';
+import type { ActualSession, PlanDecision, PlannedSession } from '@/types';
 import { SessionCard } from './SessionCard';
 
 afterEach(cleanup);
@@ -77,6 +77,20 @@ it.each([
 ])('offers no revert for %s', (_label, d) => {
   render(<SessionCard planned={session} realised={null} state="pending" decision={d} onRevert={vi.fn()} />);
   expect(screen.queryByText('Rétablir la séance prévue')).toBeNull();
+});
+
+it('shows the exercises of the Muscu log on the Garmin activity that fulfils the session', () => {
+  const garmin = {
+    id: 30,
+    date: '2026-10-09',
+    sport: 'strength',
+    name: 'Musculation',
+    duration_sec: 3600,
+    exercises: ['Squat', 'Développé couché'],
+  } as ActualSession;
+  render(<SessionCard planned={{ ...session, sport: 'strength', session_type: 'strength' }} realised={garmin} state="done" />);
+  expect(screen.getByText('Musculation')).toBeTruthy();
+  expect(screen.getByText('Squat · Développé couché')).toBeTruthy();
 });
 
 it('reverts an applied change', () => {

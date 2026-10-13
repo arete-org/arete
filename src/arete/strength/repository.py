@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Collection
 from datetime import date, datetime
 
 import duckdb
 
 from arete.data.exercises_catalog import EXERCISES_CATALOG
 from arete.dataio.db import configure_athlete, connect, get_db_path
+from arete.dataio.game_events import KEPT_AT_LINK
 from arete.dataio.ownership import require_owned
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.strength.models import (
@@ -522,14 +524,17 @@ class StrengthRepository:
             rows = conn.execute(
                 f"""
                 WITH s AS (
-                    SELECT id, date, name, program, duration_min, overall_rpe
+                    SELECT id, date, name, program, duration_min, overall_rpe,
+                           actual_session_id
                     FROM app.visible_strength_sessions WHERE 1=1{filters}
                     ORDER BY date DESC, id DESC LIMIT ?
                 ), ex AS (
                     SELECT se.session_id, count(*) AS exercises,
                            list_sort(list_distinct(list(CASE WHEN e.id IS NOT NULL
                                THEN coalesce(nullif(e.primary_muscle, ''), 'full_body')
-                           END))) AS muscles
+                           END))) AS muscles,
+                           list(e.name ORDER BY se.exercise_order, se.id)
+                               FILTER (WHERE e.id IS NOT NULL) AS names
                     FROM app.visible_session_exercises se
                     LEFT JOIN app.visible_exercises e ON se.exercise_id = e.id
                     WHERE se.session_id IN (SELECT id FROM s)
@@ -546,7 +551,8 @@ class StrengthRepository:
                 )
                 SELECT s.id, s.date, s.name, s.program, s.duration_min, s.overall_rpe,
                        coalesce(ex.exercises, 0), coalesce(st.sets, 0),
-                       coalesce(st.volume, 0), coalesce(ex.muscles, [])
+                       coalesce(st.volume, 0), coalesce(ex.muscles, []),
+                       coalesce(ex.names, []), s.actual_session_id
                 FROM s
                 LEFT JOIN ex ON ex.session_id = s.id
                 LEFT JOIN st ON st.session_id = s.id
@@ -568,6 +574,8 @@ class StrengthRepository:
                 total_sets=int(row[7]),
                 total_volume=float(row[8]),
                 muscles_worked=list(row[9]),
+                exercise_names=list(row[10]),
+                actual_session_id=row[11],
             )
             for row in rows
         ]
@@ -968,9 +976,10 @@ class StrengthRepository:
                 "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) ",
                 (garmin_id, session_id),
             )
+            # A manual link merges the rewards, even ones an automatic link kept.
             conn.execute(
-                "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
-                [f"strength:{session_id}", f"actual:{garmin_id}"],
+                "UPDATE app.game_events SET processed=false, reason=replace(reason, ?, '') WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
+                [KEPT_AT_LINK, f"strength:{session_id}", f"actual:{garmin_id}"],
             )
             conn.execute("COMMIT")
             return True
@@ -979,6 +988,129 @@ class StrengthRepository:
             raise
         finally:
             conn.close()
+
+    def link_lone_garmin_pairs(
+        self, days: Collection[date] | None = None
+    ) -> list[tuple[int, int, date]]:
+        """Link each day's lone unlinked log to its lone unlinked strength activity.
+
+        A day with two unlinked logs or two unlinked strength activities stays
+        as it is: the manual link decides those. ``None`` covers every day (the
+        backfill). Idempotent: a linked pair is no longer a candidate. Unlike a
+        manual link, it never takes back XP or shards already granted. Returns
+        the (strength session, actual session, day) pairs it linked.
+        """
+        if days is not None and not days:
+            return []
+        day_filter = ""
+        params: list[date] = []
+        if days is not None:
+            params = sorted(set(days))
+            day_filter = f"AND date IN ({', '.join('?' for _ in params)})"
+        conn = self._get_connection()
+        # Pairs, links and their rewards are one commit, like a manual link.
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            pairs = conn.execute(
+                f"""
+                WITH logs AS (
+                    SELECT date, min(id) AS id, count(*) AS n
+                    FROM app.visible_strength_sessions
+                    WHERE actual_session_id IS NULL {day_filter}
+                    GROUP BY date
+                ), activities AS (
+                    SELECT date, min(id) AS id, count(*) AS n
+                    FROM app.visible_actual_sessions a
+                    WHERE sport = 'strength' {day_filter}
+                      AND NOT EXISTS (
+                          SELECT 1 FROM app.visible_strength_sessions s
+                          WHERE s.actual_session_id = a.id
+                      )
+                    GROUP BY date
+                )
+                SELECT logs.id, activities.id, logs.date
+                FROM logs JOIN activities USING (date)
+                WHERE logs.n = 1 AND activities.n = 1
+                ORDER BY logs.date
+                """,
+                params + params,
+            ).fetchall()
+            for session_id, actual_id, _day in pairs:
+                conn.execute(
+                    "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ? AND actual_session_id IS NULL) ",
+                    (actual_id, session_id),
+                )
+                _keep_settled_rewards(conn, session_id, actual_id)
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+        return [(int(s), int(a), d) for s, a, d in pairs]
+
+
+def _keep_settled_rewards(conn, session_id: int, actual_id: int) -> None:
+    """Count an automatically linked pair once without debiting a past reward.
+
+    The projection merges a linked log into its activity's canonical key and
+    reverses the reward of the key that disappears. A key belongs to the past
+    when it holds a net credit or an eligible event the projection already
+    counted toward its week (a capped one included: merging it would lower
+    the week's count and could take back the weekly bonus). Only a past-free
+    pair is left to the projection; a pair with one past side in a single week
+    re-keys the other side into it. Any other pair keeps both keys
+    (``KEPT_AT_LINK``): it goes on counting as before, toward the cap and the
+    weekly goal included. Reads go through the athlete-scoped visible views.
+    """
+    keys = [f"strength:{session_id}", f"actual:{actual_id}"]
+    canonical = dict(
+        conn.execute(
+            "SELECT source_key, canonical_key FROM app.visible_game_events"
+            " WHERE source_key IN (?, ?)",
+            keys,
+        ).fetchall()
+    )
+    if len(canonical) < 2:
+        return  # One side was never captured: the projection has nothing to merge.
+    log, activity = canonical[keys[0]], canonical[keys[1]]
+    if log == activity:
+        return
+    past = {
+        key
+        for key in (log, activity)
+        if conn.execute(
+            """SELECT coalesce(bool_or(eligible AND processed), false) OR coalesce(
+                bool_or(eligible) AND (SELECT sum(xp) > 0 OR sum(shards) > 0
+                    FROM app.visible_game_ledger WHERE cause = ?), false)
+            FROM app.visible_game_events WHERE canonical_key = ?""",
+            ["activity:" + key, key],
+        ).fetchone()[0]
+    }
+    weeks = conn.execute(
+        "SELECT count(DISTINCT week_start) FROM app.visible_game_events"
+        " WHERE canonical_key IN (?, ?)",
+        [log, activity],
+    ).fetchone()[0]
+    if not past:
+        # Nothing counted yet: the next projection merges them, as after a manual link.
+        conn.execute(
+            "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
+            keys,
+        )
+    elif len(past) == 1 and weeks == 1:
+        kept = past.pop()
+        conn.execute(
+            "UPDATE app.game_events SET canonical_key=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (canonical_key=?) ",
+            [kept, activity if kept == log else log],
+        )
+    else:
+        # A merged group settles in its first week: a later week's credit would
+        # be reversed. Both sides counted, or weeks apart: keep both keys.
+        conn.execute(
+            "UPDATE app.game_events SET reason=reason || ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? AND NOT ends_with(reason, ?)) ",
+            [KEPT_AT_LINK, keys[0], KEPT_AT_LINK],
+        )
 
 
 _SESSION_COLUMNS = """id, user_id, date, name, program, duration_min,

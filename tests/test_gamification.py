@@ -412,3 +412,146 @@ def test_the_daily_sync_settles_what_it_imported(game_db):
     evidence("imported")
     assert settle_game() == "0 pending"
     assert game.snapshot()["xp"] == 50
+
+
+def strength_log() -> int:
+    from arete.strength.models import (
+        Exercise,
+        ExerciseSet,
+        SessionExercise,
+        StrengthSession,
+    )
+    from arete.strength.repository import StrengthRepository
+
+    repo = StrengthRepository()
+    exercise = repo.create_exercise(Exercise(name="Squat"))
+    session = StrengthSession(date=athlete_today(), name="Muscu")
+    session.exercises.append(
+        SessionExercise(
+            exercise_id=exercise, order=1, sets=[ExerciseSet(set_number=1, reps=5)]
+        )
+    )
+    return repo.create_session(session)
+
+
+def strength_activity() -> int:
+    return GarminRepository().create_actual_session(
+        ActualSession(
+            date=athlete_today(), sport="strength", duration_sec=3600, source="manual"
+        )
+    )
+
+
+def auto_link() -> None:
+    from arete.strength.repository import StrengthRepository
+
+    assert len(StrengthRepository().link_lone_garmin_pairs([athlete_today()])) == 1
+
+
+def debits(state) -> list:
+    return [row for row in state["history"] if row["xp"] < 0 or row["shards"] < 0]
+
+
+def test_auto_link_keeps_a_pair_already_rewarded_twice(game_db):
+    enable()
+    strength_log()
+    strength_activity()
+    assert (game.sync()["xp"], game.snapshot()["shards"]) == (100, 20)
+    auto_link()
+    for _ in range(2):
+        state = game.sync()
+        assert (state["xp"], state["shards"], debits(state)) == (100, 20, [])
+    # A kept pair is settled as it is: loading a page writes nothing more.
+    with db_connection() as con:
+        assert not game._due(con)
+
+
+def test_auto_link_credits_a_pair_not_yet_rewarded_once(game_db):
+    enable()
+    strength_log()
+    strength_activity()
+    auto_link()
+    state = game.sync()
+    assert (state["sessions"], state["xp"], state["shards"]) == (1, 50, 10)
+
+
+def test_auto_link_after_one_side_was_rewarded_neither_debits_nor_doubles(game_db):
+    enable()
+    strength_log()
+    assert game.sync()["shards"] == 10
+    strength_activity()
+    auto_link()
+    for _ in range(2):
+        state = game.sync()
+        assert (state["sessions"], state["shards"], debits(state)) == (1, 10, [])
+
+
+def test_manual_link_still_merges_a_rewarded_pair(game_db):
+    from arete.strength.repository import StrengthRepository
+
+    enable()
+    log, activity = strength_log(), strength_activity()
+    assert game.sync()["shards"] == 20
+    auto_link()
+    assert game.sync()["shards"] == 20
+    # Relinking by hand keeps the manual link's semantics: one session.
+    assert StrengthRepository().link_to_actual_session(log, activity)
+    state = game.sync()
+    assert (state["sessions"], state["shards"]) == (1, 10)
+
+
+def test_auto_link_never_moves_a_reward_out_of_its_week(game_db):
+    enable()
+    activity = strength_activity()
+    assert game.sync()["shards"] == 10
+    log = strength_log()
+    # The log's evidence sits in the previous week: a merge would settle the
+    # pair there and take back this week's reward.
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.game_events SET week_start=week_start - 7,"
+            " activity_date=activity_date - 7 WHERE source_key=?",
+            [f"strength:{log}"],
+        )
+        con.execute(
+            "INSERT INTO app.game_weeks (week_start,goal,timezone)"
+            " SELECT week_start,6,'Europe/Paris' FROM app.game_events"
+            " WHERE source_key=? ON CONFLICT DO NOTHING",
+            [f"strength:{log}"],
+        )
+    auto_link()
+    for _ in range(2):
+        state = game.sync()
+        assert state["shards"] >= 10 and debits(state) == []
+    with db_connection() as con:
+        keys = con.execute(
+            "SELECT count(DISTINCT canonical_key) FROM app.game_events"
+            " WHERE source_key IN (?, ?)",
+            [f"strength:{log}", f"actual:{activity}"],
+        ).fetchone()[0]
+    assert keys == 2
+
+
+def test_an_ineligible_counted_log_is_not_a_past_reward(game_db):
+    from arete.strength.models import StrengthSession
+    from arete.strength.repository import StrengthRepository
+
+    enable()
+    # No set: the log is captured ineligible, processed without credit.
+    log = StrengthRepository().create_session(
+        StrengthSession(date=athlete_today(), name="Muscu")
+    )
+    activity = strength_activity()
+    assert game.sync()["shards"] == 10
+    auto_link()
+    state = game.sync()
+    assert (state["sessions"], state["shards"], debits(state)) == (1, 10, [])
+    with db_connection() as con:
+        rows = con.execute(
+            "SELECT canonical_key, reason FROM app.game_events"
+            " WHERE source_key IN (?, ?) ORDER BY source_key",
+            [f"actual:{activity}", f"strength:{log}"],
+        ).fetchall()
+    # Re-keyed into the rewarded activity, not kept apart as a past reward.
+    assert rows[0][0] == rows[1][0]
+    assert not rows[1][1].endswith("+kept_at_link")

@@ -3,7 +3,7 @@ export { Navigation } from "./Navigation";
 export { ErrorBoundary } from "./ErrorBoundary";
 export { LoadingState, ErrorState, EmptyState, SystemAlert } from "./States";
 export { CalendarWeek } from "./CalendarWeek";
-export { SessionCard, OffPlanRow, SessionFacts, strengthAsActual, SESSION_TYPE_LABEL } from "./SessionCard";
+export { SessionCard, OffPlanRow, SessionFacts, strengthAsActual, withStrengthLogs, SESSION_TYPE_LABEL } from "./SessionCard";
 export { AdherenceBar } from "./AdherenceBar";
 export { DecisionBadge } from "./DecisionBadge";
 export { FitDropzone } from "./FitDropzone";

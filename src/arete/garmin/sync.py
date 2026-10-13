@@ -33,6 +33,7 @@ from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import ActivityStreams, from_time_series
 from arete.garmin.threshold import refresh_threshold
 from arete.strava.merge import garmin_takeover
+from arete.strength.logging_service import link_garmin_strength
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,8 @@ class GarminActivity:
     avg_cadence: int | None
     max_cadence: int | None
     moving_duration_sec: int | None = None
+    #: False when Garmin sent no start time and the sync time stands in for it.
+    start_time_known: bool = True
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> GarminActivity:
@@ -135,6 +138,7 @@ class GarminActivity:
             moving_duration_sec=int(data["movingDuration"])
             if data.get("movingDuration")
             else None,
+            start_time_known="startTimeLocal" in data,
         )
 
     def to_actual_session(self) -> ActualSession:
@@ -515,6 +519,10 @@ class GarminSyncClient:
                         if auto_match(self.repository, actual_id, session, self.zones):
                             result.activities_matched += 1
                     result.session_ids.append(actual_id)
+                    # The Muscu log of that day may already be saved; a day
+                    # guessed from the sync time could pair the wrong one.
+                    if session.sport == "strength" and activity.start_time_known:
+                        link_garmin_strength([session.date])
                     if streams is not None:
                         self._save_streams(actual_id, streams)
                     result.last_activity_date = activity.start_time.date()

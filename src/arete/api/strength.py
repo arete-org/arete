@@ -17,7 +17,10 @@ from pydantic import BaseModel, Field
 
 from arete.data.cardio_muscle_impact import CARDIO_MUSCLE_IMPACT
 from arete.features import muscles as muscle_map
-from arete.strength.logging_service import complete_planned_strength
+from arete.strength.logging_service import (
+    complete_planned_strength,
+    link_garmin_strength,
+)
 from arete.strength.models import (
     Exercise,
     ExerciseCategory,
@@ -120,6 +123,8 @@ class StrengthSessionResponse(BaseModel):
     total_volume: float
     overall_rpe: float | None
     muscles_worked: list[str]
+    exercise_names: list[str] = []
+    garmin_activity_id: int | None = None
 
 
 class SetResponse(BaseModel):
@@ -403,6 +408,7 @@ def create_session(data: StrengthSessionCreate):
 
     session_id = _repo.create_session(session)
     complete_planned_strength(session.date)
+    link_garmin_strength([session.date], _repo)
     session.id = session_id
 
     return _session_to_summary_response(session)
@@ -428,6 +434,8 @@ def list_sessions(
             total_volume=round(s.total_volume, 1),
             overall_rpe=s.overall_rpe,
             muscles_worked=s.muscles_worked,
+            exercise_names=s.exercise_names,
+            garmin_activity_id=s.actual_session_id,
         )
         for s in _repo.list_session_summaries(
             start_date=start_date, end_date=end_date, program=program, limit=limit
@@ -447,9 +455,11 @@ def get_session(session_id: int):
 @router.delete("/sessions/{session_id}")
 def delete_session(session_id: int):
     """Delete a strength session."""
-    success = _repo.delete_session(session_id)
-    if not success:
+    session = _repo.get_session(session_id)
+    if session is None or not _repo.delete_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
+    # Another log of that day may now be the lone match of its activity.
+    link_garmin_strength([session.date], _repo)
     return {"message": "Session deleted"}
 
 
@@ -631,6 +641,8 @@ def _session_to_summary_response(session: StrengthSession) -> StrengthSessionRes
         total_volume=round(session.total_volume, 1),
         overall_rpe=session.overall_rpe,
         muscles_worked=[m.value for m in session.muscles_worked],
+        exercise_names=[ex.exercise.name for ex in session.exercises if ex.exercise],
+        garmin_activity_id=session.actual_session_id,
     )
 
 

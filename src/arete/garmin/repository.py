@@ -723,20 +723,31 @@ class GarminRepository:
         conn.execute("BEGIN TRANSACTION")
         try:
             result = conn.execute(
-                "UPDATE actual_sessions SET deleted_at = current_timestamp WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
+                "UPDATE actual_sessions SET deleted_at = current_timestamp WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id, date",
                 [session_id],
             ).fetchone()
             conn.execute(
                 "UPDATE app.game_events SET eligible=false,reason='removed',processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) ",
                 [f"actual:{session_id}"],
             )
+            # A Muscu log recorded with it is free to pair again.
+            conn.execute(
+                "UPDATE app.strength_sessions SET actual_session_id = NULL WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (actual_session_id = ?) ",
+                [session_id],
+            )
             conn.execute("COMMIT")
-            return result is not None
         except BaseException:
             conn.execute("ROLLBACK")
             raise
         finally:
             conn.close()
+        if result is None:
+            return False
+        from arete.strength.logging_service import link_garmin_strength
+
+        # Another strength activity of that day may now be the log's lone match.
+        link_garmin_strength([result[1]])
+        return True
 
     # ─────────────────────────────────────────────────────────────────────
     # Activity streams (one row per session, see garmin/streams.py)

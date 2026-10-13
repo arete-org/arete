@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from arete.config import config
 from arete.services import oauth_state
 from arete.services.athlete_scope import athlete_scope, resolve_athlete_id
+from arete.strength.logging_service import link_garmin_strength
 
 if TYPE_CHECKING:
     from arete.strava.client import StravaClient
@@ -290,6 +291,8 @@ def sync(body: SyncRequest | None = None):
             else:
                 actual_id = repo.create_actual_session(session)
                 auto_match(repo, actual_id, session, zone_model)
+                if session.sport == "strength":
+                    link_garmin_strength([session.date])
                 imported += 1
 
             # Rate limiting: pause briefly between detail calls

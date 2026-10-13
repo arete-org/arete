@@ -3,6 +3,11 @@
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+#: Appended to a strength event's reason when an automatic link found both the
+#: log and its activity already counted: the projection keeps both rewards
+#: instead of merging them. A manual link removes it.
+KEPT_AT_LINK = "+kept_at_link"
+
 
 def capture(
     con,

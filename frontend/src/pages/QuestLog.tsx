@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, MoreHorizontal } from 'lucide-react';
-import { ErrorState, strengthAsActual } from '@/components';
+import { ErrorState, withStrengthLogs } from '@/components';
 import { Button, Select, Modal, ModalHeader, Skeleton } from '@/components/ui';
 import { WorkoutSelection } from '@/components/WorkoutSelection';
 import { garminApi, settingsApi } from '@/lib/api';
@@ -81,12 +81,10 @@ export function PlanningPage() {
     retry: false,
   });
   const planned = plannedQuery.data ?? [];
-  const actual = [
-    ...(actualQuery.data ?? []),
-    ...(strengthQuery.data ?? [])
-      .filter((s) => s.date >= weekStart && s.date <= weekEnd)
-      .map(strengthAsActual),
-  ];
+  const actual = withStrengthLogs(
+    actualQuery.data ?? [],
+    (strengthQuery.data ?? []).filter((s) => s.date >= weekStart && s.date <= weekEnd),
+  );
   const rows = days.flatMap(
     (date) =>
       linkDay(

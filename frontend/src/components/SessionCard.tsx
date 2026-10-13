@@ -73,7 +73,25 @@ export function strengthAsActual(s: StrengthSession): ActualSession {
     garmin_activity_id: null,
     strava_activity_id: null,
     adherence_score: null,
+    exercises: s.exercise_names,
   };
+}
+
+/**
+ * Realised sessions plus the Muscu logs, each workout once. A log linked to an
+ * activity of the list lends it its exercises instead of adding a second entry;
+ * the others come in through `strengthAsActual`.
+ */
+export function withStrengthLogs(actual: ActualSession[], logs: StrengthSession[]): ActualSession[] {
+  const linked = new Map(logs.filter((s) => s.garmin_activity_id != null).map((s) => [s.garmin_activity_id, s]));
+  const shown = new Set(actual.map((a) => a.id));
+  return [
+    ...actual.map((a) => {
+      const log = linked.get(a.id);
+      return log ? { ...a, exercises: log.exercise_names } : a;
+    }),
+    ...logs.filter((s) => s.garmin_activity_id == null || !shown.has(s.garmin_activity_id)).map(strengthAsActual),
+  ];
 }
 
 function SportIcon({ sport, className }: { sport: string; className?: string }) {
@@ -96,6 +114,9 @@ export function SessionFacts({ session }: { session: ActualSession }) {
       {session.avg_hr ? <span className="text-text-secondary">{session.avg_hr} bpm</span> : null}
       {session.ascent_m ? <span className="text-text-secondary">{Math.round(session.ascent_m)} m D+</span> : null}
       {session.rpe ? <span className="text-text-secondary">RPE {session.rpe}</span> : null}
+      {session.exercises?.length ? (
+        <span className="basis-full text-text-muted truncate">{session.exercises.join(' · ')}</span>
+      ) : null}
     </div>
   );
 }

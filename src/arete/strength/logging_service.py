@@ -14,6 +14,7 @@ not when an agent is dictating and the athlete only reads a sentence.
 from __future__ import annotations
 
 import logging
+from collections.abc import Collection
 from dataclasses import dataclass, field, replace
 from datetime import date as date_type
 from typing import TYPE_CHECKING
@@ -154,6 +155,7 @@ def save_parsed_session(
 
         session_id = repo.create_session(session)
         complete_planned_strength(session.date)
+        link_garmin_strength([session.date], repo)
     except Exception as exc:  # noqa: BLE001 - the parse is still worth returning
         logger.error("Failed to save parsed session: %s", exc)
         return SaveOutcome(
@@ -344,3 +346,20 @@ def complete_planned_strength(day: date_type) -> None:
         complete_planned(GarminRepository(), day, "strength")
     except Exception as e:  # noqa: BLE001 - never block the save
         logger.warning("Could not update planned session for %s: %s", day, e)
+
+
+def link_garmin_strength(
+    days: Collection[date_type], repo: StrengthRepository | None = None
+) -> None:
+    """Pair each day's lone Muscu log with its lone strength activity.
+
+    Runs whenever either side is saved or a log is deleted, whichever comes
+    last. Never raises: a failed link leaves the manual link, not a failed save.
+    """
+    try:
+        linked = (repo or StrengthRepository()).link_lone_garmin_pairs(days)
+    except Exception as e:  # noqa: BLE001 - never block the save or the sync
+        logger.warning("Could not link strength logs to Garmin activities: %s", e)
+        return
+    if linked:
+        logger.info("Linked %d strength logs to their Garmin activity", len(linked))

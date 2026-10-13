@@ -234,6 +234,9 @@ class StrengthSessionSummary:
     total_sets: int
     total_volume: float
     muscles_worked: list[str]
+    #: Catalog names in session order.
+    exercise_names: list[str] = field(default_factory=list)
+    actual_session_id: int | None = None
 
 
 @dataclass

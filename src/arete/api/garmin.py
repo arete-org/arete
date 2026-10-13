@@ -29,6 +29,7 @@ from arete.garmin.models import (
 from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import from_time_series
 from arete.services.settings import athlete_today
+from arete.strength.logging_service import link_garmin_strength
 
 logger = logging.getLogger(__name__)
 
@@ -470,6 +471,9 @@ def upload_fit_file(
 
     # Save actual session
     activity_id = _repo.create_actual_session(actual)
+    # A file without a start time is dated today: too weak to pair a Muscu log.
+    if actual.sport == "strength" and parsed.start_time:
+        link_garmin_strength([actual.date])
     streams = from_time_series(parsed.time_series, actual.sport)
     if streams is not None:
         try:
@@ -537,6 +541,8 @@ def create_actual_session(payload: ActualSessionCreate):
     )
     session_id = _repo.create_actual_session(session)
     auto_match(_repo, session_id, session)
+    if session.sport == "strength":
+        link_garmin_strength([session.date])
     created = _repo.get_actual_session(session_id)
     if created is None:  # pragma: no cover - just inserted
         raise HTTPException(status_code=500, detail="Session could not be read back")

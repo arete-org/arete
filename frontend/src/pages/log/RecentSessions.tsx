@@ -6,7 +6,7 @@ import { cn, formatDurationCompact } from '@/lib/utils';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
 import { Button, Panel, RPE_TEXT, RpeBadge, Textarea, rpeTone } from '@/components/ui';
 import { analyticsApi } from '@/lib/api';
-import { qk } from '@/lib/queryKeys';
+import { qk, strengthSessionsQuery } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import type { CardioSession } from '@/types';
 
@@ -23,6 +23,9 @@ export function RecentSessions() {
     queryKey: qk.cardioSessions,
     queryFn: () => analyticsApi.getSessions(20),
   });
+  // A Garmin activity linked to a Muscu log is shown once, as that log (Force tab).
+  const { data: strength } = useQuery(strengthSessionsQuery);
+  const linked = new Set((strength ?? []).map((l) => l.garmin_activity_id));
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRpe, setEditRpe] = useState<number | null>(null);
@@ -55,7 +58,7 @@ export function RecentSessions() {
   if (isLoading) return <LoadingState message="CHARGEMENT DES SÉANCES…" />;
   if (isError) return <ErrorState message="ÉCHEC DU CHARGEMENT DES SÉANCES" onRetry={() => refetch()} />;
 
-  const sessions = data?.sessions || [];
+  const sessions = (data?.sessions || []).filter((s) => !linked.has(s.id));
   if (sessions.length === 0) {
     return (
       <Panel animate={false}>
