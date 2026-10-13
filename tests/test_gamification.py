@@ -412,3 +412,86 @@ def test_the_daily_sync_settles_what_it_imported(game_db):
     evidence("imported")
     assert settle_game() == "0 pending"
     assert game.snapshot()["xp"] == 50
+
+
+def strength_log() -> int:
+    from arete.strength.models import (
+        Exercise,
+        ExerciseSet,
+        SessionExercise,
+        StrengthSession,
+    )
+    from arete.strength.repository import StrengthRepository
+
+    repo = StrengthRepository()
+    exercise = repo.create_exercise(Exercise(name="Squat"))
+    session = StrengthSession(date=athlete_today(), name="Muscu")
+    session.exercises.append(
+        SessionExercise(
+            exercise_id=exercise, order=1, sets=[ExerciseSet(set_number=1, reps=5)]
+        )
+    )
+    return repo.create_session(session)
+
+
+def strength_activity() -> int:
+    return GarminRepository().create_actual_session(
+        ActualSession(
+            date=athlete_today(), sport="strength", duration_sec=3600, source="manual"
+        )
+    )
+
+
+def auto_link() -> None:
+    from arete.strength.repository import StrengthRepository
+
+    assert len(StrengthRepository().link_lone_garmin_pairs([athlete_today()])) == 1
+
+
+def debits(state) -> list:
+    return [row for row in state["history"] if row["xp"] < 0 or row["shards"] < 0]
+
+
+def test_auto_link_keeps_a_pair_already_rewarded_twice(game_db):
+    enable()
+    strength_log()
+    strength_activity()
+    assert (game.sync()["xp"], game.snapshot()["shards"]) == (100, 20)
+    auto_link()
+    for _ in range(2):
+        state = game.sync()
+        assert (state["xp"], state["shards"], debits(state)) == (100, 20, [])
+
+
+def test_auto_link_credits_a_pair_not_yet_rewarded_once(game_db):
+    enable()
+    strength_log()
+    strength_activity()
+    auto_link()
+    state = game.sync()
+    assert (state["sessions"], state["xp"], state["shards"]) == (1, 50, 10)
+
+
+def test_auto_link_after_one_side_was_rewarded_neither_debits_nor_doubles(game_db):
+    enable()
+    strength_log()
+    assert game.sync()["shards"] == 10
+    strength_activity()
+    auto_link()
+    for _ in range(2):
+        state = game.sync()
+        assert (state["sessions"], state["shards"], debits(state)) == (1, 10, [])
+
+
+def test_manual_link_still_merges_a_rewarded_pair(game_db):
+    from arete.strength.repository import StrengthRepository
+
+    enable()
+    log, activity = strength_log(), strength_activity()
+    assert game.sync()["shards"] == 20
+    auto_link()
+    assert game.sync()["shards"] == 20
+    # Relinking by hand keeps the manual link's semantics: one session.
+    assert StrengthRepository().link_to_actual_session(log, activity)
+    state = game.sync()
+    assert (state["sessions"], state["shards"]) == (1, 10)

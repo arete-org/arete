@@ -408,7 +408,7 @@ def create_session(data: StrengthSessionCreate):
 
     session_id = _repo.create_session(session)
     complete_planned_strength(session.date)
-    link_garmin_strength(_repo, [session.date])
+    link_garmin_strength([session.date], _repo)
     session.id = session_id
 
     return _session_to_summary_response(session)
@@ -453,9 +453,11 @@ def get_session(session_id: int):
 @router.delete("/sessions/{session_id}")
 def delete_session(session_id: int):
     """Delete a strength session."""
-    success = _repo.delete_session(session_id)
-    if not success:
+    session = _repo.get_session(session_id)
+    if session is None or not _repo.delete_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
+    # Another log of that day may now be the lone match of its activity.
+    link_garmin_strength([session.date], _repo)
     return {"message": "Session deleted"}
 
 

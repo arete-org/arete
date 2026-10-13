@@ -14,6 +14,7 @@ import duckdb
 
 from arete.data.exercises_catalog import EXERCISES_CATALOG
 from arete.dataio.db import configure_athlete, connect, get_db_path
+from arete.dataio.game_events import KEPT_AT_LINK
 from arete.dataio.ownership import require_owned
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.strength.models import (
@@ -931,9 +932,10 @@ class StrengthRepository:
                 "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) ",
                 (garmin_id, session_id),
             )
+            # A manual link merges the rewards, even ones an automatic link kept.
             conn.execute(
-                "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
-                [f"strength:{session_id}", f"actual:{garmin_id}"],
+                "UPDATE app.game_events SET processed=false, reason=replace(reason, ?, '') WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
+                [KEPT_AT_LINK, f"strength:{session_id}", f"actual:{garmin_id}"],
             )
             conn.execute("COMMIT")
             return True
@@ -950,7 +952,8 @@ class StrengthRepository:
 
         A day with two unlinked logs or two unlinked strength activities stays
         as it is: the manual link decides those. ``None`` covers every day (the
-        backfill). Idempotent: a linked pair is no longer a candidate. Returns
+        backfill). Idempotent: a linked pair is no longer a candidate. Unlike a
+        manual link, it never takes back XP or shards already granted. Returns
         the (strength session, actual session, day) pairs it linked.
         """
         if days is not None and not days:
@@ -961,7 +964,7 @@ class StrengthRepository:
             params = sorted(set(days))
             day_filter = f"AND date IN ({', '.join('?' for _ in params)})"
         conn = self._get_connection()
-        # Pairs, links and reward invalidation are one commit, like a manual link.
+        # Pairs, links and their rewards are one commit, like a manual link.
         conn.execute("BEGIN TRANSACTION")
         try:
             pairs = conn.execute(
@@ -993,10 +996,7 @@ class StrengthRepository:
                     "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ? AND actual_session_id IS NULL) ",
                     (actual_id, session_id),
                 )
-                conn.execute(
-                    "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
-                    [f"strength:{session_id}", f"actual:{actual_id}"],
-                )
+                _keep_settled_rewards(conn, session_id, actual_id)
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
@@ -1004,6 +1004,55 @@ class StrengthRepository:
         finally:
             conn.close()
         return [(int(s), int(a), d) for s, a, d in pairs]
+
+
+def _keep_settled_rewards(conn, session_id: int, actual_id: int) -> None:
+    """Count an automatically linked pair once without debiting a settled reward.
+
+    The projection merges a linked log into its activity's canonical key and
+    reverses the reward of the key that disappears. Here the unsettled side
+    joins the settled one instead, and a pair whose two sides were both
+    already counted keeps both rewards (``KEPT_AT_LINK``).
+    """
+    keys = [f"strength:{session_id}", f"actual:{actual_id}"]
+    canonical = dict(
+        conn.execute(
+            "SELECT source_key, canonical_key FROM app.visible_game_events"
+            " WHERE source_key IN (?, ?)",
+            keys,
+        ).fetchall()
+    )
+    if len(canonical) < 2:
+        return  # One side was never captured: the projection has nothing to merge.
+    log, activity = canonical[keys[0]], canonical[keys[1]]
+    if log == activity:
+        return
+    settled = {
+        key
+        for key in (log, activity)
+        if conn.execute(
+            "SELECT 1 FROM app.visible_game_events WHERE canonical_key = ? AND processed"
+            " UNION ALL SELECT 1 FROM app.visible_game_ledger WHERE cause = ?",
+            [key, "activity:" + key],
+        ).fetchone()
+    }
+    if not settled:
+        # Nothing counted yet: the next projection merges them, as after a manual link.
+        conn.execute(
+            "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
+            keys,
+        )
+    elif len(settled) == 2:
+        conn.execute(
+            "UPDATE app.game_events SET reason=reason || ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? AND NOT ends_with(reason, ?)) ",
+            [KEPT_AT_LINK, keys[0], KEPT_AT_LINK],
+        )
+    else:
+        kept = settled.pop()
+        conn.execute(
+            "UPDATE app.game_events SET canonical_key=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (canonical_key=?) ",
+            [kept, activity if kept == log else log],
+        )
 
 
 _SESSION_COLUMNS = """id, user_id, date, name, program, duration_min,

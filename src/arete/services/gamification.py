@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from arete.config import config
 from arete.dataio.db import db_connection, transaction
+from arete.dataio.game_events import KEPT_AT_LINK
 
 MAX_EVENTS = 100
 MAX_WEEK_ACTIVITIES = 1000
@@ -157,11 +158,12 @@ def _balance(con) -> tuple[int, int]:
 
 
 #: A strength session linked to an actual one whose evidence still has its own
-#: canonical identity: the projection must resolve it before counting.
-_UNRESOLVED_LINK = """SELECT 1 FROM app.visible_game_events e, app.visible_strength_sessions s,
+#: canonical identity: the projection must resolve it before counting. A pair an
+#: automatic link kept apart (both sides already rewarded) is resolved as it is.
+_UNRESOLVED_LINK = f"""SELECT 1 FROM app.visible_game_events e, app.visible_strength_sessions s,
     app.visible_game_events a WHERE e.source_key='strength:'||s.id
     AND a.source_key='actual:'||s.actual_session_id AND e.canonical_key<>a.canonical_key
-    LIMIT 1"""
+    AND NOT ends_with(e.reason, '{KEPT_AT_LINK}') LIMIT 1"""
 
 
 def _receipts(con, week: date, targets: list[tuple[str, int, int, str]]) -> list[list]:
@@ -326,13 +328,15 @@ def sync() -> dict:
         current = _current_week(con, day)
         if current is not None:
             weeks.add(current)
-        # Resolve existing strength ↔ actual links before counting or debiting.
+        # Resolve existing strength ↔ actual links before counting or debiting,
+        # except pairs an automatic link found already counted on both sides.
         if con.execute(_UNRESOLVED_LINK).fetchone():
             con.execute(
                 """UPDATE app.game_events e SET canonical_key=a.canonical_key
                 FROM app.visible_strength_sessions s, app.visible_game_events a
                 WHERE e.athlete_id = getvariable('arete_athlete_id') AND e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=e.athlete_id AND scope_owner.deleted_at IS NULL) AND (e.source_key='strength:'||s.id AND a.source_key='actual:'||s.actual_session_id
-                AND e.canonical_key<>a.canonical_key) """
+                AND e.canonical_key<>a.canonical_key AND NOT ends_with(e.reason, ?)) """,
+                [KEPT_AT_LINK],
             )
         # A duplicate imported with another date must settle its original week too.
         if pending:

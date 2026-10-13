@@ -62,28 +62,6 @@ def test_a_lone_pair_is_linked_once(con):
     assert _linked(con, log) == activity
 
 
-def test_the_link_reopens_the_rewards_of_both_entries(con):
-    activity, log = _activity(con), _log(con)
-    keys = [f"strength:{log}", f"actual:{activity}"]
-    for key in keys:
-        con.execute(
-            "INSERT INTO app.game_events (athlete_id, source_key, canonical_key,"
-            " activity_date, week_start, timezone, name, eligible, reason, processed)"
-            " VALUES (1, ?, ?, ?, DATE '2024-03-11', 'UTC', 'Muscu', true, 'ok', true)",
-            [key, key, DAY],
-        )
-    try:
-        StrengthRepository().link_lone_garmin_pairs([DAY])
-        processed = con.execute(
-            "SELECT bool_or(processed) FROM app.game_events WHERE source_key IN (?, ?)",
-            keys,
-        ).fetchone()[0]
-        # Gamification re-reads both: the pair then counts once, credit kept.
-        assert processed is False
-    finally:
-        con.execute("DELETE FROM app.game_events WHERE source_key IN (?, ?)", keys)
-
-
 def test_two_strength_activities_leave_the_day_to_the_manual_link(con):
     _first, second, log = _activity(con), _activity(con), _log(con)
     repo = StrengthRepository()
@@ -155,15 +133,41 @@ def test_saving_a_log_links_the_day_activity(con, client):
     assert listed[0]["exercise_names"]
 
 
+def test_deleting_a_log_lets_the_remaining_one_take_the_activity(con, client):
+    activity = _activity(con)
+    first, second = _log(con), _log(con)
+    assert StrengthRepository().link_to_actual_session(first, activity)
+
+    assert client.delete(f"/strength/sessions/{first}").status_code == 200
+    assert _linked(con, second) == activity
+
+
+def test_a_manual_strength_entry_is_linked_to_the_day_log(con, client):
+    log = _log(con)
+    response = client.post(
+        "/garmin/actual",
+        json={"date": DAY.isoformat(), "sport": "strength", "duration_min": 60},
+    )
+    assert response.status_code == 201, response.text
+    activity = response.json()["id"]
+    con.execute(
+        "UPDATE app.actual_sessions SET source = 'garmin-link-test' WHERE id = ?",
+        [activity],
+    )
+    assert _linked(con, log) == activity
+
+
 def test_a_failed_link_never_fails_the_save():
     from arete.strength.logging_service import link_garmin_strength
 
-    repo = MagicMock()
-    repo.link_lone_garmin_pairs.side_effect = RuntimeError("database busy")
-    link_garmin_strength(repo, [DAY])  # logged, not raised
+    with patch(
+        "arete.strength.logging_service.StrengthRepository",
+        side_effect=RuntimeError("database busy"),
+    ):
+        link_garmin_strength([DAY])  # logged, not raised
 
 
-def test_a_synced_strength_activity_is_linked_to_its_day():
+def _sync(raw: list[dict]):
     from arete.features.hr_zones import ZoneModel
     from arete.garmin.sync import GarminSyncClient
 
@@ -172,32 +176,55 @@ def test_a_synced_strength_activity_is_linked_to_its_day():
     repo.has_garmin_activity.return_value = False
     repo.find_overlapping_session.return_value = None
     repo.get_potential_matches.return_value = []
-    repo.create_actual_session.side_effect = [1, 2]
+    repo.create_actual_session.side_effect = range(1, len(raw) + 1)
     client = GarminSyncClient(client=MagicMock(), zones=ZoneModel.from_reference())
     client._repository = repo
-    client.client.activities.return_value = [
-        {
-            "activityId": 901,
-            "activityName": "Musculation",
-            "activityType": {"typeKey": "strength_training"},
-            "startTimeLocal": "2024-03-12T18:00:00",
-            "duration": 3600,
-        },
-        {
-            "activityId": 902,
-            "activityName": "Course",
-            "activityType": {"typeKey": "running"},
-            "startTimeLocal": "2024-03-13T08:00:00",
-            "duration": 1800,
-        },
-    ]
+    client.client.activities.return_value = raw
     with (
         patch("arete.garmin.sync.time.sleep"),
         patch("arete.garmin.sync.refresh_threshold", return_value={}),
-        patch("arete.garmin.sync.link_garmin_strength") as link,
     ):
-        result = client.sync_activities(download_fit=False)
+        return client.sync_activities(download_fit=False)
+
+
+SYNCED = [
+    {
+        "activityId": 901,
+        "activityName": "Musculation",
+        "activityType": {"typeKey": "strength_training"},
+        "startTimeLocal": "2024-03-12T18:00:00",
+        "duration": 3600,
+    },
+    {
+        "activityId": 902,
+        "activityName": "Course",
+        "activityType": {"typeKey": "running"},
+        "startTimeLocal": "2024-03-13T08:00:00",
+        "duration": 1800,
+    },
+    # No start time: the sync dates it today, too weak to pair a log.
+    {
+        "activityId": 903,
+        "activityName": "Musculation",
+        "activityType": {"typeKey": "strength_training"},
+        "duration": 3600,
+    },
+]
+
+
+def test_a_synced_strength_activity_with_a_start_time_is_linked_to_its_day():
+    with patch("arete.garmin.sync.link_garmin_strength") as link:
+        result = _sync(SYNCED)
 
     assert result.success
-    link.assert_called_once()
-    assert link.call_args.args[1] == [DAY]
+    assert [c.args[0] for c in link.call_args_list] == [[DAY]]
+
+
+def test_a_failed_link_never_fails_the_synced_activity():
+    with patch(
+        "arete.strength.logging_service.StrengthRepository",
+        side_effect=RuntimeError("database busy"),
+    ):
+        result = _sync(SYNCED[:1])
+
+    assert (result.success, result.activities_synced, result.errors) == (True, 1, [])

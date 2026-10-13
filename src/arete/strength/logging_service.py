@@ -183,7 +183,7 @@ def save_parsed_session(
 
         session_id = repo.create_session(session)
         complete_planned_strength(session.date)
-        link_garmin_strength(repo, [session.date])
+        link_garmin_strength([session.date], repo)
     except Exception as exc:  # noqa: BLE001 - the parse is still worth returning
         logger.error("Failed to save parsed session: %s", exc)
         return SaveOutcome(
@@ -248,14 +248,16 @@ def complete_planned_strength(day: date_type) -> None:
         logger.warning("Could not update planned session for %s: %s", day, e)
 
 
-def link_garmin_strength(repo: StrengthRepository, days: Collection[date_type]) -> None:
-    """Pair each day's lone Muscu log with its lone Garmin strength activity.
+def link_garmin_strength(
+    days: Collection[date_type], repo: StrengthRepository | None = None
+) -> None:
+    """Pair each day's lone Muscu log with its lone strength activity.
 
-    Runs when a log is saved and after a Garmin sync, whichever comes second.
-    Never raises: a failed link leaves the manual link, not a failed save.
+    Runs whenever either side is saved or a log is deleted, whichever comes
+    last. Never raises: a failed link leaves the manual link, not a failed save.
     """
     try:
-        linked = repo.link_lone_garmin_pairs(days)
+        linked = (repo or StrengthRepository()).link_lone_garmin_pairs(days)
     except Exception as e:  # noqa: BLE001 - never block the save or the sync
         logger.warning("Could not link strength logs to Garmin activities: %s", e)
         return
