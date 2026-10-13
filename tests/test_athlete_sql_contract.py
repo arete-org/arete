@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from arete.dataio.tenant_schema import PRIVATE_TABLES
+from arete.scheduler import _CANDIDATES
 
 # Bootstrap is deliberately privileged and never used by a domain request.
 BOOTSTRAP = {
@@ -42,6 +43,8 @@ def test_domain_reads_use_live_athlete_projections():
                 and sql == "SELECT email FROM app.user_settings WHERE user_id = 1"
             ):
                 continue  # Bootstrap owner lookup before a scope exists.
+            if relative == "scheduler.py" and sql == _CANDIDATES:
+                continue  # Trusted dispatch: every athlete's zone and quiet hours.
             if reads.search(sql):
                 failures.append(f"{relative}:{node.lineno}: {sql[:160]}")
     assert failures == [], "Unscoped private reads:\n" + "\n".join(failures)

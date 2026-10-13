@@ -1,10 +1,10 @@
 """Daily background sync (Garmin activities + health, Strava) inside the API.
 
-Enabled by ``ARETE_AUTO_SYNC_HOUR`` (local hour). No extra dependency: an
-asyncio task wakes up every few minutes, compares the wall clock to the
-scheduled hour and runs the blocking syncs in a worker thread when the day's
-run is still owed. Short ticks on purpose: a laptop that sleeps freezes the
-container's monotonic clock, and a single long sleep would silently skip a day.
+Enabled by ``ARETE_AUTO_SYNC_HOUR`` (an hour on each athlete's clock). No extra
+dependency: an asyncio task wakes up every few minutes and runs the blocking
+syncs in a worker thread for the athletes whose day's run is owed by then.
+Short ticks on purpose: a laptop that sleeps freezes the container's monotonic
+clock, and a single long sleep would silently skip a day.
 The last run is written next to the database, so a restart does not re-run a
 sync that already happened — and does run the one that was missed.
 Failures are logged and never stop the loop.
@@ -16,7 +16,7 @@ import asyncio
 import json
 import logging
 from contextvars import ContextVar
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from time import monotonic, sleep
 
@@ -24,9 +24,14 @@ import duckdb
 
 from arete.config import config
 from arete.dataio.db import db_connection
-from arete.dataio.settings import get_user_settings
 from arete.services.athlete_scope import athlete_scope, current_athlete_id
-from arete.services.settings import athlete_today, zone_of
+from arete.services.settings import (
+    QuietHours,
+    athlete_today,
+    stored_preferences,
+    utc_now,
+    zone_of,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -344,46 +349,85 @@ SCHEDULE_MODEL_SECONDS = 210
 SCHEDULE_LEASE_SECONDS = 900
 #: Most athletes one dispatch reads to find those owed today (5-10 expected).
 MAX_SCANNED_ATHLETES = 500
-#: Markers are naive TIMESTAMPs written by ``current_timestamp`` in the
-#: session's timezone; casting back to TIMESTAMPTZ recovers the instant, which
-#: each athlete's own timezone turns into a calendar day.
+#: No run starts before this hour on the athlete's clock unless
+#: ``ARETE_AUTO_SYNC_HOUR`` names another: Garmin has the night's sleep and HRV
+#: once the watch syncs after waking.
+DEFAULT_SYNC_HOUR = 7
+#: Markers are naive UTC TIMESTAMPs that the dispatch writes from its own
+#: clock, so no session's TimeZone enters them, and ``epoch`` reads a naive
+#: TIMESTAMP as UTC. The trusted scheduler reads every athlete's zone and quiet
+#: hours from the base table in the same query. Least recent activity first: a
+#: lease a failed run took today counts as today's.
 _CANDIDATES = (
-    "SELECT id, last_sync_at, sync_lease_until, "
-    "epoch(last_sync_at::TIMESTAMPTZ), epoch(sync_lease_until::TIMESTAMPTZ), "
-    "epoch(current_timestamp) "
-    "FROM app.athletes WHERE deleted_at IS NULL "
-    "ORDER BY last_sync_at NULLS FIRST, id LIMIT ?"
+    "SELECT a.id, a.last_sync_at, a.sync_lease_until, "
+    "epoch(a.last_sync_at), epoch(a.sync_lease_until), "
+    "s.timezone, s.notification_preferences "
+    "FROM app.athletes a LEFT JOIN app.user_settings s "
+    "ON s.user_id = a.id AND s.deleted_at IS NULL "
+    "WHERE a.deleted_at IS NULL "
+    "ORDER BY greatest(a.last_sync_at, a.sync_lease_until) NULLS FIRST, a.id "
+    "LIMIT ?"
 )
 
 
 def owed_today(
-    last_sync: float | None, lease: float | None, now: float, zone: str | None
+    last_sync: float | None,
+    lease: float | None,
+    now: float,
+    zone: str | None,
+    *,
+    sync_hour: int = 0,
+    quiet_hours: QuietHours | None = None,
 ) -> bool:
-    """Owed today and not held by a run started today, on the athlete's clock.
+    """Owed now and not held by a run claimed today, on the athlete's clock.
 
     Epoch seconds in, so the database's and the server's timezones never
-    matter. A lease dated before today belongs to a run that failed or was
-    stopped: the next day's dispatch starts a new day (every step is
-    idempotent per day), the same day never retries.
+    matter. Nothing is owed before ``sync_hour`` (the night's data is not in
+    yet) nor during quiet hours, which would drop the run's pushes. A lease
+    is dated by its claim, ``SCHEDULE_LEASE_SECONDS`` earlier. One dated
+    before today belongs to a run that failed or was stopped: the next day's
+    dispatch starts a new day (every step is idempotent per day), the same
+    day never retries.
     """
-    tz = zone_of(zone)
-    today = datetime.fromtimestamp(now, tz).date()
+    local = datetime.fromtimestamp(now, zone_of(zone))
+    if local.hour < sync_hour:
+        return False
+    if quiet_hours is not None and quiet_hours.covers(local.time()):
+        return False
 
     def before_today(epoch: float | None) -> bool:
-        return epoch is None or datetime.fromtimestamp(epoch, tz).date() < today
+        if epoch is None:
+            return True
+        return datetime.fromtimestamp(epoch, local.tzinfo).date() < local.date()
 
-    return before_today(last_sync) and before_today(lease)
+    claimed = None if lease is None else lease - SCHEDULE_LEASE_SECONDS
+    return before_today(last_sync) and before_today(claimed)
 
 
-def _athlete_owed(
-    athlete_id: int, last_sync: float | None, lease: float | None, now: float
-) -> bool:
-    if last_sync is None and lease is None:
-        return True  # never ran: owed on any clock
-    # The settings projection is private: read the zone in the athlete's scope.
-    with athlete_scope(athlete_id):
-        zone = (get_user_settings() or {}).get("timezone")
-    return owed_today(last_sync, lease, now, zone)
+def _quiet_hours(raw: str | None) -> QuietHours | None:
+    """The stored preferences' quiet hours; the defaults when unreadable."""
+    try:
+        stored = json.loads(raw) if raw else None
+    except ValueError:
+        stored = None
+    return stored_preferences(stored if isinstance(stored, dict) else None).quiet_hours
+
+
+def _owed(row: tuple, now: datetime, sync_hour: int) -> bool:
+    last_sync, lease, zone, preferences = row[3:]
+    return owed_today(
+        last_sync,
+        lease,
+        now.timestamp(),
+        zone,
+        sync_hour=sync_hour,
+        quiet_hours=_quiet_hours(preferences),
+    )
+
+
+def _naive_utc(moment: datetime) -> datetime:
+    """How a marker is stored: the UTC wall clock, without an offset."""
+    return moment.astimezone(UTC).replace(tzinfo=None)
 
 
 def run_scheduled_batch() -> dict:
@@ -395,20 +439,30 @@ def run_scheduled_batch() -> dict:
     skips an athlete another one claimed first.
     """
     started = monotonic()
+    sync_hour = config.auto_sync_hour
+    if sync_hour is None:
+        sync_hour = DEFAULT_SYNC_HOUR
     with db_connection() as con:
         candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
-    if len(candidates) == MAX_SCANNED_ATHLETES:
+    # Athletes past the bound are left for a later window.
+    deferred = len(candidates) == MAX_SCANNED_ATHLETES
+    if deferred:
         logger.warning("Dispatch read %d athletes, the scan bound", len(candidates))
-    rows = [
-        row[:3] for row in candidates if _athlete_owed(row[0], row[3], row[4], row[5])
-    ]
+    scanned_at = utc_now()
+    rows = [row for row in candidates if _owed(row, scanned_at, sync_hour)]
     outcomes: dict[str, dict] = {}
-    deferred = len(rows) > MAX_SCHEDULED_ATHLETES
-    for athlete_id, last_sync, stale_lease in rows[:MAX_SCHEDULED_ATHLETES]:
+    deferred = deferred or len(rows) > MAX_SCHEDULED_ATHLETES
+    for row in rows[:MAX_SCHEDULED_ATHLETES]:
+        athlete_id, last_sync, stale_lease = row[:3]
         if monotonic() - started >= SCHEDULE_DISPATCH_SECONDS:
             deferred = True
             break
-        if not _claim(athlete_id, last_sync, stale_lease):
+        # Still owed at the claim, which dates the run: a scan just before the
+        # athlete's midnight must not stamp the next day as done.
+        claimed_at = utc_now()
+        if not _owed(row, claimed_at, sync_hour):
+            continue
+        if not _claim(athlete_id, last_sync, stale_lease, claimed_at):
             continue
         if stale_lease is not None:
             logger.warning(
@@ -416,25 +470,32 @@ def run_scheduled_batch() -> dict:
                 athlete_id,
                 stale_lease,
             )
-        outcomes[str(athlete_id)] = _run_athlete(athlete_id, started)
+        outcomes[str(athlete_id)] = _run_athlete(
+            athlete_id, started, claimed_at, row[5]
+        )
     return {"athletes": outcomes, "deferred": deferred}
 
 
-def _claim(athlete_id: int, last_sync: datetime | None, lease: datetime | None) -> bool:
+def _claim(
+    athlete_id: int,
+    last_sync: datetime | None,
+    lease: datetime | None,
+    claimed_at: datetime,
+) -> bool:
     """Take the athlete's lease, unless another dispatch took it first.
 
     Compare-and-set on the markers this dispatch read as owed: a concurrent
     dispatch that claimed or finished the athlete has changed one of them.
     """
+    until = claimed_at + timedelta(seconds=SCHEDULE_LEASE_SECONDS)
     try:
         with db_connection() as con:
             row = con.execute(
-                "UPDATE app.athletes "
-                "SET sync_lease_until=current_timestamp + ? * INTERVAL '1 second' "
+                "UPDATE app.athletes SET sync_lease_until=? "
                 "WHERE id=? AND deleted_at IS NULL "
                 "AND last_sync_at IS NOT DISTINCT FROM ? "
                 "AND sync_lease_until IS NOT DISTINCT FROM ? RETURNING id",
-                [SCHEDULE_LEASE_SECONDS, athlete_id, last_sync, lease],
+                [_naive_utc(until), athlete_id, last_sync, lease],
             ).fetchone()
     except duckdb.TransactionException:
         logger.info("Athlete %s claimed by a concurrent dispatch", athlete_id)
@@ -442,7 +503,9 @@ def _claim(athlete_id: int, last_sync: datetime | None, lease: datetime | None) 
     return row is not None
 
 
-def _run_athlete(athlete_id: int, started: float) -> dict:
+def _run_athlete(
+    athlete_id: int, started: float, claimed_at: datetime, zone: str | None
+) -> dict:
     with athlete_scope(athlete_id):
         from arete.dataio import mirror
 
@@ -450,6 +513,8 @@ def _run_athlete(athlete_id: int, started: float) -> dict:
             if config.is_remote_db:
                 mirror.hydrate()
             status = daily_sync()
+            tz = zone_of(zone)
+            claim_day = claimed_at.astimezone(tz).date()
             # The briefing's wait for the dashboard ends at the model deadline.
             _model_deadline.set(started + SCHEDULE_MODEL_SECONDS)
             for step, write in (
@@ -457,15 +522,29 @@ def _run_athlete(athlete_id: int, started: float) -> dict:
                 ("review", write_weekly_review),
             ):
                 late = monotonic() - started >= SCHEDULE_MODEL_SECONDS
-                status[step] = "deferred" if late else write()
+                if late:
+                    status[step] = "deferred"
+                elif utc_now().astimezone(tz).date() != claim_day:
+                    # Past the athlete's midnight the step would date its text
+                    # by the new day, from the claimed day's data; the new
+                    # day's run writes its own.
+                    logger.warning(
+                        "Athlete %s: %s skipped, the claimed day has ended",
+                        athlete_id,
+                        step,
+                    )
+                    status[step] = "skipped: day ended"
+                else:
+                    status[step] = write()
             # Self-hosted status marker (``/sync/status``): server clock on purpose.
             record_run(datetime.now())
             if config.is_remote_db:
                 mirror.flush()
+            # Dated by the claim: a run that ends past midnight is the day's.
             with db_connection() as con:
                 con.execute(
-                    "UPDATE app.athletes SET last_sync_at=current_timestamp,sync_lease_until=NULL WHERE id=?",
-                    [athlete_id],
+                    "UPDATE app.athletes SET last_sync_at=?,sync_lease_until=NULL WHERE id=?",
+                    [_naive_utc(claimed_at), athlete_id],
                 )
         except Exception:
             logger.exception(
@@ -480,19 +559,20 @@ async def run_forever(hour: int, tick_seconds: int = TICK_SECONDS) -> None:
     from anyio import to_thread
 
     logger.info(
-        "Automatic sync armed for %02d:00, dispatch every %ds", hour, tick_seconds
+        "Automatic sync armed for %02d:00 athlete time, dispatch every %ds",
+        hour,
+        tick_seconds,
     )
     # This task intentionally lives as long as the server; each dispatch is bounded.
     while True:
-        # ARETE_AUTO_SYNC_HOUR is the server's wall clock (the Docker host);
-        # which athletes are owed is decided per athlete's day by the batch.
-        if datetime.now().hour >= hour:
-            try:
-                await to_thread.run_sync(run_scheduled_batch)
-            except Exception:
-                logger.exception(
-                    "Scheduled dispatch failed; next tick will check unclaimed work"
-                )
+        # ARETE_AUTO_SYNC_HOUR is read on each athlete's clock, not the host's:
+        # every tick dispatches, and the batch decides who is owed.
+        try:
+            await to_thread.run_sync(run_scheduled_batch)
+        except Exception:
+            logger.exception(
+                "Scheduled dispatch failed; next tick will check unclaimed work"
+            )
         await asyncio.sleep(tick_seconds)
 
 
@@ -515,8 +595,8 @@ def release_sync_lease(athlete_id: int) -> bool:
     """
     with db_connection() as con:
         row = con.execute(
-            "UPDATE app.athletes SET sync_lease_until=NULL "
-            "WHERE id=? AND sync_lease_until < current_timestamp RETURNING id",
+            "UPDATE app.athletes SET sync_lease_until=NULL WHERE id=? "
+            "AND sync_lease_until < (current_timestamp AT TIME ZONE 'UTC') RETURNING id",
             [athlete_id],
         ).fetchone()
     return row is not None

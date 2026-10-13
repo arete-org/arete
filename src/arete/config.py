@@ -208,10 +208,12 @@ class Config:
     # --- background jobs / logging -----------------------------------------
     @property
     def auto_sync_hour(self) -> int | None:
-        """Local hour (0-23) of the daily Garmin/Strava sync; None disables it.
+        """Hour (0-23) on each athlete's clock from which the daily sync runs.
 
-        Garmin publishes the night's HRV and sleep score at wake-up, so an hour
-        before the athlete is up leaves the day without recovery data.
+        None disables the in-process loop (Vercel Cron dispatches instead, from
+        ``scheduler.DEFAULT_SYNC_HOUR``). Garmin publishes the night's HRV and
+        sleep score at wake-up, so an hour before the athlete is up leaves the
+        day without recovery data.
         """
         raw = _env("ARETE_AUTO_SYNC_HOUR")
         if raw is None:
