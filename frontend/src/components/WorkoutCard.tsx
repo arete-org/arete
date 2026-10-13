@@ -1,13 +1,13 @@
 import { inputClasses } from '@/components/ui/Input';
 import { Link } from 'react-router-dom';
 import { markWorkout, measureWorkout } from '@/lib/workoutPerformance';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Check, ChevronDown, CircleAlert, ExternalLink, Loader2 } from 'lucide-react';
 import { PrescriptionEditor } from './PrescriptionEditor';
 import { Modal, ModalHeader } from './ui';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
-import { exportLabel, mergeWorkout, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
+import { exportLabel, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
 import { parseLocalDate } from '@/lib/dates';
 import type { Prescription } from '@/lib/documents';
 
@@ -36,24 +36,14 @@ function EditWorkout({ session, onClose, onResult }: { session: WorkoutSession; 
   </Modal>;
 }
 
-export function WorkoutCard({ sessionId, initial, compact = false, selected = false, onSelect, onResult, locked = false }: {
-  sessionId: number; initial?: WorkoutView; compact?: boolean; selected?: boolean;
+/** `WorkoutSelection` reads and polls every card of its list; a card subscribes to its entry. */
+export function WorkoutCard({ sessionId, initial, readError, compact = false, selected = false, onSelect, onResult, locked = false }: {
+  sessionId: number; initial?: WorkoutView; readError?: string; compact?: boolean; selected?: boolean;
   onSelect?: (session: WorkoutSession, checked: boolean) => void; onResult?: (text: string) => void; locked?: boolean;
 }) {
   const actions = useWorkoutActions(onResult);
-  const pollingStarted = useRef<number | null>(null);
   const pending = actions.pendingIds.has(sessionId);
-  const query = useQuery({
-    queryKey: workoutKey(sessionId), queryFn: () => workoutApi.inspect(sessionId),
-    staleTime: 0, retry: false,
-    structuralSharing: (old, next) => mergeWorkout(old as WorkoutView | undefined, next as WorkoutView),
-    refetchInterval: q => {
-      const working = pending || q.state.data?.export?.state === 'working';
-      if (!working) { pollingStarted.current = null; return false; }
-      pollingStarted.current ??= Date.now();
-      return Date.now() - pollingStarted.current < 150_000 ? 1000 : false;
-    },
-  });
+  const query = useQuery({ queryKey: workoutKey(sessionId), queryFn: () => workoutApi.inspect(sessionId), enabled: false });
   const [editing, setEditing] = useState(false);
   const view = query.data ?? initial;
   useEffect(() => {
@@ -62,13 +52,13 @@ export function WorkoutCard({ sessionId, initial, compact = false, selected = fa
       measureWorkout('workout:event-to-card', 'coach:workout-received', 'workout:card-visible');
     }
   }, [view]);
-  if (!view) return <div className="rounded-xl border border-text-muted/15 p-4 text-sm text-text-muted" role="status">{query.error ? query.error.message : 'Lecture de la séance…'}</div>;
+  if (!view) return <div className="rounded-xl border border-text-muted/15 p-4 text-sm text-text-muted" role="status">{readError ?? 'Lecture de la séance…'}</div>;
   const { session, export: state } = view;
   const working = pending || state?.state === 'working';
   const uncertain = state && ['uncertain', 'conflict'].includes(state.state);
   const sent = state && ['scheduled', 'transfer_requested'].includes(state.state);
   const canEdit = !!query.data && !working && !uncertain && !locked;
-  const selectable = session.exportable !== false && !working && !uncertain && !locked && !query.error;
+  const selectable = session.exportable !== false && !working && !uncertain && !locked && !readError;
   return <div id={compact ? `workout-${sessionId}` : undefined} className={compact ? 'mt-3 border-t border-text-muted/15 pt-3' : 'my-3 rounded-xl border border-text-muted/20 bg-shadow/30 p-4'} data-testid={`workout-${sessionId}`}>
     <div className="flex items-start gap-3">
       {onSelect && <input type="checkbox" className="mt-1 size-4 accent-neon-cyan" aria-label={`Sélectionner ${session.description || session.sport}`} checked={selected} disabled={!selected && !selectable} onChange={e => onSelect(session, e.target.checked)} />}
@@ -87,7 +77,7 @@ export function WorkoutCard({ sessionId, initial, compact = false, selected = fa
       </div>
     </div>
     {session.reason && <p className="mt-2 text-xs text-warning-orange">{session.reason}</p>}
-    {(query.error || actions.error || state?.error) && <p role="alert" className="mt-2 text-xs text-danger-red">{actions.error ?? query.error?.message ?? state?.error}</p>}
+    {(readError || actions.error || state?.error) && <p role="alert" className="mt-2 text-xs text-danger-red">{actions.error ?? readError ?? state?.error}</p>}
     {session.prescription && <details className="mt-3 text-xs text-text-secondary">
       <summary className="flex cursor-pointer items-center gap-1"><ChevronDown className="size-3" /> Voir les étapes</summary>
       <StepList prescription={session.prescription} />

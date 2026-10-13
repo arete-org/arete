@@ -61,14 +61,24 @@ function Snapshot({
   );
 }
 
+/** Outcomes the server never changes again (services/calendar_repository.py). */
+const FINAL: ReadonlySet<CalendarAction["status"]> = new Set([
+  "succeeded",
+  "rejected",
+  "expired",
+  "invalidated",
+  "failed",
+]);
+
 export function CalendarActionCard({ id }: { id: string }) {
   const cache = useQueryClient();
   const key = ["calendarAction", id];
+  // Reopening the coach rereads only actions whose outcome can still change.
   const query = useQuery({
     queryKey: key,
     queryFn: () => calendarApi.action(id),
     retry: false,
-    staleTime: 0,
+    staleTime: (q) => (q.state.data && FINAL.has(q.state.data.status) ? Infinity : 0),
   });
   const mutation = useMutation({
     mutationFn: (decision: "approve" | "reject" | "verify") =>

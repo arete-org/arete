@@ -14,9 +14,15 @@ export interface WorkoutUpdate extends WorkoutView {
 export interface ExportBatchResult {
   results: GarminExport[]; not_attempted: number[]; blocked?: number; error?: string;
 }
+export interface WorkoutBatch { workouts: WorkoutView[]; errors: Record<string, string> }
+/** The server's bound per read (services/garmin_export.MAX_INSPECT_SESSIONS). */
+const MAX_INSPECT_SESSIONS = 50;
 export const workoutKey = (id: number) => ['workout', id] as const;
+/** Under `['workout']`, so a write's invalidation refreshes a whole list in one request. */
+export const workoutsKey = (scope: 'cards' | 'progress', ids: number[]) => ['workout', scope, ...ids] as const;
 export const workoutApi = {
   inspect: (id: number) => documentRequest<WorkoutView>(`/garmin/planned/${id}/workout`),
+  inspectMany: (ids: number[]) => documentRequest<WorkoutBatch>(`/garmin/workouts?${ids.map(id => `ids=${id}`).join('&')}`),
   export: (sessions: WorkoutSession[], deviceId: number | null) => documentRequest<ExportBatchResult>(
     '/garmin/exports/batch', { method: 'POST', body: JSON.stringify({ session_ids: sessions.map(s => s.id), revisions: sessions.map(s => s.revision), device_id: deviceId }) }, 150_000),
 };
@@ -47,6 +53,17 @@ export function mergeWorkout(previous: WorkoutView | undefined, next: WorkoutVie
 }
 export function cacheWorkout(queryClient: QueryClient, view: WorkoutView): void {
   queryClient.setQueryData<WorkoutView>(workoutKey(view.session.id), previous => mergeWorkout(previous, view));
+}
+/** Reads several cards at once and seeds each card's entry; per-session errors stay per session. */
+export async function readWorkouts(queryClient: QueryClient, ids: number[]): Promise<WorkoutBatch> {
+  const result: WorkoutBatch = { workouts: [], errors: {} };
+  for (let offset = 0; offset < ids.length; offset += MAX_INSPECT_SESSIONS) {
+    const batch = await workoutApi.inspectMany(ids.slice(offset, offset + MAX_INSPECT_SESSIONS));
+    batch.workouts.forEach(view => cacheWorkout(queryClient, view));
+    result.workouts.push(...batch.workouts);
+    Object.assign(result.errors, batch.errors);
+  }
+  return result;
 }
 export const exportLabels: Record<string, string> = {
   scheduled: 'Programmée dans Garmin Connect', transfer_requested: 'Transfert demandé · synchronise la montre',

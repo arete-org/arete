@@ -61,6 +61,7 @@ export function PlanningPage() {
   const [selecting, setSelecting] = useState(false);
   const [message, setMessage] = useState('');
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [analysisOpened, setAnalysisOpened] = useState(false);
   const plannedQuery = useQuery({
     queryKey: qk.planned(weekStart, weekEnd),
     queryFn: () => garminApi.getPlanned(weekStart, weekEnd),
@@ -438,14 +439,22 @@ export function PlanningPage() {
             </Button>
           </div>
         </Modal>
-        <details className="planning-analysis">
+        {/* Collapsed by default: the review and the goal projection load when first opened. */}
+        <details
+          className="planning-analysis"
+          onToggle={(e) => {
+            if (e.currentTarget.open) setAnalysisOpened(true);
+          }}
+        >
           <summary className="min-h-11 text-sm font-semibold cursor-pointer">
             Bilan et objectifs
           </summary>
-          <div className="space-y-5 mt-4">
-            <WeeklyReviewPanel />
-            <GoalProjectionPanel />
-          </div>
+          {analysisOpened && (
+            <div className="space-y-5 mt-4">
+              <WeeklyReviewPanel />
+              <GoalProjectionPanel />
+            </div>
+          )}
         </details>
         {detail && !editor && !moving && (
           <SessionDetail
