@@ -528,9 +528,12 @@ endpoint, which all remain, read on one connection for the athlete's day, with
 the load history read and modelled once for player stats, fitness and readiness.
 It makes no Garmin request, model call or write; its briefing may be `pending`.
 The page reads it as one query whose panels select their slice
-(`frontend/src/lib/dashboard.ts`); the answer seeds the keys of the endpoints
-it replaces, and the coach card and the briefing's polling start from it rather
-than asking again. A session write invalidates it with the rest.
+(`frontend/src/lib/dashboard.ts`); the current read (never a cancelled one, nor
+one older than a key's own answer) seeds the keys still read elsewhere, so the
+coach card and the briefing's polling start from it rather than asking again.
+A session write invalidates it with the rest (`invalidateAfterSession`), and a
+change to data it carries without one (Garmin state, health, goals) with
+`invalidateWithDashboard`. When it fails, the panels say so and offer a retry.
 
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References
