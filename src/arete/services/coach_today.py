@@ -18,12 +18,16 @@ def prepare() -> None:
 
 def today() -> dict[str, Any]:
     day = athlete_today()
-    proposals = [
-        d.to_dict()
+    # The day's open proposals are answered together, so they form one card.
+    group = [
+        d
         for d in PlanDecisionRepository().list_for_day(day)
         if d.state in {"pending", "discussion"}
-        and (d.snoozed_until is None or d.snoozed_until <= day)
     ]
+    if all(d.snoozed_until is not None and d.snoozed_until > day for d in group):
+        group = []
+    # The session that keeps a training load leads the card.
+    proposals = [d.to_dict() for d in sorted(group, key=lambda d: d.decision == "rest")]
     from arete.garmin.repository import GarminRepository
 
     repo = GarminRepository()
@@ -36,7 +40,11 @@ def today() -> dict[str, Any]:
         ):
             proposal["state"] = "stale"
     followups = coach_followup.pending(day)
-    items = [{"kind": "proposal", "record": d} for d in proposals]
+    items: list[dict[str, Any]] = (
+        [{"kind": "proposal", "record": proposals[0], "group": proposals}]
+        if proposals
+        else []
+    )
     items += [{"kind": "followup", "record": f} for f in followups]
     briefing = BriefingRepository().get_for_day(day)
     return {

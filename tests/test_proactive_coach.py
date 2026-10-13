@@ -64,6 +64,86 @@ def proposal():
     return sid, decision
 
 
+def low_day():
+    """Readiness 49 with Fractionné 60' and Endurance 45': one card for the day."""
+    repo = GarminRepository()
+    ids = [
+        repo.create_planned_session(
+            PlannedSession(
+                date=date.today(),
+                sport="running",
+                session_type=kind,
+                target_duration_min=minutes,
+            )
+        )
+        for kind, minutes in ((SessionType.ENDURANCE, 45), (SessionType.INTERVALS, 60))
+    ]
+    facts = RuleFacts(
+        acwr=1,
+        tsb=-5,
+        readiness_score=49,
+        fatigue_threshold=85,
+        fitness_goal="build",
+        readiness_source="garmin_training",
+        readiness_measured_on=date.today(),
+    )
+    with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
+        plan_adaptation.adapt_today()
+    (item,) = coach_today.today()["items"]
+    return ids, item
+
+
+def test_a_low_day_is_one_card_applied_in_one_transaction(athlete):
+    (endurance, intervals), item = low_day()
+    assert item["kind"] == "proposal" and len(item["group"]) == 2
+    assert [(d["planned_session_id"], d["decision"]) for d in item["group"]] == [
+        (intervals, "replace_easy"),
+        (endurance, "rest"),
+    ]
+    key = item["record"]
+    assert key == item["group"][0]
+    others = {d["id"]: d["revision"] for d in item["group"][1:]}
+    # A client that saw only part of the day cannot answer for it.
+    with pytest.raises(plan_adaptation.ProposalConflict):
+        plan_adaptation.respond(key["id"], key["revision"], "apply")
+    plan_adaptation.respond(key["id"], key["revision"], "apply", others)
+    repo = GarminRepository()
+    assert repo.get_planned_session(intervals).target_duration_min == 30
+    assert repo.get_planned_session(endurance).status.value == "skipped"
+    # A replay of the same answer changes nothing.
+    plan_adaptation.respond(key["id"], key["revision"], "apply", others)
+    assert repo.get_planned_session(intervals).revision == 2
+    assert coach_today.today()["items"] == []
+
+
+def test_a_changed_session_applies_nothing_of_the_group(athlete):
+    (endurance, intervals), item = low_day()
+    # The rest is written first, then the changed key session refuses.
+    GarminRepository().update_planned_session_fields(intervals, description="moved")
+    key = item["record"]
+    others = {d["id"]: d["revision"] for d in item["group"][1:]}
+    with pytest.raises(plan_adaptation.ProposalConflict):
+        plan_adaptation.respond(key["id"], key["revision"], "apply", others)
+    assert GarminRepository().get_planned_session(endurance).status.value == "pending"
+    assert [d["state"] for d in coach_today.today()["items"][0]["group"]] == [
+        "stale",
+        "pending",
+    ]
+
+
+def test_keeping_a_low_day_records_the_choice_for_both(athlete):
+    (endurance, intervals), item = low_day()
+    key = item["record"]
+    others = {d["id"]: d["revision"] for d in item["group"][1:]}
+    plan_adaptation.respond(key["id"], key["revision"], "keep", others)
+    repo = GarminRepository()
+    assert [repo.get_planned_session(s).revision for s in (endurance, intervals)] == [
+        1,
+        1,
+    ]
+    assert {d.state for d in plan_adaptation.adapt_today()} == {"dismissed"}
+
+
 def test_proposal_requires_validation_and_replay_cannot_apply_twice(athlete):
     sid, decision = proposal()
     repo = GarminRepository()
