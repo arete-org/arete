@@ -116,15 +116,15 @@ configuration is ready. Production uses the repository's manual deployment workf
 Each athlete is synced once a day: Garmin activities and health, plan
 adaptation, Strava, the calendar and the session feedback, then the briefing
 and, on Mondays, the week's review. Vercel's Hobby plan runs a cron at most once
-a day, so `vercel.json` lists six daily windows on the same path, from 07:00 to
-12:00 UTC (each fires within its hour). The first window waits for Garmin to
+a day, so `vercel.json` lists ten daily windows on the same path, from 07:00 to
+16:00 UTC (each fires within its hour). The first window waits for Garmin to
 have the night's sleep and HRV, which arrive when the watch syncs after waking.
 
 An athlete is owed from 07:00 on their own clock (their timezone setting), or
 from `ARETE_AUTO_SYNC_HOUR` when set, and never during their quiet hours
 (21:30-07:00 by default): a run there would sync before the night's data and
 lose the briefing, feedback and review pushes that quiet hours drop. With the
-default quiet hours, the windows reach athletes from UTC-5 eastward in their
+default quiet hours, the windows reach athletes from UTC-9 eastward in their
 morning; further west no window falls after 07:00 local, so the scheduler
 skips them until a later window is added to `vercel.json`.
 

@@ -1,7 +1,9 @@
 """Exercise real shared storage with two unrelated authenticated athletes."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -565,17 +567,52 @@ def _run_the_day(monkeypatch, frozen_dispatch, hours):
 def test_vercel_windows_run_each_athlete_once_out_of_quiet_hours(
     athletes, monkeypatch, frozen_dispatch
 ):
-    """Cron windows 07:00-12:00 UTC: 10:00 in Moscow, 02:00-07:00 in Bogota."""
+    """Cron windows from 07:00 UTC: 10:00 in Moscow, 02:00-07:00 in Bogota."""
     first, second = athletes
     _settle(first.athlete_id, MOSCOW)
     _settle(second.athlete_id, BOGOTA)
-    runs = _run_the_day(monkeypatch, frozen_dispatch, range(7, 13))
+    runs = _run_the_day(monkeypatch, frozen_dispatch, _cron_hours())
     # Bogota waits for the end of its quiet hours (07:00 local): its briefing
     # push is sent, not dropped as "heures calmes".
     assert runs == {
         first.athlete_id: [(7, "clés Web Push absentes du serveur")],
         second.athlete_id: [(12, "clés Web Push absentes du serveur")],
     }
+
+
+def _cron_hours() -> list[int]:
+    crons = json.loads((Path(__file__).parents[1] / "vercel.json").read_text())["crons"]
+    return sorted(int(cron["schedule"].split()[1]) for cron in crons)
+
+
+@pytest.mark.parametrize(
+    "zone",
+    [
+        "Europe/Moscow",
+        "Europe/Paris",
+        "America/New_York",
+        "America/Los_Angeles",
+        "America/Anchorage",
+    ],
+)
+def test_a_cron_window_reaches_every_zone_from_utc_minus_9_in_its_morning(zone):
+    """Default quiet hours end at 07:00 local: some window must fall after it."""
+    from arete import scheduler
+    from arete.services.settings import stored_preferences
+
+    quiet = stored_preferences(None).quiet_hours
+    day = datetime(2026, 1, 12, tzinfo=UTC)  # winter: the westernmost offsets
+    assert any(
+        scheduler.owed_today(
+            None,
+            None,
+            day.replace(hour=hour).timestamp(),
+            zone,
+            sync_hour=scheduler.DEFAULT_SYNC_HOUR,
+            quiet_hours=quiet,
+        )
+        for hour in _cron_hours()
+    )
 
 
 @pytest.mark.parametrize(
