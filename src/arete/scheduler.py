@@ -233,7 +233,7 @@ BRIEFING_WAIT_SECONDS = 60
 BRIEFING_POLL_SECONDS = 5
 
 
-def write_daily_briefing() -> str:
+def write_daily_briefing(*, model_deadline: float | None = None) -> str:
     """Have the coach write the day's briefing, after the sync that feeds it.
 
     Kept out of ``daily_sync`` so the sync's status dict stays about sources.
@@ -247,7 +247,11 @@ def write_daily_briefing() -> str:
     if not briefing_enabled():
         return "disabled"
     repo = BriefingRepository()
+    # Waiting never eats the dispatch's model budget (``SCHEDULE_MODEL_SECONDS``):
+    # a rewrite started past it would outlive the function.
     deadline = monotonic() + BRIEFING_WAIT_SECONDS
+    if model_deadline is not None:
+        deadline = min(deadline, model_deadline)
     try:
         while True:
             # A briefing the dashboard asked for is rewritten only when its
@@ -420,7 +424,12 @@ def _run_athlete(athlete_id: int, started: float) -> dict:
                 mirror.hydrate()
             status = daily_sync()
             for step, write in (
-                ("briefing", write_daily_briefing),
+                (
+                    "briefing",
+                    lambda: write_daily_briefing(
+                        model_deadline=started + SCHEDULE_MODEL_SECONDS
+                    ),
+                ),
                 ("review", write_weekly_review),
             ):
                 late = monotonic() - started >= SCHEDULE_MODEL_SECONDS

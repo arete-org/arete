@@ -207,6 +207,21 @@ class TestWriteDailyBriefing:
         sleep.assert_not_called()
         notify.assert_not_called()
 
+    def test_the_wait_stops_at_the_dispatch_s_model_deadline(self):
+        # A rewrite started past SCHEDULE_MODEL_SECONDS would outlive the function.
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=None,
+            ),
+            patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch.object(scheduler, "sleep") as sleep,
+        ):
+            spent = scheduler.monotonic() - 1
+            assert scheduler.write_daily_briefing(model_deadline=spent) == "in progress"
+        sleep.assert_not_called()
+
     def test_a_failed_rewrite_keeps_the_briefing_without_a_notification(self):
         stale = self._existing("api")
         with (
