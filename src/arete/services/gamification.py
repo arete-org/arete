@@ -156,28 +156,48 @@ def _balance(con) -> tuple[int, int]:
     return int(row[0]), int(row[1])
 
 
-def _settle(con, cause: str, week: date, xp: int, shards: int, label: str) -> None:
-    old = con.execute(
-        "SELECT coalesce(sum(xp),0),coalesce(sum(shards),0) FROM app.visible_game_ledger WHERE cause=?",
-        [cause],
-    ).fetchone()
-    assert old is not None
-    dx, ds = xp - old[0], shards - old[1]
-    if dx or ds:
-        con.execute(
-            "INSERT INTO app.game_ledger (id,cause,week_start,xp,shards,label) VALUES (?,?,?,?,?,?)",
-            [
-                str(uuid4()),
-                cause,
-                week,
-                dx,
-                ds,
-                label if dx >= 0 and ds >= 0 else "Correction de doublon · " + label,
-            ],
-        )
+#: A strength session linked to an actual one whose evidence still has its own
+#: canonical identity: the projection must resolve it before counting.
+_UNRESOLVED_LINK = """SELECT 1 FROM app.visible_game_events e, app.visible_strength_sessions s,
+    app.visible_game_events a WHERE e.source_key='strength:'||s.id
+    AND a.source_key='actual:'||s.actual_session_id AND e.canonical_key<>a.canonical_key
+    LIMIT 1"""
 
 
-def _week(con, week: date, today: date) -> dict:
+def _receipts(con, week: date, targets: list[tuple[str, int, int, str]]) -> list[list]:
+    """Ledger rows that bring each cause's total to its target, in order.
+
+    One query for the week's causes; a cause appears at most once per week.
+    """
+    sums = {
+        cause: (xp, shards)
+        for cause, xp, shards in con.execute(
+            "SELECT cause,coalesce(sum(xp),0),coalesce(sum(shards),0) FROM app.visible_game_ledger WHERE cause IN (SELECT unnest(?)) GROUP BY cause",
+            [[cause for cause, *_ in targets]],
+        ).fetchall()
+    }
+    rows = []
+    for cause, xp, shards, label in targets:
+        old_xp, old_shards = sums.get(cause, (0, 0))
+        dx, ds = xp - old_xp, shards - old_shards
+        if dx or ds:
+            rows.append(
+                [
+                    str(uuid4()),
+                    cause,
+                    week,
+                    dx,
+                    ds,
+                    label
+                    if dx >= 0 and ds >= 0
+                    else "Correction de doublon · " + label,
+                ]
+            )
+    return rows
+
+
+def _week(con, week: date, today: date) -> tuple[dict, list[list]]:
+    """The week's summary and the receipts it is missing. Reads only."""
     goal, zone = con.execute(
         "SELECT goal,timezone FROM app.visible_game_weeks WHERE week_start=?", [week]
     ).fetchone()
@@ -189,28 +209,21 @@ def _week(con, week: date, today: date) -> dict:
         raise GameError("Trop d’activités dans cette semaine : projection suspendue.")
     # Canonical aliases are durable. A late link reverses the duplicate, even after purchase.
     count = 0
-    live = set()
+    targets = []
     for key, eligible, name, _ in rows:
-        live.add("activity:" + key)
         rewarded = eligible and count < 6
-        _settle(
-            con,
-            "activity:" + key,
-            week,
-            50 if rewarded else 0,
-            10 if rewarded else 0,
-            name,
+        targets.append(
+            ("activity:" + key, 50 if rewarded else 0, 10 if rewarded else 0, name)
         )
         count += int(eligible)
+    live = {cause for cause, *_ in targets}
     old = con.execute(
         "SELECT DISTINCT cause FROM app.visible_game_ledger WHERE week_start=? AND starts_with(cause,'activity:') LIMIT ?",
         [week, MAX_WEEK_ACTIVITIES + 1],
     ).fetchall()
-    if len(old) > MAX_WEEK_ACTIVITIES:
-        raise GameError("Trop de reçus dans cette semaine.")
-    for (cause,) in old:
-        if cause not in live:
-            _settle(con, cause, week, 0, 0, "Séance rapprochée")
+    targets += [
+        (cause, 0, 0, "Séance rapprochée") for (cause,) in old if cause not in live
+    ]
     # A prescribed rest counts once per planned session and only after its day.
     rest = con.execute(
         """SELECT count(DISTINCT d.planned_session_id) FROM app.visible_plan_decisions d
@@ -222,15 +235,22 @@ def _week(con, week: date, today: date) -> dict:
         [week, week + timedelta(days=7), today],
     ).fetchone()[0]
     complete = count + rest >= goal
-    _settle(
-        con,
-        "week:" + week.isoformat(),
-        week,
-        200 if complete else 0,
-        40 if complete else 0,
-        "Objectif hebdomadaire respecté",
+    targets.append(
+        (
+            "week:" + week.isoformat(),
+            200 if complete else 0,
+            40 if complete else 0,
+            "Objectif hebdomadaire respecté",
+        )
     )
-    return {
+    receipts = _receipts(con, week, targets)
+    # The receipts this week will hold once written: the live ones it adds too.
+    held = {cause for (cause,) in old} | {
+        r[1] for r in receipts if r[1].startswith("activity:")
+    }
+    if len(held) > MAX_WEEK_ACTIVITIES:
+        raise GameError("Trop de reçus dans cette semaine.")
+    summary = {
         "start": str(week),
         "goal": goal,
         "sessions": count,
@@ -240,12 +260,59 @@ def _week(con, week: date, today: date) -> dict:
         "complete": complete,
         "timezone": zone,
     }
+    return summary, receipts
+
+
+def _current_week(con, day: date) -> date | None:
+    """This week, when an opted-in athlete has its row (frozen goal)."""
+    current = day - timedelta(days=day.weekday())
+    if (
+        _profile(con)[0]
+        and con.execute(
+            "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?", [current]
+        ).fetchone()
+    ):
+        return current
+    return None
+
+
+def _owns_cape(con) -> bool:
+    return bool(
+        con.execute("SELECT 1 FROM app.visible_game_owned WHERE skin='cape'").fetchone()
+    )
+
+
+def _due(con) -> bool:
+    """Whether a projection would write anything. Reads only, takes no lock.
+
+    Pending evidence, an unresolved strength link, a current week whose
+    receipts differ from its rules (a rest decision applied since) or a cape
+    earned but not owned.
+    """
+    if con.execute(
+        "SELECT 1 FROM app.visible_game_events WHERE NOT processed LIMIT 1"
+    ).fetchone():
+        return True
+    if con.execute(_UNRESOLVED_LINK).fetchone():
+        return True
+    day, _, _ = _today(con)
+    current = _current_week(con, day)
+    if current is not None and _week(con, current, day)[1]:
+        return True
+    return level_for(_balance(con)[0]) >= 6 and not _owns_cape(con)
 
 
 def sync() -> dict:
-    """Explicit bounded projection. Reads never quietly credit a receipt."""
+    """Explicit bounded projection. Reads never quietly credit a receipt.
+
+    With nothing to settle it writes nothing and takes no lock: a page that
+    asks twice, or two tabs at once, read the same snapshot.
+    """
     if not config.gamification_available:
         raise GameError("Gamification indisponible sur ce déploiement.")
+    with db_connection() as con:
+        if not _due(con):
+            return _snapshot(con)
     with transaction() as con:
         _lock(con)
         # An opted-out athlete may settle evidence captured before opting out.
@@ -256,21 +323,17 @@ def sync() -> dict:
             [MAX_EVENTS],
         ).fetchall()
         weeks = {w for _, w in pending}
-        current = day - timedelta(days=day.weekday())
-        if (
-            _profile(con)[0]
-            and con.execute(
-                "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?", [current]
-            ).fetchone()
-        ):
+        current = _current_week(con, day)
+        if current is not None:
             weeks.add(current)
         # Resolve existing strength ↔ actual links before counting or debiting.
-        con.execute(
-            """UPDATE app.game_events e SET canonical_key=a.canonical_key
-            FROM app.visible_strength_sessions s, app.visible_game_events a
-            WHERE e.athlete_id = getvariable('arete_athlete_id') AND e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=e.athlete_id AND scope_owner.deleted_at IS NULL) AND (e.source_key='strength:'||s.id AND a.source_key='actual:'||s.actual_session_id
-            AND e.canonical_key<>a.canonical_key) """
-        )
+        if con.execute(_UNRESOLVED_LINK).fetchone():
+            con.execute(
+                """UPDATE app.game_events e SET canonical_key=a.canonical_key
+                FROM app.visible_strength_sessions s, app.visible_game_events a
+                WHERE e.athlete_id = getvariable('arete_athlete_id') AND e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=e.athlete_id AND scope_owner.deleted_at IS NULL) AND (e.source_key='strength:'||s.id AND a.source_key='actual:'||s.actual_session_id
+                AND e.canonical_key<>a.canonical_key) """
+            )
         # A duplicate imported with another date must settle its original week too.
         if pending:
             keys = [key for key, _ in pending]
@@ -283,14 +346,18 @@ def sync() -> dict:
             if con.execute(
                 "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?", [week]
             ).fetchone():
-                _week(con, week, day)
-        for key, _ in pending:
+                for receipt in _week(con, week, day)[1]:
+                    con.execute(
+                        "INSERT INTO app.game_ledger (id,cause,week_start,xp,shards,label) VALUES (?,?,?,?,?,?)",
+                        receipt,
+                    )
+        if pending:
             con.execute(
-                "UPDATE app.game_events SET processed=true WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) ",
-                [key],
+                "UPDATE app.game_events SET processed=true WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key IN (SELECT unnest(?))) ",
+                [[key for key, _ in pending]],
             )
         xp, _ = _balance(con)
-        if level_for(xp) >= 6:
+        if level_for(xp) >= 6 and not _owns_cape(con):
             con.execute(
                 "INSERT INTO app.game_owned (skin) VALUES ('cape') ON CONFLICT DO NOTHING"
             )
@@ -303,36 +370,39 @@ def sync() -> dict:
 
 def snapshot(offset: int = 0) -> dict:
     with db_connection() as con:
-        p = _profile(con)
-        xp, shards = _balance(con)
-        day, zone, goal = _today(con)
-        week = day - timedelta(days=day.weekday())
-        frozen = con.execute(
-            "SELECT goal FROM app.visible_game_weeks WHERE week_start=?", [week]
-        ).fetchone()
-        counts = con.execute(
-            "SELECT count(*),count(*) FILTER(WHERE week_start=?) FROM (SELECT canonical_key,min(week_start) AS week_start FROM app.visible_game_events GROUP BY canonical_key HAVING bool_or(eligible))",
-            [week],
-        ).fetchone()
-        owned = {
-            r[0]
-            for r in con.execute("SELECT skin FROM app.visible_game_owned").fetchall()
-        }
-        rows = con.execute(
-            "SELECT id,cause,week_start,xp,shards,label,CAST(created_at AS VARCHAR) FROM app.visible_game_ledger ORDER BY created_at DESC,id DESC LIMIT 51 OFFSET ?",
-            [offset],
-        ).fetchall()
-        pending_row = con.execute(
-            "SELECT count(*) FROM app.visible_game_events WHERE NOT processed"
-        ).fetchone()
-        assert pending_row is not None
-        pending = pending_row[0]
-        bonus_row = con.execute(
-            "SELECT coalesce(sum(xp),0) FROM app.visible_game_ledger WHERE cause=?",
-            ["week:" + str(week)],
-        ).fetchone()
-        assert bonus_row is not None and counts is not None
-        bonus = bonus_row[0]
+        return _snapshot(con, offset)
+
+
+def _snapshot(con, offset: int = 0) -> dict:
+    p = _profile(con)
+    xp, shards = _balance(con)
+    day, zone, goal = _today(con)
+    week = day - timedelta(days=day.weekday())
+    frozen = con.execute(
+        "SELECT goal FROM app.visible_game_weeks WHERE week_start=?", [week]
+    ).fetchone()
+    counts = con.execute(
+        "SELECT count(*),count(*) FILTER(WHERE week_start=?) FROM (SELECT canonical_key,min(week_start) AS week_start FROM app.visible_game_events GROUP BY canonical_key HAVING bool_or(eligible))",
+        [week],
+    ).fetchone()
+    owned = {
+        r[0] for r in con.execute("SELECT skin FROM app.visible_game_owned").fetchall()
+    }
+    rows = con.execute(
+        "SELECT id,cause,week_start,xp,shards,label,CAST(created_at AS VARCHAR) FROM app.visible_game_ledger ORDER BY created_at DESC,id DESC LIMIT 51 OFFSET ?",
+        [offset],
+    ).fetchall()
+    pending_row = con.execute(
+        "SELECT count(*) FROM app.visible_game_events WHERE NOT processed"
+    ).fetchone()
+    assert pending_row is not None
+    pending = pending_row[0]
+    bonus_row = con.execute(
+        "SELECT coalesce(sum(xp),0) FROM app.visible_game_ledger WHERE cause=?",
+        ["week:" + str(week)],
+    ).fetchone()
+    assert bonus_row is not None and counts is not None
+    bonus = bonus_row[0]
     level = level_for(xp)
     rank = next(name for n, name in reversed(RANKS) if level >= n)
     return {

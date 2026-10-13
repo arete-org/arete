@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { documentRequest } from './documents';
 
 export interface GamePreference {
@@ -74,6 +75,46 @@ export const gameApi = {
       body: JSON.stringify(body),
     }),
 };
+export const gameKey = ['game'] as const;
+
+/**
+ * The stored progression: a read, so loading a page writes nothing. Evidence
+ * settled nowhere yet (an import elsewhere) asks for one projection; the
+ * projection's own answer never asks for another.
+ */
+export function useGameSnapshot(options: { enabled?: boolean; refetchOnWindowFocus?: 'always' } = {}) {
+  const client = useQueryClient();
+  const query = useQuery({ queryKey: gameKey, queryFn: () => gameApi.snapshot(), retry: false, ...options });
+  const asked = useRef(0);
+  const { mutate, isPending } = useMutation({
+    mutationFn: gameApi.sync,
+    onSuccess: (player) => {
+      asked.current = Date.now();
+      client.setQueryData(gameKey, player, { updatedAt: asked.current });
+    },
+  });
+  const { data, dataUpdatedAt } = query;
+  useEffect(() => {
+    if (!data?.enabled || !data.pending || isPending || asked.current >= dataUpdatedAt) return;
+    asked.current = dataUpdatedAt;
+    mutate();
+  }, [data, dataUpdatedAt, isPending, mutate]);
+  return query;
+}
+
+/** After a session event: the one projection, for an opted-in athlete only. */
+export function syncGame(client: QueryClient) {
+  if (!client.getQueryData<GamePreference>(['game-preference'])?.enabled) return;
+  gameApi.sync().then(
+    (player) => {
+      client.setQueryData(gameKey, player);
+      void client.invalidateQueries({ queryKey: [...gameKey, 'receipts'] });
+    },
+    // A failed projection is never replayed: the next read shows what is pending.
+    () => undefined,
+  );
+}
+
 export function useGamePreference() {
   return useQuery({
     queryKey: ['game-preference'],

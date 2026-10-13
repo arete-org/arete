@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { strengthApi } from './api';
+import { syncGame } from './gamification';
 
 /**
  * Every react-query key of the app, in one place.
@@ -100,7 +101,6 @@ export function invalidateAfterSession(queryClient: QueryClient): void {
     qk.sessionDetail(),
     qk.analytics,
     qk.playerStats,
-    ['game'],
     qk.fitness,
     qk.workload,
     qk.planToday,
@@ -109,4 +109,6 @@ export function invalidateAfterSession(queryClient: QueryClient): void {
   ]) {
     queryClient.invalidateQueries({ queryKey: key });
   }
+  // Settles the RPG: it replaces the snapshot instead of re-reading it.
+  syncGame(queryClient);
 }

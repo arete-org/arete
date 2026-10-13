@@ -153,6 +153,11 @@ def daily_sync() -> dict[str, str]:
     else:
         status["strava"] = "not connected"
 
+    # After the imports and the rest decisions: the dashboard then reads the
+    # settled progression without a projection request of its own.
+    if (game := settle_game()) is not None:
+        status["gamification"] = game
+
     # After every plan change of the run (adaptation, completed sessions).
     from arete.calendar import sync_training_plan
     from arete.services.calendar_plan import DAILY
@@ -176,6 +181,24 @@ def daily_sync() -> dict[str, str]:
     logger.info("Daily sync: %s", status)
     _last_status[current_athlete_id()] = dict(status)
     return status
+
+
+def settle_game() -> str | None:
+    """Settle an opted-in athlete's RPG progression. Never raises.
+
+    None when there is nothing to report: the deployment or the athlete has
+    the RPG off. A sync with nothing pending writes nothing.
+    """
+    from arete.services import gamification
+
+    try:
+        if not gamification.preference()["enabled"]:
+            return None
+        state = gamification.sync()
+    except Exception as e:  # noqa: BLE001 - background job must not die
+        logger.warning("Gamification sync failed: %s", e)
+        return f"failed: {e}"
+    return f"{state['pending']} pending"
 
 
 def write_sync_feedback(session_ids: list[int]) -> tuple[str, list[dict] | None]:

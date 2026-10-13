@@ -10,6 +10,7 @@ import {
   gameApi,
   ranks,
   useGamePreference,
+  useGameSnapshot,
   type Player,
   type Skin,
 } from '@/lib/gamification';
@@ -61,13 +62,8 @@ function ActiveProfile() {
   const [params, setParams] = useSearchParams();
   const tab = tabs.find((t) => t[0] === params.get('tab'))?.[0] ?? 'overview';
   const client = useQueryClient();
-  // Projection is an explicit idempotent command, with no automatic retry.
-  const player = useQuery({
-    queryKey: ['game'],
-    queryFn: gameApi.sync,
-    retry: false,
-    refetchOnWindowFocus: 'always',
-  });
+  // A read: pending evidence asks for one projection, never retried.
+  const player = useGameSnapshot({ refetchOnWindowFocus: 'always' });
   const settings = useQuery({
     queryKey: ['settings'],
     queryFn: settingsApi.get,

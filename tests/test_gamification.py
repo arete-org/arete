@@ -281,3 +281,133 @@ def test_duplicate_during_opt_out_does_not_erase_earned_reward(game_db):
         )
     state = game.sync()
     assert (state["sessions"], state["xp"], state["shards"]) == (1, 50, 10)
+
+
+def _ledger() -> list[tuple]:
+    with db_connection() as con:
+        return sorted(
+            con.execute(
+                "SELECT cause,CAST(week_start AS VARCHAR),xp,shards,label FROM app.game_ledger"
+            ).fetchall()
+        )
+
+
+def test_receipts_of_caps_aliases_and_moved_duplicates_are_unchanged(game_db):
+    """Characterizes every receipt a multi-week projection writes."""
+    enable()
+    with transaction() as con:  # opted in for three weeks already
+        con.execute(
+            "UPDATE app.game_periods SET started_at=started_at - INTERVAL 20 DAY"
+        )
+    today = athlete_today()
+    last_week = today - timedelta(days=7)
+    for n in range(7):
+        evidence(f"session:{n}")
+    evidence("earlier", last_week)
+    game.sync()
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.game_events SET canonical_key='session:0',processed=false WHERE source_key='session:6'"
+        )
+        capture(con, "dup", last_week, "Doublon", True, canonical="session:1")
+    game.sync()
+    game.sync()
+    week, previous = (str(d - timedelta(days=d.weekday())) for d in (today, last_week))
+    fix = "Correction de doublon · "
+    assert _ledger() == sorted(
+        [
+            ("activity:earlier", previous, 50, 10, "Course"),
+            *[(f"activity:session:{n}", week, 50, 10, "Course") for n in range(6)],
+            # The duplicate dated last week moves session 1 there: its sum per
+            # cause is already credited, so only the current week's reversal
+            # is written (behavior kept as is).
+            ("activity:session:1", week, -50, -10, fix + "Séance rapprochée"),
+            ("week:" + week, week, 200, 40, "Objectif hebdomadaire respecté"),
+            ("week:" + week, week, -200, -40, fix + "Objectif hebdomadaire respecté"),
+        ]
+    )
+
+
+WRITES = ("INSERT", "UPDATE", "DELETE", "BEGIN")
+
+
+def _statements(monkeypatch, statement_log, run) -> list[str]:
+    """The statements ``run`` sends, on the raw connections it opens."""
+    real = duckdb.connect
+    monkeypatch.setattr(
+        duckdb, "connect", lambda *a, **k: statement_log.wrap(real(*a, **k))
+    )
+    run()
+    monkeypatch.setattr(duckdb, "connect", real)
+    return [" ".join(sql.split()).upper() for sql in statement_log]
+
+
+def test_a_sync_with_nothing_to_settle_writes_nothing(
+    game_db, monkeypatch, statement_log
+):
+    enable()
+    for n in range(7):
+        evidence(f"session:{n}")
+    settled = game.sync()
+    statements = _statements(monkeypatch, statement_log, game.sync)
+    assert [s for s in statements if s.startswith(WRITES)] == []
+    assert game.sync() == settled  # same snapshot, same version
+
+
+def test_settling_more_activities_costs_no_more_reads(
+    game_db, monkeypatch, statement_log
+):
+    enable()
+
+    def selects(keys: list[str]) -> int:
+        for key in keys:
+            evidence(key)
+        statement_log.clear()
+        statements = _statements(monkeypatch, statement_log, game.sync)
+        return sum(s.startswith(("SELECT", "WITH")) for s in statements)
+
+    assert selects(["a", "b"]) == selects([f"k:{n}" for n in range(6)])
+
+
+def test_a_rest_applied_since_the_last_sync_is_still_due(game_db):
+    from arete.services.settings import UserSettingsUpdate, update_settings
+
+    update_settings(UserSettingsUpdate(weekly_training_goal=2))
+    enable()
+    evidence("one")
+    game.sync()
+    with db_connection() as con:
+        assert not game._due(con)
+    with transaction() as con:
+        con.execute(
+            "INSERT INTO app.planned_sessions (date,sport,session_type,description) VALUES (?,'running','endurance','Repos')",
+            [athlete_today()],
+        )
+        planned = con.execute("SELECT max(id) FROM app.planned_sessions").fetchone()[0]
+        con.execute(
+            "INSERT INTO app.plan_decisions (user_id,date,planned_session_id,decision,reason,applied_at) VALUES (1,?,?,'rest','Prescribed',CURRENT_TIMESTAMP)",
+            [athlete_today(), planned],
+        )
+    with db_connection() as con:
+        assert game._due(con)
+    assert game.sync()["week"]["complete"] is True
+
+
+def test_concurrent_syncs_with_nothing_to_settle_never_conflict(game_db):
+    enable()
+    evidence("one")
+    game.sync()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(lambda _: game.sync()["xp"], range(4)))
+    assert results == [50] * 4
+
+
+def test_the_daily_sync_settles_what_it_imported(game_db):
+    from arete.scheduler import settle_game
+
+    evidence("before opt-in")
+    assert settle_game() is None  # opted out: nothing to report
+    enable()
+    evidence("imported")
+    assert settle_game() == "0 pending"
+    assert game.snapshot()["xp"] == 50

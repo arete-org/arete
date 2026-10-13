@@ -1,15 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { characterAsset, gameApi, useGamePreference } from '@/lib/gamification';
+import { characterAsset, useGamePreference, useGameSnapshot } from '@/lib/gamification';
 
 export function PlayerSummary() {
   const pref = useGamePreference();
-  const player = useQuery({
-    queryKey: ['game'],
-    queryFn: gameApi.sync,
-    enabled: pref.data?.enabled === true,
-    retry: false,
-  });
+  const player = useGameSnapshot({ enabled: pref.data?.enabled === true });
   if (!pref.data?.enabled) return null;
   if (player.error)
     return (

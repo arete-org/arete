@@ -71,7 +71,7 @@ beforeEach(() => {
     available: true,
     version: 1,
   });
-  vi.mocked(gameApi.sync).mockResolvedValue(structuredClone(fixture));
+  vi.mocked(gameApi.snapshot).mockResolvedValue(structuredClone(fixture));
 });
 afterEach(cleanup);
 it('gates direct profile links without projecting rewards when opted out', async () => {
@@ -83,11 +83,12 @@ it('gates direct profile links without projecting rewards when opted out', async
   });
   mount(<ProfilePage />);
   expect(await screen.findByText('Ouvrir les Réglages →')).toBeTruthy();
+  expect(gameApi.snapshot).not.toHaveBeenCalled();
   expect(gameApi.sync).not.toHaveBeenCalled();
 });
 it('uses the confirmed purchase result before offering a separate equip action', async () => {
   vi.mocked(gameApi.purchase).mockImplementation(async () => {
-    vi.mocked(gameApi.sync).mockResolvedValue({
+    vi.mocked(gameApi.snapshot).mockResolvedValue({
       ...fixture,
       version: 2,
       shards: 90,
@@ -105,6 +106,7 @@ it('uses the confirmed purchase result before offering a separate equip action',
   ).toBeTruthy();
   expect(gameApi.purchase).toHaveBeenCalledTimes(1);
   expect(gameApi.equip).not.toHaveBeenCalled();
+  expect(gameApi.sync).not.toHaveBeenCalled(); // nothing pending: reads only
   expect(screen.getByText('Solde : 90 Éclats')).toBeTruthy();
 });
 it('keeps the switch at the server value when saving fails', async () => {
@@ -124,4 +126,14 @@ it('keeps the switch at the server value when saving fails', async () => {
     )
   );
   expect(toggle.getAttribute('aria-checked')).toBe('false');
+});
+it('settles evidence imported elsewhere with one projection, never two', async () => {
+  vi.mocked(gameApi.snapshot).mockResolvedValue({ ...structuredClone(fixture), pending: 2 });
+  vi.mocked(gameApi.sync).mockResolvedValue({ ...structuredClone(fixture), pending: 1 });
+  mount(<ProfilePage />);
+  await waitFor(() => expect(gameApi.sync).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText('Niveau 6 · Adepte')).toBeTruthy();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  // What the projection left pending waits for the next read.
+  expect(gameApi.sync).toHaveBeenCalledTimes(1);
 });
