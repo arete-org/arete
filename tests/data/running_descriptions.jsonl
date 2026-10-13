@@ -9,7 +9,7 @@
 {"text": "Fractionné : 8×400 m à l'allure VMA, récup 2'", "source": "plan_generator", "steps": [{"kind": "repeat", "repeat": 8, "steps": [{"kind": "effort", "duration_kind": "meters", "value": 400.0, "notes": "à l'allure VMA"}, {"kind": "recovery", "duration_kind": "seconds", "value": 120.0}]}]}
 {"text": "Rappel : 4×4' allure course (4:45/km)", "source": "plan_generator", "steps": [{"kind": "repeat", "repeat": 4, "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 240.0, "target": {"kind": "pace_sec_km", "low": 282.0, "high": 288.0}, "notes": "allure course"}]}]}
 {"text": "Activation : 20' facile + 4×2' allure course (4:10/km)", "source": "plan_generator", "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 1200.0, "notes": "facile"}, {"kind": "repeat", "repeat": 4, "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 120.0, "target": {"kind": "pace_sec_km", "low": 247.0, "high": 253.0}, "notes": "allure course"}]}]}
-{"text": "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'", "source": "ARE-87 coach description", "steps": null}
+{"text": "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'", "source": "ARE-87 coach description", "steps": [{"kind": "warmup", "duration_kind": "seconds", "value": 1200.0, "notes": "20-25'"}, {"kind": "repeat", "repeat": 4, "steps": [{"kind": "effort", "notes": "strides"}, {"kind": "recovery"}], "notes": "4-6 strides"}, {"kind": "repeat", "repeat": 12, "steps": [{"kind": "effort", "duration_kind": "meters", "value": 400.0, "target": {"kind": "pace_sec_km", "low": 210.0, "high": 216.0}, "notes": "VMA"}, {"kind": "recovery", "duration_kind": "seconds", "value": 60.0}]}, {"kind": "cooldown", "duration_kind": "seconds", "value": 900.0}]}
 {"text": "3x10' au seuil", "source": "tests/test_adaptation.py", "steps": [{"kind": "repeat", "repeat": 3, "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 600.0, "notes": "au seuil"}]}]}
 {"text": "3x10' tempo", "source": "tests/test_coach_briefing.py", "steps": [{"kind": "repeat", "repeat": 3, "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 600.0, "notes": "tempo"}]}]}
 {"text": "4x800m", "source": "tests/test_garmin.py", "steps": [{"kind": "repeat", "repeat": 4, "steps": [{"kind": "effort", "duration_kind": "meters", "value": 800.0}]}]}
@@ -43,3 +43,12 @@
 {"text": "12×400 @3'75", "source": "notation", "steps": null}
 {"text": "10×200 m, retour en marchant", "source": "notation", "steps": null}
 {"text": "12×400 r1', retour 10', 4 strides", "source": "notation", "steps": null}
+{"text": "12×400 r1'; EC 20', RAC 10'", "source": "notation", "steps": [{"kind": "warmup", "duration_kind": "seconds", "value": 1200.0}, {"kind": "repeat", "repeat": 12, "steps": [{"kind": "effort", "duration_kind": "meters", "value": 400.0}, {"kind": "recovery", "duration_kind": "seconds", "value": 60.0}]}, {"kind": "cooldown", "duration_kind": "seconds", "value": 600.0}]}
+{"text": "12×400 r1', Échauffement 20' + 4 strides, retour 15'", "source": "notation", "steps": null}
+{"text": "12×400 r1'. Échauffement 20' + 4 strides", "source": "notation", "steps": null}
+{"text": "12×400 r1'. Échauffement 20', retour 15', 4 strides", "source": "notation", "steps": null}
+{"text": "12×400 r1'. Échauffement 20', 6×100, retour 15'", "source": "notation", "steps": null}
+{"text": "12×400 r1'. 4 strides, Échauffement 20', retour 15'", "source": "notation", "steps": null}
+{"text": "12×400 r1'. Échauffement 20'. Retour 15'", "source": "notation", "steps": null}
+{"text": "12×400 r1', retour 5'. Échauffement 20', retour 15'", "source": "notation", "steps": null}
+{"text": "Échauffement 10'. 12×400 r1'. Échauffement 20', retour 15'", "source": "notation", "steps": null}

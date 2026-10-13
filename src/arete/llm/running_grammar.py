@@ -10,7 +10,12 @@ the same compact French notation:
 Blocks are separated by ``.``, ``+``, ``·``, ``,``, ``;``, a dash, a new line
 or "puis", and stay in written order: a warm-up (``Échauffement``,
 ``échauff``, ``EC``) only first, a cool-down (``retour``, ``RAC``, ``retour
-au calme``) only last. An optional title ("Fractionné :", "Rappel :") opens
+au calme``) only last. One exception, the coach's habit: a last sentence
+(after ``.``, ``;`` or a new line) holding only a warm-up, optional strides
+and a final cool-down frames the main set written before it:
+
+    VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'
+ An optional title ("Fractionné :", "Rappel :") opens
 the text; a leading intensity ("Seuil :", "VMA —") becomes the first
 effort's notes. Other blocks are a repeat ``N×D``, a single effort ``D``, a
 recovery (``r1'``, ``r90"``, ``r200 m``, ``récup 2'``) or strides (``4
@@ -23,7 +28,7 @@ list ("au seuil", "allure course", "facile"...); a recovery only how to
 recover ("trot", "marche").
 
 When in doubt the text is unread: "1.000 m", a unitless recovery, a target
-after a recovery, seconds of 60 or more, a warm-up after the main set.
+after a recovery, seconds of 60 or more, any other warm-up after the main set.
 
 Output: Step-shaped dictionaries (see ``services.prescriptions.Step``); the
 caller validates them. Anything the grammar cannot place makes the whole
@@ -62,10 +67,10 @@ RECOVERY_NOTES = frozenset(
 )
 
 GRAMMAR = rf"""
-start: head? block (_SEP block)* _SEP?
+start: head? block (SEP block)* SEP?
 
-head: TITLE | LABEL lead? _SEP? | lead
-lead: INTENSITY+ (":" | _SEP)?
+head: TITLE | LABEL lead? SEP? | lead
+lead: INTENSITY+ (":" | SEP)?
 
 ?block: warmup | cooldown | strides | repeat | effort | recovery
 
@@ -92,7 +97,7 @@ DISTANCE.4: /\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?\s*(?:km|m)\b/i
 INTENSITY.3: /{_INTENSITY}/i
 LABEL.3: /(?:fractionn[ée]|sp[ée]cifique|rappel|activation|s[ée]ance)\b/i
 COUNT.1: /\d+(?:\s*[-–]\s*\d+)?/
-_SEP: /(?:[.+·,;—–\n]|puis\b)(?:\s*(?:[.+·,;—–\n]|puis\b))*/i
+SEP: /(?:[.+·,;—–\n]|puis\b)(?:\s*(?:[.+·,;—–\n]|puis\b))*/i
 
 %import common.WS_INLINE
 %ignore WS_INLINE
@@ -255,7 +260,15 @@ class _ToBlocks(Transformer):
         return {"kind": "repeat", "repeat": n, "steps": steps}
 
     def start(self, children: list[Any]) -> list[dict[str, Any]]:
-        blocks = [c for c in children if c is not None]
+        blocks: list[dict[str, Any]] = []
+        sentence = False
+        for child in children:
+            if isinstance(child, Token):  # SEP: does a new sentence start?
+                sentence = bool(re.search(r"[.;\n]", str(child)))
+            elif child is not None:
+                if sentence:
+                    child["_sentence"] = True
+                blocks.append(child)
         if blocks and "_lead" in blocks[0]:
             # "Seuil : 3×10'": the leading intensity belongs to the first effort.
             notes, first = blocks.pop(0)["_lead"], blocks[0]
@@ -269,16 +282,35 @@ class _ToBlocks(Transformer):
 _TRANSFORM = _ToBlocks()
 
 
+def _trailing_warmup(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Move one written-after sentence: "…. Échauffement 20' + 4 strides, retour 15'".
+
+    Only a last sentence made of a warm-up, optional strides and a final
+    cool-down; any other order stays as written (and is refused below).
+    """
+    starts = [i for i, b in enumerate(blocks) if b.get("_sentence")]
+    if not starts or starts[-1] == 0:
+        return blocks
+    tail = blocks[starts[-1] :]
+    shape = ["strides" if b.get("_strides") else b["kind"] for b in tail]
+    if shape not in (["warmup", "cooldown"], ["warmup", "strides", "cooldown"]):
+        return blocks
+    return tail[:-1] + blocks[: starts[-1]] + tail[-1:]
+
+
 def _assemble(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Steps in written order: a warm-up only first, a cool-down only last.
 
     A recovery standing alone after a repeat without one ("6×3', récup 2'")
-    is that repeat's recovery. A warm-up written after the main set, or a
-    "retour" in the middle (a jog back?), is not guessed: the text is unread.
+    is that repeat's recovery. Apart from the trailing warm-up sentence, a
+    warm-up after the main set or a "retour" in the middle (a jog back?) is
+    not guessed: the text is unread.
     """
+    blocks = _trailing_warmup(blocks)
     steps: list[dict[str, Any]] = []
     for index, block in enumerate(blocks):
         block.pop("_strides", None)
+        block.pop("_sentence", None)
         if block["kind"] == "warmup" and index != 0:
             raise RunningParseError("échauffement après le début")
         if block["kind"] == "cooldown" and index != len(blocks) - 1:

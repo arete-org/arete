@@ -26,12 +26,8 @@ def test_corpus_holds_enough_real_descriptions():
     real = [e for e in ENTRIES if e["source"] != "notation"]
     read = [e for e in real if e["steps"] is not None]
     assert len(read) >= 15
-    # Left unread on purpose: a warm-up written after the main set, and a
-    # unitless recovery ("r100": meters or seconds?).
-    assert {e["text"] for e in real} - {e["text"] for e in read} == {
-        "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'",
-        "20x300 r100",
-    }
+    # Left unread on purpose: a unitless recovery ("r100": meters or seconds?).
+    assert {e["text"] for e in real} - {e["text"] for e in read} == {"20x300 r100"}
 
 
 @pytest.mark.parametrize("entry", ENTRIES, ids=[e["text"] for e in ENTRIES])
@@ -44,11 +40,12 @@ def test_description_yields_its_steps_or_nothing(entry):
 
 
 def test_coach_interval_description_reads_as_the_written_workout():
-    text = "Échauffement 20-25' + 4-6 strides, 12×400 @3'33 r1', retour 15'"
+    text = "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'"
     parsed = prescription_from_description(text, "running")
     assert parsed is not None
     warmup, strides, block, cooldown = parsed.steps
-    # A duration range keeps its lower bound.
+    # The trailing warm-up sentence frames the main set; a range keeps its
+    # lower bound.
     assert (warmup.kind, warmup.value, warmup.notes) == ("warmup", 1200, "20-25'")
     # Lap to end each stride, lap again once walked back.
     assert strides.repeat == 4 and strides.notes == "4-6 strides"
@@ -73,9 +70,11 @@ def test_coach_interval_description_reads_as_the_written_workout():
         60,
     )
     assert (cooldown.kind, cooldown.value) == ("cooldown", 900)
-    # The same workout with its warm-up written last is not reordered.
-    reordered = "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'"
-    assert prescription_from_description(reordered, "running") is None
+    # Written in order, the same workout reads the same (bar the VMA note).
+    in_order = "Échauffement 20-25' + 4-6 strides, 12×400 @3'33 r1', retour 15'"
+    ordered = prescription_from_description(in_order, "running")
+    assert ordered is not None and len(ordered.steps) == 4
+    assert ordered.steps[2].steps[0].notes == "" and effort.notes == "VMA"
 
 
 @pytest.mark.parametrize("sport", ["cycling", "swimming", "strength"])
