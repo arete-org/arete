@@ -12,7 +12,7 @@ import { InstallPrompt } from '@/components/InstallPrompt';
 import { LoadingState } from '@/components/States';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { useAuthState } from '@/components/auth/authState';
-import { athletePersister, keepPersistedQueries, PERSIST_BUSTER, PERSIST_MAX_AGE_MS, shouldPersistQuery } from '@/lib/queryPersistence';
+import { athletePersister, keepPersistedQueries, PERSIST_BUSTER, PERSIST_DEHYDRATE, PERSIST_MAX_AGE_MS } from '@/lib/queryPersistence';
 import { SettingsProvider } from '@/contexts';
 import { DashboardPage, PlanningPage, LogPage, SettingsPage } from '@/pages';
 
@@ -50,7 +50,7 @@ function PersistedQueries({ children }: { children: ReactNode }) {
     persister: athletePersister(athleteId),
     maxAge: PERSIST_MAX_AGE_MS,
     buster: PERSIST_BUSTER,
-    dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
+    dehydrateOptions: PERSIST_DEHYDRATE,
   }), [athleteId]);
   return <PersistQueryClientProvider key={athleteId} client={queryClient} persistOptions={persistOptions}>{children}</PersistQueryClientProvider>;
 }

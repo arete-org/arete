@@ -60,6 +60,21 @@ test('a repeat visit paints the last known dashboard before any data answer', as
   await expect(page.getByRole('heading', { name: 'Bonjour, HUNTER' })).toBeVisible();
 });
 
+test('hiding or leaving the page writes the pending cache at once', async ({ page }) => {
+  await dashboard(page);
+  await page.goto('/');
+  await expect(page.getByText('Footing du jour')).toBeVisible();
+  // Well under the one-second write delay: only the flush can have written it.
+  const kept = await page.evaluate(`import('/src/lib/queryPersistence.ts').then(async ({ athletePersister }) => {
+    const persister = athletePersister(3);
+    persister.persistClient({ timestamp: Date.now(), buster: 'test', clientState: { queries: [], mutations: [] } });
+    window.dispatchEvent(new Event('pagehide'));
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return (await persister.restoreClient())?.buster ?? null;
+  })`);
+  expect(kept).toBe('test');
+});
+
 test.describe('signed-in build', () => {
   test.use({ baseURL: 'http://127.0.0.1:5180' });
 

@@ -34,6 +34,12 @@ export function shouldPersistQuery(query: Query): boolean {
   return typeof start === 'string' && typeof end === 'string' && start <= today && today <= end;
 }
 
+/** Queries only: a paused mutation (an offline upload's file, a draft) never reaches IndexedDB. */
+export const PERSIST_DEHYDRATE = {
+  shouldDehydrateQuery: shouldPersistQuery,
+  shouldDehydrateMutation: () => false,
+};
+
 /** Kept queries outlive the default 5 minutes of an unused query, or leaving a page would drop them. */
 export function keepPersistedQueries(client: QueryClient): void {
   for (const root of PERSISTED_ROOTS) client.setQueryDefaults([root], { gcTime: PERSIST_MAX_AGE_MS });
@@ -62,23 +68,42 @@ function request<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => ID
   });
 }
 
-/** Writes at most once a second, always the latest cache. */
+/** The write waiting for its delay, run at once when the page is hidden or left. */
+let flushPending: (() => void) | null = null;
+let listening = false;
+function flushOnExit(): void {
+  if (listening || typeof document === 'undefined') return;
+  listening = true;
+  const flush = () => flushPending?.();
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush();
+  });
+}
+
+/** Writes at most once a second, always the latest cache; leaving the page writes at once. */
 export function athletePersister(athleteId: number): Persister {
   if (!Number.isSafeInteger(athleteId) || athleteId < 1) throw new Error('Athlète absent.');
   const key = `athlete:${athleteId}`;
   let latest: PersistedClient | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  flushOnExit();
   return {
     persistClient: (client) => {
       latest = client;
+      if (timer !== undefined) return;
       const scheduled = generation;
-      timer ??= setTimeout(() => {
+      const write = () => {
+        clearTimeout(timer);
         timer = undefined;
+        if (flushPending === write) flushPending = null;
         const value = latest;
         latest = null;
-        if (scheduled !== generation) return;
+        if (scheduled !== generation || !value) return;
         request('readwrite', (store) => store.put(value, key)).catch(() => {});
-      }, WRITE_DELAY_MS);
+      };
+      timer = setTimeout(write, WRITE_DELAY_MS);
+      flushPending = write;
     },
     restoreClient: () => request<PersistedClient | undefined>('readonly', (store) => store.get(key)),
     removeClient: () => request('readwrite', (store) => store.delete(key)).then(() => undefined),
