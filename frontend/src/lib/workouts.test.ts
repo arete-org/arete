@@ -2,20 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { applyEvent, consumeStream, type ChatMessage } from './agentStream';
 import { restoreConversation } from './agentConversation';
 import type { Prescription, WorkoutStep } from './documents';
-import { bareMinutes, isWorkoutUpdate, mergeWorkout, parseStepDuration, prescriptionReady, stepAmount, type WorkoutUpdate } from './workouts';
+import { isWorkoutUpdate, mergeWorkout, prescriptionReady, stepAmount, type WorkoutUpdate } from './workouts';
 
 describe('workout steps', () => {
-  it('reads a bare duration as minutes for running, as seconds for strength and swimming', () => {
-    expect(parseStepDuration('20', bareMinutes('running'))).toBe(1200);
-    expect(parseStepDuration('90', bareMinutes('strength'))).toBe(90);
-    expect(parseStepDuration('90', bareMinutes('swimming'))).toBe(90);
-    for (const sport of ['running', 'strength']) {
-      expect(parseStepDuration('1:30', bareMinutes(sport))).toBe(90);
-      expect(parseStepDuration('1:05:00', bareMinutes(sport))).toBe(3900);
-      for (const text of ['', '0', '1:3', '1:60', '20 min']) expect(parseStepDuration(text, bareMinutes(sport))).toBeNull();
-    }
-  });
-
   it('shows each step amount the same way everywhere', () => {
     const step = (duration_kind: WorkoutStep['duration_kind'], value: number | null): WorkoutStep => ({ kind: 'effort', duration_kind, value, steps: [] });
     expect(stepAmount(step('seconds', 1200))).toBe('20:00');
