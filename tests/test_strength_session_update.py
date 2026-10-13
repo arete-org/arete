@@ -16,7 +16,7 @@ from arete.agent.tools.strength import (
     save_workout,
     update_workout,
 )
-from arete.dataio.db import db_connection
+from arete.dataio.db import db_connection, transaction
 from arete.dataio.init_duckdb import main
 from arete.garmin.models import ActualSession
 from arete.garmin.repository import GarminRepository
@@ -96,6 +96,21 @@ def test_game_credit_is_neither_duplicated_nor_lost():
             "SELECT source_key, eligible FROM app.visible_game_events"
         ).fetchall()
     assert keys == [(f"strength:{session_id}", True)]
+
+
+def test_correcting_a_session_without_game_event_grants_no_credit():
+    session_id = logged("4x5 tractions")
+    # A session logged before gamification existed has no event.
+    with transaction() as con:
+        con.execute("DELETE FROM app.game_events")
+    preference = game.preference()
+    game.set_preference(game.Preference(enabled=True, version=preference["version"]))
+
+    update_logged_session(session_id, "4x6 tractions")
+
+    assert game.sync()["shards"] == 0
+    with db_connection() as con:
+        assert con.execute("SELECT count(*) FROM app.game_events").fetchone() == (0,)
 
 
 @pytest.mark.parametrize("deleted", [False, True])

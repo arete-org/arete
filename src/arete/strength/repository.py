@@ -566,15 +566,14 @@ class StrengthRepository:
         """Replace a live session's exercises and sets; False if it is not live.
 
         A correction, not a new session: the id, date, Garmin link and game
-        event stay. Replaced rows are retained for recovery, like a deletion's.
+        event (or its absence) stay. Replaced rows are retained for recovery,
+        like a deletion's.
         """
-        from arete.dataio.game_events import capture
-
         conn = self._get_connection()
         conn.execute("BEGIN TRANSACTION")
         try:
             row = conn.execute(
-                "SELECT date, name FROM app.visible_strength_sessions WHERE id = ?",
+                "SELECT id FROM app.visible_strength_sessions WHERE id = ?",
                 [session_id],
             ).fetchone()
             if row is None:
@@ -591,14 +590,8 @@ class StrengthRepository:
             for ex in exercises:
                 ex.session_id = session_id
                 self._create_session_exercise(conn, ex)
-            # Keyed by the session: an existing event, and its credit, stays as is.
-            capture(
-                conn,
-                f"strength:{session_id}",
-                row[0],
-                row[1] or "Force",
-                any(s.reps > 0 for e in exercises for s in e.sets),
-            )
+            # No capture: a correction never grants or revokes game credit, even
+            # for a legacy session without an event or one whose sets are now empty.
             conn.execute("COMMIT")
             return True
         except BaseException:
