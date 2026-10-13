@@ -105,22 +105,6 @@ export interface PlanToday {
   decisions: PlanDecision[];
 }
 
-/** Whether a planned session can be sent to Garmin, and the steps it would carry. */
-export interface WorkoutStructure {
-  pushable: boolean;
-  /** e.g. "10' Z2 · 4×(3' Z5 / 2' Z1) · 10' Z1". */
-  text: string | null;
-  estimated_min: number | null;
-  /** French sentence when not pushable. */
-  reason: string | null;
-}
-
-export interface GarminPushResult {
-  garmin_workout_id: string;
-  garmin_schedule_id: string | null;
-  garmin_pushed_at: string;
-}
-
 export interface ActualSession {
   id: number;
   planned_session_id: number | null;

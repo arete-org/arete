@@ -1,6 +1,8 @@
 import { createElement, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, ChevronDown, RotateCcw, Trash2, Watch, X } from 'lucide-react';
 import { formatClock } from '@/lib/fr';
+import type { SessionPush } from '@/lib/workouts';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import type { PlannedState } from '@/lib/sessionMatch';
 import { cn, formatDurationCompact, formatPace } from '@/lib/utils';
@@ -151,16 +153,61 @@ interface SessionCardProps {
   decision?: PlanDecision | null;
   /** Shown for an applied decision other than keep. */
   onRevert?: () => void;
-  /** "Send to the watch" control; omit when the session cannot be sent. */
+  /** The Garmin line, from the export state; omitted, only a recorded push time shows. */
   push?: SessionPush;
 }
 
-export interface SessionPush {
-  /** Steps the watch will get, e.g. "10' Z2 · 4×(3' Z5 / 2' Z1) · 10' Z1". */
-  text: string | null;
-  onPush: () => void;
-  pending: boolean;
-  error: string | null;
+function SentLabel({ at }: { at: string | null }) {
+  return (
+    <span
+      className="flex items-center gap-1 text-success-green/80"
+      title="La montre la récupère à sa prochaine synchronisation avec le téléphone."
+    >
+      <Watch className="w-3 h-3" />
+      Envoyée à Garmin{at ? ` ${formatClock(at)}` : ''}
+    </span>
+  );
+}
+
+function WatchControl({ push, busy }: { push: SessionPush; busy?: boolean }) {
+  switch (push.kind) {
+    case 'sent':
+      return <SentLabel at={push.at} />;
+    case 'unsettled':
+      return (
+        <span className="flex items-center gap-1 text-warning-orange">
+          <Watch className="w-3 h-3" />
+          {push.label}
+        </span>
+      );
+    case 'steps':
+      return (
+        <Link
+          to={push.href}
+          title="Les étapes décrites n’ont pas pu être lues : complète-les dans le Planning."
+          className="flex items-center gap-1 rounded border border-neon-gold/30 bg-neon-gold/10 px-2 py-1 text-neon-gold hover:bg-neon-gold/20"
+        >
+          <Watch className="w-3 h-3" />
+          Compléter les étapes
+        </Link>
+      );
+    case 'send':
+      return (
+        <>
+          <button
+            type="button"
+            disabled={busy || push.pending}
+            onClick={push.onPush}
+            title={push.text ?? undefined}
+            className="flex items-center gap-1 rounded border border-neon-cyan/30 bg-neon-cyan/10 px-2 py-1 text-neon-cyan hover:bg-neon-cyan/20 disabled:opacity-40"
+          >
+            {push.pending ? <Spinner className="w-3 h-3" /> : <Watch className="w-3 h-3" />}
+            Envoyer sur la montre
+          </button>
+          {push.text && <span className="text-text-muted">{push.text}</span>}
+        </>
+      );
+  }
 }
 
 /**
@@ -290,29 +337,11 @@ export function SessionCard({
 
       {!realised && (planned.garmin_pushed_at || push || canRevert(decision, onRevert)) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-sans">
-          {planned.garmin_pushed_at ? (
-            <span
-              className="flex items-center gap-1 text-success-green/80"
-              title="La montre la récupère à sa prochaine synchronisation avec le téléphone."
-            >
-              <Watch className="w-3 h-3" />
-              Envoyée à Garmin {formatClock(planned.garmin_pushed_at)}
-            </span>
+          {push ? (
+            <WatchControl push={push} busy={busy} />
           ) : (
-            push && (
-              <button
-                type="button"
-                disabled={busy || push.pending}
-                onClick={push.onPush}
-                title={push.text ?? undefined}
-                className="flex items-center gap-1 rounded border border-neon-cyan/30 bg-neon-cyan/10 px-2 py-1 text-neon-cyan hover:bg-neon-cyan/20 disabled:opacity-40"
-              >
-                {push.pending ? <Spinner className="w-3 h-3" /> : <Watch className="w-3 h-3" />}
-                Envoyer sur la montre
-              </button>
-            )
+            planned.garmin_pushed_at && <SentLabel at={planned.garmin_pushed_at} />
           )}
-          {push?.text && !planned.garmin_pushed_at && <span className="text-text-muted">{push.text}</span>}
           {canRevert(decision, onRevert) && (
             <button
               type="button"
@@ -324,7 +353,9 @@ export function SessionCard({
               Rétablir la séance prévue
             </button>
           )}
-          {push?.error && <span className="basis-full text-danger-red">{push.error}</span>}
+          {(push?.kind === 'send' || push?.kind === 'unsettled') && push.error && (
+            <span className="basis-full text-danger-red">{push.error}</span>
+          )}
         </div>
       )}
 

@@ -80,3 +80,44 @@ export function exportLabel(state: GarminExport | null): string {
   if (state.state === 'working' && ['created', 'updated', 'scheduled', 'unscheduled'].includes(state.phase ?? '')) return 'Vérification dans Garmin';
   return exportLabels[state.state] ?? 'État à vérifier';
 }
+/** Where today's session stands with Garmin (the export view, ARE-100). */
+export type SessionPush =
+  | {
+      kind: 'send';
+      /** Steps the watch will get, e.g. "10 min · 4 × (3 min / 2 min) · 10 min". */
+      text: string | null;
+      onPush: () => void;
+      pending: boolean;
+      error: string | null;
+    }
+  /** `at` is the UTC push instant; older explicit exports have none. */
+  | { kind: 'sent'; at: string | null }
+  /** In flight, uncertain or in conflict: no new send until it is settled. */
+  | { kind: 'unsettled'; label: string; error: string | null }
+  /** A described session whose steps the server could not read. */
+  | { kind: 'steps'; href: string };
+
+/**
+ * The Garmin line for a session from its export view. `send.result` answers
+ * the athlete's own send and is newer than the view until it refreshes.
+ */
+export function watchLine(
+  view: WorkoutView,
+  sentAt: string | null,
+  send: { onPush: () => void; pending: boolean; error: string | null; result: GarminExport | null }
+): SessionPush | undefined {
+  const current = newerExport(view.export, send.result);
+  const state = current?.state;
+  if (state === 'scheduled' || state === 'transfer_requested') return { kind: 'sent', at: sentAt };
+  if (current && (state === 'working' || state === 'uncertain' || state === 'conflict'))
+    return { kind: 'unsettled', label: exportLabel(current), error: state === 'working' ? null : current.error };
+  if (view.session.needs_steps) return { kind: 'steps', href: `/planning?date=${view.session.date}` };
+  if (!view.session.exportable) return undefined;
+  return {
+    kind: 'send',
+    text: view.session.summary ?? null,
+    onPush: send.onPush,
+    pending: send.pending,
+    error: send.error ?? (state === 'failed' ? current?.error ?? exportLabel(current ?? null) : null),
+  };
+}

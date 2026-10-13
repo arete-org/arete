@@ -49,9 +49,6 @@ export const qk = {
   stravaStatus: ['stravaStatus'] as const,
 
   planToday: ['plan', 'today'] as const,
-  /** Watch steps of a planned session; changes whenever the session is adapted. */
-  plannedStructure: (id?: number) =>
-    id == null ? (['plannedStructure'] as const) : (['plannedStructure', id] as const),
   /** Last week's review and its proposals. */
   weeklyReview: ['weeklyReview'] as const,
 
@@ -104,7 +101,6 @@ export function invalidateAfterSession(queryClient: QueryClient): void {
     qk.fitness,
     qk.workload,
     qk.planToday,
-    qk.plannedStructure(),
     qk.goalProjection(),
   ]) {
     queryClient.invalidateQueries({ queryKey: key });

@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
+import type { GarminExport } from '@/lib/documents';
+import { watchLine, type WorkoutView } from '@/lib/workouts';
 import type { ActualSession, PlanDecision, PlannedSession } from '@/types';
 import { SessionCard } from './SessionCard';
 
@@ -46,29 +49,79 @@ it('shows the decision, its reason and the modified chip', () => {
   expect(screen.getByText('modifiée')).toBeTruthy();
 });
 
+const exported = (state: string, error: string | null = null): GarminExport => ({
+  session_id: 7, operation_id: 'op', updated_at: '2026-10-09T05:00:00', state, phase: state,
+  error, deleted: false, workout_id: 1, schedule_id: 100,
+});
+const view = (session: Partial<WorkoutView['session']> = {}, state: GarminExport | null = null): WorkoutView => ({
+  session: { id: 7, revision: 1, date: '2026-10-09', sport: 'running', description: null, status: 'pending', summary: '45 min Z2', exportable: true, ...session },
+  export: state,
+});
+const send = { onPush: vi.fn(), pending: false, error: null, result: null };
+const card = (push: ReturnType<typeof watchLine>, planned = session) =>
+  render(
+    <MemoryRouter>
+      <SessionCard planned={planned} realised={null} state="pending" push={push} />
+    </MemoryRouter>
+  );
+
 it('sends to Garmin, then says when it was sent rather than claiming the watch has it', () => {
   const onPush = vi.fn();
-  const push = { text: "45' Z2", onPush, pending: false, error: null };
-  const { rerender } = render(<SessionCard planned={session} realised={null} state="pending" push={push} />);
+  const { unmount } = card(watchLine(view(), null, { ...send, onPush }));
+  expect(screen.getByText('45 min Z2')).toBeTruthy();
   fireEvent.click(screen.getByText('Envoyer sur la montre'));
   expect(onPush).toHaveBeenCalledOnce();
+  unmount();
 
   // The API sends a UTC instant; the athlete reads their own clock (CEST here).
   vi.stubEnv('TZ', 'Europe/Paris');
   try {
-    rerender(
-      <SessionCard
-        planned={{ ...session, garmin_pushed_at: '2026-10-09T23:01:00+00:00' }}
-        realised={null}
-        state="pending"
-        push={push}
-      />
-    );
+    const sentAt = '2026-10-09T23:01:00+00:00';
+    card(watchLine(view({}, exported('scheduled')), sentAt, send), { ...session, garmin_pushed_at: sentAt });
     expect(screen.queryByText('Envoyer sur la montre')).toBeNull();
     expect(screen.getByText('Envoyée à Garmin 01:01')).toBeTruthy();
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+it('shows a session exported by hand as sent, from the export state', () => {
+  // Explicit steps exported before ARE-100 carry no push time: the state is enough.
+  card(watchLine(view({ prescription: { version: 1, steps: [] } }, exported('transfer_requested')), null, send));
+  expect(screen.getByText('Envoyée à Garmin')).toBeTruthy();
+  expect(screen.queryByText('Envoyer sur la montre')).toBeNull();
+});
+
+it('shows the failure of a send and offers it again', () => {
+  card(watchLine(view({}, exported('failed', 'ConnectionError: offline. Aucun renvoi automatique.')), null, send));
+  expect(screen.getByText('Envoyer sur la montre')).toBeTruthy();
+  expect(screen.getByText(/ConnectionError: offline/)).toBeTruthy();
+});
+
+it.each([
+  ['uncertain', 'Résultat indéterminé · vérifier Garmin'],
+  ['conflict', 'Conflit avec Garmin Connect'],
+])('never offers a new send while the export is %s', (state, label) => {
+  card(watchLine(view({}, exported(state, 'Réponse perdue')), null, send));
+  expect(screen.getByText(label)).toBeTruthy();
+  expect(screen.getByText('Réponse perdue')).toBeTruthy();
+  expect(screen.queryByText('Envoyer sur la montre')).toBeNull();
+});
+
+it('asks for the steps of a described session the server could not read', () => {
+  card(watchLine(view({ needs_steps: true, exportable: false }), null, send));
+  const link = screen.getByText('Compléter les étapes').closest('a');
+  expect(link?.getAttribute('href')).toBe('/planning?date=2026-10-09');
+  expect(screen.queryByText('Envoyer sur la montre')).toBeNull();
+});
+
+it('shows nothing to send for a session Garmin cannot take', () => {
+  expect(watchLine(view({ exportable: false, reason: 'Muscu' }), null, send)).toBeUndefined();
+});
+
+it('takes the answer of its own send over an older view', () => {
+  const answer = { ...exported('scheduled'), updated_at: '2026-10-09T06:00:00' };
+  expect(watchLine(view({}, exported('dirty')), null, { ...send, result: answer })).toEqual({ kind: 'sent', at: null });
 });
 
 it.each([
