@@ -154,3 +154,56 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
             )
         return Adaptation(Decision.KEEP, f"{said} : séance facile maintenue.")
     return Adaptation(Decision.KEEP, f"{said} : séance {planned} maintenue.")
+
+
+#: Which session of a day keeps the recovery: the hardest type, then the longest.
+_KEY_RANK = {"intervals": 2, "tempo": 1}
+
+
+def one_recovery_per_day(
+    day: list[tuple[AdaptationInput, Adaptation | None]],
+    *,
+    kept: str | None = None,
+) -> list[Adaptation | None]:
+    """The day's outcomes with a single recovery: on the key session, rest elsewhere.
+
+    ``evaluate`` decides each session alone, so two sessions would get two
+    recoveries. The key session (intervals > tempo > others, then the longest)
+    keeps it; the other replaced sessions rest. ``kept`` names a session that
+    already holds the day's recovery (an earlier run): every new replacement
+    then rests.
+
+    When the key is ambiguous (a tie on type and duration, or a race that day)
+    the outcomes are unchanged: each tied session keeps its own recovery, all
+    on the same day card. This is accepted, not an oversight (ARE-89).
+    """
+    outcomes = [outcome for _, outcome in day]
+    replaced = [
+        (inp, i)
+        for i, (inp, outcome) in enumerate(day)
+        if outcome is not None and outcome.decision == Decision.REPLACE_EASY
+    ]
+    if kept is None:
+        if len(replaced) < 2 or any(inp.session_type == "race" for inp, _ in day):
+            return outcomes
+
+        def weight(inp: AdaptationInput) -> tuple[int, int]:
+            return _KEY_RANK.get(inp.session_type, 0), inp.target_duration_min or 0
+
+        replaced.sort(key=lambda item: weight(item[0]), reverse=True)
+        if weight(replaced[0][0]) == weight(replaced[1][0]):
+            return outcomes
+        key = replaced.pop(0)[0]
+        kept = describe(key.session_type, key.target_duration_min, key.target_hr_zone)
+    for inp, i in replaced:
+        assert inp.readiness is not None  # REPLACE_EASY needs a readiness
+        planned = describe(
+            inp.session_type, inp.target_duration_min, inp.target_hr_zone
+        )
+        outcomes[i] = Adaptation(
+            Decision.REST,
+            f"{readiness_phrase(inp.readiness, inp.readiness_source)} : repos à la "
+            f"place de la séance {planned} ; la récupération du jour remplace "
+            f"la séance {kept}.",
+        )
+    return outcomes

@@ -10,9 +10,16 @@ from arete.services import coach_followup, coach_today, plan_adaptation
 router = APIRouter(prefix="/coach", tags=["coach"])
 
 
+class SeenRevision(BaseModel):
+    id: int = Field(ge=1)
+    revision: int = Field(ge=1)
+
+
 class ProposalResponse(BaseModel):
     revision: int = Field(ge=1)
     action: Literal["apply", "keep", "snooze"]
+    #: The day's other proposals, answered together with this one.
+    group: list[SeenRevision] = Field(default_factory=list, max_length=10)
 
 
 class FollowupResponse(BaseModel):
@@ -46,7 +53,10 @@ def prepare():
 def proposal_response(decision_id: int, body: ProposalResponse):
     return _call(
         lambda: plan_adaptation.respond(
-            decision_id, body.revision, body.action
+            decision_id,
+            body.revision,
+            body.action,
+            {seen.id: seen.revision for seen in body.group},
         ).to_dict()
     )
 

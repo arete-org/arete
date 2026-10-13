@@ -64,6 +64,182 @@ def proposal():
     return sid, decision
 
 
+def low_adapt():
+    facts = RuleFacts(
+        acwr=1,
+        tsb=-5,
+        readiness_score=49,
+        fatigue_threshold=85,
+        fitness_goal="build",
+        readiness_source="garmin_training",
+        readiness_measured_on=date.today(),
+    )
+    with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
+        return plan_adaptation.adapt_today()
+
+
+def planned(kind, minutes):
+    return GarminRepository().create_planned_session(
+        PlannedSession(
+            date=date.today(),
+            sport="running",
+            session_type=kind,
+            target_duration_min=minutes,
+        )
+    )
+
+
+def low_day():
+    """Readiness 49 with Fractionné 60' and Endurance 45': one card for the day."""
+    ids = [
+        planned(kind, minutes)
+        for kind, minutes in ((SessionType.ENDURANCE, 45), (SessionType.INTERVALS, 60))
+    ]
+    low_adapt()
+    (item,) = coach_today.today()["items"]
+    return ids, item
+
+
+def test_a_low_day_is_one_card_applied_in_one_transaction(athlete):
+    (endurance, intervals), item = low_day()
+    assert item["kind"] == "proposal" and len(item["group"]) == 2
+    assert [(d["planned_session_id"], d["decision"]) for d in item["group"]] == [
+        (intervals, "replace_easy"),
+        (endurance, "rest"),
+    ]
+    key = item["record"]
+    assert key == item["group"][0]
+    others = {
+        m["id"]: m["revision"]
+        for m in item["members"]
+        if m["id"] != item["record"]["id"]
+    }
+    # A client that saw only part of the day cannot answer for it.
+    with pytest.raises(plan_adaptation.ProposalConflict):
+        plan_adaptation.respond(key["id"], key["revision"], "apply")
+    plan_adaptation.respond(key["id"], key["revision"], "apply", others)
+    repo = GarminRepository()
+    assert repo.get_planned_session(intervals).target_duration_min == 30
+    assert repo.get_planned_session(endurance).status.value == "skipped"
+    # A replay of the same answer changes nothing.
+    plan_adaptation.respond(key["id"], key["revision"], "apply", others)
+    assert repo.get_planned_session(intervals).revision == 2
+    assert coach_today.today()["items"] == []
+
+
+def test_a_changed_session_applies_nothing_of_the_group(athlete):
+    (endurance, intervals), item = low_day()
+    # The rest is written first, then the changed key session refuses.
+    GarminRepository().update_planned_session_fields(intervals, description="moved")
+    key = item["record"]
+    others = {
+        m["id"]: m["revision"]
+        for m in item["members"]
+        if m["id"] != item["record"]["id"]
+    }
+    with pytest.raises(plan_adaptation.ProposalConflict):
+        plan_adaptation.respond(key["id"], key["revision"], "apply", others)
+    assert GarminRepository().get_planned_session(endurance).status.value == "pending"
+    assert [d["state"] for d in coach_today.today()["items"][0]["group"]] == [
+        "stale",
+        "pending",
+    ]
+
+
+def test_keeping_a_low_day_records_the_choice_for_both(athlete):
+    (endurance, intervals), item = low_day()
+    key = item["record"]
+    others = {
+        m["id"]: m["revision"]
+        for m in item["members"]
+        if m["id"] != item["record"]["id"]
+    }
+    plan_adaptation.respond(key["id"], key["revision"], "keep", others)
+    repo = GarminRepository()
+    assert [repo.get_planned_session(s).revision for s in (endurance, intervals)] == [
+        1,
+        1,
+    ]
+    assert {d.state for d in plan_adaptation.adapt_today()} == {"dismissed"}
+
+
+def test_a_stale_session_still_lets_the_athlete_keep_the_day(athlete):
+    (endurance, intervals), item = low_day()
+    GarminRepository().update_planned_session_fields(endurance, description="moved")
+    key = item["record"]
+    rest = item["group"][1]
+    plan_adaptation.respond(key["id"], key["revision"], "keep", {rest["id"]: 1})
+    assert {d.state for d in plan_adaptation.adapt_today()} == {"dismissed"}
+
+
+def test_a_snooze_hides_the_whole_day_and_a_legacy_one_hides_its_member(athlete):
+    _, item = low_day()
+    key, rest = item["group"]
+    with db_connection() as con:  # a row snoozed alone before the grouping
+        con.execute(
+            "UPDATE app.plan_decisions SET snoozed_until=?,revision=revision+1 WHERE id=?",
+            [date.today() + timedelta(days=1), rest["id"]],
+        )
+    (item,) = coach_today.today()["items"]
+    assert [d["id"] for d in item["group"]] == [key["id"]]
+    assert {m["id"]: m["revision"] for m in item["members"]} == {
+        key["id"]: 1,
+        rest["id"]: 2,
+    }
+    plan_adaptation.respond(key["id"], 1, "snooze", {rest["id"]: 2})
+    assert coach_today.today()["items"] == []
+
+
+def test_a_proposal_created_meanwhile_makes_the_answer_conflict(athlete, monkeypatch):
+    from arete.dataio import db
+    from arete.services.plan_repository import PlanDecisionRepository
+
+    _, item = low_day()
+    key, rest = item["group"]
+    late = planned(SessionType.ENDURANCE, 30)
+    real = db.transaction
+
+    def racing():
+        PlanDecisionRepository().create(
+            day=date.today(),
+            planned_session_id=late,
+            decision="rest",
+            reason="r",
+            readiness_score=49,
+            readiness_source="garmin_training",
+            acwr=1,
+            original={},
+            adapted=None,
+            session_revision=1,
+        )
+        return real()
+
+    monkeypatch.setattr(db, "transaction", racing)
+    with pytest.raises(plan_adaptation.ProposalConflict):
+        plan_adaptation.respond(key["id"], 1, "apply", {rest["id"]: 1})
+    assert {d.state for d in plan_adaptation.adapt_today()} == {"pending"}
+
+
+def test_a_session_added_later_rests_beside_the_open_recovery(athlete):
+    low_day()
+    late = planned(SessionType.TEMPO, 40)
+    decisions = {d.planned_session_id: d for d in low_adapt()}
+    assert decisions[late].decision == "rest"
+    assert "fractionné 60 min" in decisions[late].reason
+    assert [d.decision for d in decisions.values()].count("replace_easy") == 1
+
+
+def test_a_foreign_or_unknown_proposal_is_simply_not_found(athlete):
+    _, item = low_day()
+    key, rest = item["group"]
+    with pytest.raises(LookupError):
+        plan_adaptation.respond(key["id"], 1, "apply", {rest["id"]: 1, 999_999_999: 1})
+    with athlete_scope(1):
+        for decision_id in (key["id"], 999_999_999):
+            with pytest.raises(LookupError):
+                plan_adaptation.respond(decision_id, 1, "keep")
+
+
 def test_proposal_requires_validation_and_replay_cannot_apply_twice(athlete):
     sid, decision = proposal()
     repo = GarminRepository()

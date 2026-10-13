@@ -112,6 +112,28 @@ def test_a_bad_morning_skips_the_session(tempo):
     assert session is not None and session.status == SessionStatus.SKIPPED
 
 
+def test_a_low_day_with_two_sessions_keeps_one_recovery(tempo):
+    endurance = GarminRepository().create_planned_session(
+        PlannedSession(
+            date=DAY,
+            sport="running",
+            session_type=SessionType.ENDURANCE,
+            target_duration_min=60,
+        )
+    )
+    decisions = {d.planned_session_id: d for d in _adapt(49.0)}
+    assert decisions[tempo].decision == "replace_easy"
+    assert decisions[endurance].decision == "rest"
+    group = {d.id: d.revision for d in decisions.values()}
+    plan_adaptation.respond(decisions[tempo].id, 1, "apply", group)
+    repo = GarminRepository()
+    recovery = repo.get_planned_session(tempo)
+    assert recovery is not None and recovery.session_type == SessionType.RECOVERY
+    assert recovery.target_duration_min == 30
+    rested = repo.get_planned_session(endurance)
+    assert rested is not None and rested.status == SessionStatus.SKIPPED
+
+
 def test_the_switch_off_writes_nothing_unless_asked(tempo):
     with patch.object(plan_adaptation, "auto_adapt_enabled", return_value=False):
         assert [d.state for d in _adapt(30.0, respect_setting=True)] == ["pending"]
