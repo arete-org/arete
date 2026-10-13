@@ -417,3 +417,81 @@ def test_cards_only_reference_confirmed_writes():
     }
     assert coach_card(message({"error": "conflict"})) is None
     assert coach_card(message({"saved": True, "fact": {"id": 12}}, "error")) is None
+
+
+def _apply_low_day(item):
+    key = item["record"]
+    others = {m["id"]: m["revision"] for m in item["members"] if m["id"] != key["id"]}
+    plan_adaptation.respond(key["id"], key["revision"], "apply", others)
+
+
+@pytest.fixture
+def watch(athlete):
+    """Garmin as the athlete's account holds it, cleaned of this test's exports."""
+    from unittest.mock import MagicMock
+
+    from test_garmin_export import Garmin
+
+    garmin = Garmin()
+    garmin.has_tokens = MagicMock(return_value=True)
+    with patch("arete.garmin.client.GarminClient", return_value=garmin):
+        yield garmin
+    with db_connection() as con:
+        con.execute("DELETE FROM app.garmin_exports WHERE athlete_id=8123")
+
+
+def test_an_applied_low_day_replaces_the_recovery_and_withdraws_the_rest(watch):
+    from arete.services import garmin_export
+
+    (endurance, intervals), item = low_day()
+    for session_id in (endurance, intervals):
+        assert garmin_export.export(session_id, client=watch)["state"] == "scheduled"
+    workout_id = garmin_export.inspect_session(intervals)["export"]["workout_id"]
+    watch.calls.clear()
+    _apply_low_day(item)
+    # The recovery replaces the intervals in place: same workout, new steps.
+    state = garmin_export.inspect_session(intervals)["export"]
+    assert state["state"] == "scheduled" and state["workout_id"] == workout_id
+    assert ("PUT", f"{garmin_export.WORKOUT}/{workout_id}") in [
+        (m, p) for m, p, _ in watch.calls
+    ]
+    assert list(watch.workouts) == [workout_id]
+    session = GarminRepository().get_planned_session(intervals)
+    assert session.target_duration_min == 30 and session.garmin_pushed_at is not None
+    # The rest is gone from Garmin.
+    assert garmin_export.inspect_session(endurance)["export"]["state"] == "removed"
+    assert len(watch.schedules) == 1
+    # A replay of the same answer touches Garmin no more.
+    calls = len(watch.calls)
+    _apply_low_day(item)
+    assert len(watch.calls) == calls
+
+
+def test_a_failed_watch_update_keeps_the_answer_and_is_not_replayed(watch):
+    from arete.services import garmin_export
+
+    (endurance, intervals), item = low_day()
+    for session_id in (endurance, intervals):
+        garmin_export.export(session_id, client=watch)
+    watch.calls.clear()
+    watch.fail = "read"  # Garmin unreachable
+    _apply_low_day(item)
+    repo = GarminRepository()
+    assert repo.get_planned_session(intervals).target_duration_min == 30
+    assert repo.get_planned_session(endurance).status.value == "skipped"
+    # One request each, refused before any write: the card offers the button.
+    assert len(watch.calls) == 2
+    states = {
+        s: garmin_export.inspect_session(s)["export"]["state"]
+        for s in (endurance, intervals)
+    }
+    assert states == {endurance: "failed", intervals: "failed"}
+    assert repo.get_planned_session(intervals).garmin_pushed_at is None
+    assert coach_today.today()["items"] == []
+
+
+def test_an_answer_for_sessions_not_on_garmin_never_reaches_it(athlete):
+    _, item = low_day()
+    with patch("arete.garmin.client.GarminClient") as client:
+        _apply_low_day(item)
+    client.assert_not_called()

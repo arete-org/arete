@@ -677,7 +677,9 @@ def export(
             writing = False
         with db_connection() as con:
             con.execute(
-                "UPDATE app.planned_sessions SET garmin_workout_id=?,garmin_schedule_id=?,garmin_pushed_at=? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id=? AND prescription IS NULL) ",
+                "UPDATE app.planned_sessions SET garmin_workout_id=?,garmin_schedule_id=?,garmin_pushed_at=? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id=?) ",
+                # Every source of steps (explicit, parsed, derived) gets its
+                # push time and ids, so a card reads them alike.
                 # Naive UTC: DuckDB stores an aware value (and current_timestamp)
                 # in its session TimeZone, which follows the process TZ.
                 [
@@ -822,12 +824,19 @@ def _verify_absent(exchange: Exchange, path: str) -> None:
     raise DocumentError("La suppression distante n’est pas confirmée par relecture.")
 
 
-def remove(session_id: int, *, client=None, _skipped: bool = False) -> dict:
+def remove(
+    session_id: int,
+    *,
+    client=None,
+    exchange: Exchange | None = None,
+    _skipped: bool = False,
+) -> dict:
     state = _claim(session_id)
     if not state["deleted"] and not _skipped:
         _update(session_id, state["operation_id"], state="ready")
         raise DocumentError("Le retrait est réservé aux séances supprimées dans Arete.")
-    exchange = Exchange(client)
+    exchange = exchange or Exchange(client)
+    exchange.session_calls = 0
     exchange.reservation = (session_id, state["operation_id"])
     writing = False
     try:
@@ -967,12 +976,43 @@ def export_batch(
     return {"results": results, "not_attempted": []}
 
 
-def withdraw_skipped(session_id: int, *, client=None) -> dict:
+def on_garmin(session_id: int) -> bool:
+    """Whether Garmin may hold a copy of the session; reads no remote state."""
+    with db_connection() as con:
+        legacy = con.execute(
+            "SELECT garmin_workout_id,garmin_schedule_id FROM app.visible_planned_sessions WHERE id=?",
+            [session_id],
+        ).fetchone()
+        state = _get(con, session_id)
+    if state is not None:
+        return state["state"] != "removed" and bool(
+            state["workout_id"] or state["schedule_id"]
+        )
+    return bool(legacy and any(legacy))
+
+
+def sent_as_is(session_id: int, state: dict | None) -> bool:
+    """Whether the verified copy on Garmin is the session as it is now.
+
+    Compares the fingerprint of the last confirmed export with today's payload,
+    so a session already sent (by hand the evening before) costs no request.
+    """
+    if not state or state["state"] not in {"scheduled", "transfer_requested"}:
+        return False
+    payload, day, _, _ = _payload(session_id)
+    return bool(state["fingerprint"] == _fingerprint(payload, day))
+
+
+def withdraw_skipped(
+    session_id: int, *, client=None, exchange: Exchange | None = None
+) -> dict:
+    """Take a skipped session off Garmin, whatever the source of its steps."""
     from arete.garmin.repository import GarminRepository
 
     session = GarminRepository().get_planned_session(session_id)
-    if session is None or session.prescription or session.status.value != "skipped":
-        raise DocumentError("Retrait quotidien réservé aux séances classiques sautées.")
+    if session is None or session.status.value != "skipped":
+        raise DocumentError("Retrait réservé aux séances sautées.")
+    exchange = exchange or Exchange(client)
     with db_connection() as con:
         existing = _get(con, session_id)
     if existing is None:
@@ -980,7 +1020,7 @@ def withdraw_skipped(session_id: int, *, client=None) -> dict:
         # described-session guard must stay withdrawable.
         payload, _, _, revision = _payload(session_id, upload=False)
         state = _claim(session_id, revision=revision)
-        exchange = Exchange(client)
+        exchange.session_calls = 0
         exchange.reservation = (session_id, state["operation_id"])
         try:
             state = _adopt_legacy(session_id, state, payload, exchange)
@@ -994,4 +1034,4 @@ def withdraw_skipped(session_id: int, *, client=None) -> dict:
         except Exception as exc:
             _update(session_id, state["operation_id"], state="conflict", error=str(exc))
             raise
-    return remove(session_id, client=client, _skipped=True)
+    return remove(session_id, exchange=exchange, _skipped=True)

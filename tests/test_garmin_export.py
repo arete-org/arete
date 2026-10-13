@@ -3,6 +3,7 @@
 import copy
 import json
 from datetime import date
+from unittest.mock import patch
 
 import pytest
 
@@ -421,8 +422,9 @@ def test_reconciliation_fences_the_previous_worker(planned):
     assert exchange.client.calls == []
 
 
-def test_reviewed_prescription_bypasses_daily_adaptation_and_push(planned, monkeypatch):
-    from arete.garmin.workout_structure import NotPushable
+def test_reviewed_prescription_bypasses_adaptation_but_reaches_the_watch(
+    planned, monkeypatch
+):
     from arete.services import plan_adaptation
 
     monkeypatch.setattr(plan_adaptation, "auto_adapt_enabled", lambda: True)
@@ -433,12 +435,12 @@ def test_reviewed_prescription_bypasses_daily_adaptation_and_push(planned, monke
     garmin = Garmin()
     assert (
         plan_adaptation.push_today(garmin, date(2027, 1, 12))
-        == "0 sent, 1 not pushable, 0 failed"
+        == "1 sent, 0 skipped, 0 failed"
     )
-    with pytest.raises(NotPushable, match="prescription validée"):
-        plan_adaptation.push_session(garmin, planned)
-    assert garmin.calls == []
-    assert not plan_adaptation.structure_preview(planned)["pushable"]
+    # Its push time and ids, like any other session's: the card reads them.
+    session = GarminRepository().get_planned_session(planned)
+    assert session.prescription is not None and session.garmin_pushed_at is not None
+    assert (session.garmin_workout_id, session.garmin_schedule_id) == ("1", "100")
 
 
 def test_coach_move_marks_export_dirty_without_rewriting_prescription(planned):
@@ -676,8 +678,12 @@ def test_prescription_edit_checks_revision_and_dirties_export(planned):
     assert len(garmin.calls) == count
 
 
-def test_daily_and_chat_share_export_reservation(planned):
+def test_daily_and_chat_share_export_reservation(planned, monkeypatch):
     from arete.services import plan_adaptation
+
+    monkeypatch.setattr(
+        plan_adaptation, "get_user_settings", lambda: {"push_to_garmin_enabled": True}
+    )
 
     with db_connection() as con:
         con.execute(
@@ -687,8 +693,14 @@ def test_daily_and_chat_share_export_reservation(planned):
     garmin = Garmin()
 
     def concurrent_push():
+        # The morning run leaves an export in flight alone, without a request.
+        calls = len(garmin.calls)
+        assert plan_adaptation.push_today(garmin, date(2027, 1, 12)).startswith(
+            "0 sent, 1 skipped"
+        )
+        assert len(garmin.calls) == calls
         with pytest.raises(DocumentError, match="déjà en cours"):
-            plan_adaptation.push_session(garmin, planned)
+            service.export(planned, client=Garmin())
         from arete.services import planning
 
         result = json.loads(
@@ -1068,9 +1080,12 @@ def test_described_structured_session_never_reaches_garmin_as_the_template(
     garmin = Garmin()
     with pytest.raises(DocumentError, match="Séance décrite sans étapes"):
         service.export(planned, client=garmin)
-    with pytest.raises(NotPushable, match="Séance décrite sans étapes"):
-        plan_adaptation.push_session(garmin, planned)
-    assert not plan_adaptation.structure_preview(planned)["pushable"]
+    monkeypatch.setattr(
+        plan_adaptation, "get_user_settings", lambda: {"push_to_garmin_enabled": True}
+    )
+    assert plan_adaptation.push_today(garmin, date(2027, 1, 12)).startswith(
+        "0 sent, 1 skipped"
+    )
     original = service.export_batch
     monkeypatch.setattr(
         service,
@@ -1110,10 +1125,17 @@ def test_read_description_exports_its_steps_instead_of_the_template(planned):
         (s["endCondition"]["conditionTypeKey"], "endConditionValue" in s)
         for s in strides["workoutSteps"]
     ] == [("lap.button", False), ("lap.button", False)]
-    # The daily push sends no template: like explicit steps, from the Planning.
-    assert "lues dans la description" in (
-        plan_adaptation.structure_preview(planned)["reason"] or ""
-    )
+    # The daily push finds Garmin holding these steps: no second request.
+    calls = len(garmin.calls)
+    with patch.object(
+        plan_adaptation,
+        "get_user_settings",
+        return_value={"push_to_garmin_enabled": True},
+    ):
+        assert plan_adaptation.push_today(garmin, date(2027, 1, 12)).startswith(
+            "0 sent, 1 skipped"
+        )
+    assert len(garmin.calls) == calls
     # The athlete's steps, once saved, take over from the description.
     service.update_session(planned, 1, date(2027, 1, 12), READ, parsed)
     view = service.inspect_session(planned)["session"]
@@ -1257,3 +1279,28 @@ def test_template_sent_before_the_guard_can_still_be_withdrawn(planned, descript
     GarminRepository().update_planned_session_status(planned, SessionStatus.SKIPPED)
     assert service.withdraw_skipped(planned, client=garmin)["state"] == "removed"
     assert not garmin.workouts and not garmin.schedules
+
+
+@pytest.mark.parametrize("source", ["explicit", "parsed"])
+def test_a_skipped_session_is_withdrawn_whatever_its_steps(planned, source):
+    from arete.garmin.models import SessionStatus
+
+    if source == "parsed":
+        _without_steps(planned, "intervals", READ)
+    garmin = Garmin()
+    assert service.export(planned, client=garmin)["state"] == "scheduled"
+    assert service.on_garmin(planned)
+    GarminRepository().update_planned_session_status(planned, SessionStatus.SKIPPED)
+    assert service.withdraw_skipped(planned, client=garmin)["state"] == "removed"
+    assert not garmin.workouts and not garmin.schedules
+    assert not service.on_garmin(planned)
+    session = GarminRepository().get_planned_session(planned)
+    assert session.garmin_workout_id is None and session.garmin_pushed_at is None
+
+
+def test_only_a_skipped_session_is_withdrawn(planned):
+    garmin = Garmin()
+    service.export(planned, client=garmin)
+    with pytest.raises(DocumentError, match="séances sautées"):
+        service.withdraw_skipped(planned, client=garmin)
+    assert len(garmin.workouts) == 1
