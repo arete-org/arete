@@ -141,6 +141,38 @@ test('Planning selection, direct export and editing work on mobile without model
   await page.screenshot({ path: '../.context/garmin-planning-mobile.png', fullPage: true });
 });
 
+test('Planning edits a description-read session starting from the steps read', async ({ page }) => {
+  const description = "VMA — 12×400 @3'33 r1'. Échauffement 20-25', retour 15'";
+  const steps = [
+    { kind: 'warmup' as const, duration_kind: 'seconds' as const, value: 1200, notes: "20-25'", steps: [] },
+    { kind: 'repeat' as const, duration_kind: 'lap' as const, repeat: 12, steps: [
+      { kind: 'effort' as const, duration_kind: 'meters' as const, value: 400, target: { kind: 'pace_sec_km' as const, low: 210, high: 216 }, steps: [] },
+      { kind: 'recovery' as const, duration_kind: 'seconds' as const, value: 60, steps: [] },
+    ] },
+    { kind: 'cooldown' as const, duration_kind: 'seconds' as const, value: 900, steps: [] },
+  ];
+  const view: WorkoutView = { session: { ...structuredClone(session), description, derived: false, parsed: true, prescription: { version: 1, steps } }, export: null };
+  const counts = await mockApi(page, () => view);
+  let saved: unknown = null;
+  // Stored without a prescription: the steps exist only as read by the server.
+  await page.route(url => url.pathname.endsWith('/api/garmin/planned'), route =>
+    route.fulfill({ json: [{ ...view.session, prescription: null }] }));
+  await page.route(url => url.pathname.endsWith('/api/garmin/planned/42'), async route => {
+    if (route.request().method() === 'PUT') saved = route.request().postDataJSON().prescription;
+    await route.fallback();
+  });
+  await page.goto('/planning?date=2027-01-12');
+  await page.getByRole('button', { name: 'Ouvrir la séance', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Étapes lues dans la description.', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Modifier', exact: true }).click();
+  await expect(page.getByRole('dialog').getByLabel('Type de l’étape 1', { exact: true }).first()).toHaveValue('warmup');
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect.poll(() => counts.edits).toBe(1);
+  expect(saved).toEqual({ version: 1, steps });
+  expect(counts.model).toBe(0);
+});
+
 test('uncertain export survives reload and is verified without replaying the write', async ({ page }) => {
   const view: WorkoutView = { session: structuredClone(session), export: null };
   const counts = await mockApi(page, () => view);

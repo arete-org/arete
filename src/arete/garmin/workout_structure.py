@@ -88,12 +88,18 @@ def ensure_template_fits(session: PlannedSession) -> None:
 
     A described tempo or interval session without explicit steps would reach
     the watch as the type's generic template, not the workout the coach wrote.
+    A running description the grammar reads entirely counts as explicit steps
+    (``garmin_export.described_prescription`` exports them).
     """
+    from arete.services.prescriptions import prescription_from_description
+
     if (
         not session.prescription
         and not session.structure_json
         and (session.description or "").strip()
         and needs_explicit_steps(session.sport, session.session_type.value)
+        and prescription_from_description(session.description or "", session.sport)
+        is None
     ):
         raise NotPushable(
             "Séance décrite sans étapes : le modèle générique du type de séance "

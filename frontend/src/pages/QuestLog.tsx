@@ -476,10 +476,11 @@ export function PlanningPage() {
             state={detail.state}
             realised={detail.realised}
             onClose={() => setDetailId(null)}
-            onEdit={() =>
+            onEdit={(parsed) =>
               setEditor({
                 mode: 'edit',
-                session: detail.session,
+                // Steps read from the description start the editor; saving fixes them.
+                session: parsed ? { ...detail.session, prescription: parsed } : detail.session,
                 date: detail.session.date,
               })
             }

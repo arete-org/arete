@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { GENERIC_STEPS_LABEL, workoutApi, type WorkoutView } from '@/lib/workouts';
+import { GENERIC_STEPS_LABEL, PARSED_STEPS_LABEL, workoutApi, type WorkoutView } from '@/lib/workouts';
 import { WorkoutCard } from './WorkoutCard';
 
 afterEach(() => {
@@ -39,4 +39,27 @@ it('keeps derived steps editable as the session when nothing contradicts them', 
   expect(screen.getByText('Étapes dérivées du planning')).toBeTruthy();
   expect(screen.queryByText(GENERIC_STEPS_LABEL)).toBeNull();
   expect(screen.getByRole('button', { name: 'Modifier' })).toBeTruthy();
+});
+
+it('says steps read from the description are exportable and starts the editor from them', async () => {
+  const parsed = view(false);
+  parsed.session = {
+    ...parsed.session, derived: false, parsed: true,
+    prescription: { version: 1, steps: [
+      { kind: 'warmup', duration_kind: 'seconds', value: 1200, steps: [] },
+      { kind: 'repeat', duration_kind: 'lap', repeat: 12, steps: [
+        { kind: 'effort', duration_kind: 'meters', value: 400, steps: [] },
+        { kind: 'recovery', duration_kind: 'seconds', value: 60, steps: [] },
+      ] },
+    ] },
+  };
+  mount(parsed);
+  expect(screen.getByText(PARSED_STEPS_LABEL)).toBeTruthy();
+  expect(screen.queryByText(GENERIC_STEPS_LABEL)).toBeNull();
+  expect(screen.queryByText('Étapes dérivées du planning')).toBeNull();
+  const edit = screen.getByRole('button', { name: 'Modifier' }) as HTMLButtonElement;
+  await waitFor(() => expect(edit.disabled).toBe(false));
+  fireEvent.click(edit);
+  const kinds = screen.getAllByLabelText(/^Type de l’étape/).map(s => (s as HTMLSelectElement).value);
+  expect(kinds).toEqual(['warmup', 'repeat', 'effort', 'recovery']);
 });

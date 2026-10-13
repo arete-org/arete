@@ -7,7 +7,7 @@ import { Check, ChevronDown, CircleAlert, ExternalLink, Loader2 } from 'lucide-r
 import { PrescriptionEditor } from './PrescriptionEditor';
 import { Modal, ModalHeader } from './ui';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
-import { exportLabel, GENERIC_STEPS_LABEL, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
+import { exportLabel, GENERIC_STEPS_LABEL, PARSED_STEPS_LABEL, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
 import { parseLocalDate } from '@/lib/dates';
 import type { Prescription } from '@/lib/documents';
 
@@ -29,6 +29,7 @@ function EditWorkout({ session, onClose, onResult }: { session: WorkoutSession; 
       <label className="block space-y-1 text-sm">Date<input type="date" className={input} value={day} onChange={e => setDay(e.target.value)} /></label>
       <label className="block space-y-1 text-sm">Titre<input className={input} value={description} maxLength={500} onChange={e => setDescription(e.target.value)} /></label>
       {session.derived && !session.needs_steps && <p className="text-xs text-text-muted">Ces étapes étaient dérivées du planning. Les enregistrer fixe cette prescription et la retire de l’adaptation automatique.</p>}
+      {session.parsed && <p className="text-xs text-text-muted">Ces étapes sont lues dans la description. Les enregistrer les fixe : modifier ensuite le titre ne les changera plus.</p>}
       <PrescriptionEditor sport={session.sport} value={prescription} onChange={setPrescription} />
       <p className="text-xs text-text-muted">Enregistrement dans Arete. Un nouvel envoi sera nécessaire pour mettre Garmin à jour.</p>
       {actions.error && <p role="alert" className="text-sm text-danger-red">{actions.error}</p>}
@@ -69,6 +70,7 @@ export function WorkoutCard({ sessionId, initial, readError, compact = false, se
           <h4 className="mt-1 text-sm font-semibold text-text-primary">{session.description || 'Séance prévue'}</h4>
         </>}
         <p className="mt-1 text-sm leading-relaxed text-text-secondary">{session.summary || 'Étapes à compléter'}</p>
+        {session.parsed && <p className="mt-1 text-xs text-text-muted">{PARSED_STEPS_LABEL}</p>}
         {session.derived && <p className="mt-1 text-xs text-text-muted">{session.needs_steps ? GENERIC_STEPS_LABEL : 'Étapes dérivées du planning'}</p>}
         <p className="mt-2 flex items-center gap-1.5 text-xs text-text-muted"><Check className="size-3" /> Enregistrée dans Arete</p>
         <p role="status" aria-atomic="true" className={`mt-1 flex items-center gap-1.5 text-xs ${uncertain || state?.state === 'failed' ? 'text-warning-orange' : sent ? 'text-success-green' : 'text-text-secondary'}`}>

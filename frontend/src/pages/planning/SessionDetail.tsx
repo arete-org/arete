@@ -8,7 +8,8 @@ import { useWorkoutActions } from '@/hooks/useWorkoutActions';
 import { garminApi } from '@/lib/api';
 import { exportApi } from '@/lib/documents';
 import { invalidateAfterSession } from '@/lib/queryKeys';
-import { GENERIC_STEPS_LABEL, mergeWorkout, workoutApi, workoutKey } from '@/lib/workouts';
+import { GENERIC_STEPS_LABEL, mergeWorkout, PARSED_STEPS_LABEL, workoutApi, workoutKey } from '@/lib/workouts';
+import type { Prescription } from '@/lib/documents';
 import type { PlannedState } from '@/lib/sessionMatch';
 import type { ActualSession, PlannedSession } from '@/types';
 import {
@@ -36,7 +37,8 @@ export function SessionDetail({
   state: PlannedState;
   realised: ActualSession | null;
   onClose: () => void;
-  onEdit: () => void;
+  /** Receives the steps read from the description, to start the editor from them. */
+  onEdit: (parsed?: Prescription) => void;
   onMove: () => void;
   onDuplicate: () => void;
   onChanged: (session: PlannedSession, message: string) => void;
@@ -77,6 +79,8 @@ export function SessionDetail({
     !!query.error ||
     ['working', 'uncertain', 'conflict'].includes(view.export?.state ?? '');
   const hasGarmin = !!view?.export && view.export.state !== 'removed';
+  const edit = () =>
+    onEdit((view?.session.parsed && view.session.prescription) || undefined);
   const status = useMutation({
     mutationKey: ['workout-action', 'planning'],
     retry: false,
@@ -154,7 +158,7 @@ export function SessionDetail({
             <span className="ui-inset px-2 py-1">{STATE_LABELS[state]}</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button strong disabled={blocked} onClick={onEdit}>
+            <Button strong disabled={blocked} onClick={edit}>
               Modifier
             </Button>
             <Button disabled={blocked} onClick={onMove}>
@@ -181,6 +185,9 @@ export function SessionDetail({
               <div className="planning-steps">
                 <StepList prescription={view.session.prescription} />
               </div>
+              {view.session.parsed && (
+                <p className="mt-3 text-xs text-text-muted">{PARSED_STEPS_LABEL}.</p>
+              )}
               {view.session.derived && (
                 <p className="mt-3 text-xs text-text-muted">
                   {view.session.needs_steps
@@ -191,7 +198,7 @@ export function SessionDetail({
               {view.session.needs_steps && (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs text-warning-orange">{view.session.reason}</p>
-                  <Button disabled={blocked} onClick={onEdit}>
+                  <Button disabled={blocked} onClick={edit}>
                     Compléter les étapes
                   </Button>
                 </div>
