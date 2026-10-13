@@ -1,4 +1,5 @@
 import { claimPushDevice } from './pushSession';
+import { clearPersistedQueries } from './queryPersistence';
 /**
  * Session tokens for the API transports.
  *
@@ -55,6 +56,12 @@ export async function authFetch(input: string, init: RequestInit = {}): Promise<
   return response;
 }
 
+/** Drops every cached answer, the service worker's and the persisted query cache,
+ *  so the next account on this browser never reads this one's data. */
+export async function clearSignedOutCaches(): Promise<void> {
+  await Promise.all([clearApiCache(), clearPersistedQueries()]);
+}
+
 /** Drops the cached API answers so the next account never reads this one's data. */
 export async function clearApiCache(): Promise<void> {
   // Absent outside secure contexts and in unsupported browsers.
@@ -64,7 +71,7 @@ export async function clearApiCache(): Promise<void> {
 
 /**
  * Ends the session: Clerk's sign-out, then `reset` (in-memory caches), then the
- * API cache, then a reload so the page restarts signed out with nothing left over.
+ * cached and persisted answers, then a reload so the page restarts signed out with nothing left over.
  * The cleanup runs as Clerk's sign-out callback, in place of its own navigation.
  * A failed sign-out leaves everything in place for the caller to report.
  */
@@ -77,7 +84,7 @@ export async function endSession(
     cleaned = true;
     setTokenGetter(null);
     reset?.();
-    await clearApiCache();
+    await clearSignedOutCaches();
     await claimPushDevice(null);
     window.location.reload();
   };

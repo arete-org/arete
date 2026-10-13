@@ -1,6 +1,9 @@
-import { QueryClient } from '@tanstack/react-query';
+// @vitest-environment jsdom
+import { createElement, type ReactNode } from 'react';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { gameApi, gameKey, type Player } from './gamification';
+import { gameApi, gameKey, useGamePreference, type Player } from './gamification';
 import { invalidateAfterSession } from './queryKeys';
 
 vi.mock('./api', () => ({ strengthApi: {} }));
@@ -29,4 +32,17 @@ it('an opted-out athlete sends no projection', () => {
   client.setQueryData(['game-preference'], { enabled: false, opted_in: false, available: true, version: 1 });
   invalidateAfterSession(client);
   expect(gameApi.sync).not.toHaveBeenCalled();
+});
+
+it('a window focus within five minutes does not refetch the game preference', async () => {
+  const preference = vi.spyOn(gameApi, 'preference').mockResolvedValue({ enabled: true, opted_in: true, available: true, version: 1 });
+  const client = new QueryClient();
+  const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+  renderHook(() => [useGamePreference(), useGamePreference()], { wrapper });
+  await waitFor(() => expect(preference).toHaveBeenCalledTimes(1));
+  focusManager.setFocused(false);
+  focusManager.setFocused(true);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(preference).toHaveBeenCalledTimes(1);
+  focusManager.setFocused(undefined);
 });

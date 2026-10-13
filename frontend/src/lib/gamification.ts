@@ -115,12 +115,14 @@ export function syncGame(client: QueryClient) {
   );
 }
 
+/** Several components read it: a focus within five minutes refetches nothing. Another
+ *  tab's change arrives through SettingsContext's BroadcastChannel invalidation. */
 export function useGamePreference() {
   return useQuery({
     queryKey: ['game-preference'],
     queryFn: gameApi.preference,
     retry: false,
-    refetchOnWindowFocus: 'always',
+    staleTime: 5 * 60_000,
   });
 }
 export const classes = [

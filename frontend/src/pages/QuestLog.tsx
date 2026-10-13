@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, MoreHorizontal } from 'lucide-react';
-import { ErrorState, LoadingState, strengthAsActual } from '@/components';
-import { Button, Select, Modal, ModalHeader } from '@/components/ui';
+import { ErrorState, strengthAsActual } from '@/components';
+import { Button, Select, Modal, ModalHeader, Skeleton } from '@/components/ui';
 import { WorkoutSelection } from '@/components/WorkoutSelection';
 import { garminApi, settingsApi } from '@/lib/api';
 import { exportApi } from '@/lib/documents';
@@ -132,8 +132,8 @@ export function PlanningPage() {
     setMessage(text);
   };
 
-  if (plannedQuery.isPending || actualQuery.isPending)
-    return <LoadingState message="CHARGEMENT DU PLANNING…" />;
+  // The page frame and week controls show at once; the week fills in when it arrives.
+  const loading = plannedQuery.isPending || actualQuery.isPending;
   if (plannedQuery.error || actualQuery.error)
     return (
       <ErrorState
@@ -165,46 +165,56 @@ export function PlanningPage() {
           </Button>
         </header>
         <div className="planning-summary">
-          <section className="glass-panel p-5">
-            <p className="planning-eyebrow">Séances</p>
-            <p className="mt-2 text-[26px] font-semibold tabular-nums">
-              {rows.filter((r) => r.state === 'done').length}
-              <span> / {planned.length}</span>
-            </p>
-            <p className="mt-2 text-xs text-text-secondary">
-              {stats.due
-                ? `${stats.rate} % des séances dues réalisées`
-                : 'La semaine est devant vous.'}
-            </p>
-          </section>
-          <section className="glass-panel p-5">
-            <p className="planning-eyebrow">Récupération</p>
-            <p className="mt-2 text-[26px] font-semibold">
-              {freeDays}{' '}
-              <span className="text-[26px]">
-                jour{freeDays > 1 ? 's' : ''} libre{freeDays > 1 ? 's' : ''}
-              </span>
-            </p>
-            <p className="mt-2 text-xs text-text-secondary">Sans séance planifiée cette semaine.</p>
-          </section>
-          <section className="glass-panel p-5 planning-next">
-            <p className="text-sm font-semibold">Prochaine séance</p>
-            {next ? (
-              <button
-                className="planning-next-link block text-left mt-2"
-                onClick={() => setDetailId(next.session.id)}
-              >
-                <span className="text-sm text-text-secondary">
-                  {dayLabel(next.session.date)} · {sessionTitle(next.session)} ·{' '}
-                  {sessionSummary(next.session)}
-                </span>
-              </button>
-            ) : (
-              <p className="text-sm text-text-secondary mt-3">
-                Aucune séance à venir cette semaine.
-              </p>
-            )}
-          </section>
+          {loading ? (
+            [0, 1, 2].map((i) => (
+              <section key={i} className="glass-panel p-5">
+                <Skeleton label="Chargement du résumé de la semaine" />
+              </section>
+            ))
+          ) : (
+            <>
+              <section className="glass-panel p-5">
+                <p className="planning-eyebrow">Séances</p>
+                <p className="mt-2 text-[26px] font-semibold tabular-nums">
+                  {rows.filter((r) => r.state === 'done').length}
+                  <span> / {planned.length}</span>
+                </p>
+                <p className="mt-2 text-xs text-text-secondary">
+                  {stats.due
+                    ? `${stats.rate} % des séances dues réalisées`
+                    : 'La semaine est devant vous.'}
+                </p>
+              </section>
+              <section className="glass-panel p-5">
+                <p className="planning-eyebrow">Récupération</p>
+                <p className="mt-2 text-[26px] font-semibold">
+                  {freeDays}{' '}
+                  <span className="text-[26px]">
+                    jour{freeDays > 1 ? 's' : ''} libre{freeDays > 1 ? 's' : ''}
+                  </span>
+                </p>
+                <p className="mt-2 text-xs text-text-secondary">Sans séance planifiée cette semaine.</p>
+              </section>
+              <section className="glass-panel p-5 planning-next">
+                <p className="text-sm font-semibold">Prochaine séance</p>
+                {next ? (
+                  <button
+                    className="planning-next-link block text-left mt-2"
+                    onClick={() => setDetailId(next.session.id)}
+                  >
+                    <span className="text-sm text-text-secondary">
+                      {dayLabel(next.session.date)} · {sessionTitle(next.session)} ·{' '}
+                      {sessionSummary(next.session)}
+                    </span>
+                  </button>
+                ) : (
+                  <p className="text-sm text-text-secondary mt-3">
+                    Aucune séance à venir cette semaine.
+                  </p>
+                )}
+              </section>
+            </>
+          )}
         </div>
         {message && (
           <div role="status" className="ui-inset p-4 my-4 text-sm flex justify-between gap-3">
@@ -285,69 +295,73 @@ export function PlanningPage() {
               </button>
             </p>
           )}
-          <WorkoutSelection
-            key={`${weekStart}:${selecting}:${sport}`}
-            locked={busy || !!exportsQuery.error || exportsQuery.isPending}
-            sessions={planned.map((session) => ({
-              session: { ...session, revision: session.revision ?? 1 },
-              export: exportsQuery.data?.find((e) => e.session_id === session.id) ?? null,
-            }))}
-            renderWorkout={(workout) => {
-              const row = rows.find((r) => r.session.id === workout.sessionId);
-              return (
-                row && (
-                  <PlanningSessionCard
-                    planned={row.session}
-                    state={row.state}
-                    realised={row.realised}
-                    workout={workout}
-                    active={active?.session.id === row.session.id}
-                    selecting={selecting}
-                    exportUnavailable={!!exportsQuery.error || exportsQuery.isPending}
-                    onActivate={() => {
-                      setActiveId(row.session.id);
-                      day(row.session.date);
-                    }}
-                    onOpen={() => setDetailId(row.session.id)}
-                    onDrag={setDragged}
-                  />
-                )
-              );
-            }}
-          >
-            {(render) => (
-              <WeekBoard
-                days={days}
-                planned={planned}
-                actual={actual}
-                today={today}
-                selectedDate={selectedDate}
-                restDays={restDays}
-                sport={sport}
-                render={render}
-                summary={
-                  <>
-                    <span className="text-success-green">
-                      {rows.filter((r) => r.state === 'done').length} / {planned.length} réalisée
-                      {rows.filter((r) => r.state === 'done').length > 1 ? 's' : ''}
-                    </span>
-                    <span>{freeDays} jours libres</span>
-                    {sport && <span>{sportLabel(sport)}</span>}
-                  </>
-                }
-                onDay={(date) => {
-                  setActiveId(null);
-                  day(date);
-                }}
-                onCreate={(date) => setEditor({ mode: 'create', date })}
-                onDropSession={(date) => {
-                  if (dragged && dragged.date !== date && !busy)
-                    setMoving({ session: dragged, date });
-                  setDragged(null);
-                }}
-              />
-            )}
-          </WorkoutSelection>
+          {loading ? (
+            <Skeleton label="Chargement de la semaine" lines={4} className="px-5 pb-5" />
+          ) : (
+            <WorkoutSelection
+              key={`${weekStart}:${selecting}:${sport}`}
+              locked={busy || !!exportsQuery.error || exportsQuery.isPending}
+              sessions={planned.map((session) => ({
+                session: { ...session, revision: session.revision ?? 1 },
+                export: exportsQuery.data?.find((e) => e.session_id === session.id) ?? null,
+              }))}
+              renderWorkout={(workout) => {
+                const row = rows.find((r) => r.session.id === workout.sessionId);
+                return (
+                  row && (
+                    <PlanningSessionCard
+                      planned={row.session}
+                      state={row.state}
+                      realised={row.realised}
+                      workout={workout}
+                      active={active?.session.id === row.session.id}
+                      selecting={selecting}
+                      exportUnavailable={!!exportsQuery.error || exportsQuery.isPending}
+                      onActivate={() => {
+                        setActiveId(row.session.id);
+                        day(row.session.date);
+                      }}
+                      onOpen={() => setDetailId(row.session.id)}
+                      onDrag={setDragged}
+                    />
+                  )
+                );
+              }}
+            >
+              {(render) => (
+                <WeekBoard
+                  days={days}
+                  planned={planned}
+                  actual={actual}
+                  today={today}
+                  selectedDate={selectedDate}
+                  restDays={restDays}
+                  sport={sport}
+                  render={render}
+                  summary={
+                    <>
+                      <span className="text-success-green">
+                        {rows.filter((r) => r.state === 'done').length} / {planned.length} réalisée
+                        {rows.filter((r) => r.state === 'done').length > 1 ? 's' : ''}
+                      </span>
+                      <span>{freeDays} jours libres</span>
+                      {sport && <span>{sportLabel(sport)}</span>}
+                    </>
+                  }
+                  onDay={(date) => {
+                    setActiveId(null);
+                    day(date);
+                  }}
+                  onCreate={(date) => setEditor({ mode: 'create', date })}
+                  onDropSession={(date) => {
+                    if (dragged && dragged.date !== date && !busy)
+                      setMoving({ session: dragged, date });
+                    setDragged(null);
+                  }}
+                />
+              )}
+            </WorkoutSelection>
+          )}
         </section>
         {active && (
           <section className="planning-active glass-panel" aria-label="Séance sélectionnée">

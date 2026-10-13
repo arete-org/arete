@@ -1,15 +1,18 @@
 import { useCoachDisplay } from '@/hooks/useCoachDisplay';
 import { AreteMark } from '@/components/AreteBrand';
 import type { CoachReference } from '@/lib/coachToday';
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { Navigation, ErrorBoundary } from '@/components';
 import { AgentSidePanel } from '@/components/AgentSidePanel';
 import { EnableNotifications } from '@/components/EnableNotifications';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { LoadingState } from '@/components/States';
 import { AuthGate } from '@/components/auth/AuthGate';
+import { useAuthState } from '@/components/auth/authState';
+import { athletePersister, keepPersistedQueries, PERSIST_BUSTER, PERSIST_MAX_AGE_MS, shouldPersistQuery } from '@/lib/queryPersistence';
 import { SettingsProvider } from '@/contexts';
 import { DashboardPage, PlanningPage, LogPage, SettingsPage } from '@/pages';
 
@@ -34,8 +37,23 @@ const queryClient = new QueryClient({
   },
 });
 
+keepPersistedQueries(queryClient);
+
 /** A session that ends takes the query cache with it; the page reloads right after. */
 const dropQueryCache = () => queryClient.clear();
+
+/** A repeat visit paints this athlete's last answers while they revalidate. */
+function PersistedQueries({ children }: { children: ReactNode }) {
+  const { athleteId } = useAuthState();
+  if (athleteId === null) throw new Error('Athlète absent.');
+  const persistOptions = useMemo(() => ({
+    persister: athletePersister(athleteId),
+    maxAge: PERSIST_MAX_AGE_MS,
+    buster: PERSIST_BUSTER,
+    dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
+  }), [athleteId]);
+  return <PersistQueryClientProvider key={athleteId} client={queryClient} persistOptions={persistOptions}>{children}</PersistQueryClientProvider>;
+}
 
 /** Route content can fade independently; the active chat is never remounted. */
 function RouteContent({ children }: { children: ReactNode }) {
@@ -77,7 +95,7 @@ function App() {
 
   return (
     <AuthGate onSessionEnd={dropQueryCache}>
-      <QueryClientProvider client={queryClient}>
+      <PersistedQueries>
         <SettingsProvider>
           <BrowserRouter>
             <div className="min-h-screen bg-void">
@@ -168,7 +186,7 @@ function App() {
             </div>
           </BrowserRouter>
         </SettingsProvider>
-      </QueryClientProvider>
+      </PersistedQueries>
     </AuthGate>
   );
 }
