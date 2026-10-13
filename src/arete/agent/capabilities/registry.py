@@ -56,6 +56,7 @@ PLANNING_INSTRUCTIONS += """
 
 STRENGTH_INSTRUCTIONS = """Musculation réalisée :
 - Pour consigner une séance déjà réalisée : save_workout en un appel. Pour une séance future, utilise le planning.
+- Pour corriger une séance déjà enregistrée, jamais save_workout (doublon) : list_strength_sessions donne son session_id, puis update_workout avec la séance complète corrigée.
 - Un élément non reconnu bloque tout enregistrement : cite les éléments à corriger et les did_you_mean, sans inventer la correction.
 - Passe le texte tel qu'il l'a dit. N'invente jamais une série, une charge ou un RPE.
 - Progression ou charge à viser sur un exercice : `get_strength_progress`, puis cite `next_session` (charge, séries, raison) tel quel.
@@ -153,11 +154,12 @@ Aucun accès aux conversations conservées uniquement dans les navigateurs ni au
         description=(
             "Enregistrer une séance de musculation dictée : enregistrer ce que "
             "l'athlète décrit, seulement si tout est reconnu ; "
+            "corriger une séance déjà enregistrée ; "
             "suivre la progression d'un exercice (e1RM, records, charge suivante)."
         ),
         tools=STRENGTH_TOOLS,
         instructions=STRENGTH_INSTRUCTIONS,
-        read_tools=frozenset({"get_strength_progress"}),
+        read_tools=frozenset({"get_strength_progress", "list_strength_sessions"}),
     ),
 }
 

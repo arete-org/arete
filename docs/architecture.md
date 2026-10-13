@@ -221,6 +221,9 @@ repositories, not in tool adapters.
 `save_workout` parses and saves completed strength work in one call. Unknown exercises
 or unparsed lines reject the entire coach save and report corrections. The Log page
 retains its explicit preview behavior. Session/exercise/set persistence is transactional.
+A correction goes through `list_strength_sessions` then `update_workout`, which
+replaces the session's exercises and sets in place under the same rule: the id,
+date, Garmin link and game event stay, and records are recomputed.
 A skill describes how to interpret documents; planning owns creation; Garmin owns
 export. Google Calendar still requires approval through its existing HTTP/UI cards.
 

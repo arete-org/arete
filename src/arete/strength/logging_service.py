@@ -63,6 +63,7 @@ class SaveOutcome:
     dropped: list[DroppedExercise] = field(default_factory=list)
     message: str = ""
     records: list[SessionRecord] = field(default_factory=list)
+    unparsed_lines: list[str] = field(default_factory=list)
 
 
 def athlete_abbreviations(user_id: int | None = None) -> dict[str, str]:
@@ -75,11 +76,16 @@ def athlete_abbreviations(user_id: int | None = None) -> dict[str, str]:
 
 
 def parse_for_athlete(
-    text: str, workout_date: date_type | None = None, user_id: int | None = None
+    text: str,
+    workout_date: date_type | None = None,
+    user_id: int | None = None,
+    *,
+    today: date_type | None = None,
 ) -> ParsedWorkout:
     """Read workout text with the athlete's abbreviations applied.
 
-    Deterministic — Lark grammar plus catalog matching, no model. Raises
+    Deterministic — Lark grammar plus catalog matching, no model. ``today``
+    dates a text that names no day (default: the athlete's today). Raises
     ValueError when nothing in the text looks like an exercise.
     """
     user_id = resolve_athlete_id(user_id)
@@ -90,7 +96,7 @@ def parse_for_athlete(
         text=text,
         workout_date=workout_date,
         abbreviations=athlete_abbreviations(user_id),
-        today=athlete_today() if workout_date is None else None,
+        today=(today or athlete_today()) if workout_date is None else None,
     )
 
 
@@ -134,45 +140,11 @@ def save_parsed_session(
         overall_rpe=parsed.overall_rpe,
         notes=parsed.notes,
     )
-    saved: list[str] = []
-
     try:
-        for index, parsed_exercise in enumerate(parsed.exercises):
-            if not parsed_exercise.exercise_id:
-                continue
-            exercise = repo.get_or_create_exercise_from_catalog(
-                parsed_exercise.exercise_id
-            )
-            if exercise is None:
-                if require_complete:
-                    return SaveOutcome(
-                        session_id=None,
-                        message=f"Exercice indisponible : {parsed_exercise.name}",
-                    )
-                dropped.append(DroppedExercise(name=parsed_exercise.name))
-                continue
-            session_exercise = SessionExercise(
-                exercise_id=exercise.id,
-                exercise=exercise,
-                order=index + 1,
-            )
-            for parsed_set in parsed_exercise.sets:
-                session_exercise.sets.append(
-                    ExerciseSet(
-                        set_number=parsed_set.set_number,
-                        reps=parsed_set.reps if parsed_set.reps is not None else 0,
-                        weight_kg=parsed_set.weight_kg,
-                        rpe=parsed_set.rpe,
-                        rir=parsed_set.rir,
-                        rest_sec=parsed_set.rest_sec,
-                        tempo=parsed_set.tempo,
-                        is_warmup=parsed_set.is_warmup,
-                        is_failure=parsed_set.is_failure,
-                    )
-                )
-            session.exercises.append(session_exercise)
-            saved.append(exercise.name)
-
+        built = _session_exercises(parsed, repo, dropped, require_complete)
+        if isinstance(built, SaveOutcome):
+            return built
+        session.exercises, saved = built
         if not session.exercises:
             return SaveOutcome(
                 session_id=None,
@@ -200,6 +172,134 @@ def save_parsed_session(
         message=message,
         records=session_records(repo, session_id, session),
     )
+
+
+def update_logged_session(
+    session_id: int, text: str, repo: StrengthRepository | None = None
+) -> SaveOutcome:
+    """Correct a logged session in place from its complete corrected text.
+
+    Same parse and all-or-nothing rule as the coach's save. The session keeps
+    its id, date, Garmin link and game event; a text naming another day is
+    refused, since a correction never moves a session. Raises ValueError
+    when nothing in the text looks like an exercise.
+    """
+    repo = repo or StrengthRepository()
+    missing = f"Séance de musculation {session_id} introuvable : rien n'a été modifié."
+    existing = repo.get_session(session_id)
+    if existing is None:
+        return SaveOutcome(session_id=None, message=missing)
+    parsed = parse_for_athlete(text, today=existing.date)
+    if parsed.date != existing.date:
+        return SaveOutcome(
+            session_id=None,
+            message=(
+                f"Ce texte date la séance du {parsed.date.isoformat()}, elle est "
+                f"du {existing.date.isoformat()} : une correction ne la déplace "
+                "pas, rien n'a été modifié."
+            ),
+        )
+    dropped = dropped_exercises(parsed)
+    if dropped or parsed.unparsed_lines:
+        return SaveOutcome(
+            session_id=None,
+            dropped=dropped,
+            unparsed_lines=parsed.unparsed_lines,
+            message="Séance non modifiée : corrige les éléments non reconnus.",
+        )
+    built = _session_exercises(parsed, repo, dropped, require_complete=True)
+    if isinstance(built, SaveOutcome):
+        return built
+    existing.exercises, saved = built
+    if not repo.update_session(session_id, existing.exercises):
+        return SaveOutcome(session_id=None, message=missing)
+    return SaveOutcome(
+        session_id=session_id,
+        saved=saved,
+        message=f"Séance modifiée : {len(existing.exercises)} exercices",
+        records=session_records(repo, session_id, existing),
+    )
+
+
+def logged_sessions(
+    day: date_type | None = None, repo: StrengthRepository | None = None
+) -> list[dict]:
+    """The strength sessions logged on ``day`` (default: the athlete's today)."""
+    from arete.services.settings import athlete_today
+
+    repo = repo or StrengthRepository()
+    day = day or athlete_today()
+    return [
+        {
+            "session_id": session.id,
+            "date": session.date.isoformat(),
+            "name": session.name,
+            "summary": " ; ".join(
+                f"{ex.exercise.name if ex.exercise else ex.exercise_id} : "
+                + ", ".join(_set_summary(s) for s in ex.sets)
+                for ex in session.exercises
+            ),
+        }
+        for session in repo.list_sessions(
+            start_date=day, end_date=day, include_details=True
+        )
+    ]
+
+
+def _set_summary(exercise_set: ExerciseSet) -> str:
+    text = str(exercise_set.reps)
+    if exercise_set.weight_kg:
+        text += f"×{exercise_set.weight_kg:g} kg"
+    if exercise_set.rpe is not None:
+        text += f" RPE {exercise_set.rpe:g}"
+    if exercise_set.rir is not None:
+        text += f" RIR {exercise_set.rir}"
+    return text + (" (échauffement)" if exercise_set.is_warmup else "")
+
+
+def _session_exercises(
+    parsed: ParsedWorkout,
+    repo: StrengthRepository,
+    dropped: list[DroppedExercise],
+    require_complete: bool,
+) -> tuple[list[SessionExercise], list[str]] | SaveOutcome:
+    """The matched exercises with their sets, and their names; or a refusal."""
+    exercises: list[SessionExercise] = []
+    saved: list[str] = []
+    for index, parsed_exercise in enumerate(parsed.exercises):
+        if not parsed_exercise.exercise_id:
+            continue
+        exercise = repo.get_or_create_exercise_from_catalog(parsed_exercise.exercise_id)
+        if exercise is None:
+            if require_complete:
+                return SaveOutcome(
+                    session_id=None,
+                    message=f"Exercice indisponible : {parsed_exercise.name}",
+                )
+            dropped.append(DroppedExercise(name=parsed_exercise.name))
+            continue
+        session_exercise = SessionExercise(
+            exercise_id=exercise.id,
+            exercise=exercise,
+            order=index + 1,
+        )
+        for parsed_set in parsed_exercise.sets:
+            session_exercise.sets.append(
+                ExerciseSet(
+                    set_number=parsed_set.set_number,
+                    reps=parsed_set.reps if parsed_set.reps is not None else 0,
+                    weight_kg=parsed_set.weight_kg,
+                    rpe=parsed_set.rpe,
+                    rir=parsed_set.rir,
+                    rest_sec=parsed_set.rest_sec,
+                    tempo=parsed_set.tempo,
+                    is_warmup=parsed_set.is_warmup,
+                    is_failure=parsed_set.is_failure,
+                )
+            )
+        exercises.append(session_exercise)
+        saved.append(exercise.name)
+    return exercises, saved
 
 
 def session_records(

@@ -562,6 +562,51 @@ class StrengthRepository:
         finally:
             conn.close()
 
+    def update_session(self, session_id: int, exercises: list[SessionExercise]) -> bool:
+        """Replace a live session's exercises and sets; False if it is not live.
+
+        A correction, not a new session: the id, date, Garmin link and game
+        event stay. Replaced rows are retained for recovery, like a deletion's.
+        """
+        from arete.dataio.game_events import capture
+
+        conn = self._get_connection()
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            row = conn.execute(
+                "SELECT date, name FROM app.visible_strength_sessions WHERE id = ?",
+                [session_id],
+            ).fetchone()
+            if row is None:
+                conn.execute("ROLLBACK")
+                return False
+            conn.execute(
+                "UPDATE app.exercise_sets SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_exercise_id IN (SELECT id FROM app.visible_session_exercises WHERE session_id = ?))",
+                [session_id],
+            )
+            conn.execute(
+                "UPDATE app.session_exercises SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id = ?)",
+                [session_id],
+            )
+            for ex in exercises:
+                ex.session_id = session_id
+                self._create_session_exercise(conn, ex)
+            # Keyed by the session: an existing event, and its credit, stays as is.
+            capture(
+                conn,
+                f"strength:{session_id}",
+                row[0],
+                row[1] or "Force",
+                any(s.reps > 0 for e in exercises for s in e.sets),
+            )
+            conn.execute("COMMIT")
+            return True
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+
     # ─────────────────────────────────────────────────────────────────────
     # Statistics
     # ─────────────────────────────────────────────────────────────────────
