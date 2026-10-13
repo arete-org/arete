@@ -25,6 +25,7 @@ async function tick(ms = 0) {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 9, 13, 8, 0));
   vi.mocked(tipsApi.getDaily).mockReset().mockResolvedValue(pending);
   // The writing request outlives the polling: it never settles here.
   vi.mocked(tipsApi.writeDaily).mockReset().mockReturnValue(new Promise(() => {}));
@@ -85,4 +86,37 @@ it('retries a failed writing request only on refresh', async () => {
   act(() => result.current.refresh());
   await tick();
   expect(tipsApi.writeDaily).toHaveBeenCalledTimes(2);
+});
+
+it('asks again on refresh when the writing request answered pending', async () => {
+  // Another request held the day's claim, and its run may have died since.
+  vi.mocked(tipsApi.writeDaily).mockResolvedValue(pending);
+  const { result } = mount();
+  await tick();
+  for (const delay of TIP_POLL_DELAYS_MS) await tick(delay);
+  expect(result.current.stalled).toBe(true);
+  vi.mocked(tipsApi.writeDaily).mockResolvedValue(ready);
+  act(() => result.current.refresh());
+  await tick();
+  expect(tipsApi.writeDaily).toHaveBeenCalledTimes(2);
+  expect(result.current.tip?.tip).toBe('Footing facile.');
+});
+
+it('a tab left open overnight asks for the new day and polls afresh', async () => {
+  vi.mocked(tipsApi.getDaily).mockResolvedValue(ready);
+  const { result, rerender } = mount();
+  await tick();
+  expect(result.current.tip?.tip).toBe('Footing facile.');
+  expect(tipsApi.writeDaily).not.toHaveBeenCalled();
+
+  vi.setSystemTime(new Date(2026, 9, 14, 7, 0));
+  vi.mocked(tipsApi.getDaily).mockResolvedValue(pending);
+  rerender();
+  await tick();
+  expect(result.current.writing).toBe(true);
+  expect(tipsApi.writeDaily).toHaveBeenCalledTimes(1);
+  vi.mocked(tipsApi.getDaily).mockClear();
+  for (const delay of TIP_POLL_DELAYS_MS) await tick(delay);
+  expect(tipsApi.getDaily).toHaveBeenCalledTimes(TIP_POLL_DELAYS_MS.length);
+  expect(result.current.stalled).toBe(true);
 });

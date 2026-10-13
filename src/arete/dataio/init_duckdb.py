@@ -305,7 +305,8 @@ CREATE TABLE IF NOT EXISTS app.coach_briefings (
     status       VARCHAR NOT NULL DEFAULT 'ok',     -- 'ok', 'failed'
     error        VARCHAR,                    -- why the agent run failed, when it did
     trigger      VARCHAR NOT NULL DEFAULT 'api',    -- 'scheduler', 'api'
-    created_at   TIMESTAMP DEFAULT now()
+    created_at   TIMESTAMP DEFAULT now(),
+    facts_digest VARCHAR                     -- SHA-256 of the facts it was written from
 );
 
 -- ============================================================
@@ -821,6 +822,21 @@ def _m45_notification_preferences(con) -> None:
     _view(con, "user_settings")
 
 
+def _m46_briefing_facts_digest(con) -> None:
+    """Which facts a briefing was written from (ARE-39).
+
+    The daily sync rewrites a briefing only when its facts changed since.
+    Nullable: an older briefing has none and counts as changed.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute(
+        "ALTER TABLE app.coach_briefings ADD COLUMN IF NOT EXISTS facts_digest VARCHAR"
+    )
+    # DuckDB binds a view's columns at creation: refresh the private projection.
+    _view(con, "coach_briefings")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -856,6 +872,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (43, _m43_proactive_coaching),
     (44, _m44_slack_product),
     (45, _m45_notification_preferences),
+    (46, _m46_briefing_facts_digest),
 ]
 
 

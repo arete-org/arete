@@ -143,14 +143,17 @@ gets the rule text without a model request; facts that could not be read still
 go to the model. `GET /tips/daily` only reads: without a stored briefing it
 answers `pending` and never imports the agent stack. The dashboard then sends
 `POST /tips/daily`, a long request it does not wait on, and polls the GET (5, 10,
-20 s, then an "Actualiser" button). The briefing is produced once per athlete and
-day under a per-athlete lock and a `pending` row in `app.coach_briefings` that
-stops another instance; a concurrent request answers `pending` at once. A claim
-older than the run bound belongs to a stopped run: it is settled with the rule
-text and a failed row, never by a second model request. The daily sync keeps a
-briefing the dashboard asked for unless data it reads (the day's Garmin health, a
-session, a plan decision) landed after it; the rewrite is then marked
-`updated_after_sync`. Athletes never wait for each other's run. The
+20 s, then an "Actualiser" button that sends the idempotent POST again); each
+day has its own read and request. The briefing is produced once per athlete and
+day under a per-athlete lock and a `pending` row in `app.coach_briefings`, dated
+in naive UTC, that stops another instance; a concurrent request answers
+`pending` at once. A claim older than the run bound belongs to a stopped run: it
+is settled with the rule text and a failed row, never by a second model request.
+Each briefing stores the SHA-256 of the facts it was written from (migration 46).
+The daily sync recomputes them without a model request and keeps a briefing the
+dashboard asked for unless they changed; it waits up to a minute for one being
+written. A rewrite is marked `updated_after_sync`; a failed rewrite keeps the
+briefing it would have replaced. Athletes never wait for each other's run. The
 server files the feedback's ledger entry itself (`services/memory.append_entry`,
 dated heading, never twice), so neither mission can mutate training data or
 forget to write. Every profile receives the current date: the athlete's, in

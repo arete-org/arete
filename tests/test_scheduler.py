@@ -144,7 +144,7 @@ class TestWriteDailyBriefing:
             "Briefing du coach", "Footing 45'.", "/", kind="briefing"
         )
 
-    def test_a_briefing_written_before_new_data_is_rewritten(self):
+    def test_a_briefing_written_from_other_facts_is_rewritten(self):
         fresh, stale = self._existing("scheduler"), self._existing("api")
         with (
             patch("arete.services.briefing.briefing_enabled", return_value=True),
@@ -152,7 +152,7 @@ class TestWriteDailyBriefing:
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=stale,
             ),
-            patch("arete.services.briefing.written_before_new_data", return_value=True),
+            patch("arete.services.briefing.facts_changed", return_value=True),
             patch(
                 "arete.coaching.get_or_create_briefing", return_value=fresh
             ) as generate,
@@ -167,15 +167,31 @@ class TestWriteDailyBriefing:
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=self._existing("api"),
             ),
-            patch(
-                "arete.services.briefing.written_before_new_data", return_value=False
-            ),
+            patch("arete.services.briefing.facts_changed", return_value=False),
             patch("arete.coaching.get_or_create_briefing") as generate,
         ):
             assert scheduler.write_daily_briefing() == "agent"
         generate.assert_not_called()
 
-    def test_a_run_in_progress_is_left_to_finish(self):
+    def test_a_run_in_progress_is_awaited_then_compared(self):
+        # The dashboard's request was writing it: once stored, its facts decide.
+        dashboard = self._existing("api")
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                side_effect=[None, dashboard],
+            ),
+            patch("arete.services.briefing.facts_changed", return_value=False),
+            patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch.object(scheduler, "sleep") as sleep,
+            patch("arete.services.notifications.notify") as notify,
+        ):
+            assert scheduler.write_daily_briefing() == "agent"
+        sleep.assert_called_once_with(scheduler.BRIEFING_POLL_SECONDS)
+        notify.assert_not_called()
+
+    def test_a_run_still_in_progress_after_the_wait_is_left_to_finish(self):
         with (
             patch("arete.services.briefing.briefing_enabled", return_value=True),
             patch(
@@ -183,9 +199,27 @@ class TestWriteDailyBriefing:
                 return_value=None,
             ),
             patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch.object(scheduler, "BRIEFING_WAIT_SECONDS", 0),
+            patch.object(scheduler, "sleep") as sleep,
             patch("arete.services.notifications.notify") as notify,
         ):
             assert scheduler.write_daily_briefing() == "in progress"
+        sleep.assert_not_called()
+        notify.assert_not_called()
+
+    def test_a_failed_rewrite_keeps_the_briefing_without_a_notification(self):
+        stale = self._existing("api")
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=stale,
+            ),
+            patch("arete.services.briefing.facts_changed", return_value=True),
+            patch("arete.coaching.get_or_create_briefing", return_value=stale),
+            patch("arete.services.notifications.notify") as notify,
+        ):
+            assert scheduler.write_daily_briefing() == "rewrite failed; kept"
         notify.assert_not_called()
 
 

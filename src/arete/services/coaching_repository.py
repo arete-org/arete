@@ -9,7 +9,7 @@ silently empty.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 import duckdb
@@ -39,6 +39,8 @@ class Briefing:
     error: str | None
     trigger: str
     created_at: datetime | None
+    #: Identifies the facts it was written from (``briefing.facts_digest``).
+    facts_digest: str | None = None
     #: An earlier usable briefing of the same day was replaced by this one.
     revised: bool = False
 
@@ -56,7 +58,9 @@ class Briefing:
         }
 
 
-_COLUMNS = "id, date, text, priority, source, status, error, trigger, created_at"
+_COLUMNS = (
+    "id, date, text, priority, source, status, error, trigger, created_at, facts_digest"
+)
 
 
 def _row_to_briefing(row: tuple) -> Briefing:
@@ -70,6 +74,7 @@ def _row_to_briefing(row: tuple) -> Briefing:
         error=row[6],
         trigger=row[7],
         created_at=row[8],
+        facts_digest=row[9],
     )
 
 
@@ -92,6 +97,7 @@ class BriefingRepository:
         error: str | None = None,
         trigger: str = "api",
         user_id: int | None = None,
+        facts_digest: str | None = None,
     ) -> int:
         user_id = resolve_athlete_id(user_id)
         conn = self._get_connection()
@@ -100,8 +106,8 @@ class BriefingRepository:
                 """
                 INSERT INTO coach_briefings
                     (user_id, date, text, priority, source, status, error,
-                     trigger, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     trigger, created_at, facts_digest)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 """,
                 [
@@ -114,6 +120,7 @@ class BriefingRepository:
                     error,
                     trigger,
                     datetime.now(),
+                    facts_digest,
                 ],
             ).fetchone()
         finally:
@@ -148,7 +155,7 @@ class BriefingRepository:
             conn.close()
         if row is None:
             return None
-        return replace(_row_to_briefing(row), revised=bool(row[9]))
+        return replace(_row_to_briefing(row), revised=bool(row[10]))
 
     def list_recent(
         self, limit: int = 30, user_id: int | None = None
@@ -187,7 +194,9 @@ class BriefingRepository:
         still both succeed (no unique key), at worst one extra model request.
         """
         user_id = resolve_athlete_id(user_id)
-        now = datetime.now()
+        # Naive UTC, like the scheduler's markers: instances on other clocks
+        # (Docker in Paris, Vercel in UTC) share the database.
+        now = datetime.now(UTC).replace(tzinfo=None)
         try:
             with transaction() as conn:
                 held = conn.execute(

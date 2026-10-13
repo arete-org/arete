@@ -17,10 +17,11 @@ something concrete and numeric to show.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 from collections.abc import Callable
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
 from arete.dataio.settings import get_user_settings
@@ -256,17 +257,21 @@ def generate_briefing(
     trigger: str = "api",
     target_date: date | None = None,
     user_id: int | None = None,
+    keep: Briefing | None = None,
 ) -> Briefing:
     """Produce and persist one briefing. Never raises.
 
     The rule floor is computed first and always: it supplies the priority (the
     card's colour must not depend on a model) and it is the text we store when
     the agent is disabled or fails, or when there is nothing to coach on.
+    ``keep`` is the briefing a rewrite replaces: a failed rewrite records its
+    failure and keeps serving it rather than the rule text.
     """
     user_id = resolve_athlete_id(user_id)
     target_date = target_date or athlete_today()
     repo = BriefingRepository()
     rule_text, priority, facts = _rule_floor(target_date)
+    digest: str | None = None
 
     def store(text: str, source: str, status: str, error: str | None) -> Briefing:
         repo.create(
@@ -278,6 +283,7 @@ def generate_briefing(
             error=error,
             trigger=trigger,
             user_id=user_id,
+            facts_digest=digest,
         )
         stored = repo.get_for_day(target_date, user_id=user_id)
         if stored is not None:
@@ -299,6 +305,8 @@ def generate_briefing(
         logger.info("Coach briefing disabled; storing the rule tip")
         return store(rule_text, "rules", "ok", None)
 
+    written_from = briefing_facts(target_date, rule_text, facts)
+    digest = facts_digest(written_from)
     # No load, no form, no readiness and nothing planned for the day: a model
     # request would only restate the rule text. Facts that could not be read
     # (None) still go to the model, and so does a plan built before any sync.
@@ -307,7 +315,7 @@ def generate_briefing(
         return store(rule_text, "rules", "ok", None)
 
     try:
-        text = produce(briefing_facts(target_date, rule_text, facts))
+        text = produce(written_from)
     except Exception as exc:
         # A visible failure beats a silently empty card: the failed row is
         # kept for the audit view, and the floor is what gets served.
@@ -322,6 +330,8 @@ def generate_briefing(
             trigger=trigger,
             user_id=user_id,
         )
+        if keep is not None:
+            return keep
         return store(rule_text, "rules", "ok", None)
 
     logger.info("Briefing written by the agent (%d chars)", len(text))
@@ -381,7 +391,8 @@ def get_or_create_briefing(
     None while another request or instance produces it: the caller reports
     "pending" instead of holding a worker for the length of a model run.
     ``replacing`` is a stored briefing the scheduler rewrites (see
-    ``written_before_new_data``); any other briefing of the day is returned.
+    ``facts_changed``), kept if the rewrite fails; any other briefing of the
+    day is returned.
     A claim left by a stopped run is settled with the rule text and a failed
     row, never by a second model run.
     """
@@ -417,6 +428,7 @@ def get_or_create_briefing(
                 trigger=trigger,
                 target_date=target_date,
                 user_id=user_id,
+                keep=replacing,
             )
         finally:
             repo.release(claim_id)
@@ -424,29 +436,21 @@ def get_or_create_briefing(
         lock.release()
 
 
-def written_before_new_data(briefing: Briefing) -> bool:
-    """Whether data the briefing reads landed after it was written.
+def facts_digest(facts_text: str) -> str:
+    """Identifies the facts a briefing was written from (stored with it)."""
+    return hashlib.sha256(facts_text.encode()).hexdigest()
 
-    The day's Garmin health (first fetched: a re-fetch keeps ``fetched_at``),
-    an imported session or a plan decision. The scheduler rewrites such a
-    briefing after its sync; one written from the same data is kept, since a
-    second run would pay for the same text.
+
+def facts_changed(briefing: Briefing) -> bool:
+    """Whether the facts the briefing was written from have changed since.
+
+    Recomputed from the database, without a model request: the day's health,
+    sessions, plan and decisions as the briefing reads them. A briefing stored
+    without a digest (before it existed, or with the briefing disabled)
+    counts as changed.
     """
-    if briefing.created_at is None:
+    if briefing.facts_digest is None:
         return True
-    from arete.dataio.db import db_connection
-
-    written: datetime = briefing.created_at
-    with db_connection() as con:
-        row = con.execute(
-            """
-            SELECT EXISTS (SELECT 1 FROM app.visible_daily_metrics
-                           WHERE date = ? AND fetched_at > ?)
-                OR EXISTS (SELECT 1 FROM app.visible_actual_sessions
-                           WHERE created_at > ?)
-                OR EXISTS (SELECT 1 FROM app.visible_plan_decisions
-                           WHERE date = ? AND created_at > ?)
-            """,
-            [briefing.date, written, written, briefing.date, written],
-        ).fetchone()
-    return bool(row and row[0])
+    rule_text, _, facts = _rule_floor(briefing.date)
+    current = facts_digest(briefing_facts(briefing.date, rule_text, facts))
+    return current != briefing.facts_digest

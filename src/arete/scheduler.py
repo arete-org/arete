@@ -17,7 +17,7 @@ import json
 import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from time import monotonic
+from time import monotonic, sleep
 
 import duckdb
 
@@ -227,6 +227,12 @@ def announce_sync(feedback: list[dict], unannounced: int) -> str | None:
     return result.skipped_reason or f"{result.sent} sent"
 
 
+#: How long the daily sync waits for a briefing the dashboard is writing
+#: before comparing its facts; past it, that briefing stands as written.
+BRIEFING_WAIT_SECONDS = 60
+BRIEFING_POLL_SECONDS = 5
+
+
 def write_daily_briefing() -> str:
     """Have the coach write the day's briefing, after the sync that feeds it.
 
@@ -235,27 +241,36 @@ def write_daily_briefing() -> str:
     it has its own rule floor, so a failure here is already handled downstream.
     """
     from arete.coaching import get_or_create_briefing
-    from arete.services.briefing import briefing_enabled, written_before_new_data
+    from arete.services.briefing import briefing_enabled, facts_changed
     from arete.services.coaching_repository import BriefingRepository
 
     if not briefing_enabled():
         return "disabled"
-    # A briefing the dashboard asked for is rewritten only when this sync
-    # brought data it was written without (today's health, a session, a plan
-    # decision); the dashboard then says it was updated after the sync. One
-    # this job already wrote (a cron that fires twice) is kept.
-    existing = BriefingRepository().get_for_day(athlete_today())
+    repo = BriefingRepository()
+    deadline = monotonic() + BRIEFING_WAIT_SECONDS
     try:
-        if existing is not None and (
-            existing.trigger == "scheduler" or not written_before_new_data(existing)
-        ):
-            return existing.source
-        briefing = get_or_create_briefing(trigger="scheduler", replacing=existing)
+        while True:
+            # A briefing the dashboard asked for is rewritten only when its
+            # facts changed since (this sync's health, sessions, decisions);
+            # the dashboard then says it was updated after the sync. One this
+            # job already wrote (a cron that fires twice) is kept.
+            existing = repo.get_for_day(athlete_today())
+            if existing is not None and (
+                existing.trigger == "scheduler" or not facts_changed(existing)
+            ):
+                return existing.source
+            briefing = get_or_create_briefing(trigger="scheduler", replacing=existing)
+            if briefing is not None:
+                break
+            # The dashboard's request is writing it: compare once it is stored.
+            if monotonic() >= deadline:
+                return "in progress"
+            sleep(BRIEFING_POLL_SECONDS)
     except Exception as e:  # noqa: BLE001 - background job must not die
         logger.warning("Daily briefing failed: %s", e)
         return f"failed: {e}"
-    if briefing is None:
-        return "in progress"  # the dashboard's request is writing it
+    if existing is not None and briefing.id == existing.id:
+        return "rewrite failed; kept"  # the athlete already read this one
     logger.info("Daily briefing: %s", briefing.source)
     from arete.services.notifications import first_sentence, notify
 
