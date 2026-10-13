@@ -246,7 +246,7 @@ class TestGarminSyncClient:
     def test_sync_starts_from_the_newest_garmin_activity(self):
         repo = MagicMock()
         repo.last_garmin_import.return_value = (date(2026, 9, 1), None)
-        repo.list_actual_sessions.return_value = []
+        repo.has_garmin_activity.return_value = False
         client, _ = self._sync_with(repo, [])
         start, _end = client.client.activities.call_args.args
         assert start == date(2026, 9, 1)
@@ -256,7 +256,7 @@ class TestGarminSyncClient:
 
         repo = MagicMock()
         repo.last_garmin_import.return_value = (None, None)
-        repo.list_actual_sessions.return_value = []
+        repo.has_garmin_activity.return_value = False
         repo.find_overlapping_session.return_value = None
         repo.create_actual_session.return_value = 42
         repo.get_potential_matches.return_value = [
@@ -291,7 +291,7 @@ class TestGarminSyncClient:
 
         repo = MagicMock()
         repo.last_garmin_import.return_value = (None, None)
-        repo.list_actual_sessions.return_value = []
+        repo.has_garmin_activity.return_value = False
         repo.get_potential_matches.return_value = []
         strava_twin = ActualSession(id=9, source="strava", planned_session_id=3)
         repo.find_overlapping_session.side_effect = [None, strava_twin]
@@ -338,7 +338,7 @@ class TestGarminSyncClient:
         client = self._client()
         client.client.activities.side_effect = GarminAuthError("no tokens")
         client._repository = MagicMock()
-        client._repository.list_actual_sessions.return_value = []
+        client._repository.has_garmin_activity.return_value = False
         client._repository.last_garmin_import.return_value = (None, None)
         with patch("arete.garmin.sync.time.sleep"):
             result = client.sync_activities(start_date=date(2025, 12, 1))
@@ -601,6 +601,120 @@ def test_requested_200_activities_are_not_silently_capped_at_100():
         {"activityId": n, "startTimeLocal": "2026-10-01T08:00:00"} for n in range(210)
     ]
     assert len(client.get_activities(limit=200)) == 200
+
+
+def history_client(raw):
+    repo = MagicMock()
+    repo.last_garmin_import.return_value = (None, None)
+    repo.has_garmin_activity.return_value = True
+    client = GarminSyncClient(client=MagicMock(), repository=repo)
+    client.client.activity_page.return_value = raw
+    return client
+
+
+def history_activity(activity_id):
+    return {"activityId": activity_id, "startTimeLocal": "2010-01-01T08:00:00"}
+
+
+def test_history_continues_past_a_page_of_already_imported_activities():
+    client = history_client([history_activity(n) for n in range(40, 20, -1)])
+    with patch.object(client, "refresh_threshold") as threshold:
+        first = client.sync_activities(history_offset=0, max_activities=20)
+        assert first.success and first.activities_skipped == 20
+        assert first.next_history_offset == 20 and first.history_anchor == 21
+        client.client.activity_page.return_value = [
+            history_activity(21),
+            history_activity(20),
+        ]
+        last = client.sync_activities(
+            history_offset=20, history_anchor=21, max_activities=20
+        )
+    assert last.success and last.activities_skipped == 1
+    assert last.next_history_offset is None and last.history_anchor is None
+    client.client.activity_page.assert_called_with(19, 21)
+    client.client.activities.assert_not_called()
+    threshold.assert_called_once()
+    client.repository.create_actual_session.assert_not_called()
+
+
+@pytest.mark.parametrize("raw", [[], [history_activity(999)], [{"activityId": 21}, {}]])
+def test_history_stops_on_shifted_or_invalid_pages_before_writing(raw):
+    client = history_client(raw)
+    result = client.sync_activities(
+        history_offset=20, history_anchor=21, max_activities=20
+    )
+    assert not result.success and result.errors
+    client.repository.create_actual_session.assert_not_called()
+
+
+def test_history_bound_requires_an_empty_final_probe():
+    client = history_client([history_activity(21)])
+    result = client.sync_activities(
+        history_offset=20_000, history_anchor=21, max_activities=20
+    )
+    assert result.success and result.next_history_offset is None
+    client.client.activity_page.return_value.append(history_activity(20))
+    result = client.sync_activities(
+        history_offset=20_000, history_anchor=21, max_activities=20
+    )
+    assert not result.success and "20 000" in result.errors[0]
+    client.repository.create_actual_session.assert_not_called()
+
+
+@pytest.mark.parametrize("path", ["/activities", "/activities/stream"])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"history_offset": 0},
+        {"history_offset": 20, "max_activities": 20},
+        {"history_offset": 0, "max_activities": 20, "history_anchor": 5},
+        {"history_offset": 0, "max_activities": 20, "start_date": "2010-01-01"},
+        {"history_offset": 20_001, "max_activities": 20, "history_anchor": 5},
+        {"history_anchor": 5},
+    ],
+)
+def test_invalid_history_requests_never_start_work(router_client, path, payload):
+    from arete.api.garmin_sync import router
+
+    with patch.object(GarminSyncClient, "is_authenticated") as auth:
+        response = router_client(router).post(f"/garmin/sync{path}", json=payload)
+    assert response.status_code == 422
+    auth.assert_not_called()
+
+
+def test_history_stream_preserves_the_continuation(router_client):
+    import json
+
+    from arete.api.garmin_sync import router
+
+    with (
+        patch.object(GarminSyncClient, "is_authenticated", return_value=True),
+        patch.object(
+            GarminSyncClient,
+            "iter_sync_activities",
+            return_value=(
+                event
+                for event in [
+                    SyncResult(
+                        success=True,
+                        activities_skipped=20,
+                        next_history_offset=20,
+                        history_anchor=123,
+                    ),
+                ]
+            ),
+        ) as work,
+        patch("arete.services.session_conditions.enrich_sessions"),
+    ):
+        response = router_client(router).post(
+            "/garmin/sync/activities/stream",
+            json={"history_offset": 0, "max_activities": 20},
+        )
+    terminal = json.loads(
+        response.text.strip().split("\n\n")[-1].removeprefix("data: ")
+    )
+    assert terminal["next_history_offset"] == 20 and terminal["history_anchor"] == 123
+    assert work.call_args.kwargs["history_offset"] == 0
 
 
 def test_sync_stream_protocol_and_enrichment(router_client):

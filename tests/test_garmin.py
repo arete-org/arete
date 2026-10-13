@@ -230,6 +230,40 @@ def repo():
 class TestGarminRepository:
     """Tests for GarminRepository."""
 
+    def test_garmin_deduplication_covers_old_history_and_respects_ownership(self, repo):
+        from arete.garmin.sync import GarminSyncClient
+        from arete.services.athlete_scope import athlete_scope
+
+        conn = repo._get_connection()
+        try:
+            conn.execute(
+                "INSERT INTO app.athletes (id) VALUES (9876), (9877) ON CONFLICT DO NOTHING"
+            )
+            conn.execute(
+                "INSERT INTO app.actual_sessions (user_id, date, duration_sec, source, garmin_activity_id) "
+                "SELECT 9876, DATE '2010-01-01' + CAST(i AS INTEGER), 600, 'garmin_connect', CAST(900000 + i AS VARCHAR) "
+                "FROM range(1001) AS t(i)"
+            )
+            conn.execute(
+                "INSERT INTO app.actual_sessions (user_id, date, duration_sec, source, garmin_activity_id) "
+                "VALUES (9876, '2009-01-01', 600, 'strava', '1')"
+            )
+            with athlete_scope(9876):
+                assert repo.has_garmin_activity(900000)
+                assert GarminSyncClient(repository=repo)._is_already_synced(900000)
+                assert not repo.has_garmin_activity(1)
+            with athlete_scope(9877):
+                assert not repo.has_garmin_activity(900000)
+            conn.execute(
+                "UPDATE app.actual_sessions SET deleted_at = now() WHERE user_id = 9876"
+            )
+            with athlete_scope(9876):
+                assert not repo.has_garmin_activity(900000)
+        finally:
+            conn.execute("DELETE FROM app.actual_sessions WHERE user_id = 9876")
+            conn.execute("DELETE FROM app.athletes WHERE id IN (9876, 9877)")
+            conn.close()
+
     def test_create_and_get_planned_session(self, repo):
         """Test creating and retrieving a planned session."""
         session = PlannedSession(

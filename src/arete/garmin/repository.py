@@ -645,6 +645,21 @@ class GarminRepository:
             conn.close()
         return self.get_actual_session(int(row[0])) if row else None
 
+    def has_garmin_activity(self, activity_id: int) -> bool:
+        """Check the athlete's entire archive without loading their sessions."""
+        conn = self._get_connection()
+        try:
+            return (
+                conn.execute(
+                    "SELECT 1 FROM visible_actual_sessions "
+                    "WHERE source != 'strava' AND garmin_activity_id = ? LIMIT 1",
+                    [str(activity_id)],
+                ).fetchone()
+                is not None
+            )
+        finally:
+            conn.close()
+
     def known_strava_ids(self) -> set[str]:
         """Strava activity IDs already imported (own rows or merged into Garmin rows)."""
         conn = self._get_connection()

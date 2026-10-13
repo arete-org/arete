@@ -194,6 +194,15 @@ class GarminClient:
             self.connect().get_activities_by_date(start.isoformat(), end.isoformat()),
         )
 
+    def activity_page(self, offset: int, limit: int) -> list[dict[str, Any]]:
+        """Fetch one history page; never let the SDK paginate the whole archive."""
+        raw = self.connect().get_activities(start=offset, limit=limit)
+        if not isinstance(raw, list) or len(raw) > limit:
+            raise ValueError("Invalid Garmin activity page")
+        if not all(isinstance(item, dict) for item in raw):
+            raise ValueError("Invalid Garmin activity in page")
+        return raw
+
     def download_fit(self, activity_id: int | str) -> bytes | None:
         """Original FIT bytes for an activity (Garmin ships them zipped)."""
         raw = bytes(

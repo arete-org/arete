@@ -369,6 +369,24 @@ for resource bounds, frontend worker assets, unsupported conversions and accepta
 
 ## Session page, kept streams and sync feedback
 
+The System page's **Tout l’historique** Garmin option starts one browser-owned
+import across sequential SSE requests of 20 activities. `garmin/client.py` fetches
+one SDK page per request; `garmin/sync.py` reuses the usual FIT, matching and save
+workflow. Each continuation re-reads the preceding activity ID to detect shifting
+Garmin offsets and stops explicitly if the archive changes. Already imported IDs
+are checked against the athlete's entire visible archive, excluding Strava IDs;
+the check is no longer limited to the latest 1,000 sessions.
+
+`frontend/src/lib/garminSync.ts` owns pagination and aggregates counts. The UI
+shows an indeterminate progress bar because the total is unknown until the final
+page. Bounds are 20,000 activities, 1,001 requests (including a possible empty
+final probe), four hours overall and the existing 20-minute per-request timeout.
+Every page is paced by the existing three-second Garmin delay, even when its
+activities are all skipped. Limits, failed streams and cancellation stop the
+import without replay; committed sessions remain. Leaving the page aborts the
+browser operation. A manual restart scans from the beginning and skips known
+activities. This is not a detached job and requires keeping the page open.
+
 Migration 31 keeps each FIT activity's per-second streams in
 `app.activity_streams` (one row per session, one LIST column per channel,
 `garmin/streams.py`) and the coach's word on a cardio session in

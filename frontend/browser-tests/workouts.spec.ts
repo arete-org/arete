@@ -179,7 +179,9 @@ test('a run interrupted by closing the tab can be reconciled from its durable wo
   let checks = 0;
   await page.route('**/api/garmin/exports/42/reconcile', async route => {
     checks++;
-    view.export = state('ready');
+    // The reconciled snapshot must follow the interrupted operation regardless
+    // of the runner's date: the cache correctly rejects older export states.
+    view.export = { ...state('ready'), updated_at: '2027-01-01T00:03:00' };
     await route.fulfill({ json: view.export });
   });
   await page.goto('/planning?date=2027-01-12');
@@ -189,7 +191,9 @@ test('a run interrupted by closing the tab can be reconciled from its durable wo
   await expect(page.getByLabel('Sélectionner Fractionné · 6 × 400 m')).toBeDisabled();
   await page.getByRole('button', { name: 'Ouvrir la séance', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Vérifier Garmin', exact: true }).click();
+  await expect(page.getByRole('dialog').getByText('Vérifiée · prête à envoyer', { exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(card.getByText('Vérifiée · prête à envoyer', { exact: true })).toBeVisible();
   expect(checks).toBe(1); expect(counts.exports).toBe(0);
 });

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { THEMES } from '../src/lib/theme';
 
 test('connect Garmin with MFA, sync and disconnect from Connections', async ({ page }) => {
   let connected = false;
@@ -112,4 +113,76 @@ test('one live progress bar follows Garmin work in System, including partial fai
   await expect(page.getByText('Un fichier FIT indisponible')).toBeVisible();
   await expect(launch).toBeEnabled();
   expect(await page.evaluate(() => (window as typeof window & { syncRequests: number }).syncRequests)).toBe(1);
+});
+
+test('complete history runs multiple batches from one click with mobile progress', async ({ page }) => {
+  const requests: Record<string, unknown>[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
+    if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { available: false, opted_in: false } });
+    if (path.endsWith('/garmin/sync/status')) return route.fulfill({ json: { garmin_authenticated: true, user_email: 'EDMOND', activities_synced: 1001 } });
+    if (path.endsWith('/garmin/health/status')) return route.fulfill({ json: { days_stored: 10, last_date: '2026-10-12' } });
+    if (path.endsWith('/health')) return route.fulfill({ json: { status: 'ok', database: 'connected' } });
+    if (path.includes('/settings')) return route.fulfill({ json: { theme: 'odyssey' } });
+    if (path.endsWith('/garmin/sync/activities/stream')) {
+      const request = route.request().postDataJSON();
+      requests.push(request);
+      const first = requests.length === 1;
+      if (!first) await gate;
+      const events = [
+        { type: 'progress', stage: 'processing', completed: first ? 20 : 1, total: first ? 20 : 1, activity_name: null },
+        { type: 'done', success: true, activities_synced: first ? 0 : 1, activities_merged: 0, activities_matched: 0, activities_skipped: first ? 20 : 0, errors: [], last_activity_date: null, next_history_offset: first ? 20 : null, history_anchor: first ? 123 : null },
+      ];
+      return route.fulfill({ contentType: 'text/event-stream', body: events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/settings?tab=system');
+  await page.getByLabel('Période').selectOption('all');
+  await expect(page.getByLabel('Activités maximum')).toHaveCount(0);
+  const launch = page.getByRole('button', { name: 'SYNCHRONISER LES ACTIVITÉS' });
+  await expect(launch).toHaveAttribute('data-strong', 'true');
+  await page.getByRole('button', { name: 'SYNCHRONISER LES ACTIVITÉS' }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  await expect(page.getByText('20 activités traitées · historique complet')).toBeVisible();
+  await expect(page.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
+  await expect(page.getByLabel('Période')).toBeDisabled();
+  await expect(page.getByLabel('Télécharger les fichiers FIT')).toBeDisabled();
+  const form = page.locator('form').filter({ has: page.getByLabel('Période') });
+  const progressPanel = page.getByRole('progressbar').locator('..');
+  // The same controls and nested surfaces must follow every theme's tokens.
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 1100 });
+    for (const theme of THEMES) {
+      await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme.value);
+      await expect(page.getByLabel('Période')).toHaveCSS('font-family', /Inter/);
+      await expect(page.getByLabel('Période')).toHaveCSS('border-radius', '9px');
+      await expect(form).toHaveCSS('border-radius', '9px');
+      await expect(progressPanel).toHaveCSS('border-radius', '9px');
+      const surface = await form.evaluate(el => ({ background: getComputedStyle(el).backgroundColor, border: getComputedStyle(el).borderColor }));
+      expect(surface.background).not.toContain('rgba');
+      await expect(progressPanel).toHaveCSS('background-color', surface.background);
+      await expect(progressPanel).toHaveCSS('border-color', surface.border);
+      await expect(page.getByLabel('Période')).toHaveCSS('border-color', surface.border);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      if (theme.value === 'pierre' || theme.value === 'darker') {
+        await page.getByText('SYNCHRONISATION GARMIN', { exact: true }).locator('..').screenshot({ path: `../.context/garmin-history-${theme.value}-${width}.png` });
+      }
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 1100 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.getByText('SYNCHRONISATION GARMIN', { exact: true }).locator('..').screenshot({ path: '../.context/garmin-full-history-mobile.png' });
+  release();
+  await expect(page.getByText('1 importées · 0 fusionnées · 20 déjà présentes')).toBeVisible();
+  await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
+  await expect(page.getByRole('button', { name: 'SYNCHRONISER LES ACTIVITÉS' })).toBeEnabled();
+  expect(requests).toEqual([
+    { download_fit: true, max_activities: 20, history_offset: 0 },
+    { download_fit: true, max_activities: 20, history_offset: 20, history_anchor: 123 },
+  ]);
 });

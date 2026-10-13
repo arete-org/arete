@@ -380,9 +380,17 @@ test('classic coach: one memory receipt, inline files, drafts and reload', async
     expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await page.screenshot({ path: '../.context/chiron-inline-local-mobile.png' });
     await expect.poll(() => page.evaluate(() => Object.values(localStorage).some(v => v.includes('Mon brouillon')))).toBe(true);
+    // Hold bootstrap so reload coverage cannot depend on a fast local render.
+    let releaseBootstrap!: () => void;
+    const bootstrap = new Promise<void>(resolve => { releaseBootstrap = resolve; });
+    await page.route('**/api/auth/config', async route => {
+      await bootstrap;
+      await route.fulfill({ json: { enabled: false } });
+    });
     await page.reload();
     const toggle = page.getByRole('button', { name: 'Ouvrir le coach' }).filter({ visible: true });
-    if (await toggle.count()) await toggle.click();
+    releaseBootstrap();
+    await toggle.click();
     await expect(receipt).toHaveCount(1);
     await receipt.click();
     const saved = panel.locator('summary').filter({ hasText: fact.text });

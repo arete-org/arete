@@ -263,6 +263,8 @@ export interface SyncResult {
   activities_skipped: number;
   errors: string[];
   last_activity_date: string | null;
+  next_history_offset?: number | null;
+  history_anchor?: number | null;
 }
 
 // ========================= //
