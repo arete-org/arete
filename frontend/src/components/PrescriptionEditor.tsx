@@ -1,10 +1,9 @@
 import { inputClasses } from '@/components/ui/Input';
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { documentRequest, type Prescription, type WorkoutStep, type Target } from '@/lib/documents';
-import { formatElapsed } from '@/lib/activity';
-import { formatPace, parsePace } from '@/lib/utils';
-import { bareMinutes, endsWithRecovery, parseStepDuration, SKIPPED_LAST_RECOVERY, stepAmount } from '@/lib/workouts';
+import { endsWithRecovery, SKIPPED_LAST_RECOVERY, stepAmount } from '@/lib/workouts';
+import { TimeInput } from './TimeInput';
 
 const inputClass = inputClasses('cyan', 'text-sm');
 const kinds = { warmup: 'Échauffement', effort: 'Effort', recovery: 'Récupération', cooldown: 'Retour au calme', rest: 'Repos', repeat: 'Répéter un bloc' };
@@ -12,24 +11,6 @@ const units = { seconds: 'Durée', meters: 'Mètres', reps: 'Répétitions', lap
 const targets = { pace_sec_km: 'Allure (min/km)', heart_rate_bpm: 'FC (bpm)', power_w: 'Puissance (W)', cadence_rpm: 'Cadence (/min)', hr_zone: 'Zone FC (1 à 5)' };
 const newStep = (): WorkoutStep => ({ kind: 'effort', duration_kind: 'seconds', value: 60, steps: [] });
 const newRecovery = (): WorkoutStep => ({ ...newStep(), kind: 'recovery' });
-const paceText = (seconds: number) => formatPace(seconds, "'");
-
-/** Typed as the athlete writes it; the step only takes a value that reads in full (null otherwise). */
-function NotationInput({ label, value, format, parse, error, onChange }: { label: string; value: number | null; format: (value: number) => string; parse: (text: string) => number | null; error: string; onChange: (value: number | null) => void }) {
-  const [draft, setDraft] = useState<{ text: string; value: number | null } | null>(null);
-  // A step moved, or a value changed elsewhere, shows the stored value again.
-  const text = draft && draft.value === value ? draft.text : value === null ? '' : format(value);
-  const invalid = parse(text) === null;
-  const errorId = useId();
-  return <div className="text-xs"><label>{label}
-    <input className={inputClass} value={text} aria-invalid={invalid} aria-describedby={invalid ? errorId : undefined} onChange={e => {
-      const parsed = parse(e.target.value);
-      setDraft({ text: e.target.value, value: parsed });
-      onChange(parsed);
-    }} onBlur={() => { if (!invalid && value !== null) setDraft(null); }} /></label>
-    {invalid && <span id={errorId} role="alert" className="mt-1 block text-danger-red">{error}</span>}
-  </div>;
-}
 
 function TargetEditor({ value, onChange, label }: { value?: Target | null; onChange: (value: Target | null) => void; label: string }) {
   return <fieldset className="space-y-1"><legend className="text-xs">{label}</legend>
@@ -37,12 +18,13 @@ function TargetEditor({ value, onChange, label }: { value?: Target | null; onCha
       <option value="">Sans cible</option>{Object.entries(targets).map(([id, text]) => <option key={id} value={id}>{text}</option>)}
     </select>
     {value && <div className="grid grid-cols-2 gap-2">
-      {value.kind === 'pace_sec_km' ? (['low', 'high'] as const).map(bound => <NotationInput key={bound} label={bound === 'low' ? 'Minimum' : 'Maximum'} value={value[bound]} format={paceText} parse={parsePace} error="Allure attendue en m'ss (3'30)." onChange={pace => onChange({ ...value, [bound]: pace })} />) : <>
+      {value.kind === 'pace_sec_km' ? (['low', 'high'] as const).map(bound => <TimeInput key={bound} mask="pace" label={bound === 'low' ? 'Minimum' : 'Maximum'} accessibleLabel={`Allure ${bound === 'low' ? 'minimum' : 'maximum'} (min'ss par km)`} value={value[bound]} onChange={pace => onChange({ ...value, [bound]: pace })} />) : <>
         <label className="text-xs">Minimum<input className={inputClass} type="number" min="1" step="any" value={value.low ?? ''} onChange={e => onChange({ ...value, low: e.target.value ? Number(e.target.value) : null })} /></label>
         <label className="text-xs">Maximum<input className={inputClass} type="number" min="1" step="any" value={value.high ?? ''} onChange={e => onChange({ ...value, high: e.target.value ? Number(e.target.value) : null })} /></label>
       </>}
     </div>}
     {value && value.kind !== 'pace_sec_km' && (value.low === null || value.high === null) && <p role="alert" className="text-xs text-danger-red">Indique les deux bornes de la cible.</p>}
+    {value && value.low !== null && value.high !== null && value.low > value.high && <p role="alert" className="text-xs text-danger-red">Le minimum ne peut pas dépasser le maximum.</p>}
   </fieldset>;
 }
 
@@ -53,7 +35,6 @@ function StepsEditor({ steps, sport, onChange, depth = 0, exerciseList }: { step
     onChange(next);
   };
   const patch = (index: number, change: Partial<WorkoutStep>) => onChange(steps.map((s, i) => i === index ? { ...s, ...change } : s));
-  const minutes = bareMinutes(sport);
   return <div className="space-y-3">{steps.map((step, index) => <details key={index} className="rounded border border-text-muted/20 p-3 space-y-3">
     <summary className="cursor-pointer min-h-11 text-sm font-medium flex items-center">{index + 1}. {kinds[step.kind]} · {step.kind === 'repeat' ? `${step.repeat} fois${step.skip_last_recovery ? `, ${SKIPPED_LAST_RECOVERY}` : ''}` : stepAmount(step)}</summary>
     <div className="flex flex-wrap gap-3 text-xs"><button type="button" disabled={index === 0} aria-label={`Monter l’étape ${index + 1}`} onClick={() => move(index, -1)}>↑ Monter</button><button type="button" disabled={index === steps.length - 1} aria-label={`Descendre l’étape ${index + 1}`} onClick={() => move(index, 1)}>↓ Descendre</button></div>
@@ -70,7 +51,7 @@ function StepsEditor({ steps, sport, onChange, depth = 0, exerciseList }: { step
     </> : <>
       <div className="grid grid-cols-2 gap-2">
         <label className="text-xs">Fin de l’étape<select className={inputClass} value={step.duration_kind} onChange={e => patch(index, { duration_kind: e.target.value as WorkoutStep['duration_kind'], value: e.target.value === 'lap' ? null : step.value ?? 1 })}>{Object.entries(units).map(([id, text]) => <option key={id} value={id}>{text}</option>)}</select></label>
-        {step.duration_kind === 'seconds' ? <NotationInput label={minutes ? 'Durée (mm:ss)' : 'Durée (s ou mm:ss)'} value={step.value ?? null} format={formatElapsed} parse={text => parseStepDuration(text, minutes)} error={minutes ? 'Durée attendue en mm:ss (20:00) ou en minutes (20).' : 'Durée attendue en secondes (90) ou en mm:ss (1:30).'} onChange={value => patch(index, { value })} />
+        {step.duration_kind === 'seconds' ? <TimeInput mask="duration" label="Durée (h:mm:ss)" value={step.value ?? null} onChange={value => patch(index, { value })} />
           : step.duration_kind !== 'lap' && <label className="text-xs">Valeur<input className={inputClass} type="number" min="1" step="any" value={step.value ?? ''} onChange={e => patch(index, { value: e.target.value ? Number(e.target.value) : null })} /></label>}
       </div>
       {sport === 'strength' && <div className="space-y-2">

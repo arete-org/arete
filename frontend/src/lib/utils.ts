@@ -50,14 +50,6 @@ export function formatPace(secondsPerKm: number, separator = ":"): string {
   return `${Math.floor(total / 60)}${separator}${(total % 60).toString().padStart(2, "0")}`;
 }
 
-/** "3'30", "3’30" or "3:30" (per km) → 210 seconds per km. */
-export function parsePace(text: string): number | null {
-  const match = text.trim().match(/^(\d{1,2})\s*['’′:]\s*(\d{2})(?:\s*(?:min)?\/\s*km)?$/i);
-  if (!match || Number(match[2]) >= 60) return null;
-  const seconds = Number(match[1]) * 60 + Number(match[2]);
-  return seconds > 0 ? seconds : null;
-}
-
 /** 'API Error 422: {"detail":"Enregistrement vide"}' -> 'Enregistrement vide' */
 export function readableError(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);

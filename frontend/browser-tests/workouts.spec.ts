@@ -173,6 +173,59 @@ test('Planning edits a description-read session starting from the steps read', a
   expect(counts.model).toBe(0);
 });
 
+test('step durations and paces are typed as digits that format themselves on a phone', async ({ page }) => {
+  const steps = [
+    { kind: 'warmup' as const, duration_kind: 'seconds' as const, value: 1200, steps: [] },
+    { kind: 'repeat' as const, duration_kind: 'lap' as const, repeat: 6, steps: [
+      { kind: 'effort' as const, duration_kind: 'meters' as const, value: 400, target: { kind: 'pace_sec_km' as const, low: 210, high: 216 }, steps: [] },
+    ] },
+  ];
+  const view: WorkoutView = { session: { ...structuredClone(session), prescription: { version: 1, steps } }, export: null };
+  const counts = await mockApi(page, () => view);
+  let saved: { steps: typeof steps } | null = null;
+  await page.route(url => url.pathname.endsWith('/api/garmin/planned/42'), async route => {
+    if (route.request().method() === 'PUT') saved = route.request().postDataJSON().prescription;
+    await route.fallback();
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto('/planning?date=2027-01-12');
+  await page.getByRole('button', { name: 'Ouvrir la séance Fractionné · 6 × 400 m', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Modifier', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('summary', { hasText: '1. Échauffement' }).click();
+  const duration = dialog.getByLabel('Durée (h:mm:ss)', { exact: true }).first();
+  await expect(duration).toHaveValue('20:00');
+  await expect(duration).toHaveAttribute('inputmode', 'numeric');
+  await expect(dialog.getByText('Tape 2000 pour 20:00', { exact: true }).first()).toBeVisible();
+  // A tap selects the value: the first digit restarts it, like a timer.
+  await duration.click();
+  await duration.pressSequentially('90');
+  await expect(duration).toHaveValue('0:90');
+  await duration.blur();
+  await expect(duration).toHaveValue('1:30');
+  await duration.click();
+  await duration.pressSequentially('130000');
+  await expect(duration).toHaveValue('13:00:00');
+  // The caret stays at the end: Backspace removes the last digit wherever the athlete moved it.
+  await duration.press('Home');
+  await duration.press('Backspace');
+  await expect(duration).toHaveValue('1:30:00');
+  await dialog.locator('summary', { hasText: '2. Répéter un bloc' }).click();
+  await dialog.locator('summary', { hasText: '1. Effort' }).click();
+  const pace = dialog.getByLabel("Allure maximum (min'ss par km)", { exact: true });
+  await expect(pace).toHaveValue("3'36");
+  await expect(pace).toHaveAttribute('inputmode', 'numeric');
+  await pace.click();
+  await pace.pressSequentially('375');
+  await expect(pace).toHaveValue("3'75");
+  await pace.blur();
+  await expect(pace).toHaveValue("4'15");
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect.poll(() => counts.edits).toBe(1);
+  expect(saved!.steps[0].value).toBe(5400);
+  expect(saved!.steps[1].steps[0].target).toEqual({ kind: 'pace_sec_km', low: 210, high: 255 });
+});
+
 test('uncertain export survives reload and is verified without replaying the write', async ({ page }) => {
   const view: WorkoutView = { session: structuredClone(session), export: null };
   const counts = await mockApi(page, () => view);

@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { formatElapsed } from './activity';
-import { documentRequest, type GarminExport, type Prescription, type WorkoutStep } from './documents';
-import { parseRaceTime } from './race';
+import { documentRequest, type GarminExport, type Prescription, type Target, type WorkoutStep } from './documents';
+import { plausibleTime } from './timeMask';
 
 export interface WorkoutSession {
   id: number; revision: number; date: string; sport: string; description: string | null;
@@ -143,24 +143,17 @@ export function endsWithRecovery(step: WorkoutStep): boolean {
   return step.kind === 'repeat' && last?.kind === 'recovery' && last.duration_kind !== 'lap';
 }
 
-/** Sports whose bare duration is minutes ("20" → 20:00); strength and swimming count seconds. */
-export const bareMinutes = (sport: string) => sport !== 'strength' && sport !== 'swimming';
+export const INCOMPLETE_STEPS = 'Étapes incomplètes ou invalides : vérifie chaque durée, distance et borne de cible.';
 
-/** Seconds from "mm:ss" or "h:mm:ss", or a bare number of minutes (or seconds); null otherwise. */
-export function parseStepDuration(text: string, minutes: boolean): number | null {
-  const bare = text.trim().match(/^\d+$/);
-  if (!bare) return parseRaceTime(text);
-  const seconds = Number(bare[0]) * (minutes ? 60 : 1);
-  return seconds > 0 ? seconds : null;
-}
+/** Both bounds set, in order (services/prescriptions.Target), and a pace within plausible bounds. */
+const targetReady = (target: Target) => target.low != null && target.high != null && target.low <= target.high
+  && (target.kind !== 'pace_sec_km' || (plausibleTime(target.low, 'pace') && plausibleTime(target.high, 'pace')));
 
-export const INCOMPLETE_STEPS = 'Étapes incomplètes : renseigne chaque durée, distance et borne de cible.';
-
-/** Whether every step has its value and every target both bounds: nothing partial is saved. */
+/** Whether every step has a plausible value and every target valid bounds: nothing partial or rejected is saved. */
 export function prescriptionReady(prescription: Prescription): boolean {
   const ready = (step: WorkoutStep): boolean => step.kind === 'repeat'
     ? step.steps.every(ready)
-    : (step.duration_kind === 'lap' || step.value != null)
-      && [step.target, step.secondary_target].every(t => !t || (t.low != null && t.high != null));
+    : (step.duration_kind === 'lap' || (step.value != null && (step.duration_kind !== 'seconds' || plausibleTime(step.value, 'duration'))))
+      && [step.target, step.secondary_target].every(t => !t || targetReady(t));
   return prescription.steps.every(ready);
 }
