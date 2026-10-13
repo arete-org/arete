@@ -101,7 +101,9 @@ def test_the_briefing_and_the_agent_share_the_paris_day(frozen):
             "arete.services.coaching_repository.BriefingRepository.get_for_day",
             return_value=None,
         ) as existing,
-        patch("arete.coaching.generate_briefing", side_effect=RuntimeError("stop")),
+        patch(
+            "arete.coaching.get_or_create_briefing", side_effect=RuntimeError("stop")
+        ),
     ):
         scheduler.write_daily_briefing()
     existing.assert_called_once_with(PARIS_DAY)
