@@ -36,16 +36,22 @@ if TYPE_CHECKING:
     import duckdb
 
     from arete.garmin.client import GarminClient
-    from arete.services.garmin_export import Exchange
+    from arete.services.garmin_export import Exchange, Prepared
 
 logger = logging.getLogger(__name__)
 
 #: Bound on what the daily run sends to Garmin in one go.
 MAX_DAILY_PUSHES = 3
-#: One run's requests to Garmin, shared by its sessions (12 at most each).
-MAX_DAILY_REQUESTS = 60
-#: Time a session's exchange needs before the run's shared deadline (120 s).
-MIN_SECONDS_PER_SESSION = 30
+#: Time a session's exchange needs left before it starts: a few reads and two
+#: writes, each given its whole 10 s timeout (garmin_export.REQUEST_TIMEOUT).
+SESSION_SECONDS = 20
+#: An answer (apply or revert) waits for Garmin at most this long in all.
+ANSWER_SECONDS = 25
+#: What one session of an answer may need: a same-day re-export to a watch
+#: with a legacy copy to adopt (9 requests) or a withdrawal (8).
+ANSWER_SESSION_REQUESTS = 9
+#: A low day's answer: the eased session and the rest, at their worst.
+ANSWER_REQUESTS = 2 * ANSWER_SESSION_REQUESTS
 
 #: The planning fields a decision may overwrite, saved before it does.
 _PLAN_FIELDS = (
@@ -173,9 +179,10 @@ def revert(decision_id: int) -> PlanDecision:
     """Put the planned session back as it was before the decision.
 
     Raises ``LookupError`` for an unknown id and ``NothingToRevert`` for a
-    keep or a decision already reverted. A copy already scheduled on Garmin
-    is marked unsent: its ids stay, so the next push replaces it instead of
-    leaving it on the calendar beside the original.
+    keep or a decision already reverted. A copy on Garmin keeps its ids and is
+    marked stale; with the automatic push on, the original replaces it in place
+    (or comes back after a reverted rest), once, after the commit. Otherwise,
+    or when that attempt fails, the card offers to send it again.
     """
     decisions = PlanDecisionRepository()
     decision = decisions.get(decision_id)
@@ -197,6 +204,7 @@ def revert(decision_id: int) -> PlanDecision:
         garmin_pushed_at=None,
     )
     decisions.mark(decision.id, "reverted_at")
+    follow_on_garmin([decision], reverted=True)
     reverted = decisions.get(decision.id)
     assert reverted is not None
     return reverted
@@ -205,6 +213,10 @@ def revert(decision_id: int) -> PlanDecision:
 # --------------------------------------------------------------------------- #
 # The day's sessions on Garmin's calendar, through the export circuit
 # --------------------------------------------------------------------------- #
+def _pushing() -> bool:
+    return bool((get_user_settings() or {}).get("push_to_garmin_enabled", False))
+
+
 def push_today(client: GarminClient, target_date: date | None = None) -> str:
     """The daily run's push: the day's sessions through the export circuit.
 
@@ -216,7 +228,7 @@ def push_today(client: GarminClient, target_date: date | None = None) -> str:
     """
     from arete.services import garmin_export
 
-    if not bool((get_user_settings() or {}).get("push_to_garmin_enabled", False)):
+    if not _pushing():
         return "disabled"
     day = target_date or athlete_today()
     try:
@@ -227,7 +239,11 @@ def push_today(client: GarminClient, target_date: date | None = None) -> str:
         return f"failed: {e}"
     if not sessions:
         return "0 sent, 0 skipped, 0 failed"
-    exchange = garmin_export.Exchange(client, max_calls=MAX_DAILY_REQUESTS)
+    # The Exchange caps its own deadline at MAX_EXPORT_SECONDS.
+    exchange = garmin_export.Exchange(
+        client, max_calls=garmin_export.MAX_BATCH_REQUESTS
+    )
+    room = garmin_export.MAX_EXPORT_REQUESTS
     sent, skipped, failed = 0, 0, 0
     for session in sessions:
         if session.id is None:
@@ -241,64 +257,81 @@ def push_today(client: GarminClient, target_date: date | None = None) -> str:
         try:
             if session.status == SessionStatus.SKIPPED:
                 # Rest: the watch must not offer it.
-                if garmin_export.on_garmin(session.id) and _affords(exchange):
+                if garmin_export.on_garmin(session.id) and _affords(exchange, room):
                     _withdraw(exchange, session.id)
                 continue
-            reason = _skip_reason(session.id)
+            prepared = garmin_export.prepare(session.id)
         except Exception:  # noqa: BLE001 - one unreadable session, not the run
             logger.warning("Garmin push check failed for %s", session.id, exc_info=True)
             failed += 1
             continue
+        reason = _skip_reason(prepared)
         if reason is not None:
             logger.info("Garmin push of %s skipped: %s", session.id, reason)
             skipped += 1
             continue
-        if sent + failed >= MAX_DAILY_PUSHES or not _affords(exchange):
+        if sent + failed >= MAX_DAILY_PUSHES or not _affords(exchange, room):
             logger.info("Garmin push of %s skipped: run budget spent", session.id)
             skipped += 1
             continue
-        try:
-            result = garmin_export.export(session.id, exchange=exchange)
-        except Exception:  # noqa: BLE001 - refused before any write
-            logger.warning("Garmin push failed for %s", session.id, exc_info=True)
-            failed += 1
-            continue
-        if result["state"] in {"scheduled", "transfer_requested"}:
+        if _send(exchange, session.id, prepared, why="push"):
             sent += 1
         else:
-            logger.warning(
-                "Garmin push of %s ended %s: %s",
-                session.id,
-                result["state"],
-                result["error"],
-            )
             failed += 1
     return f"{sent} sent, {skipped} skipped, {failed} failed"
 
 
-def _skip_reason(session_id: int) -> str | None:
-    """Why the daily run leaves this session as it is, from the export view."""
+def _skip_reason(prepared: Prepared) -> str | None:
+    """Why the daily run leaves this session as it is, from its export view."""
     from arete.services import garmin_export
 
-    view = garmin_export.inspect_session(session_id, include_steps=False)
+    view, _ = prepared
     state = view["export"]
     if not view["session"]["exportable"]:
         return view["session"]["reason"] or "not exportable"
     if state and state["state"] in {"working", "uncertain", "conflict"}:
         return f"export {state['state']}"
-    if garmin_export.sent_as_is(session_id, state):
+    if garmin_export.sent_as_is(prepared):
         return "already on Garmin"
     return None
 
 
-def _affords(exchange: Exchange) -> bool:
-    """Room left for one more session's full exchange in the shared budget."""
-    from arete.services.garmin_export import MAX_EXPORT_REQUESTS
-
+def _affords(exchange: Exchange, requests: int) -> bool:
+    """Room left in the shared budget for one more session's whole exchange."""
     return (
-        exchange.calls + MAX_EXPORT_REQUESTS <= exchange.max_calls
-        and exchange.deadline - monotonic() >= MIN_SECONDS_PER_SESSION
+        exchange.calls + requests <= exchange.max_calls
+        and exchange.deadline - monotonic() >= SESSION_SECONDS
     )
+
+
+def _send(
+    exchange: Exchange, session_id: int, prepared: Prepared | None = None, *, why: str
+) -> bool:
+    """One export attempt; whether Garmin confirmed it. Never raises.
+
+    A copy sent to a watch (``transfer_requested``) goes back to that watch.
+    """
+    from arete.services import garmin_export
+
+    try:
+        prepared = prepared or garmin_export.prepare(session_id)
+        device_id = (prepared[0]["export"] or {}).get("device_id")
+        result = garmin_export.export(
+            session_id, device_id, exchange=exchange, prepared=prepared
+        )
+    except Exception:  # noqa: BLE001 - refused before any write
+        logger.warning("Garmin %s of %s failed", why, session_id, exc_info=True)
+        return False
+    if result["state"] in {"scheduled", "transfer_requested"}:
+        return True
+    logger.warning(
+        "Garmin %s of %s ended %s: %s",
+        why,
+        session_id,
+        result["state"],
+        result["error"],
+    )
+    return False
 
 
 def _withdraw(exchange: Exchange, session_id: int) -> None:
@@ -317,19 +350,38 @@ def _withdraw(exchange: Exchange, session_id: int) -> None:
 
 
 def follow_on_garmin(
-    decisions: list[PlanDecision], client: GarminClient | None = None
+    decisions: list[PlanDecision],
+    *,
+    reverted: bool = False,
+    client: GarminClient | None = None,
 ) -> None:
-    """Bring Garmin in line with applied decisions: one attempt each, never raises.
+    """Bring Garmin in line with a committed answer: one attempt each, never raises.
 
-    Only a session Garmin may already hold is touched: a rest withdraws it, any
-    other change replaces it in place. A failure stays in the export state the
-    card shows; nothing replays it.
+    Only with the automatic push on, and only for a session Garmin holds: an
+    applied rest withdraws it, any other change (or a revert) replaces it in
+    place; a reverted rest sends back the session it withdrew. The whole answer
+    waits at most ``ANSWER_SECONDS``: a session that does not fit is not
+    started and keeps the card's send button. A failure stays in the export
+    state the card shows; nothing replays it.
     """
     from arete.services import garmin_export
 
     try:
-        held = [d for d in decisions if garmin_export.on_garmin(d.planned_session_id)]
-        if not held:
+        if not _pushing():
+            return  # the copy stays stale: the card offers to send it again
+        actions: list[tuple[int, str]] = []
+        for decision in decisions:
+            session_id = decision.planned_session_id
+            rest = decision.decision == Decision.REST
+            if garmin_export.on_garmin(session_id):
+                actions.append(
+                    (session_id, "withdraw" if rest and not reverted else "export")
+                )
+            elif reverted and rest:
+                state = garmin_export.export_state(session_id)
+                if state is not None and state["state"] == "removed":
+                    actions.append((session_id, "export"))
+        if not actions:
             return
         if client is None:
             from arete.garmin.client import GarminClient
@@ -337,30 +389,19 @@ def follow_on_garmin(
             client = GarminClient()
             if not client.has_tokens():
                 return
-        exchange = garmin_export.Exchange(client, max_calls=MAX_DAILY_REQUESTS)
+        exchange = garmin_export.Exchange(
+            client, deadline=monotonic() + ANSWER_SECONDS, max_calls=ANSWER_REQUESTS
+        )
     except Exception:  # noqa: BLE001 - the answer is committed; the watch is best effort
         logger.warning("Garmin follow-up not started", exc_info=True)
         return
-    for decision in held:
-        session_id = decision.planned_session_id
-        if not _affords(exchange):
-            logger.warning("Garmin follow-up of %s skipped: budget spent", session_id)
-            continue
-        if decision.decision == Decision.REST:
+    for session_id, action in actions:
+        if not _affords(exchange, ANSWER_SESSION_REQUESTS):
+            logger.warning("Garmin follow-up of %s not started: budget", session_id)
+        elif action == "withdraw":
             _withdraw(exchange, session_id)
-            continue
-        try:
-            result = garmin_export.export(session_id, exchange=exchange)
-        except Exception:  # noqa: BLE001 - refused before any write
-            logger.warning("Garmin follow-up failed for %s", session_id, exc_info=True)
-            continue
-        if result["state"] not in {"scheduled", "transfer_requested"}:
-            logger.warning(
-                "Garmin follow-up of %s ended %s: %s",
-                session_id,
-                result["state"],
-                result["error"],
-            )
+        else:
+            _send(exchange, session_id, why="follow-up")
 
 
 class ProposalConflict(ValueError):

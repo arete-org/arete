@@ -1304,3 +1304,59 @@ def test_only_a_skipped_session_is_withdrawn(planned):
     with pytest.raises(DocumentError, match="séances sautées"):
         service.withdraw_skipped(planned, client=garmin)
     assert len(garmin.workouts) == 1
+
+
+@pytest.mark.parametrize("limit", ["requests", "deadline"])
+def test_a_write_the_budget_refuses_is_failed_not_uncertain(planned, limit):
+    from time import monotonic
+
+    garmin = Garmin()
+    exchange = (
+        service.Exchange(garmin, max_calls=0)
+        if limit == "requests"
+        # Less than a write's whole timeout left: the write is never sent.
+        else service.Exchange(
+            garmin, deadline=monotonic() + service.REQUEST_TIMEOUT / 2
+        )
+    )
+    state = service.export(planned, exchange=exchange)
+    assert state["state"] == "failed" and "Limite" in state["error"]
+    assert garmin.calls == []
+    # Nothing was written: the next attempt simply sends it.
+    assert service.export(planned, client=garmin)["state"] == "scheduled"
+    assert len(garmin.workouts) == 1
+
+
+def test_a_budget_refusal_after_a_sent_write_stays_uncertain(planned):
+    garmin = Garmin()
+    service.export(planned, client=garmin)
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.planned_sessions SET date='2027-01-13' WHERE id=?", [planned]
+        )
+    # Three reads, then the old schedule's DELETE is sent and its readback
+    # refused: whether Garmin removed it is unverified.
+    exchange = service.Exchange(garmin, max_calls=4)
+    state = service.export(planned, exchange=exchange)
+    assert state["state"] == "uncertain"
+    assert [m for m, _, _ in garmin.calls[-4:]] == ["GET", "GET", "GET", "DELETE"]
+
+
+def test_the_removal_route_withdraws_a_skipped_session_only(planned, router_client):
+    from arete.api.garmin_export import router
+    from arete.garmin.models import SessionStatus
+
+    garmin = Garmin()
+    service.export(planned, client=garmin)
+    client = router_client(router)
+    original = service.remove
+    with patch.object(
+        service, "remove", lambda session_id: original(session_id, client=garmin)
+    ):
+        with pytest.raises(DocumentError, match="supprimées ou sautées"):
+            client.post(f"/garmin/exports/{planned}/remove")
+        assert len(garmin.workouts) == 1
+        GarminRepository().update_planned_session_status(planned, SessionStatus.SKIPPED)
+        removed = client.post(f"/garmin/exports/{planned}/remove").json()
+    assert removed["state"] == "removed"
+    assert not garmin.workouts and not garmin.schedules

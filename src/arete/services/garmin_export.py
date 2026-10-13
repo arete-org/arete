@@ -144,6 +144,23 @@ def statuses() -> list[dict]:
         return result
 
 
+class BudgetSpent(DocumentError):
+    """The exchange's budget refused a request before sending it."""
+
+
+def _outcome(exc: Exception, exchange: Exchange, window: int | None) -> str:
+    """``uncertain`` only when a write of the open window may have reached Garmin.
+
+    ``window`` is the exchange's request count when the write window opened;
+    a budget refusal with no request sent since leaves nothing ambiguous.
+    """
+    if window is None or isinstance(exc, PermissionError):
+        return "failed"
+    if isinstance(exc, BudgetSpent) and exchange.calls == window:
+        return "failed"
+    return "uncertain"
+
+
 class Exchange:
     def __init__(
         self,
@@ -172,8 +189,10 @@ class Exchange:
             self.calls >= self.max_calls
             or self.session_calls >= MAX_EXPORT_REQUESTS
             or remaining <= 0
+            # A write gets its whole timeout, or is not sent at all.
+            or (method != "GET" and remaining < REQUEST_TIMEOUT)
         ):
-            raise DocumentError(
+            raise BudgetSpent(
                 "Limite de synchronisation atteinte ; vérifie l’état avant de reprendre."
             )
         if self.reservation:
@@ -303,7 +322,21 @@ def session_prescription(session) -> tuple[Prescription, str]:
     return Prescription(steps=[adapt(b) for b in blocks]), "derived"
 
 
+#: A session's export view and, when it can be built, its payload, date,
+#: sport and revision: what ``export`` sends, built once.
+Prepared = tuple[dict, tuple[dict, date, str, int] | None]
+
+
 def inspect_session(session_id: int, *, include_steps: bool = True) -> dict:
+    return _inspect(session_id, include_steps=include_steps)[0]
+
+
+def prepare(session_id: int) -> Prepared:
+    """The view and payload an export decides on and sends, read once."""
+    return _inspect(session_id, include_steps=False)
+
+
+def _inspect(session_id: int, *, include_steps: bool) -> Prepared:
     from arete.garmin.repository import GarminRepository
     from arete.garmin.workout_structure import NotPushable, ensure_template_fits
     from arete.services.planning import _session_to_dict
@@ -320,6 +353,7 @@ def inspect_session(session_id: int, *, include_steps: bool = True) -> dict:
         exportable=False,
         reason=None,
     )
+    built = None
     try:
         prescription, source = session_prescription(session)
         result.update(
@@ -336,7 +370,7 @@ def inspect_session(session_id: int, *, include_steps: bool = True) -> dict:
                 # Shown as a generic estimate; every push goes through this status.
                 result["needs_steps"] = True
                 raise
-        _payload(session_id)
+        built = _payload(session_id)
         result["exportable"] = session.status.value in {"pending", "modified"}
         if not result["exportable"]:
             result["reason"] = "Cette séance est terminée ou sautée."
@@ -344,7 +378,7 @@ def inspect_session(session_id: int, *, include_steps: bool = True) -> dict:
         result["reason"] = str(exc)
     with db_connection() as con:
         state = _get(con, session_id)
-    return {"session": result, "export": public_status(state)}
+    return {"session": result, "export": public_status(state)}, built
 
 
 def inspect_sessions(session_ids: list[int]) -> dict:
@@ -514,17 +548,19 @@ def export(
     exchange: Exchange | None = None,
     on_progress: Callable[[dict], None] | None = None,
     expected_revision: int | None = None,
+    prepared: Prepared | None = None,
 ) -> dict:
-    try:
-        payload, day, sport, revision = _payload(session_id)
-    except ValueError as exc:
-        raise DocumentError(str(exc)) from exc
+    """Send the session; ``prepared`` is its view and payload when already read
+    (the claim's revision lock still refuses a session changed since)."""
+    view, built = prepared or prepare(session_id)
+    if built is None:
+        raise DocumentError(view["session"]["reason"] or "Séance non exportable.")
+    payload, day, sport, revision = built
     if expected_revision is not None and revision != expected_revision:
         raise DocumentError("La séance a changé. Recharge son contenu avant l’envoi.")
     exchange = exchange or Exchange(client, on_progress=on_progress)
     exchange.reservation = None
     exchange.session_calls = 0
-    view = inspect_session(session_id, include_steps=False)
     exchange.session = view["session"]
     if not view["session"]["exportable"]:
         raise DocumentError(view["session"]["reason"])
@@ -541,7 +577,7 @@ def export(
     if state["deleted"]:
         exchange.update(session_id, state["operation_id"], state="pending_removal")
         raise DocumentError("Cette séance a été supprimée ; utilise le retrait Garmin.")
-    writing = False
+    writing: int | None = None  # requests sent before the open write
     try:
         exchange.update(
             session_id,
@@ -567,17 +603,17 @@ def export(
                 )
             if not matches(payload, remote):
                 exchange.update(session_id, state["operation_id"], phase="updating")
-                writing = True
+                writing = exchange.calls
                 exchange.call(
                     "PUT",
                     f"{WORKOUT}/{workout_id}",
                     {**remote, **payload, "workoutId": workout_id},
                 )
                 exchange.update(session_id, state["operation_id"], phase="updated")
-                writing = False
+                writing = None
         else:
             exchange.update(session_id, state["operation_id"], phase="creating")
-            writing = True
+            writing = exchange.calls
             created = exchange.call("POST", WORKOUT, payload)
             workout_id = int(created["workoutId"])
             exchange.update(
@@ -586,7 +622,7 @@ def export(
                 workout_id=workout_id,
                 phase="created",
             )
-            writing = False
+            writing = None
         remote = exchange.call("GET", f"{WORKOUT}/{workout_id}")
         if not matches(payload, remote):
             return exchange.update(
@@ -608,7 +644,7 @@ def export(
                 )
             if remote_date != day:
                 exchange.update(session_id, state["operation_id"], phase="unscheduling")
-                writing = True
+                writing = exchange.calls
                 exchange.call("DELETE", f"{SCHEDULE}/{schedule_id}")
                 _verify_absent(exchange, f"{SCHEDULE}/{schedule_id}")
                 exchange.update(
@@ -618,11 +654,11 @@ def export(
                     remote_date=None,
                     phase="unscheduled",
                 )
-                writing = False
+                writing = None
                 schedule_id = None
         if not schedule_id:
             exchange.update(session_id, state["operation_id"], phase="scheduling")
-            writing = True
+            writing = exchange.calls
             scheduled = exchange.call(
                 "POST", f"{SCHEDULE}/{workout_id}", {"date": day.isoformat()}
             )
@@ -633,7 +669,7 @@ def export(
                 schedule_id=schedule_id,
                 phase="scheduled",
             )
-            writing = False
+            writing = None
         verified = exchange.call("GET", f"{SCHEDULE}/{schedule_id}")
         if _schedule_date(verified, workout_id) != day:
             return exchange.update(
@@ -656,7 +692,7 @@ def export(
         )
         if device_id is not None and not already_pushed:
             exchange.update(session_id, state["operation_id"], phase="pushing")
-            writing = True
+            writing = exchange.calls
             exchange.call(
                 "POST",
                 "/device-service/devicemessage/messages",
@@ -674,7 +710,7 @@ def export(
                 ],
             )
             exchange.update(session_id, state["operation_id"], phase="pushed")
-            writing = False
+            writing = None
         with db_connection() as con:
             con.execute(
                 "UPDATE app.planned_sessions SET garmin_workout_id=?,garmin_schedule_id=?,garmin_pushed_at=? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id=?) ",
@@ -699,9 +735,7 @@ def export(
         return exchange.update(
             session_id,
             state["operation_id"],
-            state="uncertain"
-            if writing and not isinstance(exc, PermissionError)
-            else "failed",
+            state=_outcome(exc, exchange, writing),
             error=f"{type(exc).__name__}: {exc}. Aucun renvoi automatique.",
         )
 
@@ -824,21 +858,19 @@ def _verify_absent(exchange: Exchange, path: str) -> None:
     raise DocumentError("La suppression distante n’est pas confirmée par relecture.")
 
 
-def remove(
-    session_id: int,
-    *,
-    client=None,
-    exchange: Exchange | None = None,
-    _skipped: bool = False,
-) -> dict:
+def remove(session_id: int, *, client=None, exchange: Exchange | None = None) -> dict:
+    """Take the copy off Garmin: for a session deleted or skipped in Arete only."""
+    skipped = _status(session_id) == "skipped"
     state = _claim(session_id)
-    if not state["deleted"] and not _skipped:
+    if not state["deleted"] and not skipped:
         _update(session_id, state["operation_id"], state="ready")
-        raise DocumentError("Le retrait est réservé aux séances supprimées dans Arete.")
+        raise DocumentError(
+            "Le retrait est réservé aux séances supprimées ou sautées dans Arete."
+        )
     exchange = exchange or Exchange(client)
     exchange.session_calls = 0
     exchange.reservation = (session_id, state["operation_id"])
-    writing = False
+    writing: int | None = None  # requests sent before the open write
     try:
         workout_id = state["workout_id"]
         if workout_id:
@@ -867,11 +899,12 @@ def remove(
                         error="La programmation distante a changé ; retrait bloqué.",
                     )
             _update(session_id, state["operation_id"], phase="removing")
-            writing = True
+            writing = exchange.calls
             if state["schedule_id"]:
                 exchange.call("DELETE", f"{SCHEDULE}/{state['schedule_id']}")
                 _verify_absent(exchange, f"{SCHEDULE}/{state['schedule_id']}")
                 _update(session_id, state["operation_id"], schedule_id=None)
+                writing = exchange.calls  # its removal is verified
             exchange.call("DELETE", f"{WORKOUT}/{workout_id}")
             _verify_absent(exchange, f"{WORKOUT}/{workout_id}")
         with db_connection() as con:
@@ -891,9 +924,7 @@ def remove(
         return _update(
             session_id,
             state["operation_id"],
-            state="uncertain"
-            if writing and not isinstance(exc, PermissionError)
-            else "failed",
+            state=_outcome(exc, exchange, writing),
             error=str(exc),
         )
 
@@ -976,6 +1007,20 @@ def export_batch(
     return {"results": results, "not_attempted": []}
 
 
+def _status(session_id: int) -> str | None:
+    with db_connection() as con:
+        row = con.execute(
+            "SELECT status FROM app.visible_planned_sessions WHERE id=?", [session_id]
+        ).fetchone()
+    return row[0] if row else None
+
+
+def export_state(session_id: int) -> dict | None:
+    """The session's export row as the views show it; reads no remote state."""
+    with db_connection() as con:
+        return public_status(_get(con, session_id))
+
+
 def on_garmin(session_id: int) -> bool:
     """Whether Garmin may hold a copy of the session; reads no remote state."""
     with db_connection() as con:
@@ -991,15 +1036,19 @@ def on_garmin(session_id: int) -> bool:
     return bool(legacy and any(legacy))
 
 
-def sent_as_is(session_id: int, state: dict | None) -> bool:
+def sent_as_is(prepared: Prepared) -> bool:
     """Whether the verified copy on Garmin is the session as it is now.
 
     Compares the fingerprint of the last confirmed export with today's payload,
     so a session already sent (by hand the evening before) costs no request.
     """
-    if not state or state["state"] not in {"scheduled", "transfer_requested"}:
+    view, built = prepared
+    state = view["export"]
+    if built is None or not state:
         return False
-    payload, day, _, _ = _payload(session_id)
+    if state["state"] not in {"scheduled", "transfer_requested"}:
+        return False
+    payload, day, _, _ = built
     return bool(state["fingerprint"] == _fingerprint(payload, day))
 
 
@@ -1034,4 +1083,4 @@ def withdraw_skipped(
         except Exception as exc:
             _update(session_id, state["operation_id"], state="conflict", error=str(exc))
             raise
-    return remove(session_id, exchange=exchange, _skipped=True)
+    return remove(session_id, exchange=exchange)

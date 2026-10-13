@@ -378,8 +378,11 @@ Explicit prescriptions remain excluded from automatic daily adaptation. The dail
 run exports the day's sessions through this same circuit, whatever the source of
 their steps (explicit, parsed, derived): at most three, one shared request/time
 budget, no request for a copy already sent as is, nothing while an export is
-unsettled. An applied proposal replaces a copy in place or withdraws it for a rest,
-once, after its commit.
+unsettled. With that automatic push on, an applied or reverted proposal replaces a
+copy in place, withdraws it for a rest or sends back what a rest withdrew: once,
+after its commit, within the answer's own small budget; a session that does not
+fit is not started. A request the budget refuses is never sent, so it ends
+`failed`, not `uncertain`. Removal also serves a skipped session.
 Legacy sessions use deterministic conversion, and existing Garmin identifiers must
 be verified before adoption. Updates require the current revision and mark the
 export dirty without transmitting it; a status change alone (done, skipped) keeps

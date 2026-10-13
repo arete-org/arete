@@ -413,7 +413,7 @@ def test_the_morning_sends_three_sessions_under_one_budget(tempo, monkeypatch):
         assert plan_adaptation.push_today(client, DAY) == "3 sent, 1 skipped, 0 failed"
     assert len(client.workouts) == 3
     # A shared deadline too close to finish a session's exchange sends nothing.
-    monkeypatch.setattr(plan_adaptation, "MIN_SECONDS_PER_SESSION", 10_000)
+    monkeypatch.setattr(plan_adaptation, "SESSION_SECONDS", 10_000)
     other = _garmin()
     with _pushing():
         assert plan_adaptation.push_today(other, DAY).startswith("0 sent")
@@ -457,3 +457,32 @@ def test_the_legacy_push_routes_are_retired(tempo, router_client):
     client = router_client(router)
     assert client.get(f"/garmin/planned/{tempo}/structure").status_code in {404, 405}
     assert client.post(f"/garmin/planned/{tempo}/push").status_code in {404, 405}
+
+
+def test_a_write_the_budget_refused_is_sent_by_the_next_run(tempo):
+    client = _garmin()
+    refused = garmin_export.export(
+        tempo, exchange=garmin_export.Exchange(client, max_calls=0)
+    )
+    assert refused["state"] == "failed" and client.calls == []
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY) == "1 sent, 0 skipped, 0 failed"
+    assert len(client.workouts) == 1
+
+
+def test_the_morning_builds_each_payload_once(tempo, monkeypatch):
+    built: list[int] = []
+    original = garmin_export._payload
+
+    def counted(session_id, **kwargs):
+        built.append(session_id)
+        return original(session_id, **kwargs)
+
+    monkeypatch.setattr(garmin_export, "_payload", counted)
+    client = _garmin()
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY).startswith("1 sent")
+        assert built == [tempo]
+        # The next run decides from the same single read, with no request.
+        assert plan_adaptation.push_today(client, DAY).startswith("0 sent")
+    assert built == [tempo, tempo]
