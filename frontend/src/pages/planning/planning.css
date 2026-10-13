@@ -10,6 +10,7 @@
   margin-bottom: 24px;
 }
 .planning-content button,
+.planning-content select,
 .planning-dialog button,
 .planning-dialog input:not([type='checkbox']),
 .planning-dialog select {
@@ -61,6 +62,14 @@
     calc(100% - 12px) 50%;
   background-size: 5px 5px;
   background-repeat: no-repeat;
+}
+/* Forced colors drop background images, so the native arrow returns there. */
+@media (forced-colors: active) {
+  .planning-toolbar .ui-input,
+  .planning-dialog select[aria-label='Filtrer par sport'] {
+    appearance: auto;
+    background-image: none;
+  }
 }
 .planning-week-board {
   display: grid;
