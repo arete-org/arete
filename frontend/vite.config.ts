@@ -74,6 +74,8 @@ export default defineConfig({
       },
     },
   },
+  // Busts the persisted query cache on each build (src/lib/queryPersistence.ts).
+  define: { __APP_BUILD__: JSON.stringify(String(Date.now())) },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

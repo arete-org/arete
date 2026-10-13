@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Dumbbell, Heart, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { EmptyState, ErrorState, LoadingState, MuscleMap } from '@/components';
-import { Button, Modal, ModalHeader, Panel } from '@/components/ui';
+import { EmptyState, ErrorState, MuscleMap } from '@/components';
+import { Button, Modal, ModalHeader, Panel, Skeleton } from '@/components/ui';
 import { settingsApi, strengthApi } from '@/lib/api';
 import { CardioTab, ExerciseProgress, LogSessionModal, SessionDetailModal, SessionRow, WeeklyVolumeTracker } from './log/index';
 import { invalidateAfterSession, qk, strengthSessionsQuery } from '@/lib/queryKeys';
@@ -54,10 +54,6 @@ export function LogPage() {
     },
   });
 
-  if (muscleQuery.isLoading || sessionsQuery.isLoading) {
-    return <LoadingState message="CHARGEMENT DU JOURNAL…" />;
-  }
-
   if (sessionsQuery.isError) {
     return <ErrorState message="ÉCHEC DU CHARGEMENT DES SÉANCES" onRetry={() => sessionsQuery.refetch()} />;
   }
@@ -101,18 +97,25 @@ export function LogPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
             <div className="space-y-4 sm:space-y-8">
               <Panel title={`ZONES TRAVAILLÉES (${MUSCLE_WINDOW_DAYS} DERNIERS JOURS)`}>
-                {muscleQuery.isError ? (
+                {muscleQuery.isPending ? (
+                  <Skeleton label="Chargement des zones travaillées" lines={4} />
+                ) : muscleQuery.isError ? (
                   <ErrorState message="VOLUME INDISPONIBLE" onRetry={() => muscleQuery.refetch()} />
                 ) : (
                   <MuscleMap muscles={muscleQuery.data?.muscles ?? []} />
                 )}
               </Panel>
-              <WeeklyVolumeTracker sessions={sessions} targetKg={settings?.weekly_volume_target_kg ?? 20000} />
+              {sessionsQuery.isPending ? (
+                <Panel><Skeleton label="Chargement du volume de la semaine" /></Panel>
+              ) : (
+                <WeeklyVolumeTracker sessions={sessions} targetKg={settings?.weekly_volume_target_kg ?? 20000} />
+              )}
             </div>
 
             <div className="space-y-4 sm:space-y-8">
               <Panel title="SÉANCES RÉCENTES" delay={0.3}>
                 <div className="space-y-3">
+                  {sessionsQuery.isPending && <Skeleton label="Chargement des séances récentes" lines={3} />}
                   {sessions.slice(0, 5).map((session) => (
                     <SessionRow
                       key={session.id}
@@ -121,7 +124,7 @@ export function LogPage() {
                       onDelete={() => setToDelete(session.id)}
                     />
                   ))}
-                  {sessions.length === 0 && (
+                  {sessionsQuery.isSuccess && sessions.length === 0 && (
                     <EmptyState message="AUCUNE SÉANCE" action="Saisis ta première séance de muscu" />
                   )}
                 </div>

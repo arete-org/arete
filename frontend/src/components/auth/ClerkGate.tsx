@@ -4,7 +4,7 @@ import { frFR } from '@clerk/localizations/fr-FR';
 import { ErrorState } from '@/components/States';
 import { AreteWordmark } from '@/components/AreteBrand';
 import { ApiError, authApi, type AuthMe } from '@/lib/api';
-import { clearApiCache, endSession, onUnauthorized, setTokenGetter } from '@/lib/auth';
+import { clearApiCache, clearSignedOutCaches, endSession, onUnauthorized, setTokenGetter } from '@/lib/auth';
 import { AuthStateContext, type AuthState } from './authState';
 import { GateScreen, GateSpinner } from './GateScreen';
 import { SignOutButton } from './SignOutButton';
@@ -91,10 +91,10 @@ function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGat
     [signOut, onSessionEnd]
   );
 
-  // Signed out: nothing of a previous account may survive in the API cache.
+  // Signed out: nothing of a previous account may survive in the API or query caches.
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
-      void clearApiCache();
+      void clearSignedOutCaches();
       void claimPushDevice(null).catch((error: unknown) => console.error(error));
     }
   }, [isLoaded, isSignedIn]);

@@ -4,10 +4,11 @@ import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
-import { LoadingState, MetricCard, OffPlanRow, SessionCard, strengthAsActual } from '@/components';
-import { Button, Panel } from '@/components/ui';
+import { MetricCard, OffPlanRow, SessionCard, strengthAsActual } from '@/components';
+import { Button, Panel, Skeleton } from '@/components/ui';
 import { ApiError, garminApi, garminHealthApi, goalsApi, metricsApi, planApi, settingsApi } from '@/lib/api';
 import { useDailyTip } from '@/lib/dailyTip';
 import { formatHoursMinutes } from '@/lib/fr';
@@ -29,6 +30,20 @@ const readinessTone = (score: number, threshold: number) =>
 const stressTone = (avg: number) => (avg > 40 ? 'text-danger-red' : avg > 25 ? 'text-neon-gold' : 'text-success-green');
 
 
+
+/** Shown on a repeat visit while cached data waits for its refresh (a cold server can take seconds). */
+const STALE_HINT_MS = 10 * 60_000;
+function UpdatedAgo({ at }: { at: number }) {
+  const [now] = useState(Date.now);
+  const age = now - at;
+  if (!at || age < STALE_HINT_MS) return null;
+  const ago = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
+  return (
+    <p className="text-[11px] font-sans text-text-muted mt-0.5">
+      Mis à jour {age < 3_600_000 ? ago.format(-Math.round(age / 60_000), 'minute') : ago.format(-Math.round(age / 3_600_000), 'hour')}
+    </p>
+  );
+}
 
 function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
@@ -111,7 +126,7 @@ export function DashboardPage() {
   const { data: nextGoal } = useQuery({ queryKey: qk.nextGoal, queryFn: goalsApi.next });
   const fatigueThreshold = userSettings?.fatigue_threshold ?? 85;
 
-  const { data: allPlanned, isLoading: plannedLoading } = useQuery({
+  const { data: allPlanned, isPending: plannedPending, dataUpdatedAt: plannedAt } = useQuery({
     queryKey: qk.planned(today, today),
     queryFn: () => garminApi.getPlanned(today, today),
   });
@@ -135,7 +150,7 @@ export function DashboardPage() {
 
   const {
     data: playerStats,
-    isLoading: statsLoading,
+    isPending: statsPending,
     error: statsError,
     refetch: refetchStats,
   } = useQuery({
@@ -150,17 +165,13 @@ export function DashboardPage() {
 
   const { data: workload } = useQuery({ queryKey: qk.workload, queryFn: metricsApi.getWorkload });
 
-  const { data: healthData } = useQuery({
+  const { data: healthData, isPending: healthPending } = useQuery({
     queryKey: qk.healthDaily(today),
     queryFn: () => garminHealthApi.getDaily(today),
     retry: false,
   });
 
   const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip();
-
-  if (plannedLoading || statsLoading) {
-    return <LoadingState message="CHARGEMENT DU TABLEAU DE BORD…" />;
-  }
 
   return (
     <div className="page-shell bg-void">
@@ -173,6 +184,7 @@ export function DashboardPage() {
             <p className="text-xs font-sans text-text-muted mt-0.5">
               {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
+            <UpdatedAgo at={plannedAt} />
             {nextGoal && (
               <Link
                 to="/planning"
@@ -205,7 +217,9 @@ export function DashboardPage() {
             {/* Block 1: Today's Plan */}
             <Panel className="p-4">
               <SectionHeader icon={<Calendar className="w-4 h-4 text-neon-purple" />} title="SÉANCE DU JOUR" />
-              {todayLink.planned.length > 0 || todayLink.offPlan.length > 0 ? (
+              {plannedPending ? (
+                <Skeleton label="Chargement de la séance du jour" />
+              ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 ? (
                 <div className="space-y-2">
                   {todayLink.planned.map((row) => (
                     <TodaySession
@@ -255,7 +269,7 @@ export function DashboardPage() {
             />
 
             {/* Quick Actions Footer */}
-            <div className="flex gap-3 animate-fade-in" style={{ animationDelay: '0.3s' }}>
+            <div className="flex gap-3 animate-fade-in">
               <Link
                 to="/log"
                 className="flex-1 flex items-center justify-center gap-2 glass-panel px-4 py-3 text-sm font-sans text-neon-cyan hover:bg-abyss/80 transition-colors"
@@ -276,11 +290,13 @@ export function DashboardPage() {
           </div>
           <div className="dashboard-secondary">
             {/* Block 2: Player Status */}
-            <Panel className="p-4" delay={0.1}>
+            <Panel className="p-4">
               <SectionHeader icon={<Dumbbell className="w-4 h-4 text-neon-gold" />} title="ÉTAT DU JOUEUR" />
               <PlayerSummary />
 
-              {statsError ? (
+              {statsPending ? (
+                <Skeleton label="Chargement des statistiques" lines={3} className="mb-4" />
+              ) : statsError ? (
                 <p className="text-xs font-sans text-danger-red mb-4">
                   Statistiques indisponibles.{' '}
                   <button type="button" onClick={() => refetchStats()} className="text-neon-cyan hover:underline">
@@ -337,10 +353,12 @@ export function DashboardPage() {
             </Panel>
 
             {/* Block 3: Readiness (Garmin) */}
-            <Panel className="p-4" delay={0.2}>
+            <Panel className="p-4">
               <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="RÉCUPÉRATION" />
 
-              {healthData && healthData.readiness_score != null ? (
+              {healthPending ? (
+                <Skeleton label="Chargement de la récupération" />
+              ) : healthData && healthData.readiness_score != null ? (
                 <div className="flex items-center gap-6">
                   <div
                     className={cn(

@@ -460,6 +460,13 @@ scheduler owns releasing a sync lease. Services never import `arete.api.auth`. `
 token from Clerk for Calendar, and
 `services/oauth_state.py` signs the Strava OAuth state the callback demands.
 
+The browser keeps an allowlist of query answers (dashboard, settings, goals and
+the session windows containing today) in IndexedDB for 24 hours so a repeat visit
+paints them while they revalidate (`frontend/src/lib/queryPersistence.ts`). Each
+athlete has its own entry, restored only after the auth gate names the athlete;
+a new build discards it, and signing out or a signed-out page deletes every entry
+with the service worker's API cache (`lib/auth.ts`).
+
 ## Google Calendar
 
 With sign-in on, the composition root adds Calendar to the chat's resolved
