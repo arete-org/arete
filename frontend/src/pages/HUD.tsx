@@ -3,7 +3,7 @@ import { AretePresence } from '@/components/AreteBrand';
 import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
@@ -48,13 +48,17 @@ function UpdatedAgo({ at }: { at: number }) {
   );
 }
 
-/** The page's one request (`GET /dashboard`); each panel reads its slice. */
+/**
+ * The page's one request (`GET /dashboard`); each panel reads its slice. The
+ * previous day's answer stays on screen while a new day's loads.
+ */
 function useDashboard<T>(select: (board: DashboardData) => T) {
   const client = useQueryClient();
   return useQuery({
     queryKey: qk.dashboard(toLocalISODate()),
     queryFn: ({ signal }) => fetchDashboard(client, signal),
     select,
+    placeholderData: keepPreviousData,
   });
 }
 

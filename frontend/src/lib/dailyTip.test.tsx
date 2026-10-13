@@ -142,3 +142,21 @@ it('waits for the dashboard to seed the read, then writes and polls from it', as
   expect(tipsApi.getDaily).toHaveBeenCalledTimes(1);
   expect(result.current.tip?.tip).toBe('Footing facile.');
 });
+
+it('the dashboard seeding the read again spends none of its polls', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  client.setQueryData(['tip-daily', '2026-10-12'], pending);
+  const { result } = renderHook(() => useDailyTip({ day: '2026-10-12' }), {
+    wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
+  await tick();
+  for (const delay of TIP_POLL_DELAYS_MS) {
+    // A focus or a logged session refreshes the dashboard, which seeds it again.
+    act(() => client.setQueryData(['tip-daily', '2026-10-12'], { ...pending }));
+    await tick();
+    expect(result.current.stalled).toBe(false);
+    await tick(delay);
+  }
+  expect(tipsApi.getDaily).toHaveBeenCalledTimes(TIP_POLL_DELAYS_MS.length);
+  expect(result.current.stalled).toBe(true);
+});
