@@ -1,36 +1,19 @@
-import { memo } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { createElement, memo, useEffect } from 'react';
+import { preloadAgentMarkdown, useMarkdownRenderer } from './markdownRenderer';
 
-const MARKDOWN_PLUGINS = [remarkGfm];
-
-/** No raw HTML or remote images: model text is content, never executable markup. */
-export const AgentMarkdown = memo(function AgentMarkdown({
-  text,
-}: {
-  text: string;
-}) {
+function PlainText({ text }: { text: string }) {
   return (
     <div className="coach-markdown">
-      <Markdown
-        remarkPlugins={MARKDOWN_PLUGINS}
-        skipHtml
-        components={{
-          a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {children}
-            </a>
-          ),
-          img: ({ alt }) => <span>{alt}</span>,
-          table: ({ children }) => (
-            <div className="coach-table-scroll">
-              <table>{children}</table>
-            </div>
-          ),
-        }}
-      >
-        {text}
-      </Markdown>
+      <p className="whitespace-pre-wrap">{text}</p>
     </div>
   );
+}
+
+/** Until the renderer arrives, the received text shows as is: never a blank answer. */
+export const AgentMarkdown = memo(function AgentMarkdown({ text }: { text: string }) {
+  const renderer = useMarkdownRenderer();
+  useEffect(() => {
+    if (!renderer) preloadAgentMarkdown();
+  }, [renderer]);
+  return renderer ? createElement(renderer, { text }) : <PlainText text={text} />;
 });

@@ -2,7 +2,8 @@
 import { clientsClaim } from 'workbox-core';
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { NetworkOnly } from 'workbox-strategies';
+import { ExpirationPlugin } from 'workbox-expiration';
+import { CacheFirst, NetworkOnly } from 'workbox-strategies';
 
 declare let self: ServiceWorkerGlobalScope;
 
@@ -16,6 +17,20 @@ cleanupOutdatedCaches();
 // SPA navigation falls back to the app shell. API calls and the Strava OAuth
 // callback must reach the server, never the cached shell.
 registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/api\//] }));
+
+// Only the shell is precached. Lazy chunks, fonts and images have content-hashed
+// names: the first use caches them for good. The SPA fallback answers a missing
+// file with index.html, which must never be kept as an asset.
+registerRoute(
+  ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/assets/'),
+  new CacheFirst({
+    cacheName: 'assets',
+    plugins: [
+      { cacheWillUpdate: async ({ response }) => (response.ok && !response.headers.get('content-type')?.includes('text/html') ? response : null) },
+      new ExpirationPlugin({ maxEntries: 120, purgeOnQuotaError: true }),
+    ],
+  })
+);
 
 // Private API responses must never fall back to another account's cached data.
 registerRoute(({ url }) => url.pathname.startsWith('/api/'), new NetworkOnly());

@@ -9,13 +9,18 @@ import { AreteMark, AreteWordmark } from './AreteBrand';
 import { User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthState } from '@/components/auth/authState';
+import { preloadAgentMarkdown } from './agent/markdownRenderer';
+import { preloadRoute } from '@/pages/routes';
+import { importChunk } from '@/lib/chunkReload';
+// The Planning variant of the nav is styled there: it must not wait for the lazy page.
+import '@/pages/planning/planning.css';
 
 // Clerk's account menu lives in the lazily loaded auth chunk; it only renders when sign-in is on.
-const AccountButton = lazy(() =>
+const AccountButton = lazy(importChunk(() =>
   import('@/components/auth/ClerkGate').then((m) => ({
     default: m.AccountButton,
   })),
-);
+));
 
 const navItems = [
   { path: '/', label: 'Tableau de bord', icon: LayoutDashboard },
@@ -100,6 +105,8 @@ export function Navigation({
                   key={item.path}
                   to={item.path}
                   aria-label={item.label}
+                  onPointerEnter={() => preloadRoute(item.path)}
+                  onFocus={() => preloadRoute(item.path)}
                   end={item.path === '/'}
                   className={({ isActive }) =>
                     cn(
@@ -122,6 +129,8 @@ export function Navigation({
             <div className="flex items-center gap-3">
               <button
                 onClick={onToggleAgent}
+                onPointerEnter={preloadAgentMarkdown}
+                onFocus={preloadAgentMarkdown}
                 aria-controls="coach-panel"
                 aria-expanded={agentOpen}
                 aria-label={agentOpen ? 'Masquer le coach' : 'Ouvrir le coach'}
@@ -165,6 +174,8 @@ export function Navigation({
               key={item.path}
               to={item.path}
               aria-label={item.label}
+              onPointerEnter={() => preloadRoute(item.path)}
+              onFocus={() => preloadRoute(item.path)}
               end={item.path === '/'}
               className={({ isActive }) =>
                 cn(
@@ -194,6 +205,8 @@ export function Navigation({
           ))}
           <button
             onClick={onToggleAgent}
+            onPointerEnter={preloadAgentMarkdown}
+            onFocus={preloadAgentMarkdown}
             aria-controls="coach-panel"
             aria-expanded={agentOpen}
             aria-label={agentOpen ? 'Masquer le coach' : 'Ouvrir le coach'}
