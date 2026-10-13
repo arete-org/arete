@@ -1,5 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { documentRequest, type GarminExport, type Prescription } from './documents';
+import { formatElapsed } from './activity';
+import { documentRequest, type GarminExport, type Prescription, type WorkoutStep } from './documents';
+import { parseRaceTime } from './race';
 
 export interface WorkoutSession {
   id: number; revision: number; date: string; sport: string; description: string | null;
@@ -123,4 +125,42 @@ export function watchLine(view: WorkoutView, sentAt: string | null, action: Watc
   if (view.session.needs_steps) return { kind: 'steps', href: planning };
   if (!view.session.exportable) return undefined;
   return { kind: 'send', text: view.session.summary ?? null, onPush: action.run, pending: action.pending, error: action.error ?? failure };
+}
+
+/** A step's end as the athlete reads it: "20:00", "400 m", "8 répétitions", "tour manuel". */
+export function stepAmount(step: WorkoutStep): string {
+  if (step.duration_kind === 'lap') return 'tour manuel';
+  if (step.value == null) return '—';
+  if (step.duration_kind === 'seconds') return formatElapsed(step.value);
+  return `${step.value} ${step.duration_kind === 'meters' ? 'm' : 'répétitions'}`;
+}
+
+export const SKIPPED_LAST_RECOVERY = 'sans la dernière récup';
+
+/** A repeat whose last recovery Garmin may skip (services/prescriptions.ends_with_recovery). */
+export function endsWithRecovery(step: WorkoutStep): boolean {
+  const last = step.steps.at(-1);
+  return step.kind === 'repeat' && last?.kind === 'recovery' && last.duration_kind !== 'lap';
+}
+
+/** Sports whose bare duration is minutes ("20" → 20:00); strength and swimming count seconds. */
+export const bareMinutes = (sport: string) => sport !== 'strength' && sport !== 'swimming';
+
+/** Seconds from "mm:ss" or "h:mm:ss", or a bare number of minutes (or seconds); null otherwise. */
+export function parseStepDuration(text: string, minutes: boolean): number | null {
+  const bare = text.trim().match(/^\d+$/);
+  if (!bare) return parseRaceTime(text);
+  const seconds = Number(bare[0]) * (minutes ? 60 : 1);
+  return seconds > 0 ? seconds : null;
+}
+
+export const INCOMPLETE_STEPS = 'Étapes incomplètes : renseigne chaque durée, distance et borne de cible.';
+
+/** Whether every step has its value and every target both bounds: nothing partial is saved. */
+export function prescriptionReady(prescription: Prescription): boolean {
+  const ready = (step: WorkoutStep): boolean => step.kind === 'repeat'
+    ? step.steps.every(ready)
+    : (step.duration_kind === 'lap' || step.value != null)
+      && [step.target, step.secondary_target].every(t => !t || (t.low != null && t.high != null));
+  return prescription.steps.every(ready);
 }

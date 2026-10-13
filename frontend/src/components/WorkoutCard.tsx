@@ -7,9 +7,10 @@ import { Check, ChevronDown, CircleAlert, ExternalLink, Loader2 } from 'lucide-r
 import { PrescriptionEditor } from './PrescriptionEditor';
 import { Modal, ModalHeader } from './ui';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
-import { exportLabel, GENERIC_STEPS_LABEL, PARSED_STEPS_LABEL, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
+import { exportLabel, GENERIC_STEPS_LABEL, INCOMPLETE_STEPS, PARSED_STEPS_LABEL, prescriptionReady, SKIPPED_LAST_RECOVERY, stepAmount, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
 import { parseLocalDate } from '@/lib/dates';
-import type { Prescription } from '@/lib/documents';
+import type { Prescription, Target } from '@/lib/documents';
+import { formatPace } from '@/lib/utils';
 
 const input = inputClasses('cyan', 'text-sm');
 const sports: Record<string, string> = { running: 'Course', cycling: 'Vélo', swimming: 'Natation', strength: 'Musculation', walking: 'Marche', hiking: 'Randonnée' };
@@ -33,7 +34,8 @@ function EditWorkout({ session, onClose, onResult }: { session: WorkoutSession; 
       <PrescriptionEditor sport={session.sport} value={prescription} onChange={setPrescription} />
       <p className="text-xs text-text-muted">Enregistrement dans Arete. Un nouvel envoi sera nécessaire pour mettre Garmin à jour.</p>
       {actions.error && <p role="alert" className="text-sm text-danger-red">{actions.error}</p>}
-      <button className="rounded-lg bg-neon-cyan/15 px-4 py-2.5 text-sm font-medium text-neon-cyan disabled:opacity-40" disabled={!day || !description.trim() || !prescription.steps.length} onClick={() => void save()}>{actions.busy ? 'Enregistrement…' : 'Enregistrer'}</button>
+      {!prescriptionReady(prescription) && <p className="text-sm text-danger-red">{INCOMPLETE_STEPS}</p>}
+      <button className="rounded-lg bg-neon-cyan/15 px-4 py-2.5 text-sm font-medium text-neon-cyan disabled:opacity-40" disabled={!day || !description.trim() || !prescription.steps.length || !prescriptionReady(prescription)} onClick={() => void save()}>{actions.busy ? 'Enregistrement…' : 'Enregistrer'}</button>
     </fieldset>
   </Modal>;
 }
@@ -95,15 +97,19 @@ export function WorkoutCard({ sessionId, initial, readError, compact = false, se
   </div>;
 }
 
+const targetText = (target: Target) => target.kind === 'pace_sec_km'
+  ? `${target.low == null ? '—' : formatPace(target.low, "'")}–${target.high == null ? '—' : formatPace(target.high, "'")}/km`
+  : `${target.low}–${target.high} ${({ hr_zone: 'zone FC', heart_rate_bpm: 'bpm', power_w: 'W', cadence_rpm: 'tr/min' })[target.kind]}`;
+
 export function StepList({ prescription }: { prescription: Prescription }) {
   const render = (steps: Prescription['steps'], depth: number): React.ReactNode => {
     if (depth > 2) return <li>Structure trop profonde.</li>;
     return steps.map((step, index) => <li key={index} className="my-1">
-      {step.kind === 'repeat' ? <>{step.repeat} répétitions<ul className="ml-4 border-l border-text-muted/20 pl-3">{render(step.steps, depth + 1)}</ul></> : <>
+      {step.kind === 'repeat' ? <>{step.repeat} répétitions{step.skip_last_recovery && `, ${SKIPPED_LAST_RECOVERY}`}<ul className="ml-4 border-l border-text-muted/20 pl-3">{render(step.steps, depth + 1)}</ul></> : <>
         {({ warmup: 'Échauffement', effort: 'Effort', recovery: 'Récupération', cooldown: 'Retour au calme', rest: 'Repos' })[step.kind]} · {step.exercise ? `${step.exercise} · ` : ''}
-        {step.duration_kind === 'lap' ? 'Tour manuel' : `${step.value} ${({ seconds: 's', meters: 'm', reps: 'répétitions' })[step.duration_kind]}`}
-        {step.target && ` · ${step.target.low}–${step.target.high} ${({ hr_zone: 'zone FC', pace_sec_km: 's/km', heart_rate_bpm: 'bpm', power_w: 'W', cadence_rpm: 'tr/min' })[step.target.kind]}`}
-        {step.secondary_target && ` · ${step.secondary_target.low}–${step.secondary_target.high} ${({ hr_zone: 'zone FC', pace_sec_km: 's/km', heart_rate_bpm: 'bpm', power_w: 'W', cadence_rpm: 'tr/min' })[step.secondary_target.kind]}`}
+        {stepAmount(step)}
+        {step.target && ` · ${targetText(step.target)}`}
+        {step.secondary_target && ` · ${targetText(step.secondary_target)}`}
         {step.weight_kg != null && ` · ${step.weight_kg} kg`}{step.stroke && ` · ${({ free: 'crawl', back: 'dos', breast: 'brasse', butterfly: 'papillon', mixed: 'quatre nages' })[step.stroke]}`}{step.notes && ` · ${step.notes}`}
       </>}
     </li>);

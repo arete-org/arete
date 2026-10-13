@@ -9,7 +9,8 @@ export interface SourceBlock {
 }
 export interface Extraction { blocks: SourceBlock[]; warnings: string[] }
 export interface CoachDocument { id: string; name: string; size: number; sha256: string; status: 'uploading' | 'ready' }
-export interface Target { kind: 'pace_sec_km' | 'heart_rate_bpm' | 'power_w' | 'cadence_rpm' | 'hr_zone'; low: number; high: number }
+/** A bound is null only in an editor draft not yet complete (never saved). */
+export interface Target { kind: 'pace_sec_km' | 'heart_rate_bpm' | 'power_w' | 'cadence_rpm' | 'hr_zone'; low: number | null; high: number | null }
 export interface WorkoutStep {
   kind: 'warmup' | 'effort' | 'recovery' | 'cooldown' | 'rest' | 'repeat';
   duration_kind: 'seconds' | 'meters' | 'reps' | 'lap';
@@ -23,6 +24,8 @@ export interface WorkoutStep {
   weight_kg?: number | null;
   stroke?: 'free' | 'back' | 'breast' | 'butterfly' | 'mixed' | null;
   notes?: string;
+  /** Repeat ending with a timed or measured recovery only; unset reads as false (Garmin's skipLastRestStep). */
+  skip_last_recovery?: boolean | null;
 }
 export interface Prescription { version: 1; steps: WorkoutStep[]; pool_length_m?: number | null }
 export interface Provenance { document_id: string; locator: string; quote: string }

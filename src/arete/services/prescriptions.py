@@ -46,6 +46,13 @@ class Step(StrictModel):
     weight_kg: float | None = Field(default=None, ge=0, le=1000)
     stroke: Literal["free", "back", "breast", "butterfly", "mixed"] | None = None
     notes: str = Field(default="", max_length=500)
+    # Unset (every step stored before it existed) reads as false and leaves the
+    # Garmin payload as it was, so a copy already sent stays as is.
+    skip_last_recovery: bool | None = Field(
+        default=None,
+        description="Repeat ending with a timed or measured recovery only: true "
+        "skips that recovery after the last repetition.",
+    )
 
     @model_validator(mode="after")
     def consistent(self):
@@ -65,8 +72,17 @@ class Step(StrictModel):
                     "steps (sous-étapes non vides). Place durée, distance et cible "
                     "sur chaque sous-étape, pas sur le bloc."
                 )
+            if self.skip_last_recovery and not ends_with_recovery(self):
+                raise ValueError(
+                    "Sauter la dernière récupération exige un bloc qui finit par "
+                    "une récupération en durée ou en distance."
+                )
         elif self.steps or self.repeat:
             raise ValueError("Seul un bloc répété peut contenir des étapes.")
+        elif self.skip_last_recovery:
+            raise ValueError(
+                "Seul un bloc répété peut sauter sa dernière récupération."
+            )
         elif (self.duration_kind == "lap") != (self.value is None):
             raise ValueError(
                 "Indique une valeur pour la durée, la distance ou les répétitions."
@@ -78,6 +94,12 @@ class Step(StrictModel):
         ):
             raise ValueError("Le nombre de répétitions doit être entier.")
         return self
+
+
+def ends_with_recovery(step: Step) -> bool:
+    """Whether a repeat's last child is a timed or measured recovery to skip."""
+    last = step.steps[-1] if step.steps else None
+    return bool(last and last.kind == "recovery" and last.duration_kind != "lap")
 
 
 class Prescription(StrictModel):
@@ -234,6 +256,7 @@ def describe(prescription: Prescription) -> str:
                 f"{step.repeat} × ("
                 + " / ".join(step_text(s) for s in step.steps)
                 + ")"
+                + (", sans la dernière récup" if step.skip_last_recovery else "")
             )
         value = step.value or 0
         amount = {

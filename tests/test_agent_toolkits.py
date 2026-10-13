@@ -224,8 +224,11 @@ def test_workout_tool_wire_schema_keeps_nested_intervals_typed():
         step = prescription["properties"]["steps"]["items"]
         for _ in range(2):
             assert step["properties"]["repeat"]["anyOf"][0]["maximum"] == 100
+            assert "recovery" in step["properties"]["skip_last_recovery"]["description"]
             step = step["properties"]["steps"]["items"]
         assert "repeat" not in step["properties"]["kind"]["enum"]
+        # No repeat at the leaf depth, so nothing to skip there either.
+        assert step["properties"]["skip_last_recovery"] == {"type": "null"}
         assert step["properties"]["duration_kind"]["enum"] == [
             "seconds",
             "meters",

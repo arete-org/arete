@@ -326,6 +326,13 @@ def _assemble(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
             steps.append(block)
     if not any(b["kind"] in {"effort", "repeat"} for b in steps):
         raise RunningParseError("aucun effort")
+    for step in steps:
+        # "12×400 r1'": the written recovery separates efforts; after the last
+        # one the athlete moves on. A lap-ended recovery (strides) is the
+        # athlete's own transition and stays.
+        last = step["steps"][-1] if step["kind"] == "repeat" else None
+        if last and last["kind"] == "recovery" and last["duration_kind"] != "lap":
+            step["skip_last_recovery"] = True
     return steps
 
 

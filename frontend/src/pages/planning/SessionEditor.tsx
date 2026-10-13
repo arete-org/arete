@@ -4,6 +4,7 @@ import { Button, Input, Modal, ModalHeader, Select } from '@/components/ui';
 import { PrescriptionEditor } from '@/components/PrescriptionEditor';
 import { garminApi } from '@/lib/api';
 import { invalidateAfterSession } from '@/lib/queryKeys';
+import { INCOMPLETE_STEPS, prescriptionReady } from '@/lib/workouts';
 import type { PlannedSession } from '@/types';
 import {
   planningError,
@@ -107,6 +108,10 @@ export function SessionEditor({
             }
             if (draft.prescription && !draft.prescription.steps.length) {
               setLocalError('Ajoute au moins une étape.');
+              return;
+            }
+            if (draft.prescription && !prescriptionReady(draft.prescription)) {
+              setLocalError(INCOMPLETE_STEPS);
               return;
             }
             save.mutate();
