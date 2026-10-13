@@ -27,6 +27,12 @@ def history(tmp_path, monkeypatch):
     con = connect()
     try:
         seed_history(con, today)
+        # A second session today, unplanned and without HR: the flat default.
+        con.execute(
+            "INSERT INTO app.actual_sessions (date, sport, duration_sec, name, source)"
+            " VALUES (?, 'cycling', 3600, 'Velo', 'manual')",
+            [today],
+        )
     finally:
         con.close()
     return today
@@ -74,6 +80,8 @@ def test_every_slice_equals_its_former_endpoint(history, client):
     assert board["next_goal"] and board["health"]
     assert board["fitness"]["ctl"] > 0 and board["player_stats"]["xp"]["current"] > 0
     assert board["briefing"]["status"] == "ready"
+    # Ties on the date keep a stable order: the newest session first.
+    assert [s["name"] for s in board["actual"]] == ["Velo", "Réveil musculaire"]
 
 
 def test_one_connection_one_load_history_and_no_write(

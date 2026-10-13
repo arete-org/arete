@@ -575,7 +575,7 @@ class GarminRepository:
         if unmatched_only:
             query += " AND planned_session_id IS NULL"
 
-        query += " ORDER BY date DESC LIMIT ?"
+        query += " ORDER BY date DESC, id DESC LIMIT ?"
         params.append(limit)
 
         results = conn.execute(query, params).fetchall()
