@@ -9,6 +9,8 @@ const player = {
   has_more: false,
 };
 
+const synced = { ...player, xp: 1820, history: [{ ...player.history[0], id: 'r2', label: 'Séance sans montre' }] };
+
 // Opening a page reads the progression; only a logged session projects it.
 test('loading pages reads the RPG snapshot and logging a session syncs it once', async ({ page }) => {
   const syncs: string[] = [];
@@ -18,11 +20,12 @@ test('loading pages reads the RPG snapshot and logging a session syncs it once',
     const path = new URL(request.url()).pathname;
     if (path === '/api/gamification/sync') {
       syncs.push(path);
-      return route.fulfill({ json: { ...player, xp: 1820, history: [{ ...player.history[0], id: 'r2', label: 'Séance sans montre' }] } });
+      return route.fulfill({ json: synced });
     }
     if (path === '/api/gamification') {
       reads.push(path);
-      return route.fulfill({ json: player });
+      // The server's snapshot is the synced one once the session was projected.
+      return route.fulfill({ json: syncs.length ? synced : player });
     }
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' } });
@@ -54,6 +57,6 @@ test('loading pages reads the RPG snapshot and logging a session syncs it once',
   await expect(page.getByRole('button', { name: 'ENREGISTRER' })).toBeHidden();
   await expect.poll(() => syncs.length).toBe(1);
   await page.goto('/');
-  await expect(page.getByText('Dernier reçu : Footing')).toBeVisible();
+  await expect(page.getByText('Dernier reçu : Séance sans montre')).toBeVisible();
   expect(syncs).toHaveLength(1);
 });
