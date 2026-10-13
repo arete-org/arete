@@ -216,6 +216,26 @@ class SessionExercise:
         }
 
 
+@dataclass(frozen=True)
+class StrengthSessionSummary:
+    """A session's list row: the totals of ``StrengthSession``, computed in SQL.
+
+    Working sets are those not marked warm-up; muscles are the exercises'
+    primary ones (secondary muscles do not count), sorted.
+    """
+
+    id: int
+    date: date
+    name: str | None
+    program: str | None
+    duration_min: int | None
+    overall_rpe: float | None
+    exercises_count: int
+    total_sets: int
+    total_volume: float
+    muscles_worked: list[str]
+
+
 @dataclass
 class StrengthSession:
     """A complete strength training session."""
