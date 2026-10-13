@@ -318,9 +318,10 @@ def test_receipts_of_caps_aliases_and_moved_duplicates_are_unchanged(game_db):
         [
             ("activity:earlier", previous, 50, 10, "Course"),
             *[(f"activity:session:{n}", week, 50, 10, "Course") for n in range(6)],
-            # The duplicate dated last week moves session 1 there: its sum per
-            # cause is already credited, so only the current week's reversal
-            # is written (behavior kept as is).
+            # Known bug, tracked in Linear ARE-93: the duplicate dated last
+            # week moves session 1 there, but its sum per cause is already
+            # credited, so only the current week's reversal is written and the
+            # session ends uncredited. Pinned here until ARE-93 fixes it.
             ("activity:session:1", week, -50, -10, fix + "Séance rapprochée"),
             ("week:" + week, week, 200, 40, "Objectif hebdomadaire respecté"),
             ("week:" + week, week, -200, -40, fix + "Objectif hebdomadaire respecté"),

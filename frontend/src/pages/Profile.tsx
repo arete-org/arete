@@ -108,6 +108,14 @@ function ActiveProfile() {
           Réglages →
         </Link>
       </header>
+      {player.syncError && (
+        <p role="alert" className="font-sans text-xs text-warning-orange">
+          Progression non actualisée : {player.syncError.message}{' '}
+          <Button variant="ghost" onClick={player.sync}>
+            Actualiser
+          </Button>
+        </p>
+      )}
       <div className="flex items-center gap-3 sm:gap-6">
         <button
           className="shrink-0"
