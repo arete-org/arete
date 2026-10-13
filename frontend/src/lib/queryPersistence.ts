@@ -29,6 +29,8 @@ const PERSISTED_ROOTS = [
 export function shouldPersistQuery(query: Query): boolean {
   const [root, start, end] = query.queryKey;
   if (query.state.status !== 'success' || typeof root !== 'string' || !PERSISTED_ROOTS.includes(root)) return false;
+  // A briefing still being written is read again on the next visit, not painted.
+  if (root === 'tip-daily') return (query.state.data as { status?: string } | undefined)?.status !== 'pending';
   if (root !== 'planned' && root !== 'actual') return true;
   const today = toLocalISODate();
   return typeof start === 'string' && typeof end === 'string' && start <= today && today <= end;

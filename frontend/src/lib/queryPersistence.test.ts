@@ -17,6 +17,12 @@ it('keeps the dashboard, settings and goals, never documents or coach data', () 
     expect(shouldPersistQuery(query(key)), JSON.stringify(key)).toBe(false);
 });
 
+it('never paints a briefing that was still being written', () => {
+  const today = toLocalISODate();
+  expect(shouldPersistQuery(query(['tip-daily', today], { status: 'pending' }))).toBe(false);
+  expect(shouldPersistQuery(query(['tip-daily', today], { status: 'ready', tip: 'Footing.' }))).toBe(true);
+});
+
 it('keeps only the session windows that contain today', () => {
   const today = toLocalISODate();
   expect(shouldPersistQuery(query(['planned', today, today], []))).toBe(true);
