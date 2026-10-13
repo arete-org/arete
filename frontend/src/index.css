@@ -180,7 +180,7 @@ html[data-theme='light'] {
 body {
   background-color: var(--color-void);
   color: var(--color-text-primary);
-  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -349,9 +349,9 @@ body {
 
 /* Keep the coach below desktop navigation and above the mobile tab bar,
    so its toggle remains reachable while the conversation is open. */
-.coach-panel { top: 0; bottom: calc(4rem + env(safe-area-inset-bottom)); }
+.coach-panel { right: var(--safe-right); width: calc(100% - var(--safe-left) - var(--safe-right)); top: calc(var(--visible-top, 0px) + var(--safe-top)); bottom: max(var(--mobile-nav-space), var(--keyboard-inset, 0px)); max-height: calc(var(--visible-height, 100dvh) - var(--safe-top)); }
 @media (min-width: 768px) {
-  .coach-panel { top: 3.5rem; bottom: 0; }
+  .coach-panel { top: max(3.5rem, var(--visible-top, 0px)); bottom: var(--keyboard-inset, 0px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .coach-panel { animation: none; }
@@ -456,9 +456,27 @@ html[data-theme='pierre'], html[data-theme='prune'] {
 
 /* A shared gutter keeps the wordmark and page headings aligned at every width.
    Content uses the available workspace, including when the coach is docked. */
-:root { --page-gutter: 16px; }
-.navigation-shell { padding-inline: var(--page-gutter); }
-.page-shell { width: 100%; min-width: 0; padding: 20px var(--page-gutter); }
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --page-gutter: 16px;
+  --mobile-nav-space: calc(4rem + var(--safe-bottom));
+  --launcher-space: 68px;
+}
+.app-shell { min-height: 100dvh; padding-top: var(--safe-top); }
+.app-main { padding-bottom: calc(var(--mobile-nav-space) + var(--launcher-space)); }
+.mobile-navigation { padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left); }
+.journal-actions { position: sticky; top: var(--safe-top); z-index: 20; padding-block: 8px; margin-bottom: 16px; background: var(--color-void); }
+.journal-actions > button { width: 100%; }
+@media (min-width: 768px) {
+  .app-main { padding-bottom: var(--launcher-space); }
+  .journal-actions { position: static; }
+  .journal-actions > button { width: auto; }
+}
+.navigation-shell { padding-inline: max(var(--page-gutter), var(--safe-left)) max(var(--page-gutter), var(--safe-right)); }
+.page-shell { width: 100%; min-width: 0; padding: 20px max(var(--page-gutter), var(--safe-right)) 20px max(var(--page-gutter), var(--safe-left)); }
 .page-content { width: 100%; min-width: 0; }
 .dashboard-content { container-type: inline-size; }
 .dashboard-grid, .dashboard-primary, .dashboard-secondary { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 20px; align-content: start; }
@@ -476,17 +494,17 @@ html[data-theme='pierre'], html[data-theme='prune'] {
 .coach-composer .coach-composer-input:focus-visible { outline: none; }
 
 .coach-launcher {
-  right: 12px;
-  bottom: calc(5rem + env(safe-area-inset-bottom));
+  right: max(12px, var(--safe-right));
+  bottom: calc(var(--mobile-nav-space) + 16px);
 }
 .coach-panel[data-display="floating"] {
-  --coach-bottom: max(calc(5rem + env(safe-area-inset-bottom)), calc(var(--coach-keyboard-inset, 0px) + 12px));
+  --coach-bottom: max(calc(var(--mobile-nav-space) + 16px), calc(var(--keyboard-inset, 0px) + 12px));
   top: auto;
-  right: 12px;
+  right: max(12px, var(--safe-right));
   bottom: var(--coach-bottom);
-  width: min(360px, calc(100vw - 24px));
+  width: min(360px, calc(100% - max(12px, var(--safe-left)) - max(12px, var(--safe-right))));
   max-width: none;
-  max-height: min(560px, 65dvh, calc(var(--coach-visible-height, 100dvh) - 96px));
+  max-height: min(560px, 65dvh, calc(var(--visible-height, 100dvh) - var(--safe-top) - max(24px, calc(var(--mobile-nav-space) + 28px - var(--keyboard-inset, 0px)))));
   padding: 0;
   border: 1px solid var(--color-border);
   border-radius: 16px;
@@ -520,19 +538,44 @@ html[data-theme='pierre'], html[data-theme='prune'] {
   .coach-panel[data-display="floating"] button:is([aria-label="Envoyer"], [aria-label="Arrêter la réponse"]) { width: 44px; height: 44px; margin: 0; }
 }
 @media (min-width: 768px) {
-  .coach-launcher { right: 24px; bottom: 24px; }
+  .coach-launcher { right: max(24px, var(--safe-right)); bottom: max(24px, var(--safe-bottom)); }
   .coach-panel[data-display="floating"] {
-    --coach-bottom: max(24px, calc(var(--coach-keyboard-inset, 0px) + 12px));
-    right: 24px;
-    max-height: min(560px, calc(var(--coach-visible-height, 100dvh) - 104px));
+    --coach-bottom: max(24px, var(--safe-bottom), calc(var(--keyboard-inset, 0px) + 12px));
+    right: max(24px, var(--safe-right));
+    max-height: min(560px, calc(var(--visible-height, 100dvh) - 104px));
   }
 }
 @media (prefers-reduced-transparency: reduce) {
   .coach-panel[data-display="floating"] { background: var(--color-abyss); backdrop-filter: none; }
 }
 
-/* Sheets preserve the shared modal's focus trap while putting mobile actions in reach. */
-@media (max-width:640px) {
-  .mobile-sheet { align-items:flex-end; padding:12px 0 0; }
-  .mobile-sheet > [role=dialog] { border-radius:var(--radius-panel) var(--radius-panel) 0 0; max-height:calc(100dvh - 12px); }
+/* Dialogs follow the visible viewport, including the software keyboard. */
+.modal-overlay {
+  inset-inline: 0;
+  top: var(--visible-top, 0px);
+  height: var(--visible-height, 100dvh);
+  padding: max(12px, var(--safe-top)) max(12px, var(--safe-right)) max(12px, var(--safe-bottom)) max(12px, var(--safe-left));
+}
+.modal-overlay > .modal-panel { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; min-width: 0; }
+body:has([aria-modal='true']) .coach-launcher { visibility: hidden; }
+@media (max-width: 767px) {
+  .mobile-sheet { align-items: flex-end; padding-bottom: 0; }
+  .mobile-sheet .modal-header { position: sticky; top: 0; z-index: 2; background: var(--color-abyss); }
+  .mobile-sheet > .modal-panel { scroll-padding-block: 72px; border-radius: var(--radius-panel) var(--radius-panel) 0 0; padding-bottom: max(20px, var(--safe-bottom)); }
+  .ui-input, .coach-panel[data-display] .coach-composer-input { font-size: 16px; min-width: 0; }
+  .ui-button, .navigation-item, .modal-panel button { min-height: 44px; }
+  .modal-panel input:not([type='checkbox'], [type='radio']), .modal-panel select, .modal-panel textarea { min-height: 44px; font-size: 16px; }
+}
+
+/* Modal touch scrolling must not move the page behind it. CSS handles nested dialogs. */
+html:has([aria-modal='true']) { overflow: hidden; }
+/* The install invitation occupies its own layer above the persistent launcher. */
+.install-invitation { bottom: calc(var(--mobile-nav-space) + var(--launcher-space)); max-height: calc(var(--visible-height, 100dvh) - var(--safe-top) - var(--mobile-nav-space) - var(--launcher-space) - 24px); overflow-y: auto; }
+body:has(.coach-panel) .install-invitation, body:has([aria-modal='true']) .install-invitation { display: none; }
+@media (min-width: 768px) { .install-invitation { bottom: 84px; } }
+
+@media (pointer: coarse) {
+  .ui-input, .coach-panel[data-display] .coach-composer-input,
+  .modal-panel input:not([type='checkbox'], [type='radio']), .modal-panel select, .modal-panel textarea { font-size: 16px; }
+  .ui-button, .navigation-item, .modal-panel button { min-height: 44px; }
 }

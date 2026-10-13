@@ -32,7 +32,7 @@ export function Modal({ open, onClose, children, className, padded = true, label
     const panel = dialog.current;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusable = () => Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, iframe, [tabindex="0"]')).filter(node => node.getClientRects().length > 0);
-    if (!panel.contains(document.activeElement)) (focusable()[0] ?? panel).focus();
+    if (!panel.contains(document.activeElement)) (focusable()[0] ?? panel).focus({ preventScroll: true });
     const trap = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
       const items = focusable();
@@ -43,7 +43,7 @@ export function Modal({ open, onClose, children, className, padded = true, label
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     panel.addEventListener('keydown', trap);
-    return () => { panel.removeEventListener('keydown', trap); if (previous?.isConnected) previous.focus(); };
+    return () => { panel.removeEventListener('keydown', trap); if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, [open]);
   // "Adjust state when a prop changes" pattern: detect the open -> closed edge during render.
   const [prevOpen, setPrevOpen] = useState(open);
@@ -79,7 +79,7 @@ export function Modal({ open, onClose, children, className, padded = true, label
   return createPortal(
     <div
       className={cn(
-        'fixed inset-0 bg-void/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4',
+        'modal-overlay fixed bg-void/80 backdrop-blur-sm z-[100] flex items-center justify-center',
         mobileSheet && 'mobile-sheet',
         closing ? 'animate-fade-out' : 'animate-fade-in'
       )}
@@ -98,7 +98,7 @@ export function Modal({ open, onClose, children, className, padded = true, label
         aria-modal="true"
         aria-label={label}
         className={cn(
-          'glass-panel w-full',
+          'modal-panel glass-panel w-full',
           padded && 'p-6',
           closing ? 'animate-scale-out' : 'animate-scale-in',
           className
@@ -122,7 +122,7 @@ interface ModalHeaderProps {
 
 export function ModalHeader({ title, icon, tone = 'text-neon-cyan', onClose, className }: ModalHeaderProps) {
   return (
-    <div className={cn('flex items-center justify-between mb-6', className)}>
+    <div className={cn('modal-header flex items-center justify-between gap-2 mb-6', className)}>
       <div className={cn('flex items-center gap-2', tone)}>
         {icon}
         <h3 className="text-lg font-sans">{title}</h3>
@@ -132,7 +132,7 @@ export function ModalHeader({ title, icon, tone = 'text-neon-cyan', onClose, cla
           type="button"
           onClick={onClose}
           aria-label="Fermer"
-          className="p-1 hover:bg-text-muted/20 rounded transition-colors"
+          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center hover:bg-text-muted/20 rounded transition-colors"
         >
           <X className="w-5 h-5 text-text-muted" />
         </button>

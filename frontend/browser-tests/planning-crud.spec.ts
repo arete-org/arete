@@ -308,7 +308,7 @@ test('mobile prioritizes sessions, uses one focus ring and stays usable in every
   await expect(page.locator('h1')).toHaveCSS('font-size', '30px');
   await expect(
     page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('link'),
-  ).toHaveText(['Accueil', 'Planning', 'Analyses', 'Journal', 'Réglages']);
+  ).toHaveText(['Accueil', 'Planning', 'Analyses', 'Journal', 'Profil', 'Réglages']);
   await expect(page.getByRole('button', { name: 'Options du planning' })).toBeInViewport();
   expect(
     await page.evaluate(async () =>

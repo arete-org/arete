@@ -49,7 +49,7 @@ export function InstallPrompt() {
     <aside
       role="region"
       aria-label="Installer Arete"
-      className="glass-panel fixed inset-x-3 bottom-20 z-40 p-4 md:inset-x-auto md:bottom-4 md:right-4 md:w-96 animate-scale-in"
+      className="install-invitation glass-panel fixed inset-x-3 z-40 p-4 md:inset-x-auto md:right-4 md:w-96 animate-scale-in"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>

@@ -16,7 +16,7 @@ interface Upload {
 }
 
 
-export function CardioTab() {
+export function CardioTab({ showManual, onManualChange }: { showManual: boolean; onManualChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
   const [recentUploads, setRecentUploads] = useState<Upload[]>([]);
   const [feedback, setFeedback] = useState<PostSessionFeedback | null>(null);
@@ -24,7 +24,6 @@ export function CardioTab() {
   // The coach reads the session before answering, which takes seconds, not
   // milliseconds. Say so rather than leaving the page looking finished.
   const [feedbackPending, setFeedbackPending] = useState(false);
-  const [showManual, setShowManual] = useState(false);
 
   // Shared by the FIT upload and the manual entry.
   const requestFeedback = async (id: number) => {
@@ -71,7 +70,7 @@ export function CardioTab() {
         title={
           <span className="flex items-center justify-between gap-2 w-full">
             IMPORTER UNE SÉANCE CARDIO
-            <Button variant="ghost" onClick={() => setShowManual(true)}>
+            <Button variant="ghost" onClick={() => onManualChange(true)}>
               <Plus className="w-4 h-4" />
               SANS MONTRE
             </Button>
@@ -124,7 +123,7 @@ export function CardioTab() {
       <RecentSessions />
       <ManualCardioModal
         open={showManual}
-        onClose={() => setShowManual(false)}
+        onClose={() => onManualChange(false)}
         onCreated={(id) => void requestFeedback(id)}
       />
     </div>

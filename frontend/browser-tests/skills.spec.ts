@@ -22,7 +22,7 @@ for (const rpg of [false, true]) {
       return route.fulfill({ json: [] });
     });
     await page.goto('/planning?date=2026-10-10');
-    const open = () => page.getByRole('button', { name: 'Ouvrir le coach' }).filter({ visible: true }).click();
+    const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
     await open();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     const input = panel.getByLabel('Message au coach');

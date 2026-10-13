@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
 
 // Local fixtures keep layout checks independent of training data or model calls.
 test('desktop aligns the brand and content, uses the workspace and reflows beside the coach', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('arete.coach-display.v2', 'sidebar'));
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });

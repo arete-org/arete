@@ -1,0 +1,238 @@
+import { expect, test, type Page } from '@playwright/test';
+import { coachStream } from './coachStream';
+import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
+
+test.setTimeout(30_000);
+
+async function fixture(page: Page) {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => {
+    localStorage.setItem('arete.coach-display.v1', 'sidebar');
+    localStorage.setItem('arete.install.dismissed', '1');
+    localStorage.setItem('arete.notifications.offered', '1');
+  });
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
+    if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'odyssey', display_name: 'Arthur' } });
+    if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
+    if (path === '/api/coach/today') return route.fulfill({ json: { date: '2026-10-13', items: [], remaining: 0, briefing: null } });
+    if (path === '/api/plan/today') return route.fulfill({ json: { decisions: [] } });
+    if (path === '/api/metrics/player-stats') return route.fulfill({ json: {
+      level: 0, weeks_at_goal: 0,
+      hp: { current: 50, max: 100, label: 'Récupération' },
+      mp: { current: 50, max: 100, label: 'Forme' },
+      xp: { current: 0, max: 300, label: 'Charge de la semaine' },
+    } });
+    if (path === '/api/strength/stats/muscles') return route.fulfill({ json: { muscles: [{ muscle: 'chest', label: 'Pectoraux', volume: 1200, sets: 3, level: 2, previous_volume: 900, last_trained: '2026-10-13' }] } });
+    if (path === '/api/tips/daily') return route.fulfill({ json: { tip: 'Prépare tes prochaines séances.', source: 'rules', priority: 'info' } });
+    return route.fulfill({ json: [] });
+  });
+}
+
+async function safeArea(page: Page) {
+  // Browser emulation has no physical notch: exercise the same CSS tokens explicitly.
+  await page.evaluate(() => {
+    for (const [name, value] of Object.entries({ '--safe-top': '47px', '--safe-bottom': '34px', '--safe-left': '0px', '--safe-right': '0px' })) {
+      document.documentElement.style.setProperty(name, value);
+    }
+  });
+}
+
+async function noOverflow(page: Page) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+}
+
+for (const width of [320, 390, 430]) {
+  test(`mobile ${width}: safe areas, sticky entry, navigation and history`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 844 });
+    await fixture(page);
+    await page.goto('/log');
+    await safeArea(page);
+    const heading = page.getByRole('heading', { name: 'Journal', exact: true });
+    await expect(heading).toBeVisible();
+    expect((await heading.boundingBox())!.y).toBeGreaterThanOrEqual(47);
+    const nav = page.getByRole('navigation', { name: 'Navigation mobile' });
+    await expect(nav.getByRole('link')).toHaveText(['Accueil', 'Planning', 'Analyses', 'Journal', 'Profil', 'Réglages']);
+    for (const link of await nav.getByRole('link').all()) {
+      const box = (await link.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await noOverflow(page);
+    await page.locator('svg[aria-label="Silhouette Face"] g').filter({ has: page.locator('title', { hasText: 'Pectoraux' }) }).locator('path').first().tap();
+    await heading.tap();
+    await expect(page.getByText('Pectoraux', { exact: true })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const content = (await page.locator('.page-shell').boundingBox())!;
+    const bubble = (await page.getByRole('button', { name: 'Demander à Chiron' }).boundingBox())!;
+    expect(content.y + content.height).toBeLessThanOrEqual(bubble.y);
+    await page.evaluate(() => window.scrollTo(0, 350));
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
+    const position = await page.evaluate(() => scrollY);
+    const entry = page.getByRole('button', { name: 'Saisir une séance', exact: true });
+    expect((await entry.boundingBox())!.y).toBeGreaterThanOrEqual(47);
+    await expect(entry).toBeInViewport();
+    await entry.tap();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Demander à Chiron' })).toBeHidden();
+    await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(position, 0);
+    await nav.getByRole('link', { name: 'Planning', exact: true }).tap();
+    await expect(page.getByRole('heading', { name: 'Planning', exact: true })).toBeInViewport();
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+    const days = page.getByRole('group', { name: 'Jours de la semaine' });
+    await expect(days.getByRole('button')).toHaveCount(7);
+    for (const day of await days.getByRole('button').all()) {
+      await expect(day).toBeInViewport();
+      expect((await day.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    }
+    await noOverflow(page);
+    await page.screenshot({ path: `../.context/mobile-planning-${width}-${info.project.name}.png` });
+    await page.goBack();
+    await expect(heading).toBeVisible();
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(position, 0);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `../.context/mobile-journal-${width}-${info.project.name}.png` });
+    await page.getByRole('button', { name: 'CARDIO', exact: true }).tap();
+    await entry.tap();
+    await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Fermer' }).tap();
+    await nav.getByRole('link', { name: 'Tableau de bord' }).tap();
+    await page.getByRole('link', { name: 'Saisir une séance', exact: true }).tap();
+    await expect(dialog.getByRole('heading', { name: 'SAISIR UNE SÉANCE' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
+    await nav.getByRole('link', { name: 'Profil', exact: true }).tap();
+    await expect(page.getByRole('heading', { name: 'Mon profil' })).toBeInViewport();
+    await expect(page.getByText('Active la gamification', { exact: false })).toBeVisible();
+  });
+}
+
+test('floating default migrates once, survives navigation and fits the keyboard', async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await fixture(page);
+  await page.goto('/log');
+  await safeArea(page);
+  const launcher = page.getByRole('button', { name: 'Demander à Chiron', exact: true });
+  await launcher.tap();
+  const panel = page.getByRole('complementary', { name: 'Coach IA' });
+  await expect(panel).toHaveAttribute('data-display', 'floating');
+  const input = panel.getByLabel('Message au coach');
+  await input.fill('Ma séance : squats 3 × 8 à 60 kg');
+  await page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('link', { name: 'Planning' }).tap();
+  await expect(input).toHaveValue('Ma séance : squats 3 × 8 à 60 kg');
+  await page.evaluate(() => {
+    Object.defineProperty(window.visualViewport!, 'height', { configurable: true, value: 360 });
+    Object.defineProperty(window.visualViewport!, 'offsetTop', { configurable: true, value: 20 });
+    window.visualViewport!.dispatchEvent(new Event('resize'));
+  });
+  const bounds = (await panel.boundingBox())!;
+  expect(bounds.y).toBeGreaterThanOrEqual(67);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(380);
+  await expect(input).toHaveCSS('font-size', '16px');
+  await expect(panel.getByRole('button', { name: 'Envoyer', exact: true })).toBeInViewport();
+  await noOverflow(page);
+  await page.screenshot({ path: `../.context/mobile-chiron-keyboard-${info.project.name}.png` });
+  await page.evaluate(() => {
+    Object.defineProperty(window.visualViewport!, 'height', { configurable: true, value: 844 });
+    Object.defineProperty(window.visualViewport!, 'offsetTop', { configurable: true, value: 0 });
+    window.visualViewport!.dispatchEvent(new Event('resize'));
+  });
+  await panel.getByRole('button', { name: 'Options du coach' }).tap();
+  await panel.getByRole('radio', { name: 'Panneau latéral classique' }).tap();
+  await panel.getByRole('button', { name: 'Masquer le coach' }).tap();
+  await expect(launcher).toBeInViewport();
+  await page.reload();
+  await launcher.tap();
+  await expect(panel).toHaveAttribute('data-display', 'sidebar');
+  await expect(input).toHaveValue('Ma séance : squats 3 × 8 à 60 kg');
+});
+
+test('short viewport keeps planning and cardio forms reachable with keyboard and errors', async ({ page }) => {
+  await fixture(page);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto('/planning?new=1');
+  await safeArea(page);
+  let dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(window.visualViewport!, 'height', { configurable: true, value: 320 });
+    window.visualViewport!.dispatchEvent(new Event('resize'));
+  });
+  const bounds = (await dialog.boundingBox())!;
+  expect(bounds.y).toBeGreaterThanOrEqual(47);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(320);
+  await expect(dialog.getByLabel('Titre', { exact: true })).toHaveCSS('font-size', '16px');
+  await dialog.getByRole('button', { name: 'Annuler', exact: true }).tap();
+  await page.goto('/log?tab=cardio&new=1');
+  dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
+  await page.route('**/api/garmin/actual', route => route.fulfill({ status: 503, json: { detail: 'Indisponible' } }));
+  await dialog.getByPlaceholder('Footing au parc').fill('Séance à conserver');
+  await dialog.getByRole('button', { name: 'ENREGISTRER', exact: true }).tap();
+  await expect(dialog.getByText(/Enregistrement impossible/)).toBeVisible();
+  await expect(dialog.getByPlaceholder('Footing au parc')).toHaveValue('Séance à conserver');
+  await noOverflow(page);
+});
+
+
+test('touch navigation and display changes preserve a live response and manual draft', async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const stream = await coachStream(page, false, 'floating');
+  try {
+    await page.goto('/planning');
+    await expect(page.getByRole('heading', { name: 'Planning', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Demander à Chiron' }).tap();
+    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const input = panel.getByLabel('Message au coach');
+    await input.fill('Comment adapter ma semaine ?');
+    await panel.getByRole('button', { name: 'Envoyer', exact: true }).tap();
+    await expect.poll(() => stream.requests()).toBe(1);
+    stream.send({ type: 'token', id: 'answer', text: 'Préserve une journée de récupération.' });
+    await expect(panel.locator('.coach-answer-part')).toContainText('Préserve une journée');
+    await input.fill('Garde mon dimanche libre.');
+    await page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('link', { name: 'Journal' }).tap();
+    await expect(page.getByRole('heading', { name: 'Journal', exact: true })).toBeVisible();
+    await expect(input).toHaveValue('Garde mon dimanche libre.');
+    await panel.getByRole('button', { name: 'Options du coach' }).tap();
+    await panel.getByRole('radio', { name: 'Panneau latéral classique' }).tap();
+    await expect(panel).toHaveAttribute('data-display', 'sidebar');
+    await expect(input).toHaveValue('Garde mon dimanche libre.');
+    stream.send({ type: 'token', id: 'answer', text: ' Dimanche reste libre.' });
+    stream.send({ type: 'done', message: { role: 'assistant', content: 'Préserve une journée de récupération. Dimanche reste libre.' } });
+    await expect(panel.getByRole('button', { name: 'Envoyer', exact: true })).toBeVisible();
+    expect(stream.requests()).toBe(1);
+    await panel.getByRole('button', { name: 'Options du coach' }).tap();
+    await panel.getByRole('radio', { name: 'Chat flottant' }).tap();
+    await noOverflow(page);
+    await page.screenshot({ path: `../.context/mobile-chiron-live-${info.project.name}.png` });
+  } finally { await stream.close(); }
+});
+
+
+test('landscape respects lateral safe areas and preserves the draft through rotation', async ({ page }) => {
+  await fixture(page);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto('/planning');
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--safe-left', '47px');
+    document.documentElement.style.setProperty('--safe-right', '47px');
+    document.documentElement.style.setProperty('--safe-bottom', '21px');
+  });
+  await expect(page.getByRole('heading', { name: 'Planning', exact: true })).toBeVisible();
+  expect((await page.getByRole('link', { name: 'Arete · Accueil' }).boundingBox())!.x).toBeGreaterThanOrEqual(47);
+  await page.getByRole('button', { name: 'Demander à Chiron' }).tap();
+  const panel = page.getByRole('complementary', { name: 'Coach IA' });
+  const input = panel.getByLabel('Message au coach');
+  await input.fill('Brouillon en paysage');
+  await expect(input).toHaveCSS('font-size', '16px');
+  const box = (await panel.boundingBox())!;
+  expect(box.x + box.width).toBeLessThanOrEqual(797);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await safeArea(page);
+  await expect(input).toHaveValue('Brouillon en paysage');
+  await noOverflow(page);
+});

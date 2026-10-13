@@ -1,3 +1,5 @@
+import { RouteScroll } from '@/components/RouteScroll';
+import { useVisualViewport } from '@/hooks/useVisualViewport';
 import { useCoachDisplay } from '@/hooks/useCoachDisplay';
 import { AreteMark } from '@/components/AreteBrand';
 import type { CoachReference } from '@/lib/coachToday';
@@ -75,6 +77,7 @@ function RouteContent({ children }: { children: ReactNode }) {
 }
 
 function App() {
+  useVisualViewport();
   // Panel state lives above the router so the drawer survives page navigation
   // (the agent's panel_context follows the route, the conversation too).
   const display = useCoachDisplay();
@@ -103,7 +106,10 @@ function App() {
     if (!agentOpen && restoreCoachFocus.current) {
       restoreCoachFocus.current = false;
       // The floating launcher is mounted again only after closing the panel.
-      (launcherRef.current ?? triggerRef.current)?.focus();
+      const launcher = launcherRef.current;
+      const desktopTrigger = document.querySelector<HTMLButtonElement>('nav[aria-label="Navigation principale"] button[aria-controls="coach-panel"]');
+      const target = launcher?.getClientRects().length ? launcher : desktopTrigger ?? triggerRef.current;
+      target?.focus({ preventScroll: true });
     }
   }, [agentOpen]);
 
@@ -112,7 +118,8 @@ function App() {
       <PersistedQueries>
         <SettingsProvider>
           <BrowserRouter>
-            <div className="min-h-screen bg-void">
+            <div className="app-shell bg-void">
+              <RouteScroll />
               <Navigation
                 agentOpen={agentOpen}
                 agentBusy={agentBusy}
@@ -121,9 +128,9 @@ function App() {
                   setAgentOpen((v) => !v);
                 }}
               />
-              {/* pb-20 on mobile for bottom tab bar clearance, pb-0 on desktop */}
+              {/* Reserve the tab bar and launcher so the final content remains reachable. */}
               <main
-                className={`pb-20 md:pb-0 transition-[margin] duration-[220ms] motion-reduce:transition-none ${agentOpen && display.mode === 'sidebar' ? 'xl:mr-[520px]' : ''}`}
+                className={`app-main transition-[margin] duration-[220ms] motion-reduce:transition-none ${agentOpen && display.mode === 'sidebar' ? 'xl:mr-[520px]' : ''}`}
               >
                 <RouteContent>
                   <ErrorBoundary>
@@ -179,9 +186,9 @@ function App() {
                 </RouteContent>
               </main>
 
-              {display.mode === 'floating' && !agentOpen && <button
+              {!agentOpen && <button
                 ref={launcherRef}
-                className="coach-launcher fixed z-40 flex min-h-11 items-center gap-2 rounded-full border border-text-muted/20 bg-abyss px-4 text-sm text-text-primary shadow-lg"
+                className={`coach-launcher ${display.mode === 'sidebar' ? 'md:hidden' : ''} fixed z-40 flex min-h-11 items-center gap-2 rounded-full border border-text-muted/20 bg-abyss px-4 text-sm text-text-primary shadow-lg`}
                 aria-controls="coach-panel" aria-expanded={false}
                 onClick={event => { triggerRef.current = event.currentTarget; setAgentOpen(true); }}
                 onPointerEnter={preloadAgentMarkdown} onFocus={preloadAgentMarkdown}

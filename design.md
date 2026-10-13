@@ -112,8 +112,8 @@ débordement horizontal et retour à la préférence enregistrée après recharg
 
 La [maquette compacte approuvée](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=62-143)
 et ses [états de croissance et de changement de mode](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=82-324)
-prolongent la même identité. Le panneau latéral classique reste le mode par défaut.
-Dans « Options du coach », « Chat flottant » active une préférence locale au navigateur ;
+prolongent la même identité. Le chat flottant devient le mode par défaut.
+Dans « Options du coach », le mode choisi est une préférence locale au navigateur ;
 « Panneau latéral classique » permet de revenir au mode précédent, même pendant une réponse.
 Si le stockage est indisponible, le choix fonctionne pour la session avec une explication visible.
 
@@ -164,3 +164,69 @@ suppression. L’éditeur conserve son brouillon en cas d’erreur et signale le
 modifications non enregistrées. Les écritures utilisent la version lue pour
 refuser un écran périmé. Le statut sportif et le statut Garmin restent distincts ;
 un retrait Garmin incomplet reste accessible après suppression de la séance.
+
+
+## Mobile first — navigation, Journal et fenêtres
+
+La proposition A mobile (`111:175`) reste la référence du contenu Planning.
+La navigation commune comporte six entrées, dans cet ordre : Accueil, Planning,
+Analyses, Journal, Profil, Réglages. Profil reste accessible sans gamification
+et explique alors comment l’activer. Chiron n’est plus un onglet mobile :
+« Demander à Chiron » est un lanceur flottant actionnable au toucher et au clavier.
+Les liens contextuels vers une discussion restent disponibles.
+
+Les maquettes Figma A et B réutilisent désormais les mêmes composants de navigation :
+[mobile](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=126-382),
+[bureau](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=126-429)
+et [lanceur Chiron](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=126-481).
+Le menu à quatre liens textuels des premières propositions est remplacé.
+Planning ne possède aucune variante de navigation propre à sa page.
+
+- Sur mobile : barre de 64 px, hors zone de sécurité, icônes Lucide de 20 px,
+  libellés Inter de 10 px et cibles d’au moins 44 × 44 px. L’onglet actif utilise
+  la couleur de sélection, l’accent et l’indicateur supérieur du menu commun.
+- Sur bureau : barre de 56 px, signature au laurier, liens Tableau de bord,
+  Planning, Analyses, Journal et Réglages, puis accès au coach. Profil s’insère
+  avant Réglages lorsque la gamification est activée ; les six entrées mobiles
+  restent présentes dans les deux cas.
+- Les couleurs et rayons suivent les tokens communs. Les textes et les icônes
+  des maquettes restent éditables ; les quatre écrans utilisent des instances
+  des composants partagés. Le code de référence reste `Navigation.tsx` et
+  `index.css` pour les huit thèmes et les zones de sécurité.
+
+- `App` réserve les zones de sécurité système et l’espace de la navigation et du
+  lanceur. Les tokens `--safe-*`, `--mobile-nav-space` et `--launcher-space` dans
+  `index.css` en sont les propriétaires communs, y compris en mode installé.
+- Le document défile pour les pages. Une navigation vers une autre page repart
+  en haut ; le retour navigateur restaure les 100 dernières positions en mémoire.
+  La restauration attend au plus deux secondes l’arrivée du contenu différé et
+  cède immédiatement à un geste utilisateur. Les paramètres de la page et la
+  fermeture d’un dialogue ne ramènent pas arbitrairement en haut.
+- Le Journal présente « Saisir une séance » sous son titre. Cette action reste
+  visible en haut pendant le défilement mobile et ouvre le formulaire de l’onglet
+  Force ou Cardio. `/log?new=1` ouvre directement la saisie force depuis l’accueil ;
+  `/log?tab=cardio&new=1` ouvre la saisie cardio manuelle. Fermer retire `new` sans
+  ajouter une entrée d’historique.
+- `useVisualViewport` fournit une seule mesure de l’espace visible aux dialogues
+  et à Chiron. Le clavier ne doit masquer ni les champs ni les commandes ; les
+  champs mobiles font au moins 16 px et les commandes tactiles au moins 44 px.
+  Les dialogues bloquent le défilement de fond et restaurent le focus sans
+  déplacer la page. Les formulaires longs défilent dans leur panneau.
+- Le Planning commence par le sélecteur de jours, les compteurs et les séances.
+  Sept colonnes apparaissent au-delà de 1050 px disponibles. Sur les plus petites
+  largeurs (moins de 308 px de contenu), les sept jours passent sur deux lignes
+  pour conserver des cibles de 44 px sans masquer le dimanche.
+- La préférence locale Chiron passe à `arete.coach-display.v2` : les anciens choix
+  sont réinitialisés une seule fois vers le flottant ; les choix explicites
+  suivants sont conservés. Le lanceur mobile reste présent en mode latéral.
+  Ouvrir, fermer ou déplacer le chat ne crée aucun appel modèle.
+- Les invitations d’installation restent au-dessus du lanceur et s’effacent
+  temporairement devant un dialogue ou le coach. Les zones musculaires peuvent
+  être consultées au toucher, sans nécessiter un survol.
+
+Validation : `mobile-ux.spec.ts` utilise Chromium et WebKit en mode tactile à
+320, 390 et 430 px, avec zones de sécurité et clavier simulés. Les scénarios
+existants vérifient les huit thèmes à 390, 430, 768 et 1440 px, les flux SSE et
+les écritures Planning sur une base jetable. Les captures sont enregistrées
+sous `.context/`. L’émulation ne remplace pas une recette sur iPhone et Android
+réels, notamment pour le clavier système, les barres du navigateur et le mode installé.
