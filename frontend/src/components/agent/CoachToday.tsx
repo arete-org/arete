@@ -75,7 +75,7 @@ export function FollowupCard({ followup }: { followup: Followup }) {
   </article>;
 }
 
-export function CoachTodayPanel({ briefing }: { briefing?: string }) {
+export function CoachTodayPanel({ briefing, briefingNote }: { briefing?: string; briefingNote?: string }) {
   const client = useQueryClient();
   const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today });
   const prepare = useMutation({ mutationFn: coachApi.prepare, onSuccess: data => client.setQueryData(coachTodayKey, data) });
@@ -85,6 +85,7 @@ export function CoachTodayPanel({ briefing }: { briefing?: string }) {
       {(query.error || prepare.error) && <p role="alert" className="text-sm text-danger-red">{readableError(query.error ?? prepare.error)}</p>}
       {query.data?.items.map(item => item.kind === 'proposal' ? <ProposalCard key={`p:${item.record.id}`} proposal={item.record} /> : <FollowupCard key={`f:${item.record.id}`} followup={item.record} />)}
       {(briefing || query.data?.briefing) && <p className="text-sm text-text-secondary">{briefing || query.data?.briefing?.text}</p>}
+      {briefing && briefingNote && <p className="text-xs text-text-muted">{briefingNote}</p>}
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
       <Button variant="ghost" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>
     </div>

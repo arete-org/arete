@@ -529,15 +529,24 @@ export interface PostSessionFeedback {
   source: "agent" | "rules";
 }
 
+/** The day's briefing, or `pending` (no other field) while the coach writes it. */
+export interface DailyTip {
+  status: "ready" | "pending";
+  tip: string | null;
+  priority: "info" | "warning" | "alert" | null;
+  /** Who wrote it: the coaching agent, or the deterministic rule engine. */
+  source: "agent" | "rules" | null;
+  generated_at: string | null;
+  /** The daily sync rewrote a briefing written before its data. */
+  updated_after_sync: boolean;
+}
+
 export const tipsApi = {
-  getDaily: () =>
-    fetchAPI<{
-      tip: string;
-      priority: "info" | "warning" | "alert";
-      /** Who wrote it: the coaching agent, or the deterministic rule engine. */
-      source: "agent" | "rules";
-      generated_at: string;
-    }>("/tips/daily"),
+  /** Reads only: never runs the coach. */
+  getDaily: () => fetchAPI<DailyTip>("/tips/daily"),
+
+  /** Writes the day's briefing if it has none: a long request nobody waits on. */
+  writeDaily: () => fetchAPI<DailyTip>("/tips/daily", { method: "POST" }),
 
   getPostSession: (
     sessionType: "strength" | "cardio",

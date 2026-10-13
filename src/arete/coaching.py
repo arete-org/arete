@@ -314,11 +314,19 @@ def generate_briefing(
 
 
 def get_or_create_briefing(
-    *, trigger: str = "api", target_date: date | None = None, user_id: int | None = None
-) -> Briefing:
+    *,
+    trigger: str = "api",
+    target_date: date | None = None,
+    user_id: int | None = None,
+    replacing: Briefing | None = None,
+) -> Briefing | None:
     user_id = resolve_athlete_id(user_id)
     return briefing.get_or_create_briefing(
-        produce=run_briefing, trigger=trigger, target_date=target_date, user_id=user_id
+        produce=run_briefing,
+        trigger=trigger,
+        target_date=target_date,
+        user_id=user_id,
+        replacing=replacing,
     )
 
 

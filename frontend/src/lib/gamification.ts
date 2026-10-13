@@ -76,30 +76,39 @@ export const gameApi = {
     }),
 };
 export const gameKey = ['game'] as const;
+/** When a projection last failed: the read that follows it never asks for another. */
+let lastFailure = 0;
 
 /**
  * The stored progression: a read, so loading a page writes nothing. Evidence
- * settled nowhere yet (an import elsewhere) asks for one projection; the
- * projection's own answer never asks for another.
+ * settled nowhere yet (an import elsewhere) asks for one projection; neither
+ * the projection's own answer nor the read after a failed one asks again.
+ * `syncError` is that projection's failure, the snapshot still shown; `sync`
+ * is the explicit retry a click offers.
  */
 export function useGameSnapshot(options: { enabled?: boolean; refetchOnWindowFocus?: 'always' } = {}) {
   const client = useQueryClient();
   const query = useQuery({ queryKey: gameKey, queryFn: () => gameApi.snapshot(), retry: false, ...options });
   const asked = useRef(0);
-  const { mutate, isPending } = useMutation({
+  const { mutate, isPending, error: syncError } = useMutation({
     mutationFn: gameApi.sync,
     onSuccess: (player) => {
       asked.current = Date.now();
       client.setQueryData(gameKey, player, { updatedAt: asked.current });
     },
+    onError: () => {
+      lastFailure = Date.now();
+    },
   });
   const { data, dataUpdatedAt } = query;
   useEffect(() => {
     if (!data?.enabled || !data.pending || isPending || asked.current >= dataUpdatedAt) return;
+    const retry = lastFailure > asked.current;
     asked.current = dataUpdatedAt;
-    mutate();
+    if (!retry) mutate();
   }, [data, dataUpdatedAt, isPending, mutate]);
-  return query;
+  // An explicit refresh (a click) may project again.
+  return { ...query, syncError, sync: () => mutate() };
 }
 
 /** After a session event: the one projection, for an opted-in athlete only. */
@@ -110,8 +119,11 @@ export function syncGame(client: QueryClient) {
       client.setQueryData(gameKey, player);
       void client.invalidateQueries({ queryKey: [...gameKey, 'receipts'] });
     },
-    // A failed projection is never replayed: the next read shows what is pending.
-    () => undefined,
+    // Never replayed: the snapshot is read again and shows what is pending.
+    () => {
+      lastFailure = Date.now();
+      void client.invalidateQueries({ queryKey: gameKey });
+    },
   );
 }
 

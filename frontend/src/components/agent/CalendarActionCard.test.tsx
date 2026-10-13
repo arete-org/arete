@@ -148,3 +148,29 @@ it("preserves action IDs through SSE and browser storage without trusting a stor
     ),
   ).toThrow();
 });
+
+it("rereads an open proposal on remount but never a final outcome", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const show = (identifier: string) =>
+    render(
+      <QueryClientProvider client={client}>
+        <CalendarActionCard id={identifier} />
+      </QueryClientProvider>,
+    );
+  const done = "b".repeat(32);
+  vi.mocked(calendarApi.action).mockImplementation(async (identifier) =>
+    identifier === done ? { ...action, id: done, status: "succeeded" } : action,
+  );
+  for (const identifier of [id, done]) {
+    const view = show(identifier);
+    await waitFor(() => expect(client.getQueryData(["calendarAction", identifier])).toBeTruthy());
+    view.unmount();
+  }
+  show(id);
+  show(done);
+  expect(await screen.findByText("Enregistré")).toBeTruthy();
+  await waitFor(() =>
+    expect(vi.mocked(calendarApi.action).mock.calls.filter(([a]) => a === id)).toHaveLength(2),
+  );
+  expect(vi.mocked(calendarApi.action).mock.calls.filter(([a]) => a === done)).toHaveLength(1);
+});

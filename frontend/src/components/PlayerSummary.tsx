@@ -44,6 +44,11 @@ export function PlayerSummary() {
             Dernier reçu : {p.history[0].label}
           </p>
         )}
+        {player.syncError && (
+          <p role="alert" className="text-[10px] text-warning-orange truncate">
+            Progression non actualisée : {player.syncError.message}
+          </p>
+        )}
       </div>
       <span className="text-xs text-neon-cyan">Profil →</span>
     </Link>

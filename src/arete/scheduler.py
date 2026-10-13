@@ -15,9 +15,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from contextvars import ContextVar
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from time import monotonic
+from time import monotonic, sleep
 
 import duckdb
 
@@ -250,6 +251,14 @@ def announce_sync(feedback: list[dict], unannounced: int) -> str | None:
     return result.skipped_reason or f"{result.sent} sent"
 
 
+#: How long the daily sync waits for a briefing the dashboard is writing
+#: before comparing its facts; past it, that briefing stands as written.
+BRIEFING_WAIT_SECONDS = 60
+BRIEFING_POLL_SECONDS = 5
+#: When the running dispatch stops starting model calls; unset outside one.
+_model_deadline: ContextVar[float | None] = ContextVar("model_deadline", default=None)
+
+
 def write_daily_briefing() -> str:
     """Have the coach write the day's briefing, after the sync that feeds it.
 
@@ -257,23 +266,42 @@ def write_daily_briefing() -> str:
     Log-and-continue: the briefing must never be able to break the loop, and
     it has its own rule floor, so a failure here is already handled downstream.
     """
-    from arete.coaching import generate_briefing
-    from arete.services.briefing import briefing_enabled
+    from arete.coaching import get_or_create_briefing
+    from arete.services.briefing import briefing_enabled, facts_changed
     from arete.services.coaching_repository import BriefingRepository
 
     if not briefing_enabled():
         return "disabled"
-    # A briefing the dashboard asked for before the sync is rewritten: it was
-    # read off last night's missing data. One this job already wrote (a cron
-    # that fires twice) is kept: the second run would pay for the same text.
-    existing = BriefingRepository().get_for_day(athlete_today())
-    if existing is not None and existing.trigger == "scheduler":
-        return existing.source
+    repo = BriefingRepository()
+    # Waiting never eats the dispatch's model budget (``SCHEDULE_MODEL_SECONDS``):
+    # a rewrite started past it would outlive the function.
+    deadline = monotonic() + BRIEFING_WAIT_SECONDS
+    model_deadline = _model_deadline.get()
+    if model_deadline is not None:
+        deadline = min(deadline, model_deadline)
     try:
-        briefing = generate_briefing(trigger="scheduler")
+        while True:
+            # A briefing the dashboard asked for is rewritten only when its
+            # facts changed since (this sync's health, sessions, decisions);
+            # the dashboard then says it was updated after the sync. One this
+            # job already wrote (a cron that fires twice) is kept.
+            existing = repo.get_for_day(athlete_today())
+            if existing is not None and (
+                existing.trigger == "scheduler" or not facts_changed(existing)
+            ):
+                return existing.source
+            briefing = get_or_create_briefing(trigger="scheduler", replacing=existing)
+            if briefing is not None:
+                break
+            # The dashboard's request is writing it: compare once it is stored.
+            if monotonic() >= deadline:
+                return "in progress"
+            sleep(BRIEFING_POLL_SECONDS)
     except Exception as e:  # noqa: BLE001 - background job must not die
         logger.warning("Daily briefing failed: %s", e)
         return f"failed: {e}"
+    if existing is not None and briefing.id == existing.id:
+        return "rewrite failed; kept"  # the athlete already read this one
     logger.info("Daily briefing: %s", briefing.source)
     from arete.services.notifications import first_sentence, notify
 
@@ -422,6 +450,8 @@ def _run_athlete(athlete_id: int, started: float) -> dict:
             if config.is_remote_db:
                 mirror.hydrate()
             status = daily_sync()
+            # The briefing's wait for the dashboard ends at the model deadline.
+            _model_deadline.set(started + SCHEDULE_MODEL_SECONDS)
             for step, write in (
                 ("briefing", write_daily_briefing),
                 ("review", write_weekly_review),

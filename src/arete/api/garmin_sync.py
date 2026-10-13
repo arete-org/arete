@@ -92,16 +92,14 @@ class GarminLoginResponse(BaseModel):
 
 @router.get("/status", response_model=SyncStatusResponse)
 def get_sync_status():
-    """Get current sync status and authentication state."""
-    from arete.garmin.client import GarminClient
+    """Sync status from local state: no Garmin login, no ``garminconnect``.
 
-    client = GarminClient()
-    authenticated = client.is_authenticated()
-    user_email = None
-    if authenticated:
-        with contextlib.suppress(Exception):
-            user_email = client.profile().get("user_email")
+    ``garmin_authenticated`` means session tokens are stored; tokens Garmin
+    has since expired or revoked are reported by the next real sync.
+    """
+    from arete.garmin import token_store
 
+    authenticated, user_email = token_store.session_status()
     _, imported_at = _repo.last_garmin_import()
     return SyncStatusResponse(
         garmin_authenticated=authenticated,

@@ -34,6 +34,16 @@ it('an opted-out athlete sends no projection', () => {
   expect(gameApi.sync).not.toHaveBeenCalled();
 });
 
+it('a failed session-event projection reads the snapshot again, without replaying it', async () => {
+  const client = new QueryClient();
+  client.setQueryData(['game-preference'], { enabled: true, opted_in: true, available: true, version: 1 });
+  vi.mocked(gameApi.sync).mockRejectedValue(new Error('conflict'));
+  const refetch = vi.spyOn(client, 'invalidateQueries');
+  invalidateAfterSession(client);
+  await vi.waitFor(() => expect(refetch).toHaveBeenCalledWith({ queryKey: gameKey }));
+  expect(gameApi.sync).toHaveBeenCalledTimes(1);
+});
+
 it('a window focus within five minutes does not refetch the game preference', async () => {
   const preference = vi.spyOn(gameApi, 'preference').mockResolvedValue({ enabled: true, opted_in: true, available: true, version: 1 });
   const client = new QueryClient();

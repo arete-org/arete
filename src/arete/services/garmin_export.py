@@ -23,6 +23,7 @@ REQUEST_TIMEOUT = 10.0
 MAX_REMOTE_WORKOUTS = 500
 MAX_DEVICES = 50
 MAX_STATUS_ROWS = 500
+MAX_INSPECT_SESSIONS = 50
 WORKOUT = "/workout-service/workout"
 SCHEDULE = "/workout-service/schedule"
 
@@ -304,6 +305,20 @@ def inspect_session(session_id: int, *, include_steps: bool = True) -> dict:
     with db_connection() as con:
         state = _get(con, session_id)
     return {"session": result, "export": public_status(state)}
+
+
+def inspect_sessions(session_ids: list[int]) -> dict:
+    """Several cards' views in one read; a session that no longer exists is
+    reported beside the others instead of failing the whole list."""
+    ids = list(dict.fromkeys(session_ids))
+    assert 1 <= len(ids) <= MAX_INSPECT_SESSIONS
+    workouts, errors = [], {}
+    for session_id in ids:
+        try:
+            workouts.append(inspect_session(session_id))
+        except DocumentError as exc:
+            errors[str(session_id)] = str(exc)
+    return {"workouts": workouts, "errors": errors}
 
 
 def _payload(session_id: int) -> tuple[dict, date, str, int]:

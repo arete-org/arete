@@ -8,8 +8,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, strengthAsActual } from '@/components';
-import { Panel, Skeleton } from '@/components/ui';
-import { ApiError, garminApi, garminHealthApi, goalsApi, metricsApi, planApi, settingsApi, tipsApi } from '@/lib/api';
+import { Button, Panel, Skeleton } from '@/components/ui';
+import { ApiError, garminApi, garminHealthApi, goalsApi, metricsApi, planApi, settingsApi } from '@/lib/api';
+import { useDailyTip } from '@/lib/dailyTip';
 import { formatHoursMinutes } from '@/lib/fr';
 import { goalCountdown } from '@/lib/race';
 import { cn } from '@/lib/utils';
@@ -170,11 +171,7 @@ export function DashboardPage() {
     retry: false,
   });
 
-  const { data: tip, isLoading: tipLoading } = useQuery({
-    queryKey: qk.tipDaily,
-    queryFn: tipsApi.getDaily,
-    staleTime: 1000 * 60 * 30,
-  });
+  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip();
 
   return (
     <div className="page-shell bg-void">
@@ -255,13 +252,21 @@ export function DashboardPage() {
             </Panel>
 
             {/* Block 4: AI Tip — the first visit of the day may wait for the coach */}
-            {tipLoading && (
+            {tipWriting && (
               <p className="glass-panel p-4 text-sm font-sans text-text-muted flex items-center gap-2">
                 <AretePresence size={24} />
                 Le coach écrit ton briefing…
+                {tipStalled && (
+                  <Button variant="ghost" className="ml-auto" onClick={refreshTip}>
+                    Actualiser
+                  </Button>
+                )}
               </p>
             )}
-            <CoachTodayPanel briefing={tip?.tip} />
+            <CoachTodayPanel
+              briefing={tip?.tip ?? undefined}
+              briefingNote={tip?.updated_after_sync ? 'Mis à jour après la synchro' : undefined}
+            />
 
             {/* Quick Actions Footer */}
             <div className="flex gap-3 animate-fade-in">

@@ -23,7 +23,6 @@
     "@tesseract.js-data/fra": "^1.0.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.555.0",
-    "pdfjs-dist": "^6.4.299",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",

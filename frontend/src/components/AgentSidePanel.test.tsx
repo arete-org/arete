@@ -119,7 +119,8 @@ it('creates a thread without erasing the old one and retains a stream when hidde
   expect(screen.getByLabelText('Ton message').textContent).toBe(
     'Préparer mon trail'
   );
-  expect(screen.getByText('Réponse au trail').tagName).toBe('STRONG');
+  // The markdown renderer loads with the panel: the answer is formatted once it arrives.
+  expect((await screen.findByText('Réponse au trail')).tagName).toBe('STRONG');
   expect((screen.getByRole('textbox', { name: 'Message au coach' }) as HTMLTextAreaElement).value).toBe('');
 });
 

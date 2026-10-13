@@ -646,6 +646,29 @@ def test_remote_token_store_revokes_stale_worker_files(athletes, tmp_path):
         assert stale.read_text() == athletes[0].email
 
 
+def test_remote_session_status_reads_each_athletes_rows(
+    athletes, tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from arete.garmin import token_store
+
+    # Only the status's branch is remote; the database stays the local copy.
+    monkeypatch.setattr(token_store, "config", SimpleNamespace(is_remote_db=True))
+    first, second = (user.athlete_id for user in athletes)
+    with athlete_scope(first):
+        source = tmp_path / "garmin_tokens.json"
+        source.write_text("{}")
+        token_store.save(source)
+        token_store.save_account(source, "first@garmin.test", remote=True)
+        assert token_store.session_status() == (True, "first@garmin.test")
+    with athlete_scope(second):
+        assert token_store.session_status() == (False, None)
+    with athlete_scope(first):
+        token_store.delete()
+        assert token_store.session_status() == (False, None)
+
+
 @pytest.mark.parametrize("flow", ["portal", "ios", "widget"])
 def test_mfa_sdk_state_round_trip_is_bounded_and_password_free(flow):
     import requests
