@@ -174,6 +174,54 @@ def test_push_stores_ids_and_reuses_the_copy(tempo):
     assert not any(method == "DELETE" for method, _, _ in client.calls)
 
 
+def test_the_push_time_is_a_utc_instant_under_a_paris_session(
+    tempo, monkeypatch, router_client
+):
+    from contextlib import contextmanager
+    from datetime import UTC, datetime
+
+    from arete.api.garmin import router
+    from arete.dataio.db import db_connection
+    from arete.services import garmin_export
+
+    # The Docker stack runs with TZ=Europe/Paris, which DuckDB adopts as its
+    # session TimeZone. ICU caches the process zone, so set it on the session.
+    @contextmanager
+    def paris_connection(*args, **kwargs):
+        with db_connection(*args, **kwargs) as con:
+            con.execute("SET TimeZone='Europe/Paris'")
+            yield con
+
+    monkeypatch.setattr(garmin_export, "db_connection", paris_connection)
+    monkeypatch.setattr(
+        garmin_export, "utc_now", lambda: datetime(2026, 10, 9, 23, 1, tzinfo=UTC)
+    )
+    pushed = plan_adaptation.push_session(_garmin(), tempo)
+    assert pushed["garmin_pushed_at"] == "2026-10-09T23:01:00+00:00"
+
+    def listed() -> datetime:
+        response = router_client(router).get(
+            "/garmin/planned", params={"start_date": DAY, "end_date": DAY}
+        )
+        (session,) = [s for s in response.json() if s["id"] == tempo]
+        # The browser reads an offset-less string as local time.
+        wire = session["garmin_pushed_at"]
+        assert wire.endswith(("Z", "+00:00")), wire
+        return datetime.fromisoformat(wire)
+
+    assert listed() == datetime(2026, 10, 9, 23, 1, tzinfo=UTC)
+    # Rows pushed before this fix from Vercel hold naive UTC; Docker-pushed ones
+    # (TZ=Europe/Paris) hold Paris time and read 1-2 h off, as accepted.
+    con = connect()
+    con.execute(
+        "UPDATE app.planned_sessions SET garmin_pushed_at=TIMESTAMP '2026-10-08 06:30' "
+        "WHERE id=?",
+        [tempo],
+    )
+    con.close()
+    assert listed() == datetime(2026, 10, 8, 6, 30, tzinfo=UTC)
+
+
 def test_a_strength_session_is_not_pushable():
     from arete.garmin.workout_structure import NotPushable
 
