@@ -434,6 +434,8 @@ def list_sessions(
             total_volume=round(s.total_volume, 1),
             overall_rpe=s.overall_rpe,
             muscles_worked=s.muscles_worked,
+            exercise_names=s.exercise_names,
+            garmin_activity_id=s.actual_session_id,
         )
         for s in _repo.list_session_summaries(
             start_date=start_date, end_date=end_date, program=program, limit=limit

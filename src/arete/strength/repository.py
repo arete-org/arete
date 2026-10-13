@@ -524,14 +524,17 @@ class StrengthRepository:
             rows = conn.execute(
                 f"""
                 WITH s AS (
-                    SELECT id, date, name, program, duration_min, overall_rpe
+                    SELECT id, date, name, program, duration_min, overall_rpe,
+                           actual_session_id
                     FROM app.visible_strength_sessions WHERE 1=1{filters}
                     ORDER BY date DESC, id DESC LIMIT ?
                 ), ex AS (
                     SELECT se.session_id, count(*) AS exercises,
                            list_sort(list_distinct(list(CASE WHEN e.id IS NOT NULL
                                THEN coalesce(nullif(e.primary_muscle, ''), 'full_body')
-                           END))) AS muscles
+                           END))) AS muscles,
+                           list(e.name ORDER BY se.exercise_order, se.id)
+                               FILTER (WHERE e.id IS NOT NULL) AS names
                     FROM app.visible_session_exercises se
                     LEFT JOIN app.visible_exercises e ON se.exercise_id = e.id
                     WHERE se.session_id IN (SELECT id FROM s)
@@ -548,7 +551,8 @@ class StrengthRepository:
                 )
                 SELECT s.id, s.date, s.name, s.program, s.duration_min, s.overall_rpe,
                        coalesce(ex.exercises, 0), coalesce(st.sets, 0),
-                       coalesce(st.volume, 0), coalesce(ex.muscles, [])
+                       coalesce(st.volume, 0), coalesce(ex.muscles, []),
+                       coalesce(ex.names, []), s.actual_session_id
                 FROM s
                 LEFT JOIN ex ON ex.session_id = s.id
                 LEFT JOIN st ON st.session_id = s.id
@@ -570,6 +574,8 @@ class StrengthRepository:
                 total_sets=int(row[7]),
                 total_volume=float(row[8]),
                 muscles_worked=list(row[9]),
+                exercise_names=list(row[10]),
+                actual_session_id=row[11],
             )
             for row in rows
         ]

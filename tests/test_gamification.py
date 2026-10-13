@@ -461,6 +461,9 @@ def test_auto_link_keeps_a_pair_already_rewarded_twice(game_db):
     for _ in range(2):
         state = game.sync()
         assert (state["xp"], state["shards"], debits(state)) == (100, 20, [])
+    # A kept pair is settled as it is: loading a page writes nothing more.
+    with db_connection() as con:
+        assert not game._due(con)
 
 
 def test_auto_link_credits_a_pair_not_yet_rewarded_once(game_db):
