@@ -18,6 +18,7 @@ from arete.services.prescriptions import (
     Prescription,
     Step,
     Target,
+    describe,
     prescription_from_description,
 )
 
@@ -194,6 +195,33 @@ def test_skip_last_recovery_belongs_to_repeats_only():
     with pytest.raises(ValueError, match="dernière récupération"):
         Step(kind="effort", duration_kind="seconds", value=60, skip_last_recovery=True)
     assert Step.model_validate({**_INTERVALS, "skip_last_recovery": True})
+
+
+@pytest.mark.parametrize(
+    "last",
+    [
+        {"kind": "effort", "duration_kind": "meters", "value": 400},
+        {"kind": "recovery", "duration_kind": "lap"},
+    ],
+)
+def test_only_a_timed_or_measured_last_recovery_can_be_skipped(last):
+    children = [{"kind": "effort", "duration_kind": "meters", "value": 400}, last]
+    block = {"kind": "repeat", "repeat": 4, "steps": children}
+    with pytest.raises(ValueError, match="finit par une récupération"):
+        Step.model_validate({**block, "skip_last_recovery": True})
+    # False asks Garmin for its default: harmless whatever the last step.
+    assert Step.model_validate({**block, "skip_last_recovery": False})
+
+
+def test_the_summary_says_the_last_recovery_is_skipped():
+    plain = Prescription.model_validate({"steps": [_INTERVALS]})
+    skipped = Prescription.model_validate(
+        {"steps": [{**_INTERVALS, "skip_last_recovery": True}]}
+    )
+    assert describe(plain) == "12 × (400 m / récupération 1 min)"
+    assert describe(skipped) == (
+        "12 × (400 m / récupération 1 min), sans la dernière récup"
+    )
 
 
 def test_a_repeat_stored_before_the_skip_flag_exports_as_before():

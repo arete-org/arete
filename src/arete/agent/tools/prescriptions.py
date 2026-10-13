@@ -32,6 +32,7 @@ def _schema() -> dict:
                 "maxItems": 0,
             }
             fields["repeat"] = {"type": "null"}
+            fields["skip_last_recovery"] = {"type": "null"}
         else:
             fields["steps"]["items"] = step(depth + 1)
         return item
