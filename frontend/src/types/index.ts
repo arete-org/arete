@@ -146,6 +146,8 @@ export interface ActualSession {
   garmin_activity_id: string | null;
   strava_activity_id: string | null;
   adherence_score: number | null;
+  /** Exercises of the Muscu log behind this session, when there is one (browser-side). */
+  exercises?: string[];
 }
 
 export interface MatchSummary {
@@ -222,6 +224,9 @@ export interface StrengthSession {
   exercises_count?: number;
   muscles_worked?: string[];
   exercises?: SessionExercise[];
+  /** Exercise names in order; the list endpoint's light alternative to `exercises`. */
+  exercise_names?: string[];
+  /** actual_sessions.id of the Garmin activity this log was recorded with. */
   garmin_activity_id?: number | null;
 }
 

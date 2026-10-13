@@ -121,6 +121,9 @@ export function PlanningSessionCard({
             {realised.distance_m ? ` · ${(realised.distance_m / 1000).toFixed(1)} km` : ''} réalisés
           </p>
         )}
+        {realised?.exercises?.length ? (
+          <p className="text-[11px] text-text-muted break-words">{realised.exercises.join(' · ')}</p>
+        ) : null}
         <p
           className={cn(
             'text-[11px] font-medium',

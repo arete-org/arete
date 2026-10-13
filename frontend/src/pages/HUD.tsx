@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
-import { MetricCard, OffPlanRow, SessionCard, strengthAsActual } from '@/components';
+import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { Button, Panel, Skeleton } from '@/components/ui';
 import { ApiError, garminApi, garminHealthApi, goalsApi, metricsApi, planApi, settingsApi } from '@/lib/api';
 import { useDailyTip } from '@/lib/dailyTip';
@@ -136,9 +136,9 @@ export function DashboardPage() {
   });
   const { data: todayStrength } = useQuery({
     ...strengthSessionsQuery,
-    select: (data) => data.filter((s) => s.date === today).map(strengthAsActual),
+    select: (data) => data.filter((s) => s.date === today),
   });
-  const todayLink = linkDay(today, allPlanned ?? [], [...(todayActual ?? []), ...(todayStrength ?? [])], today);
+  const todayLink = linkDay(today, allPlanned ?? [], withStrengthLogs(todayActual ?? [], todayStrength ?? []), today);
 
   const { data: syncStatus } = useQuery({ queryKey: qk.syncStatus, queryFn: garminApi.getSyncStatus });
   const garminConnected = syncStatus?.garmin_authenticated ?? false;
