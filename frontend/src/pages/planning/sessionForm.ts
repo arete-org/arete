@@ -111,33 +111,48 @@ export const TEMPLATES: {
   },
 ];
 
+type SummarySession = Pick<
+  PlannedSession,
+  'prescription' | 'target_duration_min' | 'target_distance_km' | 'target_hr_zone'
+>;
+
 /** One meaningful work block gives the board useful density without fetching details. */
-export function sessionSummary(
-  session: Pick<
-    PlannedSession,
-    'prescription' | 'target_duration_min' | 'target_distance_km' | 'target_hr_zone'
-  >,
-): string {
+export function sessionSummary(session: SummarySession): string {
+  const { metric, recovery, skipped } = sessionSummaryParts(session);
+  // The server's describe() words it the same way: "…, sans la dernière récup".
+  return `${metric}${recovery ? ` · récup. ${recovery}` : ''}${skipped ? `, ${SKIPPED_LAST_RECOVERY}` : ''}`;
+}
+
+/** The summary's parts, for the board that lays the recovery out on its own line. */
+export function sessionSummaryParts(session: SummarySession): {
+  metric: string;
+  recovery?: string;
+  skipped?: boolean;
+} {
   if (!session.prescription)
-    return (
-      [
-        session.target_duration_min && `${session.target_duration_min} min`,
-        session.target_distance_km && `${session.target_distance_km} km`,
-        session.target_hr_zone,
-      ]
-        .filter(Boolean)
-        .join(' · ') || 'Objectifs à préciser'
-    );
+    return {
+      metric:
+        [
+          session.target_duration_min && `${session.target_duration_min} min`,
+          session.target_distance_km && `${session.target_distance_km} km`,
+          session.target_hr_zone,
+        ]
+          .filter(Boolean)
+          .join(' · ') || 'Objectifs à préciser',
+    };
   const steps = session.prescription.steps;
   const main =
     steps.find((step) => step.kind === 'repeat') ?? steps.find((step) => step.kind === 'effort');
-  if (!main) return `${steps.length} étapes structurées`;
+  if (!main) return { metric: `${steps.length} étapes structurées` };
   if (main.kind !== 'repeat')
-    return `${main.exercise ? `${main.exercise} · ` : ''}${stepAmount(main)}`;
+    return { metric: `${main.exercise ? `${main.exercise} · ` : ''}${stepAmount(main)}` };
   const effort = main.steps.find((step) => step.kind === 'effort');
   const recovery = main.steps.find((step) => step.kind === 'recovery' || step.kind === 'rest');
-  const skipped = main.skip_last_recovery ? `, ${SKIPPED_LAST_RECOVERY}` : '';
-  return `${main.repeat} × ${effort ? stepAmount(effort) : 'bloc'}${recovery ? ` · récup. ${stepAmount(recovery)}${skipped}` : ''}`;
+  return {
+    metric: `${main.repeat} × ${effort ? stepAmount(effort) : 'bloc'}`,
+    recovery: recovery && stepAmount(recovery),
+    skipped: main.skip_last_recovery === true,
+  };
 }
 
 export function planningError(error: Error | null): string {

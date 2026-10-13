@@ -8,7 +8,8 @@ import { parseLocalDate } from '@/lib/dates';
 import { exportLabel } from '@/lib/workouts';
 import { linkDay, type PlannedState } from '@/lib/sessionMatch';
 import type { ActualSession, PlannedSession } from '@/types';
-import { dayLabel, sessionTitle, sessionSummary, sportLabel, STATE_LABELS } from './sessionForm';
+import { SKIPPED_LAST_RECOVERY } from '@/lib/workouts';
+import { dayLabel, sessionTitle, sessionSummaryParts, sportLabel, STATE_LABELS } from './sessionForm';
 
 export function GarminState({
   state,
@@ -63,7 +64,7 @@ export function PlanningSessionCard({
     exportUnavailable ||
     ['working', 'uncertain', 'conflict'].includes(workout.initial?.export?.state ?? '');
   const title = sessionTitle(planned);
-  const [metric, recovery] = sessionSummary(planned).split(' · récup. ');
+  const { metric, recovery, skipped } = sessionSummaryParts(planned);
   return (
     <>
       <article
@@ -114,7 +115,12 @@ export function PlanningSessionCard({
           <span className="min-w-0 break-words">{title}</span>
         </button>
         <p className="text-[13px] text-text-secondary">{metric}</p>
-        {recovery && <p className="text-[11px] text-text-muted">Récupération {recovery}</p>}
+        {recovery && (
+          <p className="text-[11px] text-text-muted">
+            Récupération {recovery}
+            {skipped && <span>, {SKIPPED_LAST_RECOVERY}</span>}
+          </p>
+        )}
         {realised && (
           <p className="text-xs text-text-secondary">
             {formatDurationCompact(realised.duration_sec)}
