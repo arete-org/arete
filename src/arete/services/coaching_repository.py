@@ -130,7 +130,10 @@ class BriefingRepository:
         return int(result[0])
 
     def get_for_day(
-        self, briefing_date: date | None = None, user_id: int | None = None
+        self,
+        briefing_date: date | None = None,
+        user_id: int | None = None,
+        con: duckdb.DuckDBPyConnection | None = None,
     ) -> Briefing | None:
         """The day's usable briefing — newest first, failures skipped.
 
@@ -139,12 +142,12 @@ class BriefingRepository:
         when there is none the caller falls back to the rule text.
         """
         user_id = resolve_athlete_id(user_id)
-        conn = self._get_connection()
+        conn = con or self._get_connection()
         try:
             row = conn.execute(
                 f"""
                 SELECT {_COLUMNS}, count(*) OVER () > 1
-                FROM visible_coach_briefings
+                FROM app.visible_coach_briefings
                 WHERE user_id = ? AND date = ? AND status = 'ok'
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
@@ -152,7 +155,8 @@ class BriefingRepository:
                 [user_id, briefing_date or athlete_today()],
             ).fetchone()
         finally:
-            conn.close()
+            if con is None:
+                conn.close()
         if row is None:
             return None
         return replace(_row_to_briefing(row), revised=bool(row[10]))

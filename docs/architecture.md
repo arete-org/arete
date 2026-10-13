@@ -522,6 +522,12 @@ the service checks the session revision, status and Garmin reservations, then
 updates the same session and the decision in one transaction. Structured
 prescriptions stay in chat. The former immediate adaptation endpoint refuses writes.
 
+`GET /dashboard` (`api/dashboard.py`, `services/dashboard.py`) serves the home
+page in one request: each slice keeps its owner and the shape of its former
+endpoint, which all remain, read on one connection for the athlete's day, with
+the load history read and modelled once for player stats, fitness and readiness.
+It makes no Garmin request, model call or write; its briefing may be `pending`.
+
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References
 in HTTP/SSE and browser storage contain identifiers; the server reloads the

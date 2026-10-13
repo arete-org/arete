@@ -18,6 +18,7 @@ from arete.api.athlete_facts import router as athlete_facts_router
 from arete.api.auth import AuthMiddleware, auth_misconfigured
 from arete.api.auth import router as auth_router
 from arete.api.coach import router as coach_router
+from arete.api.dashboard import router as dashboard_router
 from arete.api.data_export import router as data_export_router
 from arete.api.documents import router as documents_router
 from arete.api.gamification import router as gamification_router
@@ -195,6 +196,7 @@ def cron_daily_sync(authorization: str | None = Header(default=None)):
 
 for router in (
     coach_router,
+    dashboard_router,
     gamification_router,
     auth_router,
     settings_router,

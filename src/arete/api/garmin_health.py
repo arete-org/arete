@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from arete.dataio.db import connect, db_connection
-from arete.dataio.queries import daily_metrics_range
+from arete.dataio.queries import daily_health, daily_metrics_range
 from arete.garmin.readiness import update_readiness_range
 from arete.services.settings import athlete_today
 
@@ -116,32 +116,20 @@ def get_daily_metrics(
     """Get stored health metrics + readiness for one day."""
     con = connect()
     try:
-        row = con.execute(
-            """
-            SELECT date, hrv_weekly_avg, hrv_last_night, hrv_status,
-                   sleep_duration_sec, sleep_score, sleep_deep_sec, sleep_light_sec,
-                   sleep_rem_sec, sleep_awake_sec,
-                   body_battery_charged, body_battery_drained,
-                   body_battery_high, body_battery_low,
-                   resting_hr, stress_avg, stress_max, steps, intensity_minutes,
-                   readiness_score, source, fetched_at,
-                   training_readiness_score, training_readiness_level,
-                   training_readiness_feedback, training_status, vo2max_run,
-                   race_5k_sec, race_10k_sec, race_half_sec, race_marathon_sec,
-                   endurance_score, hill_score
-            FROM app.visible_daily_metrics
-            WHERE user_id = getvariable('arete_athlete_id') AND date = ?
-            """,
-            [target_date],
-        ).fetchone()
+        values = daily_health(con, target_date)
     finally:
         con.close()
 
-    if not row:
+    if values is None:
         raise HTTPException(
             status_code=404,
             detail=f"No metrics for {target_date}. Run POST /garmin/health/sync first.",
         )
+    return daily_metrics_response(values)
+
+
+def daily_metrics_response(values: dict[str, Any]) -> DailyMetricsResponse:
+    """The HTTP shape of ``queries.daily_health``: the day and fetch time as text."""
 
     def _to_str(v: Any) -> str | None:
         if v is None:
@@ -149,39 +137,11 @@ def get_daily_metrics(
         return str(v.isoformat()) if hasattr(v, "isoformat") else str(v)
 
     return DailyMetricsResponse(
-        date=str(row[0]),
-        hrv_weekly_avg=row[1],
-        hrv_last_night=row[2],
-        hrv_status=row[3],
-        sleep_duration_sec=row[4],
-        sleep_score=row[5],
-        sleep_deep_sec=row[6],
-        sleep_light_sec=row[7],
-        sleep_rem_sec=row[8],
-        sleep_awake_sec=row[9],
-        body_battery_charged=row[10],
-        body_battery_drained=row[11],
-        body_battery_high=row[12],
-        body_battery_low=row[13],
-        resting_hr=row[14],
-        stress_avg=row[15],
-        stress_max=row[16],
-        steps=row[17],
-        intensity_minutes=row[18],
-        readiness_score=row[19],
-        source=row[20],
-        fetched_at=_to_str(row[21]),
-        training_readiness_score=row[22],
-        training_readiness_level=row[23],
-        training_readiness_feedback=row[24],
-        training_status=row[25],
-        vo2max_run=row[26],
-        race_5k_sec=row[27],
-        race_10k_sec=row[28],
-        race_half_sec=row[29],
-        race_marathon_sec=row[30],
-        endurance_score=row[31],
-        hill_score=row[32],
+        **{
+            **values,
+            "date": str(values["date"]),
+            "fetched_at": _to_str(values["fetched_at"]),
+        }
     )
 
 

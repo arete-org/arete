@@ -166,16 +166,20 @@ class PlanDecisionRepository:
             con.close()
         return _from_row(row) if row else None
 
-    def list_for_day(self, day: date, user_id: int | None = None) -> list[PlanDecision]:
+    def list_for_day(
+        self, day: date, user_id: int | None = None, con=None
+    ) -> list[PlanDecision]:
         user_id = resolve_athlete_id(user_id)
-        con = connect()
+        own = con is None
+        con = con or connect()
         try:
             rows = con.execute(
                 f"SELECT {_COLUMNS} FROM app.visible_plan_decisions WHERE user_id = ? AND date = ? ORDER BY id",
                 [user_id, day],
             ).fetchall()
         finally:
-            con.close()
+            if own:
+                con.close()
         return [_from_row(r) for r in rows]
 
     def mark(self, decision_id: int, column: str) -> None:
