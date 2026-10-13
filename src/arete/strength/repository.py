@@ -637,6 +637,44 @@ class StrengthRepository:
         finally:
             conn.close()
 
+    def update_session(self, session_id: int, exercises: list[SessionExercise]) -> bool:
+        """Replace a live session's exercises and sets; False if it is not live.
+
+        A correction, not a new session: the id, date, Garmin link and game
+        event (or its absence) stay. Replaced rows are retained for recovery,
+        like a deletion's.
+        """
+        conn = self._get_connection()
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            row = conn.execute(
+                "SELECT id FROM app.visible_strength_sessions WHERE id = ?",
+                [session_id],
+            ).fetchone()
+            if row is None:
+                conn.execute("ROLLBACK")
+                return False
+            conn.execute(
+                "UPDATE app.exercise_sets SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_exercise_id IN (SELECT id FROM app.visible_session_exercises WHERE session_id = ?))",
+                [session_id],
+            )
+            conn.execute(
+                "UPDATE app.session_exercises SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id = ?)",
+                [session_id],
+            )
+            for ex in exercises:
+                ex.session_id = session_id
+                self._create_session_exercise(conn, ex)
+            # No capture: a correction never grants or revokes game credit, even
+            # for a legacy session without an event or one whose sets are now empty.
+            conn.execute("COMMIT")
+            return True
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+
     # ─────────────────────────────────────────────────────────────────────
     # Statistics
     # ─────────────────────────────────────────────────────────────────────

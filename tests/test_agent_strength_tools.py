@@ -41,13 +41,16 @@ def day():
 # ---------------------------------------------------------------------------
 
 
-def test_registered_with_its_two_tools():
+def test_registered_with_its_tools():
     toolkit = CAPABILITIES["strength"]
     assert {t.name for t in toolkit.tools} == {
         "save_workout",
+        "list_strength_sessions",
+        "update_workout",
         "get_strength_progress",
     }
-    assert "get_strength_progress" in toolkit.read_tools
+    # Background missions may read sessions, never correct them.
+    assert toolkit.read_tools == {"get_strength_progress", "list_strength_sessions"}
     assert toolkit.instructions == STRENGTH_INSTRUCTIONS
     assert {t.name for t in STRENGTH_TOOLS} == {t.name for t in toolkit.tools}
 

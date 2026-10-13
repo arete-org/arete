@@ -124,6 +124,65 @@ def save_workout(
 
 
 @typed_tool
+def list_strength_sessions(date_str: date | None = None) -> str:
+    """Strength sessions already logged on one day: session_id, name and sets.
+
+    Missing date means today. Read it before correcting a logged session.
+    """
+    try:
+        from arete.strength.logging_service import logged_sessions
+
+        return _out({"sessions": logged_sessions(date_str)})
+    except Exception as exc:
+        return _error(f"{type(exc).__name__}: {exc}")
+
+
+@typed_tool
+def update_workout(
+    session_id: Annotated[int, Field(gt=0)],
+    text: Annotated[str, Field(min_length=1, max_length=4000)],
+) -> str:
+    """Correct a logged strength session in place: same id and date, no new session.
+
+    Pass the complete corrected session (every exercise and set): it replaces the
+    session's exercises. A rejected parse or an unknown session_id writes nothing.
+    """
+    checked = _checked(text, "")
+    if isinstance(checked, str):
+        return checked
+    try:
+        from arete.strength.logging_service import update_logged_session
+
+        outcome = update_logged_session(session_id, checked[0])
+    except ValueError as exc:
+        return _error(f"Nothing readable as an exercise: {exc}")
+    except Exception as exc:
+        return _error(f"{type(exc).__name__}: {exc}")
+
+    if outcome.session_id is None:
+        return _out(
+            {
+                "error": outcome.message,
+                "saved": False,
+                "not_recognised": [
+                    {"name": d.name, "did_you_mean": d.suggestions}
+                    for d in outcome.dropped
+                ],
+                "unparsed_lines": outcome.unparsed_lines,
+            }
+        )
+    return _out(
+        {
+            "saved": True,
+            "session_id": outcome.session_id,
+            "saved_exercises": outcome.saved,
+            "message": outcome.message,
+            "personal_records": [r.as_dict() for r in outcome.records],
+        }
+    )
+
+
+@typed_tool
 def get_strength_progress(
     exercise: Annotated[str, Field(min_length=1, max_length=100)],
 ) -> str:
@@ -148,4 +207,9 @@ def get_strength_progress(
         return _error(f"{type(exc).__name__}: {exc}")
 
 
-STRENGTH_TOOLS: list[BaseTool] = [save_workout, get_strength_progress]
+STRENGTH_TOOLS: list[BaseTool] = [
+    save_workout,
+    list_strength_sessions,
+    update_workout,
+    get_strength_progress,
+]

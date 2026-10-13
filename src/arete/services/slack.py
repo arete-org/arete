@@ -85,6 +85,8 @@ TOOL_LABELS = {
     "list_recent_sessions": "Lecture de tes séances",
     "get_activity_detail": "Analyse de la séance",
     "save_workout": "Enregistrement de la séance",
+    "list_strength_sessions": "Lecture de tes séances de musculation",
+    "update_workout": "Correction de la séance",
     "get_strength_progress": "Lecture de ta progression en force",
     "list_planned": "Lecture du planning",
     "inspect_planned_session": "Lecture des étapes",
