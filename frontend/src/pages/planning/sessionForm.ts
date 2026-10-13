@@ -98,6 +98,7 @@ export const TEMPLATES: {
           kind: 'repeat',
           duration_kind: 'lap',
           repeat: 20,
+          skip_last_recovery: true,
           steps: [
             { kind: 'effort', duration_kind: 'meters', value: 300, steps: [] },
             { kind: 'recovery', duration_kind: 'meters', value: 100, steps: [] },

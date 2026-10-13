@@ -9,7 +9,8 @@ import { Modal, ModalHeader } from './ui';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
 import { exportLabel, GENERIC_STEPS_LABEL, PARSED_STEPS_LABEL, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
 import { parseLocalDate } from '@/lib/dates';
-import type { Prescription } from '@/lib/documents';
+import type { Prescription, Target } from '@/lib/documents';
+import { formatClock, formatPace } from '@/lib/utils';
 
 const input = inputClasses('cyan', 'text-sm');
 const sports: Record<string, string> = { running: 'Course', cycling: 'Vélo', swimming: 'Natation', strength: 'Musculation', walking: 'Marche', hiking: 'Randonnée' };
@@ -95,15 +96,19 @@ export function WorkoutCard({ sessionId, initial, readError, compact = false, se
   </div>;
 }
 
+const targetText = (target: Target) => target.kind === 'pace_sec_km'
+  ? `${formatPace(target.low, "'")}–${formatPace(target.high, "'")}/km`
+  : `${target.low}–${target.high} ${({ hr_zone: 'zone FC', heart_rate_bpm: 'bpm', power_w: 'W', cadence_rpm: 'tr/min' })[target.kind]}`;
+
 export function StepList({ prescription }: { prescription: Prescription }) {
   const render = (steps: Prescription['steps'], depth: number): React.ReactNode => {
     if (depth > 2) return <li>Structure trop profonde.</li>;
     return steps.map((step, index) => <li key={index} className="my-1">
-      {step.kind === 'repeat' ? <>{step.repeat} répétitions<ul className="ml-4 border-l border-text-muted/20 pl-3">{render(step.steps, depth + 1)}</ul></> : <>
+      {step.kind === 'repeat' ? <>{step.repeat} répétitions{step.skip_last_recovery && ' · sans la dernière récup'}<ul className="ml-4 border-l border-text-muted/20 pl-3">{render(step.steps, depth + 1)}</ul></> : <>
         {({ warmup: 'Échauffement', effort: 'Effort', recovery: 'Récupération', cooldown: 'Retour au calme', rest: 'Repos' })[step.kind]} · {step.exercise ? `${step.exercise} · ` : ''}
-        {step.duration_kind === 'lap' ? 'Tour manuel' : `${step.value} ${({ seconds: 's', meters: 'm', reps: 'répétitions' })[step.duration_kind]}`}
-        {step.target && ` · ${step.target.low}–${step.target.high} ${({ hr_zone: 'zone FC', pace_sec_km: 's/km', heart_rate_bpm: 'bpm', power_w: 'W', cadence_rpm: 'tr/min' })[step.target.kind]}`}
-        {step.secondary_target && ` · ${step.secondary_target.low}–${step.secondary_target.high} ${({ hr_zone: 'zone FC', pace_sec_km: 's/km', heart_rate_bpm: 'bpm', power_w: 'W', cadence_rpm: 'tr/min' })[step.secondary_target.kind]}`}
+        {step.duration_kind === 'lap' ? 'Tour manuel' : step.duration_kind === 'seconds' && step.value ? formatClock(step.value) : `${step.value} ${({ seconds: 's', meters: 'm', reps: 'répétitions' })[step.duration_kind]}`}
+        {step.target && ` · ${targetText(step.target)}`}
+        {step.secondary_target && ` · ${targetText(step.secondary_target)}`}
         {step.weight_kg != null && ` · ${step.weight_kg} kg`}{step.stroke && ` · ${({ free: 'crawl', back: 'dos', breast: 'brasse', butterfly: 'papillon', mixed: 'quatre nages' })[step.stroke]}`}{step.notes && ` · ${step.notes}`}
       </>}
     </li>);

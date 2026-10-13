@@ -94,6 +94,9 @@ def convert(
                 ).model_dump(exclude_none=True)
                 if step.notes:
                     group["description"] = step.notes
+                # Unset stays absent: an older copy on Garmin still matches.
+                if step.skip_last_recovery is not None:
+                    group["skipLastRestStep"] = step.skip_last_recovery
                 result.append(group)
                 continue
             if (

@@ -46,6 +46,9 @@ class Step(StrictModel):
     weight_kg: float | None = Field(default=None, ge=0, le=1000)
     stroke: Literal["free", "back", "breast", "butterfly", "mixed"] | None = None
     notes: str = Field(default="", max_length=500)
+    # Repeat only. Unset (every step stored before it existed) reads as false
+    # and leaves the Garmin payload as it was, so a copy already sent stays as is.
+    skip_last_recovery: bool | None = None
 
     @model_validator(mode="after")
     def consistent(self):
@@ -67,6 +70,10 @@ class Step(StrictModel):
                 )
         elif self.steps or self.repeat:
             raise ValueError("Seul un bloc répété peut contenir des étapes.")
+        elif self.skip_last_recovery:
+            raise ValueError(
+                "Seul un bloc répété peut sauter sa dernière récupération."
+            )
         elif (self.duration_kind == "lap") != (self.value is None):
             raise ValueError(
                 "Indique une valeur pour la durée, la distance ou les répétitions."

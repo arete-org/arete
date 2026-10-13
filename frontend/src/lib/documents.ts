@@ -23,6 +23,8 @@ export interface WorkoutStep {
   weight_kg?: number | null;
   stroke?: 'free' | 'back' | 'breast' | 'butterfly' | 'mixed' | null;
   notes?: string;
+  /** Repeat only; unset reads as false (Garmin's skipLastRestStep). */
+  skip_last_recovery?: boolean | null;
 }
 export interface Prescription { version: 1; steps: WorkoutStep[]; pool_length_m?: number | null }
 export interface Provenance { document_id: string; locator: string; quote: string }

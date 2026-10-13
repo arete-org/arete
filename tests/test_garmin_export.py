@@ -11,10 +11,15 @@ from arete.dataio.db import db_connection
 from arete.dataio.init_duckdb import main
 from arete.garmin.repository import GarminRepository
 from arete.garmin.workout_structure import NotPushable
-from arete.garmin.workouts import convert
+from arete.garmin.workouts import canonical, convert, matches
 from arete.services import garmin_export as service
 from arete.services.documents import DocumentError
-from arete.services.prescriptions import Prescription, Step, Target
+from arete.services.prescriptions import (
+    Prescription,
+    Step,
+    Target,
+    prescription_from_description,
+)
 
 
 class Garmin:
@@ -173,6 +178,91 @@ def test_repeats_pace_and_secondary_targets():
     assert effort["targetValueOne"] == pytest.approx(1000 / 290)
     assert effort["targetValueTwo"] == pytest.approx(1000 / 270)
     assert effort["secondaryTargetValueOne"] == 150
+
+
+_INTERVALS = {
+    "kind": "repeat",
+    "repeat": 12,
+    "steps": [
+        {"kind": "effort", "duration_kind": "meters", "value": 400},
+        {"kind": "recovery", "duration_kind": "seconds", "value": 60},
+    ],
+}
+
+
+def test_skip_last_recovery_belongs_to_repeats_only():
+    with pytest.raises(ValueError, match="dernière récupération"):
+        Step(kind="effort", duration_kind="seconds", value=60, skip_last_recovery=True)
+    assert Step.model_validate({**_INTERVALS, "skip_last_recovery": True})
+
+
+def test_a_repeat_stored_before_the_skip_flag_exports_as_before():
+    stored = Prescription.model_validate({"steps": [_INTERVALS]})
+    payload = convert(1, "VMA", "running", stored)
+    group = payload["workoutSegments"][0]["workoutSteps"][0]
+    assert stored.steps[0].skip_last_recovery is None
+    assert "skipLastRestStep" not in group
+    # Saved again (the field now serialised as null): the same payload.
+    resaved = Prescription.model_validate(stored.model_dump(mode="json"))
+    assert convert(1, "VMA", "running", resaved) == payload
+    # Garmin's copy reports its default; the older copy is still the session.
+    remote = copy.deepcopy(payload)
+    remote["workoutSegments"][0]["workoutSteps"][0]["skipLastRestStep"] = False
+    assert matches(payload, remote)
+
+
+@pytest.mark.parametrize("flag", [True, False])
+def test_the_skip_flag_reaches_garmin_and_a_change_is_not_a_match(flag):
+    def payload(value: bool) -> dict:
+        prescription = Prescription.model_validate(
+            {"steps": [{**_INTERVALS, "skip_last_recovery": value}]}
+        )
+        return convert(1, "VMA", "running", prescription)
+
+    group = payload(flag)["workoutSegments"][0]["workoutSteps"][0]
+    assert group["skipLastRestStep"] is flag
+    assert matches(payload(flag), payload(flag))
+    assert not matches(payload(flag), payload(not flag))
+    assert canonical(payload(flag)) != canonical(payload(not flag))
+
+
+def test_the_coach_interval_description_skips_its_last_recovery_on_garmin():
+    text = "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'"
+    parsed = prescription_from_description(text, "running")
+    assert parsed is not None
+    _, strides, block, _ = parsed.steps
+    assert block.skip_last_recovery is True
+    # Strides end on a lap-button walk back: the athlete's own transition.
+    assert strides.skip_last_recovery is None
+    steps = convert(1, "VMA", "running", parsed)["workoutSegments"][0]["workoutSteps"]
+    assert steps[2]["skipLastRestStep"] is True
+    assert "skipLastRestStep" not in steps[1]
+
+
+def test_a_changed_skip_flag_updates_the_copy_on_garmin(planned):
+    garmin = Garmin()
+
+    def save(prescription: dict) -> None:
+        session = GarminRepository().get_planned_session(planned)
+        service.update_session(
+            planned,
+            session.revision,
+            session.date,
+            "VMA",
+            Prescription.model_validate(prescription),
+        )
+
+    save({"steps": [_INTERVALS]})
+    assert service.export(planned, client=garmin)["state"] == "scheduled"
+    assert service.export(planned, client=garmin)["state"] == "scheduled"
+    assert not any(method == "PUT" for method, _, _ in garmin.calls)
+    for flag in (True, False):
+        save({"steps": [{**_INTERVALS, "skip_last_recovery": flag}]})
+        assert service.export(planned, client=garmin)["state"] == "scheduled"
+        group = garmin.workouts[1]["workoutSegments"][0]["workoutSteps"][0]
+        assert group["skipLastRestStep"] is flag
+    assert sum(method == "PUT" for method, _, _ in garmin.calls) == 2
+    assert len(garmin.workouts) == 1
 
 
 def test_export_and_repeat_do_not_duplicate_workout_or_date(planned):
