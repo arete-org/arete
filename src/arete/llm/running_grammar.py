@@ -3,20 +3,27 @@
 The coach, the plan generator and the athlete describe structured runs in
 the same compact French notation:
 
-    VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'
+    Échauffement 20-25' + 4-6 strides, 12×400 @3'33 r1', retour 15'
     Seuil : 3×10' au seuil (3:56/km), récup 2'
     Activation : 20' facile + 4×2' allure course (4:10/km)
 
 Blocks are separated by ``.``, ``+``, ``·``, ``,``, ``;``, a dash, a new line
-or "puis". An optional title ("VMA —", "Seuil :", "Fractionné") opens the
-text. Each block is a repeat ``N×D``, a single effort ``D``, a recovery
-(``r1'``, ``r90"``, ``récup 2'``), a warm-up (``Échauffement``, ``échauff``,
-``EC``), a cool-down (``retour``, ``RAC``, ``retour au calme``) or strides
-(``4 strides``, ``6 lignes droites``). D is a distance (``400 m``, ``1 km``, a
-bare number of at least 100 meters) or a duration (``10'``, ``1'30``,
-``90"``, ``45 min``, ``1h30``). An effort may carry a pace (``@3'33``,
-``@3'30-3'36``, ``(3:56/km)``), a heart-rate zone (``Z2``) and intensity
-words from a closed list ("au seuil", "allure course", "facile"...).
+or "puis", and stay in written order: a warm-up (``Échauffement``,
+``échauff``, ``EC``) only first, a cool-down (``retour``, ``RAC``, ``retour
+au calme``) only last. An optional title ("Fractionné :", "Rappel :") opens
+the text; a leading intensity ("Seuil :", "VMA —") becomes the first
+effort's notes. Other blocks are a repeat ``N×D``, a single effort ``D``, a
+recovery (``r1'``, ``r90"``, ``r200 m``, ``récup 2'``) or strides (``4
+strides``, ``6 lignes droites``: lap button to end each, lap button after
+walking back). D is a distance (``400 m``, ``1 km``, an effort's bare number
+of at least 100 meters) or a duration (``10'``, ``1'30``, ``90"``, ``45
+min``, ``1h30``). An effort may carry a pace (``@3'33``, ``@3'30-3'36``,
+``(3:56/km)``), a heart-rate zone (``Z2``) and intensity words from a closed
+list ("au seuil", "allure course", "facile"...); a recovery only how to
+recover ("trot", "marche").
+
+When in doubt the text is unread: "1.000 m", a unitless recovery, a target
+after a recovery, seconds of 60 or more, a warm-up after the main set.
 
 Output: Step-shaped dictionaries (see ``services.prescriptions.Step``); the
 caller validates them. Anything the grammar cannot place makes the whole
@@ -39,11 +46,26 @@ MAX_TEXT = 1_000
 
 _P = r"\d{1,2}\s*['’′:]\s*\d{2}[\"”″]?"
 _PR = rf"{_P}(?:\s*(?:-|–|à)\s*{_P})?"
+# Intensity and strides words carry meaning: never swallowed by a title.
+_INTENSITY = (
+    r"(?:au\s+seuil|seuil\s+continu|(?:[àa]\s+)?(?:l['’]\s*)?allure\s+"
+    r"(?:vma|course|seuil|marathon|semi(?:-marathon)?|sp[ée]cifique|10\s?km|5\s?km)"
+    r"|vma|seuil|tempo|facile|souple|footing|trot|march[ée]e?"
+    r"|endurance(?:\s+fondamentale)?|ef)\b"
+)
+_STRIDES = r"(?:strides?|lignes?\s+droites?)\b"
+_KEYWORD = rf"(?i:{_INTENSITY}|{_STRIDES}|[ée]chauf|retour\b|r[aà]c\b|ec\b)"
+_TITLE_WORD = rf"(?!{_KEYWORD})[^\W\d_][^\W\d_'’]*"
+#: Recovery notes that describe how to recover, not an effort's intensity.
+RECOVERY_NOTES = frozenset(
+    {"trot", "footing", "facile", "souple", "marche", "marché", "marchée"}
+)
 
 GRAMMAR = rf"""
-start: title? block (_SEP block)* _SEP?
+start: head? block (_SEP block)* _SEP?
 
-title: TITLE | LABEL _SEP?
+head: TITLE | LABEL lead? _SEP? | lead
+lead: INTENSITY+ (":" | _SEP)?
 
 ?block: warmup | cooldown | strides | repeat | effort | recovery
 
@@ -57,18 +79,18 @@ recovery: RECOVERY ":"? amount mods
 mods: (PACE | ZONE | INTENSITY)*
 ?amount: DURATION | DISTANCE | COUNT
 
-TITLE.7: /(?!(?i:[ée]chauf|retour|r[aà]c\b|ec\b))[^\W\d_][^\W\d_'’]*(?:[ '’]+[^\W\d_]+)*\s*(?::|—|–|\s-(?=\s))/
+TITLE.7: /{_TITLE_WORD}(?:[ '’]+{_TITLE_WORD})*\s*(?::|—|–|\s-(?=\s))/
 REPEAT.6: /\d+\s*[x×]\s*(?=\d)/i
 PACE.5: /@\s*{_PR}(?:\s*(?:min)?\/\s*km)?|\(\s*{_PR}\s*(?:(?:min)?\/\s*km)?\s*\)|(?:à\s+)?{_PR}\s*(?:min)?\/\s*km/i
 ZONE.5: /z[1-5]\b/i
 WARMUP.5: /(?i:[ée]chauf+(?:ement|e)?\b)|EC\b/
 COOLDOWN.5: /(?i:retour(?:\s+au\s+calme)?\b|r[aà]c\b)/
-STRIDES.5: /(?:strides?|lignes?\s+droites?)\b/i
+STRIDES.5: /{_STRIDES}/i
 RECOVERY.5: /(?:r(?=\s?\d)|r[ée]cup(?:[ée]ration)?\b|repos\b)/i
 DURATION.4: /\d+\s*h(?:\s*\d{{2}})?\b|\d+(?:\s*[-–]\s*\d+)?\s*(?:['’′]{{2}}|[\"”″]|['’′](?:\s*\d{{2}}[\"”″]?)?|(?:min(?:utes?)?|mn|sec(?:ondes?)?|s)\b)/i
 DISTANCE.4: /\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?\s*(?:km|m)\b/i
-INTENSITY.3: /(?:au\s+seuil|(?:[àa]\s+)?(?:l['’]\s*)?allure\s+(?:vma|course|seuil|marathon|semi(?:-marathon)?|sp[ée]cifique|10\s?km|5\s?km)|vma|seuil|tempo|facile|souple|footing|trot|march[ée]e?|endurance(?:\s+fondamentale)?|ef)\b/i
-LABEL.3: /(?:fractionn[ée]|vma|seuil|tempo|sp[ée]cifique|rappel|activation|s[ée]ance)\b/i
+INTENSITY.3: /{_INTENSITY}/i
+LABEL.3: /(?:fractionn[ée]|sp[ée]cifique|rappel|activation|s[ée]ance)\b/i
 COUNT.1: /\d+(?:\s*[-–]\s*\d+)?/
 _SEP: /(?:[.+·,;—–\n]|puis\b)(?:\s*(?:[.+·,;—–\n]|puis\b))*/i
 
@@ -99,10 +121,15 @@ def _seconds(tok: str) -> float:
     t = tok.lower()
     numbers = [int(n) for n in re.findall(r"\d+", t)]
     if "h" in t:
-        return numbers[0] * 3600 + (numbers[1] * 60 if len(numbers) > 1 else 0)
+        minutes = numbers[1] if len(numbers) > 1 else 0
+        if minutes >= 60:
+            raise RunningParseError(f"minutes invalides : {tok}")
+        return numbers[0] * 3600 + minutes * 60
     if re.search(r"['’′]{2}", t):
         return numbers[0]
     if re.search(r"['’′]\s*\d", t):  # minutes then seconds
+        if numbers[-1] >= 60:
+            raise RunningParseError(f"secondes invalides : {tok}")
         return numbers[-2] * 60 + numbers[-1]
     if re.search(r"min|mn|['’′]", t):
         return numbers[0] * 60
@@ -113,6 +140,8 @@ def _amount(tok: Token) -> tuple[str, float]:
     text = str(tok)
     if tok.type == "DURATION":
         return "seconds", _seconds(text)
+    if re.search(r"\d[.,]\d{3}", text):  # 1.000 m: thousands or decimals?
+        raise RunningParseError(f"distance ambiguë : {text}")
     low = _numbers(text)[0]
     if tok.type == "DISTANCE":
         return "meters", low * 1000 if text.lower().rstrip().endswith("km") else low
@@ -122,10 +151,10 @@ def _amount(tok: Token) -> tuple[str, float]:
 
 
 def _pace(tok: Token) -> tuple[float, float]:
-    paces = [
-        int(m) * 60 + int(s)
-        for m, s in re.findall(r"(\d{1,2})\s*['’′:]\s*(\d{2})", str(tok))
-    ]
+    found = re.findall(r"(\d{1,2})\s*['’′:]\s*(\d{2})", str(tok))
+    if any(int(s) >= 60 for _, s in found):
+        raise RunningParseError(f"allure invalide : {tok}")
+    paces = [int(m) * 60 + int(s) for m, s in found]
     if len(paces) == 1:
         return paces[0] - PACE_TOLERANCE_SEC, paces[0] + PACE_TOLERANCE_SEC
     return min(paces), max(paces)
@@ -175,8 +204,13 @@ class _ToBlocks(Transformer):
         notes = [" ".join(str(t).split()) for t in toks if t.type == "INTENSITY"]
         return {"targets": targets, "notes": notes}
 
-    def title(self, _: list[Token]) -> None:
-        return None
+    def lead(self, toks: list[Token]) -> dict[str, Any]:
+        return {
+            "_lead": [" ".join(str(t).split()) for t in toks if t.type == "INTENSITY"]
+        }
+
+    def head(self, children: list[Any]) -> dict[str, Any] | None:
+        return next((c for c in children if isinstance(c, dict)), None)
 
     def warmup(self, children: list[Any]) -> dict[str, Any]:
         return _step("warmup", children)
@@ -188,15 +222,28 @@ class _ToBlocks(Transformer):
         return _step("effort", children)
 
     def recovery(self, children: list[Any]) -> dict[str, Any]:
+        # "10×400 r1' @3'33": the pace was meant for the effort; never guess.
+        amount = next(
+            c for c in children if isinstance(c, Token) and c.type in _AMOUNTS
+        )
+        if amount.type == "COUNT":
+            raise RunningParseError(f"récupération sans unité : {amount}")
+        mods = next((c for c in children if isinstance(c, dict)), {})
+        if mods.get("targets") or set(mods.get("notes", [])) - RECOVERY_NOTES:
+            raise RunningParseError("cible ou intensité après la récupération")
         return _step("recovery", children)
 
     def strides(self, children: list[Token]) -> dict[str, Any]:
         count = str(children[0])
         n = int(_numbers(count)[0])
-        stride = {"kind": "effort", "duration_kind": "lap", "notes": "strides"}
-        if n == 1:
-            return {**stride, "_strides": True}
-        block: dict[str, Any] = {"kind": "repeat", "repeat": n, "steps": [stride]}
+        if n < 2:
+            raise RunningParseError("une seule ligne droite")
+        # Lap button to end the stride, lap button again after walking back.
+        steps = [
+            {"kind": "effort", "duration_kind": "lap", "notes": "strides"},
+            {"kind": "recovery", "duration_kind": "lap"},
+        ]
+        block: dict[str, Any] = {"kind": "repeat", "repeat": n, "steps": steps}
         if _is_range(count):
             block["notes"] = f"{count.strip()} strides"
         return {**block, "_strides": True}
@@ -208,47 +255,46 @@ class _ToBlocks(Transformer):
         return {"kind": "repeat", "repeat": n, "steps": steps}
 
     def start(self, children: list[Any]) -> list[dict[str, Any]]:
-        return [c for c in children if c is not None]
+        blocks = [c for c in children if c is not None]
+        if blocks and "_lead" in blocks[0]:
+            # "Seuil : 3×10'": the leading intensity belongs to the first effort.
+            notes, first = blocks.pop(0)["_lead"], blocks[0]
+            work = first["steps"][0] if first["kind"] == "repeat" else first
+            if first.get("_strides") or work["kind"] != "effort":
+                raise RunningParseError("intensité sans effort")
+            work["notes"] = " ".join([*notes, work.get("notes", "")]).strip()
+        return blocks
 
 
 _TRANSFORM = _ToBlocks()
 
 
 def _assemble(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Warm-up (with the strides that follow it) first, cool-down last.
+    """Steps in written order: a warm-up only first, a cool-down only last.
 
     A recovery standing alone after a repeat without one ("6×3', récup 2'")
-    is that repeat's recovery.
+    is that repeat's recovery. A warm-up written after the main set, or a
+    "retour" in the middle (a jog back?), is not guessed: the text is unread.
     """
-    middle: list[dict[str, Any]] = []
-    warmup: list[dict[str, Any]] = []
-    cooldown: list[dict[str, Any]] = []
-    after_warmup = False
-    for block in blocks:
-        strides = block.pop("_strides", False)
-        if block["kind"] == "warmup":
-            if warmup:
-                raise RunningParseError("deux échauffements")
-            warmup.append(block)
-        elif block["kind"] == "cooldown":
-            if cooldown:
-                raise RunningParseError("deux retours au calme")
-            cooldown.append(block)
-        elif strides and after_warmup:
-            warmup.append(block)
-        elif (
+    steps: list[dict[str, Any]] = []
+    for index, block in enumerate(blocks):
+        block.pop("_strides", None)
+        if block["kind"] == "warmup" and index != 0:
+            raise RunningParseError("échauffement après le début")
+        if block["kind"] == "cooldown" and index != len(blocks) - 1:
+            raise RunningParseError("retour au calme avant la fin")
+        if (
             block["kind"] == "recovery"
-            and middle
-            and middle[-1]["kind"] == "repeat"
-            and len(middle[-1]["steps"]) == 1
+            and steps
+            and steps[-1]["kind"] == "repeat"
+            and len(steps[-1]["steps"]) == 1
         ):
-            middle[-1]["steps"].append(block)
+            steps[-1]["steps"].append(block)
         else:
-            middle.append(block)
-        after_warmup = block["kind"] == "warmup" or (strides and after_warmup)
-    if not any(b["kind"] in {"effort", "repeat"} for b in middle):
+            steps.append(block)
+    if not any(b["kind"] in {"effort", "repeat"} for b in steps):
         raise RunningParseError("aucun effort")
-    return warmup + middle + cooldown
+    return steps
 
 
 # --------------------------------------------------------------------------- #

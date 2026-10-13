@@ -1032,7 +1032,8 @@ def test_read_then_strength_action_only_emits_the_created_workout(
 
 
 INTERVALS = "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'"
-# The grammar reads INTERVALS for a run; this one keeps a fragment it cannot.
+# The grammar reads READ for a run; UNREAD keeps a fragment it cannot.
+READ = "Échauffement 20-25' + 4-6 strides, 12×400 @3'33 r1', retour 15'"
 UNREAD = "VMA — 12×400 @3'33 r1'. Échauffement 20-25', puis à la sensation"
 
 
@@ -1086,10 +1087,11 @@ def test_described_structured_session_never_reaches_garmin_as_the_template(
 
 
 def test_read_description_exports_its_steps_instead_of_the_template(planned):
+    from arete.services import plan_adaptation
     from arete.services.prescriptions import prescription_from_description
 
-    _without_steps(planned, "intervals", INTERVALS)
-    parsed = prescription_from_description(INTERVALS, "running")
+    _without_steps(planned, "intervals", READ)
+    parsed = prescription_from_description(READ, "running")
     assert parsed is not None
     view = service.inspect_session(planned)["session"]
     assert view["parsed"] and not view["derived"] and not view["needs_steps"]
@@ -1099,17 +1101,21 @@ def test_read_description_exports_its_steps_instead_of_the_template(planned):
     assert service.export(planned, client=garmin)["state"] == "scheduled"
     (workout,) = garmin.workouts.values()
     assert workout == {
-        **convert(planned, INTERVALS, "running", parsed),
+        **convert(planned, READ, "running", parsed),
         "workoutId": workout["workoutId"],
     }
-    from arete.services import plan_adaptation
-
+    strides = workout["workoutSegments"][0]["workoutSteps"][1]
+    assert strides["numberOfIterations"] == 4
+    assert [
+        (s["endCondition"]["conditionTypeKey"], "endConditionValue" in s)
+        for s in strides["workoutSteps"]
+    ] == [("lap.button", False), ("lap.button", False)]
     # The daily push sends no template: like explicit steps, from the Planning.
     assert "lues dans la description" in (
         plan_adaptation.structure_preview(planned)["reason"] or ""
     )
     # The athlete's steps, once saved, take over from the description.
-    service.update_session(planned, 1, date(2027, 1, 12), INTERVALS, parsed)
+    service.update_session(planned, 1, date(2027, 1, 12), READ, parsed)
     view = service.inspect_session(planned)["session"]
     assert not view["parsed"] and not view["derived"]
 
@@ -1180,7 +1186,7 @@ def test_coach_cannot_create_structured_session_without_steps(planned, sport):
     # A run description the grammar reads entirely is its own steps.
     result = json.loads(
         planning.create_planned_session(
-            "2027-01-15", "intervals", INTERVALS, sport=sport, target_duration_min=50
+            "2027-01-15", "intervals", READ, sport=sport, target_duration_min=50
         )
     )
     assert ("created" in result) == (sport == "running"), result

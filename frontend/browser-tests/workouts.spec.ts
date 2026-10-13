@@ -142,7 +142,7 @@ test('Planning selection, direct export and editing work on mobile without model
 });
 
 test('Planning edits a description-read session starting from the steps read', async ({ page }) => {
-  const description = "VMA — 12×400 @3'33 r1'. Échauffement 20-25', retour 15'";
+  const description = "Échauffement 20-25', 12×400 @3'33 r1', retour 15'";
   const steps = [
     { kind: 'warmup' as const, duration_kind: 'seconds' as const, value: 1200, notes: "20-25'", steps: [] },
     { kind: 'repeat' as const, duration_kind: 'lap' as const, repeat: 12, steps: [

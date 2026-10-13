@@ -24,8 +24,14 @@ ENTRIES = [
 
 def test_corpus_holds_enough_real_descriptions():
     real = [e for e in ENTRIES if e["source"] != "notation"]
-    assert len(real) >= 15
-    assert all(e["steps"] is not None for e in real)
+    read = [e for e in real if e["steps"] is not None]
+    assert len(read) >= 15
+    # Left unread on purpose: a warm-up written after the main set, and a
+    # unitless recovery ("r100": meters or seconds?).
+    assert {e["text"] for e in real} - {e["text"] for e in read} == {
+        "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'",
+        "20x300 r100",
+    }
 
 
 @pytest.mark.parametrize("entry", ENTRIES, ids=[e["text"] for e in ENTRIES])
@@ -38,15 +44,17 @@ def test_description_yields_its_steps_or_nothing(entry):
 
 
 def test_coach_interval_description_reads_as_the_written_workout():
-    text = "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'"
+    text = "Échauffement 20-25' + 4-6 strides, 12×400 @3'33 r1', retour 15'"
     parsed = prescription_from_description(text, "running")
     assert parsed is not None
     warmup, strides, block, cooldown = parsed.steps
-    # Warm-up first although written second; a duration range keeps its lower bound.
+    # A duration range keeps its lower bound.
     assert (warmup.kind, warmup.value, warmup.notes) == ("warmup", 1200, "20-25'")
+    # Lap to end each stride, lap again once walked back.
     assert strides.repeat == 4 and strides.notes == "4-6 strides"
     assert [(s.kind, s.duration_kind, s.notes) for s in strides.steps] == [
-        ("effort", "lap", "strides")
+        ("effort", "lap", "strides"),
+        ("recovery", "lap", ""),
     ]
     effort, recovery = block.steps
     assert block.repeat == 12
@@ -65,6 +73,9 @@ def test_coach_interval_description_reads_as_the_written_workout():
         60,
     )
     assert (cooldown.kind, cooldown.value) == ("cooldown", 900)
+    # The same workout with its warm-up written last is not reordered.
+    reordered = "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'"
+    assert prescription_from_description(reordered, "running") is None
 
 
 @pytest.mark.parametrize("sport", ["cycling", "swimming", "strength"])
