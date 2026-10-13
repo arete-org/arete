@@ -51,8 +51,11 @@ function UpdatedAgo({ at }: { at: number }) {
 /** The page's one request (`GET /dashboard`); each panel reads its slice. */
 function useDashboard<T>(select: (board: DashboardData) => T) {
   const client = useQueryClient();
-  const today = toLocalISODate();
-  return useQuery({ queryKey: qk.dashboard(today), queryFn: () => fetchDashboard(client, today), select });
+  return useQuery({
+    queryKey: qk.dashboard(toLocalISODate()),
+    queryFn: ({ signal }) => fetchDashboard(client, signal),
+    select,
+  });
 }
 
 function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
@@ -141,6 +144,7 @@ export function DashboardPage() {
   // The coach card and the briefing read their own keys, which the dashboard
   // seeds: they ask the server themselves only once it has answered or failed.
   const boardSettled = !plannedPending && !boardFetching;
+  const { data: boardDay } = useDashboard((d) => d.date);
 
   const { data: garminConnected = false } = useDashboard((d) => d.garmin_connected);
   // One batched export view for the day's sessions still to do or skipped
@@ -177,7 +181,10 @@ export function DashboardPage() {
 
   const { data: healthData, isPending: healthPending } = useDashboard((d) => d.health);
 
-  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({ enabled: boardSettled });
+  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
+    enabled: boardSettled,
+    day: boardDay,
+  });
 
   return (
     <div className="page-shell bg-void">

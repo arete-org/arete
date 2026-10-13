@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { fetchAPI, type DailyTip, type garminHealthApi } from './api';
 import { coachTodayKey, type CoachToday } from './coachToday';
 import { qk } from './queryKeys';
@@ -28,23 +28,25 @@ export interface Dashboard {
 /** What the dashboard query keeps: the briefing and the coach card live under their own keys. */
 export type DashboardData = Omit<Dashboard, 'briefing' | 'coach'>;
 
+/** Seeds `key` as of `at`, when the read started: an answer written since (a mutation, the key's own read) wins. */
+function seed(client: QueryClient, key: QueryKey, data: unknown, at: number) {
+  if ((client.getQueryState(key)?.dataUpdatedAt ?? 0) >= at) return;
+  client.setQueryData(key, data, { updatedAt: at });
+}
+
 /**
- * The dashboard's one request. Its slices also seed the queries they replace,
- * so other pages, the coach card and the briefing's polling start from this
- * answer; `day` is the browser's date the briefing query is keyed by.
+ * The dashboard's one request. Its slices also seed the queries that still
+ * read them elsewhere: the next goal (Planning), the coach card and the
+ * day's briefing (keyed by the server's day). A read cancelled or replaced
+ * meanwhile, or whose cache was cleared (sign-out, another account), seeds
+ * nothing.
  */
-export async function fetchDashboard(client: QueryClient, day: string): Promise<DashboardData> {
-  const { briefing, coach, ...board } = await fetchAPI<Dashboard>('/dashboard');
-  const date = board.date;
-  client.setQueryData(qk.planned(date, date), board.planned);
-  client.setQueryData(qk.actual(date, date), board.actual);
-  client.setQueryData(qk.planToday, board.plan_today);
-  client.setQueryData(qk.nextGoal, board.next_goal);
-  client.setQueryData(qk.playerStats, board.player_stats);
-  client.setQueryData(qk.fitness, board.fitness);
-  client.setQueryData(qk.workload, board.workload);
-  if (board.health) client.setQueryData(qk.healthDaily(date), board.health);
-  client.setQueryData([...qk.tipDaily, day], briefing);
-  client.setQueryData(coachTodayKey, coach);
+export async function fetchDashboard(client: QueryClient, signal?: AbortSignal): Promise<DashboardData> {
+  const started = Date.now();
+  const { briefing, coach, ...board } = await fetchAPI<Dashboard>('/dashboard', { signal });
+  if (signal?.aborted) return board;
+  seed(client, qk.nextGoal, board.next_goal, started);
+  seed(client, coachTodayKey, coach, started);
+  seed(client, [...qk.tipDaily, board.date], briefing, started);
   return board;
 }
