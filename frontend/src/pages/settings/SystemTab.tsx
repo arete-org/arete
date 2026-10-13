@@ -56,7 +56,11 @@ export function SystemTab() {
       );
       queryClient.invalidateQueries({ queryKey: ['settings'] });
     },
-    onError: (error) => setAlert({ type: 'error', message: `LECTURE DU SEUIL IMPOSSIBLE : ${error}` }),
+    onError: (error) => {
+      // Garmin may have refused the session: the status then asks to reconnect.
+      queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+      setAlert({ type: 'error', message: `LECTURE DU SEUIL IMPOSSIBLE : ${error}` });
+    },
   });
 
   const zonesMutation = useMutation({
@@ -91,7 +95,10 @@ export function SystemTab() {
       queryClient.invalidateQueries({ queryKey: ['garminHealthStatus'] });
       queryClient.invalidateQueries({ queryKey: ['garmin-health'] });
     },
-    onError: (error) => setAlert({ type: 'error', message: `SYNCHRO SANTÉ IMPOSSIBLE : ${error}` }),
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+      setAlert({ type: 'error', message: `SYNCHRO SANTÉ IMPOSSIBLE : ${error}` });
+    },
   });
 
   const handleRefresh = () => {

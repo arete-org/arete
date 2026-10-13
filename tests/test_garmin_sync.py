@@ -918,6 +918,20 @@ class TestSyncStatusFromLocalState:
         body = self.status(router_client)
         assert (body["garmin_authenticated"], body["user_email"]) == (True, None)
 
+    def test_tokens_garmin_refused_ask_to_reconnect(self, router_client, tokens):
+        from arete.garmin.token_store import refused, save_account
+
+        tokens.mkdir()
+        token = tokens / "garmin_tokens.json"
+        token.write_text("{}")
+        save_account(token, "me@garmin.test", remote=False)
+        refused(token, remote=False)
+        body = self.status(router_client)
+        assert (body["garmin_authenticated"], body["user_email"]) == (
+            False,
+            "me@garmin.test",
+        )
+
     def test_no_tokens_is_not_connected(self, router_client, tokens):
         body = self.status(router_client)
         assert (body["garmin_authenticated"], body["user_email"]) == (False, None)
