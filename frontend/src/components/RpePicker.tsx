@@ -46,8 +46,8 @@ export function RpePicker({ sessionId, autoFocus = false, className }: { session
     mutationFn: (rpe: number) => analyticsApi.updateSession(sessionId, { rpe }),
     onSuccess: () => {
       setHidden(true);
+      // The dashboard's refresh brings the coach card back with it.
       invalidateAfterSession(queryClient);
-      void queryClient.invalidateQueries({ queryKey: coachTodayKey });
     },
   });
 

@@ -278,6 +278,7 @@ export function DashboardPage() {
             )}
             <CoachTodayPanel
               enabled={boardSettled}
+              refetchOnFocus={false}
               briefing={tip?.tip ?? undefined}
               briefingNote={tip?.updated_after_sync ? 'Mis à jour après la synchro' : undefined}
             />

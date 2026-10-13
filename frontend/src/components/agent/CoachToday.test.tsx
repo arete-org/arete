@@ -91,3 +91,14 @@ it('shows the card the dashboard seeded without a request of its own', async () 
   expect(await screen.findByText('Prévu : Fractionné · 60 min')).toBeTruthy();
   expect(today).not.toHaveBeenCalled();
 });
+
+it('checks an uncertain answer with a read of its own while the card waits for the dashboard', async () => {
+  vi.spyOn(coachApi, 'proposal').mockRejectedValue(new Error('timeout'));
+  const today = vi.spyOn(coachApi, 'today').mockResolvedValue({ date: '2026-10-13', items: [], remaining: 0, briefing: null });
+  client.setQueryData(coachTodayKey, { date: '2026-10-13', items: [{ kind: 'proposal', record: key, group: [key], members: [] }], remaining: 0, briefing: null });
+  render(<QueryClientProvider client={client}><CoachTodayPanel enabled={false} refetchOnFocus={false} /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Appliquer' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Vérifier l’état' }));
+  await waitFor(() => expect(today).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Vérifier l’état' })).toBeNull());
+});

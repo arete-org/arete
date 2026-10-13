@@ -23,10 +23,20 @@ export function ProposalCard({ proposal, group, members }: { proposal: Proposal;
   const others = members.filter(m => m.id !== proposal.id);
   const action = useMutation({
     mutationFn: (choice: 'apply' | 'keep' | 'snooze') => coachApi.proposal(proposal.id, proposal.revision, choice, others),
-    onSuccess: () => { void client.invalidateQueries({ queryKey: coachTodayKey }); invalidateAfterSession(client); },
+    // The dashboard's refresh brings the card back (invalidateAfterSession).
+    onSuccess: () => invalidateAfterSession(client),
     onError: () => setUncertain(true),
   });
-  const check = async () => { await client.refetchQueries({ queryKey: coachTodayKey }); if (client.getQueryState(coachTodayKey)?.status === 'success') { setUncertain(false); action.reset(); } };
+  // A read of its own: the card's query may be waiting for the dashboard.
+  const check = async () => {
+    try {
+      await client.fetchQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, staleTime: 0 });
+      setUncertain(false);
+      action.reset();
+    } catch {
+      // Still unknown: the button stays.
+    }
+  };
   const stale = group.some(p => p.state === 'stale');
   const discussion = group.some(p => p.state === 'discussion');
   // A changed session only blocks applying; keeping or postponing writes no session.
@@ -61,7 +71,7 @@ export function FollowupCard({ followup }: { followup: Followup }) {
   const [uncertain, setUncertain] = useState(false);
   const action = useMutation({
     mutationFn: (choice: 'answer' | 'skip' | 'snooze') => coachApi.respond(followup.id, followup.revision, choice, choice === 'answer' ? Number(rpe) : undefined, choice === 'answer' && notes.trim() ? notes.trim() : undefined),
-    onSuccess: () => { void client.invalidateQueries({ queryKey: coachTodayKey }); void client.invalidateQueries({ queryKey: ['coachFollowup', followup.id] }); invalidateAfterSession(client); },
+    onSuccess: () => { void client.invalidateQueries({ queryKey: ['coachFollowup', followup.id] }); invalidateAfterSession(client); },
     onError: () => setUncertain(true),
   });
   const checked = useQuery({ queryKey: ['coachFollowup', followup.id], queryFn: () => coachApi.followup(followup.id), enabled: false });
@@ -89,10 +99,13 @@ export function FollowupCard({ followup }: { followup: Followup }) {
   </article>;
 }
 
-/** `enabled: false` waits for another request to seed the card (the dashboard's). */
-export function CoachTodayPanel({ briefing, briefingNote, enabled = true }: { briefing?: string; briefingNote?: string; enabled?: boolean }) {
+/**
+ * `enabled: false` waits for another request to seed the card (the dashboard's);
+ * `refetchOnFocus: false` leaves a focus refresh to that request.
+ */
+export function CoachTodayPanel({ briefing, briefingNote, enabled = true, refetchOnFocus = true }: { briefing?: string; briefingNote?: string; enabled?: boolean; refetchOnFocus?: boolean }) {
   const client = useQueryClient();
-  const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled });
+  const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled, refetchOnWindowFocus: refetchOnFocus });
   const prepare = useMutation({ mutationFn: coachApi.prepare, onSuccess: data => client.setQueryData(coachTodayKey, data) });
   return <Panel title="Avec Chiron aujourd’hui">
     <div className="space-y-3">
