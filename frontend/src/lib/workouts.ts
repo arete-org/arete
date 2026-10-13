@@ -92,32 +92,35 @@ export type SessionPush =
     }
   /** `at` is the UTC push instant; older explicit exports have none. */
   | { kind: 'sent'; at: string | null }
-  /** In flight, uncertain or in conflict: no new send until it is settled. */
-  | { kind: 'unsettled'; label: string; error: string | null }
+  /** In flight, uncertain or in conflict: settled from the session in Planning. */
+  | { kind: 'unsettled'; label: string; error: string | null; href: string }
   /** A described session whose steps the server could not read. */
-  | { kind: 'steps'; href: string };
+  | { kind: 'steps'; href: string }
+  /** A skipped session whose copy is still on Garmin. */
+  | { kind: 'withdraw'; onWithdraw: () => void; pending: boolean; error: string | null };
 
-/**
- * The Garmin line for a session from its export view. `send.result` answers
- * the athlete's own send and is newer than the view until it refreshes.
- */
-export function watchLine(
-  view: WorkoutView,
-  sentAt: string | null,
-  send: { onPush: () => void; pending: boolean; error: string | null; result: GarminExport | null }
-): SessionPush | undefined {
-  const current = newerExport(view.export, send.result);
+/** The athlete's own send or withdrawal; `result` is newer than the view until it refreshes. */
+export interface WatchAction {
+  run: () => void;
+  pending: boolean;
+  error: string | null;
+  result: GarminExport | null;
+}
+
+/** The Garmin line for a session still to do, or skipped, from its export view. */
+export function watchLine(view: WorkoutView, sentAt: string | null, action: WatchAction): SessionPush | undefined {
+  const current = newerExport(view.export, action.result);
   const state = current?.state;
-  if (state === 'scheduled' || state === 'transfer_requested') return { kind: 'sent', at: sentAt };
+  const planning = `/planning?date=${view.session.date}`;
   if (current && (state === 'working' || state === 'uncertain' || state === 'conflict'))
-    return { kind: 'unsettled', label: exportLabel(current), error: state === 'working' ? null : current.error };
-  if (view.session.needs_steps) return { kind: 'steps', href: `/planning?date=${view.session.date}` };
+    return { kind: 'unsettled', label: exportLabel(current), error: state === 'working' ? null : current.error, href: planning };
+  const failure = state === 'failed' ? (current?.error ?? exportLabel(current ?? null)) : null;
+  if (view.session.status === 'skipped') {
+    const held = current && state !== 'removed' && (current.workout_id != null || current.schedule_id != null);
+    return held ? { kind: 'withdraw', onWithdraw: action.run, pending: action.pending, error: action.error ?? failure } : undefined;
+  }
+  if (state === 'scheduled' || state === 'transfer_requested') return { kind: 'sent', at: sentAt };
+  if (view.session.needs_steps) return { kind: 'steps', href: planning };
   if (!view.session.exportable) return undefined;
-  return {
-    kind: 'send',
-    text: view.session.summary ?? null,
-    onPush: send.onPush,
-    pending: send.pending,
-    error: send.error ?? (state === 'failed' ? current?.error ?? exportLabel(current ?? null) : null),
-  };
+  return { kind: 'send', text: view.session.summary ?? null, onPush: action.run, pending: action.pending, error: action.error ?? failure };
 }

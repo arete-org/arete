@@ -57,7 +57,7 @@ const view = (session: Partial<WorkoutView['session']> = {}, state: GarminExport
   session: { id: 7, revision: 1, date: '2026-10-09', sport: 'running', description: null, status: 'pending', summary: '45 min Z2', exportable: true, ...session },
   export: state,
 });
-const send = { onPush: vi.fn(), pending: false, error: null, result: null };
+const send = { run: vi.fn(), pending: false, error: null, result: null };
 const card = (push: ReturnType<typeof watchLine>, planned = session) =>
   render(
     <MemoryRouter>
@@ -67,7 +67,7 @@ const card = (push: ReturnType<typeof watchLine>, planned = session) =>
 
 it('sends to Garmin, then says when it was sent rather than claiming the watch has it', () => {
   const onPush = vi.fn();
-  const { unmount } = card(watchLine(view(), null, { ...send, onPush }));
+  const { unmount } = card(watchLine(view(), null, { ...send, run: onPush }));
   expect(screen.getByText('45 min Z2')).toBeTruthy();
   fireEvent.click(screen.getByText('Envoyer sur la montre'));
   expect(onPush).toHaveBeenCalledOnce();
@@ -106,6 +106,26 @@ it.each([
   expect(screen.getByText(label)).toBeTruthy();
   expect(screen.getByText('Réponse perdue')).toBeTruthy();
   expect(screen.queryByText('Envoyer sur la montre')).toBeNull();
+  // Reconciliation lives with the session in Planning.
+  const link = screen.getByText('Vérifier dans le Planning').closest('a');
+  expect(link?.getAttribute('href')).toBe('/planning?date=2026-10-09');
+});
+
+it('offers to withdraw a skipped session still on Garmin, again after a failure', () => {
+  const run = vi.fn();
+  const skipped = { status: 'skipped', exportable: false };
+  const { unmount } = card(watchLine(view(skipped, exported('scheduled')), null, { ...send, run }), { ...session, status: 'skipped' });
+  fireEvent.click(screen.getByText('Retirer de la montre'));
+  expect(run).toHaveBeenCalledOnce();
+  expect(screen.queryByText(/Envoyée à Garmin/)).toBeNull();
+  unmount();
+  card(watchLine(view(skipped, exported('failed', 'TimeoutError: lent')), null, send), { ...session, status: 'skipped' });
+  expect(screen.getByText('Retirer de la montre')).toBeTruthy();
+  expect(screen.getByText('TimeoutError: lent')).toBeTruthy();
+  // Withdrawn, or never sent: nothing to do on Garmin.
+  const removed = { ...exported('removed'), workout_id: null, schedule_id: null };
+  expect(watchLine(view(skipped, removed), null, send)).toBeUndefined();
+  expect(watchLine(view(skipped, null), null, send)).toBeUndefined();
 });
 
 it('asks for the steps of a described session the server could not read', () => {

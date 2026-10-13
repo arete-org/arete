@@ -175,10 +175,28 @@ function WatchControl({ push, busy }: { push: SessionPush; busy?: boolean }) {
       return <SentLabel at={push.at} />;
     case 'unsettled':
       return (
-        <span className="flex items-center gap-1 text-warning-orange">
-          <Watch className="w-3 h-3" />
-          {push.label}
-        </span>
+        <>
+          <span className="flex items-center gap-1 text-warning-orange">
+            <Watch className="w-3 h-3" />
+            {push.label}
+          </span>
+          <Link to={push.href} className="text-neon-cyan hover:underline">
+            Vérifier dans le Planning
+          </Link>
+        </>
+      );
+    case 'withdraw':
+      return (
+        <button
+          type="button"
+          disabled={busy || push.pending}
+          onClick={push.onWithdraw}
+          title="La séance est sautée mais encore programmée dans Garmin Connect."
+          className="flex items-center gap-1 rounded border border-warning-orange/30 bg-warning-orange/10 px-2 py-1 text-warning-orange hover:bg-warning-orange/20 disabled:opacity-40"
+        >
+          {push.pending ? <Spinner className="w-3 h-3" /> : <Watch className="w-3 h-3" />}
+          Retirer de la montre
+        </button>
       );
     case 'steps':
       return (
@@ -353,7 +371,7 @@ export function SessionCard({
               Rétablir la séance prévue
             </button>
           )}
-          {(push?.kind === 'send' || push?.kind === 'unsettled') && push.error && (
+          {push && 'error' in push && push.error && (
             <span className="basis-full text-danger-red">{push.error}</span>
           )}
         </div>

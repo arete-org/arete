@@ -73,9 +73,11 @@ function TodaySession({
   const queryClient = useQueryClient();
   const { session, realised, state } = row;
 
+  const skipped = session.status === 'skipped';
   const push = useMutation({
-    // Garmin Connect only: the watch takes it at its next phone sync.
-    mutationFn: () => exportApi.export(session.id, null),
+    // A skipped session's copy is withdrawn; otherwise sent to Garmin Connect
+    // only, and the watch takes it at its next phone sync.
+    mutationFn: () => (skipped ? exportApi.remove(session.id) : exportApi.export(session.id, null)),
     onSettled: () => invalidateAfterSession(queryClient),
   });
   const revert = useMutation({
@@ -87,11 +89,11 @@ function TodaySession({
   });
 
   const watch =
-    view && !realised && state === 'pending'
+    view && !realised && (state === 'pending' || state === 'skipped')
       ? watchLine(view, session.garmin_pushed_at, {
-          onPush: () => push.mutate(),
+          run: () => push.mutate(),
           pending: push.isPending,
-          error: push.error ? push.error.message || 'Envoi à Garmin impossible, réessaie plus tard.' : null,
+          error: push.error ? push.error.message || 'Garmin ne répond pas, réessaie plus tard.' : null,
           result: push.data ?? null,
         })
       : undefined;
@@ -136,10 +138,13 @@ export function DashboardPage() {
 
   const { data: syncStatus } = useQuery({ queryKey: qk.syncStatus, queryFn: garminApi.getSyncStatus });
   const garminConnected = syncStatus?.garmin_authenticated ?? false;
-  // One batched export view for the day's sessions still to do (as Planning's cards).
+  // One batched export view for the day's sessions still to do or skipped
+  // (a skipped copy still on Garmin can be withdrawn), as Planning's cards.
   const queryClient = useQueryClient();
   const watchIds = garminConnected
-    ? todayLink.planned.filter((r) => !r.realised && r.state === 'pending').map((r) => r.session.id)
+    ? todayLink.planned
+        .filter((r) => !r.realised && (r.state === 'pending' || r.state === 'skipped'))
+        .map((r) => r.session.id)
     : [];
   const { data: workouts } = useQuery({
     queryKey: workoutsKey('cards', watchIds),
