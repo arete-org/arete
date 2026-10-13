@@ -193,6 +193,8 @@ class JevService:
             record_decision_call(
                 model=self.model,
                 elapsed_ms=round((monotonic() - started) * 1000),
-                response=result,
+                payload=result.model_dump(exclude_none=True)
+                if result is not None
+                else None,
                 error=error,
             )

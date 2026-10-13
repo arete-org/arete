@@ -54,7 +54,7 @@ class SystemSkillsMiddleware(SkillsMiddleware):
         if (
             context
             and context.resolved_profile
-            and not context.resolved_profile.journal_tools
+            and not context.resolved_profile.filesystem_tools
         ):
             return {"skills_metadata": []}
         # Rediscover trusted metadata, never bodies or browser-supplied instructions.
@@ -67,7 +67,7 @@ class SystemSkillsMiddleware(SkillsMiddleware):
         if (
             context
             and context.resolved_profile
-            and not context.resolved_profile.journal_tools
+            and not context.resolved_profile.filesystem_tools
         ):
             return {"skills_metadata": []}
         return self._prepare(

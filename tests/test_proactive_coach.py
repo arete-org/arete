@@ -206,7 +206,7 @@ def test_memory_import_is_once_and_scope_isolated(athlete):
 
 
 def test_forget_fact_cannot_delete_a_newer_revision(athlete):
-    from arete.agent.tools.journal import forget_fact
+    from arete.agent.tools.fact_memory import forget_fact
     from arete.services import athlete_facts
 
     fact = athlete_facts.add_fact("preference", "Le matin")

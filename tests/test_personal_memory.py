@@ -340,17 +340,13 @@ def test_background_missions_never_search_or_gain_tools(monkeypatch):
     assert build_context(request).tools == []
 
 
-def test_tool_requires_explicit_evidence_and_rejects_stale_revision():
-    from arete.agent.tools.journal import remember_fact
-
+def test_tool_requires_explicit_evidence_and_rejects_stale_revision(memory_tool):
     missing_source = json.loads(
-        remember_fact.invoke(
-            {"kind": "preference", "text": "Matin", "evidence": "explicit"}
-        )
+        memory_tool({"kind": "preference", "text": "Matin", "evidence": "explicit"})
     )
     assert "error" in missing_source
     saved = json.loads(
-        remember_fact.invoke(
+        memory_tool(
             {
                 "kind": "preference",
                 "text": "Matin",
@@ -363,7 +359,7 @@ def test_tool_requires_explicit_evidence_and_rejects_stale_revision():
     fid = saved["fact"]["id"]
     facts.update_fact(fid, text="Soir", expected_revision=1)
     stale = json.loads(
-        remember_fact.invoke(
+        memory_tool(
             {
                 "kind": "preference",
                 "text": "Midi",

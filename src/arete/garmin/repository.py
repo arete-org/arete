@@ -299,11 +299,21 @@ class GarminRepository:
             plan_changes.touch()
         return result is not None
 
-    def delete_planned_session(self, session_id: int) -> bool:
+    def delete_planned_session(
+        self, session_id: int, *, expected_revision: int | None = None
+    ) -> bool:
         """Delete a planned session by ID."""
         conn = self._get_connection()
         try:
             conn.execute("BEGIN TRANSACTION")
+            current = conn.execute(
+                "SELECT revision FROM visible_planned_sessions WHERE id=?", [session_id]
+            ).fetchone()
+            if current is None or (
+                expected_revision is not None and current[0] != expected_revision
+            ):
+                conn.execute("ROLLBACK")
+                return False
             active = conn.execute(
                 "SELECT state FROM visible_garmin_exports WHERE session_id=?",
                 [session_id],

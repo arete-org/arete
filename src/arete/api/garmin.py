@@ -13,7 +13,7 @@ from datetime import date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from arete.dataio.settings import athlete_zone_model
 from arete.garmin.fit_parser import FITParser, laps_to_json
@@ -49,11 +49,12 @@ class PlannedSessionCreate(BaseModel):
     date: date
     sport: str = "running"
     session_type: SessionType = SessionType.ENDURANCE
-    target_duration_min: int | None = None
-    target_distance_km: float | None = None
+    target_duration_min: int | None = Field(None, ge=1, le=1440)
+    target_distance_km: float | None = Field(None, gt=0, le=1000)
     target_hr_zone: str | None = Field(None, pattern=r"^Z[1-5]$")
     target_intensity: Literal["easy", "moderate", "hard"] | None = None
-    description: str | None = None
+    description: str | None = Field(None, max_length=500)
+    prescription: dict | None = None
     source: Literal["manual", "llm", "coach"] = "manual"
 
 
@@ -215,14 +216,15 @@ def create_planned_session(session: PlannedSessionCreate):
         target_intensity=session.target_intensity,
         description=session.description,
         source=session.source,
+        prescription=session.prescription,
     )
 
-    session_id = _repo.create_planned_session(planned)
-    created = _repo.get_planned_session(session_id)
-    if created is None:
-        raise HTTPException(status_code=500, detail="Failed to create session")
+    from arete.services.planning import create_manual_session
 
-    logger.info(f"Created planned session {session_id} for {session.date}")
+    try:
+        created = create_manual_session(planned)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return _planned_to_response(created)
 
 
@@ -246,17 +248,64 @@ def list_planned_sessions(
     return [_planned_to_response(s) for s in sessions]
 
 
+class PlannedSessionUpdate(BaseModel):
+    """A complete editor save requires the revision the athlete actually read."""
+
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=1)
+    date: date
+    session_type: SessionType
+    description: str = Field(min_length=1, max_length=500)
+    target_duration_min: int = Field(default=0, ge=0, le=1440)
+    target_distance_km: float = Field(default=0, ge=0, le=1000)
+    target_hr_zone: Literal["", "Z1", "Z2", "Z3", "Z4", "Z5"] = ""
+    target_intensity: Literal["", "easy", "moderate", "hard"] = ""
+    prescription: dict | None = None
+
+
+@router.put("/planned/{session_id}", response_model=PlannedSessionResponse)
+def edit_planned_session(session_id: int, payload: PlannedSessionUpdate):
+    from arete.services.planning import SessionChanges, apply_session_changes
+
+    changes = payload.model_dump(exclude={"revision", "date", "prescription"})
+    changes["date_str"] = payload.date
+    if payload.prescription is not None:
+        changes["prescription"] = payload.prescription
+    try:
+        validated = SessionChanges.model_validate(changes)
+    except ValidationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    try:
+        return _planned_to_response(
+            apply_session_changes(
+                session_id, payload.revision, validated, require_strength_source=False
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
 class PlannedStatusUpdate(BaseModel):
     """Manual status change for a planned session."""
 
     status: SessionStatus
+    revision: int | None = Field(None, ge=1)
 
 
 @router.patch("/planned/{session_id}", response_model=PlannedSessionResponse)
 def update_planned_status(session_id: int, payload: PlannedStatusUpdate):
     """Mark a planned session as done, skipped or back to pending."""
-    if not _repo.update_planned_session_status(session_id, payload.status):
-        raise HTTPException(status_code=404, detail="Planned session not found")
+    try:
+        changed = _repo.update_planned_session_fields(
+            session_id, status=payload.status, expected_revision=payload.revision
+        )
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    if not changed:
+        raise HTTPException(
+            409 if payload.revision else 404,
+            "La séance a changé ou n’existe plus. Recharge le planning.",
+        )
     session = _repo.get_planned_session(session_id)
     if session is None:  # pragma: no cover - just deleted concurrently
         raise HTTPException(status_code=404, detail="Planned session not found")
@@ -264,14 +313,17 @@ def update_planned_status(session_id: int, payload: PlannedStatusUpdate):
 
 
 @router.delete("/planned/{session_id}")
-def delete_planned_session(session_id: int):
+def delete_planned_session(session_id: int, revision: int | None = Query(None, ge=1)):
     """Delete a planned session."""
     try:
-        success = _repo.delete_planned_session(session_id)
+        success = _repo.delete_planned_session(session_id, expected_revision=revision)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not success:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(
+            409 if revision else 404,
+            "La séance a changé ou n’existe plus. Recharge le planning.",
+        )
     return {"message": "Session deleted"}
 
 

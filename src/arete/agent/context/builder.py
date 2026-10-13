@@ -88,7 +88,7 @@ def build_context(
     system = getattr(request, "system_message", None)
     # Filesystem middleware belongs to the shared graph, but its instructions
     # must not advertise private ledger access in product/clarification turns.
-    if profile.id == "slack" and not profile.journal_tools:
+    if profile.id == "slack" and not profile.filesystem_tools:
         system = SystemMessage(profile.system_prompt or "")
     instructions = profile.instructions
     context = getattr(getattr(request, "runtime", None), "context", None)
@@ -106,7 +106,7 @@ def build_context(
         ContextSection("profile", instructions, "server"),
         ContextSection(
             "system_skills",
-            system_skills_section(state, context) if profile.journal_tools else "",
+            system_skills_section(state, context) if profile.filesystem_tools else "",
             "server",
         ),
         ContextSection(
@@ -144,7 +144,7 @@ def build_context(
             attachment_section(
                 state.get("files", {}), context.attachment_paths if context else ()
             )
-            if profile.journal_tools
+            if profile.filesystem_tools
             else "",
             "server",
         ),
@@ -162,7 +162,7 @@ def build_context(
     )
     if final_call:
         base = base.override(tool_choice=None)
-    if not isinstance(context, AgentContext) or not profile.journal_tools:
+    if not isinstance(context, AgentContext) or not profile.filesystem_tools:
         return base
     # Mandatory preferences/history are checked first, never displaced by retrieval.
     available = MAX_RETRIEVED_TOKENS

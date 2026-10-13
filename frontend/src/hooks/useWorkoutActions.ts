@@ -1,5 +1,5 @@
 import { markWorkout, measureWorkout } from '@/lib/workoutPerformance';
-import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { exportApi, type Prescription } from '@/lib/documents';
 import { invalidateAfterSession } from '@/lib/queryKeys';
 import { cacheWorkout, exportLabel, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
@@ -11,7 +11,8 @@ const key = ['workout-action'];
 const MAX_SELECTED = 50;
 export function useWorkoutActions(onResult?: (text: string) => void) {
   const queryClient = useQueryClient();
-  const pending = useMutationState({ filters: { mutationKey: key, status: 'pending' }, select: m => m.state.variables as Action });
+  const busy = useIsMutating({ mutationKey: key }) > 0;
+  const pending = useMutationState({ filters: { mutationKey: key, exact: true, status: 'pending' }, select: m => m.state.variables as Action });
   const pendingIds = new Set(pending.flatMap(a => a.kind === 'export' ? a.sessions.map(s => s.id) : [a.session.id]));
   const pendingLabels = new Map(pending.flatMap<readonly [number, string]>(a => a.kind === 'export'
     ? a.sessions.map(s => [s.id, 'Envoi en cours…'] as const)
@@ -56,5 +57,5 @@ export function useWorkoutActions(onResult?: (text: string) => void) {
     try { await mutation.mutateAsync(action); return true; }
     catch { return false; } // The mutation exposes the error inline and records it in the originating thread.
   };
-  return { run, pendingIds, pendingLabels, busy: pending.length > 0, error: mutation.error?.message, reset: mutation.reset };
+  return { run, pendingIds, pendingLabels, busy, error: mutation.error?.message, reset: mutation.reset };
 }

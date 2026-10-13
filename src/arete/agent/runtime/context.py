@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
+    from arete.agent.models.jev import JevClient
     from arete.agent.profiles.models import AgentProfile
     from arete.agent.runtime.surface import SurfaceDecision
     from arete.services.calendar import CalendarService
@@ -44,6 +45,8 @@ class RunStats:
     skill_reads: int = 0
     skill_read_ms: int = 0
     skill_read_tokens_approx: int = 0
+    memory_decision_calls: int = 0
+    memory_decision_ms: int = 0
     memory_searches: int = 0
     memory_ms: int = 0
     memory_tokens: int = 0
@@ -85,6 +88,10 @@ class AgentContext:
     slack_visibility: Literal["private", "public"] | None = None
     slack_product: SlackProduct | None = field(default=None, repr=False)
     slack_decision: SurfaceDecision | None = field(default=None, repr=False)
+    memory_model: JevClient | None = field(default=None, init=False, repr=False)
+    memory_source_message: str = field(default="", init=False, repr=False)
+    memory_calls: int = field(default=0, init=False)
+    memory_charged_calls: int = field(default=0, init=False)
     classifier_calls: int = 0
     run_logged: bool = False
     attachment_paths: tuple[str, ...] = ()

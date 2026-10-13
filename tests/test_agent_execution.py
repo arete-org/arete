@@ -141,8 +141,8 @@ def test_model_budget_stops_loop():
 def test_last_model_call_answers_with_all_results_and_no_tools(
     mode, monkeypatch, tmp_path
 ):
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.runtime.streaming import StreamProjection
+    from arete.coaching import build_agent_filesystem
 
     monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     requests = []
@@ -173,7 +173,7 @@ def test_last_model_call_answers_with_all_results_and_no_tools(
         middleware=[
             *execution_limits(),
             ToolkitMiddleware(),
-            build_memory_filesystem(),
+            build_agent_filesystem(),
             ContextBuilderMiddleware(),
             Capture(),
         ],

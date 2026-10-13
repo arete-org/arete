@@ -246,59 +246,90 @@ class SessionChanges(StrictModel):
         return self
 
 
-def update_planned_session(
-    session_id: int, revision: int, changes: SessionChanges
-) -> str:
-    """Apply one versioned patch; repository checks export reservations atomically."""
-    try:
-        current = _repo().get_planned_session(session_id)
-        if current is None:
-            raise ValueError("Séance introuvable.")
-        fields = changes.model_dump(
-            exclude_unset=True, exclude={"prescription", "strength_text"}
-        )
-        if "date_str" in fields:
-            fields["date"] = fields.pop("date_str")
-        prescription = None
-        if changes.prescription is not None or changes.strength_text is not None:
-            prescription = conversation_prescription(
+def create_manual_session(session: PlannedSession) -> PlannedSession:
+    """Persist the browser's validated steps together with the session, in one write."""
+    if session.prescription is not None:
+        prescription = Prescription.model_validate(session.prescription)
+        session.prescription = prescription.model_dump(mode="json")
+        # Structured steps own their targets; scalar hints must not contradict them.
+        session.target_duration_min = None
+        session.target_distance_km = None
+        session.target_hr_zone = None
+        session.target_intensity = None
+    session_id = _repo().create_planned_session(session)
+    created = _repo().get_planned_session(session_id)
+    assert created is not None, "A committed session must be readable"
+    return created
+
+
+def apply_session_changes(
+    session_id: int,
+    revision: int,
+    changes: SessionChanges,
+    *,
+    require_strength_source: bool = True,
+) -> PlannedSession:
+    """Share one versioned editing boundary between HTTP and coaching tools."""
+    current = _repo().get_planned_session(session_id)
+    if current is None:
+        raise ValueError("Séance introuvable.")
+    fields = changes.model_dump(
+        exclude_unset=True, exclude={"prescription", "strength_text"}
+    )
+    if "date_str" in fields:
+        fields["date"] = fields.pop("date_str")
+    prescription = None
+    if changes.prescription is not None or changes.strength_text is not None:
+        # Typed manual fields do not need the grammar evidence required from a model.
+        prescription = (
+            conversation_prescription(
                 changes.prescription,
                 current.sport,
                 changes.date_str or current.date,
                 changes.strength_text or "",
             )
-        targets = {
-            "target_duration_min",
-            "target_distance_km",
-            "target_hr_zone",
-            "target_intensity",
-        }
-        if (current.prescription or prescription) and any(
-            fields.get(k) for k in targets
-        ):
-            raise ValueError(
-                "Modifie la prescription pour changer les objectifs d’une séance structurée."
-            )
-        # A replacement must not leave stale scalar targets contradicting its steps.
-        if prescription:
-            fields.update({key: None for key in targets})
-        for key in targets | {"description"}:
-            if key in fields and not fields[key]:
-                fields[key] = None
-        changed = _repo().update_planned_session_fields(
-            session_id,
-            expected_revision=revision,
-            prescription=prescription.model_dump(mode="json") if prescription else None,
-            **fields,
-            garmin_pushed_at=None,
+            if require_strength_source or changes.strength_text is not None
+            else changes.prescription
         )
-        if not changed:
-            raise ValueError(
-                "La séance a changé ou n’existe plus. Recharge le planning."
-            )
+    targets = {
+        "target_duration_min",
+        "target_distance_km",
+        "target_hr_zone",
+        "target_intensity",
+    }
+    if (current.prescription or prescription) and any(fields.get(k) for k in targets):
+        raise ValueError(
+            "Modifie la prescription pour changer les objectifs d’une séance structurée."
+        )
+    # A replacement must not leave stale scalar targets contradicting its steps.
+    if prescription:
+        fields.update({key: None for key in targets})
+    for key in targets | {"description"}:
+        if key in fields and not fields[key]:
+            fields[key] = None
+    changed = _repo().update_planned_session_fields(
+        session_id,
+        expected_revision=revision,
+        prescription=prescription.model_dump(mode="json") if prescription else None,
+        **fields,
+        garmin_pushed_at=None,
+    )
+    if not changed:
+        raise ValueError("La séance a changé ou n’existe plus. Recharge le planning.")
+    updated = _repo().get_planned_session(session_id)
+    if updated is None:
+        raise ValueError("La séance a été supprimée. Recharge le planning.")
+    return updated
+
+
+def update_planned_session(
+    session_id: int, revision: int, changes: SessionChanges
+) -> str:
+    """Adapt domain errors and the updated workout to the coaching tool contract."""
+    try:
+        apply_session_changes(session_id, revision, changes)
         from arete.services.garmin_export import inspect_session
 
-        # Include the new export state so an existing UI card cannot remain "scheduled".
         return json.dumps(
             {"updated": True, **inspect_session(session_id, include_steps=False)},
             ensure_ascii=False,

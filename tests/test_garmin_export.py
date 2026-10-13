@@ -953,7 +953,7 @@ def test_read_then_strength_action_only_emits_the_created_workout(
         )
 
     graph = build_agent(
-        replace(get_profile("chat"), journal_tools=False),
+        replace(get_profile("chat"), journal_tools=False, filesystem_tools=False),
         model=Model(
             disable_streaming=True,
             messages=iter(

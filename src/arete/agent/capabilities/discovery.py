@@ -5,7 +5,12 @@ from typing import Any
 from langchain_core.tools import BaseTool
 
 from arete.agent.capabilities.models import Toolkit
-from arete.agent.capabilities.registry import CAPABILITIES
+from arete.agent.capabilities.registry import (
+    CAPABILITIES,
+    FACT_MEMORY_TOOL_NAMES,
+    FILESYSTEM_TOOL_NAMES,
+    JOURNAL_TOOL_NAMES,
+)
 from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.policy import ProfileSpec, resolve_policy
 
@@ -46,6 +51,12 @@ def tool_instructions_suffix(profile: ProfileSpec) -> str:
 def tool_available(profile: ProfileSpec, name: str) -> bool:
     """Use the same gate for model binding and execution, including ledger tools."""
     policy = resolve_policy(profile)
+    if name in FACT_MEMORY_TOOL_NAMES:
+        return policy.profile.fact_memory_tools
+    if name in FILESYSTEM_TOOL_NAMES:
+        return policy.profile.filesystem_tools
+    if name in JOURNAL_TOOL_NAMES:
+        return policy.profile.journal_tools
     domain_names = {t.name for tk in CAPABILITIES.values() for t in tk.tools}
     if name in domain_names:
         return name in {t.name for t in authorized_tools(profile)}

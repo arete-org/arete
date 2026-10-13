@@ -46,15 +46,15 @@ def record_model_call(
 
 
 def record_decision_call(
-    *, model: str, elapsed_ms: int, response: Any = None, error: str | None = None
+    *, model: str, elapsed_ms: int, payload: dict | None, error: str | None
 ) -> None:
-    """Decisions reports its own token/cost schema, without chat messages."""
+    # Both decision callers report usage without logging the athlete's source text.
     logger.info(
         "Agent model call: model=%s served=%s elapsed_ms=%d usage=%s error=%s",
         model,
-        response.model if response is not None else None,
+        payload.get("model") if payload else None,
         elapsed_ms,
-        response.usage.model_dump(exclude_none=True) if response is not None else None,
+        payload.get("usage") if payload else None,
         error,
     )
 
@@ -65,7 +65,7 @@ def record_run(
     """One line per run: what a turn, a briefing or a feedback really cost."""
     logger.info(
         "Agent run: profile=%s calls=%d tools=%d model_ms=%d ttft_ms=%s "
-        "total_ms=%d first_result_ms=%s models=%s error=%s skill_reads=%d skill_read_ms=%d skill_read_tokens_approx=%d memory_searches=%d memory_ms=%d memory_tokens=%d",
+        "total_ms=%d first_result_ms=%s models=%s error=%s skill_reads=%d skill_read_ms=%d skill_read_tokens_approx=%d memory_searches=%d memory_ms=%d memory_tokens=%d memory_decision_calls=%d memory_decision_ms=%d",
         profile,
         stats.model_calls,
         stats.tool_calls,
@@ -81,4 +81,6 @@ def record_run(
         stats.memory_searches,
         stats.memory_ms,
         stats.memory_tokens,
+        stats.memory_decision_calls,
+        stats.memory_decision_ms,
     )

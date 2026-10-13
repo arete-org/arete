@@ -22,9 +22,15 @@ function TargetEditor({ value, onChange, label }: { value?: Target | null; onCha
 }
 
 function StepsEditor({ steps, sport, onChange, depth = 0, exerciseList }: { steps: WorkoutStep[]; sport: string; onChange: (steps: WorkoutStep[]) => void; depth?: number; exerciseList: string }) {
+  const move = (index: number, direction: number) => {
+    const next = [...steps];
+    [next[index], next[index + direction]] = [next[index + direction], next[index]];
+    onChange(next);
+  };
   const patch = (index: number, change: Partial<WorkoutStep>) => onChange(steps.map((s, i) => i === index ? { ...s, ...change } : s));
-  return <div className="space-y-3">{steps.map((step, index) => <fieldset key={index} className="rounded border border-text-muted/20 p-3 space-y-2">
-    <legend className="text-xs">Étape {index + 1}</legend>
+  return <div className="space-y-3">{steps.map((step, index) => <details key={index} className="rounded border border-text-muted/20 p-3 space-y-3">
+    <summary className="cursor-pointer min-h-11 text-sm font-medium flex items-center">{index + 1}. {kinds[step.kind]} · {step.kind === 'repeat' ? `${step.repeat} fois` : step.duration_kind === 'lap' ? 'Appui sur Lap' : `${step.value ?? "—"} ${step.duration_kind === 'seconds' ? 's' : step.duration_kind === 'meters' ? 'm' : 'répétitions'}`}</summary>
+    <div className="flex flex-wrap gap-3 text-xs"><button type="button" disabled={index === 0} aria-label={`Monter l’étape ${index + 1}`} onClick={() => move(index, -1)}>↑ Monter</button><button type="button" disabled={index === steps.length - 1} aria-label={`Descendre l’étape ${index + 1}`} onClick={() => move(index, 1)}>↓ Descendre</button></div>
     <div className="flex gap-2"><select aria-label={`Type de l’étape ${index + 1}`} className={inputClass} value={step.kind} onChange={e => {
       const kind = e.target.value as WorkoutStep['kind'];
       patch(index, kind === 'repeat' ? { ...newStep(), kind, repeat: 2, value: null, duration_kind: 'lap', steps: [newStep()], target: null, secondary_target: null, exercise: '', weight_kg: null, stroke: null } : { kind, repeat: null, steps: [] });
@@ -48,7 +54,7 @@ function StepsEditor({ steps, sport, onChange, depth = 0, exerciseList }: { step
       <TargetEditor label="Cible secondaire" value={step.secondary_target} onChange={secondary_target => patch(index, { secondary_target })} />
       <label className="block text-xs">Consignes<input className={inputClass} value={step.notes ?? ''} maxLength={500} onChange={e => patch(index, { notes: e.target.value })} /></label>
     </>}
-  </fieldset>)}
+  </details>)}
     <button type="button" className="text-neon-cyan text-sm" disabled={steps.length >= 100} onClick={() => onChange([...steps, newStep()])}>+ Ajouter une étape</button>
   </div>;
 }
