@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { fetchAPI } from './api';
 import { coachTodayKey } from './coachToday';
 import { fetchDashboard, type Dashboard } from './dashboard';
-import { invalidateAfterSession, qk } from './queryKeys';
+import { invalidateAfterSession, invalidateWithDashboard, qk } from './queryKeys';
 
 vi.mock('./api', () => ({ fetchAPI: vi.fn() }));
 vi.mock('./gamification', () => ({ syncGame: vi.fn() }));
@@ -102,9 +102,15 @@ it('a cache cleared during the read (sign-out, another account) stays empty', as
   expect(client.getQueryCache().getAll()).toEqual([]);
 });
 
-it('a logged session refreshes the dashboard', () => {
+it('a logged session, the Garmin state or a goal refreshes the dashboard', () => {
   const client = new QueryClient();
   client.setQueryData(qk.dashboard(day), { date: day });
   invalidateAfterSession(client);
   expect(client.getQueryState(qk.dashboard(day))?.isInvalidated).toBe(true);
+
+  client.setQueryData(qk.dashboard(day), { date: day });
+  client.setQueryData(['syncStatus'], {});
+  invalidateWithDashboard(client, ['syncStatus']);
+  expect(client.getQueryState(qk.dashboard(day))?.isInvalidated).toBe(true);
+  expect(client.getQueryState(['syncStatus'])?.isInvalidated).toBe(true);
 });

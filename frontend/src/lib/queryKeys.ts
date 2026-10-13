@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { strengthApi } from './api';
 import { syncGame } from './gamification';
 
@@ -82,6 +82,11 @@ export const strengthSessionsQuery = {
   queryKey: qk.strengthSessions,
   queryFn: () => strengthApi.getSessions(200),
 };
+
+/** `keys` and the dashboard, whose one answer also carries their data (Garmin state, health, goals). */
+export function invalidateWithDashboard(queryClient: QueryClient, ...keys: QueryKey[]): void {
+  for (const key of [...keys, qk.dashboard()]) queryClient.invalidateQueries({ queryKey: key });
+}
 
 /** Everything that changes when a session is logged, uploaded, synced or matched. */
 export function invalidateAfterSession(queryClient: QueryClient): void {
