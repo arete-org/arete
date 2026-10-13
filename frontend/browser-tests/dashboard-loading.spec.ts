@@ -136,6 +136,33 @@ test('a repeat visit paints the last known dashboard before any data answer', as
   await expect(page.getByRole('heading', { name: 'Bonjour, HUNTER' })).toBeVisible();
 });
 
+test('a repeat visit and a focus refresh stay within the budget, the coach card read once', async ({ page }) => {
+  await page.clock.install();
+  const followup = { id: 1, session_id: 9, decision_id: null, question: 'Comment était la séance ?', requested_on: localDay(), expires_at: `${localDay(2)}T00:00:00`, state: 'pending', revision: 1, rpe: null, notes: null };
+  const coach = { date: localDay(), items: [{ kind: 'followup', record: followup }], remaining: 0, briefing: null };
+  await dashboard(page, () => 0, (_route, path) => (path === '/api/dashboard' ? dashboardAnswer({ planned: [session], coach }) : undefined));
+  await page.goto('/');
+  await expect(page.getByText('Comment était la séance ?')).toBeVisible();
+  // Writes are throttled to one a second.
+  await page.waitForTimeout(1_500);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  const requests = await dashboard(page, () => 0, (_route, path) => (path === '/api/dashboard' ? dashboardAnswer({ planned: [session], coach }) : undefined));
+  await page.reload();
+  await expect(page.getByText('Footing du jour')).toBeVisible();
+  await expect(page.getByText('Comment était la séance ?')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  expect([...requests].sort(), requests.join('\n')).toEqual(['GET /api/dashboard', 'GET /api/settings', 'GET /api/settings/gamification']);
+
+  // Past the 30 s freshness, the athlete comes back to the tab.
+  requests.length = 0;
+  await page.clock.fastForward('00:45');
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => requests.includes('GET /api/dashboard')).toBe(true);
+  await page.waitForLoadState('networkidle');
+  expect(requests.filter(r => r.endsWith('/coach/today') || r.endsWith('/tips/daily')), requests.join('\n')).toEqual([]);
+  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(4);
+});
+
 test('a dashboard that fails says so with a retry, and the coach card and briefing load on their own', async ({ page }) => {
   let failing = true;
   const reads: string[] = [];
