@@ -1,9 +1,6 @@
 import { lazy, Suspense, type MouseEvent } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { BarChart3, CalendarDays, Dumbbell, LayoutDashboard, Settings } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { settingsApi } from '@/lib/api';
-import { qk } from '@/lib/queryKeys';
 import { useGamePreference } from '@/lib/gamification';
 import { AreteMark, AreteWordmark } from './AreteBrand';
 import { User } from 'lucide-react';
@@ -43,55 +40,18 @@ export function Navigation({
   agentBusy: boolean;
   onToggleAgent: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const planning = useLocation().pathname === '/planning';
-  const { data: settings } = useQuery({
-    queryKey: qk.settings,
-    queryFn: settingsApi.get,
-    enabled: planning,
-  });
-  const initials = (settings?.display_name || 'Profil')
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase();
   const { data: preference } = useGamePreference();
   const rpg = preference?.enabled === true;
   const profile = { path: '/profile', label: 'Profil', icon: User };
-  const desktopItems = planning
-    ? [navItems[0], navItems[1], navItems[3], navItems[2], navItems[4]]
-    : rpg
-      ? [...navItems.slice(0, 4), profile, navItems[4]]
-      : navItems;
-  const mobileItems = planning
-    ? [navItems[0], navItems[1], navItems[3]]
-    : rpg
-      ? [...navItems.slice(0, 4), profile]
-      : navItems;
+  const desktopItems = rpg ? [...navItems.slice(0, 4), profile, navItems[4]] : navItems;
+  const mobileItems = rpg ? [...navItems.slice(0, 4), profile] : navItems;
   const auth = useAuthState();
   return (
     <>
-      {planning && (
-        <header className="planning-brand-header md:hidden">
-          <Link to="/" aria-label="Arete · Accueil">
-            <AreteWordmark />
-          </Link>
-          <Link
-            to="/settings"
-            aria-label="Réglages et profil"
-            className="text-sm text-text-secondary min-h-11 flex items-center"
-          >
-            {initials}
-          </Link>
-        </header>
-      )}
       {/* Desktop top nav — hidden on mobile */}
       <nav
         aria-label="Navigation principale"
-        className={cn(
-          'hidden md:block sticky top-0 z-50 bg-void/95 backdrop-blur-sm border-b border-text-muted/20',
-          planning && 'planning-desktop-nav',
-        )}
+        className="hidden md:block sticky top-0 z-50 bg-void/95 backdrop-blur-sm border-b border-text-muted/20"
       >
         <div className="navigation-shell">
           <div className="flex items-center justify-between h-14">
@@ -119,9 +79,7 @@ export function Navigation({
                   }
                 >
                   <item.icon className="w-4 h-4" />
-                  <span className="hidden lg:inline">
-                    {planning && item.path === '/' ? 'Vue d’ensemble' : item.label}
-                  </span>
+                  <span className="hidden lg:inline">{item.label}</span>
                 </NavLink>
               ))}
             </div>
@@ -147,7 +105,7 @@ export function Navigation({
                     <span className="absolute -right-1 top-0 size-1.5 rounded-full bg-neon-cyan" />
                   )}
                 </span>
-                <span>{rpg || planning ? 'Chiron' : 'Coach'}</span>
+                <span>{rpg ? 'Chiron' : 'Coach'}</span>
               </button>
               {auth.enabled && (
                 <Suspense fallback={null}>
@@ -162,10 +120,7 @@ export function Navigation({
       {/* Mobile bottom tab bar — hidden on desktop */}
       <nav
         aria-label="Navigation mobile"
-        className={cn(
-          'md:hidden fixed bottom-0 left-0 right-0 z-50 bg-void/95 backdrop-blur-sm border-t border-text-muted/20',
-          planning && 'planning-mobile-nav',
-        )}
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-void/95 backdrop-blur-sm border-t border-text-muted/20"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="flex items-center justify-around h-16 px-2">
@@ -221,7 +176,7 @@ export function Navigation({
                 <span className="absolute -right-1 top-0 size-1.5 rounded-full bg-neon-cyan" />
               )}
             </span>
-            <span className="text-[9px] font-sans">{rpg || planning ? 'Chiron' : 'Coach'}</span>
+            <span className="text-[9px] font-sans">{rpg ? 'Chiron' : 'Coach'}</span>
           </button>
         </div>
       </nav>

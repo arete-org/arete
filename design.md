@@ -144,15 +144,16 @@ de réponse, puis le retour au choix sauvegardé après rechargement.
 La semaine affiche sept colonnes sur grand écran ; sous 1050 px de largeur
 **disponible** (coach compris), un sélecteur de jours donne accès au même contenu.
 Sur mobile, les compteurs deviennent une ligne pour laisser la priorité aux séances.
-Le titre et les cartes utilisent les tokens communs aux huit thèmes. Le titre reprend
-Cormorant Garamond SemiBold (42 px maximum sur bureau, 34 px sur la maquette mobile).
+La proposition A ne concerne que le contenu de la page : la navigation, la marge de page
+et l’en-tête (`page-title` « Planning » et sous-titre discret) sont ceux des autres pages.
+Les cartes utilisent les tokens communs aux huit thèmes.
 Inter Regular, Medium et SemiBold sont chargés localement avec leurs vraies graisses
 (version 4.0, licence OFL fournie), sans dépendre du gras simulé par le navigateur.
 
 La [référence mobile](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=111-175)
-conserve la signature ARETE, les marges de 20 px, les jours, les compteurs et le bouton
-« Ouvrir la séance » sous la carte. Les options de filtre, sélection et rafraîchissement
-sont regroupées dans le menu du titre. Les cibles tactiles font au moins 44 px :
+conserve les jours, les compteurs et le bouton « Ouvrir la séance » sous la carte.
+Les options de filtre, sélection et rafraîchissement sont regroupées dans le menu
+de la barre de semaine. Les cibles tactiles font au moins 44 px :
 le titre d’une carte étend sa cible à la carte entière. Le focus de cette cible
 fusionne avec la bordure de sélection pour éviter deux rectangles imbriqués.
 Les données et les statuts restent ceux du serveur ; aucun retrait Garmin fictif
