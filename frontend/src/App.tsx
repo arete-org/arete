@@ -6,13 +6,17 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigation, ErrorBoundary } from '@/components';
 import { AgentSidePanel } from '@/components/AgentSidePanel';
+import { preloadAgentMarkdown } from '@/components/agent/AgentMarkdown';
 import { EnableNotifications } from '@/components/EnableNotifications';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { LoadingState } from '@/components/States';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { SettingsProvider } from '@/contexts';
-import { DashboardPage, PlanningPage, LogPage, SettingsPage } from '@/pages';
+import { DashboardPage, SettingsPage } from '@/pages';
+import { loadLogPage, loadPlanningPage } from '@/pages/routes';
 
+const PlanningPage = lazy(loadPlanningPage);
+const LogPage = lazy(loadLogPage);
 // recharts is most of the bundle and only the Analytics page draws charts.
 const ProfilePage = lazy(() => import('@/pages/Profile').then(m => ({ default: m.ProfilePage })));
 const AnalyticsPage = lazy(() =>
@@ -97,7 +101,7 @@ function App() {
                   <ErrorBoundary>
                     <Routes>
                       <Route path="/" element={<DashboardPage />} />
-                      <Route path="/planning" element={<PlanningPage />} />
+                      <Route path="/planning" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><PlanningPage /></Suspense>} />
                       <Route
                         path="/analytics"
                         element={
@@ -114,7 +118,7 @@ function App() {
                           </Suspense>
                         }
                       />
-                      <Route path="/log" element={<LogPage />} />
+                      <Route path="/log" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><LogPage /></Suspense>} />
                       <Route
                         path="/log/sessions/:id"
                         element={
@@ -152,6 +156,7 @@ function App() {
                 className="coach-launcher fixed z-40 flex min-h-11 items-center gap-2 rounded-full border border-text-muted/20 bg-abyss px-4 text-sm text-text-primary shadow-lg"
                 aria-controls="coach-panel" aria-expanded={false}
                 onClick={event => { triggerRef.current = event.currentTarget; setAgentOpen(true); }}
+                onPointerEnter={preloadAgentMarkdown} onFocus={preloadAgentMarkdown}
               ><AreteMark size={18} />{agentBusy ? 'Chiron répond…' : 'Demander à Chiron'}</button>}
               <AgentSidePanel
                 display={display.mode}

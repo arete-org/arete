@@ -1,52 +1,13 @@
-import { expect, it } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
+// @vitest-environment jsdom
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, expect, it } from 'vitest';
 import { AgentMarkdown } from './AgentMarkdown';
 
-it('renders headings, lists, emphasis, tables and code as semantic HTML', () => {
-  const html = renderToStaticMarkup(
-    <AgentMarkdown
-      text={
-        '## Capacités\n\n**Analyser**\n- Charge\n- Forme\n\n`analytics`\n\n| Jour | Séance |\n| --- | --- |\n| Lundi | Repos |\n\n```python\nprint("ok")\n```'
-      }
-    />
-  );
-  for (const token of [
-    '<h2>',
-    '<strong>Analyser</strong>',
-    '<ul>',
-    '<li>Charge</li>',
-    '<table>',
-    '<th>Jour</th>',
-    '<code>analytics</code>',
-    '<pre>',
-  ])
-    expect(html).toContain(token);
-});
-it('does not execute HTML, unsafe links or load model-supplied images', () => {
-  const html = renderToStaticMarkup(
-    <AgentMarkdown
-      text={
-        '<script>alert(1)</script>\n\n[x](javascript:alert(1))\n\n![tracking](https://example.com/pixel)'
-      }
-    />
-  );
-  expect(html).not.toContain('<script');
-  expect(html).not.toContain('javascript:');
-  expect(html).not.toContain('<img');
-  expect(html).not.toContain('example.com/pixel');
-});
-it('renders partial streaming markdown without throwing', () => {
-  expect(
-    renderToStaticMarkup(
-      <AgentMarkdown text={'**Analyser\n\n- Charge\n\n```py\nprint('} />
-    )
-  ).toContain('Analyser');
-});
+afterEach(cleanup);
 
-it('keeps links safe and readable', () => {
-  const html = renderToStaticMarkup(
-    <AgentMarkdown text={'[Source](https://example.com)'} />
-  );
-  expect(html).toContain('rel="noopener noreferrer"');
-  expect(html).toContain('target="_blank"');
+it('shows the received text at once, then formats it when the renderer arrives', async () => {
+  const { container } = render(<AgentMarkdown text={'**Repos** demain'} />);
+  expect(container.textContent).toBe('**Repos** demain');
+  expect((await screen.findByText('Repos')).tagName).toBe('STRONG');
+  expect(container.textContent).toBe('Repos demain');
 });

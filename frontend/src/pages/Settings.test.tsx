@@ -39,17 +39,18 @@ function mount(path: string, auth: AuthState = AUTH_DISABLED) {
   );
 }
 
-function openAppearance(path = '/settings') {
+/** Tabs load on first view: wait for the appearance tab before choosing a theme. */
+async function openAppearance(path = '/settings') {
   const view = mount(path);
   if (path === '/settings') {
     fireEvent.click(screen.getByRole('button', { name: 'APPARENCE' }));
   }
-  fireEvent.click(screen.getByRole('button', { name: 'CLAIR' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'CLAIR' }));
   return view;
 }
 
-it('previews light immediately and restores the saved theme on exit', () => {
-  const view = openAppearance();
+it('previews light immediately and restores the saved theme on exit', async () => {
+  const view = await openAppearance();
   expect(document.documentElement.dataset.theme).toBe('light');
   expect(screen.getByRole('button', { name: 'CLAIR' }).getAttribute('aria-pressed')).toBe('true');
   expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#F4F7FA');
@@ -59,12 +60,12 @@ it('previews light immediately and restores the saved theme on exit', () => {
   expect(document.documentElement.dataset.theme).toBe('dark');
 });
 
-it('opens the appearance deep link and keeps the preview while switching tabs', () => {
-  const view = openAppearance('/settings?tab=appearance');
+it('opens the appearance deep link and keeps the preview while switching tabs', async () => {
+  const view = await openAppearance('/settings?tab=appearance');
   fireEvent.click(screen.getByRole('button', { name: 'PROFIL' }));
   expect(document.documentElement.dataset.theme).toBe('light');
   fireEvent.click(screen.getByRole('button', { name: 'APPARENCE' }));
-  expect(screen.getByRole('button', { name: 'CLAIR' }).getAttribute('aria-pressed')).toBe('true');
+  expect((await screen.findByRole('button', { name: 'CLAIR' })).getAttribute('aria-pressed')).toBe('true');
   view.unmount();
   expect(document.documentElement.dataset.theme).toBe('dark');
 });
@@ -73,7 +74,7 @@ it('keeps a successfully saved light theme after exit and reload', async () => {
   const light = { ...saved, theme: 'light' as const };
   vi.spyOn(settingsApi, 'update').mockResolvedValue(light);
   vi.mocked(settingsApi.get).mockResolvedValue(light);
-  const view = openAppearance();
+  const view = await openAppearance();
   fireEvent.click(screen.getByRole('button', { name: 'ENREGISTRER' }));
   await waitFor(() => expect(client.getQueryData(['settings'])).toEqual(light));
   view.unmount();
@@ -83,7 +84,7 @@ it('keeps a successfully saved light theme after exit and reload', async () => {
 
 it('does not persist a preview when saving fails', async () => {
   vi.spyOn(settingsApi, 'update').mockRejectedValue(new Error('Offline'));
-  const view = openAppearance();
+  const view = await openAppearance();
   fireEvent.click(screen.getByRole('button', { name: 'ENREGISTRER' }));
   await screen.findByText('ÉCHEC');
   expect(document.documentElement.dataset.theme).toBe('light');
@@ -110,10 +111,10 @@ it('shows the administration tab to admins only', async () => {
   expect(adminApi.accounts).toHaveBeenCalled();
 });
 
-it('falls back to the profile tab on an admin deep link for a non-admin', () => {
+it('falls back to the profile tab on an admin deep link for a non-admin', async () => {
   const accounts = vi.spyOn(adminApi, 'accounts').mockResolvedValue([]);
   mount('/settings?tab=admin', SIGNED_IN);
-  expect(screen.getByRole('heading', { name: 'PROFIL' })).toBeTruthy();
+  expect(await screen.findByRole('heading', { name: 'PROFIL' })).toBeTruthy();
   expect(screen.queryByRole('heading', { name: 'COMPTES ET ATHLÈTES' })).toBeNull();
   expect(accounts).not.toHaveBeenCalled();
 });
@@ -122,7 +123,7 @@ it.each(['pierre', 'prune'] as const)('saves %s through the settings API and res
   const updated = { ...saved, theme };
   vi.spyOn(settingsApi, 'update').mockResolvedValue(updated);
   vi.mocked(settingsApi.get).mockResolvedValue(updated);
-  const view = openAppearance();
+  const view = await openAppearance();
   fireEvent.click(screen.getByRole('button', { name: theme.toUpperCase() }));
   expect(document.documentElement.dataset.theme).toBe(theme);
   fireEvent.click(screen.getByRole('button', { name: 'ENREGISTRER' }));

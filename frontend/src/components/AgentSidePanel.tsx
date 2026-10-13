@@ -36,7 +36,7 @@ import {
 import { useCoachThreads } from '@/hooks/useCoachThreads';
 import { starters } from '@/lib/coachPrompts';
 import { ThreadHistory } from './agent/ThreadHistory';
-import { AgentMarkdown } from './agent/AgentMarkdown';
+import { AgentMarkdown, preloadAgentMarkdown } from './agent/AgentMarkdown';
 import { ToolActivity } from './agent/ToolActivity';
 import { CoachActivity, CoachPresence } from './agent/CoachActivity';
 import { canRetryMessage, isThinking } from '@/lib/agentActivity';
@@ -201,6 +201,9 @@ export function AgentSidePanel({
   useEffect(() => {
     onBusyChange?.(busy);
   }, [busy, onBusyChange]);
+  useEffect(() => {
+    if (open) preloadAgentMarkdown();
+  }, [open]);
   useEffect(() => {
     if (open && !showHistory) inputRef.current?.focus();
   }, [open, showHistory, active.id]);
