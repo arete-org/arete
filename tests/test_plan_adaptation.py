@@ -10,7 +10,7 @@ import pytest
 from arete.dataio.db import connect
 from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
-from arete.services import plan_adaptation
+from arete.services import garmin_export, plan_adaptation
 from arete.services.coaching_rules import RuleFacts
 
 #: Far enough ahead that no other test's "today" reaches it.
@@ -38,7 +38,6 @@ def tempo(monkeypatch):
         return ZoneModel.from_reference(lthr=170)
 
     monkeypatch.setattr("arete.dataio.settings.athlete_zone_model", zones)
-    monkeypatch.setattr("arete.services.plan_adaptation.athlete_zone_model", zones)
 
     monkeypatch.setattr(plan_adaptation, "athlete_today", lambda: DAY)
     repo = GarminRepository()
@@ -186,26 +185,25 @@ def test_the_old_api_refuses_implicit_application(tempo, router_client):
         ),
     ],
 )
-def test_an_eased_described_tempo_becomes_pushable_as_what_it_now_is(
+def test_an_eased_described_tempo_becomes_exportable_as_what_it_now_is(
     tempo, readiness, decision, description
 ):
-    from arete.garmin.workout_structure import NotPushable
-
     con = connect()
     con.execute(
         "UPDATE app.planned_sessions SET description=? WHERE id=?",
         ["3x10' au seuil", tempo],
     )
     con.close()
-    with pytest.raises(NotPushable):
-        plan_adaptation.structure(GarminRepository().get_planned_session(tempo))
+    # Read from the description first, then the adapted session's own template.
+    assert garmin_export.inspect_session(tempo)["session"]["parsed"]
     proposal = _adapt(readiness)[0]
     assert proposal.decision == decision
     plan_adaptation.respond(proposal.id, proposal.revision, "apply")
     session = GarminRepository().get_planned_session(tempo)
     assert session is not None and session.description == description
-    assert plan_adaptation.structure_preview(tempo)["pushable"]
-    assert plan_adaptation.push_session(_garmin(), tempo)["garmin_workout_id"] == "1"
+    view = garmin_export.inspect_session(tempo)["session"]
+    assert view["exportable"] and view["derived"]
+    assert garmin_export.export(tempo, client=_garmin())["workout_id"] == 1
 
 
 def _garmin():
@@ -218,15 +216,43 @@ def _garmin():
     return client
 
 
-def test_push_stores_ids_and_reuses_the_copy(tempo):
-    client = _garmin()
-    first = plan_adaptation.push_session(client, tempo)
-    assert first["garmin_workout_id"] == "1"
-    session = GarminRepository().get_planned_session(tempo)
-    assert session is not None and session.garmin_pushed_at is not None
-    plan_adaptation.push_session(client, tempo)
-    assert len(client.workouts) == len(client.schedules) == 1
-    assert not any(method == "DELETE" for method, _, _ in client.calls)
+def _writes(client) -> list[tuple[str, str]]:
+    return [(m, path) for m, path, _ in client.calls if m != "GET"]
+
+
+def _pushing(enabled: bool = True):
+    return patch(
+        "arete.services.plan_adaptation.get_user_settings",
+        return_value={"push_to_garmin_enabled": enabled},
+    )
+
+
+def _session(session_type: SessionType, description: str | None = None, **fields):
+    return GarminRepository().create_planned_session(
+        PlannedSession(
+            date=DAY,
+            sport="running",
+            session_type=session_type,
+            target_duration_min=45,
+            description=description,
+            **fields,
+        )
+    )
+
+
+def _explicit() -> int:
+    from arete.services.prescriptions import Prescription, Step
+
+    steps = Prescription(
+        steps=[Step(kind="effort", duration_kind="seconds", value=600)]
+    )
+    return _session(
+        SessionType.TEMPO, "Seuil 10'", prescription=steps.model_dump(mode="json")
+    )
+
+
+#: The ARE-98 acceptance session: its steps come from the description.
+VMA = "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'"
 
 
 def test_the_push_time_is_a_utc_instant_under_a_paris_session(
@@ -237,7 +263,6 @@ def test_the_push_time_is_a_utc_instant_under_a_paris_session(
 
     from arete.api.garmin import router
     from arete.dataio.db import db_connection
-    from arete.services import garmin_export
 
     # The Docker stack runs with TZ=Europe/Paris, which DuckDB adopts as its
     # session TimeZone. ICU caches the process zone, so set it on the session.
@@ -251,8 +276,7 @@ def test_the_push_time_is_a_utc_instant_under_a_paris_session(
     monkeypatch.setattr(
         garmin_export, "utc_now", lambda: datetime(2026, 10, 9, 23, 1, tzinfo=UTC)
     )
-    pushed = plan_adaptation.push_session(_garmin(), tempo)
-    assert pushed["garmin_pushed_at"] == "2026-10-09T23:01:00+00:00"
+    assert garmin_export.export(tempo, client=_garmin())["state"] == "scheduled"
 
     def listed() -> datetime:
         response = router_client(router).get(
@@ -277,11 +301,127 @@ def test_the_push_time_is_a_utc_instant_under_a_paris_session(
     assert listed() == datetime(2026, 10, 8, 6, 30, tzinfo=UTC)
 
 
-def test_a_strength_session_is_not_pushable():
-    from arete.garmin.workout_structure import NotPushable
+def test_the_daily_push_sends_once_and_only_when_enabled(tempo):
+    client = _garmin()
+    with _pushing(False):
+        assert plan_adaptation.push_today(client, DAY) == "disabled"
+    assert client.calls == []
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY).startswith("1 sent")
+        calls = len(client.calls)
+        # Garmin holds it as it is: the second run sends no request at all.
+        assert plan_adaptation.push_today(client, DAY) == "0 sent, 1 skipped, 0 failed"
+    assert len(client.calls) == calls
+    assert len(client.workouts) == len(client.schedules) == 1
 
+
+def test_every_source_of_steps_reaches_the_watch_in_the_morning(tempo):
+    parsed = _session(SessionType.INTERVALS, VMA)
+    explicit = _explicit()
+    client = _garmin()
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY) == "3 sent, 0 skipped, 0 failed"
     repo = GarminRepository()
-    session_id = repo.create_planned_session(
+    for session_id in (tempo, parsed, explicit):
+        session = repo.get_planned_session(session_id)
+        assert session is not None and session.garmin_pushed_at is not None
+        assert session.garmin_workout_id is not None
+        state = garmin_export.inspect_session(session_id)["export"]
+        assert state is not None and state["state"] == "scheduled"
+    # The parsed steps, not the type's template, went out for the VMA session.
+    expected = garmin_export._payload(parsed)[0]
+    session = repo.get_planned_session(parsed)
+    assert session is not None and session.garmin_workout_id is not None
+    sent = client.workouts[int(session.garmin_workout_id)]
+    assert sent["workoutName"] == expected["workoutName"]
+    assert sent["workoutSegments"] == expected["workoutSegments"]
+
+
+def test_a_session_exported_by_hand_costs_no_request_in_the_morning(tempo):
+    client = _garmin()
+    garmin_export.export(tempo, client=client)  # the evening before, from Planning
+    before = len(client.calls)
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY) == "0 sent, 1 skipped, 0 failed"
+    assert len(client.calls) == before
+    session = GarminRepository().get_planned_session(tempo)
+    assert session is not None and session.garmin_pushed_at is not None
+
+
+def test_an_edited_session_is_replaced_in_place(tempo):
+    client = _garmin()
+    garmin_export.export(tempo, client=client)
+    GarminRepository().update_planned_session_fields(tempo, target_duration_min=40)
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY).startswith("1 sent")
+    assert _writes(client) == [
+        ("POST", garmin_export.WORKOUT),
+        ("POST", f"{garmin_export.SCHEDULE}/1"),
+        ("PUT", f"{garmin_export.WORKOUT}/1"),
+    ]
+
+
+def test_an_unreadable_described_session_waits_for_its_steps(tempo):
+    unread = _session(
+        SessionType.INTERVALS,
+        "VMA — 12×400 @3'33 r1'. Échauffement 20-25', puis à la sensation",
+    )
+    client = _garmin()
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY) == "1 sent, 1 skipped, 0 failed"
+    view = garmin_export.inspect_session(unread)
+    assert view["session"]["needs_steps"] and view["export"] is None
+    assert len(client.workouts) == 1
+
+
+@pytest.mark.parametrize("state", ["uncertain", "conflict", "working"])
+def test_an_unsettled_export_is_never_retried_by_the_morning(tempo, state):
+    client = _garmin()
+    garmin_export.export(tempo, client=client)
+    GarminRepository().update_planned_session_fields(tempo, target_duration_min=40)
+    con = connect()
+    con.execute(
+        "UPDATE app.garmin_exports SET state=? WHERE session_id=?", [state, tempo]
+    )
+    con.close()
+    before = len(client.calls)
+    with _pushing():
+        for _ in range(2):
+            assert plan_adaptation.push_today(client, DAY).startswith(
+                "0 sent, 1 skipped"
+            )
+    assert len(client.calls) == before
+
+
+def test_an_ambiguous_morning_write_stays_uncertain(tempo):
+    client = _garmin()
+    client.fail = "create"  # Garmin created it, the answer was lost
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY) == "0 sent, 0 skipped, 1 failed"
+        state = garmin_export.inspect_session(tempo)["export"]
+        assert state is not None and state["state"] == "uncertain"
+        before = len(client.calls)
+        assert plan_adaptation.push_today(client, DAY).startswith("0 sent, 1 skipped")
+    assert len(client.calls) == before and len(client.workouts) == 1
+
+
+def test_the_morning_sends_three_sessions_under_one_budget(tempo, monkeypatch):
+    for _ in range(3):
+        _session(SessionType.ENDURANCE)
+    client = _garmin()
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY) == "3 sent, 1 skipped, 0 failed"
+    assert len(client.workouts) == 3
+    # A shared deadline too close to finish a session's exchange sends nothing.
+    monkeypatch.setattr(plan_adaptation, "SESSION_SECONDS", 10_000)
+    other = _garmin()
+    with _pushing():
+        assert plan_adaptation.push_today(other, DAY).startswith("0 sent")
+    assert other.calls == []
+
+
+def test_a_strength_session_is_not_pushed(tempo):
+    strength = GarminRepository().create_planned_session(
         PlannedSession(
             date=DAY,
             sport="strength",
@@ -289,50 +429,60 @@ def test_a_strength_session_is_not_pushable():
             target_duration_min=60,
         )
     )
-    try:
-        with pytest.raises(NotPushable):
-            plan_adaptation.push_session(_garmin(), session_id)
-        assert plan_adaptation.structure_preview(session_id)["pushable"] is False
-    finally:
-        repo.delete_planned_session(session_id)
-
-
-def test_the_daily_push_sends_once_and_only_when_enabled(tempo):
     client = _garmin()
-    with patch(
-        "arete.services.plan_adaptation.get_user_settings",
-        return_value={"push_to_garmin_enabled": False},
-    ):
-        assert plan_adaptation.push_today(client, DAY) == "disabled"
-    with patch(
-        "arete.services.plan_adaptation.get_user_settings",
-        return_value={"push_to_garmin_enabled": True},
-    ):
-        assert plan_adaptation.push_today(client, DAY).startswith("1 sent")
-        assert plan_adaptation.push_today(client, DAY).startswith("0 sent")
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY) == "1 sent, 1 skipped, 0 failed"
+    assert not garmin_export.inspect_session(strength)["session"]["exportable"]
 
 
-def test_an_adaptation_after_a_push_marks_the_copy_stale(tempo):
-    plan_adaptation.push_session(_garmin(), tempo)
-    proposal = _adapt(70.0)[0]
-    plan_adaptation.respond(proposal.id, proposal.revision, "apply")
-    session = GarminRepository().get_planned_session(tempo)
-    assert session is not None
-    assert session.garmin_pushed_at is None and session.garmin_workout_id == "1"
+def test_a_skipped_session_on_garmin_is_withdrawn_in_the_morning(tempo):
+    explicit = _explicit()
+    client = _garmin()
+    for session_id in (tempo, explicit):
+        garmin_export.export(session_id, client=client)
+        GarminRepository().update_planned_session_status(
+            session_id, SessionStatus.SKIPPED
+        )
+    with _pushing():
+        plan_adaptation.push_today(client, DAY)
+    assert not client.workouts and not client.schedules
+    for session_id in (tempo, explicit):
+        state = garmin_export.inspect_session(session_id)["export"]
+        assert state is not None and state["state"] == "removed"
 
 
-def test_the_push_routes(tempo, router_client):
+def test_the_legacy_push_routes_are_retired(tempo, router_client):
     from arete.api.garmin import router
 
     client = router_client(router)
-    preview = client.get(f"/garmin/planned/{tempo}/structure").json()
-    assert preview["pushable"] is True and "Z4" in preview["text"]
-    garmin = _garmin()
-    garmin.has_tokens.return_value = False
-    with patch("arete.garmin.client.GarminClient", return_value=garmin):
-        assert client.post(f"/garmin/planned/{tempo}/push").status_code == 409
-        garmin.has_tokens.return_value = True
-        body = client.post(f"/garmin/planned/{tempo}/push").json()
-        assert body["garmin_workout_id"] == "1"
-        garmin.fail = "read"
-        assert client.post(f"/garmin/planned/{tempo}/push").status_code == 502
+    assert client.get(f"/garmin/planned/{tempo}/structure").status_code in {404, 405}
+    assert client.post(f"/garmin/planned/{tempo}/push").status_code in {404, 405}
+
+
+def test_a_write_the_budget_refused_is_sent_by_the_next_run(tempo):
+    client = _garmin()
+    refused = garmin_export.export(
+        tempo, exchange=garmin_export.Exchange(client, max_calls=0)
+    )
+    assert refused["state"] == "failed" and client.calls == []
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY) == "1 sent, 0 skipped, 0 failed"
+    assert len(client.workouts) == 1
+
+
+def test_the_morning_builds_each_payload_once(tempo, monkeypatch):
+    built: list[int] = []
+    original = garmin_export._payload
+
+    def counted(session_id, **kwargs):
+        built.append(session_id)
+        return original(session_id, **kwargs)
+
+    monkeypatch.setattr(garmin_export, "_payload", counted)
+    client = _garmin()
+    with _pushing():
+        assert plan_adaptation.push_today(client, DAY).startswith("1 sent")
+        assert built == [tempo]
+        # The next run decides from the same single read, with no request.
+        assert plan_adaptation.push_today(client, DAY).startswith("0 sent")
+    assert built == [tempo, tempo]

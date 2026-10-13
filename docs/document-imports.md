@@ -183,9 +183,9 @@ No live Garmin writes, Vercel deployment, commit or push is part of the automate
 
 ## Coexistence with daily planning
 
-Explicit prescriptions are excluded from automatic daily adaptation and
-watch push. Their editor and export service remain their only owners; daily
-sessions keep the existing structure/push flow. Moving a structured session via
+Explicit prescriptions are excluded from automatic daily adaptation. Their
+editor and export service remain their owners; the daily push sends them, like
+every exportable session, through that export service. Moving a structured session via
 the coach increments its revision and marks its Garmin copy stale. Summary-only
 changes to its duration, targets or sport are rejected to preserve its steps.
 The prescription editor cannot convert a daily session while its separate export

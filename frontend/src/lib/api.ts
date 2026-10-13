@@ -233,16 +233,6 @@ export const garminApi = {
       body: JSON.stringify({ status, revision }),
     }),
 
-  /** Lazy: only asked for today's sessions, when Garmin is connected. */
-  getStructure: (id: number) =>
-    fetchAPI<import("@/types").WorkoutStructure>(`/garmin/planned/${id}/structure`),
-
-  /** Schedules the session on the Garmin calendar; the watch takes it at its next phone sync. */
-  pushToWatch: (id: number) =>
-    fetchAPI<import("@/types").GarminPushResult>(`/garmin/planned/${id}/push`, {
-      method: "POST",
-    }),
-
   getSummary: (startDate?: string, endDate?: string) => {
     const params = new URLSearchParams();
     if (startDate) params.set("start_date", startDate);

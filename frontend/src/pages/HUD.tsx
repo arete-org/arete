@@ -9,7 +9,9 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { Button, Panel, Skeleton } from '@/components/ui';
-import { ApiError, garminApi, garminHealthApi, goalsApi, metricsApi, planApi, settingsApi } from '@/lib/api';
+import { garminApi, garminHealthApi, goalsApi, metricsApi, planApi, settingsApi } from '@/lib/api';
+import { exportApi } from '@/lib/documents';
+import { readWorkouts, watchLine, workoutsKey, type WorkoutView } from '@/lib/workouts';
 import { useDailyTip } from '@/lib/dailyTip';
 import { formatHoursMinutes } from '@/lib/fr';
 import { goalCountdown } from '@/lib/race';
@@ -55,62 +57,56 @@ function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }
 }
 
 /**
- * Today's planned session with its adaptation and the Garmin controls. The watch
- * structure is fetched only here, for a session still to do and not yet sent.
+ * Today's planned session with its adaptation and the Garmin controls. The
+ * Garmin line comes from the export view (`view`), the circuit Planning and
+ * the morning push share; without it only a recorded push time shows.
  */
 function TodaySession({
   row,
   decision,
-  garminConnected,
+  view,
 }: {
   row: DayLink['planned'][number];
   decision: PlanDecision | null;
-  garminConnected: boolean;
+  view: WorkoutView | undefined;
 }) {
   const queryClient = useQueryClient();
   const { session, realised, state } = row;
 
+  const skipped = session.status === 'skipped';
   const push = useMutation({
-    mutationFn: () => garminApi.pushToWatch(session.id),
-    onSuccess: () => invalidateAfterSession(queryClient),
+    // A skipped session's copy is withdrawn; otherwise sent to Garmin Connect
+    // only, and the watch takes it at its next phone sync.
+    mutationFn: () => (skipped ? exportApi.remove(session.id) : exportApi.export(session.id, null)),
+    onSettled: () => invalidateAfterSession(queryClient),
   });
   const revert = useMutation({
     mutationFn: (decisionId: number) => planApi.revert(decisionId),
-    // The server drops the Garmin copy on revert: forget the local one too.
+    // The reverted session is no longer the copy sent: forget the local answer.
     onSuccess: () => push.reset(),
     // 409 means it was already reverted elsewhere: a refetch shows it.
     onSettled: () => invalidateAfterSession(queryClient),
   });
 
-  const pushedAt = session.garmin_pushed_at ?? push.data?.garmin_pushed_at ?? null;
-  const wantsStructure = garminConnected && !realised && state === 'pending' && !pushedAt;
-  const { data: structure } = useQuery({
-    queryKey: qk.plannedStructure(session.id),
-    queryFn: () => garminApi.getStructure(session.id),
-    enabled: wantsStructure,
-    staleTime: 1000 * 60 * 5,
-    retry: false,
-  });
-
-  const pushError = push.error
-    ? push.error instanceof ApiError && push.error.detail
-      ? push.error.detail
-      : 'Envoi à Garmin impossible, réessaie plus tard.'
-    : null;
+  const watch =
+    view && !realised && (state === 'pending' || state === 'skipped')
+      ? watchLine(view, session.garmin_pushed_at, {
+          run: () => push.mutate(),
+          pending: push.isPending,
+          error: push.error ? push.error.message || 'Garmin ne répond pas, réessaie plus tard.' : null,
+          result: push.data ?? null,
+        })
+      : undefined;
 
   return (
     <SessionCard
-      planned={pushedAt === session.garmin_pushed_at ? session : { ...session, garmin_pushed_at: pushedAt }}
+      planned={session}
       realised={realised}
       state={state}
       decision={decision}
       busy={revert.isPending}
       onRevert={decision ? () => revert.mutate(decision.id) : undefined}
-      push={
-        wantsStructure && structure?.pushable
-          ? { text: structure.text, onPush: () => push.mutate(), pending: push.isPending, error: pushError }
-          : undefined
-      }
+      push={watch}
     >
       {/* Cardio only: strength rows carry negative ids and their own RPE. */}
       {realised && realised.id > 0 && realised.rpe == null && <RpePicker sessionId={realised.id} className="mt-2" />}
@@ -142,6 +138,21 @@ export function DashboardPage() {
 
   const { data: syncStatus } = useQuery({ queryKey: qk.syncStatus, queryFn: garminApi.getSyncStatus });
   const garminConnected = syncStatus?.garmin_authenticated ?? false;
+  // One batched export view for the day's sessions still to do or skipped
+  // (a skipped copy still on Garmin can be withdrawn), as Planning's cards.
+  const queryClient = useQueryClient();
+  const watchIds = garminConnected
+    ? todayLink.planned
+        .filter((r) => !r.realised && (r.state === 'pending' || r.state === 'skipped'))
+        .map((r) => r.session.id)
+    : [];
+  const { data: workouts } = useQuery({
+    queryKey: workoutsKey('cards', watchIds),
+    queryFn: () => readWorkouts(queryClient, watchIds),
+    enabled: watchIds.length > 0,
+    retry: false,
+  });
+  const viewFor = (sessionId: number) => workouts?.workouts.find((w) => w.session.id === sessionId);
 
   const { data: planToday } = useQuery({ queryKey: qk.planToday, queryFn: planApi.getToday });
   const decisionFor = (sessionId: number) =>
@@ -226,7 +237,7 @@ export function DashboardPage() {
                       key={row.session.id}
                       row={row}
                       decision={decisionFor(row.session.id)}
-                      garminConnected={garminConnected}
+                      view={viewFor(row.session.id)}
                     />
                   ))}
                   {todayLink.offPlan.map((a) => (

@@ -16,7 +16,7 @@ difference between ``p50_ms`` and ``srv_ms`` is the network.
 
 The defaults are the dashboard's GET requests (``{today}`` is replaced by
 today's date). It also sends ``POST /gamification/sync`` and, for a session
-still to do, ``GET /garmin/planned/{id}/structure``: pass them explicitly.
+still to do, ``GET /garmin/workouts?ids={id}``: pass them explicitly.
 """
 
 from __future__ import annotations
