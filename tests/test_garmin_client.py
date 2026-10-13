@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 from datetime import date
 from unittest.mock import MagicMock, patch
@@ -73,8 +74,89 @@ class TestGarminClientAuth:
     def test_logout_removes_token_file(self, token_dir):
         token_dir.mkdir()
         (token_dir / TOKEN_FILE).write_text("{}")
+        (token_dir / "account.json").write_text('{"account": "a@b.c"}')
         GarminClient(token_dir).logout()
         assert not (token_dir / TOKEN_FILE).exists()
+        assert not (token_dir / "account.json").exists()
+
+    def test_login_records_the_account_for_the_status(self, token_dir):
+        with patch("arete.garmin.client.Garmin") as garmin_cls:
+            api = garmin_cls.return_value
+            api.login.return_value = (None, None)
+            api.username = "a@b.c"
+            GarminClient(token_dir).login("a@b.c", "pw")
+        assert json.loads((token_dir / "account.json").read_text()) == {
+            "account": "a@b.c"
+        }
+
+    def test_a_restored_session_records_a_missing_account(self, token_dir):
+        token_dir.mkdir()
+        (token_dir / TOKEN_FILE).write_text("{}")
+        with patch("arete.garmin.client.Garmin") as garmin_cls:
+            api = garmin_cls.return_value
+            api.username, api.full_name = None, "Jean Coureur"
+            GarminClient(token_dir).connect()
+        assert json.loads((token_dir / "account.json").read_text()) == {
+            "account": "Jean Coureur"
+        }
+
+
+class TestRefusedSessions:
+    """Garmin refusing the tokens shows as disconnected; a network error does not."""
+
+    def _restore(self, token_dir, error=None, **profile):
+        token_dir.mkdir(exist_ok=True)
+        (token_dir / TOKEN_FILE).write_text("{}")
+        with patch("arete.garmin.client.Garmin") as garmin_cls:
+            api = garmin_cls.return_value
+            api.login.side_effect = error
+            api.username, api.full_name = profile.get("username"), None
+            client = GarminClient(token_dir)
+            if error is None:
+                client.connect()
+            else:
+                with pytest.raises(GarminAuthError):
+                    client.connect()
+
+    def _record(self, token_dir):
+        return json.loads((token_dir / "account.json").read_text())
+
+    def test_a_refusal_is_recorded_and_cleared_by_a_working_session(self, token_dir):
+        from garminconnect import GarminConnectAuthenticationError
+
+        self._restore(token_dir, username="a@b.c")
+        self._restore(token_dir, GarminConnectAuthenticationError("401"))
+        assert self._record(token_dir)["account"] == "a@b.c"
+        assert "auth_failed_at" in self._record(token_dir)
+        self._restore(token_dir, username="a@b.c")
+        assert self._record(token_dir) == {"account": "a@b.c"}
+
+    @pytest.mark.parametrize("error", ["connection", "rate"])
+    def test_a_network_failure_is_not_a_refusal(self, token_dir, error):
+        from garminconnect import (
+            GarminConnectConnectionError,
+            GarminConnectTooManyRequestsError,
+        )
+
+        self._restore(token_dir, username="a@b.c")
+        failure = (
+            GarminConnectConnectionError("timeout")
+            if error == "connection"
+            else GarminConnectTooManyRequestsError("429")
+        )
+        self._restore(token_dir, failure)
+        assert self._record(token_dir) == {"account": "a@b.c"}
+
+    def test_a_failed_account_record_does_not_fail_the_login(self, token_dir):
+        with (
+            patch("arete.garmin.client.Garmin") as garmin_cls,
+            patch(
+                "arete.garmin.token_store.save_account",
+                side_effect=RuntimeError("db down"),
+            ),
+        ):
+            garmin_cls.return_value.login.return_value = (None, None)
+            assert GarminClient(token_dir).login("a@b.c", "pw") == "ok"
 
 
 class TestGarminClientData:

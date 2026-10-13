@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { documentRequest } from './documents';
 
 export interface GamePreference {
@@ -74,6 +75,58 @@ export const gameApi = {
       body: JSON.stringify(body),
     }),
 };
+export const gameKey = ['game'] as const;
+/** When a projection last failed: the read that follows it never asks for another. */
+let lastFailure = 0;
+
+/**
+ * The stored progression: a read, so loading a page writes nothing. Evidence
+ * settled nowhere yet (an import elsewhere) asks for one projection; neither
+ * the projection's own answer nor the read after a failed one asks again.
+ * `syncError` is that projection's failure, the snapshot still shown; `sync`
+ * is the explicit retry a click offers.
+ */
+export function useGameSnapshot(options: { enabled?: boolean; refetchOnWindowFocus?: 'always' } = {}) {
+  const client = useQueryClient();
+  const query = useQuery({ queryKey: gameKey, queryFn: () => gameApi.snapshot(), retry: false, ...options });
+  const asked = useRef(0);
+  const { mutate, isPending, error: syncError } = useMutation({
+    mutationFn: gameApi.sync,
+    onSuccess: (player) => {
+      asked.current = Date.now();
+      client.setQueryData(gameKey, player, { updatedAt: asked.current });
+    },
+    onError: () => {
+      lastFailure = Date.now();
+    },
+  });
+  const { data, dataUpdatedAt } = query;
+  useEffect(() => {
+    if (!data?.enabled || !data.pending || isPending || asked.current >= dataUpdatedAt) return;
+    const retry = lastFailure > asked.current;
+    asked.current = dataUpdatedAt;
+    if (!retry) mutate();
+  }, [data, dataUpdatedAt, isPending, mutate]);
+  // An explicit refresh (a click) may project again.
+  return { ...query, syncError, sync: () => mutate() };
+}
+
+/** After a session event: the one projection, for an opted-in athlete only. */
+export function syncGame(client: QueryClient) {
+  if (!client.getQueryData<GamePreference>(['game-preference'])?.enabled) return;
+  gameApi.sync().then(
+    (player) => {
+      client.setQueryData(gameKey, player);
+      void client.invalidateQueries({ queryKey: [...gameKey, 'receipts'] });
+    },
+    // Never replayed: the snapshot is read again and shows what is pending.
+    () => {
+      lastFailure = Date.now();
+      void client.invalidateQueries({ queryKey: gameKey });
+    },
+  );
+}
+
 export function useGamePreference() {
   return useQuery({
     queryKey: ['game-preference'],

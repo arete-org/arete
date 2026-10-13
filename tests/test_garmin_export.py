@@ -847,6 +847,24 @@ def test_workout_http_detail_and_batch_revision_contract(
     assert oversized.status_code == 422
 
 
+def test_workout_cards_are_read_in_one_bounded_request(planned, router_client):
+    from arete.api.garmin_export import router
+
+    client = router_client(router)
+    detail = client.get(f"/garmin/planned/{planned}/workout").json()
+    batch = client.get("/garmin/workouts", params={"ids": [planned, 999_999, planned]})
+    assert batch.status_code == 200
+    # Duplicates collapse; a deleted session is reported without hiding the others.
+    assert batch.json() == {
+        "workouts": [detail],
+        "errors": {"999999": "Cette séance n’existe plus."},
+    }
+    assert client.get("/garmin/workouts").status_code == 422
+    assert client.get("/garmin/workouts", params={"ids": [0]}).status_code == 422
+    oversized = {"ids": list(range(1, service.MAX_INSPECT_SESSIONS + 2))}
+    assert client.get("/garmin/workouts", params=oversized).status_code == 422
+
+
 def test_strength_text_creates_and_exports_sets_weights_and_rests(planned):
     from arete.services import planning
 

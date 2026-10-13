@@ -95,14 +95,15 @@ def get_goal(goal_id: int) -> Goal | None:
 def next_goal(today: date | None = None) -> Goal | None:
     """The race the plan works towards: the soonest active A race, else any."""
     today = today or athlete_today()
-    upcoming = [
-        g
-        for g in list_goals(include_past=True)
-        if g.status == "active" and g.race_date >= today
-    ]
-    a_races = [g for g in upcoming if g.priority == "A"]
-    candidates = a_races or upcoming
-    return candidates[0] if candidates else None
+    con = connect()
+    try:
+        row = con.execute(
+            f"SELECT {_COLUMNS} FROM app.visible_goals WHERE user_id = getvariable('arete_athlete_id') AND status = 'active' AND race_date >= ? ORDER BY coalesce(priority = 'A', false) DESC, race_date, id LIMIT 1",
+            [today],
+        ).fetchone()
+    finally:
+        con.close()
+    return _from_row(row) if row else None
 
 
 def create_goal(

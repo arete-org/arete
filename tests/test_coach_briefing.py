@@ -330,6 +330,166 @@ class TestGetOrCreate:
             assert (stored.text, stored.source) == (text, "agent")
 
 
+class TestClaim:
+    """The stored claim stops a second instance from paying for the same day."""
+
+    def test_a_run_held_elsewhere_answers_none_without_a_model(
+        self, repo, clean_day, enabled
+    ):
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+        produce = Mock(return_value="jamais")
+        assert (
+            briefing_service.get_or_create_briefing(
+                produce=produce, target_date=clean_day
+            )
+            is None
+        )
+        produce.assert_not_called()
+
+    def test_a_stopped_run_is_settled_with_the_floor_not_replayed(
+        self, repo, clean_day, enabled
+    ):
+        # The function was stopped mid-run: its claim outlived the run bound.
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+        produce = Mock(return_value="jamais")
+        with (
+            patch.object(briefing_service, "CLAIM_EXPIRY", timedelta(0)),
+            patch(
+                "arete.services.briefing._rule_floor",
+                return_value=("floor", "info", TRAINED),
+            ),
+        ):
+            b = briefing_service.get_or_create_briefing(
+                produce=produce, target_date=clean_day
+            )
+        produce.assert_not_called()
+        assert (b.text, b.source) == ("floor", "rules")
+        statuses = [r.status for r in repo.list_recent() if r.date == clean_day]
+        assert sorted(statuses) == ["failed", "ok"]
+
+    def test_claims_are_dated_in_utc_whatever_the_instance_clock(
+        self, repo, clean_day, enabled
+    ):
+        # A live claim written by an instance on another clock (Vercel in UTC,
+        # Docker in Paris) must neither look stale nor block for hours.
+        from datetime import UTC, datetime
+
+        from arete.dataio.db import db_connection
+
+        utc_now = datetime.now(UTC).replace(tzinfo=None)
+        with db_connection() as con:
+            con.execute(
+                "INSERT INTO app.coach_briefings (user_id,date,text,status,source,trigger,created_at) "
+                "VALUES (getvariable('arete_athlete_id'), ?, '', 'pending', 'agent', 'api', ?)",
+                [clean_day, utc_now - timedelta(seconds=10)],
+            )
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5)) is None
+        with db_connection() as con:
+            con.execute(
+                "UPDATE app.coach_briefings SET created_at = ? WHERE date = ? AND status = 'pending'",
+                [utc_now - timedelta(minutes=6), clean_day],
+            )
+        claim = repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+        assert claim is not None and claim[1] is True  # the stopped run's claim
+
+    def test_the_claim_is_released_after_a_failed_run(self, repo, clean_day, enabled):
+        with patch(
+            "arete.services.briefing._rule_floor",
+            return_value=("floor", "info", TRAINED),
+        ):
+            briefing_service.get_or_create_briefing(
+                produce=Mock(side_effect=RuntimeError("model is away")),
+                target_date=clean_day,
+            )
+        assert "pending" not in [r.status for r in repo.list_recent()]
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+
+
+class TestSchedulerRewrite:
+    """The cron rewrites the dashboard's briefing only for data it lacked."""
+
+    def test_a_rewrite_is_marked_and_served(self, repo, clean_day, enabled):
+        earlier = None
+        with (
+            patch("arete.coaching.run_briefing", side_effect=["Avant.", "Après."]),
+            patch(
+                "arete.services.briefing._rule_floor",
+                return_value=("floor", "info", TRAINED),
+            ),
+        ):
+            earlier = get_or_create_briefing(target_date=clean_day)
+            assert get_or_create_briefing(target_date=clean_day).id == earlier.id
+            later = get_or_create_briefing(
+                target_date=clean_day, trigger="scheduler", replacing=earlier
+            )
+        assert earlier.revised is False
+        assert (later.text, later.trigger, later.revised) == (
+            "Après.",
+            "scheduler",
+            True,
+        )
+        assert repo.get_for_day(clean_day).id == later.id
+
+    def test_changed_facts_are_what_make_a_briefing_stale(
+        self, repo, clean_day, enabled
+    ):
+        from arete.dataio.db import db_connection
+
+        floor = patch(
+            "arete.services.briefing._rule_floor",
+            return_value=("floor", "info", TRAINED),
+        )
+        with floor, patch("arete.coaching.run_briefing", return_value="Écrit tôt."):
+            written = get_or_create_briefing(target_date=clean_day)
+        assert written.facts_digest
+        with floor:
+            assert not briefing_service.facts_changed(written)
+        # This sync's data: a decision, a session, the night's Garmin health.
+        with db_connection() as con:
+            con.execute(
+                "INSERT INTO app.daily_metrics (user_id, date, race_10k_sec) "
+                "VALUES (getvariable('arete_athlete_id'), ?, 2400)",
+                [clean_day],
+            )
+        try:
+            with floor:
+                assert briefing_service.facts_changed(written)
+        finally:
+            with db_connection() as con:
+                con.execute("DELETE FROM app.daily_metrics WHERE date = ?", [clean_day])
+
+    def test_a_briefing_without_a_digest_counts_as_changed(self, repo, clean_day):
+        repo.create(text="Avant ARE-39.", briefing_date=clean_day)
+        assert briefing_service.facts_changed(repo.get_for_day(clean_day))
+
+    def test_a_failed_rewrite_keeps_the_briefing_it_replaces(
+        self, repo, clean_day, enabled
+    ):
+        floor = patch(
+            "arete.services.briefing._rule_floor",
+            return_value=("floor", "info", TRAINED),
+        )
+        with floor, patch("arete.coaching.run_briefing", return_value="Le bon texte."):
+            written = get_or_create_briefing(target_date=clean_day)
+        with (
+            floor,
+            patch(
+                "arete.coaching.run_briefing", side_effect=RuntimeError("model is away")
+            ),
+        ):
+            kept = get_or_create_briefing(
+                target_date=clean_day, trigger="scheduler", replacing=written
+            )
+        assert kept == written
+        served = repo.get_for_day(clean_day)
+        assert (served.id, served.text, served.revised) == (
+            written.id,
+            "Le bon texte.",
+            False,
+        )
+        assert "failed" in [r.status for r in repo.list_recent() if r.date == clean_day]
+
+
 # ---------------------------------------------------------------------------
 # The journal the briefing writes into every morning must stay bounded
 # ---------------------------------------------------------------------------

@@ -415,15 +415,24 @@ def list_sessions(
     program: str | None = None,
     limit: int = Query(50, ge=1, le=200),
 ):
-    """List strength sessions with the details their summary stats need."""
-    sessions = _repo.list_sessions(
-        start_date=start_date,
-        end_date=end_date,
-        program=program,
-        limit=limit,
-        include_details=True,
-    )
-    return [_session_to_summary_response(s) for s in sessions]
+    """List strength sessions with their totals, computed in SQL."""
+    return [
+        StrengthSessionResponse(
+            id=s.id,
+            date=s.date,
+            name=s.name,
+            program=s.program,
+            duration_min=s.duration_min,
+            exercises_count=s.exercises_count,
+            total_sets=s.total_sets,
+            total_volume=round(s.total_volume, 1),
+            overall_rpe=s.overall_rpe,
+            muscles_worked=s.muscles_worked,
+        )
+        for s in _repo.list_session_summaries(
+            start_date=start_date, end_date=end_date, program=program, limit=limit
+        )
+    ]
 
 
 @router.get("/sessions/{session_id}", response_model=StrengthSessionDetailResponse)

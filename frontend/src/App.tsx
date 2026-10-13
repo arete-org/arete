@@ -6,24 +6,29 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigation, ErrorBoundary } from '@/components';
 import { AgentSidePanel } from '@/components/AgentSidePanel';
+import { preloadAgentMarkdown, preloadAgentMarkdownWhenIdle } from '@/components/agent/markdownRenderer';
 import { EnableNotifications } from '@/components/EnableNotifications';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { LoadingState } from '@/components/States';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { SettingsProvider } from '@/contexts';
-import { DashboardPage, PlanningPage, LogPage, SettingsPage } from '@/pages';
+import { DashboardPage, SettingsPage } from '@/pages';
+import { loadLogPage, loadPlanningPage } from '@/pages/routes';
+import { importChunk } from '@/lib/chunkReload';
 
+const PlanningPage = lazy(importChunk(loadPlanningPage));
+const LogPage = lazy(importChunk(loadLogPage));
 // recharts is most of the bundle and only the Analytics page draws charts.
-const ProfilePage = lazy(() => import('@/pages/Profile').then(m => ({ default: m.ProfilePage })));
-const AnalyticsPage = lazy(() =>
+const ProfilePage = lazy(importChunk(() => import('@/pages/Profile').then(m => ({ default: m.ProfilePage }))));
+const AnalyticsPage = lazy(importChunk(() =>
   import('@/pages/Analytics').then((m) => ({ default: m.AnalyticsPage })),
-);
-const SessionDetailPage = lazy(() =>
+));
+const SessionDetailPage = lazy(importChunk(() =>
   import('@/pages/SessionDetail').then((m) => ({ default: m.SessionDetailPage })),
-);
-const YearReviewPage = lazy(() =>
+));
+const YearReviewPage = lazy(importChunk(() =>
   import('@/pages/YearReview').then((m) => ({ default: m.YearReviewPage })),
-);
+));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,6 +54,7 @@ function App() {
   const display = useCoachDisplay();
   const [agentOpen, setAgentOpen] = useState(false);
   const [coachReference, setCoachReference] = useState<CoachReference | null>(null);
+  useEffect(preloadAgentMarkdownWhenIdle, []);
   useEffect(() => {
     const discuss = (event: Event) => {
       const reference = (event as CustomEvent<CoachReference>).detail;
@@ -97,7 +103,7 @@ function App() {
                   <ErrorBoundary>
                     <Routes>
                       <Route path="/" element={<DashboardPage />} />
-                      <Route path="/planning" element={<PlanningPage />} />
+                      <Route path="/planning" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><PlanningPage /></Suspense>} />
                       <Route
                         path="/analytics"
                         element={
@@ -114,7 +120,7 @@ function App() {
                           </Suspense>
                         }
                       />
-                      <Route path="/log" element={<LogPage />} />
+                      <Route path="/log" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><LogPage /></Suspense>} />
                       <Route
                         path="/log/sessions/:id"
                         element={
@@ -152,6 +158,7 @@ function App() {
                 className="coach-launcher fixed z-40 flex min-h-11 items-center gap-2 rounded-full border border-text-muted/20 bg-abyss px-4 text-sm text-text-primary shadow-lg"
                 aria-controls="coach-panel" aria-expanded={false}
                 onClick={event => { triggerRef.current = event.currentTarget; setAgentOpen(true); }}
+                onPointerEnter={preloadAgentMarkdown} onFocus={preloadAgentMarkdown}
               ><AreteMark size={18} />{agentBusy ? 'Chiron répond…' : 'Demander à Chiron'}</button>}
               <AgentSidePanel
                 display={display.mode}
