@@ -20,6 +20,7 @@ from arete.garmin.workout_structure import NotPushable, derive, describe_fr
 from arete.services.adaptation import (
     AdaptationInput,
     Decision,
+    describe,
     evaluate,
     one_recovery_per_day,
 )
@@ -88,7 +89,19 @@ def adapt_today(
     sessions = planned_repo.list_planned_sessions(
         start_date=day, end_date=day, status=None, limit=10, ascending=True
     )
-    decided = {d.planned_session_id for d in decisions.list_for_day(day)}
+    earlier = decisions.list_for_day(day)
+    decided = {d.planned_session_id for d in earlier}
+    # A recovery proposed or applied by an earlier run still holds the day's.
+    recovery = next(
+        (
+            d.original or {}
+            for d in earlier
+            if d.decision == Decision.REPLACE_EASY
+            and d.state in {"pending", "discussion", "applied"}
+            and d.reverted_at is None
+        ),
+        None,
+    )
     # Imported prescriptions were explicitly reviewed; summary-field adaptation
     # cannot faithfully rewrite their steps or their source evidence.
     pending = [s for s in sessions if s.id is not None and s.id not in decided]
@@ -113,7 +126,16 @@ def adapt_today(
         )
         for session in pending
     ]
-    outcomes = one_recovery_per_day([(inp, evaluate(inp)) for inp in inputs])
+    outcomes = one_recovery_per_day(
+        [(inp, evaluate(inp)) for inp in inputs],
+        kept=None
+        if recovery is None
+        else describe(
+            str(recovery.get("session_type")),
+            recovery.get("target_duration_min"),
+            recovery.get("target_hr_zone"),
+        ),
+    )
     for session, outcome in zip(pending, outcomes, strict=True):
         assert session.id is not None
         if outcome is None or outcome.decision == Decision.KEEP:
@@ -331,7 +353,8 @@ def respond(
     seen = {**(group or {}), decision_id: revision}
     day = {d.id: d for d in repo.list_for_day(decision.date)}
     if not seen.keys() <= day.keys():
-        raise ProposalConflict("Cette proposition a changé. Recharge-la.")
+        # Unknown, foreign or another day's: the same answer, never an oracle.
+        raise LookupError("Proposition introuvable")
     terminal = "applied" if action == "apply" else "dismissed"
     if action != "snooze" and all(day[i].state == terminal for i in seen):
         return decision
@@ -346,6 +369,14 @@ def respond(
         raise ProposalConflict("Discute des étapes de cette séance avec le coach.")
     try:
         with transaction() as con:
+            # A proposal created since the read above joins the group: refuse.
+            current = con.execute(
+                "SELECT id,revision FROM app.visible_plan_decisions "
+                "WHERE date=? AND state IN ('pending','discussion')",
+                [decision.date],
+            ).fetchall()
+            if dict(current) != seen:
+                raise ProposalConflict("Cette proposition a changé. Recharge-la.")
             for member in members:
                 _respond_one(con, member, action, terminal)
     except duckdb.TransactionException as exc:

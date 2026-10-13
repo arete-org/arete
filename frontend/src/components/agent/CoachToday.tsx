@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Button, Panel } from '@/components/ui';
-import { coachApi, coachTodayKey, discussWithCoach, type Followup, type Proposal } from '@/lib/coachToday';
+import { coachApi, coachTodayKey, discussWithCoach, type Followup, type Proposal, type SeenRevision } from '@/lib/coachToday';
 import { invalidateAfterSession } from '@/lib/queryKeys';
 import { readableError } from '@/lib/utils';
 
@@ -16,11 +16,11 @@ function outcome(proposal: Proposal) {
   return proposal.decision === 'rest' ? 'Repos' : description({ ...proposal.original, ...proposal.adapted });
 }
 
-/** One card for the day: the athlete answers for every proposal of `group` at once. */
-export function ProposalCard({ proposal, group }: { proposal: Proposal; group: Proposal[] }) {
+/** One card for the day: the athlete answers for every open proposal (`members`) at once. */
+export function ProposalCard({ proposal, group, members }: { proposal: Proposal; group: Proposal[]; members: SeenRevision[] }) {
   const client = useQueryClient();
   const [uncertain, setUncertain] = useState(false);
-  const others = group.filter(p => p.id !== proposal.id).map(p => ({ id: p.id, revision: p.revision }));
+  const others = members.filter(m => m.id !== proposal.id);
   const action = useMutation({
     mutationFn: (choice: 'apply' | 'keep' | 'snooze') => coachApi.proposal(proposal.id, proposal.revision, choice, others),
     onSuccess: () => { void client.invalidateQueries({ queryKey: coachTodayKey }); invalidateAfterSession(client); },
@@ -29,7 +29,8 @@ export function ProposalCard({ proposal, group }: { proposal: Proposal; group: P
   const check = async () => { await client.refetchQueries({ queryKey: coachTodayKey }); if (client.getQueryState(coachTodayKey)?.status === 'success') { setUncertain(false); action.reset(); } };
   const stale = group.some(p => p.state === 'stale');
   const discussion = group.some(p => p.state === 'discussion');
-  const disabled = action.isPending || uncertain || stale;
+  // A changed session only blocks applying; keeping or postponing writes no session.
+  const disabled = action.isPending || uncertain;
   return <article className="space-y-3 rounded-xl border border-neon-cyan/25 bg-neon-cyan/5 p-4">
     <p className="text-xs uppercase tracking-wide text-neon-cyan">{stale ? 'Proposition périmée' : 'Proposition'} · {proposal.date}</p>
     {group.length > 1 ? <>
@@ -42,7 +43,7 @@ export function ProposalCard({ proposal, group }: { proposal: Proposal; group: P
     <p className="text-sm text-text-secondary">{proposal.reason}</p>
     <p className="text-xs text-text-muted">{proposal.readiness_measured_on ? `Mesure de récupération du ${proposal.readiness_measured_on}` : 'Récupération estimée par la charge'} · Rien n’a encore changé.</p>
     <div className="flex flex-wrap gap-2">
-      {group.every(p => p.state === 'pending') && <Button disabled={disabled} onClick={() => action.mutate('apply')}>Appliquer</Button>}
+      {!discussion && <Button disabled={disabled || stale} onClick={() => action.mutate('apply')}>Appliquer</Button>}
       <Button variant="ghost" disabled={disabled} onClick={() => action.mutate('keep')}>Garder ma séance</Button>
       <Button variant="ghost" onClick={() => discussWithCoach({ kind: 'proposal', id: proposal.id })}>En parler</Button>
       <Button variant="ghost" disabled={disabled} onClick={() => action.mutate('snooze')}>Pas maintenant</Button>
@@ -96,7 +97,7 @@ export function CoachTodayPanel({ briefing }: { briefing?: string }) {
     <div className="space-y-3">
       {query.isPending && <p role="status">Chargement du suivi…</p>}
       {(query.error || prepare.error) && <p role="alert" className="text-sm text-danger-red">{readableError(query.error ?? prepare.error)}</p>}
-      {query.data?.items.map(item => item.kind === 'proposal' ? <ProposalCard key={`p:${item.record.id}`} proposal={item.record} group={item.group} /> : <FollowupCard key={`f:${item.record.id}`} followup={item.record} />)}
+      {query.data?.items.map(item => item.kind === 'proposal' ? <ProposalCard key={`p:${item.record.id}`} proposal={item.record} group={item.group} members={item.members} /> : <FollowupCard key={`f:${item.record.id}`} followup={item.record} />)}
       {(briefing || query.data?.briefing) && <p className="text-sm text-text-secondary">{briefing || query.data?.briefing?.text}</p>}
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
       <Button variant="ghost" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>

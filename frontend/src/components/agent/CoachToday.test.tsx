@@ -39,8 +39,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const renderPanel = (group: Proposal[]) => {
-  vi.spyOn(coachApi, 'today').mockResolvedValue({ date: '2026-10-13', items: [{ kind: 'proposal', record: group[0], group }], remaining: 0, briefing: null });
+const renderPanel = (group: Proposal[], members = group.map(p => ({ id: p.id, revision: p.revision }))) => {
+  vi.spyOn(coachApi, 'today').mockResolvedValue({ date: '2026-10-13', items: [{ kind: 'proposal', record: group[0], group, members }], remaining: 0, briefing: null });
   return render(<QueryClientProvider client={client}><CoachTodayPanel /></QueryClientProvider>);
 };
 
@@ -54,11 +54,21 @@ it('shows a low day as one card and answers for every session of it', async () =
   await waitFor(() => expect(respond).toHaveBeenCalledWith(7, 2, 'keep', [{ id: 8, revision: 3 }]));
 });
 
-it('blocks the whole day when one of its sessions changed', async () => {
+it('blocks only applying when one session of the day changed', async () => {
+  const respond = vi.spyOn(coachApi, 'proposal').mockResolvedValue({ ...key, state: 'dismissed' });
   renderPanel([key, { ...rest, state: 'stale' }]);
   expect(await screen.findByText(/Proposition périmée/)).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'Appliquer' })).toBeNull();
-  expect((screen.getByRole('button', { name: 'Garder ma séance' }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole('button', { name: 'Appliquer' }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Pas maintenant' }));
+  await waitFor(() => expect(respond).toHaveBeenCalledWith(7, 2, 'snooze', [{ id: 8, revision: 3 }]));
+});
+
+it('answers for a member hidden by an earlier snooze', async () => {
+  const respond = vi.spyOn(coachApi, 'proposal').mockResolvedValue({ ...key, state: 'applied' });
+  renderPanel([key], [{ id: 7, revision: 2 }, { id: 8, revision: 3 }]);
+  expect(await screen.findByText('Prévu : Fractionné · 60 min')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Appliquer' }));
+  await waitFor(() => expect(respond).toHaveBeenCalledWith(7, 2, 'apply', [{ id: 8, revision: 3 }]));
 });
 
 it('keeps the single-session card as it was', async () => {

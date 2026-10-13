@@ -24,10 +24,12 @@ def today() -> dict[str, Any]:
         for d in PlanDecisionRepository().list_for_day(day)
         if d.state in {"pending", "discussion"}
     ]
-    if all(d.snoozed_until is not None and d.snoozed_until > day for d in group):
-        group = []
+    # A response snoozes the whole group. Legacy rows snoozed one by one hide
+    # only themselves, but ``members`` still names them for the response.
+    members = [{"id": d.id, "revision": d.revision} for d in group]
+    shown = [d for d in group if d.snoozed_until is None or d.snoozed_until <= day]
     # The session that keeps a training load leads the card.
-    proposals = [d.to_dict() for d in sorted(group, key=lambda d: d.decision == "rest")]
+    proposals = [d.to_dict() for d in sorted(shown, key=lambda d: d.decision == "rest")]
     from arete.garmin.repository import GarminRepository
 
     repo = GarminRepository()
@@ -41,7 +43,14 @@ def today() -> dict[str, Any]:
             proposal["state"] = "stale"
     followups = coach_followup.pending(day)
     items: list[dict[str, Any]] = (
-        [{"kind": "proposal", "record": proposals[0], "group": proposals}]
+        [
+            {
+                "kind": "proposal",
+                "record": proposals[0],
+                "group": proposals,
+                "members": members,
+            }
+        ]
         if proposals
         else []
     )

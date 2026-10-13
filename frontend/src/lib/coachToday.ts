@@ -20,8 +20,12 @@ export interface Followup {
   rpe: number | null;
   notes: string | null;
 }
-/** A day's proposals are answered together: `record` leads, `group` lists them all. */
-export type CoachItem = { kind: 'proposal'; record: Proposal; group: Proposal[] } | { kind: 'followup'; record: Followup };
+export interface SeenRevision { id: number; revision: number }
+/**
+ * A day's proposals are answered together: `record` leads, `group` lists the
+ * shown ones and `members` every open one, which the response must name.
+ */
+export type CoachItem = { kind: 'proposal'; record: Proposal; group: Proposal[]; members: SeenRevision[] } | { kind: 'followup'; record: Followup };
 export interface CoachToday {
   date: string;
   items: CoachItem[];
@@ -32,7 +36,7 @@ export const coachTodayKey = ['coachToday'] as const;
 export const coachApi = {
   today: () => fetchAPI<CoachToday>('/coach/today'),
   prepare: () => fetchAPI<CoachToday>('/coach/prepare', { method: 'POST' }),
-  proposal: (id: number, revision: number, action: 'apply' | 'keep' | 'snooze', group: { id: number; revision: number }[] = []) =>
+  proposal: (id: number, revision: number, action: 'apply' | 'keep' | 'snooze', group: SeenRevision[] = []) =>
     fetchAPI<Proposal>(`/coach/proposals/${id}/response`, { method: 'POST', body: JSON.stringify({ revision, action, group }) }),
   followup: (id: number) => fetchAPI<Followup>(`/coach/followups/${id}`),
   respond: (id: number, revision: number, action: 'answer' | 'skip' | 'snooze', rpe?: number, notes?: string) =>
