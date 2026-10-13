@@ -5,8 +5,8 @@ import { formatPace } from './utils';
 export type TimeMask = 'duration' | 'pace';
 
 const MAX_DIGITS: Record<TimeMask, number> = { duration: 6, pace: 4 };
-/** Plausible values: a step of at most 10:00:00, a pace from 1'30 to 20'00 per km. */
-const LIMITS: Record<TimeMask, { min: number; max: number }> = { duration: { min: 1, max: 36_000 }, pace: { min: 90, max: 1_200 } };
+/** Plausible values, trail and ultra included: a step of at most 24:00:00, a pace from 1'30 to 30'00 per km. */
+const LIMITS: Record<TimeMask, { min: number; max: number }> = { duration: { min: 1, max: 86_400 }, pace: { min: 90, max: 1_800 } };
 /** A pasted value: digits only, or written in full with two-digit seconds (and minutes after hours). */
 const PASTED: Record<TimeMask, RegExp> = { duration: /^(?:\d+|(?:\d{1,2}:\d{2}|\d{1,2}):\d{2})$/, pace: /^(?:\d+|\d{1,2}['’]\d{2})$/ };
 

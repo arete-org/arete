@@ -26,7 +26,8 @@ describe('workout steps', () => {
     expect(prescriptionReady(repeat({ ...effort, target: { kind: 'heart_rate_bpm', low: 160, high: 150 } }))).toBe(false);
     expect(prescriptionReady(repeat({ ...effort, target: { kind: 'pace_sec_km', low: 210, high: 210 } }))).toBe(true);
     expect(prescriptionReady(repeat({ ...effort, secondary_target: { kind: 'pace_sec_km', low: 60, high: 210 } }))).toBe(false);
-    expect(prescriptionReady(repeat({ ...effort, value: 36_001 }))).toBe(false);
+    expect(prescriptionReady(repeat({ ...effort, value: 86_400 }))).toBe(true);
+    expect(prescriptionReady(repeat({ ...effort, value: 86_401 }))).toBe(false);
     expect(prescriptionReady(repeat({ ...effort, duration_kind: 'meters', value: 42_195 }))).toBe(true);
   });
 });

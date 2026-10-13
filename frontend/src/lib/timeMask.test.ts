@@ -64,9 +64,9 @@ describe('timer-style duration', () => {
     for (const text of ['1h30', '20 min', '1:3', '1:5:00', 'abc', '', '1234567']) expect(pastedDigits(text, 'duration')).toBeNull();
   });
 
-  it('holds plausible durations up to 10:00:00', () => {
-    expect(plausibleTime(36_000, 'duration')).toBe(true);
-    expect(plausibleTime(36_001, 'duration')).toBe(false);
+  it('holds plausible durations up to 24:00:00, for ultras', () => {
+    expect(plausibleTime(86_400, 'duration')).toBe(true);
+    expect(plausibleTime(86_401, 'duration')).toBe(false);
   });
 });
 
@@ -93,7 +93,7 @@ describe("timer-style pace in m'ss per km", () => {
     for (const text of ["4'5", '4:15', "4'15/km", '4 min 15']) expect(pastedDigits(text, 'pace')).toBeNull();
   });
 
-  it("holds plausible paces from 1'30 to 20'00 per km", () => {
-    expect([89, 90, 1200, 1201].map(pace => plausibleTime(pace, 'pace'))).toEqual([false, true, true, false]);
+  it("holds plausible paces from 1'30 to 30'00 per km, steep trail included", () => {
+    expect([89, 90, 1800, 1801].map(pace => plausibleTime(pace, 'pace'))).toEqual([false, true, true, false]);
   });
 });

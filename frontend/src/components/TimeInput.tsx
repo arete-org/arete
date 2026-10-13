@@ -3,8 +3,8 @@ import { Input } from '@/components/ui/Input';
 import { digitsValue, editDigits, formatDigits, pastedDigits, plausibleTime, valueDigits, type TimeMask } from '@/lib/timeMask';
 
 const COPY: Record<TimeMask, { placeholder: string; pattern: string; hint: string; empty: string; implausible: string; pasted: string }> = {
-  duration: { placeholder: '0:00', pattern: '[0-9:]*', hint: 'Tape 2000 pour 20:00', empty: 'Indique la durée.', implausible: 'Durée au-delà de 10:00:00 : vérifie la saisie.', pasted: 'Collage refusé : chiffres ou durée comme 1:30:00.' },
-  pace: { placeholder: "0'00", pattern: "[0-9']*", hint: "Tape 330 pour 3'30", empty: 'Indique l’allure.', implausible: "Allure attendue entre 1'30 et 20'00 par km.", pasted: "Collage refusé : chiffres ou allure comme 3'30." },
+  duration: { placeholder: '0:00', pattern: '[0-9:]*', hint: 'Tape 2000 pour 20:00', empty: 'Indique la durée.', implausible: 'Durée au-delà de 24:00:00 : vérifie la saisie.', pasted: 'Collage refusé : chiffres ou durée comme 1:30:00.' },
+  pace: { placeholder: "0'00", pattern: "[0-9']*", hint: "Tape 330 pour 3'30", empty: 'Indique l’allure.', implausible: "Allure attendue entre 1'30 et 30'00 par km.", pasted: "Collage refusé : chiffres ou allure comme 3'30." },
 };
 
 /**

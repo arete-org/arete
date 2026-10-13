@@ -106,14 +106,14 @@ it('accepts a pasted plain duration and refuses anything else, leaving the field
   expect(screen.queryByRole('alert')).toBeNull();
 });
 
-it('blocks a duration over 10:00:00', () => {
+it('blocks a duration over 24:00:00', () => {
   const latest = mount(warmup);
   const duration = screen.getByLabelText('Durée (h:mm:ss)') as HTMLInputElement;
   fireEvent.focus(duration);
-  type(duration, '100001');
-  expect(latest.current.steps[0].value).toBe(36_001);
+  type(duration, '240001');
+  expect(latest.current.steps[0].value).toBe(86_401);
   expect(prescriptionReady(latest.current)).toBe(false);
-  expect(screen.getByRole('alert').textContent).toBe('Durée au-delà de 10:00:00 : vérifie la saisie.');
+  expect(screen.getByRole('alert').textContent).toBe('Durée au-delà de 24:00:00 : vérifie la saisie.');
 });
 
 it("types a pace range as digits in m'ss per km, starting empty and never storing a partial bound", () => {
@@ -151,7 +151,7 @@ it('blocks an inverted range and an implausible pace with an inline error', () =
   type(low, '100');
   expect(latest.current.steps[0].target).toEqual({ kind: 'pace_sec_km', low: 60, high: 210 });
   expect(prescriptionReady(latest.current)).toBe(false);
-  expect(screen.getByRole('alert').textContent).toBe("Allure attendue entre 1'30 et 20'00 par km.");
+  expect(screen.getByRole('alert').textContent).toBe("Allure attendue entre 1'30 et 30'00 par km.");
 });
 
 it('creates a repeat as effort then recovery with "skip the last recovery" checked', () => {
