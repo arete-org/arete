@@ -270,8 +270,9 @@ Vercel Cron calls `/api/cron/daily-sync` in six daily windows, 07:00 to 12:00
 UTC (`vercel.json`): Hobby runs each cron once a day, within its hour, and only
 on the production deployment. The endpoint answers 401 unless the environment
 has `CRON_SECRET`, which Vercel sends as a bearer token. Each dispatch syncs the
-athletes still owed today within the function's 300 seconds; the rules, and how
-to park or force an athlete, are in `docs/multi-athlete.md`. A preview syncs
+athletes still owed today within the function's 300 seconds, none before 07:00
+on their own clock nor during their quiet hours; the rules, and how to park or
+force an athlete, are in `docs/multi-athlete.md`. A preview syncs
 only when called by hand with that header.
 
 ## Local stack

@@ -134,3 +134,26 @@ class TestOwedToday:
 
         assert not owed_today(None, self.PARIS_MONDAY, self.NOW, "Europe/Paris")
         assert owed_today(None, self.SUNDAY_EVENING, self.NOW, "Europe/Paris")
+
+    def test_a_lease_is_dated_by_its_claim(self):
+        """A run claimed at 23:58 holds a lease past midnight; not the next day."""
+        from arete.scheduler import SCHEDULE_LEASE_SECONDS, owed_today
+
+        claimed = datetime(2026, 10, 11, 21, 58, tzinfo=UTC).timestamp()  # 23:58
+        lease = claimed + SCHEDULE_LEASE_SECONDS  # 00:13 on Monday in Paris
+        assert owed_today(None, lease, self.NOW, "Europe/Paris")
+
+    def test_nothing_is_owed_before_the_hour_or_in_quiet_hours(self):
+        from arete.scheduler import owed_today
+        from arete.services.settings import QuietHours
+
+        def at(hour: int) -> float:
+            return datetime(2026, 10, 12, hour, 0, tzinfo=UTC).timestamp()
+
+        # 05:00 and 07:00 in Paris against a sync hour of 7.
+        assert not owed_today(None, None, at(3), "Europe/Paris", sync_hour=7)
+        assert owed_today(None, None, at(5), "Europe/Paris", sync_hour=7)
+        quiet = QuietHours()  # 21:30-07:00, the default
+        assert not owed_today(None, None, at(4), "Europe/Paris", quiet_hours=quiet)
+        assert owed_today(None, None, at(5), "Europe/Paris", quiet_hours=quiet)
+        assert not owed_today(None, None, at(20), "Europe/Paris", quiet_hours=quiet)

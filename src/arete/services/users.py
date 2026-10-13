@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from arete.config import config
@@ -246,9 +246,13 @@ class AthleteAccount:
         return self.athlete_id == OWNER_ATHLETE_ID
 
     def to_dict(self) -> dict:
-        # Stored timestamps are the server's local time: say which one.
+        # Stored timestamps are the server's local time: say which one. The
+        # scheduler stores its daily marker and lease in UTC.
         def aware(value: datetime | None) -> datetime | None:
             return value.astimezone() if value is not None else None
+
+        def utc(value: datetime | None) -> datetime | None:
+            return value.replace(tzinfo=UTC) if value is not None else None
 
         return {
             "athlete_id": self.athlete_id,
@@ -258,8 +262,8 @@ class AthleteAccount:
             "role": self.role,
             "is_owner": self.is_owner,
             "last_seen_at": aware(self.last_seen_at),
-            "last_sync_at": aware(self.last_sync_at),
-            "sync_lease_until": aware(self.sync_lease_until),
+            "last_sync_at": utc(self.last_sync_at),
+            "sync_lease_until": utc(self.sync_lease_until),
             "lease_stuck": self.lease_stuck,
             "deactivated_at": aware(self.deactivated_at),
         }
@@ -276,7 +280,8 @@ def list_accounts() -> list[AthleteAccount]:
         rows = con.execute(
             "SELECT a.id, u.id, u.email, u.name, coalesce(u.role, 'athlete'), "
             "u.last_seen_at, a.last_sync_at, a.sync_lease_until, "
-            "coalesce(a.sync_lease_until < current_timestamp, false), a.deleted_at "
+            "coalesce(a.sync_lease_until < (current_timestamp AT TIME ZONE 'UTC'), false), "
+            "a.deleted_at "
             "FROM app.athletes a LEFT JOIN app.users u ON u.athlete_id = a.id "
             "ORDER BY a.id, u.id"
         ).fetchall()

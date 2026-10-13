@@ -29,6 +29,10 @@ def _user_id(subject: str) -> int:
     return user.id
 
 
+#: The scheduler stores its lease in UTC, whatever the session's TimeZone.
+UTC_NOW = "(current_timestamp AT TIME ZONE 'UTC')"
+
+
 def _set_lease(athlete_id: int, expression: str) -> None:
     con = connect()
     con.execute(
@@ -175,8 +179,8 @@ def test_feature_flag_needs_openrouter_but_can_always_be_disabled(client, monkey
 
 def test_the_list_shows_each_athlete_with_its_login_and_daily_sync(client, athletes):
     ana, admin = athletes["ana-token"], athletes["admin-token"]
-    _set_lease(ana, "current_timestamp - INTERVAL 1 HOUR")
-    _set_lease(admin, "current_timestamp + INTERVAL 10 MINUTE")
+    _set_lease(ana, f"{UTC_NOW} - INTERVAL 1 HOUR")
+    _set_lease(admin, f"{UTC_NOW} + INTERVAL 10 MINUTE")
     rows = {
         row["athlete_id"]: row
         for row in client.get("/admin/accounts", headers=_bearer("admin-token")).json()
@@ -275,8 +279,8 @@ def test_only_a_lease_past_its_run_is_released(client, athletes):
     admin = _bearer("admin-token")
     # A lease still ahead belongs to a run in progress: releasing it would let
     # a second dispatch run the same athlete at the same time.
-    _set_lease(ana, "current_timestamp + INTERVAL 10 MINUTE")
+    _set_lease(ana, f"{UTC_NOW} + INTERVAL 10 MINUTE")
     assert client.post(path, headers=admin).json() == {"released": False}
-    _set_lease(ana, "current_timestamp - INTERVAL 1 MINUTE")
+    _set_lease(ana, f"{UTC_NOW} - INTERVAL 1 MINUTE")
     assert client.post(path, headers=admin).json() == {"released": True}
     assert client.post(path, headers=admin).json() == {"released": False}

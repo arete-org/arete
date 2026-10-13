@@ -1,7 +1,7 @@
 """Exercise real shared storage with two unrelated authenticated athletes."""
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -26,6 +26,30 @@ def athletes(tmp_path, monkeypatch):
     assert first.athlete_id == 1
     assert second.athlete_id != first.athlete_id
     return first, second
+
+
+#: Monday 10:00 UTC, noon in Paris (the default zone): every athlete is owed.
+NOON = datetime(2026, 10, 12, 10, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def frozen_dispatch(monkeypatch):
+    """The dispatch's clock, frozen at ``NOON``; set ``[0]`` to move it.
+
+    Vercel's mode: no ``ARETE_AUTO_SYNC_HOUR``, whatever the developer's .env.
+    """
+    from arete import scheduler
+    from arete.services import notifications
+
+    now = [NOON]
+    monkeypatch.setattr(scheduler, "utc_now", lambda: now[0])
+    monkeypatch.setattr(notifications, "utc_now", lambda: now[0])
+    monkeypatch.delenv("ARETE_AUTO_SYNC_HOUR", raising=False)
+    return now
+
+
+def _naive(moment: datetime) -> datetime:
+    return moment.astimezone(UTC).replace(tzinfo=None)
 
 
 def planned(label):
@@ -239,7 +263,7 @@ def test_cached_coaches_never_share_memory_roots(athletes, monkeypatch):
 
 
 def test_scheduler_dispatches_both_athletes_once_without_replaying(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from arete import scheduler
 
@@ -306,7 +330,7 @@ def test_mirror_keeps_identical_paths_private(athletes):
 
 
 def test_scheduler_failure_is_not_replayed_and_other_athletes_continue(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from arete import scheduler
 
@@ -343,23 +367,23 @@ def _stub_scheduled_work(monkeypatch, seen):
     monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
 
 
-def _set_lease(athlete_id, expression):
+def _set_lease(athlete_id, expression, *params):
     con = connect()
     con.execute(
         f"UPDATE app.athletes SET sync_lease_until = {expression} WHERE id=?",
-        [athlete_id],
+        [*params, athlete_id],
     )
     con.close()
 
 
 def test_scheduler_reclaims_a_lease_from_a_previous_day_but_not_today(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from arete import scheduler
 
     first, second = athletes
-    _set_lease(first.athlete_id, "current_timestamp - INTERVAL 1 DAY")
-    _set_lease(second.athlete_id, "current_timestamp + INTERVAL 15 MINUTE")
+    _set_lease(first.athlete_id, "?", _naive(NOON - timedelta(days=1)))
+    _set_lease(second.athlete_id, "?", _naive(NOON + timedelta(minutes=15)))
     seen: list[int] = []
     _stub_scheduled_work(monkeypatch, seen)
     result = scheduler.run_scheduled_batch()
@@ -368,8 +392,9 @@ def test_scheduler_reclaims_a_lease_from_a_previous_day_but_not_today(
     con = connect()
     rows = dict(
         con.execute(
-            "SELECT id, (sync_lease_until IS NULL "
-            "AND CAST(last_sync_at AS DATE) = current_date) FROM app.athletes"
+            "SELECT id, (sync_lease_until IS NULL AND last_sync_at = ?) "
+            "FROM app.athletes",
+            [_naive(NOON)],
         ).fetchall()
     )
     con.close()
@@ -377,7 +402,9 @@ def test_scheduler_reclaims_a_lease_from_a_previous_day_but_not_today(
     assert rows[second.athlete_id] is False
 
 
-def test_a_failed_athlete_is_retried_by_the_next_day_s_dispatch(athletes, monkeypatch):
+def test_a_failed_athlete_is_retried_by_the_next_day_s_dispatch(
+    athletes, monkeypatch, frozen_dispatch
+):
     from arete import scheduler
 
     first = athletes[0]
@@ -407,7 +434,7 @@ def test_a_failed_athlete_is_retried_by_the_next_day_s_dispatch(athletes, monkey
 
 
 def test_a_claim_lost_to_a_concurrent_dispatch_is_skipped_not_fatal(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from contextlib import contextmanager
 
@@ -423,10 +450,7 @@ def test_a_claim_lost_to_a_concurrent_dispatch_is_skipped_not_fatal(
             self.con = con
 
         def execute(self, sql, params=None):
-            if (
-                "SET sync_lease_until=current_timestamp" in sql
-                and params[1] == first.athlete_id
-            ):
+            if "SET sync_lease_until=?" in sql and params[1] == first.athlete_id:
                 raise duckdb.TransactionException("Conflict on update!")
             return self.con.execute(sql, params)
 
@@ -443,7 +467,9 @@ def test_a_claim_lost_to_a_concurrent_dispatch_is_skipped_not_fatal(
     assert list(result["athletes"]) == [str(second.athlete_id)]
 
 
-def test_model_steps_are_deferred_past_the_model_deadline(athletes, monkeypatch):
+def test_model_steps_are_deferred_past_the_model_deadline(
+    athletes, monkeypatch, frozen_dispatch
+):
     from itertools import chain, repeat
 
     from arete import scheduler
@@ -472,15 +498,15 @@ def test_model_steps_are_deferred_past_the_model_deadline(athletes, monkeypatch)
     }
     con = connect()
     assert con.execute(
-        "SELECT CAST(last_sync_at AS DATE) = current_date, sync_lease_until IS NULL "
+        "SELECT last_sync_at = ?, sync_lease_until IS NULL "
         "FROM app.athletes WHERE id=?",
-        [first.athlete_id],
+        [_naive(NOON), first.athlete_id],
     ).fetchone() == (True, True)
     con.close()
 
 
 def test_scheduler_defers_unclaimed_work_at_the_dispatch_deadline(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from arete import scheduler
 
@@ -492,6 +518,213 @@ def test_scheduler_defers_unclaimed_work_at_the_dispatch_deadline(
         "SELECT count(*) FROM app.athletes WHERE sync_lease_until IS NOT NULL"
     ).fetchone() == (0,)
     con.close()
+
+
+#: UTC+3 and UTC-5 all year (no summer time).
+MOSCOW, BOGOTA = "Europe/Moscow", "America/Bogota"
+
+
+def _settle(athlete_id, zone, preferences=None):
+    con = connect()
+    con.execute(
+        "INSERT INTO app.user_settings (user_id, timezone, notification_preferences) "
+        "VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET "
+        "timezone=EXCLUDED.timezone, "
+        "notification_preferences=EXCLUDED.notification_preferences",
+        [athlete_id, zone, preferences],
+    )
+    con.close()
+
+
+def _run_the_day(monkeypatch, frozen_dispatch, hours):
+    """Dispatch at each UTC hour of Monday; who ran when, and the briefing push.
+
+    The briefing goes through the real preferences (quiet hours included); it
+    stops at the missing Web Push keys, after them.
+    """
+    from arete import scheduler
+    from arete.services.notifications import notify
+
+    runs: dict[int, list[tuple[int, str | None]]] = {}
+
+    def briefing():
+        result = notify("Briefing du coach", "Texte", "/", kind="briefing")
+        hour = frozen_dispatch[0].hour
+        runs.setdefault(current_athlete_id(), []).append((hour, result.skipped_reason))
+        return "rules"
+
+    monkeypatch.setattr(scheduler, "daily_sync", lambda: {"sync": "ok"})
+    monkeypatch.setattr(scheduler, "write_daily_briefing", briefing)
+    monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
+    for hour in hours:
+        frozen_dispatch[0] = NOON.replace(hour=hour)
+        scheduler.run_scheduled_batch()
+    return runs
+
+
+def test_vercel_windows_run_each_athlete_once_out_of_quiet_hours(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """Cron windows 07:00-12:00 UTC: 10:00 in Moscow, 02:00-07:00 in Bogota."""
+    first, second = athletes
+    _settle(first.athlete_id, MOSCOW)
+    _settle(second.athlete_id, BOGOTA)
+    runs = _run_the_day(monkeypatch, frozen_dispatch, range(7, 13))
+    # Bogota waits for the end of its quiet hours (07:00 local): its briefing
+    # push is sent, not dropped as "heures calmes".
+    assert runs == {
+        first.athlete_id: [(7, "clés Web Push absentes du serveur")],
+        second.athlete_id: [(12, "clés Web Push absentes du serveur")],
+    }
+
+
+@pytest.mark.parametrize(
+    ("sync_hour", "moscow", "bogota"),
+    [
+        # 09:00 on each athlete's clock, wherever the Docker host is.
+        (9, 6, 14),
+        # Before the default quiet hours end: the run waits for 07:00 local.
+        (5, 4, 12),
+    ],
+)
+def test_docker_dispatcher_waits_for_the_hour_on_each_athlete_s_clock(
+    athletes, monkeypatch, frozen_dispatch, sync_hour, moscow, bogota
+):
+    first, second = athletes
+    _settle(first.athlete_id, MOSCOW)
+    _settle(second.athlete_id, BOGOTA)
+    # Both ran on Sunday; Monday 00:00 UTC is still Sunday 19:00 in Bogota.
+    sunday = _naive(datetime(2026, 10, 11, 18, 0, tzinfo=UTC))
+    con = connect()
+    con.execute("UPDATE app.athletes SET last_sync_at=?", [sunday])
+    con.close()
+    monkeypatch.setenv("ARETE_AUTO_SYNC_HOUR", str(sync_hour))
+    runs = _run_the_day(monkeypatch, frozen_dispatch, range(24))
+    assert runs == {
+        first.athlete_id: [(moscow, "clés Web Push absentes du serveur")],
+        second.athlete_id: [(bogota, "clés Web Push absentes du serveur")],
+    }
+
+
+def test_a_run_past_the_athlete_s_midnight_is_dated_by_its_claim(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """Claimed at 23:58 in Moscow, finished at 00:01: the next day still runs."""
+    from arete import scheduler
+
+    first, second = athletes
+    _settle(first.athlete_id, MOSCOW, '{"quiet_hours": null}')
+    _settle(second.athlete_id, MOSCOW, '{"quiet_hours": null}')
+    _set_lease(second.athlete_id, "?", datetime(2100, 1, 1))  # parked
+    monkeypatch.setenv("ARETE_AUTO_SYNC_HOUR", "7")
+    claim = datetime(2026, 10, 12, 20, 58, tzinfo=UTC)  # 23:58 in Moscow
+    seen: list[int] = []
+
+    def sync():
+        seen.append(current_athlete_id())
+        frozen_dispatch[0] += timedelta(minutes=3)  # 00:01 on Tuesday
+        return {"sync": "ok"}
+
+    monkeypatch.setattr(scheduler, "daily_sync", sync)
+    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda: "rules")
+    monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
+    frozen_dispatch[0] = claim
+    scheduler.run_scheduled_batch()
+    con = connect()
+    stored = con.execute(
+        "SELECT last_sync_at FROM app.athletes WHERE id=?", [first.athlete_id]
+    ).fetchone()
+    con.close()
+    assert stored == (_naive(claim),)
+    # Tuesday before the hour, then at it: the run is owed once more.
+    frozen_dispatch[0] = claim + timedelta(hours=7)  # 06:58 in Moscow
+    assert scheduler.run_scheduled_batch()["athletes"] == {}
+    frozen_dispatch[0] = claim + timedelta(hours=8)  # 07:58 in Moscow
+    assert list(scheduler.run_scheduled_batch()["athletes"]) == [str(first.athlete_id)]
+    assert seen == [first.athlete_id, first.athlete_id]
+
+
+def test_markers_compare_right_whatever_the_writer_s_session_timezone(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """A Tokyo session writes, a UTC session reads: the markers still agree.
+
+    Each connection inherits the database instance's default TimeZone, as a
+    process with another ``TZ`` would give it (Docker beside Vercel).
+    """
+    import duckdb
+
+    from arete import scheduler
+    from arete.services.users import list_accounts
+
+    first, second = athletes
+    keeper = duckdb.connect(str(config.db_path))
+    try:
+        keeper.execute("SET GLOBAL TimeZone='Asia/Tokyo'")
+        con = connect()
+        assert con.execute("SELECT current_setting('TimeZone')").fetchone() == (
+            "Asia/Tokyo",
+        )
+        con.close()
+        _stub_scheduled_work(monkeypatch, seen := [])
+        # 21:00 in Paris; Tokyo's wall clock already reads Tuesday 04:00.
+        evening = datetime(2026, 10, 12, 19, 0, tzinfo=UTC)
+        frozen_dispatch[0] = evening
+        scheduler.run_scheduled_batch()
+        assert seen == [first.athlete_id, second.athlete_id]
+        keeper.execute("SET GLOBAL TimeZone='UTC'")
+        # Tuesday 09:00 in Paris: a new day for both, read in UTC.
+        frozen_dispatch[0] = evening + timedelta(hours=12)
+        scheduler.run_scheduled_batch()
+        assert seen == [first.athlete_id, second.athlete_id] * 2
+        # Leases against the server's clock, back in Tokyo.
+        keeper.execute("SET GLOBAL TimeZone='Asia/Tokyo'")
+        utc_now = datetime.now(UTC)
+        _set_lease(first.athlete_id, "?", _naive(utc_now - timedelta(minutes=1)))
+        _set_lease(second.athlete_id, "?", _naive(utc_now + timedelta(minutes=10)))
+        stuck = {a.athlete_id: a.lease_stuck for a in list_accounts()}
+        assert (stuck[first.athlete_id], stuck[second.athlete_id]) == (True, False)
+        assert scheduler.release_sync_lease(second.athlete_id) is False
+        assert scheduler.release_sync_lease(first.athlete_id) is True
+    finally:
+        keeper.close()
+
+
+def test_the_scan_bound_defers_the_athletes_beyond_it(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """The least recently active come first; those past the bound wait."""
+    from arete import scheduler
+
+    first, second = athletes
+    # The first athlete ran yesterday; the second's run failed this morning.
+    con = connect()
+    con.execute(
+        "UPDATE app.athletes SET last_sync_at=? WHERE id=?",
+        [_naive(NOON - timedelta(days=1)), first.athlete_id],
+    )
+    con.execute(
+        "UPDATE app.athletes SET last_sync_at=?, sync_lease_until=? WHERE id=?",
+        [
+            _naive(NOON - timedelta(days=2)),
+            _naive(NOON - timedelta(hours=1)),
+            second.athlete_id,
+        ],
+    )
+    con.close()
+    seen: list[int] = []
+    _stub_scheduled_work(monkeypatch, seen)
+    monkeypatch.setattr(scheduler, "MAX_SCANNED_ATHLETES", 1)
+    assert scheduler.run_scheduled_batch() == {
+        "athletes": {
+            str(first.athlete_id): {
+                "sync": "ok",
+                "briefing": "rules",
+                "review": "rules",
+            }
+        },
+        "deferred": True,
+    }
 
 
 def test_garmin_connection_mfa_sync_and_logout_are_private(
@@ -729,14 +962,16 @@ def test_reactivation_restores_the_athlete_and_its_logins(athletes):
         assert repo.get_planned_session(identifier).description == "paused athlete"
 
 
-def test_a_released_lease_is_claimed_by_the_next_dispatch(athletes, monkeypatch):
+def test_a_released_lease_is_claimed_by_the_next_dispatch(
+    athletes, monkeypatch, frozen_dispatch
+):
     from arete import scheduler
 
     first, second = athletes
     con = connect()
     con.execute(
-        "UPDATE app.athletes SET sync_lease_until = current_timestamp - INTERVAL 1 SECOND "
-        "WHERE id=?",
+        "UPDATE app.athletes SET sync_lease_until = "
+        "(current_timestamp AT TIME ZONE 'UTC') - INTERVAL 1 SECOND WHERE id=?",
         [second.athlete_id],
     )
     con.close()
