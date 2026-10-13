@@ -53,16 +53,22 @@ it('sends to Garmin, then says when it was sent rather than claiming the watch h
   fireEvent.click(screen.getByText('Envoyer sur la montre'));
   expect(onPush).toHaveBeenCalledOnce();
 
-  rerender(
-    <SessionCard
-      planned={{ ...session, garmin_pushed_at: '2026-10-09T07:05:00' }}
-      realised={null}
-      state="pending"
-      push={push}
-    />
-  );
-  expect(screen.queryByText('Envoyer sur la montre')).toBeNull();
-  expect(screen.getByText(/Envoyée à Garmin \d\d:\d\d/)).toBeTruthy();
+  // The API sends a UTC instant; the athlete reads their own clock (CEST here).
+  vi.stubEnv('TZ', 'Europe/Paris');
+  try {
+    rerender(
+      <SessionCard
+        planned={{ ...session, garmin_pushed_at: '2026-10-09T23:01:00+00:00' }}
+        realised={null}
+        state="pending"
+        push={push}
+      />
+    );
+    expect(screen.queryByText('Envoyer sur la montre')).toBeNull();
+    expect(screen.getByText('Envoyée à Garmin 01:01')).toBeTruthy();
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 it.each([

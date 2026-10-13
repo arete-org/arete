@@ -1,7 +1,7 @@
 """Repository for Garmin sessions database operations."""
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import duckdb
@@ -65,7 +65,8 @@ def _planned_from_row(row: tuple) -> PlannedSession:
         structure_json=row[13],
         garmin_workout_id=row[14],
         garmin_schedule_id=row[15],
-        garmin_pushed_at=row[16],
+        # Stored as naive UTC (TIMESTAMP); tagged so it serializes with an offset.
+        garmin_pushed_at=row[16].replace(tzinfo=UTC) if row[16] else None,
         prescription=json.loads(row[17]) if row[17] else None,
         provenance=json.loads(row[18]) if row[18] else None,
         revision=row[19],

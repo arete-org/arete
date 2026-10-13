@@ -14,6 +14,7 @@ from arete.dataio.db import db_connection, transaction
 from arete.garmin.workouts import canonical, convert, matches
 from arete.services.documents import DocumentError
 from arete.services.prescriptions import Prescription, Step, Target, describe
+from arete.services.settings import utc_now
 
 MAX_BATCH_SESSIONS = 5
 MAX_BATCH_REQUESTS = 60
@@ -607,8 +608,15 @@ def export(
             writing = False
         with db_connection() as con:
             con.execute(
-                "UPDATE app.planned_sessions SET garmin_workout_id=?,garmin_schedule_id=?,garmin_pushed_at=current_timestamp WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id=? AND prescription IS NULL) ",
-                [str(workout_id), str(schedule_id), session_id],
+                "UPDATE app.planned_sessions SET garmin_workout_id=?,garmin_schedule_id=?,garmin_pushed_at=? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id=? AND prescription IS NULL) ",
+                # Naive UTC: DuckDB stores an aware value (and current_timestamp)
+                # in its session TimeZone, which follows the process TZ.
+                [
+                    str(workout_id),
+                    str(schedule_id),
+                    utc_now().replace(tzinfo=None),
+                    session_id,
+                ],
             )
         return exchange.update(
             session_id,
