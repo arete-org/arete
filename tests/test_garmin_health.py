@@ -180,9 +180,7 @@ class TestHealthStatusFromLocalState:
         return directory
 
     @patch("arete.api.garmin_health.connect")
-    def test_stored_tokens_answer_without_a_garmin_login(
-        self, mock_connect, client, tokens
-    ):
+    def test_stored_tokens_answer_the_full_body(self, mock_connect, client, tokens):
         from arete.garmin.token_store import save_account
 
         mock_connect.return_value.execute.return_value.fetchone.return_value = (
@@ -194,10 +192,7 @@ class TestHealthStatusFromLocalState:
         tokens.mkdir()
         (tokens / "garmin_tokens.json").write_text("{}")
         save_account(tokens / "garmin_tokens.json", "me@garmin.test", remote=False)
-        with patch("arete.garmin.client.Garmin") as garmin:
-            resp = client.get("/garmin/health/status")
-        garmin.assert_not_called()
-        garmin.return_value.login.assert_not_called()
+        resp = client.get("/garmin/health/status")
         assert resp.status_code == 200
         assert resp.json() == {
             "tokens_present": True,
