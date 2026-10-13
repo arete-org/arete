@@ -377,10 +377,13 @@ def _payload(session_id: int, *, upload: bool = True) -> tuple[dict, date, str, 
     if session is None:
         raise DocumentError("Cette séance n’existe plus.")
     settings = get_user_settings() or {}
+    # A copy sent before ARE-98 was the template: identify it as such.
     prescription = (
         Prescription.model_validate(session.prescription)
         if session.prescription
         else described_prescription(session)
+        if upload
+        else None
     )
     if prescription is not None:
         ranges = (

@@ -1222,25 +1222,38 @@ def test_coach_update_is_judged_on_the_session_it_would_save(
         assert session.description == description and session.revision == 1
 
 
-def test_template_sent_before_the_guard_can_still_be_withdrawn(planned):
+@pytest.mark.parametrize("description", [UNREAD, READ])
+def test_template_sent_before_the_guard_can_still_be_withdrawn(planned, description):
+    from arete.dataio.settings import athlete_zone_model
     from arete.garmin.models import SessionStatus
+    from arete.garmin.workout_structure import derive
+    from arete.garmin.workouts import build_payload
 
-    _without_steps(planned, "intervals", UNREAD)
+    _without_steps(planned, "intervals", description)
     with db_connection() as con:
         con.execute(
             "UPDATE app.planned_sessions SET garmin_workout_id='1',garmin_schedule_id='100' WHERE id=?",
             [planned],
         )
+    session = GarminRepository().get_planned_session(planned)
+    # What the daily push sent before the guard: the type's template.
+    payload = build_payload(
+        derive(session, athlete_zone_model(), None),
+        name=f"Arete — {description}",
+        description=f"ARETE_SESSION:{planned}",
+        sport="running",
+    )
+    day = session.date
     garmin = Garmin()
-    payload, day, _, _ = service._payload(planned, upload=False)
     garmin.workouts[1] = {**payload, "workoutId": 1}
     garmin.schedules[100] = {
         "workoutId": 1,
         "workoutScheduleId": 100,
         "date": day.isoformat(),
     }
-    with pytest.raises(NotPushable):
-        service._payload(planned)
+    if description == UNREAD:
+        with pytest.raises(NotPushable):
+            service._payload(planned)
     GarminRepository().update_planned_session_status(planned, SessionStatus.SKIPPED)
     assert service.withdraw_skipped(planned, client=garmin)["state"] == "removed"
     assert not garmin.workouts and not garmin.schedules
