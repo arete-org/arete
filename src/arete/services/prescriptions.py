@@ -6,7 +6,7 @@ from datetime import date as Date
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 MAX_STEPS = 100
 MAX_REPEAT_DEPTH = 2
@@ -155,6 +155,25 @@ def strength_prescription(text: str, day: Date | None) -> Prescription:
             if len(steps) > MAX_STEPS:
                 raise ValueError("Maximum 100 étapes (séries et repos) par séance.")
     return Prescription(steps=steps)
+
+
+def prescription_from_description(text: str, sport: str) -> Prescription | None:
+    """The run the description writes out, or None unless every part is read.
+
+    Running only: cycling and swimming notations are not covered. Deterministic
+    (Lark grammar); never a partial workout.
+    """
+    if sport != "running":
+        return None
+    from arete.llm.running_grammar import parse_running
+
+    steps = parse_running(text)
+    if steps is None:
+        return None
+    try:
+        return Prescription.model_validate({"steps": steps})
+    except ValidationError:  # a bound the text exceeds (steps, repeats)
+        return None
 
 
 def strength_sets(

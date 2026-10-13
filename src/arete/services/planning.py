@@ -8,6 +8,7 @@ stamped ``source="coach"`` so the Planning page can tell them apart.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any, Literal
 
@@ -20,6 +21,7 @@ from arete.garmin.models import (
     canonical_sport,
 )
 from arete.garmin.repository import GarminRepository
+from arete.garmin.workout_structure import NotPushable, ensure_template_fits
 from arete.services.prescriptions import (
     Prescription,
     Provenance,
@@ -32,6 +34,12 @@ from arete.services.settings import athlete_today
 _MAX_LIST = 50
 _HORIZON_DAYS = 120
 _MAX_SOURCE_HINTS = 5
+_STEPS_REQUIRED = (
+    "Un tempo ou un fractionné décrit, en course ou à vélo, exige prescription.steps "
+    "(échauffement, blocs ou répétitions avec récupérations, retour au calme) : "
+    "sans elles, la montre recevrait un modèle générique et non la séance décrite. "
+    "Réessaie avec la prescription complète."
+)
 
 
 def _repo() -> GarminRepository:
@@ -210,6 +218,10 @@ def create_planned_session(
         prescription=prescription.model_dump(mode="json") if prescription else None,
         provenance=sources or None,
     )
+    try:
+        ensure_template_fits(planned)
+    except NotPushable:
+        return json.dumps({"error": _STEPS_REQUIRED}, ensure_ascii=False)
     session_id = _repo().create_planned_session(planned)
     created = _repo().get_planned_session(session_id)
     return json.dumps(
@@ -268,8 +280,13 @@ def apply_session_changes(
     changes: SessionChanges,
     *,
     require_strength_source: bool = True,
+    require_steps: bool = False,
 ) -> PlannedSession:
-    """Share one versioned editing boundary between HTTP and coaching tools."""
+    """Share one versioned editing boundary between HTTP and coaching tools.
+
+    ``require_steps`` (the coach's tool) refuses to leave a described tempo or
+    interval session without explicit steps; date and status moves stay allowed.
+    """
     current = _repo().get_planned_session(session_id)
     if current is None:
         raise ValueError("Séance introuvable.")
@@ -307,6 +324,22 @@ def apply_session_changes(
     for key in targets | {"description"}:
         if key in fields and not fields[key]:
             fields[key] = None
+    # Judge the session as it would be saved. A pure move or skip leaves an
+    # existing plan-generator session movable until its steps are completed.
+    if require_steps and set(fields) - {"date", "status"}:
+        try:
+            ensure_template_fits(
+                replace(
+                    current,
+                    session_type=changes.session_type or current.session_type,
+                    description=fields.get("description", current.description),
+                    prescription=prescription.model_dump(mode="json")
+                    if prescription
+                    else current.prescription,
+                )
+            )
+        except NotPushable:
+            raise ValueError(_STEPS_REQUIRED) from None
     changed = _repo().update_planned_session_fields(
         session_id,
         expected_revision=revision,
@@ -327,7 +360,7 @@ def update_planned_session(
 ) -> str:
     """Adapt domain errors and the updated workout to the coaching tool contract."""
     try:
-        apply_session_changes(session_id, revision, changes)
+        apply_session_changes(session_id, revision, changes, require_steps=True)
         from arete.services.garmin_export import inspect_session
 
         return json.dumps(

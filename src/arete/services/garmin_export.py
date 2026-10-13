@@ -246,9 +246,29 @@ def public_status(state: dict | None) -> dict | None:
     }
 
 
-def session_prescription(session) -> tuple[Prescription, bool]:
+def described_prescription(session) -> Prescription | None:
+    """Steps read from a described tempo or interval run (running only).
+
+    Only where ARE-87 refuses the type's template: a description the grammar
+    reads entirely counts as explicit steps; anything unread keeps that block.
+    """
+    from arete.garmin.workout_structure import needs_explicit_steps
+    from arete.services.prescriptions import prescription_from_description
+
+    if session.prescription or session.structure_json:
+        return None
+    if not needs_explicit_steps(session.sport, session.session_type.value):
+        return None
+    return prescription_from_description(session.description or "", session.sport)
+
+
+def session_prescription(session) -> tuple[Prescription, str]:
+    """The steps to show and send, and their source: explicit, parsed or derived."""
     if session.prescription:
-        return Prescription.model_validate(session.prescription), False
+        return Prescription.model_validate(session.prescription), "explicit"
+    parsed = described_prescription(session)
+    if parsed is not None:
+        return parsed, "parsed"
     from arete.dataio.settings import athlete_zone_model, get_user_settings
     from arete.garmin.workout_structure import Repeat, derive
 
@@ -280,23 +300,42 @@ def session_prescription(session) -> tuple[Prescription, bool]:
             target=target,
         )
 
-    return Prescription(steps=[adapt(b) for b in blocks]), True
+    return Prescription(steps=[adapt(b) for b in blocks]), "derived"
 
 
 def inspect_session(session_id: int, *, include_steps: bool = True) -> dict:
     from arete.garmin.repository import GarminRepository
+    from arete.garmin.workout_structure import NotPushable, ensure_template_fits
     from arete.services.planning import _session_to_dict
 
     session = GarminRepository().get_planned_session(session_id)
     if session is None:
         raise DocumentError("Cette séance n’existe plus.")
     result = _session_to_dict(session)
-    result.update(prescription=None, derived=False, exportable=False, reason=None)
+    result.update(
+        prescription=None,
+        derived=False,
+        parsed=False,
+        needs_steps=False,
+        exportable=False,
+        reason=None,
+    )
     try:
-        prescription, derived = session_prescription(session)
-        result.update(summary=describe(prescription), derived=derived)
+        prescription, source = session_prescription(session)
+        result.update(
+            summary=describe(prescription),
+            derived=source == "derived",
+            parsed=source == "parsed",
+        )
         if include_steps:
             result["prescription"] = prescription.model_dump(mode="json")
+        if source == "derived":
+            try:
+                ensure_template_fits(session)
+            except NotPushable:
+                # Shown as a generic estimate; every push goes through this status.
+                result["needs_steps"] = True
+                raise
         _payload(session_id)
         result["exportable"] = session.status.value in {"pending", "modified"}
         if not result["exportable"]:
@@ -322,18 +361,31 @@ def inspect_sessions(session_ids: list[int]) -> dict:
     return {"workouts": workouts, "errors": errors}
 
 
-def _payload(session_id: int) -> tuple[dict, date, str, int]:
+def _payload(session_id: int, *, upload: bool = True) -> tuple[dict, date, str, int]:
+    """The workout Garmin should hold; ``upload=False`` only identifies a copy."""
     from arete.dataio.settings import athlete_zone_model, get_user_settings
     from arete.features.hr_zones import ZoneModel
     from arete.garmin.repository import GarminRepository
-    from arete.garmin.workout_structure import derive, describe_fr
+    from arete.garmin.workout_structure import (
+        derive,
+        describe_fr,
+        ensure_template_fits,
+    )
     from arete.garmin.workouts import build_payload
 
     session = GarminRepository().get_planned_session(session_id)
     if session is None:
         raise DocumentError("Cette séance n’existe plus.")
     settings = get_user_settings() or {}
-    if session.prescription:
+    # A copy sent before ARE-98 was the template: identify it as such.
+    prescription = (
+        Prescription.model_validate(session.prescription)
+        if session.prescription
+        else described_prescription(session)
+        if upload
+        else None
+    )
+    if prescription is not None:
         ranges = (
             ZoneModel.from_reference(
                 lthr=settings.get("lthr"), max_hr=settings.get("max_hr")
@@ -345,10 +397,12 @@ def _payload(session_id: int) -> tuple[dict, date, str, int]:
             session_id,
             session.description or "Séance Arete",
             session.sport,
-            Prescription.model_validate(session.prescription),
+            prescription,
             hr_ranges=ranges,
         )
     else:
+        if upload:
+            ensure_template_fits(session)
         blocks = derive(
             session, athlete_zone_model(), settings.get("threshold_pace_sec_km")
         )
@@ -922,7 +976,9 @@ def withdraw_skipped(session_id: int, *, client=None) -> dict:
     with db_connection() as con:
         existing = _get(con, session_id)
     if existing is None:
-        payload, _, _, revision = _payload(session_id)
+        # Only identifies the legacy copy to remove: a template sent before the
+        # described-session guard must stay withdrawable.
+        payload, _, _, revision = _payload(session_id, upload=False)
         state = _claim(session_id, revision=revision)
         exchange = Exchange(client)
         exchange.reservation = (session_id, state["operation_id"])

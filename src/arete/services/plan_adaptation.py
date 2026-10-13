@@ -16,7 +16,12 @@ from typing import TYPE_CHECKING, Any
 from arete.dataio.settings import athlete_zone_model, get_user_settings
 from arete.garmin.models import PlannedSession, SessionStatus
 from arete.garmin.repository import GarminRepository
-from arete.garmin.workout_structure import NotPushable, derive, describe_fr
+from arete.garmin.workout_structure import (
+    NotPushable,
+    derive,
+    describe_fr,
+    ensure_template_fits,
+)
 from arete.services.adaptation import (
     AdaptationInput,
     Decision,
@@ -203,10 +208,18 @@ def revert(decision_id: int) -> PlanDecision:
 # --------------------------------------------------------------------------- #
 def structure(session: PlannedSession) -> tuple[Block, ...]:
     """The session's steps in the athlete's zones; ``NotPushable`` says why not."""
+    from arete.services.garmin_export import described_prescription
+
     if session.prescription is not None:
         raise NotPushable(
             "Utilise l’export Garmin de la prescription validée dans le Planning."
         )
+    # Steps read from the description are explicit too: not this template.
+    if described_prescription(session) is not None:
+        raise NotPushable(
+            "Étapes lues dans la description : envoie-les depuis le Planning."
+        )
+    ensure_template_fits(session)
     settings = get_user_settings() or {}
     return derive(session, athlete_zone_model(), settings.get("threshold_pace_sec_km"))
 

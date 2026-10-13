@@ -55,6 +55,7 @@ def test_an_eased_tempo_keeps_its_duration_in_z2():
         "session_type": "endurance",
         "target_hr_zone": "Z2",
         "target_intensity": "easy",
+        "description": "Endurance 45' Z2 (séance d'origine : 3x10' au seuil)",
     }
 
 

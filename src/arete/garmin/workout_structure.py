@@ -23,6 +23,9 @@ PUSHABLE_SPORTS = frozenset({"running", "cycling"})
 _NOT_STRUCTURED = frozenset(
     {"strength", "hypertrophy", "power", "deload", "cross_training", "other"}
 )
+#: Types ``derive`` fills with a generic template (warm-up, fixed blocks,
+#: cool-down) that ignores whatever the session's description prescribes.
+TEMPLATE_TYPES = frozenset({"tempo", "intervals"})
 RACE_PACE_MARGIN_SEC = 10
 INTERVAL_WORK_SEC = 180
 INTERVAL_REST_SEC = 120
@@ -73,6 +76,36 @@ def _zone_number(target: str | None, default: int) -> int:
     ):
         return int(target[1])
     return default
+
+
+def needs_explicit_steps(sport: str, session_type: str) -> bool:
+    """Whether only explicit steps, not the type's template, can describe it."""
+    return sport in PUSHABLE_SPORTS and session_type in TEMPLATE_TYPES
+
+
+def ensure_template_fits(session: PlannedSession) -> None:
+    """Raise ``NotPushable`` when the template would contradict the description.
+
+    A described tempo or interval session without explicit steps would reach
+    the watch as the type's generic template, not the workout the coach wrote.
+    A running description the grammar reads entirely counts as explicit steps
+    (``garmin_export.described_prescription`` exports them).
+    """
+    from arete.services.prescriptions import prescription_from_description
+
+    if (
+        not session.prescription
+        and not session.structure_json
+        and (session.description or "").strip()
+        and needs_explicit_steps(session.sport, session.session_type.value)
+        and prescription_from_description(session.description or "", session.sport)
+        is None
+    ):
+        raise NotPushable(
+            "Séance décrite sans étapes : le modèle générique du type de séance "
+            "ne reprend pas la description. Complète les étapes pour l’export "
+            "Garmin (coach : prescription.steps via update_planned_session)."
+        )
 
 
 def derive(

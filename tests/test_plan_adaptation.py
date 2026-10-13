@@ -50,7 +50,7 @@ def tempo(monkeypatch):
             target_duration_min=50,
             target_hr_zone="Z4",
             target_intensity="hard",
-            description="3x10' au seuil",
+            # Undescribed: only then is the type's template the session itself.
         )
     )
     yield session_id
@@ -173,6 +173,39 @@ def test_the_old_api_refuses_implicit_application(tempo, router_client):
     assert client.post(f"/plan/decisions/{proposal.id}/revert").status_code == 200
     assert client.post(f"/plan/decisions/{proposal.id}/revert").status_code == 409
     assert client.post("/plan/decisions/999999/revert").status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("readiness", "decision", "description"),
+    [
+        (70.0, "ease", "Endurance 50' Z2 (séance d'origine : 3x10' au seuil)"),
+        (
+            50.0,
+            "replace_easy",
+            "Récupération 30' Z1 (séance d'origine : 3x10' au seuil)",
+        ),
+    ],
+)
+def test_an_eased_described_tempo_becomes_pushable_as_what_it_now_is(
+    tempo, readiness, decision, description
+):
+    from arete.garmin.workout_structure import NotPushable
+
+    con = connect()
+    con.execute(
+        "UPDATE app.planned_sessions SET description=? WHERE id=?",
+        ["3x10' au seuil", tempo],
+    )
+    con.close()
+    with pytest.raises(NotPushable):
+        plan_adaptation.structure(GarminRepository().get_planned_session(tempo))
+    proposal = _adapt(readiness)[0]
+    assert proposal.decision == decision
+    plan_adaptation.respond(proposal.id, proposal.revision, "apply")
+    session = GarminRepository().get_planned_session(tempo)
+    assert session is not None and session.description == description
+    assert plan_adaptation.structure_preview(tempo)["pushable"]
+    assert plan_adaptation.push_session(_garmin(), tempo)["garmin_workout_id"] == "1"
 
 
 def _garmin():

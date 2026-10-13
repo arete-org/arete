@@ -143,6 +143,7 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
                 if tired
                 else "Objectif de récupération"
             )
+            minutes = f" {inp.target_duration_min}'" if inp.target_duration_min else ""
             return Adaptation(
                 Decision.EASE,
                 f"{why} : la séance {planned} est allégée en endurance Z2, même durée.",
@@ -150,6 +151,9 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
                     "session_type": "endurance",
                     "target_hr_zone": "Z2",
                     "target_intensity": "easy",
+                    # The watch shows the description: never the hard workout's.
+                    "description": f"Endurance{minutes} Z2 "
+                    f"(séance d'origine : {inp.description or planned})",
                 },
             )
         return Adaptation(Decision.KEEP, f"{said} : séance facile maintenue.")
