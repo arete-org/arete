@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import re
+from datetime import UTC, date, datetime
 
 import duckdb
 import pytest
@@ -14,16 +16,24 @@ from arete.services.athlete_scope import athlete_scope
 from arete.services.settings import athlete_today
 
 STATEMENTS = re.compile(r'db;dur=[\d.]+;desc="(\d+) statements"')
+#: Thursday 15 October 2026 in Paris: the fixture day the golden values belong to.
+NOW = datetime(2026, 10, 14, 22, 30, tzinfo=UTC)
+FIXTURE_DAY = date(2026, 10, 15)
 
 
 @pytest.fixture
 def history(tmp_path, monkeypatch):
-    """A temp database holding two years of history around today."""
+    """A temp database holding two years of history around the fixture day."""
+    from arete.services import settings
+
+    monkeypatch.setattr(settings, "utc_now", lambda: NOW)
     monkeypatch.setenv("ARETE_DB", str(tmp_path / "dashboard.duckdb"))
     monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path / "files"))
+    monkeypatch.delenv("ARETE_GARMIN_TOKENS_DIR", raising=False)
     monkeypatch.delenv("ARETE_AUTH", raising=False)
     init_schema()
     today = athlete_today()
+    assert today == FIXTURE_DAY
     con = connect()
     try:
         seed_history(con, today)
@@ -78,10 +88,57 @@ def test_every_slice_equals_its_former_endpoint(history, client):
     assert board["planned"] and board["actual"] and board["strength"]
     assert board["plan_today"]["decisions"] and board["coach"]["items"]
     assert board["next_goal"] and board["health"]
-    assert board["fitness"]["ctl"] > 0 and board["player_stats"]["xp"]["current"] > 0
     assert board["briefing"]["status"] == "ready"
     # Ties on the date keep a stable order: the newest session first.
     assert [s["name"] for s in board["actual"]] == ["Velo", "Réveil musculaire"]
+
+
+def test_the_fixture_day_keeps_its_numbers(history, client):
+    """Golden values, read from origin/main's endpoints on the same fixture."""
+    board = client.get("/dashboard").json()
+    fitness, stats, workload = (
+        board["fitness"],
+        board["player_stats"],
+        board["workload"],
+    )
+
+    assert {k: fitness[k] for k in ("ctl", "atl", "tsb", "ramp_rate", "form_zone")} == {
+        "ctl": 70.5,
+        "atl": 86.8,
+        "tsb": -16.3,
+        "ramp_rate": 3.1,
+        "form_zone": "tired",
+    }
+    assert fitness["days_analyzed"] == 32
+    assert (fitness["readiness_score"], fitness["readiness_source"]) == (54.0, "garmin")
+    assert (stats["xp"]["current"], stats["xp"]["max"]) == (390.4, 250.0)
+    assert (stats["level"], stats["weeks_at_goal"]) == (22, 98)
+    assert (stats["mp"]["current"], stats["hp"]["current"]) == (22.8, 54.0)
+    assert (workload["acwr"], workload["acwr_ewma"], workload["acwr_zone"]) == (
+        1.219,
+        1.343,
+        "optimal",
+    )
+    assert workload["days_analyzed"] == 21
+
+
+def test_garmin_connection_follows_the_stored_tokens(history, client):
+    from arete.config import config
+    from arete.garmin.token_store import ACCOUNT_FILE, TOKEN_FILE
+
+    def connected():
+        board = client.get("/dashboard").json()["garmin_connected"]
+        assert board == client.get("/garmin/sync/status").json()["garmin_authenticated"]
+        return board
+
+    assert connected() is False
+    tokens = config.garmin_tokens_dir
+    tokens.mkdir(parents=True, exist_ok=True)
+    (tokens / TOKEN_FILE).write_text("{}")
+    assert connected() is True
+    # Tokens Garmin refused at the last sync count as disconnected.
+    (tokens / ACCOUNT_FILE).write_text(json.dumps({"auth_failed_at": NOW.isoformat()}))
+    assert connected() is False
 
 
 def test_one_connection_one_load_history_and_no_write(

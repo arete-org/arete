@@ -954,6 +954,11 @@ def test_remote_session_status_reads_each_athletes_rows(
             con.close()
     with athlete_scope(second):
         assert token_store.session_status() == (False, None)
+        con = connect()
+        try:
+            assert token_store.session_status(con) == (False, None)
+        finally:
+            con.close()
     with athlete_scope(first):
         token_store.delete()
         assert token_store.session_status() == (False, None)
