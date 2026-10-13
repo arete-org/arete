@@ -124,9 +124,10 @@ An athlete is owed from 07:00 on their own clock (their timezone setting), or
 from `ARETE_AUTO_SYNC_HOUR` when set, and never during their quiet hours
 (21:30-07:00 by default): a run there would sync before the night's data and
 lose the briefing, feedback and review pushes that quiet hours drop. With the
-default quiet hours, the windows reach athletes from UTC-9 eastward in their
-morning; further west no window falls after 07:00 local, so the scheduler
-skips them until a later window is added to `vercel.json`.
+default quiet hours, athletes from UTC-9 to UTC+5 run in their morning, those
+further east in their afternoon or evening; west of UTC-9 no window falls after
+07:00 local, so the scheduler skips them until a later window is added to
+`vercel.json`.
 
 A dispatch reads the athletes still owed today, least recent run or claim
 first, and claims them one at a time. Time bounds it rather than a count: one
@@ -143,8 +144,11 @@ Each athlete carries a daily marker (`last_sync_at`) and a lease
 (`sync_lease_until`), both naive UTC timestamps written from the dispatch's
 clock, so Docker and Vercel writers agree whatever their timezone. Both are
 dated by the claim: a run claimed at 23:58 that ends after midnight counts for
-the day it started. A failed or stopped run keeps its lease for the rest of the
-day, so the same day never replays it. The next day's dispatch reclaims a lease
+the day it started, and skips its briefing and review once that day has ended.
+Markers stored by a non-UTC writer before this rule are read as UTC: shifted by
+that writer's offset, they can skip one day or hold a lease longer, once. A
+failed or stopped run keeps its lease for the rest of the day, so the same day
+never replays it. The next day's dispatch reclaims a lease
 dated before today and starts a new day: every step is idempotent per day
 (activities are deduplicated by id, the scheduler writes one briefing a day and
 one review a week). Overlapping windows skip what the other claimed. To park an

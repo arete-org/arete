@@ -419,7 +419,9 @@ def run_scheduled_batch() -> dict:
                 athlete_id,
                 stale_lease,
             )
-        outcomes[str(athlete_id)] = _run_athlete(athlete_id, started, claimed_at)
+        outcomes[str(athlete_id)] = _run_athlete(
+            athlete_id, started, claimed_at, row[5]
+        )
     return {"athletes": outcomes, "deferred": deferred}
 
 
@@ -450,7 +452,9 @@ def _claim(
     return row is not None
 
 
-def _run_athlete(athlete_id: int, started: float, claimed_at: datetime) -> dict:
+def _run_athlete(
+    athlete_id: int, started: float, claimed_at: datetime, zone: str | None
+) -> dict:
     with athlete_scope(athlete_id):
         from arete.dataio import mirror
 
@@ -458,12 +462,27 @@ def _run_athlete(athlete_id: int, started: float, claimed_at: datetime) -> dict:
             if config.is_remote_db:
                 mirror.hydrate()
             status = daily_sync()
+            tz = zone_of(zone)
+            claim_day = claimed_at.astimezone(tz).date()
             for step, write in (
                 ("briefing", write_daily_briefing),
                 ("review", write_weekly_review),
             ):
                 late = monotonic() - started >= SCHEDULE_MODEL_SECONDS
-                status[step] = "deferred" if late else write()
+                if late:
+                    status[step] = "deferred"
+                elif utc_now().astimezone(tz).date() != claim_day:
+                    # Past the athlete's midnight the step would date its text
+                    # by the new day, from the claimed day's data; the new
+                    # day's run writes its own.
+                    logger.warning(
+                        "Athlete %s: %s skipped, the claimed day has ended",
+                        athlete_id,
+                        step,
+                    )
+                    status[step] = "skipped: day ended"
+                else:
+                    status[step] = write()
             # Self-hosted status marker (``/sync/status``): server clock on purpose.
             record_run(datetime.now())
             if config.is_remote_db:

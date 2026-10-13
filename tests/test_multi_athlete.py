@@ -662,11 +662,24 @@ def test_a_run_past_the_athlete_s_midnight_is_dated_by_its_claim(
         frozen_dispatch[0] += timedelta(minutes=3)  # 00:01 on Tuesday
         return {"sync": "ok"}
 
+    def model_step():
+        written.append(frozen_dispatch[0])
+        return "rules"
+
+    written: list[datetime] = []
     monkeypatch.setattr(scheduler, "daily_sync", sync)
-    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda: "rules")
-    monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
+    monkeypatch.setattr(scheduler, "write_daily_briefing", model_step)
+    monkeypatch.setattr(scheduler, "write_weekly_review", model_step)
     frozen_dispatch[0] = claim
-    scheduler.run_scheduled_batch()
+    # Tuesday's briefing is not written from Monday's data: Tuesday's run does.
+    assert scheduler.run_scheduled_batch()["athletes"] == {
+        str(first.athlete_id): {
+            "sync": "ok",
+            "briefing": "skipped: day ended",
+            "review": "skipped: day ended",
+        }
+    }
+    assert written == []
     con = connect()
     stored = con.execute(
         "SELECT last_sync_at FROM app.athletes WHERE id=?", [first.athlete_id]
@@ -679,6 +692,7 @@ def test_a_run_past_the_athlete_s_midnight_is_dated_by_its_claim(
     frozen_dispatch[0] = claim + timedelta(hours=8)  # 07:58 in Moscow
     assert list(scheduler.run_scheduled_batch()["athletes"]) == [str(first.athlete_id)]
     assert seen == [first.athlete_id, first.athlete_id]
+    assert len(written) == 2  # Tuesday's briefing and review, on Tuesday's run
 
 
 def test_markers_compare_right_whatever_the_writer_s_session_timezone(
