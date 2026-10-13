@@ -204,10 +204,14 @@ def test_the_push_time_is_a_utc_instant_under_a_paris_session(
             "/garmin/planned", params={"start_date": DAY, "end_date": DAY}
         )
         (session,) = [s for s in response.json() if s["id"] == tempo]
-        return datetime.fromisoformat(session["garmin_pushed_at"])
+        # The browser reads an offset-less string as local time.
+        wire = session["garmin_pushed_at"]
+        assert wire.endswith(("Z", "+00:00")), wire
+        return datetime.fromisoformat(wire)
 
     assert listed() == datetime(2026, 10, 9, 23, 1, tzinfo=UTC)
-    # A row pushed before this fix holds the same naive UTC value.
+    # Rows pushed before this fix from Vercel hold naive UTC; Docker-pushed ones
+    # (TZ=Europe/Paris) hold Paris time and read 1-2 h off, as accepted.
     con = connect()
     con.execute(
         "UPDATE app.planned_sessions SET garmin_pushed_at=TIMESTAMP '2026-10-08 06:30' "
