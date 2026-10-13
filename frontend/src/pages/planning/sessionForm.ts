@@ -1,6 +1,7 @@
 import type { PlannedState } from '@/lib/sessionMatch';
 import { ApiError, type PlannedSessionCreate } from '@/lib/api';
-import type { Prescription, WorkoutStep } from '@/lib/documents';
+import type { Prescription } from '@/lib/documents';
+import { SKIPPED_LAST_RECOVERY, stepAmount } from '@/lib/workouts';
 import type { PlannedSession } from '@/types';
 
 export const STATE_LABELS: Record<PlannedState, string> = {
@@ -131,17 +132,12 @@ export function sessionSummary(
   const main =
     steps.find((step) => step.kind === 'repeat') ?? steps.find((step) => step.kind === 'effort');
   if (!main) return `${steps.length} étapes structurées`;
-  const duration = (step: WorkoutStep) =>
-    step.duration_kind === 'lap'
-      ? 'tour manuel'
-      : step.duration_kind === 'seconds' && step.value && step.value % 60 === 0
-        ? `${step.value / 60} min`
-        : `${step.value} ${{ seconds: 's', meters: 'm', reps: 'répétitions' }[step.duration_kind as 'seconds' | 'meters' | 'reps']}`;
   if (main.kind !== 'repeat')
-    return `${main.exercise ? `${main.exercise} · ` : ''}${duration(main)}`;
+    return `${main.exercise ? `${main.exercise} · ` : ''}${stepAmount(main)}`;
   const effort = main.steps.find((step) => step.kind === 'effort');
   const recovery = main.steps.find((step) => step.kind === 'recovery' || step.kind === 'rest');
-  return `${main.repeat} × ${effort ? duration(effort) : 'bloc'}${recovery ? ` · récup. ${duration(recovery)}` : ''}`;
+  const skipped = main.skip_last_recovery ? `, ${SKIPPED_LAST_RECOVERY}` : '';
+  return `${main.repeat} × ${effort ? stepAmount(effort) : 'bloc'}${recovery ? ` · récup. ${stepAmount(recovery)}${skipped}` : ''}`;
 }
 
 export function planningError(error: Error | null): string {

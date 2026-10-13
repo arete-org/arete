@@ -74,7 +74,7 @@ it("shows durations as mm:ss and paces as m'ss per km", () => {
   ] }} />);
   const text = container.textContent ?? '';
   expect(text).toContain('Échauffement · 20:00');
-  expect(text).toContain('12 répétitions · sans la dernière récup');
+  expect(text).toContain('12 répétitions, sans la dernière récup');
   expect(text).toContain("400 m · 3'30–3'36/km");
   expect(text).toContain('Récupération · 1:00');
 });

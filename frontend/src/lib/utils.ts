@@ -45,30 +45,9 @@ export function formatDurationCompact(seconds: number | null | undefined): strin
 
 // Pace in seconds per km → "m:ss" (or "m'ss" with separator "'")
 export function formatPace(secondsPerKm: number, separator = ":"): string {
-  const mins = Math.floor(secondsPerKm / 60);
-  const secs = Math.round(secondsPerKm % 60);
-  return `${mins}${separator}${secs.toString().padStart(2, "0")}`;
-}
-
-// A step duration in seconds → "mm:ss" ("20:00", "1:30"), "h:mm:ss" from an hour
-export function formatClock(seconds: number): string {
-  const total = Math.round(seconds);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = (total % 60).toString().padStart(2, "0");
-  return h ? `${h}:${m.toString().padStart(2, "0")}:${s}` : `${m}:${s}`;
-}
-
-/** "20:00" → 1200, "1:30" → 90, "1:05:00" → 3900; a bare number is minutes ("20" → 1200). */
-export function parseClock(text: string): number | null {
-  const match = text.trim().match(/^(?:(?:(\d+):)?(\d+):)?(\d+)$/);
-  if (!match) return null;
-  const [, h, m, last] = match;
-  if (m === undefined) return Number(last) > 0 ? Number(last) * 60 : null;
-  if (last.length !== 2 || Number(last) >= 60) return null;
-  if (h !== undefined && (m.length !== 2 || Number(m) >= 60)) return null;
-  const seconds = Number(h ?? 0) * 3600 + Number(m) * 60 + Number(last);
-  return seconds > 0 ? seconds : null;
+  // Round the whole pace first: 239.5 is 4:00, never 3:60.
+  const total = Math.round(secondsPerKm);
+  return `${Math.floor(total / 60)}${separator}${(total % 60).toString().padStart(2, "0")}`;
 }
 
 /** "3'30", "3’30" or "3:30" (per km) → 210 seconds per km. */
