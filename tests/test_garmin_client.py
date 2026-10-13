@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 from datetime import date
 from unittest.mock import MagicMock, patch
@@ -73,8 +74,31 @@ class TestGarminClientAuth:
     def test_logout_removes_token_file(self, token_dir):
         token_dir.mkdir()
         (token_dir / TOKEN_FILE).write_text("{}")
+        (token_dir / "account.json").write_text('{"account": "a@b.c"}')
         GarminClient(token_dir).logout()
         assert not (token_dir / TOKEN_FILE).exists()
+        assert not (token_dir / "account.json").exists()
+
+    def test_login_records_the_account_for_the_status(self, token_dir):
+        with patch("arete.garmin.client.Garmin") as garmin_cls:
+            api = garmin_cls.return_value
+            api.login.return_value = (None, None)
+            api.username = "a@b.c"
+            GarminClient(token_dir).login("a@b.c", "pw")
+        assert json.loads((token_dir / "account.json").read_text()) == {
+            "account": "a@b.c"
+        }
+
+    def test_a_restored_session_records_a_missing_account(self, token_dir):
+        token_dir.mkdir()
+        (token_dir / TOKEN_FILE).write_text("{}")
+        with patch("arete.garmin.client.Garmin") as garmin_cls:
+            api = garmin_cls.return_value
+            api.username, api.full_name = None, "Jean Coureur"
+            GarminClient(token_dir).connect()
+        assert json.loads((token_dir / "account.json").read_text()) == {
+            "account": "Jean Coureur"
+        }
 
 
 class TestGarminClientData:

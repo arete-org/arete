@@ -24,6 +24,7 @@ from garminconnect import Garmin
 
 from arete.config import config
 from arete.dataio import mirror
+from arete.garmin.token_store import ACCOUNT_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,12 @@ class GarminClient:
         except Exception as e:
             raise GarminAuthError(f"Garmin session could not be restored: {e}") from e
         self._api = api
+        if not (self.token_dir / ACCOUNT_FILE).exists():
+            # Tokens saved before the account was recorded: the status shows it.
+            try:
+                self._remember_account(api)
+            except Exception:
+                logger.warning("Could not record the Garmin account", exc_info=True)
         return api
 
     def is_authenticated(self) -> bool:
@@ -156,8 +163,22 @@ class GarminClient:
             auth_state.clear()
             if config.is_remote_db:
                 token_store.save(self.token_file)
+        self._remember_account(api)
         self._api = api
         logger.info("Garmin tokens saved to %s", self.token_file)
+
+    def _remember_account(self, api: Garmin) -> None:
+        """Record whose account the tokens open, for the status endpoint."""
+        from arete.garmin import token_store
+
+        # username is only known right after a credential login; fall back to
+        # the profile name so the UI can still show who is connected.
+        name = api.username or api.full_name or api.display_name
+        token_store.save_account(
+            self.token_file,
+            name if isinstance(name, str) else None,
+            remote=self._durable_auth and config.is_remote_db,
+        )
 
     def logout(self) -> None:
         mirror.mark_dirty()
@@ -173,6 +194,7 @@ class GarminClient:
             self._pending_mfa.pop(self.token_dir.resolve(), None)
         if self.token_file.exists():
             self.token_file.unlink()
+        (self.token_dir / ACCOUNT_FILE).unlink(missing_ok=True)
         self._api = None
         logger.info("Garmin tokens removed from %s", self.token_dir)
 
