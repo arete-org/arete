@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Navigation, ErrorBoundary } from '@/components';
 import { AgentSidePanel } from '@/components/AgentSidePanel';
-import { preloadAgentMarkdown } from '@/components/agent/AgentMarkdown';
+import { preloadAgentMarkdown, preloadAgentMarkdownWhenIdle } from '@/components/agent/markdownRenderer';
 import { EnableNotifications } from '@/components/EnableNotifications';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { LoadingState } from '@/components/States';
@@ -14,20 +14,21 @@ import { AuthGate } from '@/components/auth/AuthGate';
 import { SettingsProvider } from '@/contexts';
 import { DashboardPage, SettingsPage } from '@/pages';
 import { loadLogPage, loadPlanningPage } from '@/pages/routes';
+import { importChunk } from '@/lib/chunkReload';
 
-const PlanningPage = lazy(loadPlanningPage);
-const LogPage = lazy(loadLogPage);
+const PlanningPage = lazy(importChunk(loadPlanningPage));
+const LogPage = lazy(importChunk(loadLogPage));
 // recharts is most of the bundle and only the Analytics page draws charts.
-const ProfilePage = lazy(() => import('@/pages/Profile').then(m => ({ default: m.ProfilePage })));
-const AnalyticsPage = lazy(() =>
+const ProfilePage = lazy(importChunk(() => import('@/pages/Profile').then(m => ({ default: m.ProfilePage }))));
+const AnalyticsPage = lazy(importChunk(() =>
   import('@/pages/Analytics').then((m) => ({ default: m.AnalyticsPage })),
-);
-const SessionDetailPage = lazy(() =>
+));
+const SessionDetailPage = lazy(importChunk(() =>
   import('@/pages/SessionDetail').then((m) => ({ default: m.SessionDetailPage })),
-);
-const YearReviewPage = lazy(() =>
+));
+const YearReviewPage = lazy(importChunk(() =>
   import('@/pages/YearReview').then((m) => ({ default: m.YearReviewPage })),
-);
+));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,6 +54,7 @@ function App() {
   const display = useCoachDisplay();
   const [agentOpen, setAgentOpen] = useState(false);
   const [coachReference, setCoachReference] = useState<CoachReference | null>(null);
+  useEffect(preloadAgentMarkdownWhenIdle, []);
   useEffect(() => {
     const discuss = (event: Event) => {
       const reference = (event as CustomEvent<CoachReference>).detail;

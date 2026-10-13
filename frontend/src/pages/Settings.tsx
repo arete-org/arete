@@ -10,19 +10,20 @@ import { Button, Spinner } from '@/components/ui';
 import { settingsApi, type UserSettings } from '@/lib/api';
 import { qk } from '@/lib/queryKeys';
 import { applyTheme } from '@/lib/theme';
+import { importChunk } from '@/lib/chunkReload';
 import { DEFAULT_SETTINGS, type LocalSettings } from './settings/types';
 
 // One tab shows at a time: each loads on first view, not with the dashboard.
-const ProfileTab = lazy(() => import('./settings/ProfileTab').then((m) => ({ default: m.ProfileTab })));
-const GoalsTab = lazy(() => import('./settings/GoalsTab').then((m) => ({ default: m.GoalsTab })));
-const WorkoutTab = lazy(() => import('./settings/WorkoutTab').then((m) => ({ default: m.WorkoutTab })));
-const ConnectionsTab = lazy(() => import('./settings/ConnectionsTab').then((m) => ({ default: m.ConnectionsTab })));
-const CoachTab = lazy(() => import('./settings/CoachTab').then((m) => ({ default: m.CoachTab })));
-const GamificationTab = lazy(() => import('./settings/GamificationTab').then((m) => ({ default: m.GamificationTab })));
-const AppearanceTab = lazy(() => import('./settings/AppearanceTab').then((m) => ({ default: m.AppearanceTab })));
-const DataTab = lazy(() => import('./settings/DataTab').then((m) => ({ default: m.DataTab })));
-const SystemTab = lazy(() => import('./settings/SystemTab').then((m) => ({ default: m.SystemTab })));
-const AdminTab = lazy(() => import('./settings/AdminTab').then((m) => ({ default: m.AdminTab })));
+const ProfileTab = lazy(importChunk(() => import('./settings/ProfileTab').then((m) => ({ default: m.ProfileTab }))));
+const GoalsTab = lazy(importChunk(() => import('./settings/GoalsTab').then((m) => ({ default: m.GoalsTab }))));
+const WorkoutTab = lazy(importChunk(() => import('./settings/WorkoutTab').then((m) => ({ default: m.WorkoutTab }))));
+const ConnectionsTab = lazy(importChunk(() => import('./settings/ConnectionsTab').then((m) => ({ default: m.ConnectionsTab }))));
+const CoachTab = lazy(importChunk(() => import('./settings/CoachTab').then((m) => ({ default: m.CoachTab }))));
+const GamificationTab = lazy(importChunk(() => import('./settings/GamificationTab').then((m) => ({ default: m.GamificationTab }))));
+const AppearanceTab = lazy(importChunk(() => import('./settings/AppearanceTab').then((m) => ({ default: m.AppearanceTab }))));
+const DataTab = lazy(importChunk(() => import('./settings/DataTab').then((m) => ({ default: m.DataTab }))));
+const SystemTab = lazy(importChunk(() => import('./settings/SystemTab').then((m) => ({ default: m.SystemTab }))));
+const AdminTab = lazy(importChunk(() => import('./settings/AdminTab').then((m) => ({ default: m.AdminTab }))));
 
 const TABS = [
   { id: 'profile', label: 'PROFIL', icon: User },

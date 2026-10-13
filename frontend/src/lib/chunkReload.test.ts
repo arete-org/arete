@@ -1,0 +1,43 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+
+let reload: ReturnType<typeof vi.fn>;
+let stored: Map<string, string>;
+const stale = () => Promise.reject(new TypeError('Failed to fetch dynamically imported module'));
+
+async function load() {
+  vi.resetModules();
+  return import('./chunkReload');
+}
+
+beforeEach(() => {
+  reload = vi.fn();
+  stored = new Map();
+  vi.stubGlobal('window', { location: { reload }, addEventListener: vi.fn() });
+  vi.stubGlobal('sessionStorage', { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => stored.set(k, v) });
+});
+afterEach(() => vi.unstubAllGlobals());
+
+it('reloads once onto the new build and keeps the fallback meanwhile', async () => {
+  const { importChunk } = await load();
+  let settled = false;
+  void importChunk(stale)().finally(() => { settled = true; });
+  await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+  expect(settled).toBe(false);
+});
+
+it('surfaces a second failure right after the reload instead of looping', async () => {
+  stored.set('arete.chunk-reload', String(Date.now()));
+  const { importChunk } = await load();
+  await expect(importChunk(stale)()).rejects.toThrow('Failed to fetch');
+  expect(reload).not.toHaveBeenCalled();
+});
+
+it('never reloads without storage for its loop guard, nor during a coach run', async () => {
+  const { holdReloads, importChunk } = await load();
+  holdReloads(true);
+  await expect(importChunk(stale)()).rejects.toThrow();
+  holdReloads(false);
+  vi.stubGlobal('sessionStorage', { getItem: () => { throw new Error('blocked'); }, setItem: () => {} });
+  await expect(importChunk(stale)()).rejects.toThrow();
+  expect(reload).not.toHaveBeenCalled();
+});

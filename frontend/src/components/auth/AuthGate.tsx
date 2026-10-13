@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { importChunk } from '@/lib/chunkReload';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ErrorState } from '@/components/States';
 import { authApi, type AuthConfig } from '@/lib/api';
@@ -7,7 +8,7 @@ import { buildAuthConfig } from './buildConfig';
 import { GateScreen, GateSpinner } from './GateScreen';
 
 // The Clerk SDK is only fetched when sign-in is on (main.tsx preloads it when the build says so).
-const ClerkGate = lazy(() => import('./ClerkGate'));
+const ClerkGate = lazy(importChunk(() => import('./ClerkGate')));
 
 // Without sign-in the server's require_admin resolves the instance owner.
 // Keep the context's unprovided default closed; grant this only after config loads.

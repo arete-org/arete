@@ -36,7 +36,8 @@ import {
 import { useCoachThreads } from '@/hooks/useCoachThreads';
 import { starters } from '@/lib/coachPrompts';
 import { ThreadHistory } from './agent/ThreadHistory';
-import { AgentMarkdown, preloadAgentMarkdown } from './agent/AgentMarkdown';
+import { AgentMarkdown } from './agent/AgentMarkdown';
+import { preloadAgentMarkdown } from './agent/markdownRenderer';
 import { ToolActivity } from './agent/ToolActivity';
 import { CoachActivity, CoachPresence } from './agent/CoachActivity';
 import { canRetryMessage, isThinking } from '@/lib/agentActivity';

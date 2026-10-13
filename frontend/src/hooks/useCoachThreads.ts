@@ -2,6 +2,7 @@ import { useAuthState } from '@/components/auth/authState';
 import { markWorkout, measureWorkout } from '@/lib/workoutPerformance';
 import { cacheWorkout } from '@/lib/workouts';
 import { canRetryMessage } from '@/lib/agentActivity';
+import { holdReloads } from '@/lib/chunkReload';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { documentsApi } from '@/lib/documents';
@@ -80,6 +81,10 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       runRef.current?.controller.abort();
     };
   }, [initial.error, athleteId]);
+
+  useEffect(() => {
+    holdReloads(runningId !== null);
+  }, [runningId]);
 
   const select = (id: string) => {
     setStore((prev) =>
