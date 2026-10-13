@@ -11,14 +11,16 @@ export const TIP_POLL_DELAYS_MS = [5_000, 10_000, 20_000];
  * The day's briefing. A `pending` answer starts its writing in a request of
  * its own (the server runs it once per day, whoever asks) and polls the read.
  * Each day has its own read, so a tab left open overnight polls afresh.
+ * `enabled: false` waits for another request to seed the read (the dashboard's).
  */
-export function useDailyTip() {
+export function useDailyTip({ enabled = true }: { enabled?: boolean } = {}) {
   const client = useQueryClient();
   const day = toLocalISODate();
   const key = [...qk.tipDaily, day];
   const query = useQuery({
     queryKey: key,
     queryFn: tipsApi.getDaily,
+    enabled,
     staleTime: 1000 * 60 * 30,
     refetchInterval: ({ state }) =>
       state.data?.status === 'pending' ? TIP_POLL_DELAYS_MS[state.dataUpdateCount - 1] ?? false : false,
@@ -47,7 +49,7 @@ export function useDailyTip() {
   }, [pending, posting, day, query.data, mutate]);
   return {
     tip: query.data && !pending ? query.data : undefined,
-    writing: query.isLoading || pending,
+    writing: query.isLoading || (!enabled && query.isPending) || pending,
     stalled: pending && reads > TIP_POLL_DELAYS_MS.length,
     refresh: () => {
       if (!posting) mutate(day);

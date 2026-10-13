@@ -89,9 +89,10 @@ export function FollowupCard({ followup }: { followup: Followup }) {
   </article>;
 }
 
-export function CoachTodayPanel({ briefing, briefingNote }: { briefing?: string; briefingNote?: string }) {
+/** `enabled: false` waits for another request to seed the card (the dashboard's). */
+export function CoachTodayPanel({ briefing, briefingNote, enabled = true }: { briefing?: string; briefingNote?: string; enabled?: boolean }) {
   const client = useQueryClient();
-  const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today });
+  const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled });
   const prepare = useMutation({ mutationFn: coachApi.prepare, onSuccess: data => client.setQueryData(coachTodayKey, data) });
   return <Panel title="Avec Chiron aujourd’hui">
     <div className="space-y-3">

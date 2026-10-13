@@ -11,6 +11,8 @@ import { syncGame } from './gamification';
  */
 export const qk = {
   settings: ['settings'] as const,
+  /** `GET /dashboard`, one per day (lib/dashboard.ts); it seeds the keys of its slices. */
+  dashboard: (day?: string) => (day ? (['dashboard', day] as const) : (['dashboard'] as const)),
 
   planned: (start?: string, end?: string) =>
     start ? (['planned', start, end ?? start] as const) : (['planned'] as const),
@@ -84,6 +86,7 @@ export const strengthSessionsQuery = {
 /** Everything that changes when a session is logged, uploaded, synced or matched. */
 export function invalidateAfterSession(queryClient: QueryClient): void {
   for (const key of [
+    qk.dashboard(),
     ['workout'],
     ['garmin-exports'],
     qk.planned(),

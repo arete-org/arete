@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { coachStream } from './coachStream';
 import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
+import { dashboardAnswer } from './dashboardAnswer';
 
 test.setTimeout(30_000);
 
@@ -16,16 +17,8 @@ async function fixture(page: Page) {
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'odyssey', display_name: 'Arthur' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
-    if (path === '/api/coach/today') return route.fulfill({ json: { date: '2026-10-13', items: [], remaining: 0, briefing: null } });
-    if (path === '/api/plan/today') return route.fulfill({ json: { decisions: [] } });
-    if (path === '/api/metrics/player-stats') return route.fulfill({ json: {
-      level: 0, weeks_at_goal: 0,
-      hp: { current: 50, max: 100, label: 'Récupération' },
-      mp: { current: 50, max: 100, label: 'Forme' },
-      xp: { current: 0, max: 300, label: 'Charge de la semaine' },
-    } });
+    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer() });
     if (path === '/api/strength/stats/muscles') return route.fulfill({ json: { muscles: [{ muscle: 'chest', label: 'Pectoraux', volume: 1200, sets: 3, level: 2, previous_volume: 900, last_trained: '2026-10-13' }] } });
-    if (path === '/api/tips/daily') return route.fulfill({ json: { tip: 'Prépare tes prochaines séances.', source: 'rules', priority: 'info' } });
     return route.fulfill({ json: [] });
   });
 }

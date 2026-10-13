@@ -22,7 +22,7 @@ const WRITE_DELAY_MS = 1000;
 /** Bumped by each wipe: a write scheduled before it never lands after it. */
 let generation = 0;
 const PERSISTED_ROOTS = [
-  'settings', 'game-preference', 'game', 'syncStatus', 'goals', 'planned', 'actual', 'strengthSessions',
+  'dashboard', 'settings', 'game-preference', 'game', 'syncStatus', 'goals', 'planned', 'actual', 'strengthSessions',
   'player-stats', 'fitness', 'workload', 'plan', 'garmin-health', 'tip-daily',
 ];
 

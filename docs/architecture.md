@@ -527,6 +527,10 @@ page in one request: each slice keeps its owner and the shape of its former
 endpoint, which all remain, read on one connection for the athlete's day, with
 the load history read and modelled once for player stats, fitness and readiness.
 It makes no Garmin request, model call or write; its briefing may be `pending`.
+The page reads it as one query whose panels select their slice
+(`frontend/src/lib/dashboard.ts`); the answer seeds the keys of the endpoints
+it replaces, and the coach card and the briefing's polling start from it rather
+than asking again. A session write invalidates it with the rest.
 
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References

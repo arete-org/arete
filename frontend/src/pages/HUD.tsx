@@ -9,7 +9,8 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { Button, Panel, Skeleton } from '@/components/ui';
-import { garminApi, garminHealthApi, goalsApi, metricsApi, planApi, settingsApi } from '@/lib/api';
+import { planApi, settingsApi } from '@/lib/api';
+import { fetchDashboard, type DashboardData } from '@/lib/dashboard';
 import { exportApi } from '@/lib/documents';
 import { readWorkouts, watchLine, workoutsKey, type WorkoutView } from '@/lib/workouts';
 import { useDailyTip } from '@/lib/dailyTip';
@@ -17,7 +18,7 @@ import { formatHoursMinutes } from '@/lib/fr';
 import { goalCountdown } from '@/lib/race';
 import { cn } from '@/lib/utils';
 import { toLocalISODate } from '@/lib/dates';
-import { invalidateAfterSession, qk, strengthSessionsQuery } from '@/lib/queryKeys';
+import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { linkDay, type DayLink } from '@/lib/sessionMatch';
 import type { PlanDecision } from '@/types';
 
@@ -45,6 +46,13 @@ function UpdatedAgo({ at }: { at: number }) {
       Mis à jour {age < 3_600_000 ? ago.format(-Math.round(age / 60_000), 'minute') : ago.format(-Math.round(age / 3_600_000), 'hour')}
     </p>
   );
+}
+
+/** The page's one request (`GET /dashboard`); each panel reads its slice. */
+function useDashboard<T>(select: (board: DashboardData) => T) {
+  const client = useQueryClient();
+  const today = toLocalISODate();
+  return useQuery({ queryKey: qk.dashboard(today), queryFn: () => fetchDashboard(client, today), select });
 }
 
 function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
@@ -116,28 +124,25 @@ function TodaySession({
 
 export function DashboardPage() {
   const game = useGamePreference();
-  const today = toLocalISODate();
 
+  // The app shell already reads the settings: the same key, no second request.
   const { data: userSettings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
-  const { data: nextGoal } = useQuery({ queryKey: qk.nextGoal, queryFn: goalsApi.next });
+  const { data: nextGoal } = useDashboard((d) => d.next_goal);
   const fatigueThreshold = userSettings?.fatigue_threshold ?? 85;
 
-  const { data: allPlanned, isPending: plannedPending, dataUpdatedAt: plannedAt } = useQuery({
-    queryKey: qk.planned(today, today),
-    queryFn: () => garminApi.getPlanned(today, today),
-  });
-  const { data: todayActual } = useQuery({
-    queryKey: qk.actual(today, today),
-    queryFn: () => garminApi.getActual(today, today),
-  });
-  const { data: todayStrength } = useQuery({
-    ...strengthSessionsQuery,
-    select: (data) => data.filter((s) => s.date === today),
-  });
-  const todayLink = linkDay(today, allPlanned ?? [], withStrengthLogs(todayActual ?? [], todayStrength ?? []), today);
+  // The server's day: today's rows are the ones it read for that date.
+  const {
+    data: dayLink,
+    isPending: plannedPending,
+    isFetching: boardFetching,
+    dataUpdatedAt: plannedAt,
+  } = useDashboard((d) => linkDay(d.date, d.planned, withStrengthLogs(d.actual, d.strength), d.date));
+  const todayLink: DayLink = dayLink ?? { planned: [], offPlan: [] };
+  // The coach card and the briefing read their own keys, which the dashboard
+  // seeds: they ask the server themselves only once it has answered or failed.
+  const boardSettled = !plannedPending && !boardFetching;
 
-  const { data: syncStatus } = useQuery({ queryKey: qk.syncStatus, queryFn: garminApi.getSyncStatus });
-  const garminConnected = syncStatus?.garmin_authenticated ?? false;
+  const { data: garminConnected = false } = useDashboard((d) => d.garmin_connected);
   // One batched export view for the day's sessions still to do or skipped
   // (a skipped copy still on Garmin can be withdrawn), as Planning's cards.
   const queryClient = useQueryClient();
@@ -154,7 +159,7 @@ export function DashboardPage() {
   });
   const viewFor = (sessionId: number) => workouts?.workouts.find((w) => w.session.id === sessionId);
 
-  const { data: planToday } = useQuery({ queryKey: qk.planToday, queryFn: planApi.getToday });
+  const { data: planToday } = useDashboard((d) => d.plan_today);
   const decisionFor = (sessionId: number) =>
     planToday?.decisions.find((d) => d.planned_session_id === sessionId && d.applied_at) ?? null;
 
@@ -164,25 +169,15 @@ export function DashboardPage() {
     isPending: statsPending,
     error: statsError,
     refetch: refetchStats,
-  } = useQuery({
-    queryKey: qk.playerStats,
-    queryFn: metricsApi.getPlayerStats,
-  });
+  } = useDashboard((d) => d.player_stats);
 
-  const { data: fitness } = useQuery({
-    queryKey: qk.fitness,
-    queryFn: metricsApi.getFitness,
-  });
+  const { data: fitness } = useDashboard((d) => d.fitness);
 
-  const { data: workload } = useQuery({ queryKey: qk.workload, queryFn: metricsApi.getWorkload });
+  const { data: workload } = useDashboard((d) => d.workload);
 
-  const { data: healthData, isPending: healthPending } = useQuery({
-    queryKey: qk.healthDaily(today),
-    queryFn: () => garminHealthApi.getDaily(today),
-    retry: false,
-  });
+  const { data: healthData, isPending: healthPending } = useDashboard((d) => d.health);
 
-  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip();
+  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({ enabled: boardSettled });
 
   return (
     <div className="page-shell bg-void">
@@ -275,6 +270,7 @@ export function DashboardPage() {
               </p>
             )}
             <CoachTodayPanel
+              enabled={boardSettled}
               briefing={tip?.tip ?? undefined}
               briefingNote={tip?.updated_after_sync ? 'Mis à jour après la synchro' : undefined}
             />

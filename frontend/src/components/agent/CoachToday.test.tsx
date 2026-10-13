@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { coachApi, type Proposal } from '@/lib/coachToday';
+import { coachApi, coachTodayKey, type Proposal } from '@/lib/coachToday';
 import { CoachTodayPanel } from './CoachToday';
 
 const proposal = (id: number, over: Partial<Proposal>): Proposal => ({
@@ -78,4 +78,16 @@ it('keeps the single-session card as it was', async () => {
   expect(screen.getByText('Proposé : Récupération · 30 min · Z1')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Appliquer' }));
   await waitFor(() => expect(respond).toHaveBeenCalledWith(7, 2, 'apply', []));
+});
+
+it('shows the card the dashboard seeded without a request of its own', async () => {
+  // The app's default: a seed younger than 30 s is fresh.
+  client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+  const today = vi.spyOn(coachApi, 'today');
+  const { rerender } = render(<QueryClientProvider client={client}><CoachTodayPanel enabled={false} /></QueryClientProvider>);
+  expect(screen.getByRole('status').textContent).toBe('Chargement du suivi…');
+  client.setQueryData(coachTodayKey, { date: '2026-10-13', items: [{ kind: 'proposal', record: key, group: [key], members: [] }], remaining: 0, briefing: null });
+  rerender(<QueryClientProvider client={client}><CoachTodayPanel enabled /></QueryClientProvider>);
+  expect(await screen.findByText('Prévu : Fractionné · 60 min')).toBeTruthy();
+  expect(today).not.toHaveBeenCalled();
 });

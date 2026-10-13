@@ -1,32 +1,27 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
+import { dashboardAnswer, localDay } from './dashboardAnswer';
 
-const day = (offset = 0) => {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 const session = {
-  id: 7, date: day(), sport: 'running', session_type: 'easy', source: 'coach', description: 'Footing du jour', status: 'pending',
+  id: 7, date: localDay(), sport: 'running', session_type: 'easy', source: 'coach', description: 'Footing du jour', status: 'pending',
   revision: 1, target_duration_min: 40, target_distance_km: null, target_hr_zone: 2, target_intensity: null, garmin_workout_id: null, garmin_pushed_at: null,
-};
-const stats = {
-  level: 0, weeks_at_goal: 0,
-  hp: { current: 50, max: 100, label: 'Récupération' }, mp: { current: 50, max: 100, label: 'Forme' }, xp: { current: 0, max: 300, label: 'Charge de la semaine' },
 };
 
 /**
  * The dashboard's answers; `hold` keeps matching requests unanswered (a cold or
  * unreachable server) and `answer` replaces an answer when it returns one.
+ * Every request but the auth configuration is recorded in `requests`.
  */
 async function dashboard(
   page: Page,
   hold: (path: string) => number | null = () => 0,
   answer: (route: Route, path: string) => unknown = () => undefined,
+  requests: string[] = [],
 ) {
   await page.route('**/api/**', async (route: Route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
+    requests.push(`${route.request().method()} ${path}`);
     const delay = hold(path);
     if (delay === null) return; // never answered
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
@@ -35,24 +30,57 @@ async function dashboard(
     const json =
       path === '/api/settings' ? { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' }
       : path === '/api/settings/gamification' ? { enabled: false, opted_in: false, available: true, version: 1 }
-      : path === '/api/garmin/planned' ? [session]
-      : path === '/api/plan/today' ? { decisions: [] }
-      : path === '/api/metrics/player-stats' ? stats
-      : path === '/api/goals/next' ? null
-      : path === '/api/tips/daily' ? { tip: null }
-      : path === '/api/coach/today' ? { date: day(), items: [], remaining: 0, briefing: null }
+      : path === '/api/dashboard' ? dashboardAnswer({ planned: [session] })
       : [];
     await route.fulfill({ json }).catch(() => {}); // the page may have moved on
   });
+  return requests;
 }
 
-test('today’s session shows as soon as it arrives, whatever the slower panels', async ({ page }) => {
-  await dashboard(page, path => (path === '/api/metrics/player-stats' ? 10_000 : 0));
-  const planned = page.waitForResponse(r => new URL(r.url()).pathname === '/api/garmin/planned');
+test('the page frame shows at once, today’s session with the one answer, whatever the RPG', async ({ page }) => {
+  // An opted-in athlete whose snapshot never answers, and a slow dashboard.
+  await dashboard(
+    page,
+    path => (path === '/api/gamification' ? null : path === '/api/dashboard' ? 1_500 : 0),
+    (_route, path) => (path === '/api/settings/gamification' ? { enabled: true, opted_in: true, available: true, version: 1 } : undefined),
+  );
+  const board = page.waitForResponse(r => new URL(r.url()).pathname === '/api/dashboard');
   await page.goto('/');
-  await planned;
-  await expect(page.getByText('Footing du jour')).toBeVisible({ timeout: 1_000 });
+  await expect(page.getByRole('heading', { name: 'Bonjour, HUNTER' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Chargement de la séance du jour' })).toBeVisible();
   await expect(page.getByRole('status', { name: 'Chargement des statistiques' })).toBeVisible();
+  await board;
+  await expect(page.getByText('Footing du jour')).toBeVisible({ timeout: 1_000 });
+  await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
+  await expect(page.getByText('Chargement de la progression…')).toBeVisible();
+});
+
+test('the dashboard loads with at most four requests, its slices read from one answer', async ({ page }) => {
+  // The worst case short of the RPG: Garmin connected and today's session still to send.
+  const requests = await dashboard(page, () => 0, (route, path) => {
+    if (path === '/api/dashboard') return dashboardAnswer({
+      planned: [session], garmin_connected: true,
+      health: { date: localDay(), readiness_score: 77, training_readiness_score: 64, hrv_last_night: 52, hrv_status: 'BALANCED' },
+      next_goal: { id: 3, name: 'Semi de Lyon', race_date: localDay(40), distance_km: 21.1, target_time_sec: 5400, priority: 'A', status: 'active', days_left: 40, created_at: null },
+      coach: { date: localDay(), items: [], remaining: 0, briefing: { text: 'Garde l’allure facile.', source: 'rules', trigger: 'api', created_at: null } },
+    });
+    if (path === '/api/garmin/workouts') {
+      const view = { ...session, summary: '40 min Z2', exportable: true, derived: true, prescription: null };
+      return { workouts: [{ session: view, export: null }], errors: {} };
+    }
+    return undefined;
+  });
+  await page.goto('/');
+  await expect(page.getByText('Footing du jour')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Envoyer sur la montre' })).toBeVisible();
+  await expect(page.getByText('77', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Semi de Lyon/)).toBeVisible();
+  await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  // The app shell's settings and game preference, the dashboard, the watch card's export view.
+  expect([...requests].sort(), requests.join('\n')).toEqual([
+    'GET /api/dashboard', 'GET /api/garmin/workouts', 'GET /api/settings', 'GET /api/settings/gamification',
+  ]);
 });
 
 test('today’s session goes to the watch through the export view and shows when', async ({ page }) => {
@@ -62,11 +90,14 @@ test('today’s session goes to the watch through the export view and shows when
   const reads: string[] = [];
   const sends: unknown[] = [];
   const legacy: string[] = [];
+  let boards = 0;
   await dashboard(page, () => 0, (route, path) => {
     const url = new URL(route.request().url());
     if (/\/planned\/\d+\/(structure|push)$/.test(path)) legacy.push(path);
-    if (path === '/api/garmin/sync/status') return { garmin_authenticated: true };
-    if (path === '/api/garmin/planned') return [{ ...session, garmin_pushed_at: sent ? sentAt : null }];
+    if (path === '/api/dashboard') {
+      boards++;
+      return dashboardAnswer({ planned: [{ ...session, garmin_pushed_at: sent ? sentAt : null }], garmin_connected: true });
+    }
     if (path === '/api/garmin/workouts') {
       reads.push(url.search);
       const view = { ...session, summary: '40 min Z2', exportable: true, derived: true, prescription: null };
@@ -83,7 +114,9 @@ test('today’s session goes to the watch through the export view and shows when
   // One batched read of the export view; no per-session structure or push route.
   await page.getByRole('button', { name: 'Envoyer sur la montre' }).click();
   const clock = await page.evaluate(iso => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }), sentAt);
+  // The push time comes from the dashboard read again after the session changed.
   await expect(page.getByText(`Envoyée à Garmin ${clock}`)).toBeVisible();
+  expect(boards).toBeGreaterThanOrEqual(2);
   expect(sends).toEqual([{ device_id: null }]);
   expect(reads[0]).toBe('?ids=7');
   expect(legacy).toEqual([]);

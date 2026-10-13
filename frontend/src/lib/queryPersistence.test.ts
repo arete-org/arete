@@ -11,9 +11,9 @@ function query(queryKey: unknown[], data: unknown = {}) {
 }
 
 it('keeps the dashboard, settings and goals, never documents or coach data', () => {
-  for (const key of [['settings'], ['player-stats'], ['goals', 'next'], ['tip-daily'], ['game-preference']])
+  for (const key of [['dashboard', toLocalISODate()], ['settings'], ['player-stats'], ['goals', 'next'], ['tip-daily'], ['game-preference']])
     expect(shouldPersistQuery(query(key)), JSON.stringify(key)).toBe(true);
-  for (const key of [['coach-documents', 't1'], ['agentMemory'], ['admin', 'accounts'], ['workout', 42], ['sessionDetail', 7]])
+  for (const key of [['coach-documents', 't1'], ['coachToday'], ['agentMemory'], ['admin', 'accounts'], ['workout', 42], ['sessionDetail', 7]])
     expect(shouldPersistQuery(query(key)), JSON.stringify(key)).toBe(false);
 });
 
