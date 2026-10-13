@@ -43,11 +43,11 @@ def card(
     proposals = [d.to_dict() for d in sorted(shown, key=lambda d: d.decision == "rest")]
     from arete.garmin.repository import GarminRepository
 
-    repo = GarminRepository()
+    sessions = GarminRepository().get_planned_sessions(
+        [p["planned_session_id"] for p in proposals], connection=con
+    )
     for proposal in proposals:
-        session = repo.get_planned_session(
-            proposal["planned_session_id"], connection=con
-        )
+        session = sessions.get(proposal["planned_session_id"])
         if (
             session is None
             or session.revision != proposal["session_revision"]

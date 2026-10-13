@@ -140,27 +140,37 @@ class GarminRepository:
         plan_changes.touch()
         return int(result[0])
 
-    def get_planned_session(
-        self,
-        session_id: int,
-        connection: duckdb.DuckDBPyConnection | None = None,
-    ) -> PlannedSession | None:
-        """Get a planned session by ID (on ``connection`` when given)."""
-        conn = connection or self._get_connection()
+    def get_planned_session(self, session_id: int) -> PlannedSession | None:
+        """Get a planned session by ID."""
+        conn = self._get_connection()
         result = conn.execute(
             f"""
             SELECT {PLANNED_COLUMNS}
-            FROM app.visible_planned_sessions WHERE id = ?
+            FROM visible_planned_sessions WHERE id = ?
             """,
             [session_id],
         ).fetchone()
-        if connection is None:
-            conn.close()
+        conn.close()
 
         if not result:
             return None
 
         return _planned_from_row(result)
+
+    def get_planned_sessions(
+        self, session_ids: list[int], connection: duckdb.DuckDBPyConnection
+    ) -> dict[int, PlannedSession]:
+        """The visible planned sessions among ``session_ids``, in one statement."""
+        if not session_ids:
+            return {}
+        rows = connection.execute(
+            f"""
+            SELECT {PLANNED_COLUMNS}
+            FROM app.visible_planned_sessions WHERE id IN ({", ".join("?" * len(session_ids))})
+            """,
+            list(session_ids),
+        ).fetchall()
+        return {row[0]: _planned_from_row(row) for row in rows}
 
     def list_planned_sessions(
         self,

@@ -117,6 +117,28 @@ def test_one_connection_one_load_history_and_no_write(
     verbs = {sql.split()[0].upper() for sql in statement_log}
     assert verbs <= {"PRAGMA", "SET", "SELECT", "WITH"}, verbs
 
+    # More open proposals cost no more statements: their sessions are one read.
+    con = connect()
+    try:
+        for n in range(3):
+            planned = con.execute(
+                "INSERT INTO app.planned_sessions (user_id, date, sport, session_type)"
+                " VALUES (1, ?, 'running', 'tempo') RETURNING id",
+                [history],
+            ).fetchone()[0]
+            con.execute(
+                "INSERT INTO app.plan_decisions (user_id, date, planned_session_id,"
+                " decision, reason, state, session_revision)"
+                " VALUES (1, ?, ?, 'easier', ?, 'pending', 1)",
+                [history, planned, f"Proposition {n}"],
+            )
+    finally:
+        con.close()
+    statement_log.clear()
+    again = client.get("/dashboard")
+    assert len(again.json()["coach"]["items"][0]["group"]) == 4
+    assert len(statement_log) == count
+
 
 def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
     from arete.api import auth
