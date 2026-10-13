@@ -495,3 +495,60 @@ def test_manual_link_still_merges_a_rewarded_pair(game_db):
     assert StrengthRepository().link_to_actual_session(log, activity)
     state = game.sync()
     assert (state["sessions"], state["shards"]) == (1, 10)
+
+
+def test_auto_link_never_moves_a_reward_out_of_its_week(game_db):
+    enable()
+    activity = strength_activity()
+    assert game.sync()["shards"] == 10
+    log = strength_log()
+    # The log's evidence sits in the previous week: a merge would settle the
+    # pair there and take back this week's reward.
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.game_events SET week_start=week_start - 7,"
+            " activity_date=activity_date - 7 WHERE source_key=?",
+            [f"strength:{log}"],
+        )
+        con.execute(
+            "INSERT INTO app.game_weeks (week_start,goal,timezone)"
+            " SELECT week_start,6,'Europe/Paris' FROM app.game_events"
+            " WHERE source_key=? ON CONFLICT DO NOTHING",
+            [f"strength:{log}"],
+        )
+    auto_link()
+    for _ in range(2):
+        state = game.sync()
+        assert state["shards"] >= 10 and debits(state) == []
+    with db_connection() as con:
+        keys = con.execute(
+            "SELECT count(DISTINCT canonical_key) FROM app.game_events"
+            " WHERE source_key IN (?, ?)",
+            [f"strength:{log}", f"actual:{activity}"],
+        ).fetchone()[0]
+    assert keys == 2
+
+
+def test_an_ineligible_counted_log_is_not_a_past_reward(game_db):
+    from arete.strength.models import StrengthSession
+    from arete.strength.repository import StrengthRepository
+
+    enable()
+    # No set: the log is captured ineligible, processed without credit.
+    log = StrengthRepository().create_session(
+        StrengthSession(date=athlete_today(), name="Muscu")
+    )
+    activity = strength_activity()
+    assert game.sync()["shards"] == 10
+    auto_link()
+    state = game.sync()
+    assert (state["sessions"], state["shards"], debits(state)) == (1, 10, [])
+    with db_connection() as con:
+        rows = con.execute(
+            "SELECT canonical_key, reason FROM app.game_events"
+            " WHERE source_key IN (?, ?) ORDER BY source_key",
+            [f"actual:{activity}", f"strength:{log}"],
+        ).fetchall()
+    # Re-keyed into the rewarded activity, not kept apart as a past reward.
+    assert rows[0][0] == rows[1][0]
+    assert not rows[1][1].endswith("+kept_at_link")

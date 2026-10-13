@@ -1007,12 +1007,17 @@ class StrengthRepository:
 
 
 def _keep_settled_rewards(conn, session_id: int, actual_id: int) -> None:
-    """Count an automatically linked pair once without debiting a settled reward.
+    """Count an automatically linked pair once without debiting a past reward.
 
     The projection merges a linked log into its activity's canonical key and
-    reverses the reward of the key that disappears. Here the unsettled side
-    joins the settled one instead, and a pair whose two sides were both
-    already counted keeps both rewards (``KEPT_AT_LINK``).
+    reverses the reward of the key that disappears. A key belongs to the past
+    when it holds a net credit or an eligible event the projection already
+    counted toward its week (a capped one included: merging it would lower
+    the week's count and could take back the weekly bonus). Only a past-free
+    pair is left to the projection; a pair with one past side in a single week
+    re-keys the other side into it. Any other pair keeps both keys
+    (``KEPT_AT_LINK``): it goes on counting as before, toward the cap and the
+    weekly goal included. Reads go through the athlete-scoped visible views.
     """
     keys = [f"strength:{session_id}", f"actual:{actual_id}"]
     canonical = dict(
@@ -1027,31 +1032,40 @@ def _keep_settled_rewards(conn, session_id: int, actual_id: int) -> None:
     log, activity = canonical[keys[0]], canonical[keys[1]]
     if log == activity:
         return
-    settled = {
+    past = {
         key
         for key in (log, activity)
         if conn.execute(
-            "SELECT 1 FROM app.visible_game_events WHERE canonical_key = ? AND processed"
-            " UNION ALL SELECT 1 FROM app.visible_game_ledger WHERE cause = ?",
-            [key, "activity:" + key],
-        ).fetchone()
+            """SELECT coalesce(bool_or(eligible AND processed), false) OR coalesce(
+                bool_or(eligible) AND (SELECT sum(xp) > 0 OR sum(shards) > 0
+                    FROM app.visible_game_ledger WHERE cause = ?), false)
+            FROM app.visible_game_events WHERE canonical_key = ?""",
+            ["activity:" + key, key],
+        ).fetchone()[0]
     }
-    if not settled:
+    weeks = conn.execute(
+        "SELECT count(DISTINCT week_start) FROM app.visible_game_events"
+        " WHERE canonical_key IN (?, ?)",
+        [log, activity],
+    ).fetchone()[0]
+    if not past:
         # Nothing counted yet: the next projection merges them, as after a manual link.
         conn.execute(
             "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
             keys,
         )
-    elif len(settled) == 2:
-        conn.execute(
-            "UPDATE app.game_events SET reason=reason || ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? AND NOT ends_with(reason, ?)) ",
-            [KEPT_AT_LINK, keys[0], KEPT_AT_LINK],
-        )
-    else:
-        kept = settled.pop()
+    elif len(past) == 1 and weeks == 1:
+        kept = past.pop()
         conn.execute(
             "UPDATE app.game_events SET canonical_key=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (canonical_key=?) ",
             [kept, activity if kept == log else log],
+        )
+    else:
+        # A merged group settles in its first week: a later week's credit would
+        # be reversed. Both sides counted, or weeks apart: keep both keys.
+        conn.execute(
+            "UPDATE app.game_events SET reason=reason || ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? AND NOT ends_with(reason, ?)) ",
+            [KEPT_AT_LINK, keys[0], KEPT_AT_LINK],
         )
 
 

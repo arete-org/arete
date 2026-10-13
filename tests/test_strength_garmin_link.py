@@ -142,6 +142,16 @@ def test_deleting_a_log_lets_the_remaining_one_take_the_activity(con, client):
     assert _linked(con, second) == activity
 
 
+def test_deleting_an_activity_frees_its_log_for_the_remaining_one(con):
+    from arete.garmin.repository import GarminRepository
+
+    first, second, log = _activity(con), _activity(con), _log(con)
+    assert StrengthRepository().link_to_actual_session(log, first)
+
+    assert GarminRepository().delete_actual_session(first)
+    assert _linked(con, log) == second
+
+
 def test_a_manual_strength_entry_is_linked_to_the_day_log(con, client):
     log = _log(con)
     response = client.post(
