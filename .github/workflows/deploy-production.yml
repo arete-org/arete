@@ -6,7 +6,7 @@ name: Deploy production
 # application must already run healthy at https://arete-main-arete15.vercel.app,
 # migrations included. Non-deployable commits may follow its tagged SHA.
 # The first request migrates the real database after cloning it
-# (docs/deployment.md, "Migrations").
+# (docs/deployment.md, "Migrations"); the domain moves only onto a healthy build.
 on:
   workflow_dispatch:
 
@@ -58,16 +58,52 @@ jobs:
         with:
           node-version: 22
       - run: npm install --global vercel@63.1.2
+      # `--skip-domain`: the build gets no traffic until it answers healthy.
+      # Moving the domain first served a broken release, and after a rollback
+      # Vercel no longer moves it, so the check read the old one (2026-10-13).
       - name: Deploy main to production
-        run: vercel deploy --prod --archive=tgz --yes --token "$VERCEL_TOKEN"
+        id: deploy
+        run: |
+          url=$(vercel deploy --prod --skip-domain --archive=tgz --yes --token "$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       # The first request runs any pending migration after cloning the database;
-      # /health answers 503 until the schema is current.
-      - name: Check the health of production
+      # /health answers 503 until the schema is current. The live release keeps
+      # serving meanwhile: a migration keeps the previous release working.
+      - name: Check the health of the deployment
         run: |
           curl -fsS --retry 5 --retry-delay 10 --retry-all-errors \
+            -H "x-vercel-protection-bypass: $BYPASS" \
+            "$URL/api/health" | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          URL: ${{ steps.deploy.outputs.url }}
+      # REST, as the CLI cannot resolve `--scope` with the token. Promoting also
+      # restores the automatic domain assignment a rollback disables.
+      - name: Promote it and check production serves it
+        run: |
+          api=https://api.vercel.com
+          auth=(-H "Authorization: Bearer $VERCEL_TOKEN")
+          id=$(curl -fsS "${auth[@]}" \
+            "$api/v13/deployments/${URL#https://}?teamId=$VERCEL_ORG_ID" | jq -er .id)
+          curl -fsS -X POST "${auth[@]}" \
+            "$api/v10/projects/$VERCEL_PROJECT_ID/promote/$id?teamId=$VERCEL_ORG_ID" > /dev/null
+          for _ in $(seq 1 30); do
+            serving=$(curl -fsS "${auth[@]}" \
+              "$api/v13/deployments/${PRODUCTION_URL#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+            [[ "$serving" == "$id" ]] && break
+            sleep 5
+          done
+          if [[ "$serving" != "$id" ]]; then
+            echo "$PRODUCTION_URL serves $serving, not $id ($URL)" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          curl -fsS --retry 5 --retry-delay 10 --retry-all-errors \
             "$PRODUCTION_URL/api/health" | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          URL: ${{ steps.deploy.outputs.url }}
       # The live deployment and the previous one, for an instant rollback.
       - name: Keep the two newest production deployments
         run: scripts/ci/prune_deployments.sh 2 target=production

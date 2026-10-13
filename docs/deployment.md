@@ -170,7 +170,10 @@ the emoji is textual feedback, not an undocumented LangSmith UI reaction endpoin
    immediately using the already verified application. Code, migrations,
    dependencies, build inputs and unknown files still require a new preview.
    Missing tags/history or divergent commits fail closed. Then the workflow
-   deploys, checks `/api/health` and prunes.
+   deploys without the domain (`--skip-domain`), checks the new deployment's
+   `/api/health`, promotes it, checks the domain serves it and prunes. A broken
+   build never takes traffic, and promoting restores the automatic domain
+   assignment a rollback disables.
 
 Production deploys in batches, by hand, so that several merges can be tried on
 the preview together. There is no reviewer gate: the preview is the gate.
