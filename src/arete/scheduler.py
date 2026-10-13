@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from contextvars import ContextVar
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from time import monotonic, sleep
@@ -231,9 +232,11 @@ def announce_sync(feedback: list[dict], unannounced: int) -> str | None:
 #: before comparing its facts; past it, that briefing stands as written.
 BRIEFING_WAIT_SECONDS = 60
 BRIEFING_POLL_SECONDS = 5
+#: When the running dispatch stops starting model calls; unset outside one.
+_model_deadline: ContextVar[float | None] = ContextVar("model_deadline", default=None)
 
 
-def write_daily_briefing(*, model_deadline: float | None = None) -> str:
+def write_daily_briefing() -> str:
     """Have the coach write the day's briefing, after the sync that feeds it.
 
     Kept out of ``daily_sync`` so the sync's status dict stays about sources.
@@ -250,6 +253,7 @@ def write_daily_briefing(*, model_deadline: float | None = None) -> str:
     # Waiting never eats the dispatch's model budget (``SCHEDULE_MODEL_SECONDS``):
     # a rewrite started past it would outlive the function.
     deadline = monotonic() + BRIEFING_WAIT_SECONDS
+    model_deadline = _model_deadline.get()
     if model_deadline is not None:
         deadline = min(deadline, model_deadline)
     try:
@@ -423,13 +427,10 @@ def _run_athlete(athlete_id: int, started: float) -> dict:
             if config.is_remote_db:
                 mirror.hydrate()
             status = daily_sync()
+            # The briefing's wait for the dashboard ends at the model deadline.
+            _model_deadline.set(started + SCHEDULE_MODEL_SECONDS)
             for step, write in (
-                (
-                    "briefing",
-                    lambda: write_daily_briefing(
-                        model_deadline=started + SCHEDULE_MODEL_SECONDS
-                    ),
-                ),
+                ("briefing", write_daily_briefing),
                 ("review", write_weekly_review),
             ):
                 late = monotonic() - started >= SCHEDULE_MODEL_SECONDS

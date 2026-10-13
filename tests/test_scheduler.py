@@ -218,8 +218,11 @@ class TestWriteDailyBriefing:
             patch("arete.coaching.get_or_create_briefing", return_value=None),
             patch.object(scheduler, "sleep") as sleep,
         ):
-            spent = scheduler.monotonic() - 1
-            assert scheduler.write_daily_briefing(model_deadline=spent) == "in progress"
+            token = scheduler._model_deadline.set(scheduler.monotonic() - 1)
+            try:
+                assert scheduler.write_daily_briefing() == "in progress"
+            finally:
+                scheduler._model_deadline.reset(token)
         sleep.assert_not_called()
 
     def test_a_failed_rewrite_keeps_the_briefing_without_a_notification(self):

@@ -249,7 +249,7 @@ def test_scheduler_dispatches_both_athletes_once_without_replaying(
         "daily_sync",
         lambda: seen.append(current_athlete_id()) or {"sync": "ok"},
     )
-    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda **_: "rules")
+    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda: "rules")
     monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
     assert scheduler.run_scheduled_batch()["deferred"] is False
     assert seen == [user.athlete_id for user in athletes]
@@ -320,7 +320,7 @@ def test_scheduler_failure_is_not_replayed_and_other_athletes_continue(
         return {"sync": "ok"}
 
     monkeypatch.setattr(scheduler, "daily_sync", sync)
-    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda **_: "rules")
+    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda: "rules")
     monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
     result = scheduler.run_scheduled_batch()
     assert result["athletes"][str(athletes[0].athlete_id)] == {
@@ -339,7 +339,7 @@ def _stub_scheduled_work(monkeypatch, seen):
         "daily_sync",
         lambda: seen.append(current_athlete_id()) or {"sync": "ok"},
     )
-    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda **_: "rules")
+    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda: "rules")
     monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
 
 
@@ -391,7 +391,7 @@ def test_a_failed_athlete_is_retried_by_the_next_day_s_dispatch(athletes, monkey
         return {"sync": "ok"}
 
     monkeypatch.setattr(scheduler, "daily_sync", sync)
-    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda **_: "rules")
+    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda: "rules")
     monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
     scheduler.run_scheduled_batch()
     failing = False
@@ -746,7 +746,7 @@ def test_a_released_lease_is_claimed_by_the_next_dispatch(athletes, monkeypatch)
         "daily_sync",
         lambda: seen.append(current_athlete_id()) or {"sync": "ok"},
     )
-    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda **_: "rules")
+    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda: "rules")
     monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
     scheduler.run_scheduled_batch()
     assert seen == [first.athlete_id]
