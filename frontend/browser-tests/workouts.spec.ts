@@ -19,6 +19,10 @@ async function mockApi(page: Page, getView: () => WorkoutView, streamUrl?: strin
       return route.fulfill({ status: 307, headers: { location: streamUrl! } });
     }
     if (url.pathname.endsWith('/workout')) return route.fulfill({ json: getView() });
+    if (url.pathname.endsWith('/garmin/workouts')) {
+      expect(url.searchParams.getAll('ids')).toEqual(['42']);
+      return route.fulfill({ json: { workouts: [getView()], errors: {} } });
+    }
     if (url.pathname.endsWith('/exports/batch')) {
       counts.exports++;
       expect(route.request().postDataJSON().session_ids).toEqual([42]);

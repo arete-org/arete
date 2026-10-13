@@ -1,10 +1,14 @@
-import { useState, type ComponentProps, type ReactNode } from 'react';
-import { useQuery, useQueries } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { Send, Watch, X } from 'lucide-react';
 import { exportApi } from '@/lib/documents';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
-import { type WorkoutSession, type WorkoutView, workoutApi, workoutKey, mergeWorkout } from '@/lib/workouts';
+import { type WorkoutSession, type WorkoutView, workoutApi, workoutKey, workoutsKey, mergeWorkout, readWorkouts } from '@/lib/workouts';
 import { WorkoutCard } from './WorkoutCard';
+
+const CARD_STALE_MS = 60_000;
+const POLL_MS = 1000;
+const MAX_POLL_MS = 150_000;
 
 /** Selection is local; cards and direct API mutations are shared by chat and Planning. */
 export function WorkoutSelection({ sessions, children, onResult, locked = false, renderWorkout }: {
@@ -20,6 +24,26 @@ export function WorkoutSelection({ sessions, children, onResult, locked = false,
   const devices = useQuery({ queryKey: ['garmin-workout-devices'], queryFn: exportApi.devices, enabled: watch, retry: false });
   const views = useQueries({ queries: sessions.map(v => ({ queryKey: workoutKey(v.session.id), queryFn: () => workoutApi.inspect(v.session.id), enabled: false })) });
   const latest = sessions.map((v, i) => mergeWorkout(views[i].data, v));
+  // Planning draws its own cards from /garmin/exports. Workout cards read the
+  // server's view of every session in one request, then poll only those in progress.
+  const queryClient = useQueryClient();
+  const cards = !renderWorkout;
+  const ids = sessions.map(v => v.session.id);
+  const read = useQuery({
+    queryKey: workoutsKey('cards', ids), queryFn: () => readWorkouts(queryClient, ids),
+    enabled: cards && ids.length > 0, staleTime: CARD_STALE_MS, retry: false,
+  });
+  const inProgress = cards ? latest.filter(v => actions.pendingIds.has(v.session.id) || v.export?.state === 'working').map(v => v.session.id) : [];
+  const pollStarted = useRef<number | null>(null);
+  useEffect(() => { if (!inProgress.length) pollStarted.current = null; }, [inProgress.length]);
+  useQuery({
+    queryKey: workoutsKey('progress', inProgress), queryFn: () => readWorkouts(queryClient, inProgress),
+    enabled: inProgress.length > 0, retry: false,
+    refetchInterval: () => {
+      pollStarted.current ??= Date.now();
+      return Date.now() - pollStarted.current < MAX_POLL_MS ? POLL_MS : false;
+    },
+  });
   const scheduled = latest.filter(v => ['scheduled', 'transfer_requested'].includes(v.export?.state ?? '')).length;
   const working = latest.some(v => v.export?.state === 'working');
   const visible = new Set(sessions.map(v => v.session.id));
@@ -31,6 +55,7 @@ export function WorkoutSelection({ sessions, children, onResult, locked = false,
   const render = (id: number) => {
     const props: ComponentProps<typeof WorkoutCard> = {
       sessionId: id, initial: latest.find(v => v.session.id === id), compact: !!children,
+      readError: read.error?.message ?? read.data?.errors[id],
       selected: selected.has(id), locked,
       onResult: text => { setCompleted(text); onResult?.(text); },
       onSelect: (session, checked) => {
