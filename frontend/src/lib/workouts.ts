@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { formatElapsed } from './activity';
-import { documentRequest, type GarminExport, type Prescription, type WorkoutStep } from './documents';
+import { documentRequest, type GarminExport, type Prescription, type Target, type WorkoutStep } from './documents';
 
 export interface WorkoutSession {
   id: number; revision: number; date: string; sport: string; description: string | null;
@@ -142,13 +142,16 @@ export function endsWithRecovery(step: WorkoutStep): boolean {
   return step.kind === 'repeat' && last?.kind === 'recovery' && last.duration_kind !== 'lap';
 }
 
-export const INCOMPLETE_STEPS = 'Étapes incomplètes : renseigne chaque durée, distance et borne de cible.';
+export const INCOMPLETE_STEPS = 'Étapes incomplètes ou invalides : vérifie chaque durée, distance et borne de cible.';
 
-/** Whether every step has its value and every target both bounds: nothing partial is saved. */
+/** Both bounds set, in order (services/prescriptions.Target). */
+const targetReady = (target: Target) => target.low != null && target.high != null && target.low <= target.high;
+
+/** Whether every step has its value and every target valid bounds: nothing partial or rejected is saved. */
 export function prescriptionReady(prescription: Prescription): boolean {
   const ready = (step: WorkoutStep): boolean => step.kind === 'repeat'
     ? step.steps.every(ready)
     : (step.duration_kind === 'lap' || step.value != null)
-      && [step.target, step.secondary_target].every(t => !t || (t.low != null && t.high != null));
+      && [step.target, step.secondary_target].every(t => !t || targetReady(t));
   return prescription.steps.every(ready);
 }

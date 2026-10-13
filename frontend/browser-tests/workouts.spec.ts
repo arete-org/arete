@@ -208,8 +208,8 @@ test('step durations and paces are typed as digits that format themselves on a p
   await expect(duration).toHaveValue('1:30:00');
   await dialog.locator('summary', { hasText: '2. Répéter un bloc' }).click();
   await dialog.locator('summary', { hasText: '1. Effort' }).click();
-  const pace = dialog.getByLabel("Allure minimum (min'ss par km)", { exact: true });
-  await expect(pace).toHaveValue("3'30");
+  const pace = dialog.getByLabel("Allure maximum (min'ss par km)", { exact: true });
+  await expect(pace).toHaveValue("3'36");
   await expect(pace).toHaveAttribute('inputmode', 'numeric');
   await pace.fill('');
   await pace.pressSequentially('375');
@@ -219,7 +219,7 @@ test('step durations and paces are typed as digits that format themselves on a p
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect.poll(() => counts.edits).toBe(1);
   expect(saved!.steps[0].value).toBe(5400);
-  expect(saved!.steps[1].steps[0].target).toEqual({ kind: 'pace_sec_km', low: 255, high: 216 });
+  expect(saved!.steps[1].steps[0].target).toEqual({ kind: 'pace_sec_km', low: 210, high: 255 });
 });
 
 test('uncertain export survives reload and is verified without replaying the write', async ({ page }) => {

@@ -93,6 +93,10 @@ it("types a pace range as digits in m'ss per km, starting empty and never storin
   expect(latest.current.steps[0].target?.high).toBeNull();
   expect(prescriptionReady(latest.current)).toBe(false);
   expect(screen.getByRole('alert').textContent).toBe("Saisis l’allure en chiffres : 330 pour 3'30.");
+  // An inverted range, which the server refuses, is blocked here.
+  type(high, '300');
+  expect(prescriptionReady(latest.current)).toBe(false);
+  expect(screen.getByRole('alert').textContent).toBe('Le minimum ne peut pas dépasser le maximum.');
 });
 
 it('creates a repeat as effort then recovery with "skip the last recovery" checked', () => {

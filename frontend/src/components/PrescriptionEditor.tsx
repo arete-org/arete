@@ -24,6 +24,7 @@ function TargetEditor({ value, onChange, label }: { value?: Target | null; onCha
       </>}
     </div>}
     {value && value.kind !== 'pace_sec_km' && (value.low === null || value.high === null) && <p role="alert" className="text-xs text-danger-red">Indique les deux bornes de la cible.</p>}
+    {value && value.low !== null && value.high !== null && value.low > value.high && <p role="alert" className="text-xs text-danger-red">Le minimum ne peut pas dépasser le maximum.</p>}
   </fieldset>;
 }
 
