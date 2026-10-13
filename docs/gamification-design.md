@@ -104,7 +104,7 @@ Existing limits remain: five files per drop, 20 MiB per file, 3 MiB chunks, expl
 
 ### Cost envelope
 
-Reward calculation, settings, purchase and equipment use **zero model requests**. Page enrichment adds no model round-trip. The browser makes one preference request (shared query cache), then one projection/snapshot request when an opted-in summary/profile is loaded. Sync makes bounded per-week and per-event database operations; production MotherDuck latency has not been benchmarked. Existing model/runtime budgets are unchanged.
+Reward calculation, settings, purchase and equipment use **zero model requests**. Page enrichment adds no model round-trip. The browser makes one preference request (shared query cache), then one read-only snapshot request (`GET /gamification`) when an opted-in summary/profile is loaded: opening a page writes nothing. The projection (`POST /gamification/sync`) runs after a session event (`invalidateAfterSession`: logged, synced, matched, a plan decision), in the daily sync for opted-in athletes, and once when a snapshot still shows pending evidence; its own answer never triggers another. A projection with nothing to settle (no pending event or unresolved link, current-week receipts already exact, cape owned) takes no lock and writes nothing, so concurrent tabs no longer conflict. A week's receipts are read in one query whatever its number of activities. Sync makes bounded per-week database operations; production MotherDuck latency has not been benchmarked. Existing model/runtime budgets are unchanged.
 
 ## 5. Rollout
 
@@ -119,7 +119,7 @@ Rollback: disable the deployment flag, retain the additive tables and deploy the
 - Four classes × six ranks and Chiron use local SVG exports from the approved Figma. The current editor changes class. Independent silhouette artwork across every class/outfit is not delivered; the reserved silhouette field does not imply a visible body editor.
 - The profile reuses measured cardio records, estimated-versus-real strength PRs and existing session history. It does not invent records or seed Figma fixture balances.
 - Weekly goal and activity timezone are stored when evidence is captured. Historical reward weeks are not rebucketed when a timezone preference changes. Cross-timezone travel and historical rest corrections deserve follow-up before broadening this single-athlete rollout.
-- Current-week rest changes are reconciled on sync. There is no background worker for historical rest-only changes with no pending activity event.
+- Current-week rest changes are reconciled on sync (after a session event or a plan decision, and by the daily sync). There is no background worker for historical rest-only changes with no pending activity event.
 - Cosmetic rank artwork is reused for the small initial catalogue. A broader skin catalogue, talent tree and cinematic level-up flow remain separate from this release.
 - Chiron’s visual identity and chat page context are implemented here; scheduled briefing/feedback prompts remain on their existing contracts.
 - Tests use an isolated local database. No direct MotherDuck mutation or live model evaluation is part of verification.
