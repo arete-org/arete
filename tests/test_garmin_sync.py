@@ -974,4 +974,5 @@ print(json.dumps({"body": body, "ms": (time.perf_counter() - start) * 1000,
     result = json.loads(out.stdout.strip().splitlines()[-1])
     assert result["body"]["garmin_authenticated"] is True
     assert result["garmin"] is False
-    assert result["ms"] < 50, result
+    # A Garmin login took seconds; the bound is loose for shared CI runners.
+    assert result["ms"] < 500, result
