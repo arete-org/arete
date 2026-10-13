@@ -8,6 +8,7 @@ stamped ``source="coach"`` so the Planning page can tell them apart.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any, Literal
 
@@ -20,7 +21,7 @@ from arete.garmin.models import (
     canonical_sport,
 )
 from arete.garmin.repository import GarminRepository
-from arete.garmin.workout_structure import needs_explicit_steps
+from arete.garmin.workout_structure import NotPushable, ensure_template_fits
 from arete.services.prescriptions import (
     Prescription,
     Provenance,
@@ -34,7 +35,7 @@ _MAX_LIST = 50
 _HORIZON_DAYS = 120
 _MAX_SOURCE_HINTS = 5
 _STEPS_REQUIRED = (
-    "Une séance tempo ou fractionné en course ou à vélo exige prescription.steps "
+    "Un tempo ou un fractionné décrit, en course ou à vélo, exige prescription.steps "
     "(échauffement, blocs ou répétitions avec récupérations, retour au calme) : "
     "sans elles, la montre recevrait un modèle générique et non la séance décrite. "
     "Réessaie avec la prescription complète."
@@ -161,8 +162,6 @@ def create_planned_session(
     day = _parse_iso(date_str, "date_str")
     if isinstance(day, str):
         return day
-    if prescription is None and needs_explicit_steps(canonical_sport(sport), st.value):
-        return json.dumps({"error": _STEPS_REQUIRED}, ensure_ascii=False)
     try:
         prescription = (
             conversation_prescription(
@@ -219,6 +218,10 @@ def create_planned_session(
         prescription=prescription.model_dump(mode="json") if prescription else None,
         provenance=sources or None,
     )
+    try:
+        ensure_template_fits(planned)
+    except NotPushable:
+        return json.dumps({"error": _STEPS_REQUIRED}, ensure_ascii=False)
     session_id = _repo().create_planned_session(planned)
     created = _repo().get_planned_session(session_id)
     return json.dumps(
@@ -281,8 +284,8 @@ def apply_session_changes(
 ) -> PlannedSession:
     """Share one versioned editing boundary between HTTP and coaching tools.
 
-    ``require_steps`` (the coach's tool) refuses to define a tempo or interval
-    session without explicit steps; date and status moves stay allowed.
+    ``require_steps`` (the coach's tool) refuses to leave a described tempo or
+    interval session without explicit steps; date and status moves stay allowed.
     """
     current = _repo().get_planned_session(session_id)
     if current is None:
@@ -315,21 +318,28 @@ def apply_session_changes(
         raise ValueError(
             "Modifie la prescription pour changer les objectifs d’une séance structurée."
         )
-    if (
-        require_steps
-        and set(fields) - {"date", "status"}
-        and not (prescription or current.prescription or current.structure_json)
-        and needs_explicit_steps(
-            current.sport, (changes.session_type or current.session_type).value
-        )
-    ):
-        raise ValueError(_STEPS_REQUIRED)
     # A replacement must not leave stale scalar targets contradicting its steps.
     if prescription:
         fields.update({key: None for key in targets})
     for key in targets | {"description"}:
         if key in fields and not fields[key]:
             fields[key] = None
+    # Judge the session as it would be saved. A pure move or skip leaves an
+    # existing plan-generator session movable until its steps are completed.
+    if require_steps and set(fields) - {"date", "status"}:
+        try:
+            ensure_template_fits(
+                replace(
+                    current,
+                    session_type=changes.session_type or current.session_type,
+                    description=fields.get("description", current.description),
+                    prescription=prescription.model_dump(mode="json")
+                    if prescription
+                    else current.prescription,
+                )
+            )
+        except NotPushable:
+            raise ValueError(_STEPS_REQUIRED) from None
     changed = _repo().update_planned_session_fields(
         session_id,
         expected_revision=revision,

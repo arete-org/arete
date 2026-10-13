@@ -9,6 +9,7 @@ import pytest
 from arete.dataio.db import db_connection
 from arete.dataio.init_duckdb import main
 from arete.garmin.repository import GarminRepository
+from arete.garmin.workout_structure import NotPushable
 from arete.garmin.workouts import convert
 from arete.services import garmin_export as service
 from arete.services.documents import DocumentError
@@ -1048,7 +1049,6 @@ def test_described_structured_session_never_reaches_garmin_as_the_template(
     planned, router_client, monkeypatch, session_type, sport
 ):
     from arete.api.garmin_export import router
-    from arete.garmin.workout_structure import NotPushable
     from arete.services import plan_adaptation
 
     _without_steps(planned, session_type, INTERVALS, sport)
@@ -1056,7 +1056,7 @@ def test_described_structured_session_never_reaches_garmin_as_the_template(
     # The template stays visible, labelled as an estimate, but cannot be sent.
     assert view["derived"] and view["needs_steps"] and view["prescription"]
     assert not view["exportable"]
-    assert "complète-les" in view["reason"]
+    assert "prescription.steps via update_planned_session" in view["reason"]
     garmin = Garmin()
     with pytest.raises(DocumentError, match="Séance décrite sans étapes"):
         service.export(planned, client=garmin)
@@ -1134,24 +1134,63 @@ def test_coach_cannot_create_structured_session_without_steps(planned, sport):
     )
     assert "prescription.steps" in result["error"]
     assert planning.list_planned("2027-01-01", "2027-01-31") == before
+    # Without a description the template is the session itself.
+    result = json.loads(
+        planning.create_planned_session(
+            "2027-01-15", "intervals", sport=sport, target_duration_min=50
+        )
+    )
+    assert result["created"]
 
 
-def test_coach_cannot_redefine_structured_session_without_steps(planned):
+@pytest.mark.parametrize(
+    "description,changes,allowed",
+    [
+        (None, {"description": "Seuil : 3×10'"}, False),
+        (None, {"target_duration_min": 60}, True),
+        (INTERVALS, {"description": ""}, True),
+        (INTERVALS, {"session_type": "endurance"}, True),
+        (INTERVALS, {"target_duration_min": 60}, False),
+        # Moving a session that predates the rule does not require rewriting it.
+        (INTERVALS, {"date_str": "2027-01-13"}, True),
+    ],
+)
+def test_coach_update_is_judged_on_the_session_it_would_save(
+    planned, description, changes, allowed
+):
     from arete.services import planning
 
-    _without_steps(planned, "tempo", None)
+    _without_steps(planned, "tempo", description)
     result = json.loads(
-        planning.update_planned_session(
-            planned, 1, planning.SessionChanges(description="Seuil : 3×10'")
-        )
+        planning.update_planned_session(planned, 1, planning.SessionChanges(**changes))
     )
-    assert "prescription.steps" in result["error"]
     session = GarminRepository().get_planned_session(planned)
-    assert session.description is None and session.revision == 1
-    # Moving a session that predates the rule does not require rewriting it.
-    result = json.loads(
-        planning.update_planned_session(
-            planned, 1, planning.SessionChanges(date_str="2027-01-13")
+    if allowed:
+        assert result["updated"], result
+    else:
+        assert "prescription.steps" in result["error"]
+        assert session.description == description and session.revision == 1
+
+
+def test_template_sent_before_the_guard_can_still_be_withdrawn(planned):
+    from arete.garmin.models import SessionStatus
+
+    _without_steps(planned, "intervals", INTERVALS)
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.planned_sessions SET garmin_workout_id='1',garmin_schedule_id='100' WHERE id=?",
+            [planned],
         )
-    )
-    assert result["updated"]
+    garmin = Garmin()
+    payload, day, _, _ = service._payload(planned, upload=False)
+    garmin.workouts[1] = {**payload, "workoutId": 1}
+    garmin.schedules[100] = {
+        "workoutId": 1,
+        "workoutScheduleId": 100,
+        "date": day.isoformat(),
+    }
+    with pytest.raises(NotPushable):
+        service._payload(planned)
+    GarminRepository().update_planned_session_status(planned, SessionStatus.SKIPPED)
+    assert service.withdraw_skipped(planned, client=garmin)["state"] == "removed"
+    assert not garmin.workouts and not garmin.schedules

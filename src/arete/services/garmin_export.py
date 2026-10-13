@@ -335,11 +335,16 @@ def inspect_sessions(session_ids: list[int]) -> dict:
     return {"workouts": workouts, "errors": errors}
 
 
-def _payload(session_id: int) -> tuple[dict, date, str, int]:
+def _payload(session_id: int, *, upload: bool = True) -> tuple[dict, date, str, int]:
+    """The workout Garmin should hold; ``upload=False`` only identifies a copy."""
     from arete.dataio.settings import athlete_zone_model, get_user_settings
     from arete.features.hr_zones import ZoneModel
     from arete.garmin.repository import GarminRepository
-    from arete.garmin.workout_structure import derive, describe_fr
+    from arete.garmin.workout_structure import (
+        derive,
+        describe_fr,
+        ensure_template_fits,
+    )
     from arete.garmin.workouts import build_payload
 
     session = GarminRepository().get_planned_session(session_id)
@@ -362,6 +367,8 @@ def _payload(session_id: int) -> tuple[dict, date, str, int]:
             hr_ranges=ranges,
         )
     else:
+        if upload:
+            ensure_template_fits(session)
         blocks = derive(
             session, athlete_zone_model(), settings.get("threshold_pace_sec_km")
         )
@@ -935,7 +942,9 @@ def withdraw_skipped(session_id: int, *, client=None) -> dict:
     with db_connection() as con:
         existing = _get(con, session_id)
     if existing is None:
-        payload, _, _, revision = _payload(session_id)
+        # Only identifies the legacy copy to remove: a template sent before the
+        # described-session guard must stay withdrawable.
+        payload, _, _, revision = _payload(session_id, upload=False)
         state = _claim(session_id, revision=revision)
         exchange = Exchange(client)
         exchange.reservation = (session_id, state["operation_id"])

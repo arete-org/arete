@@ -96,8 +96,9 @@ def ensure_template_fits(session: PlannedSession) -> None:
         and needs_explicit_steps(session.sport, session.session_type.value)
     ):
         raise NotPushable(
-            "Séance décrite sans étapes : complète-les pour l’export Garmin, "
-            "le modèle générique du type de séance ne reprend pas la description."
+            "Séance décrite sans étapes : le modèle générique du type de séance "
+            "ne reprend pas la description. Complète les étapes pour l’export "
+            "Garmin (coach : prescription.steps via update_planned_session)."
         )
 
 
