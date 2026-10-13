@@ -304,7 +304,12 @@ test('mobile prioritizes sessions, uses one focus ring and stays usable in every
   await page.getByRole('button', { name: 'Options du planning' }).click();
   await page.getByRole('dialog').getByLabel('Filtrer par sport').selectOption('');
   await page.keyboard.press('Escape');
-  await expect(page.locator('h1')).toHaveCSS('font-size', '34px');
+  // Planning keeps the shared page title and the navigation of every other page.
+  await expect(page.locator('h1')).toHaveCSS('font-size', '30px');
+  await expect(
+    page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('link'),
+  ).toHaveText(['Accueil', 'Planning', 'Analyses', 'Journal', 'Réglages']);
+  await expect(page.getByRole('button', { name: 'Options du planning' })).toBeInViewport();
   expect(
     await page.evaluate(async () =>
       (await document.fonts.load('600 16px Inter')).map((font) => font.weight),

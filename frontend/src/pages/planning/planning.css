@@ -1,7 +1,4 @@
 /* Proposal A: use shared surfaces and type tokens; the board owns only its layout. */
-.planning-shell {
-  padding: 40px;
-}
 .planning-content {
   container-type: inline-size;
 }
@@ -120,7 +117,6 @@
 }
 .planning-day-strip,
 .planning-card-open,
-.planning-mobile-title,
 .planning-mobile-summary,
 .planning-mobile-day-heading,
 .planning-card-cta,
@@ -160,8 +156,6 @@
 }
 /* The compact board also applies beside the docked coach. */
 @container (max-width:1050px) {
-  .planning-desktop-title,
-  .planning-header > div > p,
   .planning-desktop-create,
   .planning-summary,
   .planning-active,
@@ -172,18 +166,13 @@
   .planning-card-title {
     display: none;
   }
-  .planning-mobile-title,
   .planning-card-open {
     display: block;
-  }
-  .planning-title {
-    font-size: 34px;
   }
   .planning-header {
     margin-bottom: 20px;
   }
   .planning-toolbar {
-    position: relative;
     padding-bottom: 20px;
   }
   .planning-week-controls {
@@ -197,12 +186,6 @@
   .planning-week-controls button {
     width: 44px;
     padding-inline: 0;
-  }
-  /* Advanced controls stay beside the title, preserving the reference's week row. */
-  .planning-extra-controls {
-    position: absolute;
-    right: 0;
-    top: -64px;
   }
   .planning-extra-controls button {
     width: 44px;
@@ -277,66 +260,6 @@
     display: none;
   }
 }
-.planning-brand-header {
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  background: var(--color-abyss);
-}
-.planning-desktop-nav {
-  background: var(--color-abyss);
-  border-bottom: 0;
-}
-.planning-desktop-nav .navigation-shell {
-  padding-inline: 40px;
-}
-.planning-desktop-nav .navigation-shell > div {
-  height: 76px;
-}
-.planning-desktop-nav .navigation-item {
-  min-height: 44px;
-  font-weight: 500;
-}
-.planning-desktop-nav .navigation-item > svg {
-  display: none;
-}
-.planning-desktop-nav .navigation-item > span {
-  display: inline;
-}
-.planning-mobile-nav {
-  background: var(--color-abyss);
-  border-top: 0;
-}
-.planning-mobile-nav > div {
-  padding: 8px 20px;
-  gap: 4px;
-  height: 60px;
-}
-.planning-mobile-nav .navigation-item,
-.planning-mobile-nav button {
-  min-height: 44px;
-  font-size: 14px;
-  font-weight: 500;
-}
-.planning-mobile-nav .navigation-item > svg,
-.planning-mobile-nav .navigation-item > span[aria-hidden],
-.planning-mobile-nav button > span:first-child {
-  display: none;
-}
-.planning-mobile-nav span.font-sans {
-  font-size: 14px;
-}
-.planning-mobile-nav .navigation-item[aria-current='page'] {
-  background: var(--color-selection);
-}
-@media (max-width: 767px) {
-  .planning-shell {
-    padding: 20px;
-  }
-  .planning-brand-header {
-    display: flex;
-  }
-}
 @media (max-width: 640px) {
   .planning-dialog {
     padding: 20px 20px max(20px, env(safe-area-inset-bottom));
@@ -376,20 +299,6 @@
 .planning-active > div:first-child {
   flex: 0 1 345px;
 }
-.planning-desktop-nav .navigation-shell > div {
-  gap: 32px;
-}
-.planning-desktop-nav .navigation-shell > div > div:nth-child(2) {
-  flex: 1;
-  gap: 20px;
-}
-.planning-desktop-nav button[aria-controls='coach-panel'] {
-  border-color: transparent;
-  color: var(--color-neon-cyan);
-}
-.planning-desktop-nav button[aria-controls='coach-panel'] > span:first-child {
-  display: none;
-}
 .planning-mobile-day-heading h3::first-letter {
   text-transform: uppercase;
 }
@@ -402,23 +311,6 @@
   margin-top: 20px;
   padding: 16px;
   border-color: color-mix(in srgb, var(--color-warning-orange) 30%, var(--color-border));
-}
-@media (min-width: 768px) and (max-width: 1100px) {
-  .planning-desktop-nav .navigation-shell {
-    padding-inline: 24px;
-  }
-  .planning-desktop-nav .navigation-shell > div {
-    gap: 16px;
-  }
-  .planning-desktop-nav .navigation-shell > div > div:nth-child(2) {
-    gap: 4px;
-  }
-  .planning-desktop-nav .navigation-item > span {
-    display: none;
-  }
-  .planning-desktop-nav .navigation-item > svg {
-    display: block;
-  }
 }
 .planning-next {
   position: relative;
@@ -436,10 +328,6 @@
   line-height: 1.2;
 }
 .planning-content .ui-button[data-variant='ghost'] {
-  color: var(--color-neon-cyan);
-}
-.planning-mobile-nav .navigation-item,
-.planning-mobile-nav button {
   color: var(--color-neon-cyan);
 }
 .planning-mobile-create {

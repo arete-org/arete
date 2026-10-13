@@ -145,15 +145,12 @@ export function PlanningPage() {
       />
     );
   return (
-    <div className="page-shell planning-shell bg-void">
+    <div className="page-shell bg-void">
       <div className="page-content planning-content">
         <header className="planning-header">
           <div>
-            <h1 className="page-title planning-title">
-              <span className="planning-desktop-title">Votre semaine, en un regard.</span>
-              <span className="planning-mobile-title">Planning</span>
-            </h1>
-            <p className="text-sm text-text-secondary mt-2">Planning · {dayLabel(weekStart)}</p>
+            <h1 className="page-title">Planning</h1>
+            <p className="text-xs text-text-muted font-sans mt-1">Votre semaine, en un regard.</p>
           </div>
           <Button
             className="planning-desktop-create"
