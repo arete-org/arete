@@ -33,6 +33,8 @@ from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import ActivityStreams, from_time_series
 from arete.garmin.threshold import refresh_threshold
 from arete.strava.merge import garmin_takeover
+from arete.strength.logging_service import link_garmin_strength
+from arete.strength.repository import StrengthRepository
 
 logger = logging.getLogger(__name__)
 
@@ -515,6 +517,9 @@ class GarminSyncClient:
                         if auto_match(self.repository, actual_id, session, self.zones):
                             result.activities_matched += 1
                     result.session_ids.append(actual_id)
+                    if session.sport == "strength":
+                        # The Muscu log of that day may already be saved.
+                        link_garmin_strength(StrengthRepository(), [session.date])
                     if streams is not None:
                         self._save_streams(actual_id, streams)
                     result.last_activity_date = activity.start_time.date()
@@ -616,8 +621,6 @@ class GarminSyncClient:
 
         updated = named = matched = kept = 0
         # Strength sessions typed in the Log complete the planned strength session of the day
-        from arete.strength.repository import StrengthRepository
-
         for logged in StrengthRepository().list_sessions(limit=1000):
             if complete_planned(self.repository, logged.date, "strength"):
                 matched += 1

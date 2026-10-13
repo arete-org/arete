@@ -17,7 +17,10 @@ from pydantic import BaseModel, Field
 
 from arete.data.cardio_muscle_impact import CARDIO_MUSCLE_IMPACT
 from arete.features import muscles as muscle_map
-from arete.strength.logging_service import complete_planned_strength
+from arete.strength.logging_service import (
+    complete_planned_strength,
+    link_garmin_strength,
+)
 from arete.strength.models import (
     Exercise,
     ExerciseCategory,
@@ -120,6 +123,8 @@ class StrengthSessionResponse(BaseModel):
     total_volume: float
     overall_rpe: float | None
     muscles_worked: list[str]
+    exercise_names: list[str] = []
+    garmin_activity_id: int | None = None
 
 
 class SetResponse(BaseModel):
@@ -403,6 +408,7 @@ def create_session(data: StrengthSessionCreate):
 
     session_id = _repo.create_session(session)
     complete_planned_strength(session.date)
+    link_garmin_strength(_repo, [session.date])
     session.id = session_id
 
     return _session_to_summary_response(session)
@@ -631,6 +637,8 @@ def _session_to_summary_response(session: StrengthSession) -> StrengthSessionRes
         total_volume=round(session.total_volume, 1),
         overall_rpe=session.overall_rpe,
         muscles_worked=[m.value for m in session.muscles_worked],
+        exercise_names=[ex.exercise.name for ex in session.exercises if ex.exercise],
+        garmin_activity_id=session.actual_session_id,
     )
 
 

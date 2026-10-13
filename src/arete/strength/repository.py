@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Collection
 from datetime import date, datetime
 
 import duckdb
@@ -941,6 +942,68 @@ class StrengthRepository:
             raise
         finally:
             conn.close()
+
+    def link_lone_garmin_pairs(
+        self, days: Collection[date] | None = None
+    ) -> list[tuple[int, int, date]]:
+        """Link each day's lone unlinked log to its lone unlinked strength activity.
+
+        A day with two unlinked logs or two unlinked strength activities stays
+        as it is: the manual link decides those. ``None`` covers every day (the
+        backfill). Idempotent: a linked pair is no longer a candidate. Returns
+        the (strength session, actual session, day) pairs it linked.
+        """
+        if days is not None and not days:
+            return []
+        day_filter = ""
+        params: list[date] = []
+        if days is not None:
+            params = sorted(set(days))
+            day_filter = f"AND date IN ({', '.join('?' for _ in params)})"
+        conn = self._get_connection()
+        # Pairs, links and reward invalidation are one commit, like a manual link.
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            pairs = conn.execute(
+                f"""
+                WITH logs AS (
+                    SELECT date, min(id) AS id, count(*) AS n
+                    FROM app.visible_strength_sessions
+                    WHERE actual_session_id IS NULL {day_filter}
+                    GROUP BY date
+                ), activities AS (
+                    SELECT date, min(id) AS id, count(*) AS n
+                    FROM app.visible_actual_sessions a
+                    WHERE sport = 'strength' {day_filter}
+                      AND NOT EXISTS (
+                          SELECT 1 FROM app.visible_strength_sessions s
+                          WHERE s.actual_session_id = a.id
+                      )
+                    GROUP BY date
+                )
+                SELECT logs.id, activities.id, logs.date
+                FROM logs JOIN activities USING (date)
+                WHERE logs.n = 1 AND activities.n = 1
+                ORDER BY logs.date
+                """,
+                params + params,
+            ).fetchall()
+            for session_id, actual_id, _day in pairs:
+                conn.execute(
+                    "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ? AND actual_session_id IS NULL) ",
+                    (actual_id, session_id),
+                )
+                conn.execute(
+                    "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
+                    [f"strength:{session_id}", f"actual:{actual_id}"],
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+        return [(int(s), int(a), d) for s, a, d in pairs]
 
 
 _SESSION_COLUMNS = """id, user_id, date, name, program, duration_min,
