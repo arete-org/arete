@@ -31,6 +31,20 @@ class PipelineFailureTests(unittest.TestCase):
                 self.assertIn("defaults:\n  run:\n    shell: bash\n", text)
 
 
+class ProductionWorkflowTests(unittest.TestCase):
+    def test_production_moves_only_onto_a_build_that_answered_healthy(self):
+        # Deploying with the domain checked the old release after a rollback:
+        # three broken builds reported green (2026-10-13).
+        text = (ROOT / ".github/workflows/deploy-production.yml").read_text()
+        deploy = text.index("vercel deploy --prod --skip-domain")
+        check = text.index('"$URL/api/health"')
+        promote = text.index("/promote/$id")
+        served = text.index('"$serving" != "$id"')
+        self.assertLess(deploy, check)
+        self.assertLess(check, promote)
+        self.assertLess(promote, served)
+
+
 class PreviewWorkflowTests(unittest.TestCase):
     def test_deploy_and_cleanup_share_a_non_cancelling_per_pr_lock(self):
         preview = CI.split("  preview:\n", 1)[1]
