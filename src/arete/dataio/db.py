@@ -98,8 +98,10 @@ def _open_remote() -> duckdb.DuckDBPyConnection:
     """
     REMOTE_HOME.mkdir(parents=True, exist_ok=True)
     _seed_extensions()
-    # The MotherDuck extension also reads $HOME, which Vercel leaves empty.
-    if not os.environ.get("HOME"):
+    # The MotherDuck extension also reads $HOME, which Vercel leaves empty or,
+    # for a large function, points at a /home/vercel that does not exist.
+    home = os.environ.get("HOME", "")
+    if not (os.path.isdir(home) and os.access(home, os.W_OK)):
         os.environ["HOME"] = str(REMOTE_HOME)
     con = duckdb.connect()
     con.execute(f"SET home_directory='{REMOTE_HOME}'")

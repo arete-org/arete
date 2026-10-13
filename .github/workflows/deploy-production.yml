@@ -17,6 +17,11 @@ concurrency:
   group: deploy-production
   cancel-in-progress: false
 
+# `bash` adds -o pipefail: a health check piped into tee must fail the job.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   deploy:
     if: github.ref == 'refs/heads/main'

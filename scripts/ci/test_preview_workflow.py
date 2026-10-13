@@ -19,6 +19,18 @@ DEPLOY_SCRIPT = textwrap.dedent(
 )
 
 
+class PipelineFailureTests(unittest.TestCase):
+    def test_workflows_that_pipe_a_check_fail_with_it(self):
+        # GitHub's default shell is `bash -e`: `curl -f … | tee` then exits
+        # with tee's status and a 503 deployed production (2026-10-12).
+        for path in sorted((ROOT / ".github/workflows").glob("*.yml")):
+            text = path.read_text()
+            if not re.search(r"\S \| tee ", text):
+                continue
+            with self.subTest(workflow=path.name):
+                self.assertIn("defaults:\n  run:\n    shell: bash\n", text)
+
+
 class PreviewWorkflowTests(unittest.TestCase):
     def test_deploy_and_cleanup_share_a_non_cancelling_per_pr_lock(self):
         preview = CI.split("  preview:\n", 1)[1]
