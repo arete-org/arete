@@ -513,10 +513,8 @@ def test_sync_status_reports_the_last_garmin_import(router_client):
     from arete.api import garmin_sync
 
     imported = datetime(2026, 10, 8, 8, 2, 11)
-    garmin = MagicMock()
-    garmin.is_authenticated.return_value = False
     with (
-        patch("arete.garmin.client.GarminClient", return_value=garmin),
+        patch("arete.garmin.token_store.session_status", return_value=(False, None)),
         patch.object(
             garmin_sync._repo, "last_garmin_import", return_value=(None, imported)
         ),
@@ -885,3 +883,96 @@ def test_coach_sync_refuses_an_overlapping_run_for_the_same_athlete():
     result, _, _ = _coach_sync(overlapping())
     assert result["complete"] is True
     assert not service._running
+
+
+class TestSyncStatusFromLocalState:
+    """The dashboard asks on every load: answered without Garmin."""
+
+    @pytest.fixture
+    def tokens(self, tmp_path, monkeypatch):
+        directory = tmp_path / "garmin_tokens"
+        monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(directory))
+        return directory
+
+    def status(self, router_client):
+        from arete.api import garmin_sync
+
+        return router_client(garmin_sync.router).get("/garmin/sync/status").json()
+
+    def test_stored_tokens_answer_without_a_garmin_login(self, router_client, tokens):
+        from arete.garmin.token_store import save_account
+
+        tokens.mkdir()
+        (tokens / "garmin_tokens.json").write_text("{}")
+        save_account(tokens / "garmin_tokens.json", "me@garmin.test", remote=False)
+        with patch("arete.garmin.client.Garmin") as garmin:
+            body = self.status(router_client)
+        garmin.assert_not_called()
+        garmin.return_value.login.assert_not_called()
+        assert body["garmin_authenticated"] is True
+        assert body["user_email"] == "me@garmin.test"
+
+    def test_tokens_saved_before_the_account_was_recorded(self, router_client, tokens):
+        tokens.mkdir()
+        (tokens / "garmin_tokens.json").write_text("{}")
+        body = self.status(router_client)
+        assert (body["garmin_authenticated"], body["user_email"]) == (True, None)
+
+    def test_tokens_garmin_refused_ask_to_reconnect(self, router_client, tokens):
+        from arete.garmin.token_store import refused, save_account
+
+        tokens.mkdir()
+        token = tokens / "garmin_tokens.json"
+        token.write_text("{}")
+        save_account(token, "me@garmin.test", remote=False)
+        refused(token, remote=False)
+        body = self.status(router_client)
+        assert (body["garmin_authenticated"], body["user_email"]) == (
+            False,
+            "me@garmin.test",
+        )
+
+    def test_no_tokens_is_not_connected(self, router_client, tokens):
+        body = self.status(router_client)
+        assert (body["garmin_authenticated"], body["user_email"]) == (False, None)
+
+
+def test_status_leaves_garminconnect_out_and_answers_fast(tmp_path):
+    """A cold instance: the status must not import Garmin's client at all."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    tokens = tmp_path / "garmin_tokens"
+    tokens.mkdir()
+    (tokens / "garmin_tokens.json").write_text("{}")
+    code = """
+import json, sys, time
+from fastapi.testclient import TestClient
+from arete.dataio.init_duckdb import main as init_schema
+init_schema()
+from arete.api.main import app
+client = TestClient(app)
+client.get("/garmin/sync/status")
+start = time.perf_counter()
+body = client.get("/garmin/sync/status").json()
+print(json.dumps({"body": body, "ms": (time.perf_counter() - start) * 1000,
+                  "garmin": "garminconnect" in sys.modules}))
+"""
+    env = {
+        **os.environ,
+        "ARETE_DB": str(tmp_path / "status.duckdb"),
+        "ARETE_DATA_DIR": str(tmp_path / "files"),
+        "ARETE_GARMIN_TOKENS_DIR": str(tokens),
+        "PYTHON_DOTENV_DISABLED": "1",
+    }
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env
+    )
+    assert out.returncode == 0, out.stderr
+    result = json.loads(out.stdout.strip().splitlines()[-1])
+    assert result["body"]["garmin_authenticated"] is True
+    assert result["garmin"] is False
+    # A Garmin login took seconds; the bound is loose for shared CI runners.
+    assert result["ms"] < 500, result
