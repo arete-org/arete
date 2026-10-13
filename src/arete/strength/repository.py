@@ -22,6 +22,7 @@ from arete.strength.models import (
     MuscleGroup,
     SessionExercise,
     StrengthSession,
+    StrengthSessionSummary,
 )
 from arete.strength.progression import ExerciseSession, WorkSet
 
@@ -496,6 +497,80 @@ class StrengthRepository:
         finally:
             conn.close()
         return sessions
+
+    def list_session_summaries(
+        self,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        program: str | None = None,
+        limit: int = 50,
+    ) -> list[StrengthSessionSummary]:
+        """The sessions' list rows and totals in one statement, no set loaded."""
+        filters = ""
+        params: list = []
+        if start_date:
+            filters += " AND date >= ?"
+            params.append(start_date)
+        if end_date:
+            filters += " AND date <= ?"
+            params.append(end_date)
+        if program:
+            filters += " AND LOWER(program) = LOWER(?)"
+            params.append(program)
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                f"""
+                WITH s AS (
+                    SELECT id, date, name, program, duration_min, overall_rpe
+                    FROM app.visible_strength_sessions WHERE 1=1{filters}
+                    ORDER BY date DESC, id DESC LIMIT ?
+                ), ex AS (
+                    SELECT se.session_id, count(*) AS exercises,
+                           list_sort(list_distinct(list(CASE WHEN e.id IS NOT NULL
+                               THEN coalesce(nullif(e.primary_muscle, ''), 'full_body')
+                           END))) AS muscles
+                    FROM app.visible_session_exercises se
+                    LEFT JOIN app.visible_exercises e ON se.exercise_id = e.id
+                    WHERE se.session_id IN (SELECT id FROM s)
+                    GROUP BY se.session_id
+                ), st AS (
+                    SELECT se.session_id, count(*) AS sets,
+                           sum(es.reps * coalesce(es.weight_kg, 0)) AS volume
+                    FROM app.visible_exercise_sets es
+                    JOIN app.visible_session_exercises se
+                      ON es.session_exercise_id = se.id
+                    WHERE se.session_id IN (SELECT id FROM s)
+                      AND es.is_warmup IS NOT TRUE
+                    GROUP BY se.session_id
+                )
+                SELECT s.id, s.date, s.name, s.program, s.duration_min, s.overall_rpe,
+                       coalesce(ex.exercises, 0), coalesce(st.sets, 0),
+                       coalesce(st.volume, 0), coalesce(ex.muscles, [])
+                FROM s
+                LEFT JOIN ex ON ex.session_id = s.id
+                LEFT JOIN st ON st.session_id = s.id
+                ORDER BY s.date DESC, s.id DESC
+                """,
+                [*params, limit],
+            ).fetchall()
+        finally:
+            conn.close()
+        return [
+            StrengthSessionSummary(
+                id=row[0],
+                date=row[1],
+                name=row[2],
+                program=row[3],
+                duration_min=row[4],
+                overall_rpe=row[5],
+                exercises_count=int(row[6]),
+                total_sets=int(row[7]),
+                total_volume=float(row[8]),
+                muscles_worked=list(row[9]),
+            )
+            for row in rows
+        ]
 
     def _load_exercises(
         self, conn: duckdb.DuckDBPyConnection, sessions: list[StrengthSession]
