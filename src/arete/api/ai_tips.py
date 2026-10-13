@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from arete.services import coaching_rules as rules
 from arete.services.coaching_repository import (
+    Briefing,
     BriefingRepository,
     SessionFeedbackRepository,
 )
@@ -20,17 +21,43 @@ router = APIRouter(prefix="/tips", tags=["tips"])
 
 
 class DailyTipResponse(BaseModel):
-    """Daily tip response."""
+    """Daily tip response: the day's briefing, or that it is being written.
 
-    tip: str = Field(description="Contextual training tip in French")
-    priority: Literal["info", "warning", "alert"] = Field(
-        description="Tip priority level"
+    ``pending`` carries no tip; ``ready`` keeps every field older clients read.
+    """
+
+    status: Literal["ready", "pending"] = Field(
+        default="ready", description="Whether the day's briefing is written yet"
     )
-    source: Literal["agent", "rules"] = Field(
-        default="rules",
+    tip: str | None = Field(
+        default=None, description="Contextual training tip in French"
+    )
+    priority: Literal["info", "warning", "alert"] | None = Field(
+        default=None, description="Tip priority level"
+    )
+    source: Literal["agent", "rules"] | None = Field(
+        default=None,
         description="Whether the coaching agent wrote it, or the rule engine did",
     )
-    generated_at: str = Field(description="ISO 8601 generation timestamp")
+    generated_at: str | None = Field(
+        default=None, description="ISO 8601 generation timestamp"
+    )
+    updated_after_sync: bool = Field(
+        default=False,
+        description="The daily sync rewrote a briefing written before its data",
+    )
+
+
+def _daily_tip(briefing: Briefing | None) -> DailyTipResponse:
+    if briefing is None:
+        return DailyTipResponse(status="pending")
+    return DailyTipResponse(
+        tip=briefing.text,
+        priority=briefing.priority,  # type: ignore[arg-type]
+        source=briefing.source,  # type: ignore[arg-type]
+        generated_at=(briefing.created_at or datetime.now(UTC)).isoformat(),
+        updated_after_sync=briefing.revised and briefing.trigger == "scheduler",
+    )
 
 
 class PostSessionRequest(BaseModel):
@@ -42,19 +69,25 @@ class PostSessionRequest(BaseModel):
 
 @router.get("/daily", response_model=DailyTipResponse)
 def get_daily_tip() -> DailyTipResponse:
-    # The stored briefing first: importing the agent stack (`arete.coaching`)
-    # costs a second on a cold instance, and most visits find one written.
+    """The stored briefing, or ``pending``: reading never runs the model."""
+    return _daily_tip(BriefingRepository().get_for_day())
+
+
+@router.post("/daily", response_model=DailyTipResponse)
+def write_daily_tip() -> DailyTipResponse:
+    """Write the day's briefing if it has none, once per athlete and day.
+
+    The dashboard sends this long request without waiting on it and polls the
+    GET. ``pending`` when another request or instance is writing it. Importing
+    the agent stack (``arete.coaching``) costs a second on a cold instance,
+    hence the stored briefing first.
+    """
     briefing = BriefingRepository().get_for_day()
     if briefing is None:
         from arete import coaching
 
         briefing = coaching.get_or_create_briefing(trigger="api")
-    return DailyTipResponse(
-        tip=briefing.text,
-        priority=briefing.priority,  # type: ignore[arg-type]
-        source=briefing.source,  # type: ignore[arg-type]
-        generated_at=(briefing.created_at or datetime.now(UTC)).isoformat(),
-    )
+    return _daily_tip(briefing)
 
 
 @router.post("/post-session", response_model=PostSessionResponse)

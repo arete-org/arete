@@ -330,6 +330,100 @@ class TestGetOrCreate:
             assert (stored.text, stored.source) == (text, "agent")
 
 
+class TestClaim:
+    """The stored claim stops a second instance from paying for the same day."""
+
+    def test_a_run_held_elsewhere_answers_none_without_a_model(
+        self, repo, clean_day, enabled
+    ):
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+        produce = Mock(return_value="jamais")
+        assert (
+            briefing_service.get_or_create_briefing(
+                produce=produce, target_date=clean_day
+            )
+            is None
+        )
+        produce.assert_not_called()
+
+    def test_a_stopped_run_is_settled_with_the_floor_not_replayed(
+        self, repo, clean_day, enabled
+    ):
+        # The function was stopped mid-run: its claim outlived the run bound.
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+        produce = Mock(return_value="jamais")
+        with (
+            patch.object(briefing_service, "CLAIM_EXPIRY", timedelta(0)),
+            patch(
+                "arete.services.briefing._rule_floor",
+                return_value=("floor", "info", TRAINED),
+            ),
+        ):
+            b = briefing_service.get_or_create_briefing(
+                produce=produce, target_date=clean_day
+            )
+        produce.assert_not_called()
+        assert (b.text, b.source) == ("floor", "rules")
+        statuses = [r.status for r in repo.list_recent() if r.date == clean_day]
+        assert sorted(statuses) == ["failed", "ok"]
+
+    def test_the_claim_is_released_after_a_failed_run(self, repo, clean_day, enabled):
+        with patch(
+            "arete.services.briefing._rule_floor",
+            return_value=("floor", "info", TRAINED),
+        ):
+            briefing_service.get_or_create_briefing(
+                produce=Mock(side_effect=RuntimeError("model is away")),
+                target_date=clean_day,
+            )
+        assert "pending" not in [r.status for r in repo.list_recent()]
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+
+
+class TestSchedulerRewrite:
+    """The cron rewrites the dashboard's briefing only for data it lacked."""
+
+    def test_a_rewrite_is_marked_and_served(self, repo, clean_day, enabled):
+        earlier = None
+        with (
+            patch("arete.coaching.run_briefing", side_effect=["Avant.", "Après."]),
+            patch(
+                "arete.services.briefing._rule_floor",
+                return_value=("floor", "info", TRAINED),
+            ),
+        ):
+            earlier = get_or_create_briefing(target_date=clean_day)
+            assert get_or_create_briefing(target_date=clean_day).id == earlier.id
+            later = get_or_create_briefing(
+                target_date=clean_day, trigger="scheduler", replacing=earlier
+            )
+        assert earlier.revised is False
+        assert (later.text, later.trigger, later.revised) == (
+            "Après.",
+            "scheduler",
+            True,
+        )
+        assert repo.get_for_day(clean_day).id == later.id
+
+    def test_new_data_is_what_makes_a_briefing_stale(self, repo, clean_day):
+        from arete.dataio.db import db_connection
+
+        repo.create(text="Écrit tôt.", briefing_date=clean_day)
+        written = repo.get_for_day(clean_day)
+        assert not briefing_service.written_before_new_data(written)
+        with db_connection() as con:
+            con.execute(
+                "INSERT INTO app.daily_metrics (user_id, date, fetched_at) "
+                "VALUES (getvariable('arete_athlete_id'), ?, ?)",
+                [clean_day, written.created_at + timedelta(minutes=1)],
+            )
+        try:
+            assert briefing_service.written_before_new_data(written)
+        finally:
+            with db_connection() as con:
+                con.execute("DELETE FROM app.daily_metrics WHERE date = ?", [clean_day])
+
+
 # ---------------------------------------------------------------------------
 # The journal the briefing writes into every morning must stay bounded
 # ---------------------------------------------------------------------------

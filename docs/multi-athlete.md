@@ -124,8 +124,9 @@ A dispatch reads the athletes still owed today, oldest sync first, and claims
 them one at a time. Time bounds it rather than a count: one athlete's run lasts
 from seconds to minutes, and Vercel stops the function at 300 seconds. No
 athlete is claimed after 120 seconds and no briefing or review starts after 210;
-a deferred briefing is written when the athlete opens the dashboard, and the
-review stays one click away in Planning. Later windows take whoever is still
+a deferred briefing is written by the dashboard's own request (`POST
+/tips/daily`) when the athlete opens it, and the review stays one click away in
+Planning. Later windows take whoever is still
 owed; a window with nothing to do costs one query.
 
 Each athlete carries a daily marker (`last_sync_at`) and a lease

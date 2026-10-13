@@ -94,7 +94,7 @@ class TestWriteDailyBriefing:
                 return_value=None,
             ),
             patch(
-                "arete.coaching.generate_briefing",
+                "arete.coaching.get_or_create_briefing",
                 side_effect=RuntimeError("boom"),
             ),
         ):
@@ -122,7 +122,7 @@ class TestWriteDailyBriefing:
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=self._existing("scheduler"),
             ),
-            patch("arete.coaching.generate_briefing") as generate,
+            patch("arete.coaching.get_or_create_briefing") as generate,
         ):
             assert scheduler.write_daily_briefing() == "agent"
         generate.assert_not_called()
@@ -136,7 +136,7 @@ class TestWriteDailyBriefing:
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=None,
             ),
-            patch("arete.coaching.generate_briefing", return_value=fresh),
+            patch("arete.coaching.get_or_create_briefing", return_value=fresh),
             patch("arete.services.notifications.notify") as notify,
         ):
             scheduler.write_daily_briefing()
@@ -144,18 +144,49 @@ class TestWriteDailyBriefing:
             "Briefing du coach", "Footing 45'.", "/", kind="briefing"
         )
 
-    def test_a_briefing_written_before_the_sync_is_rewritten(self):
-        fresh = self._existing("scheduler")
+    def test_a_briefing_written_before_new_data_is_rewritten(self):
+        fresh, stale = self._existing("scheduler"), self._existing("api")
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=stale,
+            ),
+            patch("arete.services.briefing.written_before_new_data", return_value=True),
+            patch(
+                "arete.coaching.get_or_create_briefing", return_value=fresh
+            ) as generate,
+        ):
+            scheduler.write_daily_briefing()
+        generate.assert_called_once_with(trigger="scheduler", replacing=stale)
+
+    def test_a_briefing_written_from_the_same_data_is_kept(self):
         with (
             patch("arete.services.briefing.briefing_enabled", return_value=True),
             patch(
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=self._existing("api"),
             ),
-            patch("arete.coaching.generate_briefing", return_value=fresh) as generate,
+            patch(
+                "arete.services.briefing.written_before_new_data", return_value=False
+            ),
+            patch("arete.coaching.get_or_create_briefing") as generate,
         ):
-            scheduler.write_daily_briefing()
-        generate.assert_called_once_with(trigger="scheduler")
+            assert scheduler.write_daily_briefing() == "agent"
+        generate.assert_not_called()
+
+    def test_a_run_in_progress_is_left_to_finish(self):
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=None,
+            ),
+            patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch("arete.services.notifications.notify") as notify,
+        ):
+            assert scheduler.write_daily_briefing() == "in progress"
+        notify.assert_not_called()
 
 
 class TestStart:

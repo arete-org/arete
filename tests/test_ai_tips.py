@@ -285,7 +285,7 @@ class TestTipUsesSettings:
 
 
 class TestDailyEndpoint:
-    """GET /tips/daily now reads the day's briefing, producing it once."""
+    """GET /tips/daily reads the day's briefing; POST produces it once."""
 
     def test_serves_the_stored_briefing_without_producing_another(self, client):
         from datetime import date
@@ -304,14 +304,29 @@ class TestDailyEndpoint:
         try:
             with patch("arete.services.briefing.generate_briefing") as produce:
                 body = client.get("/tips/daily").json()
+                assert client.post("/tips/daily").json() == body
             produce.assert_not_called()
         finally:
             repo.delete_for_day(date.today())
 
+        assert body["status"] == "ready"
         assert body["tip"] == "Ta charge monte vite."
         assert body["priority"] == "warning"
         assert body["source"] == "agent"
         assert body["generated_at"]
+
+    def test_reading_a_day_without_briefing_answers_pending(self, client):
+        from datetime import date
+        from unittest.mock import patch
+
+        from arete.services.coaching_repository import BriefingRepository
+
+        BriefingRepository().delete_for_day(date.today())
+        with patch("arete.services.briefing.get_or_create_briefing") as produce:
+            body = client.get("/tips/daily").json()
+        produce.assert_not_called()
+        assert body["status"] == "pending"
+        assert body["tip"] is None
 
     def test_produces_one_when_the_day_has_none(self, client):
         from datetime import date
@@ -338,10 +353,14 @@ class TestDailyEndpoint:
                     return_value=("floor", "info", trained),
                 ),
             ):
-                body = client.get("/tips/daily").json()
+                assert client.get("/tips/daily").json()["status"] == "pending"
+                body = client.post("/tips/daily").json()
+                assert client.get("/tips/daily").json() == body
         finally:
             repo.delete_for_day(date.today())
 
+        assert body["status"] == "ready"
+        assert body["updated_after_sync"] is False
         assert body["tip"] == "Écrit ce matin."
         assert body["source"] == "agent"
 
@@ -361,7 +380,7 @@ class TestDailyEndpoint:
                     side_effect=RuntimeError("model is away"),
                 ),
             ):
-                resp = client.get("/tips/daily")
+                resp = client.post("/tips/daily")
         finally:
             repo.delete_for_day(date.today())
 
@@ -369,6 +388,100 @@ class TestDailyEndpoint:
         body = resp.json()
         assert body["source"] == "rules"
         assert body["tip"]
+
+
+def test_reading_without_a_briefing_is_fast_and_leaves_the_agent_out(tmp_path):
+    """A cold instance answers the dashboard's GET without the agent stack.
+
+    Its own process: the suite imports ``arete.coaching`` everywhere else.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+
+    code = """
+import json, sys, time
+from fastapi.testclient import TestClient
+from arete.dataio.init_duckdb import main as init_schema
+init_schema()
+from arete.api.main import app
+client = TestClient(app)
+client.get("/tips/daily")  # the instance's first request opens the database
+start = time.perf_counter()
+response = client.get("/tips/daily")
+elapsed = time.perf_counter() - start
+print(json.dumps({
+    "body": response.json(),
+    "ms": elapsed * 1000,
+    "coaching": "arete.coaching" in sys.modules,
+    "timing": response.headers.get("server-timing"),
+}))
+"""
+    env = {
+        **os.environ,
+        "ARETE_DB": str(tmp_path / "pending.duckdb"),
+        "ARETE_DATA_DIR": str(tmp_path / "files"),
+        "PYTHON_DOTENV_DISABLED": "1",
+    }
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env
+    )
+    assert out.returncode == 0, out.stderr
+    result = json.loads(out.stdout.strip().splitlines()[-1])
+    assert result["body"]["status"] == "pending"
+    assert result["coaching"] is False
+    assert result["ms"] < 100, result
+
+
+def test_concurrent_writes_produce_the_day_once(client):
+    """Two tabs ask for the day's briefing: one model run, the other waits for
+    nothing and answers pending."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from arete.services.coaching_repository import BriefingRepository
+    from arete.services.coaching_rules import RuleFacts
+
+    trained = RuleFacts(
+        acwr=1.0,
+        tsb=-3.0,
+        readiness_score=71.0,
+        fatigue_threshold=85,
+        fitness_goal="build",
+    )
+    running, release = threading.Event(), threading.Event()
+
+    def produce(_facts: str) -> str:
+        running.set()
+        assert release.wait(timeout=5)
+        return "Écrit une fois."
+
+    repo = BriefingRepository()
+    repo.delete_for_day(date.today())
+    try:
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch("arete.coaching.run_briefing", side_effect=produce) as run,
+            patch(
+                "arete.services.briefing._rule_floor",
+                return_value=("floor", "info", trained),
+            ),
+            ThreadPoolExecutor(max_workers=3) as pool,
+        ):
+            first = pool.submit(client.post, "/tips/daily")
+            assert running.wait(timeout=5)
+            others = [client.post("/tips/daily").json() for _ in range(2)]
+            assert client.get("/tips/daily").json()["status"] == "pending"
+            release.set()
+            written = first.result(timeout=10).json()
+    finally:
+        repo.delete_for_day(date.today())
+
+    assert run.call_count == 1
+    assert [o["status"] for o in others] == ["pending", "pending"]
+    assert written["status"] == "ready"
+    assert written["tip"] == "Écrit une fois."
 
 
 class TestLowLoadIsNotSilence:

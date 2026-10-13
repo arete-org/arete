@@ -234,23 +234,28 @@ def write_daily_briefing() -> str:
     Log-and-continue: the briefing must never be able to break the loop, and
     it has its own rule floor, so a failure here is already handled downstream.
     """
-    from arete.coaching import generate_briefing
-    from arete.services.briefing import briefing_enabled
+    from arete.coaching import get_or_create_briefing
+    from arete.services.briefing import briefing_enabled, written_before_new_data
     from arete.services.coaching_repository import BriefingRepository
 
     if not briefing_enabled():
         return "disabled"
-    # A briefing the dashboard asked for before the sync is rewritten: it was
-    # read off last night's missing data. One this job already wrote (a cron
-    # that fires twice) is kept: the second run would pay for the same text.
+    # A briefing the dashboard asked for is rewritten only when this sync
+    # brought data it was written without (today's health, a session, a plan
+    # decision); the dashboard then says it was updated after the sync. One
+    # this job already wrote (a cron that fires twice) is kept.
     existing = BriefingRepository().get_for_day(athlete_today())
-    if existing is not None and existing.trigger == "scheduler":
-        return existing.source
     try:
-        briefing = generate_briefing(trigger="scheduler")
+        if existing is not None and (
+            existing.trigger == "scheduler" or not written_before_new_data(existing)
+        ):
+            return existing.source
+        briefing = get_or_create_briefing(trigger="scheduler", replacing=existing)
     except Exception as e:  # noqa: BLE001 - background job must not die
         logger.warning("Daily briefing failed: %s", e)
         return f"failed: {e}"
+    if briefing is None:
+        return "in progress"  # the dashboard's request is writing it
     logger.info("Daily briefing: %s", briefing.source)
     from arete.services.notifications import first_sentence, notify
 
