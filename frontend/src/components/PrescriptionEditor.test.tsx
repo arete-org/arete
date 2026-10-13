@@ -31,47 +31,89 @@ function type(input: HTMLInputElement, keys: string) {
   for (const key of keys) fireEvent.change(input, { target: { value: key === '⌫' ? input.value.slice(0, -1) : input.value + key } });
 }
 
-it('types durations as digits that fill mm:ss from the right and stores seconds', () => {
+it('types durations as digits that fill h:mm:ss from the right and stores seconds', () => {
   const latest = mount(warmup);
-  const duration = screen.getByLabelText('Durée (minutes:secondes)') as HTMLInputElement;
-  expect(duration.inputMode).toBe('numeric');
+  const duration = screen.getByLabelText('Durée (h:mm:ss)') as HTMLInputElement;
+  expect([duration.inputMode, duration.placeholder]).toEqual(['numeric', '0:00']);
+  expect(screen.getByText('Tape 2000 pour 20:00')).toBeTruthy();
   expect(duration.value).toBe('10:00');
-  // Editing appends at the right of the stored value.
-  type(duration, '0');
-  expect(duration.value).toBe('1:00:00');
-  expect(latest.current.steps[0].value).toBe(3600);
-  type(duration, '⌫⌫⌫⌫⌫');
+  type(duration, '⌫⌫⌫⌫');
   // Never a partial value: an empty field leaves the step unset, and it cannot be saved.
   expect(duration.value).toBe('');
   expect(latest.current.steps[0].value).toBeNull();
   expect(prescriptionReady(latest.current)).toBe(false);
-  expect(screen.getByRole('alert').textContent).toBe('Saisis la durée en chiffres : 2000 pour 20:00.');
+  expect(screen.getByRole('alert').textContent).toBe('Indique la durée.');
   type(duration, '2000');
   expect(duration.value).toBe('20:00');
   expect(latest.current.steps[0].value).toBe(1200);
   expect(screen.queryByRole('alert')).toBeNull();
-  fireEvent.change(duration, { target: { value: '' } });
-  type(duration, '13000');
-  expect(duration.value).toBe('1:30:00');
-  expect(latest.current.steps[0].value).toBe(5400);
-  fireEvent.change(duration, { target: { value: '' } });
-  type(duration, '100');
-  expect(latest.current.steps[0].value).toBe(60);
+  for (const [keys, text, seconds] of [['13000', '1:30:00', 5400], ['100', '1:00', 60]] as const) {
+    fireEvent.focus(duration);
+    type(duration, keys);
+    expect(duration.value).toBe(text);
+    expect(latest.current.steps[0].value).toBe(seconds);
+  }
+});
+
+it('restarts a focused duration with the first digit typed', () => {
+  const latest = mount({ version: 1, steps: [{ kind: 'warmup', duration_kind: 'seconds', value: 1200, steps: [] }] });
+  const duration = screen.getByLabelText('Durée (h:mm:ss)') as HTMLInputElement;
+  fireEvent.focus(duration);
+  expect([duration.selectionStart, duration.selectionEnd]).toEqual([0, 5]);
+  type(duration, '25');
+  expect(duration.value).toBe('0:25');
+  expect(latest.current.steps[0].value).toBe(25);
+});
+
+it('keeps the caret at the end, where Backspace always removes the last digit', () => {
+  mount({ version: 1, steps: [{ kind: 'warmup', duration_kind: 'seconds', value: 1200, steps: [] }] });
+  const duration = screen.getByLabelText('Durée (h:mm:ss)') as HTMLInputElement;
+  duration.focus();
+  // An arrow key or a tap moves the caret back to the end.
+  duration.setSelectionRange(2, 2);
+  fireEvent.keyUp(duration, { key: 'ArrowLeft' });
+  expect([duration.selectionStart, duration.selectionEnd]).toEqual([5, 5]);
+  // Even a deletion that took the separator removes the last digit.
+  fireEvent.change(duration, { target: { value: '2000' } });
+  expect(duration.value).toBe('2:00');
 });
 
 it('keeps seconds over 60 as typed, then normalises them on blur', () => {
   const latest = mount({ version: 1, steps: [{ kind: 'rest', duration_kind: 'seconds', value: 60, steps: [] }] }, 'strength');
-  const duration = screen.getByLabelText('Durée (minutes:secondes)') as HTMLInputElement;
-  fireEvent.change(duration, { target: { value: '' } });
+  const duration = screen.getByLabelText('Durée (h:mm:ss)') as HTMLInputElement;
+  fireEvent.focus(duration);
   type(duration, '90');
   expect(duration.value).toBe('0:90');
   expect(latest.current.steps[0].value).toBe(90);
   fireEvent.blur(duration);
   expect(duration.value).toBe('1:30');
-  // A pasted time keeps its digits only.
-  fireEvent.change(duration, { target: { value: '20:00' } });
+});
+
+it('accepts a pasted plain duration and refuses anything else, leaving the field unchanged', () => {
+  const latest = mount(warmup);
+  const duration = screen.getByLabelText('Durée (h:mm:ss)') as HTMLInputElement;
+  const paste = (text: string) => fireEvent.paste(duration, { clipboardData: { getData: () => text } });
+  paste('20:00');
   expect(duration.value).toBe('20:00');
   expect(latest.current.steps[0].value).toBe(1200);
+  for (const text of ['1h30', '20 min', 'abc']) {
+    paste(text);
+    expect(duration.value).toBe('20:00');
+    expect(latest.current.steps[0].value).toBe(1200);
+    expect(screen.getByRole('alert').textContent).toBe('Collage refusé : chiffres ou durée comme 1:30:00.');
+  }
+  type(duration, '⌫');
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('blocks a duration over 10:00:00', () => {
+  const latest = mount(warmup);
+  const duration = screen.getByLabelText('Durée (h:mm:ss)') as HTMLInputElement;
+  fireEvent.focus(duration);
+  type(duration, '100001');
+  expect(latest.current.steps[0].value).toBe(36_001);
+  expect(prescriptionReady(latest.current)).toBe(false);
+  expect(screen.getByRole('alert').textContent).toBe('Durée au-delà de 10:00:00 : vérifie la saisie.');
 });
 
 it("types a pace range as digits in m'ss per km, starting empty and never storing a partial bound", () => {
@@ -81,7 +123,8 @@ it("types a pace range as digits in m'ss per km, starting empty and never storin
   expect(prescriptionReady(latest.current)).toBe(false);
   const low = screen.getByLabelText("Allure minimum (min'ss par km)") as HTMLInputElement;
   const high = screen.getByLabelText("Allure maximum (min'ss par km)") as HTMLInputElement;
-  expect([low.value, high.value, high.inputMode]).toEqual(['', '', 'numeric']);
+  expect([low.value, high.value, high.inputMode, high.placeholder]).toEqual(['', '', 'numeric', "0'00"]);
+  expect(screen.getAllByText("Tape 330 pour 3'30")).toHaveLength(2);
   type(low, '330');
   type(high, '375');
   expect([low.value, high.value]).toEqual(["3'30", "3'75"]);
@@ -92,11 +135,23 @@ it("types a pace range as digits in m'ss per km, starting empty and never storin
   type(high, '⌫⌫⌫');
   expect(latest.current.steps[0].target?.high).toBeNull();
   expect(prescriptionReady(latest.current)).toBe(false);
-  expect(screen.getByRole('alert').textContent).toBe("Saisis l’allure en chiffres : 330 pour 3'30.");
-  // An inverted range, which the server refuses, is blocked here.
-  type(high, '300');
+  expect(screen.getByRole('alert').textContent).toBe('Indique l’allure.');
+});
+
+it('blocks an inverted range and an implausible pace with an inline error', () => {
+  const latest = mount(warmup);
+  fireEvent.change(screen.getByLabelText('Cible', { selector: 'select' }), { target: { value: 'pace_sec_km' } });
+  const low = screen.getByLabelText("Allure minimum (min'ss par km)") as HTMLInputElement;
+  const high = screen.getByLabelText("Allure maximum (min'ss par km)") as HTMLInputElement;
+  type(low, '415');
+  type(high, '330');
   expect(prescriptionReady(latest.current)).toBe(false);
   expect(screen.getByRole('alert').textContent).toBe('Le minimum ne peut pas dépasser le maximum.');
+  fireEvent.focus(low);
+  type(low, '100');
+  expect(latest.current.steps[0].target).toEqual({ kind: 'pace_sec_km', low: 60, high: 210 });
+  expect(prescriptionReady(latest.current)).toBe(false);
+  expect(screen.getByRole('alert').textContent).toBe("Allure attendue entre 1'30 et 20'00 par km.");
 });
 
 it('creates a repeat as effort then recovery with "skip the last recovery" checked', () => {

@@ -193,17 +193,21 @@ test('step durations and paces are typed as digits that format themselves on a p
   await page.getByRole('dialog').getByRole('button', { name: 'Modifier', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.locator('summary', { hasText: '1. Échauffement' }).click();
-  const duration = dialog.getByLabel('Durée (minutes:secondes)', { exact: true }).first();
+  const duration = dialog.getByLabel('Durée (h:mm:ss)', { exact: true }).first();
   await expect(duration).toHaveValue('20:00');
   await expect(duration).toHaveAttribute('inputmode', 'numeric');
-  await duration.fill('');
+  await expect(dialog.getByText('Tape 2000 pour 20:00', { exact: true }).first()).toBeVisible();
+  // A tap selects the value: the first digit restarts it, like a timer.
+  await duration.click();
   await duration.pressSequentially('90');
   await expect(duration).toHaveValue('0:90');
   await duration.blur();
   await expect(duration).toHaveValue('1:30');
-  await duration.fill('');
+  await duration.click();
   await duration.pressSequentially('130000');
   await expect(duration).toHaveValue('13:00:00');
+  // The caret stays at the end: Backspace removes the last digit wherever the athlete moved it.
+  await duration.press('Home');
   await duration.press('Backspace');
   await expect(duration).toHaveValue('1:30:00');
   await dialog.locator('summary', { hasText: '2. Répéter un bloc' }).click();
@@ -211,7 +215,7 @@ test('step durations and paces are typed as digits that format themselves on a p
   const pace = dialog.getByLabel("Allure maximum (min'ss par km)", { exact: true });
   await expect(pace).toHaveValue("3'36");
   await expect(pace).toHaveAttribute('inputmode', 'numeric');
-  await pace.fill('');
+  await pace.click();
   await pace.pressSequentially('375');
   await expect(pace).toHaveValue("3'75");
   await pace.blur();
