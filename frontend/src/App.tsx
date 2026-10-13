@@ -44,6 +44,8 @@ const queryClient = new QueryClient({
 
 keepPersistedQueries(queryClient);
 
+const revalidateRestored = () => queryClient.invalidateQueries();
+
 /** A session that ends takes the query cache with it; the page reloads right after. */
 const dropQueryCache = () => queryClient.clear();
 
@@ -57,7 +59,13 @@ function PersistedQueries({ children }: { children: ReactNode }) {
     buster: PERSIST_BUSTER,
     dehydrateOptions: PERSIST_DEHYDRATE,
   }), [athleteId]);
-  return <PersistQueryClientProvider key={athleteId} client={queryClient} persistOptions={persistOptions}>{children}</PersistQueryClientProvider>;
+  // Restored answers may predate a write the last page made just before closing
+  // (an IndexedDB write does not outlive the page): they paint, then revalidate.
+  return (
+    <PersistQueryClientProvider key={athleteId} client={queryClient} persistOptions={persistOptions} onSuccess={revalidateRestored}>
+      {children}
+    </PersistQueryClientProvider>
+  );
 }
 
 /** Route content can fade independently; the active chat is never remounted. */
