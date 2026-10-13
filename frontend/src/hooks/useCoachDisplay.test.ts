@@ -6,10 +6,10 @@ import { COACH_DISPLAY_KEY, useCoachDisplay } from './useCoachDisplay';
 beforeEach(() => localStorage.clear());
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it('keeps the classic panel for absent or unknown preferences and persists both choices', () => {
-  localStorage.setItem(COACH_DISPLAY_KEY, 'invalid');
+it('migrates old choices to floating once and persists subsequent explicit choices', () => {
+  localStorage.setItem('arete.coach-display.v1', 'sidebar');
   const { result, unmount } = renderHook(useCoachDisplay);
-  expect(result.current.mode).toBe('sidebar');
+  expect(result.current.mode).toBe('floating');
   act(() => result.current.setMode('floating'));
   unmount();
   const reloaded = renderHook(useCoachDisplay);
@@ -23,11 +23,16 @@ it('lets the user opt in and out for the session when browser storage is blocked
   vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('Denied', 'SecurityError'); });
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Full', 'QuotaExceededError'); });
   const { result } = renderHook(useCoachDisplay);
-  expect(result.current.mode).toBe('sidebar');
+  expect(result.current.mode).toBe('floating');
   expect(result.current.error).toContain('ne peut pas enregistrer');
   act(() => result.current.setMode('floating'));
   expect(result.current.mode).toBe('floating');
   expect(result.current.error).toContain('cette session');
   act(() => result.current.setMode('sidebar'));
   expect(result.current.mode).toBe('sidebar');
+});
+
+it('falls back to floating for unknown preferences', () => {
+  localStorage.setItem(COACH_DISPLAY_KEY, 'invalid');
+  expect(renderHook(useCoachDisplay).result.current.mode).toBe('floating');
 });

@@ -9,8 +9,6 @@ import { useAuthState } from '@/components/auth/authState';
 import { preloadAgentMarkdown } from './agent/markdownRenderer';
 import { preloadRoute } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
-// The Planning variant of the nav is styled there: it must not wait for the lazy page.
-import '@/pages/planning/planning.css';
 
 // Clerk's account menu lives in the lazily loaded auth chunk; it only renders when sign-in is on.
 const AccountButton = lazy(importChunk(() =>
@@ -44,7 +42,7 @@ export function Navigation({
   const rpg = preference?.enabled === true;
   const profile = { path: '/profile', label: 'Profil', icon: User };
   const desktopItems = rpg ? [...navItems.slice(0, 4), profile, navItems[4]] : navItems;
-  const mobileItems = rpg ? [...navItems.slice(0, 4), profile] : navItems;
+  const mobileItems = [...navItems.slice(0, 4), profile, navItems[4]];
   const auth = useAuthState();
   return (
     <>
@@ -120,8 +118,7 @@ export function Navigation({
       {/* Mobile bottom tab bar — hidden on desktop */}
       <nav
         aria-label="Navigation mobile"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-void/95 backdrop-blur-sm border-t border-text-muted/20"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="mobile-navigation md:hidden fixed bottom-0 left-0 right-0 z-50 bg-void/95 backdrop-blur-sm border-t border-text-muted/20"
       >
         <div className="flex items-center justify-around h-16 px-2">
           {mobileItems.map((item) => (
@@ -134,7 +131,7 @@ export function Navigation({
               end={item.path === '/'}
               className={({ isActive }) =>
                 cn(
-                  'navigation-item relative flex flex-1 flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-lg',
+                  'navigation-item relative flex flex-1 flex-col items-center justify-center gap-0.5 min-h-11 py-1 px-1 rounded-lg',
                   'transition-colors duration-150 motion-reduce:transition-none min-w-0',
                   isActive ? 'text-neon-cyan' : 'text-text-muted active:text-text-secondary',
                 )
@@ -143,7 +140,7 @@ export function Navigation({
               {({ isActive }) => (
                 <>
                   <item.icon className={cn('w-5 h-5', isActive && 'stroke-[2.25]')} />
-                  <span className="text-[9px] font-sans">
+                  <span className="text-[10px] font-sans">
                     {item.path === '/' ? 'Accueil' : item.label}
                   </span>
                   {/* Active indicator; the NavLink is `relative` so it sits on this tab */}
@@ -158,26 +155,6 @@ export function Navigation({
               )}
             </NavLink>
           ))}
-          <button
-            onClick={onToggleAgent}
-            onPointerEnter={preloadAgentMarkdown}
-            onFocus={preloadAgentMarkdown}
-            aria-controls="coach-panel"
-            aria-expanded={agentOpen}
-            aria-label={agentOpen ? 'Masquer le coach' : 'Ouvrir le coach'}
-            className={cn(
-              'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1',
-              agentOpen ? 'bg-neon-cyan/10 text-neon-cyan' : 'text-text-muted',
-            )}
-          >
-            <span className="relative flex" data-busy={agentBusy || undefined}>
-              <AreteMark size={24} />
-              {agentBusy && (
-                <span className="absolute -right-1 top-0 size-1.5 rounded-full bg-neon-cyan" />
-              )}
-            </span>
-            <span className="text-[9px] font-sans">{rpg ? 'Chiron' : 'Coach'}</span>
-          </button>
         </div>
       </nav>
     </>

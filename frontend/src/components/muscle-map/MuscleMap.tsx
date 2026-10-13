@@ -59,8 +59,9 @@ export interface MuscleMapProps {
  */
 export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapProps) {
   const [hovered, setHovered] = useState<string | null>(null);
+  const [touched, setTouched] = useState<string | null>(null);
   const byId = new Map(muscles.map((m) => [m.muscle, m]));
-  const active = hovered ?? selected ?? null;
+  const active = hovered ?? selected ?? touched;
   const detail = active ? byId.get(active) : undefined;
 
   const shapeClass = (muscle: string) =>
@@ -71,11 +72,11 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
     );
 
   const renderView = (view: View) => (
-    <figure className="flex flex-col items-center gap-2 m-0">
+    <figure className="flex min-w-0 max-w-[150px] flex-1 flex-col items-center gap-2 m-0">
       <figcaption className="text-[10px] font-sans text-text-muted uppercase tracking-wider">
         {VIEW_LABEL[view]}
       </figcaption>
-      <svg viewBox="0 0 200 400" className="w-[150px] h-[300px]" role="img" aria-label={`Silhouette ${VIEW_LABEL[view]}`}>
+      <svg viewBox="0 0 200 400" className="w-full h-auto aspect-[1/2]" role="img" aria-label={`Silhouette ${VIEW_LABEL[view]}`}>
         <g className="fill-shadow stroke-outline-dim stroke-[0.8]">
           <ellipse cx="100" cy="30" rx="18" ry="22" />
           <rect x="92" y="48" width="16" height="20" rx="5" />
@@ -89,7 +90,7 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
             className: shapeClass(shape.muscle),
             onMouseEnter: () => setHovered(shape.muscle),
             onMouseLeave: () => setHovered(null),
-            onClick: () => onSelect?.(shape.muscle),
+            onClick: () => { setTouched(shape.muscle); onSelect?.(shape.muscle); },
           };
           return (
             <g key={`${shape.view}-${shape.muscle}-${shape.d}`}>
@@ -123,7 +124,7 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
             <p className="text-xs text-text-muted">{freshnessLabel(detail.last_trained)}</p>
           </div>
         ) : (
-          <p className="text-xs text-text-muted">Survole une zone pour le détail.</p>
+          <p className="text-xs text-text-muted">Touche ou survole une zone pour le détail.</p>
         )}
       </div>
 

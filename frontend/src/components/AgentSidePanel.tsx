@@ -159,26 +159,26 @@ export function AgentSidePanel({
   const followRef = useRef(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
 
   useLayoutEffect(() => {
-    if (!floating || !open) return;
+    if (!open) return;
     const viewport = window.visualViewport;
     if (!viewport) return;
-    // Mobile keyboards resize the visual viewport without resizing fixed layout.
+    let frame = 0;
     const resize = () => {
-      panelRef.current?.style.setProperty('--coach-visible-height', `${viewport.height}px`);
-      panelRef.current?.style.setProperty('--coach-keyboard-inset', `${Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)}px`);
-      if (followRef.current) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+      cancelAnimationFrame(frame);
+      // App updates the shared viewport geometry first. Follow only after layout,
+      // and never pull someone away from the older messages they are reading.
+      frame = requestAnimationFrame(() => {
+        if (followRef.current) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+      });
     };
-    resize();
     viewport.addEventListener('resize', resize);
-    viewport.addEventListener('scroll', resize);
     return () => {
+      cancelAnimationFrame(frame);
       viewport.removeEventListener('resize', resize);
-      viewport.removeEventListener('scroll', resize);
     };
-  }, [floating, open]);
+  }, [open]);
 
   useLayoutEffect(() => {
     const input = inputRef.current;
@@ -206,7 +206,7 @@ export function AgentSidePanel({
     if (open) preloadAgentMarkdown();
   }, [open]);
   useEffect(() => {
-    if (open && !showHistory) inputRef.current?.focus();
+    if (open && !showHistory) inputRef.current?.focus({ preventScroll: true });
   }, [open, showHistory, active.id]);
   useEffect(() => {
     if (!open) return;
@@ -245,7 +245,6 @@ export function AgentSidePanel({
   const page = PAGE_LABELS[panelContext.page] ?? panelContext.page;
   return (
     <aside
-      ref={panelRef}
       onDragEnter={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
       onDragLeave={event => { if (event.dataTransfer.types.includes('Files')) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
       onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
@@ -517,7 +516,7 @@ export function AgentSidePanel({
                       send();
                     }
                   }}
-                  placeholder={floating ? 'Demander à Chiron…' : 'Pose ta question… / skills'}
+                  placeholder={floating ? 'Demander à Chiron…' : 'Ton message…'}
                   className={cn('coach-composer-input block min-h-11 max-h-36 min-w-0 flex-1 resize-none appearance-none overflow-x-hidden overflow-y-auto bg-transparent py-1.5 text-sm leading-relaxed outline-none', 'col-start-2 row-start-1 w-full px-1')}
                 />
                 {streaming ? (

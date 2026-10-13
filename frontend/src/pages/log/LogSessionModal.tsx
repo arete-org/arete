@@ -82,7 +82,7 @@ export function LogSessionModal({ open, onClose }: LogSessionModalProps) {
   const unparsed = parseResult?.unparsed_lines ?? [];
 
   return (
-    <Modal open={open} onClose={reset} className="max-w-lg max-h-[90vh] overflow-y-auto">
+    <Modal mobileSheet open={open} onClose={reset} className="max-w-lg overflow-y-auto">
       <ModalHeader
         title="SAISIR UNE SÉANCE"
         tone="text-neon-gold"

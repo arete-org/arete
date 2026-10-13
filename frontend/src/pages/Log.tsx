@@ -26,7 +26,12 @@ export function LogPage() {
   const activeTab: Tab = searchParams.get('tab') === 'cardio' ? 'cardio' : 'force';
   const setActiveTab = (tab: Tab) => setSearchParams(tab === 'force' ? {} : { tab }, { replace: true });
   const [toDelete, setToDelete] = useState<number | null>(null);
-  const [showNewSession, setShowNewSession] = useState(false);
+  const showNewSession = searchParams.get('new') === '1';
+  const setShowNewSession = (open: boolean) => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    if (open) next.set('new', '1'); else next.delete('new');
+    return next;
+  }, { replace: true });
   const sessionParam = searchParams.get('session');
   const selectedSessionId = sessionParam && /^\d+$/.test(sessionParam) && Number.isSafeInteger(Number(sessionParam)) ? Number(sessionParam) : null;
   const setSelectedSessionId = (id: number | null) => setSearchParams(previous => { const next = new URLSearchParams(previous); if (id === null) next.delete('session'); else next.set('session', String(id)); return next; });
@@ -63,15 +68,13 @@ export function LogPage() {
   return (
     <div className="page-shell bg-void">
       <div className="page-content">
-        <header className="flex justify-between items-center mb-4 sm:mb-8 animate-fade-down">
-          <h1 className="page-title">Journal</h1>
-          {activeTab === 'force' && (
-            <Button variant="gold" onClick={() => setShowNewSession(true)}>
-              <Sparkles className="w-4 h-4" />
-              SAISIR UNE SÉANCE
-            </Button>
-          )}
-        </header>
+        <h1 className="page-title mb-3">Journal</h1>
+        <div className="journal-actions">
+          <Button variant="gold" strong onClick={() => setShowNewSession(true)}>
+            <Sparkles className="w-4 h-4" />
+            Saisir une séance
+          </Button>
+        </div>
 
         <PlayerSummary />
         <div className="flex gap-1 mb-6">
@@ -134,10 +137,10 @@ export function LogPage() {
           </div>
         )}
 
-        {activeTab === 'cardio' && <CardioTab />}
+        {activeTab === 'cardio' && <CardioTab showManual={showNewSession} onManualChange={setShowNewSession} />}
       </div>
 
-      <LogSessionModal open={showNewSession} onClose={() => setShowNewSession(false)} />
+      <LogSessionModal open={showNewSession && activeTab === 'force'} onClose={() => setShowNewSession(false)} />
       <Modal open={toDelete !== null} onClose={() => setToDelete(null)} className="max-w-sm p-4 sm:p-6">
         <ModalHeader title="SUPPRIMER LA SÉANCE" onClose={() => setToDelete(null)} className="mb-4" />
         <p className="text-sm font-sans text-text-secondary mb-6">

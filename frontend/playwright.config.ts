@@ -9,6 +9,11 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 10_000 },
   workers: 1,
+  projects: [
+    { name: 'chromium', testIgnore: /mobile-ux\.spec\.ts/ },
+    { name: 'mobile-chromium', testMatch: /mobile-ux\.spec\.ts/, use: { browserName: 'chromium', isMobile: true, hasTouch: true } },
+    { name: 'mobile-webkit', testMatch: /mobile-ux\.spec\.ts/, use: { browserName: 'webkit', isMobile: true, hasTouch: true } },
+  ],
   retries: 0,
   outputDir: '../.context/browser-results',
   reporter: 'list',

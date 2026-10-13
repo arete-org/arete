@@ -247,7 +247,7 @@ export function DashboardPage() {
                     <Link to="/planning" className="text-neon-cyan hover:underline">
                       Semaine →
                     </Link>
-                    <Link to="/log" className="text-neon-gold hover:text-neon-gold/80 transition-colors">
+                    <Link to="/log?new=1" className="text-neon-gold hover:text-neon-gold/80 transition-colors">
                       Saisir la séance →
                     </Link>
                   </div>
@@ -282,7 +282,7 @@ export function DashboardPage() {
             {/* Quick Actions Footer */}
             <div className="flex gap-3 animate-fade-in">
               <Link
-                to="/log"
+                to="/log?new=1"
                 className="flex-1 flex items-center justify-center gap-2 glass-panel px-4 py-3 text-sm font-sans text-neon-cyan hover:bg-abyss/80 transition-colors"
               >
                 <Dumbbell className="w-4 h-4" />

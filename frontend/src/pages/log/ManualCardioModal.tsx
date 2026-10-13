@@ -61,7 +61,7 @@ export function ManualCardioModal({
   });
 
   return (
-    <Modal open={open} onClose={onClose} className="max-w-md p-4 sm:p-6">
+    <Modal mobileSheet open={open} onClose={onClose} className="max-w-md p-4 sm:p-6">
       <ModalHeader title="SÉANCE SANS MONTRE" icon={<Plus className="w-5 h-5" />} onClose={onClose} className="mb-4" />
       <form
         onSubmit={(e) => {
