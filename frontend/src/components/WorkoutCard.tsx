@@ -7,7 +7,7 @@ import { Check, ChevronDown, CircleAlert, ExternalLink, Loader2 } from 'lucide-r
 import { PrescriptionEditor } from './PrescriptionEditor';
 import { Modal, ModalHeader } from './ui';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
-import { exportLabel, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
+import { exportLabel, GENERIC_STEPS_LABEL, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
 import { parseLocalDate } from '@/lib/dates';
 import type { Prescription } from '@/lib/documents';
 
@@ -17,7 +17,8 @@ const sports: Record<string, string> = { running: 'Course', cycling: 'Vélo', sw
 function EditWorkout({ session, onClose, onResult }: { session: WorkoutSession; onClose: () => void; onResult?: (text: string) => void }) {
   const [day, setDay] = useState(session.date);
   const [description, setDescription] = useState(session.description ?? '');
-  const [prescription, setPrescription] = useState<Prescription>(session.prescription ?? { version: 1, steps: [] });
+  // A generic estimate is not a starting point: saving it would bless the template.
+  const [prescription, setPrescription] = useState<Prescription>((!session.needs_steps && session.prescription) || { version: 1, steps: [] });
   const actions = useWorkoutActions(onResult);
   const save = async () => {
     if (await actions.run({ kind: 'edit', session, date: day, description, prescription })) onClose();
@@ -27,7 +28,7 @@ function EditWorkout({ session, onClose, onResult }: { session: WorkoutSession; 
     <fieldset disabled={actions.busy} className="mt-4 space-y-4">
       <label className="block space-y-1 text-sm">Date<input type="date" className={input} value={day} onChange={e => setDay(e.target.value)} /></label>
       <label className="block space-y-1 text-sm">Titre<input className={input} value={description} maxLength={500} onChange={e => setDescription(e.target.value)} /></label>
-      {session.derived && <p className="text-xs text-text-muted">Ces étapes étaient dérivées du planning. Les enregistrer fixe cette prescription et la retire de l’adaptation automatique.</p>}
+      {session.derived && !session.needs_steps && <p className="text-xs text-text-muted">Ces étapes étaient dérivées du planning. Les enregistrer fixe cette prescription et la retire de l’adaptation automatique.</p>}
       <PrescriptionEditor sport={session.sport} value={prescription} onChange={setPrescription} />
       <p className="text-xs text-text-muted">Enregistrement dans Arete. Un nouvel envoi sera nécessaire pour mettre Garmin à jour.</p>
       {actions.error && <p role="alert" className="text-sm text-danger-red">{actions.error}</p>}
@@ -68,7 +69,7 @@ export function WorkoutCard({ sessionId, initial, readError, compact = false, se
           <h4 className="mt-1 text-sm font-semibold text-text-primary">{session.description || 'Séance prévue'}</h4>
         </>}
         <p className="mt-1 text-sm leading-relaxed text-text-secondary">{session.summary || 'Étapes à compléter'}</p>
-        {session.derived && <p className="mt-1 text-xs text-text-muted">Étapes dérivées du planning</p>}
+        {session.derived && <p className="mt-1 text-xs text-text-muted">{session.needs_steps ? GENERIC_STEPS_LABEL : 'Étapes dérivées du planning'}</p>}
         <p className="mt-2 flex items-center gap-1.5 text-xs text-text-muted"><Check className="size-3" /> Enregistrée dans Arete</p>
         <p role="status" aria-atomic="true" className={`mt-1 flex items-center gap-1.5 text-xs ${uncertain || state?.state === 'failed' ? 'text-warning-orange' : sent ? 'text-success-green' : 'text-text-secondary'}`}>
           {working ? <Loader2 className="size-3 motion-safe:animate-spin" /> : uncertain ? <CircleAlert className="size-3" /> : sent ? <Check className="size-3" /> : null}
@@ -83,7 +84,7 @@ export function WorkoutCard({ sessionId, initial, readError, compact = false, se
       <StepList prescription={session.prescription} />
     </details>}
     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-      <button disabled={!canEdit} className="min-h-9 text-neon-cyan disabled:opacity-40" onClick={() => setEditing(true)}>{session.prescription ? 'Modifier' : 'Compléter les étapes'}</button>
+      <button disabled={!canEdit} className="min-h-9 text-neon-cyan disabled:opacity-40" onClick={() => setEditing(true)}>{session.prescription && !session.needs_steps ? 'Modifier' : 'Compléter les étapes'}</button>
       {/* After reload, a durable working state may outlive its run; the server owns reservation expiry. */}
       {state && <button disabled={pending || locked} className="min-h-9 text-neon-cyan disabled:opacity-40" onClick={() => void actions.run({ kind: 'verify', session })}>Vérifier Garmin</button>}
       {!compact && <Link to={`/planning?date=${session.date}&session=${session.id}`} className="ml-auto inline-flex min-h-9 items-center gap-1 text-text-muted">Planning <ExternalLink className="size-3" /></Link>}

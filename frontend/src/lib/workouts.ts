@@ -4,9 +4,11 @@ import { documentRequest, type GarminExport, type Prescription } from './documen
 export interface WorkoutSession {
   id: number; revision: number; date: string; sport: string; description: string | null;
   status: string; summary?: string | null; prescription?: Prescription | null;
-  derived?: boolean; exportable?: boolean; reason?: string | null;
+  derived?: boolean; needs_steps?: boolean; exportable?: boolean; reason?: string | null;
   target_duration_min?: number | null; target_distance_km?: number | null;
 }
+/** Derived steps of a described tempo or interval session: the type's template, not the workout. */
+export const GENERIC_STEPS_LABEL = 'Estimation générique selon le type de séance, pas les étapes décrites';
 export interface WorkoutView { session: WorkoutSession; export: GarminExport | null }
 export interface WorkoutUpdate extends WorkoutView {
   type: 'workout_update'; id: string; thread_id: string | null; sequence: number;

@@ -285,18 +285,31 @@ def session_prescription(session) -> tuple[Prescription, bool]:
 
 def inspect_session(session_id: int, *, include_steps: bool = True) -> dict:
     from arete.garmin.repository import GarminRepository
+    from arete.garmin.workout_structure import NotPushable, ensure_template_fits
     from arete.services.planning import _session_to_dict
 
     session = GarminRepository().get_planned_session(session_id)
     if session is None:
         raise DocumentError("Cette séance n’existe plus.")
     result = _session_to_dict(session)
-    result.update(prescription=None, derived=False, exportable=False, reason=None)
+    result.update(
+        prescription=None,
+        derived=False,
+        needs_steps=False,
+        exportable=False,
+        reason=None,
+    )
     try:
         prescription, derived = session_prescription(session)
         result.update(summary=describe(prescription), derived=derived)
         if include_steps:
             result["prescription"] = prescription.model_dump(mode="json")
+        try:
+            ensure_template_fits(session)
+        except NotPushable:
+            # Shown as a generic estimate; every push goes through this status.
+            result["needs_steps"] = True
+            raise
         _payload(session_id)
         result["exportable"] = session.status.value in {"pending", "modified"}
         if not result["exportable"]:

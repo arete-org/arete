@@ -1028,3 +1028,130 @@ def test_read_then_strength_action_only_emits_the_created_workout(
     assert len(page_reads[-1]["sessions"]) == len(page_reads[0]["sessions"]) + 1
     assert all("get_page_context" not in names for names in seen_tools)
     assert context.stats.model_calls == 4 and context.stats.tool_calls == 3
+
+
+INTERVALS = "VMA — 12×400 @3'33 r1'. Échauffement 20-25' + 4-6 strides, retour 15'"
+
+
+def _without_steps(planned, session_type, description, sport="running", structure=None):
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.planned_sessions SET sport=?,session_type=?,description=?,structure_json=?,prescription=NULL,target_duration_min=50 WHERE id=?",
+            [sport, session_type, description, structure, planned],
+        )
+
+
+@pytest.mark.parametrize(
+    "session_type,sport", [("intervals", "running"), ("tempo", "cycling")]
+)
+def test_described_structured_session_never_reaches_garmin_as_the_template(
+    planned, router_client, monkeypatch, session_type, sport
+):
+    from arete.api.garmin_export import router
+    from arete.garmin.workout_structure import NotPushable
+    from arete.services import plan_adaptation
+
+    _without_steps(planned, session_type, INTERVALS, sport)
+    view = service.inspect_session(planned)["session"]
+    # The template stays visible, labelled as an estimate, but cannot be sent.
+    assert view["derived"] and view["needs_steps"] and view["prescription"]
+    assert not view["exportable"]
+    assert "complète-les" in view["reason"]
+    garmin = Garmin()
+    with pytest.raises(DocumentError, match="Séance décrite sans étapes"):
+        service.export(planned, client=garmin)
+    with pytest.raises(NotPushable, match="Séance décrite sans étapes"):
+        plan_adaptation.push_session(garmin, planned)
+    assert not plan_adaptation.structure_preview(planned)["pushable"]
+    original = service.export_batch
+    monkeypatch.setattr(
+        service,
+        "export_batch",
+        lambda ids, device_id, **kwargs: original(
+            ids, device_id, client=garmin, **kwargs
+        ),
+    )
+    response = router_client(router).post(
+        "/garmin/exports/batch", json={"session_ids": [planned], "revisions": [1]}
+    )
+    assert response.json()["blocked"] == planned
+    assert not garmin.calls
+
+
+def test_completed_steps_export_instead_of_the_template(planned):
+    _without_steps(planned, "intervals", INTERVALS)
+    steps = Prescription(
+        steps=[
+            Step(
+                kind="repeat",
+                repeat=12,
+                steps=[
+                    Step(kind="effort", duration_kind="meters", value=400),
+                    Step(kind="recovery", duration_kind="seconds", value=60),
+                ],
+            )
+        ]
+    )
+    service.update_session(planned, 1, date(2027, 1, 12), INTERVALS, steps)
+    view = service.inspect_session(planned)["session"]
+    assert view["exportable"] and not view["derived"] and not view["needs_steps"]
+    garmin = Garmin()
+    assert service.export(planned, client=garmin)["state"] == "scheduled"
+    (workout,) = garmin.workouts.values()
+    assert workout == {
+        **convert(planned, INTERVALS, "running", steps),
+        "workoutId": workout["workoutId"],
+    }
+
+
+@pytest.mark.parametrize(
+    "session_type,description,structure",
+    [
+        ("endurance", None, None),
+        ("endurance", "Footing", None),
+        ("intervals", None, None),
+        ("intervals", INTERVALS, '[{"kind": "interval", "duration_sec": 600}]'),
+    ],
+)
+def test_template_still_exports_when_nothing_contradicts_it(
+    planned, session_type, description, structure
+):
+    _without_steps(planned, session_type, description, structure=structure)
+    view = service.inspect_session(planned)["session"]
+    assert view["exportable"] and view["derived"] and not view["needs_steps"], view
+    assert service.export(planned, client=Garmin())["state"] == "scheduled"
+
+
+@pytest.mark.parametrize("sport", ["running", "cycling"])
+def test_coach_cannot_create_structured_session_without_steps(planned, sport):
+    from arete.services import planning
+
+    before = planning.list_planned("2027-01-01", "2027-01-31")
+    result = json.loads(
+        planning.create_planned_session(
+            "2027-01-15", "intervals", INTERVALS, sport=sport, target_duration_min=50
+        )
+    )
+    assert "prescription.steps" in result["error"]
+    assert planning.list_planned("2027-01-01", "2027-01-31") == before
+
+
+def test_coach_cannot_redefine_structured_session_without_steps(planned):
+    from arete.services import planning
+
+    _without_steps(planned, "tempo", None)
+    result = json.loads(
+        planning.update_planned_session(
+            planned, 1, planning.SessionChanges(description="Seuil : 3×10'")
+        )
+    )
+    assert "prescription.steps" in result["error"]
+    session = GarminRepository().get_planned_session(planned)
+    assert session.description is None and session.revision == 1
+    # Moving a session that predates the rule does not require rewriting it.
+    result = json.loads(
+        planning.update_planned_session(
+            planned, 1, planning.SessionChanges(date_str="2027-01-13")
+        )
+    )
+    assert result["updated"]

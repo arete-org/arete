@@ -50,7 +50,7 @@ def tempo(monkeypatch):
             target_duration_min=50,
             target_hr_zone="Z4",
             target_intensity="hard",
-            description="3x10' au seuil",
+            # Undescribed: only then is the type's template the session itself.
         )
     )
     yield session_id

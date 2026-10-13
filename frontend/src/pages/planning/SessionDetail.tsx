@@ -8,7 +8,7 @@ import { useWorkoutActions } from '@/hooks/useWorkoutActions';
 import { garminApi } from '@/lib/api';
 import { exportApi } from '@/lib/documents';
 import { invalidateAfterSession } from '@/lib/queryKeys';
-import { mergeWorkout, workoutApi, workoutKey } from '@/lib/workouts';
+import { GENERIC_STEPS_LABEL, mergeWorkout, workoutApi, workoutKey } from '@/lib/workouts';
 import type { PlannedState } from '@/lib/sessionMatch';
 import type { ActualSession, PlannedSession } from '@/types';
 import {
@@ -183,8 +183,18 @@ export function SessionDetail({
               </div>
               {view.session.derived && (
                 <p className="mt-3 text-xs text-text-muted">
-                  Étapes dérivées des objectifs du planning.
+                  {view.session.needs_steps
+                    ? `${GENERIC_STEPS_LABEL}.`
+                    : 'Étapes dérivées des objectifs du planning.'}
                 </p>
+              )}
+              {view.session.needs_steps && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-warning-orange">{view.session.reason}</p>
+                  <Button disabled={blocked} onClick={onEdit}>
+                    Compléter les étapes
+                  </Button>
+                </div>
               )}
             </section>
           ) : (

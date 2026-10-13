@@ -30,7 +30,7 @@ PLANNING_INSTRUCTIONS += """
 - Un bloc répété contient kind="repeat", repeat (nombre) et steps (effort puis récupération). Exemple : {"kind":"repeat","repeat":20,"steps":[{"kind":"effort","duration_kind":"meters","value":300},{"kind":"recovery","duration_kind":"meters","value":100}]}. Les distances/durées appartiennent aux sous-étapes, pas au bloc.
 - Pour une prescription cardio, conserve l’échauffement et le retour au calme existants ; s’ils manquent, ajoute par défaut un warmup au début et un cooldown à la fin, sauf demande contraire. Sans durée précisée, duration_kind="lap", sans value ni cible inventée. La récupération entre répétitions reste dans le bloc repeat.
 - Si la validation refuse les étapes, corrige la prescription complète ; changer seulement description ne réalise pas la demande. Omet les champs inchangés, jamais null. Une durée totale ou une allure absente ne bloque pas des étapes en mètres ou au tour manuel.
-- Demande les détails indispensables manquants ; ne remplace pas une prescription explicite par des étapes dérivées.
+- Demande les détails indispensables manquants ; ne remplace pas une prescription explicite par des étapes dérivées. Un tempo ou un fractionné en course ou à vélo exige prescription.steps.
 """
 
 GARMIN_INSTRUCTIONS = """Garmin :

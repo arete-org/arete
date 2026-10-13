@@ -16,7 +16,12 @@ from typing import TYPE_CHECKING, Any
 from arete.dataio.settings import athlete_zone_model, get_user_settings
 from arete.garmin.models import PlannedSession, SessionStatus
 from arete.garmin.repository import GarminRepository
-from arete.garmin.workout_structure import NotPushable, derive, describe_fr
+from arete.garmin.workout_structure import (
+    NotPushable,
+    derive,
+    describe_fr,
+    ensure_template_fits,
+)
 from arete.services.adaptation import (
     AdaptationInput,
     Decision,
@@ -207,6 +212,7 @@ def structure(session: PlannedSession) -> tuple[Block, ...]:
         raise NotPushable(
             "Utilise l’export Garmin de la prescription validée dans le Planning."
         )
+    ensure_template_fits(session)
     settings = get_user_settings() or {}
     return derive(session, athlete_zone_model(), settings.get("threshold_pace_sec_km"))
 

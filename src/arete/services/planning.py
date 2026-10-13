@@ -20,6 +20,7 @@ from arete.garmin.models import (
     canonical_sport,
 )
 from arete.garmin.repository import GarminRepository
+from arete.garmin.workout_structure import needs_explicit_steps
 from arete.services.prescriptions import (
     Prescription,
     Provenance,
@@ -32,6 +33,12 @@ from arete.services.settings import athlete_today
 _MAX_LIST = 50
 _HORIZON_DAYS = 120
 _MAX_SOURCE_HINTS = 5
+_STEPS_REQUIRED = (
+    "Une séance tempo ou fractionné en course ou à vélo exige prescription.steps "
+    "(échauffement, blocs ou répétitions avec récupérations, retour au calme) : "
+    "sans elles, la montre recevrait un modèle générique et non la séance décrite. "
+    "Réessaie avec la prescription complète."
+)
 
 
 def _repo() -> GarminRepository:
@@ -154,6 +161,8 @@ def create_planned_session(
     day = _parse_iso(date_str, "date_str")
     if isinstance(day, str):
         return day
+    if prescription is None and needs_explicit_steps(canonical_sport(sport), st.value):
+        return json.dumps({"error": _STEPS_REQUIRED}, ensure_ascii=False)
     try:
         prescription = (
             conversation_prescription(
@@ -268,8 +277,13 @@ def apply_session_changes(
     changes: SessionChanges,
     *,
     require_strength_source: bool = True,
+    require_steps: bool = False,
 ) -> PlannedSession:
-    """Share one versioned editing boundary between HTTP and coaching tools."""
+    """Share one versioned editing boundary between HTTP and coaching tools.
+
+    ``require_steps`` (the coach's tool) refuses to define a tempo or interval
+    session without explicit steps; date and status moves stay allowed.
+    """
     current = _repo().get_planned_session(session_id)
     if current is None:
         raise ValueError("Séance introuvable.")
@@ -301,6 +315,15 @@ def apply_session_changes(
         raise ValueError(
             "Modifie la prescription pour changer les objectifs d’une séance structurée."
         )
+    if (
+        require_steps
+        and set(fields) - {"date", "status"}
+        and not (prescription or current.prescription or current.structure_json)
+        and needs_explicit_steps(
+            current.sport, (changes.session_type or current.session_type).value
+        )
+    ):
+        raise ValueError(_STEPS_REQUIRED)
     # A replacement must not leave stale scalar targets contradicting its steps.
     if prescription:
         fields.update({key: None for key in targets})
@@ -327,7 +350,7 @@ def update_planned_session(
 ) -> str:
     """Adapt domain errors and the updated workout to the coaching tool contract."""
     try:
-        apply_session_changes(session_id, revision, changes)
+        apply_session_changes(session_id, revision, changes, require_steps=True)
         from arete.services.garmin_export import inspect_session
 
         return json.dumps(
