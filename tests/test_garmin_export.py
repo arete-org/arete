@@ -1360,3 +1360,142 @@ def test_the_removal_route_withdraws_a_skipped_session_only(planned, router_clie
         removed = client.post(f"/garmin/exports/{planned}/remove").json()
     assert removed["state"] == "removed"
     assert not garmin.workouts and not garmin.schedules
+
+
+def _legacy_copy(planned) -> Garmin:
+    """A template sent before the export table: ids on the session only."""
+    from arete.dataio.settings import athlete_zone_model
+    from arete.garmin.workout_structure import derive
+    from arete.garmin.workouts import build_payload
+
+    _without_steps(planned, "endurance", "Footing")
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.planned_sessions SET garmin_workout_id='1',garmin_schedule_id='100' WHERE id=?",
+            [planned],
+        )
+    session = GarminRepository().get_planned_session(planned)
+    payload = build_payload(
+        derive(session, athlete_zone_model(), None),
+        name="Arete — Footing",
+        description=f"ARETE_SESSION:{planned}",
+        sport="running",
+    )
+    garmin = Garmin()
+    garmin.workouts[1] = {**payload, "workoutId": 1}
+    garmin.schedules[100] = {
+        "workoutId": 1,
+        "workoutScheduleId": 100,
+        "date": session.date.isoformat(),
+    }
+    return garmin
+
+
+@pytest.mark.parametrize("row", ["none", "empty"])
+def test_the_removal_route_withdraws_a_legacy_copy_of_a_skipped_session(
+    planned, router_client, row
+):
+    from arete.api.garmin_export import router
+    from arete.garmin.models import SessionStatus
+
+    garmin = _legacy_copy(planned)
+    GarminRepository().update_planned_session_status(planned, SessionStatus.SKIPPED)
+    if row == "empty":  # left by a claim that sent nothing
+        state = service._claim(planned)
+        service._update(planned, state["operation_id"], state="failed")
+    with patch("arete.garmin.client.GarminClient", return_value=garmin):
+        removed = router_client(router).post(f"/garmin/exports/{planned}/remove")
+    assert removed.json()["state"] == "removed"
+    assert not garmin.workouts and not garmin.schedules
+    assert ("DELETE", f"{service.WORKOUT}/1", None) in garmin.calls
+
+
+def test_no_export_row_for_another_athletes_session(planned):
+    from arete.services.athlete_scope import athlete_scope
+
+    with db_connection() as con:
+        con.execute("INSERT INTO app.athletes(id) VALUES (9001) ON CONFLICT DO NOTHING")
+    with athlete_scope(9001), db_connection() as con:
+        foreign = con.execute(
+            "INSERT INTO app.planned_sessions (date,sport,session_type,target_duration_min) "
+            "VALUES ('2027-01-12','running','endurance',30) RETURNING id"
+        ).fetchone()[0]
+    garmin = Garmin()
+    for attempt in (
+        lambda: service.remove(foreign, client=garmin),
+        lambda: service.export(foreign, client=garmin),
+        lambda: service._claim(foreign),
+    ):
+        with pytest.raises(DocumentError):
+            attempt()
+    with db_connection() as con:
+        rows = con.execute(
+            "SELECT count(*) FROM app.garmin_exports WHERE session_id=?", [foreign]
+        ).fetchone()[0]
+    assert rows == 0 and garmin.calls == []
+
+
+def _moved(planned, garmin) -> None:
+    """A sent session moved to another day: its old schedule must go."""
+    service.export(planned, client=garmin)
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.planned_sessions SET date='2027-01-13' WHERE id=?", [planned]
+        )
+    garmin.calls.clear()
+
+
+def test_a_reservation_taken_before_a_write_sends_nothing(planned):
+    garmin = Garmin()
+    _moved(planned, garmin)
+    answer = garmin.workout_request
+
+    def overtaken(method, path, *, timeout, payload=None):
+        result = answer(method, path, timeout=timeout, payload=payload)
+        if len(garmin.calls) == 3:  # a reconcile claims it before the DELETE
+            with db_connection() as con:
+                con.execute(
+                    "UPDATE app.garmin_exports SET operation_id='other' WHERE session_id=?",
+                    [planned],
+                )
+        return result
+
+    garmin.workout_request = overtaken
+    # The stale worker may not write over the newer owner's state.
+    with pytest.raises(DocumentError, match="plus récente"):
+        service.export(planned, exchange=service.Exchange(garmin))
+    assert [m for m, _, _ in garmin.calls] == ["GET", "GET", "GET"]
+    state = service.export_state(planned)
+    assert state["operation_id"] == "other" and state["state"] != "uncertain"
+
+
+@pytest.mark.parametrize(
+    ("refused", "expected"), [("GET", "failed"), ("DELETE", "uncertain")]
+)
+def test_a_permission_error_is_uncertain_only_once_a_write_left(
+    planned, refused, expected
+):
+    garmin = Garmin()
+    _moved(planned, garmin)
+    answer = garmin.workout_request
+
+    def forbidden(method, path, *, timeout, payload=None):
+        if method == refused:
+            garmin.calls.append((method, path, payload))
+            raise PermissionError("403")
+        return answer(method, path, timeout=timeout, payload=payload)
+
+    garmin.workout_request = forbidden
+    assert service.export(planned, client=garmin)["state"] == expected
+
+
+def test_an_automatic_resend_follows_the_latest_manual_choice_of_watch(planned):
+    garmin = Garmin()
+    assert service.export(planned, 10, client=garmin)["state"] == "transfer_requested"
+    stale = service.prepare(planned)  # read while the copy was on the watch
+    assert stale[0]["export"]["device_id"] == 10
+    assert service.export(planned, None, client=garmin)["state"] == "scheduled"
+    garmin.calls.clear()
+    result = service.export(planned, client=garmin, prepared=stale, keep_device=True)
+    assert result["state"] == "scheduled" and result["device_id"] is None
+    assert all("devicemessage" not in path for _, path, _ in garmin.calls)

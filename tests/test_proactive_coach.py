@@ -600,3 +600,25 @@ def test_a_copy_sent_to_the_watch_goes_back_to_it(watch):
         if path == "/device-service/devicemessage/messages"
     ]
     assert [m[0]["deviceId"] for m in messages] == [10]
+
+
+def test_an_unpaired_watch_falls_back_to_garmin_connect(watch, caplog):
+    from arete.services import garmin_export
+
+    (_, intervals), item = low_day()
+    garmin_export.export(intervals, 10, client=watch)
+    watch.calls.clear()
+    answer = watch.workout_request
+
+    def unpaired(method, path, *, timeout, payload=None):
+        if path == "/device-service/deviceregistration/devices":
+            watch.calls.append((method, path, payload))
+            return []  # the watch was removed from the account
+        return answer(method, path, timeout=timeout, payload=payload)
+
+    watch.workout_request = unpaired
+    _apply_low_day(item)
+    state = garmin_export.export_state(intervals)
+    assert state["state"] == "scheduled" and state["device_id"] is None
+    assert all("devicemessage" not in path for _, path, _ in watch.calls)
+    assert "Watch 10 unpaired: sending to Garmin Connect only" in caplog.text

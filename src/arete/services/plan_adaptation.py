@@ -309,15 +309,14 @@ def _send(
 ) -> bool:
     """One export attempt; whether Garmin confirmed it. Never raises.
 
-    A copy sent to a watch (``transfer_requested``) goes back to that watch.
+    A copy sent to a watch (``transfer_requested``) goes back to that watch,
+    or to Garmin Connect only once the watch is unpaired or incompatible.
     """
     from arete.services import garmin_export
 
     try:
-        prepared = prepared or garmin_export.prepare(session_id)
-        device_id = (prepared[0]["export"] or {}).get("device_id")
         result = garmin_export.export(
-            session_id, device_id, exchange=exchange, prepared=prepared
+            session_id, exchange=exchange, prepared=prepared, keep_device=True
         )
     except Exception:  # noqa: BLE001 - refused before any write
         logger.warning("Garmin %s of %s failed", why, session_id, exc_info=True)

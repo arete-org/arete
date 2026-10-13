@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from time import monotonic
@@ -26,6 +27,7 @@ MAX_DEVICES = 50
 MAX_STATUS_ROWS = 500
 MAX_INSPECT_SESSIONS = 50
 WORKOUT = "/workout-service/workout"
+logger = logging.getLogger(__name__)
 SCHEDULE = "/workout-service/schedule"
 
 
@@ -144,21 +146,14 @@ def statuses() -> list[dict]:
         return result
 
 
-class BudgetSpent(DocumentError):
-    """The exchange's budget refused a request before sending it."""
+def _outcome(exchange: Exchange, window: int | None) -> str:
+    """``uncertain`` only when a request of the open write window was sent.
 
-
-def _outcome(exc: Exception, exchange: Exchange, window: int | None) -> str:
-    """``uncertain`` only when a write of the open window may have reached Garmin.
-
-    ``window`` is the exchange's request count when the write window opened;
-    a budget refusal with no request sent since leaves nothing ambiguous.
+    ``window`` is the exchange's request count when the write window opened.
+    Whatever the error (budget, reservation, permission), a write that never
+    left leaves nothing ambiguous; one that left may have reached Garmin.
     """
-    if window is None or isinstance(exc, PermissionError):
-        return "failed"
-    if isinstance(exc, BudgetSpent) and exchange.calls == window:
-        return "failed"
-    return "uncertain"
+    return "failed" if window is None or exchange.calls == window else "uncertain"
 
 
 class Exchange:
@@ -192,7 +187,7 @@ class Exchange:
             # A write gets its whole timeout, or is not sent at all.
             or (method != "GET" and remaining < REQUEST_TIMEOUT)
         ):
-            raise BudgetSpent(
+            raise DocumentError(
                 "Limite de synchronisation atteinte ; vérifie l’état avant de reprendre."
             )
         if self.reservation:
@@ -253,6 +248,19 @@ def devices(client=None, *, exchange: Exchange | None = None) -> list[dict]:
             }
         )
     return result
+
+
+def _paired(exchange: Exchange, device_id: int, sport: str) -> int | None:
+    """The watch if still paired and documented for the sport, else None."""
+    target = next((d for d in devices(exchange=exchange) if d["id"] == device_id), None)
+    if target and sport in target["sports"]:
+        return device_id
+    logger.warning(
+        "Watch %s %s: sending to Garmin Connect only",
+        device_id,
+        "unpaired" if target is None else f"not documented for {sport}",
+    )
+    return None
 
 
 def public_status(state: dict | None) -> dict | None:
@@ -531,6 +539,11 @@ def _claim(
         else:
             if reconcile:
                 raise DocumentError("Aucun export à vérifier.")
+            visible = con.execute(
+                "SELECT 1 FROM app.visible_planned_sessions WHERE id=?", [session_id]
+            ).fetchone()
+            if not visible:
+                raise DocumentError("Cette séance n’existe plus.")
             con.execute(
                 "INSERT INTO app.garmin_exports (session_id,operation_id,state) VALUES (?,?,'working')",
                 [session_id, str(uuid4())],
@@ -549,9 +562,15 @@ def export(
     on_progress: Callable[[dict], None] | None = None,
     expected_revision: int | None = None,
     prepared: Prepared | None = None,
+    keep_device: bool = False,
 ) -> dict:
     """Send the session; ``prepared`` is its view and payload when already read
-    (the claim's revision lock still refuses a session changed since)."""
+    (the claim's revision lock still refuses a session changed since).
+
+    ``keep_device`` (automatic re-exports) sends it to the watch the copy was
+    last sent to, read under the claim so a newer manual choice wins; a watch
+    no longer paired or compatible falls back to Garmin Connect only.
+    """
     view, built = prepared or prepare(session_id)
     if built is None:
         raise DocumentError(view["session"]["reason"] or "Séance non exportable.")
@@ -579,6 +598,8 @@ def export(
         raise DocumentError("Cette séance a été supprimée ; utilise le retrait Garmin.")
     writing: int | None = None  # requests sent before the open write
     try:
+        if keep_device and state["device_id"] is not None:
+            device_id = _paired(exchange, int(state["device_id"]), sport)
         exchange.update(
             session_id,
             state["operation_id"],
@@ -735,7 +756,7 @@ def export(
         return exchange.update(
             session_id,
             state["operation_id"],
-            state=_outcome(exc, exchange, writing),
+            state=_outcome(exchange, writing),
             error=f"{type(exc).__name__}: {exc}. Aucun renvoi automatique.",
         )
 
@@ -858,9 +879,24 @@ def _verify_absent(exchange: Exchange, path: str) -> None:
     raise DocumentError("La suppression distante n’est pas confirmée par relecture.")
 
 
-def remove(session_id: int, *, client=None, exchange: Exchange | None = None) -> dict:
-    """Take the copy off Garmin: for a session deleted or skipped in Arete only."""
-    skipped = _status(session_id) == "skipped"
+def remove(session_id: int, *, client=None) -> dict:
+    """Take the copy off Garmin: for a session deleted or skipped in Arete only.
+
+    A skipped one goes through ``withdraw_skipped``, which adopts a copy sent
+    before the export table existed instead of forgetting it on Garmin.
+    """
+    if _status(session_id) == "skipped":
+        return withdraw_skipped(session_id, client=client)
+    return _remove(session_id, client=client)
+
+
+def _remove(
+    session_id: int,
+    *,
+    client=None,
+    exchange: Exchange | None = None,
+    skipped: bool = False,
+) -> dict:
     state = _claim(session_id)
     if not state["deleted"] and not skipped:
         _update(session_id, state["operation_id"], state="ready")
@@ -924,7 +960,7 @@ def remove(session_id: int, *, client=None, exchange: Exchange | None = None) ->
         return _update(
             session_id,
             state["operation_id"],
-            state=_outcome(exc, exchange, writing),
+            state=_outcome(exchange, writing),
             error=str(exc),
         )
 
@@ -1064,9 +1100,10 @@ def withdraw_skipped(
     exchange = exchange or Exchange(client)
     with db_connection() as con:
         existing = _get(con, session_id)
-    if existing is None:
-        # Only identifies the legacy copy to remove: a template sent before the
-        # described-session guard must stay withdrawable.
+    if existing is None or not existing["workout_id"]:
+        # Only identifies a legacy copy to remove (ids on the session, none on
+        # the export row): a template sent before the described-session guard
+        # must stay withdrawable.
         payload, _, _, revision = _payload(session_id, upload=False)
         state = _claim(session_id, revision=revision)
         exchange.session_calls = 0
@@ -1083,4 +1120,4 @@ def withdraw_skipped(
         except Exception as exc:
             _update(session_id, state["operation_id"], state="conflict", error=str(exc))
             raise
-    return remove(session_id, exchange=exchange)
+    return _remove(session_id, exchange=exchange, skipped=True)

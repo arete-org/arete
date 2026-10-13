@@ -381,8 +381,10 @@ budget, no request for a copy already sent as is, nothing while an export is
 unsettled. With that automatic push on, an applied or reverted proposal replaces a
 copy in place, withdraws it for a rest or sends back what a rest withdrew: once,
 after its commit, within the answer's own small budget; a session that does not
-fit is not started. A request the budget refuses is never sent, so it ends
-`failed`, not `uncertain`. Removal also serves a skipped session.
+fit is not started. A write window that sent no request (budget, reservation or
+permission refusal) ends `failed`; once a request left, `uncertain`. Removal also
+serves a skipped session, adopting a copy that predates the export table; no
+export row is written for a session the athlete cannot see.
 Legacy sessions use deterministic conversion, and existing Garmin identifiers must
 be verified before adoption. Updates require the current revision and mark the
 export dirty without transmitting it; a status change alone (done, skipped) keeps
