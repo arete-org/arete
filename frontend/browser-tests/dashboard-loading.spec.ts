@@ -136,6 +136,36 @@ test('a repeat visit paints the last known dashboard before any data answer', as
   await expect(page.getByRole('heading', { name: 'Bonjour, HUNTER' })).toBeVisible();
 });
 
+test('a dashboard that fails says so with a retry, and the coach card and briefing load on their own', async ({ page }) => {
+  let failing = true;
+  const reads: string[] = [];
+  await page.route('**/api/**', async (route: Route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
+    reads.push(path);
+    if (path === '/api/dashboard') return failing ? route.fulfill({ status: 500, body: 'boom' }) : route.fulfill({ json: dashboardAnswer({ planned: [session] }) });
+    if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' } });
+    if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, opted_in: false, available: true, version: 1 } });
+    if (path === '/api/coach/today') return route.fulfill({ json: { date: localDay(), items: [], remaining: 0, briefing: null } });
+    if (path === '/api/tips/daily') return route.fulfill({ json: { status: 'ready', tip: 'Footing facile ce matin.', priority: 'info', source: 'rules', generated_at: null, updated_after_sync: false } });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/');
+  await expect(page.getByText('Séance du jour indisponible.')).toBeVisible();
+  await expect(page.getByText('Récupération indisponible.')).toBeVisible();
+  await expect(page.getByText('Statistiques indisponibles.')).toBeVisible();
+  await expect(page.getByText('Repos — aucune séance prévue')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Connecter Garmin' })).toHaveCount(0);
+  await expect(page.getByText('Footing facile ce matin.')).toBeVisible();
+  expect(reads.filter(p => p === '/api/coach/today')).toHaveLength(1);
+  expect(reads.filter(p => p === '/api/tips/daily')).toHaveLength(1);
+
+  failing = false;
+  await page.getByText('Séance du jour indisponible.').getByRole('button', { name: 'Réessayer' }).click();
+  await expect(page.getByText('Footing du jour')).toBeVisible();
+  await expect(page.getByText('Séance du jour indisponible.')).toHaveCount(0);
+});
+
 test('hiding or leaving the page writes the pending cache at once', async ({ page }) => {
   await dashboard(page);
   await page.goto('/');

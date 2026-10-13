@@ -62,6 +62,18 @@ function useDashboard<T>(select: (board: DashboardData) => T) {
   });
 }
 
+/** A panel whose slice the dashboard could not read. */
+function Unavailable({ what, retry }: { what: string; retry: () => void }) {
+  return (
+    <p className="text-xs font-sans text-danger-red">
+      {what} indisponible.{' '}
+      <button type="button" onClick={retry} className="text-neon-cyan hover:underline">
+        Réessayer
+      </button>
+    </p>
+  );
+}
+
 function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
     <div className="flex items-center gap-2 mb-4">
@@ -142,15 +154,20 @@ export function DashboardPage() {
     data: dayLink,
     isPending: plannedPending,
     isFetching: boardFetching,
+    error: boardError,
+    refetch: retryBoard,
     dataUpdatedAt: plannedAt,
   } = useDashboard((d) => linkDay(d.date, d.planned, withStrengthLogs(d.actual, d.strength), d.date));
   const todayLink: DayLink = dayLink ?? { planned: [], offPlan: [] };
+  // No answer at all: the panels say so instead of an empty day.
+  const boardFailed = !!boardError && dayLink === undefined;
   // The coach card and the briefing read their own keys, which the dashboard
   // seeds: they ask the server themselves only once it has answered or failed.
   const boardSettled = !plannedPending && !boardFetching;
   const { data: boardDay } = useDashboard((d) => d.date);
 
-  const { data: garminConnected = false } = useDashboard((d) => d.garmin_connected);
+  // Unknown until the dashboard answers: no Garmin call to action meanwhile.
+  const { data: garminConnected } = useDashboard((d) => d.garmin_connected);
   // One batched export view for the day's sessions still to do or skipped
   // (a skipped copy still on Garmin can be withdrawn), as Planning's cards.
   const queryClient = useQueryClient();
@@ -236,6 +253,8 @@ export function DashboardPage() {
               <SectionHeader icon={<Calendar className="w-4 h-4 text-neon-purple" />} title="SÉANCE DU JOUR" />
               {plannedPending ? (
                 <Skeleton label="Chargement de la séance du jour" />
+              ) : boardFailed ? (
+                <Unavailable what="Séance du jour" retry={() => void retryBoard()} />
               ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 ? (
                 <div className="space-y-2">
                   {todayLink.planned.map((row) => (
@@ -377,6 +396,8 @@ export function DashboardPage() {
 
               {healthPending ? (
                 <Skeleton label="Chargement de la récupération" />
+              ) : boardFailed ? (
+                <Unavailable what="Récupération" retry={() => void retryBoard()} />
               ) : healthData && healthData.readiness_score != null ? (
                 <div className="flex items-center gap-6">
                   <div
@@ -444,12 +465,14 @@ export function DashboardPage() {
               ) : (
                 <p className="text-sm font-sans text-text-muted">
                   Pas de données santé aujourd&apos;hui.{' '}
-                  <Link
-                    to={garminConnected ? '/settings?tab=system' : '/settings?tab=connections'}
-                    className="text-neon-cyan hover:underline"
-                  >
-                    {garminConnected ? 'Synchroniser' : 'Connecter Garmin'}
-                  </Link>
+                  {garminConnected !== undefined && (
+                    <Link
+                      to={garminConnected ? '/settings?tab=system' : '/settings?tab=connections'}
+                      className="text-neon-cyan hover:underline"
+                    >
+                      {garminConnected ? 'Synchroniser' : 'Connecter Garmin'}
+                    </Link>
+                  )}
                 </p>
               )}
             </Panel>
