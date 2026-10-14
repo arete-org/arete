@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { fetchAPI } from '@/lib/api';
-import { invalidateAfterSession, qk } from '@/lib/queryKeys';
+import { invalidateAfterGarminRefresh } from '@/lib/queryKeys';
 
 /** One browser-owned refresh on entry/foreground; the server deduplicates tabs. */
 export function GarminFreshness() {
@@ -14,11 +14,13 @@ export function GarminFreshness() {
     async function refresh() {
       if (document.visibilityState === 'hidden' || active) return;
       active = true;
+      let state: string | undefined;
       setMessage('Vérification Garmin…');
       try {
         const result = await fetchAPI<{ state: string; complete?: boolean }>('/garmin/sync/ensure', {
           method: 'POST', signal: controller.signal,
         });
+        state = result.state;
         if (!disposed) setMessage(['fresh', 'complete', 'disconnected'].includes(result.state)
           ? '' : 'Garmin : synchronisation incomplète. Les données enregistrées restent disponibles.');
       } catch {
@@ -26,10 +28,7 @@ export function GarminFreshness() {
       } finally {
         active = false;
         if (!disposed) {
-          invalidateAfterSession(queryClient);
-          for (const key of [qk.syncStatus, qk.health, qk.healthStatus, qk.settings]) {
-            void queryClient.invalidateQueries({ queryKey: key });
-          }
+          invalidateAfterGarminRefresh(queryClient, state);
         }
       }
     }

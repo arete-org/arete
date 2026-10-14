@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { documentsApi } from '@/lib/documents';
 import type { MessageFeedback } from '@/lib/agentFeedback';
-import { invalidateAfterSession, qk } from '@/lib/queryKeys';
+import { invalidateAfterGarminRefresh, invalidateAfterSession, qk } from '@/lib/queryKeys';
 import type { PanelPageContext } from '@/lib/pageContext';
 import {
   applyEvent,
@@ -205,9 +205,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       (event) => {
         if (controller.signal.aborted) return;
         if (event.type === 'sync_status' && event.state !== 'running') {
-          invalidateAfterSession(queryClient);
-          void queryClient.invalidateQueries({ queryKey: ['garmin-health'] });
-          void queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+          invalidateAfterGarminRefresh(queryClient, event.state);
         }
         if (event.type === 'workout_update') {
           if (event.thread_id !== threadId) throw new Error('Événement reçu pour un autre fil.');

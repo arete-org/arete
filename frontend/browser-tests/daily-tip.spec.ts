@@ -14,6 +14,7 @@ test('a pending briefing is written in its own request and shown by the next pol
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST') {
       posts.push(path);
+      if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'disconnected' } });
       if (path === '/api/tips/daily') return; // a long model run: never answered here
       return route.fulfill({ json: {} });
     }
@@ -38,5 +39,5 @@ test('a pending briefing is written in its own request and shown by the next pol
   await expect(page.getByText('Footing facile de 40 minutes.')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText('Mis à jour après la synchro')).toBeVisible();
   await expect(page.getByText('Le coach écrit ton briefing…')).toHaveCount(0);
-  expect(posts).toEqual(['/api/tips/daily']);
+  expect(posts.sort()).toEqual(['/api/garmin/sync/ensure', '/api/tips/daily']);
 });

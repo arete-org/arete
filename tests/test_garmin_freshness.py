@@ -118,12 +118,16 @@ def test_shifted_anchor_restarts_scan_without_losing_lower_bound(provider, monke
 
 def test_claim_is_scoped_and_not_stolen_on_expiry():
     with db_connection() as con:
-        con.execute("INSERT INTO app.athletes (id) VALUES (2) ON CONFLICT DO NOTHING")
+        # Respect the shared test database's sequence; a literal ID can collide
+        # with a later account test under CI's loadfile worker ordering.
+        second = con.execute(
+            "INSERT INTO app.athletes (id) VALUES (nextval('app.athletes_seq')) RETURNING id"
+        ).fetchone()[0]
     with service.claim(-1):
         assert service.status()["state"] == "needs_reconciliation"
         with pytest.raises(RuntimeError, match="déjà en cours"), service.claim():
             pytest.fail("overlapping owner")
-        with athlete_scope(2), service.claim():
+        with athlete_scope(second), service.claim():
             assert service.status()["state"] == "running"
     assert service.status()["state"] == "interrupted"
 
