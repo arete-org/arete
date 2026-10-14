@@ -1,19 +1,21 @@
 """HTTP coaching cards: domain evidence plus optional model enrichment."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from arete.services import coaching_rules as rules
 from arete.services.coaching_repository import (
     Briefing,
     BriefingRepository,
+    Reaction,
     SessionFeedbackRepository,
 )
 from arete.services.coaching_rules import PostSessionResponse
+from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
@@ -46,17 +48,100 @@ class DailyTipResponse(BaseModel):
         default=False,
         description="The daily sync rewrote a briefing written before its data",
     )
+    id: int | None = Field(default=None, description="The briefing, for a reaction")
+    first_written_at: str | None = Field(
+        default=None,
+        description="When the day's first briefing was written, if this one replaced it",
+    )
+    reaction: Reaction | None = Field(default=None, description="The athlete's 👍/👎")
+    reaction_comment: str | None = Field(default=None, description="Their word with it")
+
+
+def _iso(at: datetime | None) -> str | None:
+    """Briefing times are stored in naive UTC (``coaching_repository.naive_utc_now``)."""
+    return at.replace(tzinfo=UTC).isoformat() if at else None
 
 
 def _daily_tip(briefing: Briefing | None) -> DailyTipResponse:
     if briefing is None:
         return DailyTipResponse(status="pending")
+    rewritten = briefing.revised and briefing.trigger == "scheduler"
     return DailyTipResponse(
         tip=briefing.text,
         priority=briefing.priority,  # type: ignore[arg-type]
         source=briefing.source,  # type: ignore[arg-type]
-        generated_at=(briefing.created_at or datetime.now(UTC)).isoformat(),
-        updated_after_sync=briefing.revised and briefing.trigger == "scheduler",
+        generated_at=_iso(briefing.created_at) or datetime.now(UTC).isoformat(),
+        updated_after_sync=rewritten,
+        id=briefing.id,
+        # Only the sync's rewrite is announced: a second API write is not.
+        first_written_at=_iso(briefing.first_created_at) if rewritten else None,
+        reaction=briefing.reaction,  # type: ignore[arg-type]
+        reaction_comment=briefing.reaction_comment,
+    )
+
+
+#: A short word, not a conversation: that is the coach panel's job.
+MAX_REACTION_COMMENT_CHARS = 280
+
+
+class ReactionRequest(BaseModel):
+    """``reaction`` None clears it; a comment always goes with a reaction."""
+
+    reaction: Reaction | None
+    comment: str | None = Field(default=None, max_length=MAX_REACTION_COMMENT_CHARS)
+
+    @model_validator(mode="after")
+    def comment_needs_a_reaction(self):
+        self.comment = (self.comment or "").strip() or None
+        if self.reaction is None and self.comment is not None:
+            raise ValueError("Un commentaire accompagne une réaction.")
+        return self
+
+
+class ReactionResponse(BaseModel):
+    id: int
+    reaction: Reaction | None
+    reaction_comment: str | None
+
+
+class BriefingHistoryItem(BaseModel):
+    id: int
+    date: date
+    tip: str
+    source: Literal["agent", "rules"]
+    generated_at: str | None
+    reaction: Reaction | None
+    reaction_comment: str | None
+
+
+@router.get("/history", response_model=list[BriefingHistoryItem])
+def get_briefing_history() -> list[BriefingHistoryItem]:
+    """The athlete's previous days' briefings, newest first, at most seven."""
+    return [
+        BriefingHistoryItem(
+            id=b.id,
+            date=b.date,
+            tip=b.text,
+            source=b.source,  # type: ignore[arg-type]
+            generated_at=_iso(b.created_at),
+            reaction=b.reaction,  # type: ignore[arg-type]
+            reaction_comment=b.reaction_comment,
+        )
+        for b in BriefingRepository().history(before=athlete_today())
+    ]
+
+
+@router.put("/briefings/{briefing_id}/reaction", response_model=ReactionResponse)
+def react_to_briefing(briefing_id: int, body: ReactionRequest) -> ReactionResponse:
+    """Idempotent: sending the same reaction again stores nothing new."""
+    try:
+        briefing = BriefingRepository().react(briefing_id, body.reaction, body.comment)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return ReactionResponse(
+        id=briefing.id,
+        reaction=briefing.reaction,  # type: ignore[arg-type]
+        reaction_comment=briefing.reaction_comment,
     )
 
 

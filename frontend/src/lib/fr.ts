@@ -132,3 +132,10 @@ export function formatDecimal(value: number, digits: number, signed = false): st
     signDisplay: signed ? 'exceptZero' : 'auto',
   });
 }
+
+/** "7 h 12", "8 h" on the hour: a time of day as French text reads it. */
+export function frenchClock(iso: string): string {
+  const at = new Date(iso);
+  const minutes = at.getMinutes();
+  return minutes ? `${at.getHours()} h ${String(minutes).padStart(2, '0')}` : `${at.getHours()} h`;
+}

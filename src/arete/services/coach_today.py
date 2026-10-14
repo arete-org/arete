@@ -80,12 +80,16 @@ def reference(raw: str) -> dict[str, Any]:
     """Only identifiers cross the browser boundary; scope is checked by services."""
     import re
 
-    match = re.fullmatch(r"(proposal|followup):([1-9][0-9]{0,9})", raw)
+    match = re.fullmatch(r"(proposal|followup|briefing):([1-9][0-9]{0,9})", raw)
     if not match:
         raise ValueError("Référence de suivi invalide")
     kind, ident = match[1], int(match[2])
     if kind == "followup":
         record = coach_followup.get(ident)
+    elif kind == "briefing":
+        # The athlete asks about a briefing: the coach reads its text, quoted.
+        briefing = BriefingRepository().get(ident)
+        record = briefing.to_dict() if briefing else None
     else:
         decision = PlanDecisionRepository().get(ident)
         record = decision.to_dict() if decision else None

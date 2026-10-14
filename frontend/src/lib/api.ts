@@ -529,6 +529,25 @@ export interface DailyTip {
   generated_at: string | null;
   /** The daily sync rewrote a briefing written before its data. */
   updated_after_sync: boolean;
+  /** The stored briefing (absent while pending), for a reaction or a question to the coach. */
+  id?: number | null;
+  /** When the day's first briefing was written, if this one replaced it. */
+  first_written_at?: string | null;
+  reaction?: BriefingReaction | null;
+  reaction_comment?: string | null;
+}
+
+export type BriefingReaction = "up" | "down";
+
+/** One of the previous days' briefings (`GET /tips/history`, at most seven). */
+export interface PastBriefing {
+  id: number;
+  date: string;
+  tip: string;
+  source: "agent" | "rules";
+  generated_at: string | null;
+  reaction: BriefingReaction | null;
+  reaction_comment: string | null;
 }
 
 export const tipsApi = {
@@ -537,6 +556,16 @@ export const tipsApi = {
 
   /** Writes the day's briefing if it has none: a long request nobody waits on. */
   writeDaily: () => fetchAPI<DailyTip>("/tips/daily", { method: "POST" }),
+
+  /** Idempotent: the same reaction again stores nothing new; `null` withdraws it. */
+  react: (briefingId: number, reaction: BriefingReaction | null, comment?: string) =>
+    fetchAPI<{ id: number; reaction: BriefingReaction | null; reaction_comment: string | null }>(
+      `/tips/briefings/${briefingId}/reaction`,
+      { method: "PUT", body: JSON.stringify({ reaction, comment: comment ?? null }) }
+    ),
+
+  /** The previous days' briefings, newest first. */
+  history: () => fetchAPI<PastBriefing[]>("/tips/history"),
 
   getPostSession: (
     sessionType: "strength" | "cardio",

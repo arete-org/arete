@@ -161,7 +161,15 @@ Each briefing stores the SHA-256 of the facts it was written from (migration 46)
 The daily sync recomputes them without a model request and keeps a briefing the
 dashboard asked for unless they changed; it waits up to a minute for one being
 written. A rewrite is marked `updated_after_sync`; a failed rewrite keeps the
-briefing it would have replaced. Athletes never wait for each other's run. The
+briefing it would have replaced. The dashboard leads with it and says when it was
+written and, after a sync rewrite, when the sync replaced it; briefing times
+are naive UTC, like the claim, since instances on other clocks share the
+database. The athlete's 👍/👎 and
+optional short word live on the briefing's row (migration 48): one per briefing,
+idempotent, stored only, since no prompt reads them. `GET /tips/history` lists
+the previous seven days on demand. "Demander au coach" selects the briefing as
+the page's `coach_ref`, which the context builder resolves by id like a
+proposal; nothing is sent and the draft stays. Athletes never wait for each other's run. The
 server files the feedback's ledger entry itself (`services/memory.append_entry`,
 dated heading, never twice), so neither mission can mutate training data or
 forget to write. Every profile receives the current date: the athlete's, in

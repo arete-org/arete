@@ -315,7 +315,10 @@ CREATE TABLE IF NOT EXISTS app.coach_briefings (
     error        VARCHAR,                    -- why the agent run failed, when it did
     trigger      VARCHAR NOT NULL DEFAULT 'api',    -- 'scheduler', 'api'
     created_at   TIMESTAMP DEFAULT now(),
-    facts_digest VARCHAR                     -- SHA-256 of the facts it was written from
+    facts_digest VARCHAR,                    -- SHA-256 of the facts it was written from
+    reaction     VARCHAR,                    -- the athlete's 'up' or 'down', once per briefing
+    reaction_comment VARCHAR,                -- their optional word with it
+    reacted_at   TIMESTAMP
 );
 
 -- ============================================================
@@ -855,6 +858,35 @@ def _m47_garmin_freshness(con) -> None:
     _view(con, "garmin_sync_state")
 
 
+def _m48_briefing_reactions(con) -> None:
+    """The athlete's reaction to a briefing (ARE-55): 👍/👎 and a short word.
+
+    On the briefing's own row, so a reaction is one per briefing by
+    construction and follows its owner. Nullable: no briefing has one yet.
+
+    One transaction: DuckDB fails reads through a ``t.*`` view whose table
+    gained a column until the view is recreated, so a booting or previous
+    release must never see the columns without the refreshed view.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for column, kind in (
+            ("reaction", "VARCHAR"),
+            ("reaction_comment", "VARCHAR"),
+            ("reacted_at", "TIMESTAMP"),
+        ):
+            con.execute(
+                f"ALTER TABLE app.coach_briefings ADD COLUMN IF NOT EXISTS {column} {kind}"
+            )
+        _view(con, "coach_briefings")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -892,6 +924,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (45, _m45_notification_preferences),
     (46, _m46_briefing_facts_digest),
     (47, _m47_garmin_freshness),
+    (48, _m48_briefing_reactions),
 ]
 
 

@@ -1,14 +1,14 @@
 import { CoachTodayPanel } from '@/components/agent/CoachToday';
-import { AretePresence } from '@/components/AreteBrand';
+import { BriefingCard } from '@/components/BriefingCard';
 import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
+import { Calendar, Dumbbell, Flag, Sunrise, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
-import { Button, Panel, Skeleton } from '@/components/ui';
+import { Panel, Skeleton } from '@/components/ui';
 import { planApi, settingsApi } from '@/lib/api';
 import { fetchDashboard, type DashboardData } from '@/lib/dashboard';
 import { exportApi } from '@/lib/documents';
@@ -257,7 +257,7 @@ export function DashboardPage() {
 
   const { data: healthData, isPending: healthPending } = useDashboard((d) => d.health);
 
-  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
+  const { tip, day: tipDay, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
     day: boardDay,
   });
@@ -305,7 +305,14 @@ export function DashboardPage() {
 
         <div className="dashboard-grid">
           <div className="dashboard-primary">
-            {/* Block 1: Today's Plan */}
+            {/* The coach's briefing leads (on a phone, right after the greeting); the first
+                visit of the day may wait for the coach. */}
+            <Panel className="p-4">
+              <SectionHeader icon={<Sunrise className="w-4 h-4 text-neon-cyan" />} title="BRIEFING DU JOUR" />
+              <BriefingCard tip={tip} day={tipDay} writing={tipWriting} stalled={tipStalled} refresh={refreshTip} />
+            </Panel>
+
+            {/* Today's plan, right below the briefing */}
             <Panel className="p-4">
               <SectionHeader icon={<Calendar className="w-4 h-4 text-neon-purple" />} title="SÉANCE DU JOUR" />
               {plannedPending ? (
@@ -345,24 +352,7 @@ export function DashboardPage() {
               )}
             </Panel>
 
-            {/* Block 4: AI Tip — the first visit of the day may wait for the coach */}
-            {tipWriting && (
-              <p className="glass-panel p-4 text-sm font-sans text-text-muted flex items-center gap-2">
-                <AretePresence size={24} />
-                Le coach écrit ton briefing…
-                {tipStalled && (
-                  <Button variant="ghost" className="ml-auto" onClick={refreshTip}>
-                    Actualiser
-                  </Button>
-                )}
-              </p>
-            )}
-            <CoachTodayPanel
-              enabled={boardSettled}
-              refetchOnFocus={false}
-              briefing={tip?.tip ?? undefined}
-              briefingNote={tip?.updated_after_sync ? 'Mis à jour après la synchro' : undefined}
-            />
+            <CoachTodayPanel enabled={boardSettled} refetchOnFocus={false} />
 
           </div>
           <div className="dashboard-secondary">
