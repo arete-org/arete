@@ -17,16 +17,17 @@ from deepagents.backends import CompositeBackend, StateBackend
 from langsmith import traceable
 from pydantic import SecretStr
 
-from arete.agent.backends.attachments import ATTACHMENTS_ROUTE
 from arete.agent.backends.journal import (
     JOURNAL_PERMISSIONS,
     LEDGER_TOOL_DESCRIPTIONS,
+    MEMORIES_ROUTE,
     LedgerBackend,
 )
 from arete.agent.backends.skills import SYSTEM_SKILLS_ROUTE, SystemSkillsBackend
 from arete.agent.factory import build_agent
 from arete.agent.middlewares.filesystem import build_filesystem_middleware
 from arete.agent.middlewares.skills import SystemSkillsMiddleware
+from arete.agent.middlewares.summarization import ContextSummarizationMiddleware
 from arete.agent.models.jev import (
     JEV_MAX_RETRIES,
     JEV_MODEL,
@@ -37,6 +38,8 @@ from arete.agent.models.providers import build_chat_model
 from arete.agent.models.registry import (
     AGENT_MAX_RETRIES,
     AGENT_MAX_TOKENS,
+    AGENT_TEMPERATURE,
+    AGENT_TIMEOUT_SEC,
 )
 from arete.agent.models.routing import resolve_route
 from arete.agent.profiles.catalog import get_profile
@@ -71,12 +74,16 @@ def _serialized(factory):
     return get
 
 
-def build_agent_filesystem(*, system_skills: SystemSkillsBackend | None = None):
+def build_agent_filesystem(
+    *,
+    system_skills: SystemSkillsBackend | None = None,
+    offload_tool_results: bool = True,
+):
     """Compose the application's mounts; the filesystem middleware stays generic."""
     backend = CompositeBackend(
-        default=LedgerBackend(),
+        default=StateBackend(),
         routes={
-            ATTACHMENTS_ROUTE: StateBackend(),
+            MEMORIES_ROUTE: LedgerBackend(),
             **(
                 {SYSTEM_SKILLS_ROUTE: system_skills}
                 if system_skills is not None
@@ -88,6 +95,7 @@ def build_agent_filesystem(*, system_skills: SystemSkillsBackend | None = None):
         backend,
         permissions=JOURNAL_PERMISSIONS,
         tool_descriptions=LEDGER_TOOL_DESCRIPTIONS,
+        offload_tool_results=offload_tool_results,
     )
 
 
@@ -123,7 +131,12 @@ def _assemble(
     if profile.filesystem_tools:
         skill_files = publish_bundle(SYSTEM_SKILLS_ROOT)
         skills_backend = SystemSkillsBackend(skill_files)
-    filesystem = build_agent_filesystem(system_skills=skills_backend)
+    filesystem = build_agent_filesystem(
+        system_skills=skills_backend,
+        # Slack's shared graph can disable filesystem access per invocation.
+        # Keep its results inline rather than hand out unreadable file pointers.
+        offload_tool_results=profile_id == "chat",
+    )
     skills = (
         SystemSkillsMiddleware(
             backend=filesystem.backend,
@@ -149,6 +162,22 @@ def _assemble(
         else None,
         fallback_models=models[1:],
         skills=skills,
+        summarization=(
+            # The native summarizer already retries up to three times. Avoid
+            # multiplying those attempts by SDK/provider-model fallback retries.
+            ContextSummarizationMiddleware(
+                build_chat_model(
+                    route=replace(route, fallbacks=()),
+                    max_tokens=AGENT_MAX_TOKENS,
+                    temperature=AGENT_TEMPERATURE,
+                    timeout=AGENT_TIMEOUT_SEC,
+                    max_retries=0,
+                ),
+                filesystem.backend,
+            )
+            if profile_id == "chat"
+            else None
+        ),
     )
     return graph.with_config(
         metadata={"model": route.model, "model_policy": route.openrouter_policy}

@@ -47,7 +47,14 @@ export interface ChatMessage {
   interrupted?: boolean;
   pending?: boolean;
 }
+export interface ContextWindowUsage {
+  used_tokens: number;
+  window_tokens: number;
+}
+
 export type StreamEvent =
+  | { type: 'values'; context_window_usage: ContextWindowUsage }
+  | { type: 'context_compaction'; phase: 'start' | 'done' }
   | { type: 'sync_status'; state: string }
   | WorkoutUpdate
   | { type: 'calendar_action'; id: string }
@@ -88,6 +95,11 @@ export const STREAM_TIMEOUT_MS = 310_000;
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
+export function isContextWindowUsage(value: unknown): value is ContextWindowUsage {
+  return record(value)
+    && Number.isSafeInteger(value.used_tokens) && Number(value.used_tokens) >= 0
+    && Number.isSafeInteger(value.window_tokens) && Number(value.window_tokens) > 0;
+}
 function isPreview(value: unknown): value is Preview {
   return (
     record(value) &&
@@ -100,6 +112,10 @@ function isPreview(value: unknown): value is Preview {
 export function parseEvent(data: string): StreamEvent | null {
   const e: unknown = JSON.parse(data);
   if (!record(e)) throw new Error('Événement du coach invalide.');
+  if (e.type === 'values' && isContextWindowUsage(e.context_window_usage))
+    return { type: 'values', context_window_usage: e.context_window_usage };
+  if (e.type === 'context_compaction' && (e.phase === 'start' || e.phase === 'done'))
+    return { type: 'context_compaction', phase: e.phase };
   if (isWorkoutUpdate(e)) return e;
   if (e.type === 'sync_status' && typeof e.state === 'string') return e as StreamEvent;
   if (e.type === 'suggestion') return null;
@@ -168,6 +184,7 @@ export function applyEvent(
   message: ChatMessage,
   event: StreamEvent
 ): ChatMessage {
+  if (event.type === 'values' || event.type === 'context_compaction') return message;
   if (event.type === 'sync_status') return { ...message, syncStatus: event.state };
   if (event.type === 'workout_update') {
     const current = message.workouts ?? [];

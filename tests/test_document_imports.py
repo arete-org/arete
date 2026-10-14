@@ -285,7 +285,7 @@ def test_attachment_grep_returns_matching_lines_by_default(
     state = {
         "messages": [HumanMessage("Lis la semaine du 12 octobre")],
         "files": {
-            "/plan.md": create_file_data(
+            "/attachments/plan.md": create_file_data(
                 "[Feuil1!B40]\n2026-10-12\n[Feuil1!A43]\n2026-10-12"
             )
         },

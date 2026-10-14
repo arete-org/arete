@@ -138,6 +138,25 @@ Les contrôles Playwright de `chiron.spec.ts` utilisent un flux SSE local contr�
 vérifier la croissance, le plafond, le défilement manuel et le changement de mode en cours
 de réponse, puis le retour au choix sauvegardé après rechargement.
 
+## Chiron — jauge de contexte
+
+La [planche de la jauge et de la compaction](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=151-575)
+prolonge le chat compact avec quatre variantes éditables : normal, élevé,
+saturé et compaction. La jauge reste sous le champ, alignée à droite, pour
+préserver la largeur du brouillon et des commandes. Anneau de 16 px, texte
+Inter de 11 px, couleurs sémantiques succès/avertissement/danger des thèmes.
+La cible passe à 44 px sur écran tactile ; la pulsation respecte le mouvement réduit.
+
+Sans compteurs, rien ne s’affiche. Sous 85 %, la jauge apparaît seulement si
+`contextGaugeAlways` est présent dans l’URL. La compaction reste visible avec
+des compteurs, même sous ce seuil. Le pourcentage affiché est plafonné à 100 %.
+L’infobulle au survol, au clavier et au toucher conserve les valeurs réelles et
+indique que la mesure précède la compaction. `ContextWindowGauge` n’effectue
+aucun comptage ni appel réseau : il lit les événements du fil courant.
+
+`context-gauge.spec.ts` vérifie le flux SSE, l’arrêt, le rechargement sans
+compaction bloquée, les brouillons et les thèmes Pierre/Prune à 390 px.
+
 ## Planning — proposition A
 
 [Référence Figma retenue](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=110-81).

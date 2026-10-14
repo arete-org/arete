@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import duckdb
 from langchain.agents.middleware import ModelRequest
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.messages import SystemMessage
 
 from arete.agent.capabilities.discovery import (
@@ -277,7 +278,7 @@ def personal_context_section(
     return rendered
 
 
-class ContextBudgetExceeded(ValueError):
+class ContextBudgetExceeded(ContextOverflowError, ValueError):
     """The complete model request cannot fit the configured context window."""
 
 

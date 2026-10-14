@@ -50,6 +50,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   const [storageError, setStorageError] = useState(initial.error);
   const [error, setError] = useState('');
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [compactingId, setCompactingId] = useState<string | null>(null);
   const runRef = useRef<{
     threadId: string;
     controller: AbortController;
@@ -168,6 +169,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     performance.clearMarks('coach:first-scheduled');
     performance.clearMarks('coach:last-token');
     setRunningId(threadId);
+    setCompactingId(null);
     setError('');
     setStore((prev) =>
       updateThread(prev, threadId, (t) => ({
@@ -204,6 +206,16 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       context,
       (event) => {
         if (controller.signal.aborted) return;
+        if (event.type === 'values') {
+          setStore(prev => updateThread(prev, threadId, thread => ({
+            ...thread, contextWindowUsage: event.context_window_usage,
+          })));
+          return;
+        }
+        if (event.type === 'context_compaction') {
+          setCompactingId(event.phase === 'start' ? threadId : null);
+          return;
+        }
         if (event.type === 'sync_status' && event.state !== 'running') {
           invalidateAfterGarminRefresh(queryClient, event.state);
         }
@@ -264,6 +276,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       .finally(() => {
         runRef.current = null;
         setRunningId(null);
+        setCompactingId(null);
       });
     return true;
   };
@@ -287,6 +300,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     store,
     active,
     runningId,
+    compacting: compactingId === active.id,
     error,
     storageError,
     select,

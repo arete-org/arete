@@ -2,7 +2,7 @@ import {
   restoreConversation,
   STORAGE_KEY as LEGACY_KEY,
 } from './agentConversation';
-import type { ChatMessage } from './agentStream';
+import { isContextWindowUsage, type ChatMessage, type ContextWindowUsage } from './agentStream';
 
 export const THREADS_KEY = 'arete.coach.threads.v1';
 export const MAX_THREADS = 30;
@@ -18,6 +18,7 @@ export interface CoachThread {
   messages: ChatMessage[];
   draft: string;
   attachmentIds?: string[];
+  contextWindowUsage?: ContextWindowUsage;
 }
 export interface ThreadStore {
   version: 1;
@@ -138,6 +139,7 @@ export function restoreThreads(
       updatedAt: t.updatedAt,
       attachmentIds: Array.isArray(t.attachmentIds) && t.attachmentIds.length <= 20 && t.attachmentIds.every(id => typeof id === 'string') ? t.attachmentIds : [],
       messages: restoreConversation(JSON.stringify(t.messages)),
+      contextWindowUsage: isContextWindowUsage(t.contextWindowUsage) ? t.contextWindowUsage : undefined,
     };
   });
   if (!ids.has(data.activeId))

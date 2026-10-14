@@ -11,6 +11,15 @@ import {
   updateThread,
 } from './agentThreads';
 
+it('restores valid context counters, ignoring corrupt optional telemetry', () => {
+  const store = emptyStore();
+  const usage = { used_tokens: 1200, window_tokens: 1000 };
+  store.threads[0].contextWindowUsage = usage;
+  expect(restoreThreads(JSON.stringify(store), null).threads[0].contextWindowUsage).toEqual(usage);
+  store.threads[0].contextWindowUsage = { used_tokens: 12, window_tokens: 0 };
+  expect(restoreThreads(JSON.stringify(store), null).threads[0].contextWindowUsage).toBeUndefined();
+});
+
 it('migrates the existing conversation without dropping text or tool history', () => {
   const legacy = JSON.stringify([
     { role: 'user', content: 'Ma semaine' },
