@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from arete.config import config
 from arete.dataio.db import connect, db_connection
 from arete.dataio.queries import daily_metrics_range
 from arete.garmin.readiness import update_readiness_range
@@ -199,10 +200,14 @@ def get_metrics_range(
 
 @router.get("/status")
 def sync_status() -> dict:
-    """Check sync state: are tokens present, how many days stored, last sync."""
-    from arete.garmin.client import GarminClient
+    """Health sync state from local state: no Garmin login, no ``garminconnect``.
 
-    client = GarminClient()
+    ``tokens_present`` means usable session tokens are stored, as for
+    ``GET /garmin/sync/status``: tokens Garmin refused count as absent.
+    """
+    from arete.garmin import token_store
+
+    tokens_present, _ = token_store.session_status()
     con = connect()
     try:
         stats = con.execute(
@@ -215,8 +220,8 @@ def sync_status() -> dict:
         con.close()
 
     return {
-        "tokens_present": client.has_tokens(),
-        "tokens_dir": str(client.token_dir),
+        "tokens_present": tokens_present,
+        "tokens_dir": str(config.garmin_tokens_dir),
         "days_stored": stats[0] or 0,
         "first_date": str(stats[1]) if stats[1] else None,
         "last_date": str(stats[2]) if stats[2] else None,
