@@ -58,21 +58,23 @@ class DailyTipResponse(BaseModel):
 
 
 def _iso(at: datetime | None) -> str | None:
-    """Stored timestamps are the server's naive local time: say which offset."""
-    return at.astimezone().isoformat() if at else None
+    """Briefing times are stored in naive UTC (``coaching_repository.utc_now``)."""
+    return at.replace(tzinfo=UTC).isoformat() if at else None
 
 
 def _daily_tip(briefing: Briefing | None) -> DailyTipResponse:
     if briefing is None:
         return DailyTipResponse(status="pending")
+    rewritten = briefing.revised and briefing.trigger == "scheduler"
     return DailyTipResponse(
         tip=briefing.text,
         priority=briefing.priority,  # type: ignore[arg-type]
         source=briefing.source,  # type: ignore[arg-type]
         generated_at=_iso(briefing.created_at) or datetime.now(UTC).isoformat(),
-        updated_after_sync=briefing.revised and briefing.trigger == "scheduler",
+        updated_after_sync=rewritten,
         id=briefing.id,
-        first_written_at=_iso(briefing.first_created_at) if briefing.revised else None,
+        # Only the sync's rewrite is announced: a second API write is not.
+        first_written_at=_iso(briefing.first_created_at) if rewritten else None,
         reaction=briefing.reaction,  # type: ignore[arg-type]
         reaction_comment=briefing.reaction_comment,
     )

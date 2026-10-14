@@ -24,6 +24,14 @@ Source = Literal["agent", "rules"]
 #: 'pending' marks a run in progress (``claim``); it is never served or audited.
 Status = Literal["ok", "failed", "pending"]
 Trigger = Literal["scheduler", "api"]
+
+
+def utc_now() -> datetime:
+    """``created_at`` and ``reacted_at`` are naive UTC: instances on other
+    clocks (Docker in Paris, Vercel in UTC) share the database."""
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 #: The athlete's reaction to a briefing (``react``).
 Reaction = Literal["up", "down"]
 #: The previous briefings the dashboard lists.
@@ -63,7 +71,11 @@ class Briefing:
             "status": self.status,
             "error": self.error,
             "trigger": self.trigger,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": (
+                self.created_at.replace(tzinfo=UTC).isoformat()
+                if self.created_at
+                else None
+            ),
         }
 
 
@@ -131,7 +143,7 @@ class BriefingRepository:
                     status,
                     error,
                     trigger,
-                    datetime.now(),
+                    utc_now(),
                     facts_digest,
                 ],
             ).fetchone()
@@ -223,14 +235,19 @@ class BriefingRepository:
                         WHEN reaction IS NOT DISTINCT FROM $reaction
                          AND reaction_comment IS NOT DISTINCT FROM $comment
                         THEN reacted_at
-                        ELSE now()
+                        ELSE $at
                     END
                 WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL
                   AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL)
                   AND id = $id AND status = 'ok'
                 RETURNING {_COLUMNS}
                 """,
-                {"reaction": reaction, "comment": comment, "id": briefing_id},
+                {
+                    "reaction": reaction,
+                    "comment": comment,
+                    "id": briefing_id,
+                    "at": utc_now(),
+                },
             ).fetchone()
         if row is None:
             raise LookupError("Briefing introuvable")
@@ -273,9 +290,8 @@ class BriefingRepository:
         still both succeed (no unique key), at worst one extra model request.
         """
         user_id = resolve_athlete_id(user_id)
-        # Naive UTC, like the scheduler's markers: instances on other clocks
-        # (Docker in Paris, Vercel in UTC) share the database.
-        now = datetime.now(UTC).replace(tzinfo=None)
+        # Naive UTC, like the scheduler's markers and every briefing's time.
+        now = utc_now()
         try:
             with transaction() as conn:
                 held = conn.execute(

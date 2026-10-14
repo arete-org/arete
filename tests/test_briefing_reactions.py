@@ -169,6 +169,14 @@ def test_a_briefing_written_once_has_no_first_time_of_its_own(db, client):
     assert tip["first_written_at"] is None and tip["updated_after_sync"] is False
 
 
+def test_a_second_api_write_is_not_announced_as_a_sync_rewrite(db, client):
+    _write(db, athlete_today(), "Premier.", trigger="api")
+    _write(db, athlete_today(), "Second.", trigger="api")
+    tip = client.get("/tips/daily").json()
+    assert tip["tip"] == "Second."
+    assert tip["updated_after_sync"] is False and tip["first_written_at"] is None
+
+
 def test_the_coach_reads_a_referenced_briefing_of_the_athlete(db):
     from arete.services.coach_today import reference
     from arete.services.users import upsert_user
@@ -248,3 +256,48 @@ def test_a_failed_migration_48_leaves_the_table_and_its_view_readable(
     assert "reaction" not in columns
     assert con.execute("SELECT count(*) FROM app.visible_coach_briefings").fetchone()
     con.close()
+
+
+@pytest.fixture
+def process_timezone():
+    """Sets the process timezone, as Docker (Paris) and Vercel (UTC) differ."""
+    import os
+    import time
+
+    previous = os.environ.get("TZ")
+
+    def use(zone: str) -> None:
+        os.environ["TZ"] = zone
+        time.tzset()
+
+    yield use
+    if previous is None:
+        os.environ.pop("TZ", None)
+    else:
+        os.environ["TZ"] = previous
+    time.tzset()
+
+
+@pytest.mark.parametrize(
+    ("writer", "reader"), [("Europe/Paris", "UTC"), ("UTC", "Europe/Paris")]
+)
+def test_briefing_times_mean_one_instant_across_instances(
+    db, client, process_timezone, writer, reader
+):
+    from datetime import UTC
+
+    # Written by one instance (the Docker stack, the Vercel cron)...
+    process_timezone(writer)
+    before = datetime.now(UTC)
+    briefing = _write(db, athlete_today(), "Écrit ailleurs.")
+    client.put(f"/tips/briefings/{briefing}/reaction", json={"reaction": "up"})
+    after = datetime.now(UTC)
+    # ...read by another, on the same database.
+    process_timezone(reader)
+    tip = client.get("/tips/daily").json()
+
+    written = datetime.fromisoformat(tip["generated_at"])
+    assert written.utcoffset() == timedelta(0)
+    assert before - timedelta(seconds=1) <= written <= after + timedelta(seconds=1)
+    reacted = _row(briefing)[2].replace(tzinfo=UTC)  # stored naive UTC
+    assert before - timedelta(seconds=1) <= reacted <= after + timedelta(seconds=1)

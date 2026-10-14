@@ -159,7 +159,9 @@ The daily sync recomputes them without a model request and keeps a briefing the
 dashboard asked for unless they changed; it waits up to a minute for one being
 written. A rewrite is marked `updated_after_sync`; a failed rewrite keeps the
 briefing it would have replaced. The dashboard leads with it and says when it was
-written and, after a rewrite, when the sync replaced it. The athlete's 👍/👎 and
+written and, after a sync rewrite, when the sync replaced it; briefing times
+are naive UTC, like the claim, since instances on other clocks share the
+database. The athlete's 👍/👎 and
 optional short word live on the briefing's row (migration 48): one per briefing,
 idempotent, stored only, since no prompt reads them. `GET /tips/history` lists
 the previous seven days on demand. "Demander au coach" selects the briefing as
