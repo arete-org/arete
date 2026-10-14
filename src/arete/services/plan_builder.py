@@ -9,7 +9,7 @@ day that already holds another planned session is left alone.
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from typing import Any
 
@@ -204,13 +204,13 @@ def remove(goal_id: int, today: date | None = None) -> int:
 FALLBACK_RACE_PACE_SEC_KM = 360
 
 
-def _race_minutes(goal: Goal) -> float:
+def _race_minutes(goal: Goal, con=None) -> float:
     from arete.features.running import race_time_sec
     from arete.services.metrics import current_vdot
 
     if goal.target_time_sec:
         return goal.target_time_sec / 60
-    vdot = current_vdot()
+    vdot = current_vdot(con)
     if vdot:
         return race_time_sec(vdot[0], goal.distance_km * 1000) / 60
     return goal.distance_km * FALLBACK_RACE_PACE_SEC_KM / 60
@@ -220,38 +220,45 @@ def _race_minutes(goal: Goal) -> float:
 PROJECTION_HISTORY_DAYS = 28
 
 
-def projection(
-    goal_id: int,
-    today: date | None = None,
-    history_days: int = PROJECTION_HISTORY_DAYS,
-) -> dict[str, Any]:
-    """CTL / ATL / TSB day by day until race day, from history and plan."""
+@dataclass(frozen=True)
+class Projected:
+    """A projection and what it was computed from, for a caller that needs more
+    than ``projection``'s answer (the dashboard's curve) on its own connection."""
+
+    answer: dict[str, Any]
+    #: The athlete's daily load up to today, as the projection read it.
+    history: dict[date, float]
+    #: The sessions still to do from the first planned day to race day.
+    planned: list[PlannedSession]
+
+
+def project(
+    goal: Goal, today: date, con, history_days: int = PROJECTION_HISTORY_DAYS
+) -> Projected:
+    """``projection`` for a goal already read, every statement on ``con``."""
     from arete.dataio.queries import daily_tss_by_date
     from arete.features.plan_generator import planned_tss
     from arete.services.metrics import fitness_series
 
-    goal = _goal_or_raise(goal_id)
-    today = today or athlete_today()
-    con = connect()
-    try:
-        history = {d: t for d, t in daily_tss_by_date(con).items() if d <= today}
-    finally:
-        con.close()
+    history = {d: t for d, t in daily_tss_by_date(con).items() if d <= today}
     # Today counts as done once a session is in; otherwise its plan still stands.
     first_planned = today + timedelta(days=1) if history.get(today) else today
-    planned = GarminRepository().list_planned_sessions(
-        start_date=first_planned,
-        end_date=goal.race_date,
-        status=None,
-        limit=500,
-        ascending=True,
-    )
+    planned = [
+        s
+        for s in GarminRepository().list_planned_sessions(
+            start_date=first_planned,
+            end_date=goal.race_date,
+            status=None,
+            limit=500,
+            ascending=True,
+            connection=con,
+        )
+        if s.status in (SessionStatus.PENDING, SessionStatus.MODIFIED)
+    ]
     future: dict[date, float] = {}
     for s in planned:
-        if s.status not in (SessionStatus.PENDING, SessionStatus.MODIFIED):
-            continue
         if s.session_type == SessionType.RACE and s.date == goal.race_date:
-            minutes = _race_minutes(goal)
+            minutes = _race_minutes(goal, con)
         else:
             minutes = float(s.target_duration_min or 0)
         future[s.date] = future.get(s.date, 0.0) + planned_tss(
@@ -277,7 +284,7 @@ def projection(
     # Race morning: the form the day before, before the race's own load lands.
     morning = shown[-2] if len(shown) > 1 else (shown[-1] if shown else None)
     ctls = [float(p["ctl"]) for p in shown]
-    return {
+    answer = {
         "goal": goal.to_dict(today),
         "series": shown,
         "race_day": {
@@ -287,3 +294,14 @@ def projection(
         "peak_ctl": max(ctls) if ctls else None,
         "planned_sessions": len(future),
     }
+    return Projected(answer, history, planned)
+
+
+def projection(goal_id: int, today: date | None = None) -> dict[str, Any]:
+    """CTL / ATL / TSB day by day until race day, from history and plan."""
+    goal = _goal_or_raise(goal_id)
+    con = connect()
+    try:
+        return project(goal, today or athlete_today(), con).answer
+    finally:
+        con.close()

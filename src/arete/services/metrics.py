@@ -600,14 +600,14 @@ def current_vdot(con=None) -> tuple[float, str] | None:
         row = con.execute(
             "SELECT race_10k_sec FROM app.visible_daily_metrics WHERE user_id = getvariable('arete_athlete_id') AND race_10k_sec IS NOT NULL ORDER BY date DESC LIMIT 1"
         ).fetchone()
+        if row and row[0]:
+            return vdot_from_race(10_000, row[0]), "garmin_prediction"
+        pace = (get_user_settings(user_id=resolve_athlete_id(), con=con) or {}).get(
+            "threshold_pace_sec_km"
+        )
     finally:
         if own:
             con.close()
-    if row and row[0]:
-        return vdot_from_race(10_000, row[0]), "garmin_prediction"
-    pace = (get_user_settings(user_id=resolve_athlete_id()) or {}).get(
-        "threshold_pace_sec_km"
-    )
     if pace:
         return vdot_from_threshold_pace(int(pace)), "threshold_pace"
     return None

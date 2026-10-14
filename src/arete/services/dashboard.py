@@ -96,16 +96,33 @@ CURVE_HISTORY_DAYS = 84
 KEY_SESSION_DAYS = 7
 
 
+def _history_points(by_date: dict[date, float], today: date) -> list[dict[str, Any]]:
+    """Twelve weeks up to today from the logged load only: today's point is the
+    dashboard's form, whatever today's plan."""
+    since = today - timedelta(days=CURVE_HISTORY_DAYS)
+    return [
+        {
+            "date": day.date.isoformat(),
+            "ctl": round(ctl, 1),
+            "atl": round(atl, 1),
+            "tsb": round(ctl - atl, 1),
+            "planned": False,
+        }
+        for day, ctl, atl in metrics.fitness_series(by_date, today)
+        if day.date >= since
+    ]
+
+
 def form_curve() -> dict[str, Any]:
     """The dashboard's form curve, read on its own after the page (lazy).
 
     Twelve weeks of fitness, fatigue and form and, with a race ahead, their
-    projection to race day from the planned sessions (``plan_builder``), the
-    race-morning form and the next key session for the goal card. Reads only.
+    projection to race day from the planned sessions (``plan_builder.project``),
+    the race-morning form, how far the plan reaches and the next key session
+    for the goal card. One connection; reads only.
     """
     from arete.dataio.queries import daily_tss_by_date
     from arete.features.plan_generator import planned_tss
-    from arete.garmin.models import SessionStatus
     from arete.services import plan_builder
 
     with db_connection() as con:
@@ -114,41 +131,25 @@ def form_curve() -> dict[str, Any]:
         goal = goals.next_goal(today, con)
         if goal is None:
             by_date = {d: t for d, t in daily_tss_by_date(con).items() if d <= today}
-    if goal is None:
-        since = today - timedelta(days=CURVE_HISTORY_DAYS)
-        series = [
-            {
-                "date": day.date.isoformat(),
-                "ctl": round(ctl, 1),
-                "atl": round(atl, 1),
-                "tsb": round(ctl - atl, 1),
-                "planned": False,
+            return {
+                "today": today.isoformat(),
+                "goal_id": None,
+                "series": _history_points(by_date, today),
+                "race_day": None,
+                "planned_sessions": 0,
+                "last_planned": None,
+                "key_session": None,
             }
-            for day, ctl, atl in metrics.fitness_series(by_date, today)
-            if day.date >= since
-        ]
-        return {
-            "today": today.isoformat(),
-            "goal_id": None,
-            "series": series,
-            "race_day": None,
-            "planned_sessions": 0,
-            "key_session": None,
-        }
-    projected = plan_builder.projection(goal.id, today, CURVE_HISTORY_DAYS)
-    week = GarminRepository().list_planned_sessions(
-        start_date=today,
-        end_date=today + timedelta(days=KEY_SESSION_DAYS - 1),
-        status=None,
-        limit=SESSION_LIMIT,
-        ascending=True,
-    )
-    still_to_do = [
-        s for s in week if s.status in (SessionStatus.PENDING, SessionStatus.MODIFIED)
-    ]
+        projected = plan_builder.project(goal, today, con, CURVE_HISTORY_DAYS)
+    answer = projected.answer
+    # Up to today the logged load only; after it the projection, which still
+    # counts today's plan when nothing is logged yet.
+    future = [p for p in answer["series"] if p["date"] > today.isoformat()]
+    week_end = min(today + timedelta(days=KEY_SESSION_DAYS - 1), goal.race_date)
+    week = [s for s in projected.planned if s.date <= week_end]
     # The hardest of the week: the planned load weighs duration and intensity.
     key = max(
-        still_to_do,
+        week,
         key=lambda s: planned_tss(
             s.session_type.value, float(s.target_duration_min or 0)
         ),
@@ -157,12 +158,14 @@ def form_curve() -> dict[str, Any]:
     return {
         "today": today.isoformat(),
         "goal_id": goal.id,
-        "series": [
-            {k: p[k] for k in ("date", "ctl", "atl", "tsb", "planned")}
-            for p in projected["series"]
-        ],
-        "race_day": projected["race_day"],
-        "planned_sessions": projected["planned_sessions"],
+        "series": _history_points(projected.history, today)
+        + [{k: p[k] for k in ("date", "ctl", "atl", "tsb", "planned")} for p in future],
+        "race_day": answer["race_day"],
+        "planned_sessions": answer["planned_sessions"],
+        # The projection assumes rest after the last planned session.
+        "last_planned": max(s.date for s in projected.planned).isoformat()
+        if projected.planned
+        else None,
         "key_session": None
         if key is None
         else {

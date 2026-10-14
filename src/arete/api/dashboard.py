@@ -96,6 +96,9 @@ class FormCurveResponse(BaseModel):
         description="Race-morning ctl and tsb, without a goal null"
     )
     planned_sessions: int = Field(description="Planned days the projection reads")
+    last_planned: date_type | None = Field(
+        description="The last planned session's day: the projection assumes rest after it"
+    )
     key_session: KeySession | None = Field(
         description="The hardest session planned in the next seven days"
     )

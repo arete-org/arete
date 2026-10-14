@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import duckdb
 import pytest
 
 from arete.dataio.db import connect
@@ -82,6 +83,77 @@ def test_with_a_goal_it_runs_to_race_day_and_names_the_key_session(athlete, clie
     assert body["race_day"]["tsb"] is not None and body["planned_sessions"] == 3
     assert body["key_session"]["id"] == key
     assert body["key_session"]["session_type"] == "intervals"
+    # The projection assumes rest after the last planned session.
+    assert body["last_planned"] == (athlete + timedelta(days=8)).isoformat()
+
+
+def test_today_is_the_dashboards_form_even_with_a_session_planned_today(
+    athlete, client
+):
+    goals.create_goal(
+        name="Semi", race_date=athlete + timedelta(days=30), distance_km=21.1
+    )
+    _plan(athlete, "intervals", 75)  # planned today, not done yet
+
+    body = client.get("/dashboard/form-curve").json()
+
+    today = [p for p in body["series"] if p["date"] == athlete.isoformat()]
+    assert len(today) == 1 and today[0]["planned"] is False
+    fitness = client.get("/metrics/fitness").json()
+    board = client.get("/dashboard").json()["fitness"]
+    for source in (fitness, board):
+        assert (today[0]["ctl"], today[0]["atl"], today[0]["tsb"]) == (
+            source["ctl"],
+            source["atl"],
+            source["tsb"],
+        )
+    # Today's plan still weighs on the projection, from tomorrow on.
+    tomorrow = next(p for p in body["series"] if p["date"] > athlete.isoformat())
+    assert tomorrow["atl"] > today[0]["atl"]
+    # Planning's projection is unchanged: its today still counts today's plan.
+    projection = client.get(f"/goals/{body['goal_id']}/projection").json()
+    planning_today = next(
+        p for p in projection["series"] if p["date"] == athlete.isoformat()
+    )
+    assert planning_today["planned"] is True
+
+
+def test_the_key_session_never_comes_after_the_race(athlete, client):
+    race = athlete + timedelta(days=3)
+    goals.create_goal(name="10 km", race_date=race, distance_km=10)
+    _plan(athlete + timedelta(days=1), "endurance", 30)
+    _plan(athlete + timedelta(days=5), "long_run", 150)  # after the race
+    body = client.get("/dashboard/form-curve").json()
+    assert body["key_session"]["date"] == (athlete + timedelta(days=1)).isoformat()
+
+
+def test_one_connection_and_a_bounded_number_of_statements(
+    athlete, client, monkeypatch, statement_log
+):
+    # A race session without target time: its minutes come from the VDOT.
+    goals.create_goal(
+        name="Marathon", race_date=athlete + timedelta(days=60), distance_km=42.195
+    )
+    for days in (1, 3, 5, 8):
+        _plan(athlete + timedelta(days=days), "endurance", 50)
+    _plan(athlete + timedelta(days=60), "race", 0)
+    real_connect = duckdb.connect
+    opened = []
+
+    def counting_connect(*args, **kwargs):
+        opened.append(args)
+        return statement_log.wrap(real_connect(*args, **kwargs))
+
+    monkeypatch.setattr(duckdb, "connect", counting_connect)
+    response = client.get("/dashboard/form-curve")
+
+    assert response.status_code == 200 and response.json()["goal_id"] is not None
+    assert len(opened) == 1
+    assert len(statement_log) <= 10, (
+        statement_log
+    )  # 9 today; 31 on 7 connections before
+    verbs = {sql.split()[0].upper() for sql in statement_log}
+    assert verbs <= {"PRAGMA", "SET", "SELECT", "WITH"}, verbs
 
 
 def test_a_past_goal_is_not_projected(athlete, client):
@@ -95,11 +167,18 @@ def test_a_past_goal_is_not_projected(athlete, client):
 def test_another_athletes_goal_and_plan_are_not_read(athlete, client):
     from arete.services.users import upsert_user
 
+    mine = goals.create_goal(
+        name="Ma course", race_date=athlete + timedelta(days=40), distance_km=10
+    )
+    _plan(athlete + timedelta(days=4), "endurance", 40)
     other = upsert_user("other", "other@example.com", "Other", verified=True)
     with athlete_scope(other.athlete_id):
         goals.create_goal(
             name="Leur course", race_date=athlete + timedelta(days=20), distance_km=10
         )
-        _plan(athlete + timedelta(days=2), "intervals", 60)
+        _plan(athlete + timedelta(days=2), "intervals", 90)
     body = client.get("/dashboard/form-curve").json()
-    assert body["goal_id"] is None and body["key_session"] is None
+    # My goal and my plan only: their harder session, sooner, is not mine.
+    assert body["goal_id"] == mine.id
+    assert body["key_session"]["date"] == (athlete + timedelta(days=4)).isoformat()
+    assert body["planned_sessions"] == 1
