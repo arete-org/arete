@@ -248,6 +248,16 @@ class TestStart:
 
 
 class TestDailySync:
+    @pytest.fixture(autouse=True)
+    def no_feedback_backlog(self):
+        # These orchestration tests must not turn fixtures from another test
+        # into a live model request. Repository catch-up has scoped DB tests.
+        with patch(
+            "arete.services.coaching_repository.SessionFeedbackRepository.pending_garmin",
+            return_value=([], 0),
+        ):
+            yield
+
     def test_reports_missing_connectors(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(tmp_path / "none"))
         with (
@@ -256,6 +266,7 @@ class TestDailySync:
         ):
             status = scheduler.daily_sync()
         assert status == {
+            "feedback_pending": "0",
             "garmin": "no tokens",
             "plan": "0 decisions (none)",
             "strava": "not connected",
@@ -304,7 +315,16 @@ class TestDailySync:
         )
         with (
             patch("arete.garmin.client.GarminClient", return_value=garmin),
-            patch("arete.garmin.sync.GarminSyncClient", return_value=sync_client),
+            patch(
+                "arete.services.garmin_sync.ensure_fresh",
+                return_value={
+                    "imported": 0,
+                    "session_ids": [],
+                    "errors": [],
+                    "state": "complete",
+                    "health_checked_at": "2026-10-13",
+                },
+            ),
             patch("arete.garmin.health_sync.sync_range", return_value=[]),
             patch("arete.garmin.readiness.update_readiness_range"),
             patch(

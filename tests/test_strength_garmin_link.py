@@ -189,12 +189,19 @@ def _sync(raw: list[dict]):
     repo.create_actual_session.side_effect = range(1, len(raw) + 1)
     client = GarminSyncClient(client=MagicMock(), zones=ZoneModel.from_reference())
     client._repository = repo
-    client.client.activities.return_value = raw
+    client.client.activity_page.return_value = raw
     with (
         patch("arete.garmin.sync.time.sleep"),
         patch("arete.garmin.sync.refresh_threshold", return_value={}),
     ):
-        return client.sync_activities(download_fit=False)
+        from arete.garmin.sync import GarminActivity
+
+        return list(
+            client.iter_sync_activities(
+                download_fit=False,
+                activity_batch=[GarminActivity.from_api_response(item) for item in raw],
+            )
+        )[-1]
 
 
 SYNCED = [

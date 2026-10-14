@@ -316,7 +316,13 @@ def test_the_sync_endpoint_enriches_what_it_imported(router_client):
         last_activity_date=None,
         session_ids=[7, 8],
     )
+    from arete.garmin.sync import SyncResult
+
+    sync_client.iter_sync_activities.return_value = (
+        event for event in [SyncResult(success=True, session_ids=[7, 8])]
+    )
     with (
+        patch("arete.garmin.token_store.session_status", return_value=(True, None)),
         patch("arete.garmin.sync.GarminSyncClient", return_value=sync_client),
         patch(
             "arete.services.session_conditions.enrich_sessions",
@@ -324,7 +330,9 @@ def test_the_sync_endpoint_enriches_what_it_imported(router_client):
         ) as enrich,
     ):
         response = router_client(garmin_sync.router).post(
-            "/garmin/sync/activities", json={}
+            "/garmin/sync/activities", json={"start_date": "2026-10-01"}
         )
     assert response.status_code == 200
-    enrich.assert_called_once_with([7, 8])
+    enrich.assert_called_once()
+    assert enrich.call_args.args == ([7, 8],)
+    assert enrich.call_args.kwargs["budget_sec"] <= 20

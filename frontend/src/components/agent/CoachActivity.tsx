@@ -65,6 +65,7 @@ export function CoachActivity({ message }: { message: ChatMessage }) {
   const interrupted = message.interrupted || !!message.error;
   const label = interrupted
     ? message.interrupted ? 'Réponse interrompue' : 'Réponse incomplète'
+    : pending && message.syncStatus === 'running' ? 'Synchronisation Garmin avant la réponse'
     : running ? toolLabel(running)
       : failed ? 'Une action a échoué'
         : uncertain ? 'Résultat à vérifier'

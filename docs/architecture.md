@@ -127,6 +127,11 @@ Tools call services; they do not import HTTP handlers. New tools are unavailable
 to background missions until explicitly classified as read-only.
 
 Chat binds analytics, planning, strength and Garmin tools natively at graph construction.
+Analytics includes the bounded, read-only `query_training` adapter over the
+[typed training catalog](typed-training-retrieval.md): explicit dates, filters,
+aggregates and evidence IDs, with daily and session grains kept separate.
+Only typed retrieval is integrated; relationship traversal and agent-written SQL
+remain in the opt-in synthetic benchmark.
 Calendar is added only by server configuration. No discovery/load tool or loaded
 state exists: every current profile either has its tools immediately or has none.
 The native ToolNode validates arguments, injects ToolRuntime and executes tools.
@@ -443,11 +448,19 @@ numbered sections split by `services/session_feedback.py`. A missing, failed or
 misnumbered answer leaves each session its rule text. The server files the
 journal entries and stores the texts; the feedback profile still binds no tool.
 
-Chat can run the sync button's import itself (`sync_garmin_activities`,
-`services/garmin_sync.py`): at most 20 activities, one run per athlete and
-process, stopped between activities 60 s before the run deadline, never
-replayed. It returns the imported sessions, and as a write it drops the cached
-page so the next model call reads it again. It writes no sync feedback.
+`services/garmin_sync.py` owns durable per-athlete import coordination and
+freshness (migration 47) for app entry/foreground, manual imports, personal
+coaching and scheduled catch-up. A refresh has 180 seconds, 20 new activities,
+six pages and 50 paced provider requests. Successful checks are separate from
+imported-session dates; capped scans retain validated continuation. Expired
+ownership requires explicit reconciliation before another writer starts.
+Personal coaching waits before graph execution, reserves two minutes for its
+answer and contributes dated freshness limitations through the central context
+builder without another model request. Chat's explicit sync tool uses the same
+coordinator and returns exact imported IDs. Neither path writes daily feedback.
+See [Garmin freshness and recovery](garmin-freshness.md) for the API, bounds and
+operator recovery procedure. The [retrieval experiment](session-retrieval-evaluation.md)
+remains offline/opt-in and adds no production retrieval tool.
 
 ## Optional athlete RPG
 

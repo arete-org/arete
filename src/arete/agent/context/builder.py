@@ -125,6 +125,27 @@ def build_context(
         ),
         ContextSection("date", date_instruction, "server"),
         ContextSection(
+            "garmin_freshness",
+            (
+                "Fraîcheur Garmin : "
+                + json.dumps(
+                    {
+                        key: value
+                        for key, value in context.garmin_freshness.items()
+                        if key != "sessions"
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                )
+                + "\nSi la synchronisation est incomplète, indique les dernières vérifications réussies. "
+                "Une séance absente peut ne pas être importée ; ne conclus pas qu’elle n’a pas eu lieu."
+            )
+            if context and context.garmin_freshness and profile.personal_context
+            else "",
+            "server",
+            stable=False,
+        ),
+        ContextSection(
             "facts",
             facts_block(
                 context.current_date if isinstance(context, AgentContext) else None

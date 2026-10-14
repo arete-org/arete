@@ -843,7 +843,13 @@ def test_garmin_connection_mfa_sync_and_logout_are_private(
     monkeypatch.setattr(Garmin, "login", login)
     monkeypatch.setattr(Garmin, "resume_login", resume)
     monkeypatch.setattr(Client, "dump", dump)
-    monkeypatch.setattr(GarminSyncClient, "sync_activities", sync)
+
+    def stream_sync(sync_client, **kwargs):
+        # The fake token file belongs to the mocked login protocol, not the SDK.
+        sync_client.client.sync_budget = None
+        yield sync(sync_client, **kwargs)
+
+    monkeypatch.setattr(GarminSyncClient, "iter_sync_activities", stream_sync)
     monkeypatch.setattr(
         "arete.api.garmin_sync.write_sync_feedback", lambda *_: None, raising=False
     )
@@ -880,7 +886,9 @@ def test_garmin_connection_mfa_sync_and_logout_are_private(
             is True
         )
         response = client.post(
-            "/garmin/sync/activities", headers=who, json={"download_fit": False}
+            "/garmin/sync/activities",
+            headers=who,
+            json={"download_fit": False, "start_date": "2026-10-01"},
         )
         assert response.status_code == 200, response.text
     for who, name in zip(

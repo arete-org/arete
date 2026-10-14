@@ -19,6 +19,7 @@ test('loading pages reads the RPG snapshot and logging a session syncs it once',
   await page.route('**/api/**', (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh', complete: true } });
     if (path === '/api/gamification/sync') {
       syncs.push(path);
       return route.fulfill({ json: synced });

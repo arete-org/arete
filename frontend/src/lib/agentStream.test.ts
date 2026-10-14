@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   applyEvent,
+  parseEvent,
   consumeStream,
   REQUEST_WINDOW_MESSAGES,
   requestWindow,
@@ -226,4 +227,13 @@ describe('retired optional events', () => {
     await consumeStream(stream('data: {"type":"suggestion","text":"Une action inventée"}\n\n' + frame(done)), e => events.push(e));
     expect(events).toEqual([done]);
   });
+});
+
+it('keeps Garmin preflight progress separate from model text and tool calls', () => {
+  const event = parseEvent('{"type":"sync_status","state":"running"}');
+  expect(event).toEqual({ type: 'sync_status', state: 'running' });
+  const message = applyEvent({ role: 'assistant', content: '', pending: true }, event!);
+  expect(message.syncStatus).toBe('running');
+  expect(message.content).toBe('');
+  expect(message.parts).toBeUndefined();
 });

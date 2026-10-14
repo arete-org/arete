@@ -21,6 +21,7 @@ from pydantic import Field
 
 from arete.agent.runtime.budget import MAX_TOOL_OUTPUT_CHARS
 from arete.agent.tools.validation import typed_tool
+from arete.services.training_query import TrainingQuery
 
 #: Mirrors the routes' own Query bounds — see api/metrics.py.
 WORKLOAD_DAYS_RANGE = (7, 90)
@@ -217,10 +218,37 @@ def get_activity_detail(session_id: Annotated[int, Field(gt=0)]) -> str:
         return _error(f"{type(exc).__name__}: {exc}")
 
 
+@typed_tool
+def query_training(request: TrainingQuery) -> str:
+    """Filter training evidence or aggregate a dated period (inclusive, <=366 days).
+
+    Entities/fields: sessions (sport, name, distance_m, duration_sec, avg_hr,
+    avg_pace_sec_km, ascent_m, gap_sec_km, temperature_c, rpe, has_feedback),
+    days (sleep_duration_sec, hrv_last_night, resting_hr, sleep_score,
+    readiness_score), plans (sport, status, completed, target_distance_km,
+    target_duration_min), strength (name, duration_sec, rpe, volume_kg).
+    All have id/date. Daily fields can filter sessions, but aggregate them only
+    with days to avoid counting nights twice. Running/cycling filters include
+    their sport aliases. Omit metric for rows; otherwise sum/avg/min/max/count
+    one metric, optionally grouped by day/week/month/sport/status. count(id)
+    counts rows; avg(completed) is plan adherence. Compare periods with separate
+    calls. Results carry source IDs, units, missing counts and explicit limits.
+    Use get_activity_detail for streams, BM25 memory for narrative evidence,
+    and existing fitness/workload tools for CTL/ATL/ACWR (never recompute them).
+    """
+    from arete.services.training_query import query_training as query
+
+    try:
+        return _out(query(request))
+    except ValueError as exc:
+        return _error(str(exc))
+
+
 ANALYTICS_TOOLS: list[BaseTool] = [
     get_workload,
     get_fitness,
     get_training_advice,
     list_recent_sessions,
     get_activity_detail,
+    query_training,
 ]

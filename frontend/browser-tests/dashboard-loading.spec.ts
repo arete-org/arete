@@ -31,6 +31,7 @@ async function dashboard(
       path === '/api/settings' ? { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' }
       : path === '/api/settings/gamification' ? { enabled: false, opted_in: false, available: true, version: 1 }
       : path === '/api/dashboard' ? dashboardAnswer({ planned: [session] })
+      : path === '/api/garmin/sync/ensure' ? { state: 'fresh' }
       : [];
     await route.fulfill({ json }).catch(() => {}); // the page may have moved on
   });
@@ -55,7 +56,7 @@ test('the page frame shows at once, today’s session with the one answer, whate
   await expect(page.getByText('Chargement de la progression…')).toBeVisible();
 });
 
-test('the dashboard loads with at most four requests, its slices read from one answer', async ({ page }) => {
+test('the dashboard loads with four reads and one freshness check, its slices read from one answer', async ({ page }) => {
   // The worst case short of the RPG: Garmin connected and today's session still to send.
   const requests = await dashboard(page, () => 0, (route, path) => {
     if (path === '/api/dashboard') return dashboardAnswer({
@@ -77,9 +78,10 @@ test('the dashboard loads with at most four requests, its slices read from one a
   await expect(page.getByText(/Semi de Lyon/)).toBeVisible();
   await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
   await page.waitForLoadState('networkidle');
-  // The app shell's settings and game preference, the dashboard, the watch card's export view.
+  // Four reads plus the shared on-use freshness check; a fresh result adds no reads.
   expect([...requests].sort(), requests.join('\n')).toEqual([
     'GET /api/dashboard', 'GET /api/garmin/workouts', 'GET /api/settings', 'GET /api/settings/gamification',
+    'POST /api/garmin/sync/ensure',
   ]);
 });
 
@@ -151,7 +153,9 @@ test('a repeat visit and a focus refresh stay within the budget, the coach card 
   await expect(page.getByText('Footing du jour')).toBeVisible();
   await expect(page.getByText('Comment était la séance ?')).toBeVisible();
   await page.waitForLoadState('networkidle');
-  expect([...requests].sort(), requests.join('\n')).toEqual(['GET /api/dashboard', 'GET /api/settings', 'GET /api/settings/gamification']);
+  expect([...requests].sort(), requests.join('\n')).toEqual([
+    'GET /api/dashboard', 'GET /api/settings', 'GET /api/settings/gamification', 'POST /api/garmin/sync/ensure',
+  ]);
 
   // Past the 30 s freshness, the athlete comes back to the tab.
   requests.length = 0;
@@ -170,6 +174,7 @@ test('a dashboard that fails says so with a retry, and the coach card and briefi
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     reads.push(path);
+    if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh' } });
     if (path === '/api/dashboard') return failing ? route.fulfill({ status: 500, body: 'boom' }) : route.fulfill({ json: dashboardAnswer({ planned: [session] }) });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, opted_in: false, available: true, version: 1 } });

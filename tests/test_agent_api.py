@@ -361,8 +361,8 @@ def test_chat_stream_endpoint_sse(client):
         if line.startswith("data: ")
     ]
     types = [e["type"] for e in events]
-    assert types == ["tool_start", "token", "done"]
-    assert events[1]["text"] == "Salut"
+    assert types == ["sync_status", "sync_status", "tool_start", "token", "done"]
+    assert events[3]["text"] == "Salut"
 
 
 def test_chat_stream_endpoint_error_event(client):

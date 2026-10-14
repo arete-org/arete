@@ -42,6 +42,7 @@ class StreamProjection:
                 if isinstance(data, dict)
                 and data.get("type")
                 in (
+                    "sync_status",
                     "tool_start",
                     "tool_end",
                     "calendar_action",

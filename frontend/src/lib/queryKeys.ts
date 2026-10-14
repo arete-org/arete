@@ -89,7 +89,7 @@ export function invalidateWithDashboard(queryClient: QueryClient, ...keys: Query
 }
 
 /** Everything that changes when a session is logged, uploaded, synced or matched. */
-export function invalidateAfterSession(queryClient: QueryClient): void {
+function invalidateSessionQueries(queryClient: QueryClient): void {
   for (const key of [
     qk.dashboard(),
     ['workout'],
@@ -113,6 +113,19 @@ export function invalidateAfterSession(queryClient: QueryClient): void {
   ]) {
     queryClient.invalidateQueries({ queryKey: key });
   }
-  // Settles the RPG: it replaces the snapshot instead of re-reading it.
+}
+
+export function invalidateAfterSession(queryClient: QueryClient): void {
+  invalidateSessionQueries(queryClient);
+  // An explicit session write settles the RPG and replaces its snapshot.
   syncGame(queryClient);
+}
+
+/** Refresh reads may have committed partial work, but must not start another write. */
+export function invalidateAfterGarminRefresh(queryClient: QueryClient, state?: string): void {
+  if (state && ['running', 'fresh', 'disconnected'].includes(state)) return;
+  invalidateSessionQueries(queryClient);
+  for (const key of [qk.syncStatus, qk.health, qk.healthStatus, qk.settings]) {
+    void queryClient.invalidateQueries({ queryKey: key });
+  }
 }

@@ -9,7 +9,8 @@ from arete.agent.tools.slack_product import ADMIN_DATA_TOOLS, SLACK_TOOLS
 from arete.agent.tools.strength import STRENGTH_TOOLS
 
 ANALYTICS_INSTRUCTIONS = """Analyses :
-- Pour une période précise ou une comparaison, appelle les outils avec des `days` différents plutôt que de raisonner sur le bloc de la page.
+- Pour filtrer des séances, suivre une tendance ou comparer des périodes, utilise `query_training` avec les dates exactes ; garde les outils de charge et de forme pour leurs calculs spécialisés.
+- Cite les sources et les unités ; respecte les limites et les valeurs manquantes. Agrège la récupération par jour, jamais par séance. Une association n'établit pas une causalité ; distingue mesures, déclarations de l'athlète et interprétations du coach.
 - Les records Strava ne sont pas accessibles au coach : renvoie vers la page Analyses sans appel d’outil.
 - L'ACWR exige 28 jours d'historique; quand il manque, ne l'invente pas.
 - Pour juger une séance précise (allure, découplage, fractionné), lis `get_activity_detail` avec son id plutôt que sa seule ligne de liste."""
@@ -146,6 +147,7 @@ Aucun accès aux conversations conservées uniquement dans les navigateurs ni au
                 "get_training_advice",
                 "list_recent_sessions",
                 "get_activity_detail",
+                "query_training",
             }
         ),
     ),

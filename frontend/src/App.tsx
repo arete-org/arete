@@ -1,3 +1,4 @@
+import { GarminFreshness } from '@/components/GarminFreshness';
 import { RouteScroll } from '@/components/RouteScroll';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
 import { useCoachDisplay } from '@/hooks/useCoachDisplay';
@@ -120,6 +121,7 @@ function App() {
           <BrowserRouter>
             <div className="app-shell bg-void">
               <RouteScroll />
+              <GarminFreshness />
               <Navigation
                 agentOpen={agentOpen}
                 agentBusy={agentBusy}

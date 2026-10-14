@@ -13,6 +13,15 @@ logger = logging.getLogger(__name__)
 DDL = """
 CREATE SCHEMA IF NOT EXISTS app;
 
+CREATE TABLE IF NOT EXISTS app.garmin_sync_state (
+    athlete_id BIGINT PRIMARY KEY DEFAULT getvariable('arete_athlete_id'),
+    owner VARCHAR,
+    lease_until TIMESTAMP,
+    revision BIGINT NOT NULL DEFAULT 0,
+    payload JSON NOT NULL DEFAULT '{}',
+    deleted_at TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS app.schema_version (
     version     INTEGER PRIMARY KEY,
     applied_at  TIMESTAMP DEFAULT now()
@@ -837,6 +846,15 @@ def _m46_briefing_facts_digest(con) -> None:
     _view(con, "coach_briefings")
 
 
+def _m47_garmin_freshness(con) -> None:
+    # Separate provider coverage from the scheduler's once-per-day claim.
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.garmin_sync_state")
+    con.execute(DDL[start : DDL.index(";", start) + 1])
+    _view(con, "garmin_sync_state")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -873,6 +891,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (44, _m44_slack_product),
     (45, _m45_notification_preferences),
     (46, _m46_briefing_facts_digest),
+    (47, _m47_garmin_freshness),
 ]
 
 

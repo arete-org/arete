@@ -379,3 +379,27 @@ def test_duplicate_sources_are_deduplicated_without_losing_distinct_blocks():
     corpus.add("document:1:p1", "2026-10-10", "Deuxième bloc")
     assert len(corpus.passages) == 2
     assert len({p.id for p in corpus.passages}) == 2
+
+
+def test_lexical_context_excludes_strava_session_text():
+    from arete.garmin.models import ActivitySource, ActualSession
+    from arete.garmin.repository import GarminRepository
+
+    repo = GarminRepository()
+    identifier = repo.create_actual_session(
+        ActualSession(
+            date=TODAY,
+            sport="running",
+            duration_sec=600,
+            name="SecretStravaLexicalMarker",
+            source=ActivitySource.STRAVA,
+        )
+    )
+    try:
+        result = memory.search_personal_context(
+            "SecretStravaLexicalMarker", None, TODAY
+        )
+        assert not any(h.passage.source == f"actual:{identifier}" for h in result.hits)
+    finally:
+        with db_connection() as con:
+            con.execute("DELETE FROM app.actual_sessions WHERE id=?", [identifier])

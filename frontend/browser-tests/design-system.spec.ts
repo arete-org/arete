@@ -6,10 +6,15 @@ import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
 for (const width of [390, 430, 768, 1440]) {
   test(`the eight themes preserve identity and usable appearance controls at ${width}px`, async ({ page }) => {
     let writes = 0;
+    let refreshes = 0;
     await page.setViewportSize({ width, height: 1000 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.route('**/api/**', route => {
       const path = new URL(route.request().url()).pathname;
+      if (path === '/api/garmin/sync/ensure') {
+        refreshes++;
+        return route.fulfill({ json: { state: 'disconnected' } });
+      }
       if (route.request().method() !== 'GET') writes++;
       if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
       if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'pierre' } });
@@ -42,6 +47,7 @@ for (const width of [390, 430, 768, 1440]) {
     }
     // Previewing themes is reversible and must never write a preference implicitly.
     expect(writes).toBe(0);
+    expect(refreshes).toBe(1);
     await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await expect(panel.locator('.coach-title')).toHaveCSS('font-family', /Cormorant Garamond/);

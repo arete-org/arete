@@ -105,11 +105,29 @@ def test_signed_challenge_does_not_run_coach(router_client, configured):
 
 
 @pytest.mark.parametrize("options", [{"secret": "wrong"}, {"age": 301}, {"age": -301}])
-def test_invalid_signatures_rejected(router_client, configured, payload, options):
+def test_invalid_signatures_rejected(
+    router_client, configured, payload, options, monkeypatch
+):
+    # A future signature 301s ahead can become valid if a slow CI request takes
+    # over a second. Freeze signing and verification at the same instant.
+    monkeypatch.setattr(time, "time", lambda: 1_800_000_000)
     response = router_client(api.router).post(
         "/slack/events", **signed(payload, **options)
     )
     assert response.status_code == 401
+    configured.assert_not_called()
+
+
+@pytest.mark.parametrize("age", [-300, 300])
+def test_signature_window_includes_exact_boundary(
+    router_client, configured, monkeypatch, age
+):
+    monkeypatch.setattr(time, "time", lambda: 1_800_000_000)
+    response = router_client(api.router).post(
+        "/slack/events",
+        **signed({"type": "url_verification", "challenge": "boundary"}, age=age),
+    )
+    assert response.json() == {"challenge": "boundary"}
     configured.assert_not_called()
 
 

@@ -7,6 +7,7 @@ test('connect Garmin with MFA, sync and disconnect from Connections', async ({ p
   const loginBodies: unknown[] = [];
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/garmin/sync/ensure')) return route.fulfill({ json: { state: 'complete', complete: true } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { available: false, opted_in: false } });
     if (path.endsWith('/garmin/sync/status')) return route.fulfill({ json: { garmin_authenticated: connected, user_email: connected ? 'athlete@garmin.test' : null, activities_synced: imported } });
@@ -57,6 +58,7 @@ test('connect Garmin with MFA, sync and disconnect from Connections', async ({ p
 test('one live progress bar follows Garmin work in System, including partial failures', async ({ page }) => {
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/garmin/sync/ensure')) return route.fulfill({ json: { state: 'complete', complete: true } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { available: false, opted_in: false } });
     if (path.endsWith('/garmin/sync/status')) return route.fulfill({ json: { garmin_authenticated: true, user_email: 'EDMOND', activities_synced: 86, last_sync: '2026-10-10T14:06:31' } });
@@ -121,6 +123,7 @@ test('complete history runs multiple batches from one click with mobile progress
   const gate = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/garmin/sync/ensure')) return route.fulfill({ json: { state: 'complete', complete: true } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { available: false, opted_in: false } });
     if (path.endsWith('/garmin/sync/status')) return route.fulfill({ json: { garmin_authenticated: true, user_email: 'EDMOND', activities_synced: 1001 } });
@@ -185,4 +188,30 @@ test('complete history runs multiple batches from one click with mobile progress
     { download_fit: true, max_activities: 20, history_offset: 0 },
     { download_fit: true, max_activities: 20, history_offset: 20, history_anchor: 123 },
   ]);
+});
+
+test('opening the app refreshes Garmin once and reports a partial result', async ({ page }) => {
+  let imports = 0;
+  let release!: () => void;
+  const completed = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
+    if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { available: false, opted_in: false } });
+    if (path.endsWith('/garmin/sync/ensure')) {
+      imports++;
+      expect(route.request().method()).toBe('POST');
+      await completed;
+      return route.fulfill({ json: { state: 'partial', complete: false, session_ids: [42] } });
+    }
+    if (path.endsWith('/garmin/sync/status')) return route.fulfill({ json: { garmin_authenticated: true, activities_synced: 1 } });
+    if (path.includes('/settings')) return route.fulfill({ json: { theme: 'odyssey' } });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/settings?tab=connections');
+  await expect(page.getByText('Vérification Garmin…')).toBeVisible();
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  expect(imports).toBe(1);
+  release();
+  await expect(page.getByText('Garmin : synchronisation incomplète. Les données enregistrées restent disponibles.')).toBeVisible();
 });

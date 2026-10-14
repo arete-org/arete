@@ -87,6 +87,36 @@ def _elapsed_ms(started: float) -> int:
     return round((monotonic() - started) * 1000)
 
 
+def _personal(context: AgentContext) -> bool:
+    from arete.agent.runtime.policy import slack_policy
+
+    return context.profile == "chat" or (
+        context.profile == "slack" and slack_policy(context).personal_context
+    )
+
+
+async def refresh_personal_data(context: AgentContext) -> None:
+    """Refresh once before context reads, never for product/admin/background runs."""
+    from anyio import to_thread
+
+    from arete.services.garmin_sync import ensure_fresh
+
+    if not _personal(context) or context.garmin_freshness is not None:
+        return
+    assert context.deadline is not None
+    try:
+        context.garmin_freshness = await to_thread.run_sync(
+            partial(ensure_fresh, deadline=context.deadline - 120)
+        )
+    except Exception as exc:
+        context.garmin_freshness = {
+            "state": "failed",
+            "complete": False,
+            "error": type(exc).__name__,
+        }
+    context.page_section = None
+
+
 async def invoke_agent(graph: Any, state: dict, *, context: AgentContext) -> dict:
     started = context.started_at or monotonic()
     context.started_at = started
@@ -95,6 +125,7 @@ async def invoke_agent(graph: Any, state: dict, *, context: AgentContext) -> dic
     try:
         with agent_tracing():
             async with asyncio.timeout(max(0, context.deadline - monotonic())):
+                await refresh_personal_data(context)
                 result = cast(
                     dict,
                     await graph.ainvoke(
@@ -140,6 +171,20 @@ async def stream_agent(
     try:
         with agent_tracing():
             async with asyncio.timeout(max(0, context.deadline - monotonic())):
+                if _personal(context):
+                    yield {
+                        "type": "custom",
+                        "data": {"type": "sync_status", "state": "running"},
+                    }
+                await refresh_personal_data(context)
+                if context.garmin_freshness is not None:
+                    yield {
+                        "type": "custom",
+                        "data": {
+                            "type": "sync_status",
+                            "state": context.garmin_freshness.get("state", "failed"),
+                        },
+                    }
                 stream = graph.astream(
                     state,
                     context=context,
