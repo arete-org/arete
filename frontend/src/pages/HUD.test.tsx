@@ -205,3 +205,13 @@ it('offers to set a goal when there is none', async () => {
   expect(screen.getByRole('link', { name: 'Fixer un objectif' })).toBeTruthy();
   expect(screen.queryByRole('region', { name: 'Objectif de course' })).toBeNull();
 });
+
+it('says this morning is not synced yet when the recovery still comes from Garmin', async () => {
+  board.fitness = { ...board.fitness, readiness_source: 'garmin', readiness_measured_on: '2026-10-13' };
+  board.player_stats = { ...stats, hp: { ...stats.hp, source: 'garmin_previous', detail: 'Garmin, mesure du 13/10' } };
+  await mount(false);
+  expect(screen.getByText(/Pas encore synchronisé ce matin/)).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Reconnecter Garmin' })).toBeTruthy();
+  expect(screen.queryByRole('link', { name: 'Connecter Garmin' })).toBeNull();
+  expect(screen.queryByText(/Pas de données santé/)).toBeNull();
+});

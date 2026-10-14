@@ -262,6 +262,7 @@ export function DashboardPage() {
   const { data: workload } = useDashboard((d) => d.workload);
 
   const { data: healthData, isPending: healthPending } = useDashboard((d) => d.health);
+  const fromGarmin = fitness != null && fitness.readiness_source !== 'model';
 
   const { tip, day: tipDay, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
@@ -495,13 +496,15 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <p className="text-sm font-sans text-text-muted">
-                  Pas de données santé aujourd&apos;hui.{' '}
+                  {/* Yesterday's Garmin night still drives the recovery above: Garmin
+                      is known, only this morning's sync is missing. */}
+                  {fromGarmin ? 'Pas encore synchronisé ce matin.' : 'Pas de données santé aujourd’hui.'}{' '}
                   {garminConnected !== undefined && (
                     <Link
                       to={garminConnected ? '/settings?tab=system' : '/settings?tab=connections'}
                       className="text-neon-cyan hover:underline"
                     >
-                      {garminConnected ? 'Synchroniser' : 'Connecter Garmin'}
+                      {garminConnected ? 'Synchroniser' : fromGarmin ? 'Reconnecter Garmin' : 'Connecter Garmin'}
                     </Link>
                   )}
                 </p>
