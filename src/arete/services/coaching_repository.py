@@ -24,6 +24,10 @@ Source = Literal["agent", "rules"]
 #: 'pending' marks a run in progress (``claim``); it is never served or audited.
 Status = Literal["ok", "failed", "pending"]
 Trigger = Literal["scheduler", "api"]
+#: The athlete's reaction to a briefing (``react``).
+Reaction = Literal["up", "down"]
+#: The previous briefings the dashboard lists.
+HISTORY_LIMIT = 7
 
 
 @dataclass(frozen=True)
@@ -43,6 +47,11 @@ class Briefing:
     facts_digest: str | None = None
     #: An earlier usable briefing of the same day was replaced by this one.
     revised: bool = False
+    #: The athlete's reaction (``react``) and their optional word with it.
+    reaction: str | None = None
+    reaction_comment: str | None = None
+    #: When the day's first usable briefing was written (``get_for_day``).
+    first_created_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -59,7 +68,8 @@ class Briefing:
 
 
 _COLUMNS = (
-    "id, date, text, priority, source, status, error, trigger, created_at, facts_digest"
+    "id, date, text, priority, source, status, error, trigger, created_at,"
+    " facts_digest, reaction, reaction_comment"
 )
 
 
@@ -75,6 +85,8 @@ def _row_to_briefing(row: tuple) -> Briefing:
         trigger=row[7],
         created_at=row[8],
         facts_digest=row[9],
+        reaction=row[10],
+        reaction_comment=row[11],
     )
 
 
@@ -146,7 +158,7 @@ class BriefingRepository:
         try:
             row = conn.execute(
                 f"""
-                SELECT {_COLUMNS}, count(*) OVER () > 1
+                SELECT {_COLUMNS}, count(*) OVER () > 1, min(created_at) OVER ()
                 FROM app.visible_coach_briefings
                 WHERE user_id = ? AND date = ? AND status = 'ok'
                 ORDER BY created_at DESC, id DESC
@@ -159,7 +171,70 @@ class BriefingRepository:
                 conn.close()
         if row is None:
             return None
-        return replace(_row_to_briefing(row), revised=bool(row[10]))
+        return replace(
+            _row_to_briefing(row), revised=bool(row[12]), first_created_at=row[13]
+        )
+
+    def get(self, briefing_id: int) -> Briefing | None:
+        """One of the athlete's usable briefings, whatever its day."""
+        with db_connection() as conn:
+            row = conn.execute(
+                f"SELECT {_COLUMNS} FROM app.visible_coach_briefings"
+                " WHERE id = ? AND status = 'ok'",
+                [briefing_id],
+            ).fetchone()
+        return _row_to_briefing(row) if row else None
+
+    def history(self, before: date, limit: int = HISTORY_LIMIT) -> list[Briefing]:
+        """The athlete's previous days, newest first: each day's usable briefing."""
+        with db_connection() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT {_COLUMNS} FROM app.visible_coach_briefings
+                WHERE status = 'ok' AND date < ?
+                QUALIFY row_number() OVER (
+                    PARTITION BY date ORDER BY created_at DESC, id DESC
+                ) = 1
+                ORDER BY date DESC
+                LIMIT ?
+                """,
+                [before, min(limit, HISTORY_LIMIT)],
+            ).fetchall()
+        return [_row_to_briefing(row) for row in rows]
+
+    def react(
+        self, briefing_id: int, reaction: Reaction | None, comment: str | None
+    ) -> Briefing:
+        """Set the athlete's reaction to a briefing; None clears it.
+
+        One per briefing (it lives on the row) and idempotent: sending the
+        same reaction again leaves the same state. LookupError when the
+        briefing is not one of the athlete's usable briefings.
+        """
+        assert reaction is not None or comment is None, "A comment needs a reaction"
+        with db_connection() as conn:
+            row = conn.execute(
+                f"""
+                UPDATE app.coach_briefings
+                SET reaction = $reaction, reaction_comment = $comment,
+                    reacted_at = CASE
+                        WHEN $reaction IS NULL THEN NULL
+                        -- The same answer again changes nothing, not even its time.
+                        WHEN reaction IS NOT DISTINCT FROM $reaction
+                         AND reaction_comment IS NOT DISTINCT FROM $comment
+                        THEN reacted_at
+                        ELSE now()
+                    END
+                WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL
+                  AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL)
+                  AND id = $id AND status = 'ok'
+                RETURNING {_COLUMNS}
+                """,
+                {"reaction": reaction, "comment": comment, "id": briefing_id},
+            ).fetchone()
+        if row is None:
+            raise LookupError("Briefing introuvable")
+        return _row_to_briefing(row)
 
     def list_recent(
         self, limit: int = 30, user_id: int | None = None

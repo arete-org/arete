@@ -103,7 +103,7 @@ export function FollowupCard({ followup }: { followup: Followup }) {
  * `enabled: false` waits for another request to seed the card (the dashboard's);
  * `refetchOnFocus: false` leaves a focus refresh to that request.
  */
-export function CoachTodayPanel({ briefing, briefingNote, enabled = true, refetchOnFocus = true }: { briefing?: string; briefingNote?: string; enabled?: boolean; refetchOnFocus?: boolean }) {
+export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { enabled?: boolean; refetchOnFocus?: boolean }) {
   const client = useQueryClient();
   const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled, refetchOnWindowFocus: refetchOnFocus });
   const prepare = useMutation({ mutationFn: coachApi.prepare, onSuccess: data => client.setQueryData(coachTodayKey, data) });
@@ -112,8 +112,6 @@ export function CoachTodayPanel({ briefing, briefingNote, enabled = true, refetc
       {query.isPending && <p role="status">Chargement du suivi…</p>}
       {(query.error || prepare.error) && <p role="alert" className="text-sm text-danger-red">{readableError(query.error ?? prepare.error)}</p>}
       {query.data?.items.map(item => item.kind === 'proposal' ? <ProposalCard key={`p:${item.record.id}`} proposal={item.record} group={item.group} members={item.members} /> : <FollowupCard key={`f:${item.record.id}`} followup={item.record} />)}
-      {(briefing || query.data?.briefing) && <p className="text-sm text-text-secondary">{briefing || query.data?.briefing?.text}</p>}
-      {briefing && briefingNote && <p className="text-xs text-text-muted">{briefingNote}</p>}
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button variant="outline" size="sm" aria-describedby="coach-prepare-hint" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>

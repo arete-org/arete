@@ -43,6 +43,8 @@ export const qk = {
   fitness: ['fitness'] as const,
   workload: ['workload'] as const,
   tipDaily: ['tip-daily'] as const,
+  /** The previous days' briefings: read when the athlete opens them, never kept offline. */
+  tipHistory: ['tip-history'] as const,
 
   health: ['garmin-health'] as const,
   healthDaily: (date: string) => ['garmin-health', 'daily', date] as const,

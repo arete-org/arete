@@ -88,7 +88,7 @@ function App() {
   useEffect(() => {
     const discuss = (event: Event) => {
       const reference = (event as CustomEvent<CoachReference>).detail;
-      if (!reference || !['proposal', 'followup'].includes(reference.kind) || !Number.isSafeInteger(reference.id)) return;
+      if (!reference || !['proposal', 'followup', 'briefing'].includes(reference.kind) || !Number.isSafeInteger(reference.id)) return;
       setCoachReference(reference);
       setAgentOpen(true);
     };

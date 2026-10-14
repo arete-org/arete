@@ -54,6 +54,8 @@ export function useDailyTip({ enabled = true, day: serverDay }: { enabled?: bool
     mutate(day);
   }, [pending, posting, day, query.data, mutate]);
   return {
+    /** The day this briefing's read is keyed by: a reaction updates it there. */
+    day,
     tip: query.data && !pending ? query.data : undefined,
     writing: query.isLoading || (!enabled && query.isPending) || pending,
     stalled: pending && polls >= TIP_POLL_DELAYS_MS.length,

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { settingsApi } from '@/lib/api';
+import { settingsApi, type DailyTip } from '@/lib/api';
 import { coachApi } from '@/lib/coachToday';
 import type { DashboardData } from '@/lib/dashboard';
 import { gameApi, type Player } from '@/lib/gamification';
@@ -47,14 +47,21 @@ const player = {
 } satisfies Player;
 
 vi.mock('@/lib/dashboard', () => ({ fetchDashboard: vi.fn(async () => board) }));
+const written: DailyTip = {
+  status: 'ready', tip: 'Footing facile, garde de la fraîcheur pour jeudi.', priority: 'info', source: 'agent',
+  generated_at: '2026-10-14T07:12:00', updated_after_sync: false, id: 41, first_written_at: null,
+  reaction: null, reaction_comment: null,
+};
+const daily = vi.hoisted(() => ({ tip: undefined as unknown }));
 vi.mock('@/lib/dailyTip', () => ({
-  useDailyTip: () => ({ tip: undefined, writing: false, stalled: false, refresh: () => {} }),
+  useDailyTip: () => ({ day: '2026-10-14', tip: daily.tip, writing: false, stalled: false, refresh: () => {} }),
 }));
 
 const stats = board.player_stats;
 let client: QueryClient;
 beforeEach(() => {
   board.player_stats = stats;
+  daily.tip = written;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(settingsApi, 'get').mockResolvedValue({ display_name: 'Arthur' } as Awaited<ReturnType<typeof settingsApi.get>>);
   vi.spyOn(coachApi, 'today').mockResolvedValue({ date: '2026-10-14', items: [], remaining: 0, briefing: null });
@@ -142,4 +149,23 @@ it('offers one way to log a session and no duplicate quick links', async () => {
   const refresh = screen.getByRole('button', { name: 'Actualiser le suivi' });
   expect(refresh.getAttribute('aria-describedby')).toBe('coach-prepare-hint');
   expect(within(document.body).getByText(/Rien ne change sans ton accord/)).toBeTruthy();
+});
+
+it('leads with the briefing, today\'s session right below it', async () => {
+  await mount(false);
+  const headings = screen.getAllByRole('heading').map((h) => h.textContent);
+  expect(headings.indexOf('BRIEFING DU JOUR')).toBeGreaterThanOrEqual(0);
+  expect(headings.indexOf('BRIEFING DU JOUR') + 1).toBe(headings.indexOf('SÉANCE DU JOUR'));
+  const briefing = screen.getByText(written.tip!);
+  const session = screen.getByText('Repos — aucune séance prévue');
+  expect(briefing.compareDocumentPosition(session) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByText('Écrit à 7 h 12')).toBeTruthy();
+  // The coach card no longer repeats it.
+  expect(screen.getAllByText(written.tip!)).toHaveLength(1);
+});
+
+it('says when the sync rewrote the briefing, and when it was first written', async () => {
+  daily.tip = { ...written, updated_after_sync: true, first_written_at: '2026-10-14T07:12:00', generated_at: '2026-10-14T08:05:00' };
+  await mount(false);
+  expect(screen.getByText('Écrit à 7 h 12 · mis à jour après la synchro de 8 h 05')).toBeTruthy();
 });
