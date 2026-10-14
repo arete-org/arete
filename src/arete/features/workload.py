@@ -20,7 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
-from statistics import mean, stdev
+from statistics import StatisticsError, mean, stdev
 from typing import NamedTuple
 
 
@@ -345,7 +345,7 @@ def calculate_monotony(loads: Sequence[DailyLoad], target_date: date) -> float |
         if std == 0:
             return None
         return mean(all_days) / std
-    except Exception:
+    except StatisticsError:
         return None
 
 
