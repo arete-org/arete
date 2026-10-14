@@ -60,7 +60,10 @@ separate 200-step backstop. A model call gives up after 60 s, or 30 s without a
 streamed chunk. Native LangChain `ModelFallbackMiddleware` tries the configured
 candidates in order (at most three, including the primary). The composition root
 constructs each fallback candidate with zero SDK retries and no provider-side fallback list,
-so one graph turn costs at most three requests, 72 per run. Completions with neither visible text nor a valid tool call are
+so one model attempt chain costs at most three requests. In browser chat, native
+context-overflow recovery can repeat that chain once after compaction: at most
+144 main-model requests over 24 graph turns, plus the bounded summary requests
+described below. Completions with neither visible text nor a valid tool call are
 rejected inside that same fallback boundary, including reasoning-only output
 that exhausts the token allowance. Responses ending in `length` (including
 concatenated streaming metadata such as `lengthlength`) are also rejected, even
@@ -219,11 +222,15 @@ exceed the envelope.
 
 `LLM_CONTEXT_TOKENS` declares the deployment window (default 65,536, minimum 8,192).
 Set it to the actual server/model limit. It is a configured constraint, not a claim
-about a dynamically routed provider. Counting is approximate. There is no
-server-side compaction: the browser sends the last 30 messages of a thread (it
-keeps the whole thread locally). Durable facts and the transactional journal are
-long-term memory; `data/agent/memory` is only a legacy import source. Summarizing per request cost a model request on every turn of a
-long thread, since nothing persists the summary between requests.
+about a dynamically routed provider. Counting is approximate. Browser chat uses
+native Deep Agents summarization within an invocation; the browser still sends
+the last 30 messages and keeps its complete thread locally. The model profile
+uses this configured window for the native 85% trigger and 10% retained tail.
+Raw messages remain in graph state and compacted history remains readable under
+`/conversation_history/`. There is no checkpointer: summaries and ephemeral files
+are not carried into the next browser request, so long threads may summarize
+again. Durable facts and the transactional journal are long-term memory;
+`data/agent/memory` is only a legacy import source.
 
 ## Native training operations
 
@@ -580,8 +587,10 @@ tools and adapts runtime provenance and budget hooks. `JournalMiddleware`
 (`agent/middlewares/journal.py`) binds only dated `append_journal` operations.
 The native `FilesystemMiddleware` receives any `BackendProtocol`; its configuration
 helper owns only bounded read/search schemas, with no journal or skill dependencies.
-The composition root mounts the DB-backed `LedgerBackend`, thread-local attachment
-`StateBackend` and immutable `SystemSkillsBackend` through `CompositeBackend` and
+The composition root uses one `CompositeBackend` with one default `StateBackend`
+for `/attachments/`, `/large_tool_results/` and
+`/conversation_history/`. It mounts the DB-backed `LedgerBackend` at `/memories/`
+and immutable `SystemSkillsBackend` at `/skills/system/`, and
 passes that same filesystem to skills discovery. Ledger and skill text backends
 implement the public backend protocol, including typed results and inherited async
 workers, without overriding private `StateBackend` methods. Their read-only base
@@ -594,8 +603,51 @@ facts, journal excerpts, retrieval and token accounting.
 This follows the [Deep Agents backend contract](https://docs.langchain.com/oss/python/deepagents/backends#custom-backends)
 and native filesystem middleware composition, checked against pinned Deep Agents
 0.7.4. The pinned middleware accepts permissions through `_permissions`; the helper
-isolates that version-specific setting. Automatic history/tool eviction stays off
-because the context builder accounts for the complete request.
+isolates that version-specific setting. Browser chat uses the native
+[context engineering](https://docs.langchain.com/oss/python/deepagents/context-engineering)
+mechanisms and defaults: tool-result eviction at 20,000 tokens, human-message
+eviction at 50,000 tokens, and `compute_summarization_defaults` for 85%/10%
+summarization and old tool-argument eviction. Without a model profile, the native
+helper falls back to a 170,000-token trigger and six recent messages; production
+models carry the configured deployment window. Filesystem tools keep their
+existing bounded schemas and permissions. The agent retrieves offloaded evidence
+with native `grep` and paginated `read_file`; internal files are read-only to it.
+
+Filesystem interception wraps error classification and UI event extraction so
+those hooks receive complete results. The context builder assembles the request
+before summarization; the final envelope guard runs afterward and raises the
+standard `ContextOverflowError` if native overflow recovery is needed. The
+summarization model uses the same configured route, output/temperature/timeout
+settings and zero SDK retries: native summary retries are already bounded to
+three attempts. Each of the 24 graph turns can summarize once, adding at most
+72 summary requests under the same five-minute invocation deadline. Native
+overflow recovery can also retry a model request after compaction; it never
+replays a tool or an entire run. The shared stream projection filters native
+`lc_source="summarization"` tokens from user-facing answers. Summary calls have native LangSmith LLM spans;
+the existing `Agent run:` model-call counter measures main-model attempts only.
+Slack retains inline results because its shared graph can disable filesystem
+access per invocation; tool-free background missions do not compact history.
+
+`ContextSummarizationMiddleware` only instruments the pinned native middleware:
+it captures its complete decision count (system, messages and tool schemas) and
+publishes `context_window_usage = {used_tokens, window_tokens}` in graph state
+after the model returns. Capture uses a `ContextVar`, so cached graphs cannot
+mix overlapping invocations. The three upstream hooks are covered by sync,
+async and concurrency tests; thresholds, counting, retention, offloading and
+overflow recovery remain native. No provider-usage correction or extra token
+count is added for the UI. A model without a known window emits no percentage.
+
+The native summary call emits custom `context_compaction` events with `start`
+and `done` phases, including failure/cancellation via `finally`. Streaming adds
+`values`; its projection exposes only changed counters, never the rest of state.
+The existing browser thread store saves counters locally; compaction activity is
+ephemeral, scoped to its originating thread and cleared on every stream closure.
+There is still no server checkpointer. The composer hides the gauge below 85%
+unless `contextGaugeAlways` is present in the URL (even with value `false`).
+No counters means no gauge. Compaction with counters is always visible. The
+percentage updates after model calls and may retain the pre-compaction count
+until the following model call. Only its display is capped at 100%; the tooltip
+retains the actual measured count and configured deployment window.
 
 New-fact writes use a bounded Jev decision to detect semantic duplicates or
 contradictions among up to seven complete candidates. `services/fact_memory.py`

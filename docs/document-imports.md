@@ -27,7 +27,7 @@ Downloads also use chunks to remain below Vercel's response-body limit.
 
 Conversation history stays in browser storage. Before any model call, each invocation
 reconstructs the thread's selected, fully extracted documents in a Deep Agents
-StateBackend mounted at `/attachments/`. References from sent messages survive the
+default StateBackend under `/attachments/`. References from sent messages survive the
 30-message request window and browser reloads; unsent draft files are excluded.
 Missing or unfinished selected files fail explicitly before the agent starts.
 Legacy callers that omit the selection require every document in the thread to be ready.
@@ -38,8 +38,8 @@ The UI's OCR/source preview remains available to the athlete.
 
 
 This follows the [Deep Agents backend contract](https://docs.langchain.com/oss/python/deepagents/backends):
-`CompositeBackend` routes `/attachments/` to `StateBackend`, whose keys are relative
-to that mount (`/<document-id>.md`). Database hydration supplies those keys for each
+`CompositeBackend` keeps attachments in its default `StateBackend`, using their
+full public paths (`/attachments/<document-id>.md`). Database hydration supplies those keys for each
 invocation; no checkpointer or server-owned conversation history is introduced.
 
 `services/documents.py` owns storage/extraction; `services/planning.py` owns direct

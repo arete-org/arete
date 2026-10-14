@@ -5,6 +5,7 @@ import { CoachReferenceCard } from './agent/CoachReferenceCard';
 import type { CoachReference } from '@/lib/coachToday';
 import { MessageFeedback } from './agent/MessageFeedback';
 import { SkillInput } from './agent/SkillInput';
+import { ContextWindowGauge } from './agent/ContextWindowGauge';
 import { useGamePreference } from '@/lib/gamification';
 import { AreteMark } from './AreteBrand';
 import { MessageAttachments } from './agent/MessageAttachments';
@@ -539,6 +540,7 @@ export function AgentSidePanel({
                 )}
               </div>
             </div>
+            <ContextWindowGauge key={active.id} usage={active.contextWindowUsage} compacting={coach.compacting} />
             {!floating && (!rpg || streaming) && <p className="mt-2 text-center text-[10px] text-text-muted">
               {rpg && streaming ? 'Tu peux préparer ton prochain message.' : touchKeyboard()
                 ? 'Touche Envoyer pour envoyer'

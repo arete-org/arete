@@ -51,6 +51,32 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it.each(['complete', 'error', 'abort'])('keeps counters in the originating thread and clears compaction on %s', async ending => {
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  const origin = result.current.active.id;
+  act(() => { result.current.send('Question'); });
+  const usage = { used_tokens: 900, window_tokens: 1000 };
+  act(() => {
+    runs[0].emit({ type: 'values', context_window_usage: usage });
+    runs[0].emit({ type: 'context_compaction', phase: 'start' });
+  });
+  expect(result.current.compacting).toBe(true);
+  act(() => result.current.create());
+  expect(result.current.compacting).toBe(false);
+  expect(result.current.active.contextWindowUsage).toBeUndefined();
+  act(() => result.current.select(origin));
+  expect(result.current.compacting).toBe(true);
+  expect(result.current.active.contextWindowUsage).toEqual(usage);
+  await act(async () => {
+    if (ending === 'abort') result.current.stop();
+    else if (ending === 'error') runs[0].reject(new Error('Connexion interrompue'));
+    else runs[0].resolve();
+  });
+  expect(result.current.compacting).toBe(false);
+  expect(result.current.active.contextWindowUsage).toEqual(usage);
+  expect(runs[0].history).toEqual([{ role: 'user', content: 'Question', attachmentIds: undefined }]);
+});
+
 it('keeps late feedback updates on their original turn after switching or deleting threads', async () => {
   const { result } = renderHook(() => useCoachThreads(context), { wrapper });
   const origin = result.current.active.id;

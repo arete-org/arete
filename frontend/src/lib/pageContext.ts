@@ -36,9 +36,12 @@ export function pageFromPath(pathname: string): string {
 
 export function usePanelContext(): PanelPageContext {
   const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  // Gauge visibility cannot change the model request or its context count.
+  params.delete('contextGaugeAlways');
   return {
     page: pageFromPath(location.pathname),
     path: location.pathname,
-    params: Object.fromEntries(new URLSearchParams(location.search)),
+    params: Object.fromEntries(params),
   };
 }

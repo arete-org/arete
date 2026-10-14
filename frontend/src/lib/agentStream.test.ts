@@ -14,6 +14,23 @@ import { restoreConversation } from './agentConversation';
 
 const empty: ChatMessage = { role: 'assistant', content: '', parts: [] };
 const preview = { text: '{}', truncated: false };
+
+it('validates context counters and compaction phases without adding message parts', () => {
+  for (const event of [
+    { type: 'values', context_window_usage: { used_tokens: 123, window_tokens: 1000 } },
+    { type: 'context_compaction', phase: 'start' },
+    { type: 'context_compaction', phase: 'done' },
+  ]) {
+    const parsed = parseEvent(JSON.stringify(event));
+    expect(parsed).toEqual(event);
+    expect(applyEvent(empty, parsed!)).toBe(empty);
+  }
+  for (const used of [-1, 1.5, '12', null]) {
+    expect(() => parseEvent(JSON.stringify({ type: 'values', context_window_usage: { used_tokens: used, window_tokens: 100 } }))).toThrow();
+  }
+  expect(() => parseEvent(JSON.stringify({ type: 'values', context_window_usage: { used_tokens: 1, window_tokens: 0 } }))).toThrow();
+  expect(() => parseEvent(JSON.stringify({ type: 'context_compaction', phase: 'unknown' }))).toThrow();
+});
 const done: StreamEvent = {
   type: 'done',
   message: { role: 'assistant', content: 'Réponse' },

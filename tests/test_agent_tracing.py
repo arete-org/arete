@@ -202,7 +202,7 @@ def test_concurrent_profiles_keep_instructions_and_traces_isolated(
     with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(run, tasks, timeout=10))
     assert all(r["messages"][-1].content == "ok" for r in results)
-    assert factory.call_count == 3  # One main model per declarative profile.
+    assert factory.call_count == 4  # Three main models plus chat's summary client.
     for messages in model._seen:
         task = next(
             m.content for m in messages if m.type == "human" and m.content in tasks
@@ -236,7 +236,7 @@ def test_native_dynamic_and_filesystem_tools_stay_in_one_trace(
                 "journal",
             ),
             tool_call("get_workload", {"days": 0}, "dynamic"),
-            tool_call("read_file", {"file_path": "/notes.md"}, "memory"),
+            tool_call("read_file", {"file_path": "/memories/notes.md"}, "memory"),
             AIMessage(
                 content="Finished.",
                 usage_metadata={
@@ -548,7 +548,7 @@ def test_unattended_runs_do_not_emit_ui_tool_events(monkeypatch):
     install_model(
         monkeypatch,
         [
-            tool_call("read_file", {"file_path": "/notes.md"}, "memory"),
+            tool_call("read_file", {"file_path": "/memories/notes.md"}, "memory"),
             AIMessage(content="feedback"),
         ],
     )
@@ -591,7 +591,7 @@ def test_chat_turns_share_thread_metadata_without_reusing_trace_or_date(
         prompt = model._seen[-1][0].content
         assert f"Date actuelle : {today.isoformat()}" in prompt
         assert f"Demain : {(today + timedelta(days=1)).isoformat()}" in prompt
-    factory.assert_called_once()
+    assert factory.call_count == 2  # Main and summary clients are cached across turns.
     runs, roots = assert_trace_tree(recorder, roots=3)
     assert len({r["trace_id"] for r in roots}) == 3
     assert {r["id"] for r in roots} == set(turn_ids)

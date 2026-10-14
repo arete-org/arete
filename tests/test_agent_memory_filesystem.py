@@ -70,7 +70,11 @@ def test_correct_remove_and_delete_current_ledger(ledger, run_tools, name):
             [
                 (
                     "edit_file",
-                    {"file_path": f"/{name}", "old_string": old, "new_string": new},
+                    {
+                        "file_path": f"/memories/{name}",
+                        "old_string": old,
+                        "new_string": new,
+                    },
                 )
             ]
         )[0][0]
@@ -80,7 +84,7 @@ def test_correct_remove_and_delete_current_ledger(ledger, run_tools, name):
     assert "corrected" in journal_block()
     assert edit("corrected\n", "").status == "success"
     assert memory.read_file(name).content == "keep\n"
-    messages, _ = run_tools([("delete", {"file_path": f"/{name}"})])
+    messages, _ = run_tools([("delete", {"file_path": f"/memories/{name}"})])
     assert messages[0].status == "success"
     assert memory.read_file(name).forgotten
     # The ordinary append path recreates a deleted file, still with a dated heading.
@@ -89,7 +93,13 @@ def test_correct_remove_and_delete_current_ledger(ledger, run_tools, name):
 
 
 @pytest.mark.parametrize(
-    "path", ["/sessions-2026-09.md", "/other.md", "/attachments/source.md", "/"]
+    "path",
+    [
+        "/memories/sessions-2026-09.md",
+        "/memories/other.md",
+        "/attachments/source.md",
+        "/",
+    ],
 )
 def test_archives_attachments_other_files_and_root_remain_protected(
     ledger, run_tools, path
@@ -121,7 +131,11 @@ def test_stale_or_ambiguous_edits_fail_without_changing_the_file(
         [
             (
                 "edit_file",
-                {"file_path": "/notes.md", "old_string": old, "new_string": "bad"},
+                {
+                    "file_path": "/memories/notes.md",
+                    "old_string": old,
+                    "new_string": "bad",
+                },
             )
         ]
     )

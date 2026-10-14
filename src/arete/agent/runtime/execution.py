@@ -189,7 +189,7 @@ async def stream_agent(
                     state,
                     context=context,
                     config=run_config(context=context, graph=graph),
-                    stream_mode=["messages", "updates", "custom"],
+                    stream_mode=["messages", "updates", "custom", "values"],
                     version="v2",
                 )
                 async with aclosing(stream):
@@ -219,4 +219,8 @@ def _is_answer_text(part: dict) -> bool:
     if part.get("type") != "messages" or part.get("ns"):
         return False
     chunk, meta = part["data"]
-    return meta.get("langgraph_node") == "model" and bool(chunk.text)
+    return (
+        meta.get("langgraph_node") == "model"
+        and meta.get("lc_source") != "summarization"
+        and bool(chunk.text)
+    )

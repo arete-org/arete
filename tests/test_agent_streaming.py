@@ -71,6 +71,23 @@ def test_empty_and_oversized_stream_fail_explicitly():
         stream.events(token("Too long", "m"))
 
 
+def test_native_summary_tokens_never_replace_the_user_answer():
+    from arete.agent.runtime.execution import _is_answer_text
+
+    stream = StreamProjection()
+    stream.events(token("Réponse du coach", "answer"))
+    assert (
+        stream.events(token("Résumé interne", "summary", lc_source="summarization"))
+        == []
+    )
+    assert stream.done()["message"]["content"] == "Réponse du coach"
+    assert "summary" not in stream.texts
+    assert not _is_answer_text(
+        token("Résumé interne", "summary", lc_source="summarization")
+    )
+    assert _is_answer_text(token("Réponse", "answer"))
+
+
 @pytest.mark.parametrize("text", [None, "", " ", "x" * 301, "🏃" * 301])
 def test_invalid_optional_suggestion_preserves_the_answer(text, caplog):
     stream = StreamProjection()
