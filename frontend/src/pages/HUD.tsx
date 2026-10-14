@@ -410,7 +410,7 @@ export function DashboardPage() {
             {/* One curve for forme de fond, fatigue and forme: its own lazy request. */}
             <Panel className="p-4">
               <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="COURBE DE FORME" />
-              <Suspense fallback={<Skeleton label="Chargement de la courbe de forme" lines={4} />}>
+              <Suspense fallback={<Skeleton label="Chargement de la courbe de forme" lines={2} />}>
                 <FormCurvePanel day={boardDay} ready={boardSettled} />
               </Suspense>
             </Panel>

@@ -22,7 +22,7 @@ export function FormCurvePanel({ day, ready }: { day: string | undefined; ready:
   const visible = useInView(ref);
   const curve = useFormCurve(day, ready && visible);
   const data = curve.data;
-  const skeleton = <Skeleton label="Chargement de la courbe de forme" lines={4} />;
+  const skeleton = <Skeleton label="Chargement de la courbe de forme" lines={2} />;
   return (
     <div ref={ref}>
       {curve.isError ? (
