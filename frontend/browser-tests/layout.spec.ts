@@ -11,6 +11,7 @@ test('desktop aligns the brand and content, uses the workspace and reflows besid
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'odyssey', display_name: 'HUNTER' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
     if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer() });
+    if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh', complete: true } });
     return route.fulfill({ json: [] });
   });
   await page.goto('/');
