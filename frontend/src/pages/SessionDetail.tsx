@@ -5,12 +5,12 @@ import { ArrowLeft, Sparkles } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
 import { RpePicker } from '@/components/RpePicker';
 import { Panel, RpeBadge } from '@/components/ui';
-import { analyticsApi } from '@/lib/api';
+import { analyticsApi, strengthApi } from '@/lib/api';
 import { chartRows, formatElapsed, intensityLabel, isFootSport } from '@/lib/activity';
 import { CHART, COLORS, HR_ZONE_COLORS } from '@/lib/chartTheme';
 import { parseLocalDate } from '@/lib/dates';
 import { sportLabel } from '@/lib/fr';
-import { qk } from '@/lib/queryKeys';
+import { qk, strengthSessionsQuery } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import { cn, formatDurationCompact, formatPace } from '@/lib/utils';
 import type {
@@ -22,6 +22,7 @@ import type {
   ActivityTerrain,
   ActivityWeather,
 } from '@/types';
+import { StrengthExercises } from './log/StrengthExercises';
 import { RouteTrace } from './session/RouteTrace';
 import { StreamChart } from './session/StreamChart';
 
@@ -126,6 +127,8 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
         <Stat label="Calories" value={session.calories ? `${session.calories} kcal` : '—'} />
       </div>
 
+      {session.sport === 'strength' && <LinkedStrengthLog activityId={session.id} />}
+
       {detail.feedback && (
         <Panel
           title={
@@ -196,6 +199,30 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
         )}
       </div>
     </>
+  );
+}
+
+/** The exercises of the Muscu log recorded with this strength activity, if one is linked. */
+function LinkedStrengthLog({ activityId }: { activityId: number }) {
+  const logs = useQuery(strengthSessionsQuery);
+  const logId = logs.data?.find((log) => log.garmin_activity_id === activityId)?.id;
+  const log = useQuery({
+    queryKey: qk.strengthSession(logId ?? -1),
+    queryFn: () => strengthApi.getSession(logId!),
+    enabled: logId !== undefined,
+  });
+  const exercises = log.data?.exercises ?? [];
+  if (logId === undefined || exercises.length === 0) return null;
+  return (
+    <Panel title="EXERCICES">
+      <StrengthExercises exercises={exercises} />
+      <Link
+        to={`/log?session=${logId}`}
+        className="mt-2 inline-flex min-h-11 items-center text-sm font-sans text-text-muted hover:text-neon-cyan"
+      >
+        Ouvrir le log Muscu
+      </Link>
+    </Panel>
   );
 }
 

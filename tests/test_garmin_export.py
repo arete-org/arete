@@ -218,9 +218,47 @@ def test_the_summary_says_the_last_recovery_is_skipped():
     skipped = Prescription.model_validate(
         {"steps": [{**_INTERVALS, "skip_last_recovery": True}]}
     )
-    assert describe(plain) == "12 × (400 m / récupération 1 min)"
+    assert describe(plain) == "12 × (400 m / récupération 1:00)"
     assert describe(skipped) == (
-        "12 × (400 m / récupération 1 min), sans la dernière récup"
+        "12 × (400 m / récupération 1:00), sans la dernière récup"
+    )
+
+
+def test_the_summary_reads_durations_and_paces_as_the_editor_shows_them():
+    session = Prescription.model_validate(
+        {
+            "steps": [
+                {"kind": "warmup", "duration_kind": "seconds", "value": 1350},
+                {
+                    **_INTERVALS,
+                    "steps": [
+                        {
+                            "kind": "effort",
+                            "duration_kind": "meters",
+                            "value": 400,
+                            "target": {"kind": "pace_sec_km", "low": 213, "high": 213},
+                        },
+                        {"kind": "recovery", "duration_kind": "seconds", "value": 60},
+                    ],
+                },
+                {
+                    "kind": "effort",
+                    "duration_kind": "seconds",
+                    "value": 5400,
+                    "target": {"kind": "pace_sec_km", "low": 270, "high": 285},
+                },
+                {
+                    "kind": "cooldown",
+                    "duration_kind": "seconds",
+                    "value": 900,
+                    "target": {"kind": "heart_rate_bpm", "low": 120, "high": 120},
+                },
+            ]
+        }
+    )
+    assert describe(session) == (
+        "22:30 · 12 × (400 m · 3'33/km / récupération 1:00)"
+        " · 1:30:00 · 4'30–4'45/km · 15:00 · 120 bpm"
     )
 
 
