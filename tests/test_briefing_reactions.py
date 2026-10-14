@@ -163,6 +163,40 @@ def test_a_briefing_rewritten_by_the_sync_says_when_it_was_first_written(db, cli
     assert datetime.fromisoformat(tip["generated_at"]).tzinfo is not None
 
 
+def test_a_later_row_wins_even_with_an_earlier_clock(db, client):
+    """Rows Docker wrote in Paris time before UTC can look later than a newer
+    UTC rewrite: the day's order is the row's id, never its clock."""
+    today = athlete_today()
+    first = _write(db, today, "Écrit à Paris, avant le passage à UTC.", trigger="api")
+    rewrite = _write(db, today, "Réécrit après la synchro.", trigger="scheduler")
+    yesterday = today - timedelta(days=1)
+    old = _write(db, yesterday, "Hier, première version.")
+    new = _write(db, yesterday, "Hier, version réécrite.")
+    con = connect()
+    try:
+        noon = datetime.combine(today, datetime.min.time()) + timedelta(hours=12)
+        # The older rows carry the later clocks (Paris is ahead of UTC).
+        for briefing, at in ((first, noon), (rewrite, noon - timedelta(hours=2))):
+            con.execute(
+                "UPDATE app.coach_briefings SET created_at = ? WHERE id = ?",
+                [at, briefing],
+            )
+        for briefing, at in ((old, noon), (new, noon - timedelta(hours=2))):
+            con.execute(
+                "UPDATE app.coach_briefings SET created_at = ? WHERE id = ?",
+                [at - timedelta(days=1), briefing],
+            )
+    finally:
+        con.close()
+
+    tip = client.get("/tips/daily").json()
+    assert (tip["id"], tip["tip"]) == (rewrite, "Réécrit après la synchro.")
+    # "First written" is the first row, shown with its own time.
+    written = datetime.fromisoformat(tip["first_written_at"])
+    assert (written.hour, written.minute) == (12, 0)
+    assert client.get("/tips/history").json()[0]["id"] == new
+
+
 def test_a_briefing_written_once_has_no_first_time_of_its_own(db, client):
     _write(db, athlete_today(), "Une seule fois.")
     tip = client.get("/tips/daily").json()

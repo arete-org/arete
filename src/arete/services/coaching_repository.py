@@ -16,6 +16,7 @@ import duckdb
 
 from arete.dataio.db import connect, db_connection, transaction
 from arete.dataio.ownership import require_owned
+from arete.services import settings
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.settings import athlete_today
 
@@ -26,10 +27,11 @@ Status = Literal["ok", "failed", "pending"]
 Trigger = Literal["scheduler", "api"]
 
 
-def utc_now() -> datetime:
+def naive_utc_now() -> datetime:
     """``created_at`` and ``reacted_at`` are naive UTC: instances on other
-    clocks (Docker in Paris, Vercel in UTC) share the database."""
-    return datetime.now(UTC).replace(tzinfo=None)
+    clocks (Docker in Paris, Vercel in UTC) share the database. Rows written
+    before that are local time, so the order of a day's rows is their id."""
+    return settings.utc_now().replace(tzinfo=None)
 
 
 #: The athlete's reaction to a briefing (``react``).
@@ -143,7 +145,7 @@ class BriefingRepository:
                     status,
                     error,
                     trigger,
-                    utc_now(),
+                    naive_utc_now(),
                     facts_digest,
                 ],
             ).fetchone()
@@ -170,10 +172,10 @@ class BriefingRepository:
         try:
             row = conn.execute(
                 f"""
-                SELECT {_COLUMNS}, count(*) OVER () > 1, min(created_at) OVER ()
+                SELECT {_COLUMNS}, count(*) OVER () > 1, arg_min(created_at, id) OVER ()
                 FROM app.visible_coach_briefings
                 WHERE user_id = ? AND date = ? AND status = 'ok'
-                ORDER BY created_at DESC, id DESC
+                ORDER BY id DESC
                 LIMIT 1
                 """,
                 [user_id, briefing_date or athlete_today()],
@@ -205,7 +207,7 @@ class BriefingRepository:
                 SELECT {_COLUMNS} FROM app.visible_coach_briefings
                 WHERE status = 'ok' AND date < ?
                 QUALIFY row_number() OVER (
-                    PARTITION BY date ORDER BY created_at DESC, id DESC
+                    PARTITION BY date ORDER BY id DESC
                 ) = 1
                 ORDER BY date DESC
                 LIMIT ?
@@ -246,7 +248,7 @@ class BriefingRepository:
                     "reaction": reaction,
                     "comment": comment,
                     "id": briefing_id,
-                    "at": utc_now(),
+                    "at": naive_utc_now(),
                 },
             ).fetchone()
         if row is None:
@@ -264,7 +266,7 @@ class BriefingRepository:
                 f"""
                 SELECT {_COLUMNS} FROM visible_coach_briefings
                 WHERE user_id = ? AND status <> 'pending'
-                ORDER BY date DESC, created_at DESC, id DESC
+                ORDER BY date DESC, id DESC
                 LIMIT ?
                 """,
                 [user_id, limit],
@@ -291,7 +293,7 @@ class BriefingRepository:
         """
         user_id = resolve_athlete_id(user_id)
         # Naive UTC, like the scheduler's markers and every briefing's time.
-        now = utc_now()
+        now = naive_utc_now()
         try:
             with transaction() as conn:
                 held = conn.execute(

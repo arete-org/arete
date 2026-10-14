@@ -58,7 +58,7 @@ class DailyTipResponse(BaseModel):
 
 
 def _iso(at: datetime | None) -> str | None:
-    """Briefing times are stored in naive UTC (``coaching_repository.utc_now``)."""
+    """Briefing times are stored in naive UTC (``coaching_repository.naive_utc_now``)."""
     return at.replace(tzinfo=UTC).isoformat() if at else None
 
 
