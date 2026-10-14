@@ -7,6 +7,10 @@ const session = {
   revision: 1, target_duration_min: 40, target_distance_km: null, target_hr_zone: 2, target_intensity: null, garmin_workout_id: null, garmin_pushed_at: null,
 };
 
+/** The form curve's own request: lazy, after the dashboard, never in its first burst. */
+const CURVE = 'GET /api/dashboard/form-curve';
+const eager = (requests: string[]) => requests.filter(r => r !== CURVE);
+
 /**
  * The dashboard's answers; `hold` keeps matching requests unanswered (a cold or
  * unreachable server) and `answer` replaces an answer when it returns one.
@@ -79,10 +83,13 @@ test('the dashboard loads with four reads and one freshness check, its slices re
   await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
   await page.waitForLoadState('networkidle');
   // Four reads plus the shared on-use freshness check; a fresh result adds no reads.
-  expect([...requests].sort(), requests.join('\n')).toEqual([
+  expect(eager(requests).sort(), requests.join('\n')).toEqual([
     'GET /api/dashboard', 'GET /api/garmin/workouts', 'GET /api/settings', 'GET /api/settings/gamification',
     'POST /api/garmin/sync/ensure',
   ]);
+  // The form curve is the page's one lazy read: once, after the dashboard answered.
+  expect(requests.filter(r => r === CURVE)).toHaveLength(1);
+  expect(requests.indexOf(CURVE)).toBeGreaterThan(requests.indexOf('GET /api/dashboard'));
 });
 
 test('today’s session goes to the watch through the export view and shows when', async ({ page }) => {
@@ -153,9 +160,10 @@ test('a repeat visit and a focus refresh stay within the budget, the coach card 
   await expect(page.getByText('Footing du jour')).toBeVisible();
   await expect(page.getByText('Comment était la séance ?')).toBeVisible();
   await page.waitForLoadState('networkidle');
-  expect([...requests].sort(), requests.join('\n')).toEqual([
+  expect(eager(requests).sort(), requests.join('\n')).toEqual([
     'GET /api/dashboard', 'GET /api/settings', 'GET /api/settings/gamification', 'POST /api/garmin/sync/ensure',
   ]);
+  expect(requests.filter(r => r === CURVE).length).toBeLessThanOrEqual(1);
 
   // Past the 30 s freshness, the athlete comes back to the tab.
   requests.length = 0;
@@ -163,7 +171,7 @@ test('a repeat visit and a focus refresh stay within the budget, the coach card 
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => requests.includes('GET /api/dashboard')).toBe(true);
   await page.waitForLoadState('networkidle');
-  expect(requests.filter(r => r.endsWith('/coach/today') || r.endsWith('/tips/daily')), requests.join('\n')).toEqual([]);
+  expect(requests.filter(r => r.endsWith('/coach/today') || r.endsWith('/tips/daily') || r === CURVE), requests.join('\n')).toEqual([]);
   expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(4);
 });
 

@@ -11,6 +11,8 @@ import { syncGame } from './gamification';
  */
 export const qk = {
   settings: ['settings'] as const,
+  /** The dashboard's lazy form curve (lib/formCurve.ts), one per server day. */
+  formCurve: (day?: string) => (day ? (['form-curve', day] as const) : (['form-curve'] as const)),
   /** `GET /dashboard`, one per day (lib/dashboard.ts); it seeds the keys of its slices. */
   dashboard: (day?: string) => (day ? (['dashboard', day] as const) : (['dashboard'] as const)),
 
@@ -112,6 +114,7 @@ function invalidateSessionQueries(queryClient: QueryClient): void {
     qk.workload,
     qk.planToday,
     qk.goalProjection(),
+    qk.formCurve(),
   ]) {
     queryClient.invalidateQueries({ queryKey: key });
   }

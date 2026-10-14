@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { settingsApi, type DailyTip } from '@/lib/api';
 import { coachApi } from '@/lib/coachToday';
 import type { DashboardData } from '@/lib/dashboard';
+import { formCurveApi } from '@/lib/formCurve';
 import { gameApi, type Player } from '@/lib/gamification';
 import { weeksAtGoalText } from '@/lib/fr';
 import { DashboardPage } from './HUD';
@@ -66,6 +67,11 @@ beforeEach(() => {
   vi.spyOn(settingsApi, 'get').mockResolvedValue({ display_name: 'Arthur' } as Awaited<ReturnType<typeof settingsApi.get>>);
   vi.spyOn(coachApi, 'today').mockResolvedValue({ date: '2026-10-14', items: [], remaining: 0, briefing: null });
   vi.spyOn(gameApi, 'snapshot').mockResolvedValue(player);
+  vi.spyOn(formCurveApi, 'get').mockResolvedValue({
+    today: '2026-10-14', goal_id: 3, planned_sessions: 4, key_session: null, race_day: { ctl: 45, tsb: 8 },
+    series: [{ date: '2026-10-14', ctl: 40, atl: 36, tsb: 4, planned: false }],
+  });
+  board.next_goal = null;
 });
 afterEach(() => {
   cleanup();
@@ -168,4 +174,26 @@ it('says when the sync rewrote the briefing, and when it was first written', asy
   daily.tip = { ...written, updated_after_sync: true, first_written_at: '2026-10-14T07:12:00', generated_at: '2026-10-14T08:05:00' };
   await mount(false);
   expect(screen.getByText('Écrit à 7 h 12 · mis à jour après la synchro de 8 h 05')).toBeTruthy();
+});
+
+it('leads with the race goal above the briefing, and the one form curve in plain words', async () => {
+  board.next_goal = {
+    id: 3, name: 'Semi de Lyon', race_date: '2026-11-23', distance_km: 21.1, target_time_sec: null,
+    priority: 'A', status: 'active', days_left: 40, created_at: null,
+  };
+  await mount(false);
+  const goal = screen.getByRole('region', { name: 'Objectif de course' });
+  const briefing = screen.getByRole('heading', { name: 'BRIEFING DU JOUR' });
+  expect(goal.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(await screen.findByText('entre +3 et +13')).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'COURBE DE FORME' })).toBeTruthy();
+  expect(await screen.findByText(/Aujourd’hui : fatigue 36, forme \+4\./)).toBeTruthy();
+  // The goal card and the curve share one request.
+  expect(formCurveApi.get).toHaveBeenCalledTimes(1);
+});
+
+it('offers to set a goal when there is none', async () => {
+  await mount(false);
+  expect(screen.getByRole('link', { name: 'Fixer un objectif' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Objectif de course' })).toBeNull();
 });

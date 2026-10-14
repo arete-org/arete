@@ -45,7 +45,7 @@ function GoalForm({ onDone }: { onDone: () => void }) {
   const create = useMutation({
     mutationFn: goalsApi.create,
     onSuccess: () => {
-      invalidateWithDashboard(queryClient, qk.goals);
+      invalidateWithDashboard(queryClient, qk.goals, qk.formCurve());
       onDone();
     },
   });

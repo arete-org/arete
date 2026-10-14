@@ -216,7 +216,15 @@ def _race_minutes(goal: Goal) -> float:
     return goal.distance_km * FALLBACK_RACE_PACE_SEC_KM / 60
 
 
-def projection(goal_id: int, today: date | None = None) -> dict[str, Any]:
+#: The days of history a projection shows before today (Planning's chart).
+PROJECTION_HISTORY_DAYS = 28
+
+
+def projection(
+    goal_id: int,
+    today: date | None = None,
+    history_days: int = PROJECTION_HISTORY_DAYS,
+) -> dict[str, Any]:
     """CTL / ATL / TSB day by day until race day, from history and plan."""
     from arete.dataio.queries import daily_tss_by_date
     from arete.features.plan_generator import planned_tss
@@ -254,7 +262,7 @@ def projection(goal_id: int, today: date | None = None) -> dict[str, Any]:
     loads.setdefault(goal.race_date, 0.0)
     shown: list[dict[str, Any]] = []
     for day, ctl, atl in fitness_series(loads, goal.race_date):
-        if day.date < today - timedelta(days=28):
+        if day.date < today - timedelta(days=history_days):
             continue
         shown.append(
             {

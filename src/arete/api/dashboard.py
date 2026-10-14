@@ -68,3 +68,40 @@ def get_dashboard() -> DashboardResponse:
         briefing=_daily_tip(board.briefing),
         coach=board.coach,
     )
+
+
+class CurvePoint(BaseModel):
+    date: date_type
+    ctl: float = Field(description="Forme de fond")
+    atl: float = Field(description="Fatigue")
+    tsb: float = Field(description="Forme")
+    planned: bool = Field(description="The day's load comes from the plan")
+
+
+class KeySession(BaseModel):
+    id: int
+    date: date_type
+    session_type: str
+    description: str | None
+    target_duration_min: int | None
+
+
+class FormCurveResponse(BaseModel):
+    today: date_type
+    goal_id: int | None = Field(description="The race the projection runs to")
+    series: list[CurvePoint] = Field(
+        description="Twelve weeks of history, then the projection to race day"
+    )
+    race_day: dict[str, float | None] | None = Field(
+        description="Race-morning ctl and tsb, without a goal null"
+    )
+    planned_sessions: int = Field(description="Planned days the projection reads")
+    key_session: KeySession | None = Field(
+        description="The hardest session planned in the next seven days"
+    )
+
+
+@router.get("/dashboard/form-curve", response_model=FormCurveResponse)
+def get_form_curve() -> dict[str, Any]:
+    """The dashboard's form curve: its own request, read after the page."""
+    return service.form_curve()
