@@ -863,18 +863,28 @@ def _m48_briefing_reactions(con) -> None:
 
     On the briefing's own row, so a reaction is one per briefing by
     construction and follows its owner. Nullable: no briefing has one yet.
+
+    One transaction: DuckDB fails reads through a ``t.*`` view whose table
+    gained a column until the view is recreated, so a booting or previous
+    release must never see the columns without the refreshed view.
     """
     from arete.dataio.tenant_schema import _view
 
-    for column, kind in (
-        ("reaction", "VARCHAR"),
-        ("reaction_comment", "VARCHAR"),
-        ("reacted_at", "TIMESTAMP"),
-    ):
-        con.execute(
-            f"ALTER TABLE app.coach_briefings ADD COLUMN IF NOT EXISTS {column} {kind}"
-        )
-    _view(con, "coach_briefings")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for column, kind in (
+            ("reaction", "VARCHAR"),
+            ("reaction_comment", "VARCHAR"),
+            ("reacted_at", "TIMESTAMP"),
+        ):
+            con.execute(
+                f"ALTER TABLE app.coach_briefings ADD COLUMN IF NOT EXISTS {column} {kind}"
+            )
+        _view(con, "coach_briefings")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
 
 
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [

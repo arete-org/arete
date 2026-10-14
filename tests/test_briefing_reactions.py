@@ -185,16 +185,19 @@ def test_the_coach_reads_a_referenced_briefing_of_the_athlete(db):
 
 def test_migration_48_adds_the_reaction_columns_once(tmp_path, monkeypatch):
     from arete.dataio import init_duckdb
+    from arete.dataio.tenant_schema import _view
 
     path = tmp_path / "current.duckdb"
     monkeypatch.setenv("ARETE_DB", str(path))
     init_duckdb.main()
-    # Back to the shape every deployed database has before this release.
+    # Back to the shape every deployed database has before this release,
+    # its private view included: the migration alters a table a view reads.
     con = duckdb.connect(str(path))
     configure_athlete(con)
     con.execute("DROP VIEW app.visible_coach_briefings")
     for column in ("reaction", "reaction_comment", "reacted_at"):
         con.execute(f"ALTER TABLE app.coach_briefings DROP COLUMN {column}")
+    _view(con, "coach_briefings")
     con.execute(
         "INSERT INTO app.coach_briefings (user_id, date, text) VALUES (1, '2026-10-13', 'Avant.')"
     )
@@ -207,6 +210,7 @@ def test_migration_48_adds_the_reaction_columns_once(tmp_path, monkeypatch):
 
     con = duckdb.connect(str(path), read_only=True)
     configure_athlete(con)
+    # A read through the private view works, and sees the new columns empty.
     row = con.execute(
         "SELECT text, reaction, reaction_comment, reacted_at FROM app.visible_coach_briefings"
     ).fetchone()
@@ -214,6 +218,33 @@ def test_migration_48_adds_the_reaction_columns_once(tmp_path, monkeypatch):
         "SELECT count(*) FROM app.schema_version WHERE version = 48"
     ).fetchone()
     con.close()
-    # An existing briefing has no reaction yet, and the private view sees the columns.
     assert row == ("Avant.", None, None, None)
     assert count == (1,)
+
+
+def test_a_failed_migration_48_leaves_the_table_and_its_view_readable(
+    tmp_path, monkeypatch
+):
+    from arete.dataio import init_duckdb, tenant_schema
+
+    path = tmp_path / "failing.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    con = duckdb.connect(str(path))
+    configure_athlete(con)
+    con.execute("DROP VIEW app.visible_coach_briefings")
+    for column in ("reaction", "reaction_comment", "reacted_at"):
+        con.execute(f"ALTER TABLE app.coach_briefings DROP COLUMN {column}")
+    tenant_schema._view(con, "coach_briefings")
+
+    def broken_view(*_args):
+        raise RuntimeError("view refresh failed")
+
+    monkeypatch.setattr(tenant_schema, "_view", broken_view)
+    with pytest.raises(RuntimeError):
+        init_duckdb._m48_briefing_reactions(con)
+    # Rolled back as a whole: no column without its view.
+    columns = {r[0] for r in con.execute("DESCRIBE app.coach_briefings").fetchall()}
+    assert "reaction" not in columns
+    assert con.execute("SELECT count(*) FROM app.visible_coach_briefings").fetchone()
+    con.close()
