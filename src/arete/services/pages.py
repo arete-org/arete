@@ -32,7 +32,7 @@ def _player_stats() -> dict[str, Any]:
     with the RPG on the athlete's only "Niveau" is the RPG's."""
     from arete.services.metrics import get_player_stats
 
-    stats = get_player_stats().model_dump(mode="json")
+    stats: dict[str, Any] = get_player_stats().model_dump(mode="json")
     stats["weeks_at_goal_streak"] = stats.pop("level")
     return stats
 
