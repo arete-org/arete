@@ -254,7 +254,10 @@ class TestFitnessEndpoint:
         assert fitness["readiness_source"] in ("garmin", "model")
         assert fitness["ctl"] == pmc["headline"]["value"]
         assert fitness["tsb"] == pmc["secondary"][0]["value"]
-        assert stats["mp"]["detail"] == f"TSB {fitness['tsb']:+.1f}"
+        tsb = fitness["tsb"] + 0.0
+        assert stats["mp"]["detail"] == (
+            f"TSB {tsb:+.1f}".replace(".", ",") if tsb else "TSB 0,0"
+        )
 
 
 class TestRecommendationsEndpoint:
@@ -404,9 +407,9 @@ class TestPlayerStatsSemantics:
             monday - timedelta(days=7): 400.0,
             today: 999.0,  # the current week never counts
         }
-        streak, total = metrics._week_history(300.0, by_date, today)
-        assert streak == 2  # only the two most recent count
-        assert total == 3
+        weeks = metrics._week_history(300.0, by_date, today)
+        assert weeks.streak == 2  # only the two most recent count
+        assert weeks.total == 3
 
     def test_a_week_without_sessions_breaks_the_streak(self):
         from arete.services import metrics
@@ -414,7 +417,94 @@ class TestPlayerStatsSemantics:
         today = date.today()
         monday = today - timedelta(days=today.weekday())
         by_date = {monday - timedelta(days=14): 400.0}  # then an empty week
-        assert metrics._week_history(300.0, by_date, today) == (0, 1)
+        assert metrics._week_history(300.0, by_date, today) == (0, 1, 1, 2)
+
+    def test_a_missed_week_lowers_the_regularity_by_one(self):
+        from arete.services import metrics
+
+        today = date.today()
+        monday = today - timedelta(days=today.weekday())
+        # oldest -> newest finished weeks: ok, ok, missed, ok
+        by_date = {
+            monday - timedelta(days=28): 400.0,
+            monday - timedelta(days=21): 400.0,
+            monday - timedelta(days=14): 100.0,
+            monday - timedelta(days=7): 400.0,
+        }
+        weeks = metrics._week_history(300.0, by_date, today)
+        assert (weeks.recent, weeks.window) == (3, 4)  # "3 des 4 dernières"
+        assert weeks.streak == 1
+
+    def test_regularity_counts_the_last_twelve_finished_weeks(self):
+        from arete.services import metrics
+
+        today = date.today()
+        monday = today - timedelta(days=today.weekday())
+        # 20 finished weeks: the 8 oldest at goal, then 3 of the last 12.
+        hits = {13, 9, 2}  # weeks ago
+        by_date = {
+            monday - timedelta(days=7 * ago): 400.0 if ago > 12 or ago in hits else 50.0
+            for ago in range(1, 21)
+        }
+        weeks = metrics._week_history(300.0, by_date, today)
+        assert (weeks.recent, weeks.window) == (2, 12)  # week 13 is outside
+        assert weeks.total == 10
+
+    def test_a_first_week_joined_midway_is_not_a_miss(self):
+        from arete.services import metrics
+
+        today = date.today()
+        monday = today - timedelta(days=today.weekday())
+        # Joined on the Saturday of a week, short of the goal, then one full week.
+        saturday = monday - timedelta(days=9)
+        by_date = {saturday: 100.0, monday - timedelta(days=7): 400.0}
+        weeks = metrics._week_history(300.0, by_date, today)
+        assert (weeks.recent, weeks.window) == (1, 1)
+        assert (weeks.streak, weeks.total) == (1, 1)  # level/weeks_at_goal unchanged
+        # Joined last Saturday: no finished full week yet, nothing to show.
+        last_saturday = monday - timedelta(days=2)
+        assert metrics._week_history(300.0, {last_saturday: 100.0}, today).window == 0
+        # A first partial week that reached the goal still counts.
+        by_date[saturday] = 400.0
+        assert metrics._week_history(300.0, by_date, today)[2:] == (2, 2)
+        # A first week starting on Monday is a full week: its miss counts.
+        assert metrics._week_history(
+            300.0,
+            {monday - timedelta(days=14): 100.0, monday - timedelta(days=7): 400.0},
+            today,
+        )[2:] == (1, 2)
+
+    def test_player_stats_reports_the_regularity_and_keeps_older_fields(self):
+        from arete.services import metrics
+
+        today = date.today()
+        monday = today - timedelta(days=today.weekday())
+        # 14 finished weeks: the last 12 have 9 at goal, the streak is 2.
+        missed = {3, 6, 10}  # weeks ago
+        by_date = {
+            monday - timedelta(days=7 * ago): 50.0 if ago in missed else 400.0
+            for ago in range(1, 15)
+        }
+        stats = metrics.player_stats(
+            {"weekly_training_goal": 6}, today, metrics.Form(by_date, None, None)
+        )
+        assert (stats.recent_weeks_at_goal, stats.recent_weeks) == (9, 12)
+        assert (stats.level, stats.weeks_at_goal) == (2, 11)
+        assert stats.xp.detail == "Objectif 300 TSS · 6 séances"
+
+    def test_a_form_near_zero_reads_as_the_dashboard_card_shows_it(self):
+        from types import SimpleNamespace
+
+        from arete.services import metrics
+
+        for tsb, shown in (
+            (-0.04, "TSB 0,0"),
+            (0.0, "TSB 0,0"),
+            (4.23, "TSB +4,2"),
+            (-4.25, "TSB -4,2"),
+        ):
+            form = metrics.Form({}, SimpleNamespace(tsb=tsb), None)  # type: ignore[arg-type]
+            assert metrics.player_stats({}, date.today(), form).mp.detail == shown
 
     def test_player_stats_reads_the_database_in_four_statements(
         self, monkeypatch, statement_log

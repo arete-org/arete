@@ -14,9 +14,13 @@ export interface PlayerStats {
   hp: StatBar;
   mp: StatBar;
   xp: StatBar;
+  /** Consecutive finished weeks at goal: older readers only, the dashboard shows `recent_*`. */
   level: number;
   weeks_at_goal: number;
   weekly_goal_tss: number;
+  /** Weeks at goal among the last `recent_weeks` finished (at most 12). */
+  recent_weeks_at_goal: number;
+  recent_weeks: number;
 }
 
 // Zone values sent by the backend (features/workload.py, features/fitness.py).

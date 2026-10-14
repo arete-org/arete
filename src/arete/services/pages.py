@@ -27,6 +27,16 @@ def _strength_sessions(**filters: Any) -> list[dict[str, Any]]:
     ]
 
 
+def _player_stats() -> dict[str, Any]:
+    """The bars as the coach reads them: the streak is not named a level, since
+    with the RPG on the athlete's only "Niveau" is the RPG's."""
+    from arete.services.metrics import get_player_stats
+
+    stats: dict[str, Any] = get_player_stats().model_dump(mode="json")
+    stats["weeks_at_goal_streak"] = stats.pop("level")
+    return stats
+
+
 def _dashboard() -> dict[str, Any]:
     """What the Dashboard shows: the bars, today's plan and sessions, the briefing.
 
@@ -36,7 +46,6 @@ def _dashboard() -> dict[str, Any]:
     from arete.garmin.repository import GarminRepository
     from arete.services.analytics import list_sessions
     from arete.services.coaching_repository import BriefingRepository
-    from arete.services.metrics import get_player_stats
     from arete.services.plan_repository import PlanDecisionRepository
     from arete.services.planning import _session_to_dict
 
@@ -46,7 +55,7 @@ def _dashboard() -> dict[str, Any]:
     )
     briefing = BriefingRepository().get_for_day(today)
     return {
-        "player_stats": get_player_stats().model_dump(mode="json"),
+        "player_stats": _player_stats(),
         "planned_today": [_without_nulls(_session_to_dict(s)) for s in planned],
         "done_today": [
             s
