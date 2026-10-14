@@ -28,6 +28,7 @@ class SyncStatusResponse(BaseModel):
     user_email: str | None = None
     last_sync: str | None = None
     activities_synced: int = 0
+    freshness: dict = Field(default_factory=dict)
 
 
 class SyncRequest(BaseModel):
@@ -98,6 +99,7 @@ def get_sync_status():
     has since expired or revoked are reported by the next real sync.
     """
     from arete.garmin import token_store
+    from arete.services.garmin_sync import status
 
     authenticated, user_email = token_store.session_status()
     _, imported_at = _repo.last_garmin_import()
@@ -106,6 +108,7 @@ def get_sync_status():
         user_email=user_email,
         last_sync=imported_at.isoformat() if imported_at else None,
         activities_synced=_repo.count_actual_sessions(),
+        freshness=status(),
     )
 
 
@@ -178,27 +181,23 @@ def sync_activities(request: SyncRequest):
 
     Requires this athlete to connect Garmin through /sync/login.
     """
-    from arete.garmin.sync import GarminSyncClient
+    from arete.garmin import token_store
 
-    client = GarminSyncClient(repository=_repo)
-
-    if not client.is_authenticated():
+    if not token_store.session_status()[0]:
         raise HTTPException(
             status_code=409,
             detail="Connecte Garmin dans Réglages → Connexions avant de synchroniser.",
         )
 
-    result = client.sync_activities(
-        start_date=request.start_date,
-        end_date=request.end_date,
-        download_fit=request.download_fit,
-        max_activities=request.max_activities,
-        history_offset=request.history_offset,
-        history_anchor=request.history_anchor,
-    )
-    from arete.services.session_conditions import enrich_sessions
+    from arete.garmin.sync import SyncResult
+    from arete.services.garmin_sync import iter_manual
 
-    enrich_sessions(result.session_ids)  # bounded, never raises
+    result = None
+    with contextlib.closing(iter_manual(**request.model_dump())) as work:
+        for event in work:
+            if isinstance(event, SyncResult):
+                result = event
+    assert result is not None
 
     return SyncResponse(
         success=result.success,
@@ -218,11 +217,11 @@ def sync_activities(request: SyncRequest):
 @router.post("/activities/stream")
 def stream_activities(request: SyncRequest) -> StreamingResponse:
     """Stream the existing sync workflow; no retries or detached worker."""
-    from arete.garmin.sync import GarminSyncClient, SyncProgress, SyncResult
-    from arete.services.session_conditions import enrich_sessions
+    from arete.garmin import token_store
+    from arete.garmin.sync import SyncProgress, SyncResult
+    from arete.services.garmin_sync import iter_manual
 
-    client = GarminSyncClient(repository=_repo)
-    if not client.is_authenticated():
+    if not token_store.session_status()[0]:
         raise HTTPException(
             status_code=409,
             detail="Connecte Garmin dans Réglages → Connexions avant de synchroniser.",
@@ -238,14 +237,11 @@ def stream_activities(request: SyncRequest) -> StreamingResponse:
     def events() -> Iterator[str]:
         try:
             # Starlette advances this iterator in its AnyIO worker pool.
-            with contextlib.closing(
-                client.iter_sync_activities(**request.model_dump())
-            ) as work:
+            with contextlib.closing(iter_manual(**request.model_dump())) as work:
                 for event in work:
                     if isinstance(event, SyncResult):
                         if event.success:
                             yield frame("progress", asdict(SyncProgress("finalizing")))
-                            enrich_sessions(event.session_ids)
                         payload = asdict(event)
                         payload["last_activity_date"] = (
                             str(event.last_activity_date)
@@ -270,6 +266,14 @@ def stream_activities(request: SyncRequest) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/ensure")
+def ensure_sync() -> dict:
+    """Idempotent on-use refresh; ordinary GETs never start provider work."""
+    from arete.services.garmin_sync import ensure_fresh
+
+    return ensure_fresh()
 
 
 @router.post("/threshold")

@@ -215,6 +215,7 @@ def enrich_sessions(
     repo: GarminRepository | None = None,
     fetch: WeatherFetcher | None = None,
     budget_sec: float = WEATHER_BUDGET_SEC,
+    deadline: float | None = None,
 ) -> dict[str, int]:
     """Terrain and weather of sessions that just arrived. Never raises.
 
@@ -222,9 +223,15 @@ def enrich_sessions(
     call's time budget is spent; the remaining sessions keep their terrain.
     """
     repo = repo or GarminRepository()
-    deadline = time.monotonic() + budget_sec
+    weather_deadline = min(
+        time.monotonic() + budget_sec,
+        deadline if deadline is not None else float("inf"),
+    )
     counts = {"terrain": 0, "weather": 0}
     for session_id in session_ids:
+        if deadline is not None and time.monotonic() >= deadline:
+            counts["incomplete"] = 1
+            break
         try:
             session = repo.get_actual_session(session_id)
             if session is None:
@@ -234,13 +241,23 @@ def enrich_sessions(
             if terrain is not None:
                 save_terrain(session_id, terrain)
                 counts["terrain"] += 1
-            if time.monotonic() >= deadline or get_weather(session_id) is not None:
+            if get_weather(session_id) is not None:
+                continue
+            if time.monotonic() >= weather_deadline:
+                if deadline is not None:
+                    counts["incomplete"] = 1
+                continue
+            if weather_deadline - time.monotonic() < 4:
+                if deadline is not None:
+                    counts["incomplete"] = 1
                 continue
             found = weather_of(session, streams, fetch)
             if found is not None:
                 save_weather(session_id, *found)
                 counts["weather"] += 1
         except Exception as e:  # noqa: BLE001 - optional enrichment, never fatal
+            if deadline is not None:
+                counts["incomplete"] = 1
             logger.warning("Could not enrich session %s: %s", session_id, e)
     if session_ids:
         logger.info(

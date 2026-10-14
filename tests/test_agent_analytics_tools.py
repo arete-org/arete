@@ -31,6 +31,7 @@ def test_analytics_toolkit_registered():
         "get_training_advice",
         "list_recent_sessions",
         "get_activity_detail",
+        "query_training",
     }
     assert tk.instructions == ANALYTICS_INSTRUCTIONS
     # Read-only: background profiles may run it, it writes nothing.

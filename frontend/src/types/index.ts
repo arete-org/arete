@@ -238,6 +238,7 @@ export interface MuscleStatsResponse {
 // ========================= //
 
 export interface SyncStatus {
+  freshness?: { state: string; activities_checked_at?: string | null; health_checked_at?: string | null; complete?: boolean; errors?: string[] };
   garmin_authenticated: boolean;
   user_email: string | null;
   last_sync: string | null;

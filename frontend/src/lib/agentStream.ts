@@ -32,6 +32,7 @@ export interface CalendarActionPart {
 export interface CoachCardPart { kind: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
 export type ChatPart = ToolPart | TextPart | CalendarActionPart | CoachCardPart;
 export interface ChatMessage {
+  syncStatus?: string;
   trace?: TraceReceipt;
   feedback?: MessageFeedback;
   /** Local transport state; restored conversations are always settled. */
@@ -47,6 +48,7 @@ export interface ChatMessage {
   pending?: boolean;
 }
 export type StreamEvent =
+  | { type: 'sync_status'; state: string }
   | WorkoutUpdate
   | { type: 'calendar_action'; id: string }
   | { type: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
@@ -99,6 +101,7 @@ export function parseEvent(data: string): StreamEvent | null {
   const e: unknown = JSON.parse(data);
   if (!record(e)) throw new Error('Événement du coach invalide.');
   if (isWorkoutUpdate(e)) return e;
+  if (e.type === 'sync_status' && typeof e.state === 'string') return e as StreamEvent;
   if (e.type === 'suggestion') return null;
   if (e.type === 'coach_card' && (e.ref_kind === 'fact' || e.ref_kind === 'followup') && Number.isSafeInteger(e.ref_id) && Number(e.ref_id) > 0 && e.id === `${e.ref_kind}:${e.ref_id}`) return e as StreamEvent;
 
@@ -165,6 +168,7 @@ export function applyEvent(
   message: ChatMessage,
   event: StreamEvent
 ): ChatMessage {
+  if (event.type === 'sync_status') return { ...message, syncStatus: event.state };
   if (event.type === 'workout_update') {
     const current = message.workouts ?? [];
     const previous = current.find(w => w.session.id === event.session.id);

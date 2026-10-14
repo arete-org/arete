@@ -55,6 +55,7 @@ PRIVATE_TABLES = (
     "calendar_actions",
     "files",
     "garmin_login_challenges",
+    "garmin_sync_state",
     "coach_memory_files",
     "coach_memory_imports",
     "coach_followups",

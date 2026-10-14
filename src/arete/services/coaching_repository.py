@@ -270,8 +270,30 @@ class StoredFeedback:
         }
 
 
+MAX_PENDING_GARMIN_FEEDBACK = 20
+FEEDBACK_IMPORT_LOOKBACK_DAYS = 30
+
+
 class SessionFeedbackRepository:
     """``app.session_feedback``: one row per cardio session, the latest wins."""
+
+    def pending_garmin(self) -> tuple[list[int], int]:
+        """Daily catch-up: 20 recent imports, independent of the activity date.
+
+        On-use refresh deliberately does not write feedback. Missing feedback
+        is its durable queue; a 30-day import window avoids announcing ancient
+        historical rows when this behavior is first enabled.
+        """
+        with db_connection() as conn:
+            rows = conn.execute(
+                "SELECT a.id, COUNT(*) OVER () FROM app.visible_actual_sessions a "
+                "LEFT JOIN app.visible_session_feedback f ON f.actual_session_id=a.id "
+                "WHERE a.source='garmin_connect' AND f.actual_session_id IS NULL "
+                "AND a.created_at >= current_timestamp - ? * INTERVAL '1 day' "
+                "ORDER BY a.created_at, a.id LIMIT ?",
+                [FEEDBACK_IMPORT_LOOKBACK_DAYS, MAX_PENDING_GARMIN_FEEDBACK],
+            ).fetchall()
+        return [int(row[0]) for row in rows], int(rows[0][1]) if rows else 0
 
     def save(self, session_id: int, *, text: str, source: str, trigger: str) -> None:
         with db_connection() as conn:

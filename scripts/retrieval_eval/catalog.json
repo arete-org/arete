@@ -1,0 +1,9 @@
+{
+  "date_policy": "Dates locales de l'athlète. Septembre = 2026-09-01 inclus à 2026-09-30 inclus. Sommeil attribué au jour du réveil. NULL signifie inconnu, jamais zéro.",
+  "sessions": {"grain": "une séance réalisée", "id": "actual:N", "fields": {"session_id":"identifiant numérique", "date":"date locale", "sport":"running/cycling", "name":"nom", "distance_m":"m", "duration_sec":"s", "pace_sec_km":"s/km", "avg_hr":"bpm", "ascent_m":"m", "gap_sec_km":"s/km, métrique terrain stockée", "temperature_c":"°C, météo stockée", "sleep_duration_sec":"s, mesure du jour; ne pas moyenner ici pour une moyenne quotidienne", "hrv":"ms, mesure du jour", "has_feedback":"0/1", "feedback":"interprétation du coach", "planned_id":"lien vers plans.id", "day_id":"lien vers days.id", "source":"provenance"}},
+  "days": {"grain":"un jour, sans multiplication par les séances", "fields":{"date":"date locale", "sleep_duration_sec":"s", "hrv":"ms"}},
+  "plans": {"grain":"une prescription", "fields":{"date":"date locale", "completed":"0/1; moyenne = proportion réalisée", "actual_id":"lien réel ou NULL"}},
+  "strength": {"grain":"une séance de force; séries agrégées une fois", "fields":{"date":"date locale", "volume_kg":"somme de charge_kg × répétitions"}},
+  "joins": ["sessions.day_id = days.id, plusieurs séances vers un jour", "sessions.planned_id = plans.id; ne pas inférer une relation par nom/date"],
+  "evidence": "Mesures Garmin et force; feedback est une interprétation. Aucune causalité ne peut être établie à partir d'une association. Les métriques dérivées sont des fixtures stockées, pas des recalculs de flux."
+}

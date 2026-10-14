@@ -184,7 +184,7 @@ class TestGarminSyncClient:
     def test_get_activities(self):
         client = self._client()
         client._last_request_time = 0.0
-        client.client.activities.return_value = [
+        client.client.activity_page.return_value = [
             {
                 "activityId": 1,
                 "activityName": "Run 1",
@@ -205,20 +205,13 @@ class TestGarminSyncClient:
                 start_date=date(2025, 12, 1), end_date=date(2025, 12, 5), limit=10
             )
         assert [a.activity_id for a in activities] == [1, 2]
-        client.client.activities.assert_called_once_with(
-            date(2025, 12, 1), date(2025, 12, 5)
-        )
+        client.client.activity_page.assert_called_once_with(0, 50)
 
-    def test_get_activities_respects_limit_and_skips_garbage(self):
+    def test_get_activities_rejects_malformed_pages(self):
         client = self._client()
-        client.client.activities.return_value = [
-            "not-a-dict",
-            {"activityId": 1, "startTimeLocal": "2025-12-01T08:00:00", "duration": 1},
-            {"activityId": 2, "startTimeLocal": "2025-12-02T08:00:00", "duration": 1},
-        ]
-        with patch("arete.garmin.sync.time.sleep"):
-            activities = client.get_activities(limit=2)
-        assert [a.activity_id for a in activities] == [1]
+        client.client.activity_page.return_value = [{"activityId": 1}]
+        with pytest.raises(ValueError, match="Date Garmin"):
+            client.get_activities(limit=2)
 
     def test_download_fit_file_writes_and_caches(self, tmp_path):
         client = self._client()
@@ -235,7 +228,7 @@ class TestGarminSyncClient:
         from arete.features.hr_zones import ZoneModel
 
         client = GarminSyncClient(client=MagicMock(), zones=ZoneModel.from_reference())
-        client.client.activities.return_value = raw
+        client.client.activity_page.return_value = raw
         client._repository = repo
         with (
             patch("arete.garmin.sync.time.sleep"),
@@ -248,8 +241,7 @@ class TestGarminSyncClient:
         repo.last_garmin_import.return_value = (date(2026, 9, 1), None)
         repo.has_garmin_activity.return_value = False
         client, _ = self._sync_with(repo, [])
-        start, _end = client.client.activities.call_args.args
-        assert start == date(2026, 9, 1)
+        client.client.activity_page.assert_called_once_with(0, 50)
 
     def test_new_activities_are_matched_to_the_plan(self):
         from arete.garmin.models import PlannedSession, SessionStatus, SessionType
@@ -307,7 +299,7 @@ class TestGarminSyncClient:
         ]
         streams = ActivityStreams(t=[0, 1], heart_rate=[140, 141])
         client = GarminSyncClient(client=MagicMock(), zones=ZoneModel.from_reference())
-        client.client.activities.return_value = raw
+        client.client.activity_page.return_value = raw
         client._repository = repo
         fit = tmp_path / "a.fit"
         with (
@@ -336,7 +328,7 @@ class TestGarminSyncClient:
 
     def test_sync_activities_reports_auth_error(self):
         client = self._client()
-        client.client.activities.side_effect = GarminAuthError("no tokens")
+        client.client.activity_page.side_effect = GarminAuthError("no tokens")
         client._repository = MagicMock()
         client._repository.has_garmin_activity.return_value = False
         client._repository.last_garmin_import.return_value = (None, None)
@@ -595,8 +587,12 @@ def test_closing_progress_before_fit_stops_before_download_or_write():
 
 def test_requested_200_activities_are_not_silently_capped_at_100():
     client = GarminSyncClient(client=MagicMock())
-    client.client.activities.return_value = [
+    client.client.activity_page.return_value = [
         {"activityId": n, "startTimeLocal": "2026-10-01T08:00:00"} for n in range(210)
+    ]
+    raw = client.client.activity_page.return_value
+    client.client.activity_page.side_effect = lambda offset, limit: raw[
+        offset : offset + limit
     ]
     assert len(client.get_activities(limit=200)) == 200
 
@@ -686,7 +682,7 @@ def test_history_stream_preserves_the_continuation(router_client):
     from arete.api.garmin_sync import router
 
     with (
-        patch.object(GarminSyncClient, "is_authenticated", return_value=True),
+        patch("arete.garmin.token_store.session_status", return_value=(True, None)),
         patch.object(
             GarminSyncClient,
             "iter_sync_activities",
@@ -722,7 +718,7 @@ def test_sync_stream_protocol_and_enrichment(router_client):
     from arete.garmin.sync import SyncProgress
 
     with (
-        patch.object(GarminSyncClient, "is_authenticated", return_value=True),
+        patch("arete.garmin.token_store.session_status", return_value=(True, None)),
         patch.object(
             GarminSyncClient,
             "iter_sync_activities",
@@ -742,7 +738,9 @@ def test_sync_stream_protocol_and_enrichment(router_client):
         ),
         patch("arete.services.session_conditions.enrich_sessions") as enrich,
     ):
-        response = router_client(router).post("/garmin/sync/activities/stream", json={})
+        response = router_client(router).post(
+            "/garmin/sync/activities/stream", json={"start_date": "2026-10-01"}
+        )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     events = [
@@ -758,14 +756,16 @@ def test_sync_stream_protocol_and_enrichment(router_client):
     assert events[-2]["stage"] == "finalizing"
     assert events[-1]["last_activity_date"] == "2026-10-01"
     assert "session_ids" not in events[-1]
-    enrich.assert_called_once_with([42])
+    enrich.assert_called_once()
+    assert enrich.call_args.args == ([42],)
+    assert enrich.call_args.kwargs["budget_sec"] <= 20
 
 
 def test_sync_stream_auth_and_validation_happen_before_work(router_client):
     from arete.api.garmin_sync import router
 
     with (
-        patch.object(GarminSyncClient, "is_authenticated", return_value=False),
+        patch("arete.garmin.token_store.session_status", return_value=(False, None)),
         patch.object(GarminSyncClient, "iter_sync_activities") as work,
     ):
         api = router_client(router)
@@ -790,13 +790,15 @@ def test_sync_stream_reports_failure_without_success_or_replay(router_client):
         raise RuntimeError("private upstream details")
 
     with (
-        patch.object(GarminSyncClient, "is_authenticated", return_value=True),
+        patch("arete.garmin.token_store.session_status", return_value=(True, None)),
         patch.object(
             GarminSyncClient, "iter_sync_activities", side_effect=failing_work
         ) as work,
         patch("arete.services.session_conditions.enrich_sessions") as enrich,
     ):
-        response = router_client(router).post("/garmin/sync/activities/stream", json={})
+        response = router_client(router).post(
+            "/garmin/sync/activities/stream", json={"start_date": "2026-10-01"}
+        )
     events = [
         json.loads(frame.removeprefix("data: "))
         for frame in response.text.strip().split("\n\n")
@@ -807,82 +809,14 @@ def test_sync_stream_reports_failure_without_success_or_replay(router_client):
     enrich.assert_not_called()
 
 
-def _coach_sync(events, *, deadline=None, authenticated=True):
-    """Run the coach's sync over scripted events; returns (result, work, enrich)."""
-    from arete.services import garmin_sync as service
+def test_coach_sync_uses_shared_force_refresh():
+    from arete.services.garmin_sync import sync_recent
 
-    def work(**kwargs):
-        yield from events
-
-    recent = {
-        "sessions": [{"id": 42, "date": "2026-10-10"}, {"id": 7, "date": "2026-10-01"}]
-    }
-    with (
-        patch.object(GarminSyncClient, "is_authenticated", return_value=authenticated),
-        patch.object(
-            GarminSyncClient, "iter_sync_activities", side_effect=work
-        ) as started,
-        patch("arete.services.session_conditions.enrich_sessions") as enrich,
-        patch("arete.services.analytics.list_sessions", return_value=recent),
-    ):
-        return service.sync_recent(deadline=deadline), started, enrich
-
-
-def test_coach_sync_returns_the_imported_sessions_it_enriched():
-    from arete.garmin.sync import SyncProgress
-    from arete.services.garmin_sync import MAX_ACTIVITIES
-
-    result, started, enrich = _coach_sync(
-        [
-            SyncProgress("fetching"),
-            SyncResult(
-                success=True,
-                activities_synced=1,
-                activities_skipped=3,
-                session_ids=[42],
-            ),
-        ]
-    )
-    started.assert_called_once_with(max_activities=MAX_ACTIVITIES)
-    enrich.assert_called_once_with([42])
-    assert result["complete"] is True
-    assert result["imported"] == 1
-    assert result["already_present"] == 3
-    assert result["sessions"] == [{"id": 42, "date": "2026-10-10"}]
-
-
-def test_coach_sync_stops_between_steps_when_the_run_runs_out_of_time():
-    from time import monotonic
-
-    from arete.garmin.sync import SyncProgress
-
-    result, _, enrich = _coach_sync(
-        [SyncProgress("fetching"), SyncResult(success=True, session_ids=[42])],
-        deadline=monotonic() + 1,
-    )
-    assert result["complete"] is False
-    assert "list_recent_sessions" in result["error"]
-    enrich.assert_not_called()
-
-
-def test_coach_sync_needs_a_garmin_connection_before_any_work():
-    with pytest.raises(PermissionError, match="Réglages"):
-        _coach_sync([], authenticated=False)
-
-
-def test_coach_sync_refuses_an_overlapping_run_for_the_same_athlete():
-    from arete.garmin.sync import SyncProgress
-    from arete.services import garmin_sync as service
-
-    def overlapping():
-        yield SyncProgress("fetching")
-        with pytest.raises(RuntimeError, match="déjà en cours"):
-            service.sync_recent()
-        yield SyncResult(success=True)
-
-    result, _, _ = _coach_sync(overlapping())
-    assert result["complete"] is True
-    assert not service._running
+    with patch(
+        "arete.services.garmin_sync.ensure_fresh", return_value={"complete": True}
+    ) as refresh:
+        assert sync_recent(deadline=123) == {"complete": True}
+    refresh.assert_called_once_with(deadline=123, force=True)
 
 
 class TestSyncStatusFromLocalState:

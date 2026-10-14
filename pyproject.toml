@@ -52,6 +52,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-xdist>=3.8,<4",
     "ruff>=0.14.7,<0.15",
+    "sqlglot>=28,<31",
 ]
 mcp = [
     "mcp>=2.3",

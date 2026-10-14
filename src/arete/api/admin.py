@@ -116,3 +116,25 @@ def reactivate(athlete_id: int) -> Response:
 def release_lease(athlete_id: int) -> dict[str, bool]:
     """After a failed or stopped daily sync, let the next window run it again."""
     return {"released": scheduler.release_sync_lease(athlete_id)}
+
+
+class GarminReconciliation(BaseModel):
+    operation_id: str
+    workers_stopped: StrictBool
+
+
+@router.post("/athletes/{athlete_id}/garmin/reconcile")
+def reconcile_garmin(athlete_id: int, body: GarminReconciliation) -> dict:
+    """Recover an expired import only after the administrator stopped old workers."""
+    from arete.services.athlete_scope import athlete_scope
+    from arete.services.garmin_sync import reconcile_abandoned
+
+    if not users.athlete_is_active(athlete_id):
+        raise HTTPException(status_code=404, detail="Athlète introuvable.")
+    try:
+        with athlete_scope(athlete_id):
+            return reconcile_abandoned(
+                body.operation_id, workers_stopped=body.workers_stopped
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

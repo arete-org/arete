@@ -204,6 +204,11 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       context,
       (event) => {
         if (controller.signal.aborted) return;
+        if (event.type === 'sync_status' && event.state !== 'running') {
+          invalidateAfterSession(queryClient);
+          void queryClient.invalidateQueries({ queryKey: ['garmin-health'] });
+          void queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+        }
         if (event.type === 'workout_update') {
           if (event.thread_id !== threadId) throw new Error('Événement reçu pour un autre fil.');
           cacheWorkout(queryClient, event);

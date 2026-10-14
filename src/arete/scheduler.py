@@ -99,34 +99,24 @@ def daily_sync() -> dict[str, str]:
 
     garmin = GarminClient()
     if garmin.has_tokens():
-        from arete.garmin.health_sync import sync_range
-        from arete.garmin.readiness import update_readiness_range
-        from arete.garmin.sync import GarminSyncClient
+        from arete.services.garmin_sync import ensure_fresh
 
         try:
-            result = GarminSyncClient(client=garmin).sync_activities(download_fit=True)
-            imported += result.activities_synced
-            synced_ids = list(result.session_ids)
+            result = ensure_fresh(force=True, daily=True)
+            imported += result.get("imported", 0)
+            synced_ids = list(result.get("session_ids", []))
             status["garmin_activities"] = (
-                f"{result.activities_synced} synced, {len(result.errors)} errors"
+                f"{result.get('imported', 0)} synced, {len(result.get('errors', []))} errors; {result['state']}"
             )
+            status["garmin_health"] = str(
+                result.get("health_checked_at") or "incomplete"
+            )
+            if conditions := result.get("conditions"):
+                status["conditions"] = (
+                    f"{conditions['terrain']} terrain, {conditions['weather']} weather"
+                )
         except Exception as e:  # noqa: BLE001 - background job must not die
             status["garmin_activities"] = f"failed: {e}"
-        if synced_ids:  # before the feedback, which reads GAP and weather
-            from arete.services.session_conditions import enrich_sessions
-
-            conditions = enrich_sessions(synced_ids)
-            status["conditions"] = (
-                f"{conditions['terrain']} terrain, {conditions['weather']} weather"
-            )
-        try:
-            end = athlete_today()  # Garmin's health days are the athlete's
-            start = end - timedelta(days=HEALTH_LOOKBACK_DAYS)
-            days = sync_range(start, end)
-            update_readiness_range(start, end)
-            status["garmin_health"] = f"{sum(1 for d in days if d.success)} days"
-        except Exception as e:  # noqa: BLE001
-            status["garmin_health"] = f"failed: {e}"
     else:
         status["garmin"] = "no tokens"
 
@@ -176,8 +166,19 @@ def daily_sync() -> dict[str, str]:
 
     # Before the briefing that reads the journal the feedback files; after the
     # bounded calendar run, so a slow model cannot starve it.
-    if synced_ids:
-        status["feedback"], feedback = write_sync_feedback(synced_ids)
+    from arete.services.coaching_repository import SessionFeedbackRepository
+
+    feedback_ids = list(synced_ids)
+    try:
+        pending_ids, pending_count = SessionFeedbackRepository().pending_garmin()
+        # At most 20 current imports plus 20 pending: still one model request,
+        # with the existing five-session model cap and rule fallback for the rest.
+        feedback_ids = list(dict.fromkeys([*synced_ids, *pending_ids]))
+        status["feedback_pending"] = str(pending_count)
+    except Exception as exc:  # noqa: BLE001 - preserve feedback for known commits
+        status["feedback_pending"] = f"failed: {type(exc).__name__}"
+    if feedback_ids:
+        status["feedback"], feedback = write_sync_feedback(feedback_ids)
 
     # Garmin sessions are announced with their feedback, once; the rest (Strava,
     # or a failed feedback run) by the import count.

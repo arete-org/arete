@@ -102,6 +102,7 @@ class AgentContext:
     stats: RunStats = field(default_factory=RunStats, init=False, repr=False)
     # The open page's data, cached per run and invalidated after domain actions.
     page_section: str | None = field(default=None, init=False, repr=False)
+    garmin_freshness: dict | None = field(default=None, init=False, repr=False)
     # Paths only: skill bodies enter messages through read_file results.
     requested_skills: tuple[str, ...] = field(default=(), init=False)
     # Async ToolNode uses gather(), ignoring RunnableConfig concurrency.
