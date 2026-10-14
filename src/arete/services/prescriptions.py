@@ -247,6 +247,23 @@ def conversation_prescription(
     return prescription
 
 
+def _clock(seconds: float) -> str:
+    """20:00 or 1:30:00, as the step editor shows a duration."""
+    hours, rest = divmod(round(seconds), 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
+
+
+def _pace(sec_per_km: float) -> str:
+    """3'33, as the step editor shows a pace per km."""
+    minutes, secs = divmod(round(sec_per_km), 60)
+    return f"{minutes}'{secs:02d}"
+
+
+def _span(low: str, high: str) -> str:
+    return low if low == high else f"{low}–{high}"
+
+
 def describe(prescription: Prescription) -> str:
     """A bounded, literal summary; distance never invents a duration."""
 
@@ -260,7 +277,7 @@ def describe(prescription: Prescription) -> str:
             )
         value = step.value or 0
         amount = {
-            "seconds": f"{value / 60:g} min" if value % 60 == 0 else f"{value:g} s",
+            "seconds": _clock(value),
             "meters": f"{value:g} m",
             "reps": f"{value:g} répétitions",
             "lap": "jusqu’au tour manuel",
@@ -273,14 +290,15 @@ def describe(prescription: Prescription) -> str:
             target = step.target
             if target.kind == "hr_zone":
                 amount += f" Z{target.low:g}"
+            elif target.kind == "pace_sec_km":
+                amount += f" · {_span(_pace(target.low), _pace(target.high))}/km"
             else:
                 unit = {
-                    "pace_sec_km": "s/km",
                     "heart_rate_bpm": "bpm",
                     "power_w": "W",
                     "cadence_rpm": "tr/min",
                 }[target.kind]
-                amount += f" · {target.low:g}–{target.high:g} {unit}"
+                amount += f" · {_span(f'{target.low:g}', f'{target.high:g}')} {unit}"
         if step.kind in {"recovery", "rest"}:
             amount = "récupération " + amount
         return amount
