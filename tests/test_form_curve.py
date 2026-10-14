@@ -182,3 +182,50 @@ def test_another_athletes_goal_and_plan_are_not_read(athlete, client):
     assert body["goal_id"] == mine.id
     assert body["key_session"]["date"] == (athlete + timedelta(days=4)).isoformat()
     assert body["planned_sessions"] == 1
+
+
+def test_a_planned_race_alone_does_not_reach_race_week(athlete, client):
+    race = athlete + timedelta(days=40)
+    goals.create_goal(name="Semi", race_date=race, distance_km=21.1)
+    _plan(athlete + timedelta(days=3), "endurance", 45)  # next week only
+    _plan(race, "race", 0)
+    body = client.get("/dashboard/form-curve").json()
+    assert body["last_planned"] == (athlete + timedelta(days=3)).isoformat()
+
+
+def test_todays_pending_session_stays_key_once_another_is_logged(athlete, client):
+    goals.create_goal(
+        name="Semi", race_date=athlete + timedelta(days=30), distance_km=21.1
+    )
+    con = connect()
+    try:  # this morning's run is logged; the evening intervals are still to do
+        con.execute(
+            "INSERT INTO app.actual_sessions (date, sport, duration_sec, rpe, source)"
+            " VALUES (?, 'running', 1800, 3, 'manual')",
+            [athlete],
+        )
+    finally:
+        con.close()
+    evening = _plan(athlete, "intervals", 70)
+    _plan(athlete + timedelta(days=2), "endurance", 40)
+    body = client.get("/dashboard/form-curve").json()
+    assert body["key_session"]["id"] == evening
+    # Its load is not counted twice: today's logged session stands for today.
+    projection = client.get(f"/goals/{body['goal_id']}/projection").json()
+    assert projection["planned_sessions"] == 1
+
+
+def test_months_off_still_count_as_a_history(athlete, client):
+    con = connect()
+    try:  # only an old block, ten months ago: today's CTL rounds to zero
+        con.execute("DELETE FROM app.actual_sessions")
+        con.execute(
+            "INSERT INTO app.actual_sessions (date, sport, duration_sec, rpe, source)"
+            " VALUES (?, 'running', 3600, 6, 'manual')",
+            [athlete - timedelta(days=300)],
+        )
+    finally:
+        con.close()
+    board = client.get("/dashboard").json()
+    assert board["fitness"]["ctl"] == 0.0 and board["fitness"]["atl"] == 0.0
+    assert board["has_load"] is True

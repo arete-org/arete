@@ -16,7 +16,7 @@ from arete.dataio.db import db_connection
 from arete.dataio.queries import daily_health, daily_loads
 from arete.dataio.settings import get_user_settings
 from arete.garmin import token_store
-from arete.garmin.models import ActualSession, PlannedSession
+from arete.garmin.models import ActualSession, PlannedSession, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services import coach_today, goals, metrics
 from arete.services.athlete_scope import resolve_athlete_id
@@ -48,6 +48,9 @@ class Dashboard:
     workload: metrics.WorkloadMetricsOut
     health: dict[str, Any] | None
     garmin_connected: bool
+    #: Any load ever logged: the form curve has something to draw (the model's
+    #: rounded numbers can read 0 after months off).
+    has_load: bool
     briefing: Briefing | None
     coach: dict[str, Any]
 
@@ -85,6 +88,7 @@ def load() -> Dashboard:
             ),
             health=daily_health(con, today),
             garmin_connected=token_store.session_status(con)[0],
+            has_load=form.model is not None,
             briefing=briefing,
             coach=coach_today.card(con, today, decisions, briefing),
         )
@@ -145,6 +149,11 @@ def form_curve() -> dict[str, Any]:
     # Up to today the logged load only; after it the projection, which still
     # counts today's plan when nothing is logged yet.
     future = [p for p in answer["series"] if p["date"] > today.isoformat()]
+    training = [
+        s.date
+        for s in projected.planned
+        if not (s.session_type == SessionType.RACE and s.date == goal.race_date)
+    ]
     week_end = min(today + timedelta(days=KEY_SESSION_DAYS - 1), goal.race_date)
     week = [s for s in projected.planned if s.date <= week_end]
     # The hardest of the week: the planned load weighs duration and intensity.
@@ -163,9 +172,8 @@ def form_curve() -> dict[str, Any]:
         "race_day": answer["race_day"],
         "planned_sessions": answer["planned_sessions"],
         # The projection assumes rest after the last planned session.
-        "last_planned": max(s.date for s in projected.planned).isoformat()
-        if projected.planned
-        else None,
+        # The race itself is no training: a planned race alone reaches nothing.
+        "last_planned": max(training).isoformat() if training else None,
         "key_session": None
         if key is None
         else {

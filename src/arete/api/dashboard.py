@@ -46,6 +46,7 @@ class DashboardResponse(BaseModel):
     garmin_connected: bool = Field(
         description="/garmin/sync/status garmin_authenticated"
     )
+    has_load: bool = Field(description="Any load ever logged (the form curve's data)")
     briefing: DailyTipResponse = Field(description="GET /tips/daily")
     coach: dict[str, Any] = Field(description="/coach/today")
 
@@ -65,6 +66,7 @@ def get_dashboard() -> DashboardResponse:
         workload=board.workload,
         health=daily_metrics_response(board.health) if board.health else None,
         garmin_connected=board.garmin_connected,
+        has_load=board.has_load,
         briefing=_daily_tip(board.briefing),
         coach=board.coach,
     )

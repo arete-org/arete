@@ -228,7 +228,8 @@ class Projected:
     answer: dict[str, Any]
     #: The athlete's daily load up to today, as the projection read it.
     history: dict[date, float]
-    #: The sessions still to do from the first planned day to race day.
+    #: The sessions still to do from today to race day, today's included even
+    #: when a session is already logged (the evening run of a double day).
     planned: list[PlannedSession]
 
 
@@ -246,7 +247,7 @@ def project(
     planned = [
         s
         for s in GarminRepository().list_planned_sessions(
-            start_date=first_planned,
+            start_date=today,
             end_date=goal.race_date,
             status=None,
             limit=500,
@@ -257,6 +258,8 @@ def project(
     ]
     future: dict[date, float] = {}
     for s in planned:
+        if s.date < first_planned:
+            continue  # today's plan once a session is logged: its load is in
         if s.session_type == SessionType.RACE and s.date == goal.race_date:
             minutes = _race_minutes(goal, con)
         else:
