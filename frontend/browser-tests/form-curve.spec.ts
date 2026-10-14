@@ -11,12 +11,20 @@ function curve(withGoal: boolean) {
   const series = [];
   for (let i = -84; i <= (withGoal ? 40 : 0); i++)
     series.push({ date: localDay(i), ctl: 40 + i / 10, atl: 38 + Math.sin(i / 3) * 6, tsb: 2 - Math.sin(i / 3) * 6, planned: i > 0 });
+  // Today's point is the dashboard's form (`fitness` below): the projection starts after it.
   return {
     today: localDay(), goal_id: withGoal ? 3 : null, series, planned_sessions: withGoal ? 24 : 0,
+    last_planned: withGoal ? localDay(39) : null,
     race_day: withGoal ? { ctl: 44, tsb: 8.4 } : null,
     key_session: withGoal ? { id: 9, date: localDay(2), session_type: 'intervals', description: '6 x 1000 m', target_duration_min: 60 } : null,
   };
 }
+
+/** The dashboard's form today, which the curve's today point repeats. */
+const fitness = {
+  ctl: 40, atl: 38, tsb: 2, form_zone: 'neutral', readiness_score: 60, readiness_level: 'good',
+  readiness_source: 'model', readiness_measured_on: null, ramp_rate: null, days_analyzed: 40,
+};
 
 async function fixture(page: Page, withGoal: boolean, requests: string[]) {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -30,7 +38,7 @@ async function fixture(page: Page, withGoal: boolean, requests: string[]) {
     requests.push(path);
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
-    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer({ next_goal: withGoal ? goal : null }) });
+    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer({ next_goal: withGoal ? goal : null, fitness }) });
     if (path === '/api/dashboard/form-curve') return route.fulfill({ json: curve(withGoal) });
     return route.fulfill({ json: [] });
   });
@@ -44,7 +52,7 @@ test('with a race, the goal card leads and the curve projects to race day in pla
   await expect(card.getByText('Semi de Lyon')).toBeVisible();
   await expect(card.getByText('J-40')).toBeVisible();
   await expect(card.getByText('entre +3 et +13')).toBeVisible();
-  await expect(card.getByRole('link', { name: /Séance clé : .* Fractionné · 60 min/ })).toHaveAttribute('href', `/planning?date=${localDay(2)}`);
+  await expect(card.getByRole('link', { name: /Séance clé : .* Fractionné · 60 min/ })).toHaveAttribute('href', `/planning?date=${localDay(2)}&session=9`);
   // On a phone: the greeting, then the race, then the briefing.
   const greeting = (await page.getByRole('heading', { name: 'Bonjour, HUNTER' }).boundingBox())!;
   const race = (await card.boundingBox())!;
@@ -55,7 +63,10 @@ test('with a race, the goal card leads and the curve projects to race day in pla
   const panel = page.locator('figure');
   await panel.scrollIntoViewIfNeeded();
   await expect(panel.locator('.recharts-surface')).toBeVisible();
+  await expect(panel.locator('figcaption')).toContainText('Aujourd’hui : fatigue 38, forme +2.');
   await expect(panel.locator('figcaption')).toContainText('Projection le jour J : forme de fond 44, forme entre +3 et +13.');
+  // The card says the same form as the dashboard's "Forme" card.
+  await expect(page.getByText('+2,0', { exact: true })).toBeVisible();
   await expect(page.getByText('Pointillés : projection')).toBeVisible();
   // The goal card and the curve share one lazy read, after the dashboard's.
   expect(requests.filter(p => p === '/api/dashboard/form-curve')).toHaveLength(1);

@@ -17,14 +17,20 @@ const CURVE_LABEL: Record<string, string> = {
 const shortDate = (iso: string) => parseLocalDate(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 
 /**
- * Forme de fond, fatigue and forme: solid up to today, dotted for the
+ * Forme de fond, fatigue and forme: solid up to the last logged day, dotted for the
  * projection to race day. recharts loads with this chunk only (ARE-46).
  */
 export function FormCurveChart({ series, today }: { series: CurvePoint[]; today: string }) {
-  // Today belongs to both halves so the dotted lines start where the solid ones end.
-  const data = series.map((p) => {
-    const past = p.date <= today;
-    const future = p.date >= today;
+  // Solid up to the last logged day (the server sends it up to today from the
+  // load only), dotted after it; that day belongs to both halves so the
+  // dotted lines start where the solid ones end.
+  let last = -1;
+  series.forEach((p, i) => {
+    if (p.date <= today && !p.planned) last = i;
+  });
+  const data = series.map((p, i) => {
+    const past = i <= last;
+    const future = i >= last;
     return {
       date: p.date,
       ctl: past ? p.ctl : null,
@@ -35,7 +41,7 @@ export function FormCurveChart({ series, today }: { series: CurvePoint[]; today:
       tsbPlan: future ? p.tsb : null,
     };
   });
-  const projected = series.some((p) => p.date > today);
+  const projected = last < series.length - 1;
   return (
     <ResponsiveContainer width="100%" height={200}>
       <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>

@@ -411,7 +411,13 @@ export function DashboardPage() {
             <Panel className="p-4">
               <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="COURBE DE FORME" />
               <Suspense fallback={<Skeleton label="Chargement de la courbe de forme" lines={2} />}>
-                <FormCurvePanel day={boardDay} ready={boardSettled} />
+                <FormCurvePanel
+                  day={boardDay}
+                  ready={boardSettled}
+                  hasLoad={fitness ? fitness.ctl > 0 || fitness.atl > 0 : undefined}
+                  failed={boardFailed}
+                  retry={() => void retryBoard()}
+                />
               </Suspense>
             </Panel>
 

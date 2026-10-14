@@ -1,9 +1,8 @@
-import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Flag } from 'lucide-react';
 import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
 import { parseLocalDate } from '@/lib/dates';
-import { formBand, useFormCurve, useInView } from '@/lib/formCurve';
+import { formBand, plannedUntil, planReachesRaceWeek, useFormCurve, useInView } from '@/lib/formCurve';
 import { formatKm } from '@/lib/race';
 import type { Goal } from '@/types';
 
@@ -13,12 +12,14 @@ const shortDay = (iso: string) =>
 /**
  * The race the athlete trains for, leading the dashboard: J-x, the form
  * projected on race day and the week's key session, both from the curve's
- * lazy read. Without a race ahead (none, or past), a compact call to set one.
+ * lazy read. The band shows only when the plan reaches race week: before
+ * that the projection is mostly assumed rest, and the card says so. Without
+ * a race ahead, a compact call to set one (a race already run only comes
+ * from yesterday's cached answer: the server never sends one).
  */
 export function GoalCard({ goal, day, ready }: { goal: Goal | null; day: string | undefined; ready: boolean }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const [ref, visible] = useInView();
   const ahead = goal != null && goal.days_left >= 0;
-  const visible = useInView(ref);
   const curve = useFormCurve(day, ready && ahead && visible);
   if (!ahead)
     return (
@@ -45,19 +46,28 @@ export function GoalCard({ goal, day, ready }: { goal: Goal | null; day: string 
         <span className="text-xs text-text-muted">{formatKm(goal.distance_km)} km</span>
       </h2>
       {curve.isError ? (
-        <p className="text-xs text-text-muted">Projection indisponible.</p>
+        <p className="text-xs text-text-muted">
+          Projection indisponible.{' '}
+          <button type="button" onClick={() => void curve.refetch()} className="text-neon-cyan hover:underline">
+            Réessayer
+          </button>
+        </p>
       ) : !data ? (
         <p role="status" className="text-xs text-text-muted">Projection du jour J…</p>
       ) : (
         <>
-          {tsb != null && (
+          {tsb != null && planReachesRaceWeek(data, goal.race_date) ? (
             <p className="text-xs text-text-secondary">
-              Forme prévue le jour J : <span className="text-neon-gold">{formBand(tsb)}</span>
-              {data.planned_sessions === 0 && <span className="text-text-muted"> (sans séance prévue, repos supposé)</span>}
+              Forme prévue le jour J : <span className="text-neon-gold">{formBand(tsb, goal.days_left)}</span>
+            </p>
+          ) : (
+            // A band over weeks of assumed rest would reassure for nothing.
+            <p className="text-xs text-text-muted">
+              {plannedUntil(data.last_planned)} · repos supposé{data.last_planned ? ' ensuite' : ''}
             </p>
           )}
           {key && (
-            <Link to={`/planning?date=${key.date}`} className="block text-xs text-neon-cyan hover:underline">
+            <Link to={`/planning?date=${key.date}&session=${key.id}`} className="block text-xs text-neon-cyan hover:underline">
               Séance clé : {shortDay(key.date)} · {SESSION_TYPE_LABEL[key.session_type] ?? key.session_type}
               {key.target_duration_min ? ` · ${key.target_duration_min} min` : ''} <span aria-hidden>→</span>
             </Link>

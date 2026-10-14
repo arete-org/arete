@@ -59,17 +59,25 @@ vi.mock('@/lib/dailyTip', () => ({
 }));
 
 const stats = board.player_stats;
+const fitness = board.fitness;
 let client: QueryClient;
 beforeEach(() => {
   board.player_stats = stats;
+  board.fitness = fitness;
   daily.tip = written;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(settingsApi, 'get').mockResolvedValue({ display_name: 'Arthur' } as Awaited<ReturnType<typeof settingsApi.get>>);
   vi.spyOn(coachApi, 'today').mockResolvedValue({ date: '2026-10-14', items: [], remaining: 0, briefing: null });
   vi.spyOn(gameApi, 'snapshot').mockResolvedValue(player);
   vi.spyOn(formCurveApi, 'get').mockResolvedValue({
-    today: '2026-10-14', goal_id: 3, planned_sessions: 4, key_session: null, race_day: { ctl: 45, tsb: 8 },
-    series: [{ date: '2026-10-14', ctl: 40, atl: 36, tsb: 4, planned: false }],
+    today: '2026-10-14', goal_id: 3, planned_sessions: 4, last_planned: '2026-11-22', key_session: null,
+    race_day: { ctl: 45, tsb: 8 },
+    // Today is the dashboard's form (+4,2 in `board.fitness`, shown +4); the projection,
+    // with today's planned session, starts the next day.
+    series: [
+      { date: '2026-10-14', ctl: 40, atl: 36, tsb: 4.2, planned: false },
+      { date: '2026-10-15', ctl: 40.9, atl: 44.8, tsb: -3.9, planned: true },
+    ],
   });
   board.next_goal = null;
 });
