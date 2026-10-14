@@ -114,3 +114,18 @@ export const FACT_KIND_LABEL: Record<string, string> = {
   goal: 'objectif',
   other: 'autre',
 };
+
+/** "9 des 12 dernières semaines à l’objectif": the regularity a missed week lowers by one. */
+export function weeksAtGoalText(hit: number, weeks: number): string {
+  if (weeks === 1) return hit ? 'Dernière semaine à l’objectif' : 'Dernière semaine sous l’objectif';
+  return `${hit} des ${weeks} dernières semaines à l’objectif`;
+}
+
+/** "1,12", "+4,2": French decimals with a fixed precision; `signed` marks a positive value. */
+export function formatDecimal(value: number, digits: number, signed = false): string {
+  return value.toLocaleString('fr-FR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    signDisplay: signed ? 'exceptZero' : 'auto',
+  });
+}

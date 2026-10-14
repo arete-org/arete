@@ -6,7 +6,7 @@ import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
+import { Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { Button, Panel, Skeleton } from '@/components/ui';
 import { planApi, settingsApi } from '@/lib/api';
@@ -14,13 +14,13 @@ import { fetchDashboard, type DashboardData } from '@/lib/dashboard';
 import { exportApi } from '@/lib/documents';
 import { readWorkouts, watchLine, workoutsKey, type WorkoutView } from '@/lib/workouts';
 import { useDailyTip } from '@/lib/dailyTip';
-import { formatHoursMinutes } from '@/lib/fr';
+import { formatDecimal, formatHoursMinutes, weeksAtGoalText } from '@/lib/fr';
 import { goalCountdown } from '@/lib/race';
 import { cn } from '@/lib/utils';
 import { toLocalISODate } from '@/lib/dates';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { linkDay, type DayLink } from '@/lib/sessionMatch';
-import type { PlanDecision } from '@/types';
+import type { PlanDecision, StatBar } from '@/types';
 
 /** Readiness / stress traffic lights as Tailwind classes (theme colors).
  *  `threshold` is the user's fatigue threshold from Settings (default 85). */
@@ -74,11 +74,65 @@ function Unavailable({ what, retry }: { what: string; retry: () => void }) {
   );
 }
 
+/** The dashboard's one way to log a session (the nav's Journal is the other). */
+function LogSessionLink() {
+  return (
+    <Link to="/log?new=1" className="text-neon-gold hover:text-neon-gold/80 transition-colors">
+      Saisir une séance <span aria-hidden>→</span>
+    </Link>
+  );
+}
+
 function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
     <div className="flex items-center gap-2 mb-4">
       {icon}
       <h2 className="text-sm font-sans text-text-muted uppercase tracking-wider">{title}</h2>
+    </div>
+  );
+}
+
+/**
+ * One bar of the day's form. Without the RPG it reads in plain words (the
+ * coach's: récupération, forme, charge); with it, the HP/MP/TSS tags lead.
+ * The detail stays on screen: a `title` never shows on a phone.
+ */
+function FormBar({ stat, color, tag }: { stat: StatBar; color: string; tag?: string }) {
+  const value = (
+    <span className="text-xs font-sans text-text-secondary tabular-nums">
+      {Math.round(stat.current)}/{Math.round(stat.max)}
+    </span>
+  );
+  const bar = (
+    <div className="flex-1 h-3 bg-shadow rounded-full overflow-hidden">
+      <div
+        className={cn('h-full rounded-full transition-all duration-500 motion-reduce:transition-none', color)}
+        style={{ width: `${Math.min(100, (stat.current / stat.max) * 100)}%` }}
+      />
+    </div>
+  );
+  if (!tag)
+    return (
+      <div>
+        <div className="flex items-baseline justify-between gap-3 mb-1">
+          <span className="text-xs font-sans text-text-primary">{stat.label}</span>
+          {value}
+        </div>
+        {bar}
+        {stat.detail && <p className="mt-0.5 text-[11px] font-sans text-text-muted">{stat.detail}</p>}
+      </div>
+    );
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-sans text-text-muted w-8">{tag}</span>
+        {bar}
+        <span className="w-20 text-right">{value}</span>
+      </div>
+      <div className="flex flex-wrap justify-between gap-x-2 pl-11 pr-1 text-[11px] font-sans text-text-muted">
+        <span>{stat.label}</span>
+        {stat.detail && <span>{stat.detail}</span>}
+      </div>
     </div>
   );
 }
@@ -142,7 +196,8 @@ function TodaySession({
 }
 
 export function DashboardPage() {
-  const game = useGamePreference();
+  // Unknown until read: plain words meanwhile, never a flash of game vocabulary.
+  const rpg = useGamePreference().data?.enabled === true;
 
   // The app shell already reads the settings: the same key, no second request.
   const { data: userSettings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
@@ -229,18 +284,20 @@ export function DashboardPage() {
               </Link>
             )}
           </div>
-          {playerStats && (
-            <div className="text-right">
+          {/* Regularity, not a level: a missed week lowers it by one, never to zero. */}
+          {playerStats && playerStats.recent_weeks > 0 && (
+            <div className="shrink-0 text-right">
               <div
-                className="w-12 h-12 ml-auto flex items-center justify-center rounded-full bg-abyss border-2 border-neon-gold font-sans text-neon-gold text-lg font-bold shadow-[0_0_12px_color-mix(in_srgb,var(--color-neon-gold)_30%,transparent)] transition-transform hover:scale-105"
-                title={`${playerStats.weeks_at_goal} semaines à l'objectif au total`}
+                aria-hidden
+                className="w-12 h-12 ml-auto flex items-center justify-center rounded-full bg-abyss border-2 border-neon-gold font-sans text-neon-gold text-sm font-bold tabular-nums shadow-[0_0_12px_color-mix(in_srgb,var(--color-neon-gold)_30%,transparent)]"
               >
-                {playerStats.level}
+                {playerStats.recent_weeks_at_goal}/{playerStats.recent_weeks}
               </div>
-              <p className="text-[11px] font-sans text-text-muted mt-1">
-                {playerStats.level > 0
-                  ? `${playerStats.level} sem. d'affilée`
-                  : 'Niveau · semaines à l’objectif'}
+              <p aria-hidden className="text-[11px] font-sans text-text-muted mt-1 max-w-[6.5rem] ml-auto leading-tight">
+                semaines à l’objectif
+              </p>
+              <p className="sr-only">
+                Régularité : {weeksAtGoalText(playerStats.recent_weeks_at_goal, playerStats.recent_weeks)}
               </p>
             </div>
           )}
@@ -270,19 +327,20 @@ export function DashboardPage() {
                   ))}
                   <div className="flex justify-end items-center gap-4 pt-1 text-xs font-sans">
                     <Link to="/planning" className="text-neon-cyan hover:underline">
-                      Semaine →
+                      Semaine <span aria-hidden>→</span>
                     </Link>
-                    <Link to="/log?new=1" className="text-neon-gold hover:text-neon-gold/80 transition-colors">
-                      Saisir la séance →
-                    </Link>
+                    <LogSessionLink />
                   </div>
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-shadow/30 p-4">
                   <p className="text-sm font-sans text-text-muted">Repos — aucune séance prévue</p>
-                  <Link to="/planning?new=1" className="text-xs font-sans text-neon-cyan hover:underline">
-                    + Ajouter une séance
-                  </Link>
+                  <div className="flex items-center gap-4 text-xs font-sans">
+                    <Link to="/planning?new=1" className="text-neon-cyan hover:underline">
+                      + Ajouter une séance
+                    </Link>
+                    <LogSessionLink />
+                  </div>
                 </div>
               )}
             </Panel>
@@ -306,30 +364,14 @@ export function DashboardPage() {
               briefingNote={tip?.updated_after_sync ? 'Mis à jour après la synchro' : undefined}
             />
 
-            {/* Quick Actions Footer */}
-            <div className="flex gap-3 animate-fade-in">
-              <Link
-                to="/log?new=1"
-                className="flex-1 flex items-center justify-center gap-2 glass-panel px-4 py-3 text-sm font-sans text-neon-cyan hover:bg-abyss/80 transition-colors"
-              >
-                <Dumbbell className="w-4 h-4" />
-                Saisir une séance
-                <ArrowRight className="w-3 h-3" />
-              </Link>
-              <Link
-                to="/planning"
-                className="flex-1 flex items-center justify-center gap-2 glass-panel px-4 py-3 text-sm font-sans text-neon-purple hover:bg-abyss/80 transition-colors"
-              >
-                <Calendar className="w-4 h-4" />
-                Voir le planning
-                <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
           </div>
           <div className="dashboard-secondary">
             {/* Block 2: Player Status */}
             <Panel className="p-4">
-              <SectionHeader icon={<Dumbbell className="w-4 h-4 text-neon-gold" />} title="ÉTAT DU JOUEUR" />
+              <SectionHeader
+                icon={<Dumbbell className="w-4 h-4 text-neon-gold" />}
+                title={rpg ? 'ÉTAT DU JOUEUR' : 'MA FORME DU JOUR'}
+              />
               <PlayerSummary />
 
               {statsPending ? (
@@ -344,48 +386,29 @@ export function DashboardPage() {
               ) : (
                 playerStats && (
                   <div className="space-y-3 mb-4">
-                    {[
-                      { stat: playerStats.hp, color: 'bg-danger-red', tag: 'HP' },
-                      { stat: playerStats.mp, color: 'bg-neon-cyan', tag: 'MP' },
-                      { stat: playerStats.xp, color: 'bg-neon-gold', tag: game.data?.enabled ? 'TSS' : 'XP' },
-                    ].map(({ stat, color, tag }) => (
-                      <div key={tag} title={stat.detail ?? undefined}>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-sans text-text-muted w-8">{tag}</span>
-                          <div className="flex-1 h-3 bg-shadow rounded-full overflow-hidden">
-                            <div
-                              className={cn('h-full rounded-full transition-all duration-500', color)}
-                              style={{ width: `${Math.min(100, (stat.current / stat.max) * 100)}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-sans text-text-secondary w-20 text-right">
-                            {Math.round(stat.current)}/{Math.round(stat.max)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between pl-11 pr-1 text-[11px] font-sans text-text-muted">
-                          <span>{stat.label}</span>
-                          {stat.detail && <span className="truncate ml-2">{stat.detail}</span>}
-                        </div>
-                      </div>
-                    ))}
+                    {/* The RPG's XP is its own ledger (Profile): the weekly load stays TSS. */}
+                    <FormBar stat={playerStats.hp} color="bg-danger-red" tag={rpg ? 'HP' : undefined} />
+                    <FormBar stat={playerStats.mp} color="bg-neon-cyan" tag={rpg ? 'MP' : undefined} />
+                    <FormBar stat={playerStats.xp} color="bg-neon-gold" tag={rpg ? 'TSS' : undefined} />
                   </div>
                 )
               )}
 
               <div className="grid grid-cols-2 gap-3">
+                {/* Plain words first, the acronym the coach never says as a secondary line. */}
                 <MetricCard
-                  title="Charge (ACWR)"
-                  value={workload?.acwr?.toFixed(2) ?? '—'}
+                  title="Charge"
+                  value={workload?.acwr != null ? formatDecimal(workload.acwr, 2) : '—'}
                   kind="acwr"
                   zone={workload?.acwr_zone}
+                  subtitle="ACWR · cette semaine face aux quatre dernières"
                 />
                 <MetricCard
-                  title="Fraîcheur (TSB)"
-                  value={
-                    fitness?.tsb != null ? `${fitness.tsb > 0 ? '+' : ''}${fitness.tsb.toFixed(1)}` : '—'
-                  }
+                  title="Fraîcheur"
+                  value={fitness?.tsb != null ? formatDecimal(fitness.tsb, 1, true) : '—'}
                   kind="form"
                   zone={fitness?.form_zone}
+                  subtitle="TSB · forme de fond moins fatigue"
                 />
               </div>
             </Panel>

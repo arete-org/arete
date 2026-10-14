@@ -94,6 +94,12 @@ for (const width of [320, 390, 430]) {
     await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Fermer' }).tap();
     await nav.getByRole('link', { name: 'Tableau de bord' }).tap();
+    // The RPG is off: the day's form reads in plain words, with no game tag nor level.
+    const form = page.locator('.dashboard-secondary');
+    await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
+    await expect(form.getByText('Charge de la semaine')).toBeVisible();
+    await expect(form.getByText(/\b(HP|MP|XP)\b|joueur|Niveau/)).toHaveCount(0);
+    await noOverflow(page);
     await page.getByRole('link', { name: 'Saisir une séance', exact: true }).tap();
     await expect(dialog.getByRole('heading', { name: 'SAISIR UNE SÉANCE' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();

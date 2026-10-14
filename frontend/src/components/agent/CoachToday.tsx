@@ -115,7 +115,10 @@ export function CoachTodayPanel({ briefing, briefingNote, enabled = true, refetc
       {(briefing || query.data?.briefing) && <p className="text-sm text-text-secondary">{briefing || query.data?.briefing?.text}</p>}
       {briefing && briefingNote && <p className="text-xs text-text-muted">{briefingNote}</p>}
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
-      <Button variant="ghost" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Button variant="ghost" aria-describedby="coach-prepare-hint" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>
+        <p id="coach-prepare-hint" className="text-xs text-text-muted">Relit ta récupération et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
+      </div>
     </div>
   </Panel>;
 }

@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
@@ -40,6 +40,8 @@ from arete.services.settings import athlete_today, today_in
 
 logger = logging.getLogger(__name__)
 TSS_PER_SESSION = 50.0
+#: The regularity window: one missed week lowers it by one, never to zero.
+RECENT_WEEKS = 12
 
 #: garmin_training: the watch's morning Training Readiness; garmin: Arete's
 #: score from Garmin's HRV, sleep and body battery; model: the CTL/ATL model.
@@ -106,6 +108,13 @@ class PlayerStats(BaseModel):
     level: int = Field(description="Consecutive finished weeks at or above the goal")
     weeks_at_goal: int = Field(default=0, description="All-time count of weeks at goal")
     weekly_goal_tss: float = Field(default=0.0, description="Weekly TSS goal in use")
+    recent_weeks_at_goal: int = Field(
+        default=0, description="Weeks at goal among the last `recent_weeks` finished"
+    )
+    recent_weeks: int = Field(
+        default=0,
+        description=f"Finished weeks counted, at most {RECENT_WEEKS} (fewer at first)",
+    )
 
 
 class RecommendationOut(BaseModel):
@@ -134,12 +143,21 @@ def _weekly_goal_tss(settings: dict) -> float:
     return sessions * TSS_PER_SESSION
 
 
+class WeekHistory(NamedTuple):
+    """The finished weeks against the goal, from the same weekly totals."""
+
+    streak: int  # consecutive, most recent first
+    total: int  # all time
+    recent: int  # among the last ``window``
+    window: int  # finished weeks counted, at most RECENT_WEEKS
+
+
 def _week_history(
     goal_tss: float, by_date: dict[date, float], today: date
-) -> tuple[int, int]:
-    """(consecutive finished weeks at goal, all-time count of such weeks)."""
+) -> WeekHistory:
+    """The finished weeks at goal: the streak, all time and over the last 12."""
     if not by_date:
-        return 0, 0
+        return WeekHistory(0, 0, 0, 0)
     weekly: dict[date, float] = {}
     for day, tss in by_date.items():
         monday = day - timedelta(days=day.weekday())
@@ -158,7 +176,8 @@ def _week_history(
         if not ok:
             break
         streak += 1
-    return streak, sum(reached)
+    recent = reached[-RECENT_WEEKS:]
+    return WeekHistory(streak, sum(reached), sum(recent), len(recent))
 
 
 # --------------------------------------------------------------------------- #
@@ -318,7 +337,8 @@ def get_player_stats():
       night is not published yet, model-based only as a last resort
     - MP = form: TSB mapped from -30..+30 onto 0..100
     - XP = this week's TSS against the goal derived from Settings
-    - Level = consecutive finished weeks at or above that goal
+    - Level = consecutive finished weeks at or above that goal (kept for
+      older readers; the dashboard shows the weeks at goal among the last 12)
 
     Four statements: settings, the readiness window, the daily TSS series
     (whole history, ~one row per training day) and the Banister coefficients.
@@ -343,7 +363,7 @@ def player_stats(settings: dict, today: date, form: Form) -> PlayerStats:
         current=mp_current,
         max=100,
         label="Forme",
-        detail=f"TSB {tsb:+.1f}",
+        detail=f"TSB {tsb:+.1f}".replace(".", ","),  # French decimals, as shown
         source="model",
     )
 
@@ -359,14 +379,16 @@ def player_stats(settings: dict, today: date, form: Form) -> PlayerStats:
         source="model",
     )
 
-    streak, total_weeks = _week_history(goal_tss, by_date, today)
+    weeks = _week_history(goal_tss, by_date, today)
     return PlayerStats(
         hp=hp,
         mp=mp,
         xp=xp,
-        level=streak,
-        weeks_at_goal=total_weeks,
+        level=weeks.streak,
+        weeks_at_goal=weeks.total,
         weekly_goal_tss=goal_tss,
+        recent_weeks_at_goal=weeks.recent,
+        recent_weeks=weeks.window,
     )
 
 
