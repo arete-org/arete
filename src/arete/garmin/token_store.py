@@ -66,22 +66,25 @@ def _account(record: dict) -> str | None:
     return name if isinstance(name, str) and name else None
 
 
-def session_status() -> tuple[bool, str | None]:
+def session_status(con=None) -> tuple[bool, str | None]:
     """Whether this athlete holds usable Garmin session tokens, and whose account.
 
     Local state only: no Garmin request, no ``garminconnect`` import, nothing
     restored. Tokens Garmin refused when a sync last tried them (``refused``)
     count as disconnected until the next successful login or restore; tokens
-    Garmin expired since are reported by that next sync.
+    Garmin expired since are reported by that next sync. Remote, the tokens
+    are read on ``con`` when the caller holds one.
     """
     if config.is_remote_db:
-        with db_connection() as con:
-            rows = dict(
-                con.execute(
-                    "SELECT path, content FROM app.visible_files WHERE path IN (?, ?)",
-                    [TOKEN_PATH, ACCOUNT_PATH],
-                ).fetchall()
-            )
+        if con is None:
+            with db_connection() as own:
+                return session_status(own)
+        rows = dict(
+            con.execute(
+                "SELECT path, content FROM app.visible_files WHERE path IN (?, ?)",
+                [TOKEN_PATH, ACCOUNT_PATH],
+            ).fetchall()
+        )
         if TOKEN_PATH not in rows:
             return False, None
         record = _record(bytes(rows[ACCOUNT_PATH]) if ACCOUNT_PATH in rows else None)

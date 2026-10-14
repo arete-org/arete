@@ -946,8 +946,19 @@ def test_remote_session_status_reads_each_athletes_rows(
         token_store.save(source)
         token_store.save_account(source, "first@garmin.test", remote=True)
         assert token_store.session_status() == (True, "first@garmin.test")
+        con = connect()
+        try:
+            # The dashboard's read, on the connection it already holds.
+            assert token_store.session_status(con) == (True, "first@garmin.test")
+        finally:
+            con.close()
     with athlete_scope(second):
         assert token_store.session_status() == (False, None)
+        con = connect()
+        try:
+            assert token_store.session_status(con) == (False, None)
+        finally:
+            con.close()
     with athlete_scope(first):
         token_store.delete()
         assert token_store.session_status() == (False, None)

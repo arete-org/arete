@@ -28,6 +28,7 @@ from arete.strength.models import (
     MuscleGroup,
     SessionExercise,
     StrengthSession,
+    StrengthSessionSummary,
 )
 from arete.strength.repository import StrengthRepository, muscle_activity
 
@@ -423,24 +424,29 @@ def list_sessions(
 ):
     """List strength sessions with their totals, computed in SQL."""
     return [
-        StrengthSessionResponse(
-            id=s.id,
-            date=s.date,
-            name=s.name,
-            program=s.program,
-            duration_min=s.duration_min,
-            exercises_count=s.exercises_count,
-            total_sets=s.total_sets,
-            total_volume=round(s.total_volume, 1),
-            overall_rpe=s.overall_rpe,
-            muscles_worked=s.muscles_worked,
-            exercise_names=s.exercise_names,
-            garmin_activity_id=s.actual_session_id,
-        )
+        summary_to_response(s)
         for s in _repo.list_session_summaries(
             start_date=start_date, end_date=end_date, program=program, limit=limit
         )
     ]
+
+
+def summary_to_response(s: StrengthSessionSummary) -> StrengthSessionResponse:
+    """A list row of ``/strength/sessions`` (the dashboard shows the same rows)."""
+    return StrengthSessionResponse(
+        id=s.id,
+        date=s.date,
+        name=s.name,
+        program=s.program,
+        duration_min=s.duration_min,
+        exercises_count=s.exercises_count,
+        total_sets=s.total_sets,
+        total_volume=round(s.total_volume, 1),
+        overall_rpe=s.overall_rpe,
+        muscles_worked=s.muscles_worked,
+        exercise_names=s.exercise_names,
+        garmin_activity_id=s.actual_session_id,
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=StrengthSessionDetailResponse)

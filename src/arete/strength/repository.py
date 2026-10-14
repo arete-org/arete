@@ -506,6 +506,7 @@ class StrengthRepository:
         end_date: date | None = None,
         program: str | None = None,
         limit: int = 50,
+        connection: duckdb.DuckDBPyConnection | None = None,
     ) -> list[StrengthSessionSummary]:
         """The sessions' list rows and totals in one statement, no set loaded."""
         filters = ""
@@ -519,7 +520,7 @@ class StrengthRepository:
         if program:
             filters += " AND LOWER(program) = LOWER(?)"
             params.append(program)
-        conn = self._get_connection()
+        conn = connection or self._get_connection()
         try:
             rows = conn.execute(
                 f"""
@@ -561,7 +562,8 @@ class StrengthRepository:
                 [*params, limit],
             ).fetchall()
         finally:
-            conn.close()
+            if connection is None:
+                conn.close()
         return [
             StrengthSessionSummary(
                 id=row[0],
