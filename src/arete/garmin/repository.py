@@ -157,6 +157,21 @@ class GarminRepository:
 
         return _planned_from_row(result)
 
+    def get_planned_sessions(
+        self, session_ids: list[int], connection: duckdb.DuckDBPyConnection
+    ) -> dict[int, PlannedSession]:
+        """The visible planned sessions among ``session_ids``, in one statement."""
+        if not session_ids:
+            return {}
+        rows = connection.execute(
+            f"""
+            SELECT {PLANNED_COLUMNS}
+            FROM app.visible_planned_sessions WHERE id IN ({", ".join("?" * len(session_ids))})
+            """,
+            list(session_ids),
+        ).fetchall()
+        return {row[0]: _planned_from_row(row) for row in rows}
+
     def list_planned_sessions(
         self,
         start_date: date | None = None,
@@ -164,17 +179,18 @@ class GarminRepository:
         status: SessionStatus | None = None,
         limit: int = 50,
         ascending: bool = False,
+        connection: duckdb.DuckDBPyConnection | None = None,
     ) -> list[PlannedSession]:
         """List planned sessions with optional date filter.
 
         Newest first by default (the HTTP list); ``ascending`` returns the
         earliest first, so a limit keeps the sessions closest to the start.
         """
-        conn = self._get_connection()
+        conn = connection or self._get_connection()
 
         query = f"""
             SELECT {PLANNED_COLUMNS}
-            FROM visible_planned_sessions WHERE 1=1
+            FROM app.visible_planned_sessions WHERE 1=1
         """
         params: list = []
 
@@ -193,7 +209,8 @@ class GarminRepository:
         params.append(limit)
 
         results = conn.execute(query, params).fetchall()
-        conn.close()
+        if connection is None:
+            conn.close()
 
         return [_planned_from_row(row) for row in results]
 
@@ -528,6 +545,7 @@ class GarminRepository:
         unmatched_only: bool = False,
         limit: int = 50,
         include_blobs: bool = True,
+        connection: duckdb.DuckDBPyConnection | None = None,
     ) -> list[ActualSession]:
         """List actual sessions with optional filters.
 
@@ -535,7 +553,7 @@ class GarminRepository:
         as None: lists shown to the athlete never read them, and they are
         most of a row's bytes.
         """
-        conn = self._get_connection()
+        conn = connection or self._get_connection()
 
         blobs = (
             "laps_json, splits_json, best_efforts_json"
@@ -554,7 +572,7 @@ class GarminRepository:
                    name, notes, rpe, workout_type, moving_time_sec,
                    suffer_score, {blobs},
                    avg_watts, weighted_avg_watts, device_name, strava_activity_id
-            FROM visible_actual_sessions WHERE 1=1
+            FROM app.visible_actual_sessions WHERE 1=1
         """
         params: list = []
 
@@ -567,11 +585,12 @@ class GarminRepository:
         if unmatched_only:
             query += " AND planned_session_id IS NULL"
 
-        query += " ORDER BY date DESC LIMIT ?"
+        query += " ORDER BY date DESC, id DESC LIMIT ?"
         params.append(limit)
 
         results = conn.execute(query, params).fetchall()
-        conn.close()
+        if connection is None:
+            conn.close()
 
         return [self._row_to_actual_session(row) for row in results]
 

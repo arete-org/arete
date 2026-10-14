@@ -51,6 +51,7 @@ it.each(['complete', 'partial', 'cooldown', 'failed'])('refreshes data for %s wi
   invalidateAfterGarminRefresh(client, state);
   expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.health });
   expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.actual() });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.dashboard() });
   expect(syncGame).not.toHaveBeenCalled();
 });
 

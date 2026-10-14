@@ -1,11 +1,13 @@
 """Read projection shared by the home card and chat; writes are explicit."""
 
+from datetime import date
 from typing import Any
 
+from arete.dataio.db import db_connection
 from arete.services import coach_followup
-from arete.services.coaching_repository import BriefingRepository
+from arete.services.coaching_repository import Briefing, BriefingRepository
 from arete.services.plan_adaptation import adapt_today
-from arete.services.plan_repository import PlanDecisionRepository
+from arete.services.plan_repository import PlanDecision, PlanDecisionRepository
 from arete.services.settings import athlete_today
 
 MAX_VISIBLE_ITEMS = 3
@@ -18,12 +20,21 @@ def prepare() -> None:
 
 def today() -> dict[str, Any]:
     day = athlete_today()
+    with db_connection() as con:
+        return card(
+            con,
+            day,
+            PlanDecisionRepository().list_for_day(day, con=con),
+            BriefingRepository().get_for_day(day, con=con),
+        )
+
+
+def card(
+    con, day: date, decisions: list[PlanDecision], briefing: Briefing | None
+) -> dict[str, Any]:
+    """The day's card from its decisions and briefing, already read on ``con``."""
     # The day's open proposals are answered together, so they form one card.
-    group = [
-        d
-        for d in PlanDecisionRepository().list_for_day(day)
-        if d.state in {"pending", "discussion"}
-    ]
+    group = [d for d in decisions if d.state in {"pending", "discussion"}]
     # A response snoozes the whole group. Legacy rows snoozed one by one hide
     # only themselves, but ``members`` still names them for the response.
     members = [{"id": d.id, "revision": d.revision} for d in group]
@@ -32,16 +43,18 @@ def today() -> dict[str, Any]:
     proposals = [d.to_dict() for d in sorted(shown, key=lambda d: d.decision == "rest")]
     from arete.garmin.repository import GarminRepository
 
-    repo = GarminRepository()
+    sessions = GarminRepository().get_planned_sessions(
+        [p["planned_session_id"] for p in proposals], connection=con
+    )
     for proposal in proposals:
-        session = repo.get_planned_session(proposal["planned_session_id"])
+        session = sessions.get(proposal["planned_session_id"])
         if (
             session is None
             or session.revision != proposal["session_revision"]
             or session.status.value not in {"pending", "modified"}
         ):
             proposal["state"] = "stale"
-    followups = coach_followup.pending(day)
+    followups = coach_followup.pending(day, con)
     items: list[dict[str, Any]] = (
         [
             {
@@ -55,7 +68,6 @@ def today() -> dict[str, Any]:
         else []
     )
     items += [{"kind": "followup", "record": f} for f in followups]
-    briefing = BriefingRepository().get_for_day(day)
     return {
         "date": day.isoformat(),
         "items": items[:MAX_VISIBLE_ITEMS],

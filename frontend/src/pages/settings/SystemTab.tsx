@@ -9,6 +9,7 @@ import { SyncOptionsForm } from './SyncOptionsForm';
 import { useGarminSync } from './useGarminSync';
 import { GarminSyncProgress } from './GarminSyncProgress';
 import { toLocalISODate } from '@/lib/dates';
+import { invalidateWithDashboard } from '@/lib/queryKeys';
 
 type Alert = { type: 'success' | 'error' | 'info'; message: string };
 
@@ -39,7 +40,7 @@ export function SystemTab() {
     mutationFn: garminApi.logout,
     onSuccess: () => {
       setAlert({ type: 'success', message: 'DÉCONNECTÉ DE GARMIN' });
-      queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+      invalidateWithDashboard(queryClient, ['syncStatus']);
     },
   });
 
@@ -58,7 +59,7 @@ export function SystemTab() {
     },
     onError: (error) => {
       // Garmin may have refused the session: the status then asks to reconnect.
-      queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+      invalidateWithDashboard(queryClient, ['syncStatus']);
       setAlert({ type: 'error', message: `LECTURE DU SEUIL IMPOSSIBLE : ${error}` });
     },
   });
@@ -92,11 +93,10 @@ export function SystemTab() {
         type: result.days_failed ? 'error' : 'success',
         message: `SANTÉ : ${result.days_synced} JOURS SYNCHRONISÉS${result.days_failed ? `, ${result.days_failed} EN ÉCHEC` : ''}`,
       });
-      queryClient.invalidateQueries({ queryKey: ['garminHealthStatus'] });
-      queryClient.invalidateQueries({ queryKey: ['garmin-health'] });
+      invalidateWithDashboard(queryClient, ['garminHealthStatus'], ['garmin-health']);
     },
     onError: (error) => {
-      queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+      invalidateWithDashboard(queryClient, ['syncStatus']);
       setAlert({ type: 'error', message: `SYNCHRO SANTÉ IMPOSSIBLE : ${error}` });
     },
   });
@@ -243,7 +243,7 @@ export function SystemTab() {
         onSuccess={() => {
           setShowLoginModal(false);
           setAlert({ type: 'success', message: 'GARMIN CONNECT AUTHENTIFIÉ' });
-          queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+          invalidateWithDashboard(queryClient, ['syncStatus']);
         }}
       />
     </div>

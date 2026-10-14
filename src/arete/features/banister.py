@@ -131,13 +131,14 @@ def fit_coefficients(sessions: list[dict]) -> dict | None:
     }
 
 
-def load_coefficients(user_id: int | None = None) -> dict | None:
-    """Load personalized Banister coefficients from DB.
+def load_coefficients(user_id: int | None = None, con=None) -> dict | None:
+    """Load personalized Banister coefficients from DB (on ``con`` if given).
 
     Returns None if coefficients are not available or R² is too low.
     """
     user_id = resolve_athlete_id(user_id)
-    con = connect()
+    own = con is None
+    con = con or connect()
     try:
         row = con.execute(
             "SELECT k1, k2, baseline, r2 FROM app.visible_banister_coefficients WHERE user_id = ?",
@@ -152,7 +153,8 @@ def load_coefficients(user_id: int | None = None) -> dict | None:
             }
         return None
     finally:
-        con.close()
+        if own:
+            con.close()
 
 
 def store_coefficients(coeffs: dict, user_id: int | None = None) -> None:

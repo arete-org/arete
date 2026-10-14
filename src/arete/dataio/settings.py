@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+import duckdb
+
 from arete.dataio.db import connect
 from arete.features.hr_zones import ZoneModel
 from arete.services.athlete_scope import resolve_athlete_id
@@ -60,10 +62,13 @@ def _json_or_none(raw: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def get_user_settings(user_id: int | None = None) -> dict[str, Any] | None:
-    """Get user settings by user_id."""
+def get_user_settings(
+    user_id: int | None = None, con: duckdb.DuckDBPyConnection | None = None
+) -> dict[str, Any] | None:
+    """Get user settings by user_id, on ``con`` when the caller holds one."""
     user_id = resolve_athlete_id(user_id)
-    con = connect()
+    own = con is None
+    con = con or connect()
     try:
         row = con.execute(
             """
@@ -81,7 +86,8 @@ def get_user_settings(user_id: int | None = None) -> dict[str, Any] | None:
         ).fetchone()
         return _settings_from_row(row) if row else None
     finally:
-        con.close()
+        if own:
+            con.close()
 
 
 def upsert_user_settings(

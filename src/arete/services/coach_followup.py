@@ -75,13 +75,15 @@ def get(followup_id: int) -> dict[str, Any] | None:
     return _record(row) if row else None
 
 
-def pending(today: date | None = None) -> list[dict[str, Any]]:
+def pending(today: date | None = None, con=None) -> list[dict[str, Any]]:
     today = today or athlete_today()
-    with db_connection() as con:
-        rows = con.execute(
-            f"SELECT {_COLUMNS} FROM app.visible_coach_followups WHERE state='pending' AND expires_at>? AND (snoozed_until IS NULL OR snoozed_until<=?) ORDER BY requested_on,id LIMIT 2",
-            [datetime.combine(today, datetime.now().time()), today],
-        ).fetchall()
+    if con is None:
+        with db_connection() as own:
+            return pending(today, own)
+    rows = con.execute(
+        f"SELECT {_COLUMNS} FROM app.visible_coach_followups WHERE state='pending' AND expires_at>? AND (snoozed_until IS NULL OR snoozed_until<=?) ORDER BY requested_on,id LIMIT 2",
+        [datetime.combine(today, datetime.now().time()), today],
+    ).fetchall()
     return [_record(row) for row in rows]
 
 

@@ -3,13 +3,14 @@ import { AretePresence } from '@/components/AreteBrand';
 import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { Button, Panel, Skeleton } from '@/components/ui';
-import { garminApi, garminHealthApi, goalsApi, metricsApi, planApi, settingsApi } from '@/lib/api';
+import { planApi, settingsApi } from '@/lib/api';
+import { fetchDashboard, type DashboardData } from '@/lib/dashboard';
 import { exportApi } from '@/lib/documents';
 import { readWorkouts, watchLine, workoutsKey, type WorkoutView } from '@/lib/workouts';
 import { useDailyTip } from '@/lib/dailyTip';
@@ -17,7 +18,7 @@ import { formatHoursMinutes } from '@/lib/fr';
 import { goalCountdown } from '@/lib/race';
 import { cn } from '@/lib/utils';
 import { toLocalISODate } from '@/lib/dates';
-import { invalidateAfterSession, qk, strengthSessionsQuery } from '@/lib/queryKeys';
+import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { linkDay, type DayLink } from '@/lib/sessionMatch';
 import type { PlanDecision } from '@/types';
 
@@ -43,6 +44,32 @@ function UpdatedAgo({ at }: { at: number }) {
   return (
     <p className="text-[11px] font-sans text-text-muted mt-0.5">
       Mis à jour {age < 3_600_000 ? ago.format(-Math.round(age / 60_000), 'minute') : ago.format(-Math.round(age / 3_600_000), 'hour')}
+    </p>
+  );
+}
+
+/**
+ * The page's one request (`GET /dashboard`); each panel reads its slice. The
+ * previous day's answer stays on screen while a new day's loads.
+ */
+function useDashboard<T>(select: (board: DashboardData) => T) {
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: qk.dashboard(toLocalISODate()),
+    queryFn: ({ signal }) => fetchDashboard(client, signal),
+    select,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** A panel whose slice the dashboard could not read. */
+function Unavailable({ what, retry }: { what: string; retry: () => void }) {
+  return (
+    <p className="text-xs font-sans text-danger-red">
+      {what} indisponible.{' '}
+      <button type="button" onClick={retry} className="text-neon-cyan hover:underline">
+        Réessayer
+      </button>
     </p>
   );
 }
@@ -116,28 +143,31 @@ function TodaySession({
 
 export function DashboardPage() {
   const game = useGamePreference();
-  const today = toLocalISODate();
 
+  // The app shell already reads the settings: the same key, no second request.
   const { data: userSettings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
-  const { data: nextGoal } = useQuery({ queryKey: qk.nextGoal, queryFn: goalsApi.next });
+  const { data: nextGoal } = useDashboard((d) => d.next_goal);
   const fatigueThreshold = userSettings?.fatigue_threshold ?? 85;
 
-  const { data: allPlanned, isPending: plannedPending, dataUpdatedAt: plannedAt } = useQuery({
-    queryKey: qk.planned(today, today),
-    queryFn: () => garminApi.getPlanned(today, today),
-  });
-  const { data: todayActual } = useQuery({
-    queryKey: qk.actual(today, today),
-    queryFn: () => garminApi.getActual(today, today),
-  });
-  const { data: todayStrength } = useQuery({
-    ...strengthSessionsQuery,
-    select: (data) => data.filter((s) => s.date === today),
-  });
-  const todayLink = linkDay(today, allPlanned ?? [], withStrengthLogs(todayActual ?? [], todayStrength ?? []), today);
+  // The server's day: today's rows are the ones it read for that date.
+  const {
+    data: dayLink,
+    isPending: plannedPending,
+    isFetching: boardFetching,
+    error: boardError,
+    refetch: retryBoard,
+    dataUpdatedAt: plannedAt,
+  } = useDashboard((d) => linkDay(d.date, d.planned, withStrengthLogs(d.actual, d.strength), d.date));
+  const todayLink: DayLink = dayLink ?? { planned: [], offPlan: [] };
+  // No answer at all: the panels say so instead of an empty day.
+  const boardFailed = !!boardError && dayLink === undefined;
+  // The coach card and the briefing read their own keys, which the dashboard
+  // seeds: they ask the server themselves only once it has answered or failed.
+  const boardSettled = !plannedPending && !boardFetching;
+  const { data: boardDay } = useDashboard((d) => d.date);
 
-  const { data: syncStatus } = useQuery({ queryKey: qk.syncStatus, queryFn: garminApi.getSyncStatus });
-  const garminConnected = syncStatus?.garmin_authenticated ?? false;
+  // Unknown until the dashboard answers: no Garmin call to action meanwhile.
+  const { data: garminConnected } = useDashboard((d) => d.garmin_connected);
   // One batched export view for the day's sessions still to do or skipped
   // (a skipped copy still on Garmin can be withdrawn), as Planning's cards.
   const queryClient = useQueryClient();
@@ -154,7 +184,7 @@ export function DashboardPage() {
   });
   const viewFor = (sessionId: number) => workouts?.workouts.find((w) => w.session.id === sessionId);
 
-  const { data: planToday } = useQuery({ queryKey: qk.planToday, queryFn: planApi.getToday });
+  const { data: planToday } = useDashboard((d) => d.plan_today);
   const decisionFor = (sessionId: number) =>
     planToday?.decisions.find((d) => d.planned_session_id === sessionId && d.applied_at) ?? null;
 
@@ -164,25 +194,18 @@ export function DashboardPage() {
     isPending: statsPending,
     error: statsError,
     refetch: refetchStats,
-  } = useQuery({
-    queryKey: qk.playerStats,
-    queryFn: metricsApi.getPlayerStats,
+  } = useDashboard((d) => d.player_stats);
+
+  const { data: fitness } = useDashboard((d) => d.fitness);
+
+  const { data: workload } = useDashboard((d) => d.workload);
+
+  const { data: healthData, isPending: healthPending } = useDashboard((d) => d.health);
+
+  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
+    enabled: boardSettled,
+    day: boardDay,
   });
-
-  const { data: fitness } = useQuery({
-    queryKey: qk.fitness,
-    queryFn: metricsApi.getFitness,
-  });
-
-  const { data: workload } = useQuery({ queryKey: qk.workload, queryFn: metricsApi.getWorkload });
-
-  const { data: healthData, isPending: healthPending } = useQuery({
-    queryKey: qk.healthDaily(today),
-    queryFn: () => garminHealthApi.getDaily(today),
-    retry: false,
-  });
-
-  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip();
 
   return (
     <div className="page-shell bg-void">
@@ -230,6 +253,8 @@ export function DashboardPage() {
               <SectionHeader icon={<Calendar className="w-4 h-4 text-neon-purple" />} title="SÉANCE DU JOUR" />
               {plannedPending ? (
                 <Skeleton label="Chargement de la séance du jour" />
+              ) : boardFailed ? (
+                <Unavailable what="Séance du jour" retry={() => void retryBoard()} />
               ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 ? (
                 <div className="space-y-2">
                   {todayLink.planned.map((row) => (
@@ -275,6 +300,8 @@ export function DashboardPage() {
               </p>
             )}
             <CoachTodayPanel
+              enabled={boardSettled}
+              refetchOnFocus={false}
               briefing={tip?.tip ?? undefined}
               briefingNote={tip?.updated_after_sync ? 'Mis à jour après la synchro' : undefined}
             />
@@ -369,6 +396,8 @@ export function DashboardPage() {
 
               {healthPending ? (
                 <Skeleton label="Chargement de la récupération" />
+              ) : boardFailed ? (
+                <Unavailable what="Récupération" retry={() => void retryBoard()} />
               ) : healthData && healthData.readiness_score != null ? (
                 <div className="flex items-center gap-6">
                   <div
@@ -436,12 +465,14 @@ export function DashboardPage() {
               ) : (
                 <p className="text-sm font-sans text-text-muted">
                   Pas de données santé aujourd&apos;hui.{' '}
-                  <Link
-                    to={garminConnected ? '/settings?tab=system' : '/settings?tab=connections'}
-                    className="text-neon-cyan hover:underline"
-                  >
-                    {garminConnected ? 'Synchroniser' : 'Connecter Garmin'}
-                  </Link>
+                  {garminConnected !== undefined && (
+                    <Link
+                      to={garminConnected ? '/settings?tab=system' : '/settings?tab=connections'}
+                      className="text-neon-cyan hover:underline"
+                    >
+                      {garminConnected ? 'Synchroniser' : 'Connecter Garmin'}
+                    </Link>
+                  )}
                 </p>
               )}
             </Panel>

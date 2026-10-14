@@ -5,7 +5,7 @@ import { Check, LogOut, Target, Watch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { garminApi, stravaApi } from '@/lib/api';
 import { Button } from '@/components/ui';
-import { invalidateAfterSession } from '@/lib/queryKeys';
+import { invalidateAfterSession, invalidateWithDashboard } from '@/lib/queryKeys';
 import { GoogleCalendarConnection } from './GoogleCalendarConnection';
 import { SlackConnection } from './SlackConnection';
 import { useGarminSync } from './useGarminSync';
@@ -31,7 +31,7 @@ export function ConnectionsTab() {
     onSuccess: () => {
       setGarminResult('Garmin déconnecté. Tes séances importées sont conservées.');
       garminSync.reset();
-      queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+      invalidateWithDashboard(queryClient, ['syncStatus']);
     },
     onError: (error: Error) => setGarminResult(error.message),
   });
