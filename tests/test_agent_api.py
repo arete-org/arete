@@ -175,6 +175,10 @@ def test_page_reads_show_what_the_athlete_sees():
         dashboard
     )
     assert "briefing_today" in dashboard
+    # The streak is not called a level: with the RPG on, the only level is the RPG's.
+    stats = dashboard["player_stats"]
+    assert "level" not in stats
+    assert {"weeks_at_goal_streak", "recent_weeks_at_goal", "recent_weeks"} <= set(stats)
     assert "recent_strength_sessions" in get_page_data("log")
 
 
