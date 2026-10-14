@@ -232,6 +232,18 @@ it('shows this morning when it is in, even without Arete’s own score (HRV miss
   expect(screen.getByText('64')).toBeTruthy();
 });
 
+it('still says not synced when an early sync wrote the day’s row empty', async () => {
+  // A sync before the watch uploads the night writes the date and nothing else.
+  board.fitness = { ...board.fitness, readiness_source: 'garmin', readiness_measured_on: '2026-10-13' };
+  board.health = {
+    date: '2026-10-14', readiness_score: null, training_readiness_score: null, hrv_last_night: null, hrv_status: null,
+    sleep_score: null, sleep_duration_sec: null, stress_avg: null, steps: 0,
+  } as unknown as DashboardData['health'];
+  await mount(false);
+  expect(screen.getByText(/Pas encore synchronisé ce matin/)).toBeTruthy();
+  expect(screen.queryByText('—')).toBeNull();
+});
+
 it('draws the curve after months off, when rounded fitness reads zero', async () => {
   board.fitness = { ...fitness, ctl: 0, atl: 0, tsb: 0, days_analyzed: 0 };
   await mount(false);

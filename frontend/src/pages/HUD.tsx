@@ -265,6 +265,13 @@ export function DashboardPage() {
   // No row for the board's day yet, while yesterday's Garmin night drives the recovery.
   const fromGarmin = fitness != null && fitness.readiness_source !== 'model';
   const morningScore = healthData?.readiness_score ?? healthData?.training_readiness_score ?? null;
+  // A sync before the watch uploads the night still writes the day's row, empty.
+  const morningIn =
+    healthData != null &&
+    (morningScore != null ||
+      healthData.hrv_last_night != null ||
+      healthData.sleep_score != null ||
+      healthData.stress_avg != null);
   const { data: hasLoad } = useDashboard((d) => d.has_load);
 
   const { tip, day: tipDay, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
@@ -439,7 +446,7 @@ export function DashboardPage() {
                 <Skeleton label="Chargement de la récupération" />
               ) : boardFailed ? (
                 <Unavailable what="Récupération" retry={() => void retryBoard()} />
-              ) : healthData ? (
+              ) : healthData && morningIn ? (
                 // This morning's row is in: its numbers show even when Arete's own
                 // score is missing (an HRV fetch that failed leaves only Garmin's).
                 <div className="flex items-center gap-6">
