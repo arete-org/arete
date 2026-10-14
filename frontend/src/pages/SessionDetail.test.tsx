@@ -3,11 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { ActivityDetail } from '@/types';
-import { analyticsApi } from '@/lib/api';
+import type { ActivityDetail, Exercise, ExerciseSet, StrengthSession } from '@/types';
+import { analyticsApi, strengthApi } from '@/lib/api';
 import { SessionDetailPage } from './SessionDetail';
 
-vi.mock('@/lib/api', () => ({ analyticsApi: { getSessionDetail: vi.fn(), updateSession: vi.fn() } }));
+vi.mock('@/lib/api', () => ({
+  analyticsApi: { getSessionDetail: vi.fn(), updateSession: vi.fn() },
+  strengthApi: { getSessions: vi.fn(), getSession: vi.fn() },
+}));
 
 afterEach(() => {
   cleanup();
@@ -170,4 +173,39 @@ it('keeps the RPE picker away once rated or dismissed', async () => {
   renderAt('/log/sessions/12');
   await screen.findByText('Fractionné 5×1000');
   expect(screen.queryByRole('region', { name: 'Effort ressenti' })).toBeNull();
+});
+
+it('shows the exercises of the Muscu log linked to a strength activity', async () => {
+  const strength = { ...detail, session: { ...session, id: 301, sport: 'strength', name: 'Strength' } };
+  const log: StrengthSession = {
+    id: 4, date: '2026-10-08', name: null, program: null, duration_min: 30, overall_rpe: null,
+    fatigue_level: null, sleep_quality: null, notes: null, total_volume: 0, total_sets: 2,
+    garmin_activity_id: 301,
+  };
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue(strength);
+  vi.mocked(strengthApi.getSessions).mockResolvedValue([{ ...log, id: 3, garmin_activity_id: null }, log]);
+  vi.mocked(strengthApi.getSession).mockResolvedValue({
+    ...log,
+    exercises: [{
+      id: 1, order: 1, exercise: { id: 9, name: 'Squat' } as Exercise,
+      target_sets: null, target_reps: null, target_rpe: null, total_volume: 0, working_sets_count: 1, avg_rpe: null, notes: null,
+      sets: [{ set_number: 1, reps: 5, weight_kg: 100, is_warmup: false } as ExerciseSet],
+    }],
+  });
+  renderAt('/log/sessions/301');
+  expect(await screen.findByText('Squat')).toBeTruthy();
+  expect(screen.getByText('100kg × 5')).toBeTruthy();
+  expect(strengthApi.getSession).toHaveBeenCalledWith(4);
+  expect(screen.getByRole('link', { name: 'Ouvrir le log Muscu' }).getAttribute('href')).toBe('/log?session=4');
+});
+
+it('shows no exercises for a strength activity without a linked log', async () => {
+  vi.mocked(strengthApi.getSession).mockClear();
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({ ...detail, session: { ...session, id: 302, sport: 'strength', name: 'Strength' } });
+  vi.mocked(strengthApi.getSessions).mockResolvedValue([]);
+  renderAt('/log/sessions/302');
+  await screen.findAllByText('Strength');
+  await waitFor(() => expect(strengthApi.getSessions).toHaveBeenCalled());
+  expect(screen.queryByText('EXERCICES')).toBeNull();
+  expect(strengthApi.getSession).not.toHaveBeenCalled();
 });
