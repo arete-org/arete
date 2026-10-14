@@ -53,7 +53,7 @@ test('the briefing leads, takes a reaction, lists the previous days and opens th
 
   await page.getByRole('button', { name: 'Utile', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Utile', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByLabel(/Un mot pour le coach/).fill('Parfait avant le travail.');
+  await page.getByLabel(/Un mot sur ce briefing/).fill('Parfait avant le travail.');
   await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
   await expect(page.getByText('Ton mot : Parfait avant le travail.')).toBeVisible();
   expect(writes).toEqual([{ reaction: 'up', comment: null }, { reaction: 'up', comment: 'Parfait avant le travail.' }]);

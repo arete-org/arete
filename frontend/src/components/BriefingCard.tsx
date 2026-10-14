@@ -80,6 +80,12 @@ function BriefingReactions({ tip, id, day }: { tip: DailyTip; id: number; day: s
         </p>
       )}
       {current && tip.reaction_comment && <p className="text-xs text-text-muted">Ton mot : {tip.reaction_comment}</p>}
+      {/* A word can come later: opening the box keeps the reaction. */}
+      {current && !tip.reaction_comment && !commenting && (
+        <button type="button" className="text-xs text-neon-cyan hover:underline" onClick={() => setCommenting(true)}>
+          Ajouter un mot
+        </button>
+      )}
       {current && commenting && (
         <form
           className="flex flex-wrap items-end gap-2"
@@ -89,7 +95,7 @@ function BriefingReactions({ tip, id, day }: { tip: DailyTip; id: number; day: s
           }}
         >
           <label className="min-w-0 flex-1 text-xs text-text-muted">
-            Un mot pour le coach ? <span className="text-text-muted/80">Facultatif</span>
+            Un mot sur ce briefing ? <span className="text-text-muted/80">Facultatif</span>
             <input
               value={comment}
               maxLength={MAX_COMMENT_CHARS}

@@ -38,7 +38,7 @@ it('stores a reaction on the briefing, then an optional word with it', async () 
   await waitFor(() => expect(screen.getByRole('button', { name: 'Utile' }).getAttribute('aria-pressed')).toBe('true'));
   expect(react).toHaveBeenLastCalledWith(41, 'up', undefined);
 
-  fireEvent.change(screen.getByLabelText(/Un mot pour le coach/), { target: { value: ' Trop court ' } });
+  fireEvent.change(screen.getByLabelText(/Un mot sur ce briefing/), { target: { value: ' Trop court ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
   await screen.findByText('Ton mot : Trop court');
   expect(react).toHaveBeenLastCalledWith(41, 'up', 'Trop court');
@@ -89,4 +89,20 @@ it('asks the coach about this briefing without sending anything', async () => {
   expect(asked).toHaveBeenCalledTimes(1);
   expect((asked.mock.calls[0][0] as CustomEvent).detail).toEqual({ kind: 'briefing', id: 41 });
   expect(react).not.toHaveBeenCalled();
+});
+
+it('lets a word come later without withdrawing the reaction', async () => {
+  const react = vi.spyOn(tipsApi, 'react').mockImplementation(async (id, reaction, comment) => ({ id, reaction, reaction_comment: comment ?? null }));
+  client.setQueryData([...qk.tipDaily, DAY], { ...tip, reaction: 'up' });
+  mount();
+  expect(screen.queryByLabelText(/Un mot sur ce briefing/)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Ajouter un mot' }));
+  expect(react).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Utile' }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.change(screen.getByLabelText(/Un mot sur ce briefing/), { target: { value: 'Plus tard.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+  await screen.findByText('Ton mot : Plus tard.');
+  expect(react).toHaveBeenCalledTimes(1);
+  expect(react).toHaveBeenLastCalledWith(41, 'up', 'Plus tard.');
+  expect(screen.queryByRole('button', { name: 'Ajouter un mot' })).toBeNull();
 });
