@@ -49,7 +49,7 @@ it('leads with the race: countdown, a form band on race day and the key session'
   // A band, not false precision, wider 40 days out (±5) than in race week.
   expect(await screen.findByText('entre +3 et +13')).toBeTruthy();
   const key = screen.getByRole('link', { name: /Séance clé : .* · Fractionné · 60 min/ });
-  expect(key.getAttribute('href')).toBe('/planning?date=2026-10-16&session=9');
+  expect(key.getAttribute('href')).toBe('/planning?date=2026-10-16');
   expect(read).toHaveBeenCalledTimes(1);
 });
 

@@ -262,7 +262,10 @@ export function DashboardPage() {
   const { data: workload } = useDashboard((d) => d.workload);
 
   const { data: healthData, isPending: healthPending } = useDashboard((d) => d.health);
+  // No row for the board's day yet, while yesterday's Garmin night drives the recovery.
   const fromGarmin = fitness != null && fitness.readiness_source !== 'model';
+  const morningScore = healthData?.readiness_score ?? healthData?.training_readiness_score ?? null;
+  const { data: hasLoad } = useDashboard((d) => d.has_load);
 
   const { tip, day: tipDay, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
@@ -411,11 +414,17 @@ export function DashboardPage() {
             {/* One curve for forme de fond, fatigue and forme: its own lazy request. */}
             <Panel className="p-4">
               <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="COURBE DE FORME" />
-              <Suspense fallback={<Skeleton label="Chargement de la courbe de forme" lines={2} />}>
+              <Suspense
+                fallback={
+                  <div className="min-h-[19rem]">
+                    <Skeleton label="Chargement de la courbe de forme" lines={6} />
+                  </div>
+                }
+              >
                 <FormCurvePanel
                   day={boardDay}
                   ready={boardSettled}
-                  hasLoad={fitness ? fitness.ctl > 0 || fitness.atl > 0 : undefined}
+                  hasLoad={hasLoad}
                   failed={boardFailed}
                   retry={() => void retryBoard()}
                 />
@@ -430,15 +439,17 @@ export function DashboardPage() {
                 <Skeleton label="Chargement de la récupération" />
               ) : boardFailed ? (
                 <Unavailable what="Récupération" retry={() => void retryBoard()} />
-              ) : healthData && healthData.readiness_score != null ? (
+              ) : healthData ? (
+                // This morning's row is in: its numbers show even when Arete's own
+                // score is missing (an HRV fetch that failed leaves only Garmin's).
                 <div className="flex items-center gap-6">
                   <div
                     className={cn(
                       'flex-shrink-0 w-20 h-20 rounded-full bg-abyss border-2 flex items-center justify-center',
-                      readinessTone(healthData.readiness_score, fatigueThreshold)
+                      morningScore != null ? readinessTone(morningScore, fatigueThreshold) : 'text-text-muted border-text-muted/40'
                     )}
                   >
-                    <span className="text-2xl font-sans font-bold">{healthData.readiness_score}</span>
+                    <span className="text-2xl font-sans font-bold">{morningScore ?? '—'}</span>
                   </div>
 
                   <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">

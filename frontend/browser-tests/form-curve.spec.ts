@@ -38,7 +38,7 @@ async function fixture(page: Page, withGoal: boolean, requests: string[]) {
     requests.push(path);
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
-    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer({ next_goal: withGoal ? goal : null, fitness }) });
+    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer({ next_goal: withGoal ? goal : null, fitness, has_load: true }) });
     if (path === '/api/dashboard/form-curve') return route.fulfill({ json: curve(withGoal) });
     return route.fulfill({ json: [] });
   });
@@ -52,7 +52,7 @@ test('with a race, the goal card leads and the curve projects to race day in pla
   await expect(card.getByText('Semi de Lyon')).toBeVisible();
   await expect(card.getByText('J-40')).toBeVisible();
   await expect(card.getByText('entre +3 et +13')).toBeVisible();
-  await expect(card.getByRole('link', { name: /Séance clé : .* Fractionné · 60 min/ })).toHaveAttribute('href', `/planning?date=${localDay(2)}&session=9`);
+  await expect(card.getByRole('link', { name: /Séance clé : .* Fractionné · 60 min/ })).toHaveAttribute('href', `/planning?date=${localDay(2)}`);
   // On a phone: the greeting, then the race, then the briefing.
   const greeting = (await page.getByRole('heading', { name: 'Bonjour, HUNTER' }).boundingBox())!;
   const race = (await card.boundingBox())!;

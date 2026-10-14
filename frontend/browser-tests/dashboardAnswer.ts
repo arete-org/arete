@@ -34,6 +34,7 @@ export function dashboardAnswer(fields: Record<string, unknown> = {}) {
     },
     health: null,
     garmin_connected: false,
+    has_load: false,
     briefing: { status: 'ready', tip: 'Prépare tes prochaines séances.', priority: 'info', source: 'rules', generated_at: `${date}T07:00:00`, updated_after_sync: false, id: 1, first_written_at: null, reaction: null, reaction_comment: null },
     coach: { date, items: [], remaining: 0, briefing: null },
     ...fields,

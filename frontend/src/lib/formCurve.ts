@@ -75,8 +75,8 @@ export function useFormCurve(day: string | undefined, enabled: boolean) {
 }
 
 /**
- * Half the width of the race-day band: ±3 within a week of the race, one
- * more per two weeks out, at most ±8. The projection is a model over a plan
+ * Half the width of the race-day band: ±3 up to 13 days before the race,
+ * one more per further 14 days (±4 from 14 days, ±5 from 28…), at most ±8. The projection is a model over a plan
  * that may still change: the further the race, the wider it reads.
  */
 export function formBandWidth(daysLeft: number): number {

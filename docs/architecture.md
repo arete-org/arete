@@ -562,8 +562,10 @@ ahead, `plan_builder.project` after it (today's plan, if not done, counts from
 tomorrow), the race-morning form, the last planned day (rest is assumed after
 it, so the card shows its race-day band only when the plan reaches race week)
 and the week's key session, all on one connection. It starts after the
-dashboard answered, once the goal card or the curve is on screen, and is not
-read without any load; the goal card and the curve, with recharts, load in
+dashboard answered, once the goal card or the curve is on screen. The curve
+itself does not read it before any load was ever logged (the aggregate's
+`has_load`; rounded CTL/ATL can read 0 after months off), while the goal card
+still does, for its race. The goal card and the curve, with recharts, load in
 their own chunk.
 
 `services/coach_followup.py` owns one question per day and per session, its

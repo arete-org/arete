@@ -38,6 +38,7 @@ const board: DashboardData = {
   },
   health: null,
   garmin_connected: false,
+  has_load: true,
 };
 
 const player = {
@@ -64,6 +65,8 @@ let client: QueryClient;
 beforeEach(() => {
   board.player_stats = stats;
   board.fitness = fitness;
+  board.health = null;
+  board.has_load = true;
   daily.tip = written;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(settingsApi, 'get').mockResolvedValue({ display_name: 'Arthur' } as Awaited<ReturnType<typeof settingsApi.get>>);
@@ -214,4 +217,24 @@ it('says this morning is not synced yet when the recovery still comes from Garmi
   expect(screen.getByRole('link', { name: 'Reconnecter Garmin' })).toBeTruthy();
   expect(screen.queryByRole('link', { name: 'Connecter Garmin' })).toBeNull();
   expect(screen.queryByText(/Pas de données santé/)).toBeNull();
+});
+
+it('shows this morning when it is in, even without Arete’s own score (HRV missing)', async () => {
+  // Garmin's Training Readiness arrived, the HRV fetch failed: no Arete score.
+  board.health = {
+    date: '2026-10-14', readiness_score: null, training_readiness_score: 64, hrv_last_night: null, hrv_status: null,
+    sleep_score: 78, sleep_duration_sec: 25200, stress_avg: 22, steps: 4100,
+  } as unknown as DashboardData['health'];
+  await mount(false);
+  expect(screen.queryByText(/Pas encore synchronisé ce matin/)).toBeNull();
+  expect(screen.queryByText(/Pas de données santé/)).toBeNull();
+  expect(screen.getByText('64/100')).toBeTruthy();
+  expect(screen.getByText('64')).toBeTruthy();
+});
+
+it('draws the curve after months off, when rounded fitness reads zero', async () => {
+  board.fitness = { ...fitness, ctl: 0, atl: 0, tsb: 0, days_analyzed: 0 };
+  await mount(false);
+  expect(await screen.findByText(/Aujourd’hui : fatigue/)).toBeTruthy();
+  expect(screen.queryByText(/Pas encore de charge enregistrée/)).toBeNull();
 });

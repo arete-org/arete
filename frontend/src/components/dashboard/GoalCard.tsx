@@ -67,7 +67,7 @@ export function GoalCard({ goal, day, ready }: { goal: Goal | null; day: string 
             </p>
           )}
           {key && (
-            <Link to={`/planning?date=${key.date}&session=${key.id}`} className="block text-xs text-neon-cyan hover:underline">
+            <Link to={`/planning?date=${key.date}`} className="block text-xs text-neon-cyan hover:underline">
               Séance clé : {shortDay(key.date)} · {SESSION_TYPE_LABEL[key.session_type] ?? key.session_type}
               {key.target_duration_min ? ` · ${key.target_duration_min} min` : ''} <span aria-hidden>→</span>
             </Link>
