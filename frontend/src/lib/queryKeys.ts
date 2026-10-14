@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { strengthApi } from './api';
 import { syncGame } from './gamification';
 
@@ -11,6 +11,8 @@ import { syncGame } from './gamification';
  */
 export const qk = {
   settings: ['settings'] as const,
+  /** `GET /dashboard`, one per day (lib/dashboard.ts); it seeds the keys of its slices. */
+  dashboard: (day?: string) => (day ? (['dashboard', day] as const) : (['dashboard'] as const)),
 
   planned: (start?: string, end?: string) =>
     start ? (['planned', start, end ?? start] as const) : (['planned'] as const),
@@ -81,9 +83,15 @@ export const strengthSessionsQuery = {
   queryFn: () => strengthApi.getSessions(200),
 };
 
+/** `keys` and the dashboard, whose one answer also carries their data (Garmin state, health, goals). */
+export function invalidateWithDashboard(queryClient: QueryClient, ...keys: QueryKey[]): void {
+  for (const key of [...keys, qk.dashboard()]) queryClient.invalidateQueries({ queryKey: key });
+}
+
 /** Everything that changes when a session is logged, uploaded, synced or matched. */
 export function invalidateAfterSession(queryClient: QueryClient): void {
   for (const key of [
+    qk.dashboard(),
     ['workout'],
     ['garmin-exports'],
     qk.planned(),

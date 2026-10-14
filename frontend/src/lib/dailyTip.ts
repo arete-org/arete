@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { tipsApi } from '@/lib/api';
+import { tipsApi, type DailyTip } from '@/lib/api';
 import { toLocalISODate } from '@/lib/dates';
 import { qk } from '@/lib/queryKeys';
 
@@ -11,17 +11,28 @@ export const TIP_POLL_DELAYS_MS = [5_000, 10_000, 20_000];
  * The day's briefing. A `pending` answer starts its writing in a request of
  * its own (the server runs it once per day, whoever asks) and polls the read.
  * Each day has its own read, so a tab left open overnight polls afresh.
+ * `enabled: false` waits for another request to seed the read (the dashboard's,
+ * under the server's `day`); a seed is not a poll, so seeding again spends none.
  */
-export function useDailyTip() {
+export function useDailyTip({ enabled = true, day: serverDay }: { enabled?: boolean; day?: string } = {}) {
   const client = useQueryClient();
-  const day = toLocalISODate();
+  const day = serverDay ?? toLocalISODate();
   const key = [...qk.tipDaily, day];
+  // Reads of the day's briefing while it was pending: the polls spent.
+  const [spent, setSpent] = useState({ day, polls: 0 });
+  const polls = spent.day === day ? spent.polls : 0;
   const query = useQuery({
     queryKey: key,
-    queryFn: tipsApi.getDaily,
+    queryFn: ({ queryKey }) => {
+      const forDay = String(queryKey[1]);
+      if (client.getQueryData<DailyTip>(queryKey)?.status === 'pending')
+        setSpent((s) => ({ day: forDay, polls: (s.day === forDay ? s.polls : 0) + 1 }));
+      return tipsApi.getDaily();
+    },
+    enabled,
     staleTime: 1000 * 60 * 30,
     refetchInterval: ({ state }) =>
-      state.data?.status === 'pending' ? TIP_POLL_DELAYS_MS[state.dataUpdateCount - 1] ?? false : false,
+      state.data?.status === 'pending' ? TIP_POLL_DELAYS_MS[polls] ?? false : false,
   });
   const { mutate, isPending: posting } = useMutation({
     // Idempotent: the server answers the stored briefing or pending, or writes it.
@@ -31,9 +42,6 @@ export function useDailyTip() {
     },
   });
   const pending = query.data?.status === 'pending';
-  // Reads so far: on the query's state, which the interval above counts too.
-  // `dataUpdatedAt` changes with each read, so it is what re-renders.
-  const reads = query.dataUpdatedAt ? client.getQueryState(key)?.dataUpdateCount ?? 0 : 0;
   // One automatic request per pending stretch: a ready read or a new day ends it.
   const askedFor = useRef<string | null>(null);
   useEffect(() => {
@@ -47,8 +55,8 @@ export function useDailyTip() {
   }, [pending, posting, day, query.data, mutate]);
   return {
     tip: query.data && !pending ? query.data : undefined,
-    writing: query.isLoading || pending,
-    stalled: pending && reads > TIP_POLL_DELAYS_MS.length,
+    writing: query.isLoading || (!enabled && query.isPending) || pending,
+    stalled: pending && polls >= TIP_POLL_DELAYS_MS.length,
     refresh: () => {
       if (!posting) mutate(day);
       void query.refetch();

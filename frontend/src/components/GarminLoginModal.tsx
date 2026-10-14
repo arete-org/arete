@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal } from '@/components/ui';
 import { authFetch } from '@/lib/auth';
+import { invalidateWithDashboard } from '@/lib/queryKeys';
 
 interface GarminLoginModalProps {
   isOpen: boolean;
@@ -39,7 +40,7 @@ export function GarminLoginModal({ isOpen, onClose, onSuccess }: GarminLoginModa
         setNeedsMfa(true);
         setError(null);
       } else {
-        queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+        invalidateWithDashboard(queryClient, ['syncStatus']);
         handleClose();
         onSuccess();
       }

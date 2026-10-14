@@ -120,3 +120,43 @@ it('a tab left open overnight asks for the new day and polls afresh', async () =
   expect(tipsApi.getDaily).toHaveBeenCalledTimes(TIP_POLL_DELAYS_MS.length);
   expect(result.current.stalled).toBe(true);
 });
+
+it('waits for the dashboard to seed the read, then writes and polls from it', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const { result, rerender } = renderHook(({ enabled }) => useDailyTip({ enabled }), {
+    initialProps: { enabled: false },
+    wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
+  await tick();
+  // The dashboard's request is in flight: the line shows, nothing is asked.
+  expect(result.current.writing).toBe(true);
+  expect(tipsApi.getDaily).not.toHaveBeenCalled();
+
+  act(() => client.setQueryData(['tip-daily', '2026-10-13'], pending));
+  rerender({ enabled: true });
+  await tick();
+  expect(tipsApi.getDaily).not.toHaveBeenCalled();
+  expect(tipsApi.writeDaily).toHaveBeenCalledTimes(1);
+  vi.mocked(tipsApi.getDaily).mockResolvedValue(ready);
+  await tick(TIP_POLL_DELAYS_MS[0]);
+  expect(tipsApi.getDaily).toHaveBeenCalledTimes(1);
+  expect(result.current.tip?.tip).toBe('Footing facile.');
+});
+
+it('the dashboard seeding the read again spends none of its polls', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  client.setQueryData(['tip-daily', '2026-10-12'], pending);
+  const { result } = renderHook(() => useDailyTip({ day: '2026-10-12' }), {
+    wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  });
+  await tick();
+  for (const delay of TIP_POLL_DELAYS_MS) {
+    // A focus or a logged session refreshes the dashboard, which seeds it again.
+    act(() => client.setQueryData(['tip-daily', '2026-10-12'], { ...pending }));
+    await tick();
+    expect(result.current.stalled).toBe(false);
+    await tick(delay);
+  }
+  expect(tipsApi.getDaily).toHaveBeenCalledTimes(TIP_POLL_DELAYS_MS.length);
+  expect(result.current.stalled).toBe(true);
+});

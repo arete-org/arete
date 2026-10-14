@@ -5,7 +5,7 @@ import { CalendarRange, Flag, Plus, Trash2 } from 'lucide-react';
 import { Button, Field, Input, Modal, ModalHeader, Panel } from '@/components/ui';
 import { goalsApi } from '@/lib/api';
 import { parseLocalDate, toLocalISODate } from '@/lib/dates';
-import { invalidateAfterSession, qk } from '@/lib/queryKeys';
+import { invalidateAfterSession, invalidateWithDashboard, qk } from '@/lib/queryKeys';
 import { formatKm, formatRaceTime, parseRaceTime } from '@/lib/race';
 import { cn, readableError } from '@/lib/utils';
 import type { Goal, GoalPriority, GoalStatus } from '@/types';
@@ -45,7 +45,7 @@ function GoalForm({ onDone }: { onDone: () => void }) {
   const create = useMutation({
     mutationFn: goalsApi.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.goals });
+      invalidateWithDashboard(queryClient, qk.goals);
       onDone();
     },
   });

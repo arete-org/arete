@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
+import { dashboardAnswer } from './dashboardAnswer';
 
 // Local fixtures keep layout checks independent of training data or model calls.
 test('desktop aligns the brand and content, uses the workspace and reflows beside the coach', async ({ page }) => {
@@ -9,15 +10,7 @@ test('desktop aligns the brand and content, uses the workspace and reflows besid
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'odyssey', display_name: 'HUNTER' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
-    if (path === '/api/coach/today') return route.fulfill({ json: { date: '2026-10-11', items: [], remaining: 0, briefing: null } });
-    if (path === '/api/plan/today') return route.fulfill({ json: { decisions: [] } });
-    if (path === '/api/metrics/player-stats') return route.fulfill({ json: {
-      level: 0, weeks_at_goal: 0,
-      hp: { current: 50, max: 100, label: 'Récupération', detail: 'Aucune donnée de charge ni mesure Garmin' },
-      mp: { current: 50, max: 100, label: 'Forme' },
-      xp: { current: 0, max: 300, label: 'Charge de la semaine', detail: 'Objectif 6 séances' },
-    } });
-    if (path === '/api/tips/daily') return route.fulfill({ json: { tip: 'Prépare tes prochaines séances.', source: 'rules', priority: 'info' } });
+    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer() });
     return route.fulfill({ json: [] });
   });
   await page.goto('/');
