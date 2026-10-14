@@ -254,7 +254,10 @@ class TestFitnessEndpoint:
         assert fitness["readiness_source"] in ("garmin", "model")
         assert fitness["ctl"] == pmc["headline"]["value"]
         assert fitness["tsb"] == pmc["secondary"][0]["value"]
-        assert stats["mp"]["detail"] == f"TSB {fitness['tsb']:+.1f}".replace(".", ",")
+        tsb = fitness["tsb"] + 0.0
+        assert stats["mp"]["detail"] == (
+            f"TSB {tsb:+.1f}".replace(".", ",") if tsb else "TSB 0,0"
+        )
 
 
 class TestRecommendationsEndpoint:
@@ -447,10 +450,61 @@ class TestPlayerStatsSemantics:
         assert (weeks.recent, weeks.window) == (2, 12)  # week 13 is outside
         assert weeks.total == 10
 
-    def test_player_stats_reports_the_regularity(self, client):
-        body = client.get("/metrics/player-stats").json()
-        assert 0 <= body["recent_weeks_at_goal"] <= body["recent_weeks"] <= 12
-        assert {"level", "weeks_at_goal"} <= body.keys()  # older readers keep theirs
+    def test_a_first_week_joined_midway_is_not_a_miss(self):
+        from arete.services import metrics
+
+        today = date.today()
+        monday = today - timedelta(days=today.weekday())
+        # Joined on the Saturday of a week, short of the goal, then one full week.
+        saturday = monday - timedelta(days=9)
+        by_date = {saturday: 100.0, monday - timedelta(days=7): 400.0}
+        weeks = metrics._week_history(300.0, by_date, today)
+        assert (weeks.recent, weeks.window) == (1, 1)
+        assert (weeks.streak, weeks.total) == (1, 1)  # level/weeks_at_goal unchanged
+        # Joined last Saturday: no finished full week yet, nothing to show.
+        last_saturday = monday - timedelta(days=2)
+        assert metrics._week_history(300.0, {last_saturday: 100.0}, today).window == 0
+        # A first partial week that reached the goal still counts.
+        by_date[saturday] = 400.0
+        assert metrics._week_history(300.0, by_date, today)[2:] == (2, 2)
+        # A first week starting on Monday is a full week: its miss counts.
+        assert metrics._week_history(
+            300.0,
+            {monday - timedelta(days=14): 100.0, monday - timedelta(days=7): 400.0},
+            today,
+        )[2:] == (1, 2)
+
+    def test_player_stats_reports_the_regularity_and_keeps_older_fields(self):
+        from arete.services import metrics
+
+        today = date.today()
+        monday = today - timedelta(days=today.weekday())
+        # 14 finished weeks: the last 12 have 9 at goal, the streak is 2.
+        missed = {3, 6, 10}  # weeks ago
+        by_date = {
+            monday - timedelta(days=7 * ago): 50.0 if ago in missed else 400.0
+            for ago in range(1, 15)
+        }
+        stats = metrics.player_stats(
+            {"weekly_training_goal": 6}, today, metrics.Form(by_date, None, None)
+        )
+        assert (stats.recent_weeks_at_goal, stats.recent_weeks) == (9, 12)
+        assert (stats.level, stats.weeks_at_goal) == (2, 11)
+        assert stats.xp.detail == "Objectif 300 TSS · 6 séances"
+
+    def test_a_form_near_zero_reads_as_the_dashboard_card_shows_it(self):
+        from types import SimpleNamespace
+
+        from arete.services import metrics
+
+        for tsb, shown in (
+            (-0.04, "TSB 0,0"),
+            (0.0, "TSB 0,0"),
+            (4.23, "TSB +4,2"),
+            (-4.25, "TSB -4,2"),
+        ):
+            form = metrics.Form({}, SimpleNamespace(tsb=tsb), None)  # type: ignore[arg-type]
+            assert metrics.player_stats({}, date.today(), form).mp.detail == shown
 
     def test_player_stats_reads_the_database_in_four_statements(
         self, monkeypatch, statement_log

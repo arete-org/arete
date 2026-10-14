@@ -170,13 +170,17 @@ def _week_history(
     while week_start < current_monday:
         reached.append(weekly.get(week_start, 0.0) >= goal_tss)
         week_start += timedelta(days=7)
+    # A first week joined midway is not a missed week: the regularity starts
+    # at the first full one (the streak and the all-time count are unchanged).
+    first_partial = earliest.weekday() > 0 and bool(reached) and not reached[0]
+    counted = reached[1:] if first_partial else reached
 
     streak = 0
     for ok in reversed(reached):  # most recent finished week first
         if not ok:
             break
         streak += 1
-    recent = reached[-RECENT_WEEKS:]
+    recent = counted[-RECENT_WEEKS:]
     return WeekHistory(streak, sum(reached), sum(recent), len(recent))
 
 
@@ -358,12 +362,13 @@ def player_stats(settings: dict, today: date, form: Form) -> PlayerStats:
 
     # --- MP: form (TSB) ---
     tsb = model.tsb if model else 0.0
+    shown = round(tsb, 1) + 0.0  # never "-0,0": the dashboard's card shows "0,0"
     mp_current = round(max(0.0, min(100.0, (tsb + 30) * (100 / 60))), 1)
     mp = StatBar(
         current=mp_current,
         max=100,
         label="Forme",
-        detail=f"TSB {tsb:+.1f}".replace(".", ","),  # French decimals, as shown
+        detail=f"TSB {shown:+.1f}".replace(".", ",") if shown else "TSB 0,0",
         source="model",
     )
 
@@ -375,7 +380,8 @@ def player_stats(settings: dict, today: date, form: Form) -> PlayerStats:
         current=xp_current,
         max=goal_tss,
         label="Charge de la semaine",
-        detail=f"Objectif {goal_sessions} séances",
+        # The weeks at goal count this load goal, not the number of sessions.
+        detail=f"Objectif {goal_tss:.0f} TSS · {goal_sessions} séances",
         source="model",
     )
 
