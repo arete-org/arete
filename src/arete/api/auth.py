@@ -8,18 +8,27 @@ server use. Each Clerk account owns a private athlete. The first verified
 configured owner email keeps the original athlete; other accounts get empty
 training data. The scope wraps the entire response, including SSE and workers.
 Administration routes need an administrator (the owner is one by right);
-naming administrators needs the owner.
+naming administrators needs the owner. A resolved account is reused for
+``ACCOUNT_TTL_SECONDS`` (30 s): a deactivation or role change applies at once
+on the instance that made it and within that bound on every other instance.
 
 Pure ASGI middleware, like the mirror's: the coach streams, and a
 ``BaseHTTPMiddleware`` would sit between the stream and the client. The Clerk
-SDK is imported inside the verification so a cold boot does not pay for it.
+SDK and PyJWT are imported inside the verification so a cold boot does not pay
+for them. With ``CLERK_JWT_KEY`` (the instance's PEM public key) a session token
+is verified offline; without it the SDK fetches Clerk's JWKS on each new
+instance and every five minutes. A key that does not load fails closed (503).
 """
 
 from __future__ import annotations
 
+import functools
 import hmac
 import logging
+import re
 import threading
+import time
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -88,12 +97,32 @@ def auth_misconfigured() -> str | None:
         return "CLERK_SECRET_KEY manquante"
     if not config.clerk_publishable_key:
         return "clé publique Clerk manquante"
+    if config.clerk_jwt_key and not _jwt_key_is_usable(config.clerk_jwt_key):
+        return "CLERK_JWT_KEY illisible (clé publique PEM RSA attendue)"
     return None
 
 
 def _without_api_prefix(path: str) -> str:
     # The deployment keeps the "/api" prefix in front; locally there is none.
     return path[4:] if path.startswith("/api/") else path
+
+
+@functools.lru_cache(maxsize=4)
+def _jwt_key_is_usable(pem: str) -> bool:
+    """Whether the SDK can verify with this key, parsed as it will parse it.
+
+    A key that does not load would turn every session into a 401 that looks
+    like a sign-in problem: refuse it as a misconfiguration instead.
+    """
+    from jwt.algorithms import RSAAlgorithm
+    from jwt.exceptions import InvalidKeyError
+
+    try:
+        # The SDK strips line breaks before handing the key to PyJWT.
+        RSAAlgorithm(RSAAlgorithm.SHA256).prepare_key(re.sub(r"[\r\n]", "", pem))
+    except (InvalidKeyError, ValueError, TypeError):
+        return False
+    return True
 
 
 def is_public(path: str) -> bool:
@@ -118,8 +147,11 @@ def _verify_session_token(token: str) -> dict[str, Any]:
         verify_token,
     )
 
+    # With the instance's public key the SDK verifies offline; without it,
+    # it fetches Clerk's JWKS on each new instance and every five minutes.
     options = VerifyTokenOptions(
         secret_key=config.clerk_secret_key,
+        jwt_key=config.clerk_jwt_key or None,
         authorized_parties=list(config.auth_origins) or None,
     )
     try:
@@ -175,15 +207,64 @@ def resolve_user(authorization: str | None) -> AppUser:
     subject = claims.get("sub")
     if not isinstance(subject, str) or not subject:
         raise AuthError(401, "Session invalide ou expirée.")
-    user = user_service.get_user(subject)
-    if user is None or _profile_is_stale(user):
-        user = _refresh_profile(subject)
+    user, athlete_active = _resolve_account(subject)
     if user.deleted_at is not None or (
-        user.athlete_id is not None
-        and not user_service.athlete_is_active(user.athlete_id)
+        user.athlete_id is not None and not athlete_active
     ):
         raise AuthError(403, "Ce compte a été désactivé.")
     return user
+
+
+# ------------------------------------------------------- account cache --
+#: How long a resolved account is reused. A dashboard sends a dozen requests
+#: at once, and each used to read the login and its athlete. This is also the
+#: bound for revocation: a deactivation or role change made on another
+#: instance is refused or applied here within this many seconds; on the
+#: instance that made it, at once (``forget_accounts``). Keep it <= 60 s.
+ACCOUNT_TTL_SECONDS = 30.0
+#: Entries kept per instance; the least recently used goes first.
+ACCOUNT_CACHE_SIZE = 256
+_clock = time.monotonic
+_accounts: OrderedDict[str, tuple[float, AppUser, bool]] = OrderedDict()
+_accounts_lock = threading.Lock()
+#: Bumped by ``forget_accounts`` so a read that started before an
+#: administration change cannot store its now stale answer afterwards.
+_accounts_generation = 0
+
+
+def forget_accounts() -> None:
+    """Drop every cached account, after an administration change here."""
+    global _accounts_generation
+    with _accounts_lock:
+        _accounts.clear()
+        _accounts_generation += 1
+
+
+def _resolve_account(subject: str) -> tuple[AppUser, bool]:
+    """(login, athlete is live) for a verified subject: cached, or one query.
+
+    A new or stale profile is refreshed from Clerk first, then read back.
+    """
+    now = _clock()
+    with _accounts_lock:
+        entry = _accounts.get(subject)
+        if entry is not None and now - entry[0] < ACCOUNT_TTL_SECONDS:
+            _accounts.move_to_end(subject)
+            return entry[1], entry[2]
+        generation = _accounts_generation
+    account = user_service.get_account(subject)
+    if account is None or _profile_is_stale(account[0]):
+        _refresh_profile(subject)
+        account = user_service.get_account(subject)
+        assert account is not None, "a refreshed account must exist"
+    with _accounts_lock:
+        if generation == _accounts_generation:
+            # Timed from before the read: the TTL bounds the data's age.
+            _accounts[subject] = (now, *account)
+            _accounts.move_to_end(subject)
+            while len(_accounts) > ACCOUNT_CACHE_SIZE:
+                _accounts.popitem(last=False)
+    return account
 
 
 #: One profile refresh at a time per instance: a dashboard sends a dozen
@@ -252,8 +333,9 @@ class AuthMiddleware:
             return
         authorization = Headers(scope=scope).get("authorization")
         try:
-            # Token verification may fetch Clerk's keys, and the account read
-            # is a database round trip: both leave the event loop free.
+            # Token verification may fetch Clerk's keys (without CLERK_JWT_KEY),
+            # and the account read is a database round trip: both leave the
+            # event loop free.
             user = await anyio.to_thread.run_sync(resolve_user, authorization)
         except AuthError as e:
             headers = {"WWW-Authenticate": "Bearer"} if e.status == 401 else None

@@ -5,7 +5,16 @@ faciles, 6 × 400 m et 90 secondes de récupération, puis envoie-le sur Garmin�
 The planning toolkit persists a versioned coach prescription. The preloaded Garmin
 toolkit inspects, exports and reconciles it without OCR or an import draft. Missing
 required parameters are requested; an explicit export request supplies intent.
-Document imports retain their separate human source validation.
+Attached documents use the same direct creation tool, with typed source references checked against the current thread. No import preview or extra confirmation is required.
+
+The planning toolkit owns translation from shorthand to typed steps: `20x300 r100`
+means 20 repeats of a 300 m effort and a 100 m recovery. Repeat counts and children
+belong to the group; duration/distance and targets belong to each child. Cardio
+prescriptions preserve existing warmup/cooldown blocks, adding missing ones by
+default unless the athlete requests otherwise. Unspecified edges end on manual lap,
+without invented durations or targets. A validation failure calls for correcting
+the full prescription; a description-only edit does not fulfill a step change.
+These are coach instructions, not server-side insertion into explicit prescriptions.
 
 ## Execution and UI
 
@@ -21,8 +30,9 @@ Document imports retain their separate human source validation.
 - Direct actions in chat append a factual message to the originating thread.
   Revision checks protect edits and selection; durable reservations protect writes
   from overlapping chat, Planning and daily jobs. Legacy IDs are verified and reused.
-- Cards refresh after mutations, remount and reconnection. Revision and durable
-  update time reject stale state. Browser conversation storage accepts old messages
+- A message's cards are read together (`GET /garmin/workouts?ids=…`, at most 50
+  per request) and refresh after mutations, reconnection and, once a minute old,
+  remount. Revision and durable update time reject stale state. Browser conversation storage accepts old messages
   and restores workout references; the server remains authoritative.
 - Navigation/hiding the panel preserves the run in the app provider. Closing or
   reloading the tab does not promise background completion. Stop closes the response,
@@ -33,7 +43,8 @@ Document imports retain their separate human source validation.
 The service batch is sequential: at most five sessions, 120 seconds total, 60 remote
 requests, at most 12 requests per session, clamped to the invocation deadline.
 Planning selects at most 50 sessions and sends batches of five, stopping on the
-first failure. Cards poll only active writes, every second for at most 150 seconds.
+first failure. Cards poll only active writes, in one request for all of them,
+every second for at most 150 seconds.
 Chat retains eight main model requests, 32 tools and five minutes. One optional,
 tool-free completion can propose the next message in the composer (five seconds,
 512 output tokens, zero SDK retries); no auxiliary model request animates workout cards.
@@ -77,8 +88,8 @@ are not a usability study and do not validate the 100/200 ms design targets or I
 `create_planned_session(sport="strength", strength_text=...)` builds versioned
 steps through the existing grammar, including specified rests and optional weights.
 A title alone is rejected before persistence. The coach may compose a requested
-future workout; logging performed sets still uses `read_workout` / `save_workout`.
-Optional `prescription_json` must preserve the grammar-verified sets and may specify
+future workout; logging performed sets uses one `save_workout` call, rejecting any incomplete parse without saving a partial session.
+Optional `prescription` must preserve the grammar-verified sets and may specify
 exact Garmin exercise names. Only explicit catalog equivalents are mapped; unknown
 exercises fail conversion without a remote write. `export_garmin_sessions` uses the
 same durable reservation, scheduling, verification and optional device-transfer

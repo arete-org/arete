@@ -94,7 +94,10 @@ class RecordingClient(Client):
 
     def update_run(self, run_id, **kwargs):
         with self.lock:
-            self.recorded_runs[str(run_id)].update(kwargs)
+            # SDK patches use inputs=None to leave the original input intact.
+            self.recorded_runs[str(run_id)].update(
+                {k: v for k, v in kwargs.items() if k != "inputs" or v is not None}
+            )
 
 
 @pytest.fixture(autouse=True)
@@ -232,8 +235,6 @@ def test_native_dynamic_and_filesystem_tools_stay_in_one_trace(
                 {"file": "notes.md", "title": "", "body": ""},
                 "journal",
             ),
-            tool_call("search_toolkits", {"query": "analytics"}, "search"),
-            tool_call("load_toolkit", {"toolkit_id": "analytics"}, "load"),
             tool_call("get_workload", {"days": 0}, "dynamic"),
             tool_call("read_file", {"file_path": "/notes.md"}, "memory"),
             AIMessage(
@@ -265,13 +266,11 @@ def test_native_dynamic_and_filesystem_tools_stay_in_one_trace(
     tools = [r for r in runs if r["run_type"] == "tool"]
     assert {r["name"] for r in tools} == {
         "append_journal",
-        "search_toolkits",
-        "load_toolkit",
         "get_workload",
         "read_file",
     }
-    assert len(tools) == 5  # No double instrumentation.
-    assert len([r for r in runs if r["run_type"] == "llm"]) == 6
+    assert len(tools) == 3  # No double instrumentation.
+    assert len([r for r in runs if r["run_type"] == "llm"]) == 4
     llms = [r for r in runs if r["run_type"] == "llm"]
     assert any(
         r["outputs"]["generations"][0][0]["message"]["kwargs"].get("usage_metadata")
@@ -292,7 +291,11 @@ def test_skill_retrieval_exports_one_child_span_before_inference(
     install_model(
         monkeypatch,
         [
-            tool_call("read_file", {"file_path": attachment}, "plan"),
+            tool_call(
+                "read_file",
+                {"file_path": "/skills/system/document-planning/SKILL.md"},
+                "plan",
+            ),
             AIMessage(content="Séance retrouvée."),
         ],
     )
@@ -311,36 +314,15 @@ def test_skill_retrieval_exports_one_child_span_before_inference(
     else:
         invoke(inputs, context=context)
     runs, roots = assert_trace_tree(recorder)
-    retrievals = [run for run in runs if run["run_type"] == "retriever"]
-    assert len(retrievals) == 1  # Native callbacks must not be double-decorated.
-    retrieval = retrievals[0]
-    assert retrieval["name"] == "SystemSkillRetriever"
-    assert retrieval["parent_run_id"] is not None
-    assert retrieval["trace_id"] == roots[0]["trace_id"]
-    assert retrieval["extra"]["metadata"]["thread_id"] == "skill-thread"
-    assert retrieval["inputs"] == {"query": question}
-    assert [doc.metadata["path"] for doc in retrieval["outputs"]["documents"]] == [
-        "/skills/system/document-planning/SKILL.md"
+    assert not [run for run in runs if run["run_type"] == "retriever"]
+    reads = [
+        run for run in runs if run["run_type"] == "tool" and run["name"] == "read_file"
     ]
-    llms = [run for run in runs if run["run_type"] == "llm"]
-    assert len(llms) == 2
-    assert retrieval["end_time"] <= min(run["start_time"] for run in llms)
-
-
-@pytest.mark.usefixtures("progressive_chat")
-def test_loaded_toolkits_do_not_leak_between_tasks(monkeypatch):
-    install_model(
-        monkeypatch,
-        [
-            tool_call("load_toolkit", {"toolkit_id": "analytics"}, "load"),
-            AIMessage(content="chat"),
-            AIMessage(content="feedback"),
-        ],
-    )
-    first = invoke(state(), context=AgentContext(profile="chat"))
-    second = invoke(state(), context=AgentContext(profile="feedback"))
-    assert first["loaded_toolkits"] == ["analytics"]
-    assert not second.get("loaded_toolkits")
+    assert len(reads) == 1
+    assert reads[0]["trace_id"] == roots[0]["trace_id"]
+    assert reads[0]["extra"]["metadata"]["thread_id"] == "skill-thread"
+    assert context.stats.skill_reads == 1
+    assert len([run for run in runs if run["run_type"] == "llm"]) == 2
 
 
 @pytest.mark.parametrize("streaming", [False, True])
@@ -485,13 +467,14 @@ def test_dynamic_tool_exception_is_traced_and_propagated(
     install_model(
         monkeypatch,
         [
-            tool_call("load_toolkit", {"toolkit_id": "analytics"}, "load"),
             tool_call("get_workload", {"days": 28}, "broken"),
         ],
     )
-    monkeypatch.setattr(
-        get_workload, "func", Mock(side_effect=RuntimeError("tool unavailable"))
-    )
+
+    def fail(days: int = 28):
+        raise RuntimeError("tool unavailable")
+
+    monkeypatch.setattr(get_workload, "func", fail)
     with pytest.raises(RuntimeError, match="tool unavailable"):
         if streaming:
 
@@ -624,30 +607,307 @@ def test_chat_turns_share_thread_metadata_without_reusing_trace_or_date(
     )
 
 
-def test_autosuggestion_has_a_child_llm_span_and_thread_metadata(monkeypatch, recorder):
-    draft = "Oui, prépare cette séance."
-    suggestion = FakeCoach(messages=iter([AIMessage(content=draft)]))
-    coach = FakeCoach(messages=iter([AIMessage(content="Une séance facile ?")]))
+@pytest.fixture
+def slack_dispatch(monkeypatch):
+    from types import SimpleNamespace
+
+    from arete.services import slack, slack_identity
+
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    actor = SimpleNamespace(is_admin=True, clerk_user_id="admin")
+    monkeypatch.setattr(slack_identity, "identity", lambda *a: (actor, "Europe/Paris"))
+    monkeypatch.setattr(slack_identity, "private_owner", lambda *a: None)
+    monkeypatch.setattr(slack_identity, "require_admin", lambda *a: actor)
+    # Admission is tested in the service tests; allow concurrent trace lifetimes.
+    monkeypatch.setattr(slack, "reserve", lambda *a: "running")
+    monkeypatch.setattr(slack, "finish", lambda *a, **kw: None)
+    agent._slack_graph.cache_clear()
+    client = AsyncMock(spec=slack.SlackClient)
+    client.call.return_value = {"ok": True, "ts": "2.000001", "members": []}
+
+    async def history(message):
+        return [{"role": "user", "content": message.text}]
+
+    client.history.side_effect = history
+
+    async def run(thread="1.000001"):
+        message = slack.SlackMessage(
+            "T123",
+            thread,
+            "A123",
+            "C123",
+            "U123",
+            thread,
+            thread,
+            "Trouve Arthur",
+            in_channel=True,
+            mentioned=True,
+        )
+        return await agent.dispatch_slack_message(message, client=client)
+
+    yield run
+    agent._slack_graph.cache_clear()
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_slack_classifier_and_native_tools_share_the_agent_trace(
+    monkeypatch, recorder, slack_dispatch, jev_api, enabled
+):
+    from langsmith.run_helpers import get_tracing_context
+
+    monkeypatch.setenv("LANGSMITH_TRACING", "true" if enabled else "false")
+    coach = FakeCoach(
+        messages=iter(
+            [
+                tool_call("find_slack_member", {"query": "Arthur"}, "find"),
+                AIMessage(content="Aucun Arthur trouvé."),
+            ]
+        )
+    )
     monkeypatch.setattr(
         agent,
         "build_chat_model",
-        lambda **kw: suggestion if kw.get("max_tokens") == 512 else coach,
+        lambda **kw: coach,
     )
-    context = AgentContext(thread_id="suggestion-thread", suggest_reply=True)
 
-    async def consume():
-        return [part async for part in stream_run(state("Demain ?"), context=context)]
+    async def run():
+        before = get_tracing_context().copy()
+        assert await slack_dispatch() == "Aucun Arthur trouvé."
+        assert get_tracing_context() == before
 
-    parts = asyncio.run(consume())
-    assert {"type": "suggestion", "text": draft} in [
-        p["data"] for p in parts if p["type"] == "custom"
-    ]
-    runs, _ = assert_trace_tree(recorder)
+    asyncio.run(run())
+    if not enabled:
+        assert not recorder.recorded_runs
+        return
+    runs, roots = assert_trace_tree(recorder)
+    root = roots[0]
+    assert root["outputs"] == {"output": "Aucun Arthur trouvé."}
+    assert root["extra"]["metadata"]["thread_id"] == "slack:T123:C123:1.000001"
+    classification = next(r for r in runs if r["name"] == "classify_slack_intent")
+    assert classification["parent_run_id"] == root["id"]
+    assert set(classification["inputs"]) == {"messages"}
+    assert classification["outputs"] == {
+        "surface": "product",
+        "private_data": False,
+        "outbound": False,
+    }
     llms = [r for r in runs if r["run_type"] == "llm"]
-    assert len(llms) == 2
-    completion = next(r for r in llms if r["name"] == "coach_autosuggestion")
-    parent = recorder.recorded_runs[str(completion["parent_run_id"])]
-    assert parent["run_type"] == "chain"
-    assert "AutoSuggestionMiddleware" in parent["name"]
-    assert completion["extra"]["metadata"]["thread_id"] == "suggestion-thread"
-    assert context.stats.model_calls == 2
+    assert len(llms) == 3
+    assert (
+        next(r for r in llms if r["name"] == "slack_surface")["parent_run_id"]
+        == classification["id"]
+    )
+    jev = next(r for r in llms if r["name"] == "slack_surface")
+    assert jev["inputs"]["model"] == "typesafe/jev-1.13"
+    assert jev["outputs"]["answers"] == jev_api.payload["answers"]
+    assert jev["extra"]["metadata"]["ls_provider"] == "openrouter"
+    assert jev["extra"]["metadata"]["ls_model_name"] == "typesafe/jev-1.13"
+    assert jev["outputs"]["usage_metadata"] == {
+        "input_tokens": 476,
+        "output_tokens": 70,
+        "total_tokens": 546,
+        "total_cost": 0.000019992,
+    }
+    assert "api_key" not in str(jev["inputs"]) and "Authorization" not in str(
+        jev["inputs"]
+    )
+    assert len([r for r in runs if r["run_type"] == "tool"]) == 1
+    assert all(
+        r["extra"]["metadata"]["thread_id"] == root["extra"]["metadata"]["thread_id"]
+        for r in runs
+    )
+
+
+@pytest.mark.parametrize("failure", ["invalid", "cancelled"])
+def test_slack_classifier_failure_closes_spans_without_running_agent(
+    monkeypatch, recorder, slack_dispatch, jev_api, failure
+):
+    from langsmith.run_helpers import get_tracing_context
+
+    started = asyncio.Event()
+
+    import httpx
+
+    async def respond(request):
+        if failure == "cancelled":
+            started.set()
+            async with asyncio.timeout(5):
+                await asyncio.Event().wait()
+        return httpx.Response(200, content="invalid JSON")
+
+    jev_api.handler = respond
+
+    async def run():
+        before = get_tracing_context().copy()
+        if failure == "cancelled":
+            task = asyncio.create_task(slack_dispatch())
+            async with asyncio.timeout(5):
+                await started.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            assert await slack_dispatch() is None
+        assert get_tracing_context() == before
+
+    asyncio.run(run())
+    runs, _ = assert_trace_tree(recorder)
+    classification = next(r for r in runs if r["name"] == "classify_slack_intent")
+    assert classification["error"]
+    llms = [r for r in runs if r["run_type"] == "llm"]
+    assert len(llms) == 1
+    assert llms[0]["error"]
+    assert llms[0]["end_time"]
+    assert not [r for r in runs if r["run_type"] == "tool"]
+
+
+def test_concurrent_slack_classifiers_keep_separate_parent_traces(
+    monkeypatch, recorder, slack_dispatch, jev_api
+):
+    import httpx
+
+    barrier = asyncio.Barrier(2)
+
+    async def respond(request):
+        async with asyncio.timeout(5):
+            await barrier.wait()
+        return httpx.Response(200, json=jev_api.payload)
+
+    jev_api.handler = respond
+    coach = FakeCoach(messages=iter([AIMessage(content="Réponse.")] * 2))
+    monkeypatch.setattr(
+        agent,
+        "build_chat_model",
+        lambda **kw: coach,
+    )
+
+    async def run():
+        async with asyncio.timeout(10):
+            return await asyncio.gather(
+                slack_dispatch("1.000001"), slack_dispatch("2.000001")
+            )
+
+    assert asyncio.run(run()) == ["Réponse.", "Réponse."]
+    runs, roots = assert_trace_tree(recorder, roots=2)
+    assert len({r["extra"]["metadata"]["thread_id"] for r in roots}) == 2
+    for root in roots:
+        children = [r for r in runs if r["trace_id"] == root["trace_id"]]
+        assert all(
+            r["extra"]["metadata"]["thread_id"]
+            == root["extra"]["metadata"]["thread_id"]
+            for r in children
+        )
+        classification = [r for r in children if r["name"] == "classify_slack_intent"]
+        assert len(classification) == 1
+        assert classification[0]["parent_run_id"] == root["id"]
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_memory_classifier_stays_in_native_tool_trace_without_credentials(
+    monkeypatch, recorder, enabled
+):
+    import json
+
+    import httpx
+    from pydantic import SecretStr
+
+    from arete.agent.models.jev import JEV_MODEL, JevClient
+    from arete.services import athlete_facts
+
+    monkeypatch.setenv("LANGSMITH_TRACING", "true" if enabled else "false")
+    monkeypatch.setenv("MEMORY_JEV_ENABLED", "true")
+
+    def handler(request):
+        choices = json.loads(request.content)["questions"]["memory"]["criteria"]
+        return httpx.Response(
+            200,
+            json={
+                "model": JEV_MODEL,
+                "answers": {
+                    "memory": {
+                        "type": "choice",
+                        "choice": "create",
+                        "confidence": 1.0,
+                        "probabilities": {
+                            key: float(key == "create") for key in choices
+                        },
+                    }
+                },
+                "usage": {"input_tokens": 100, "output_tokens": 10},
+            },
+        )
+
+    model = JevClient(
+        api_key=SecretStr("never-export-this"),
+        model=JEV_MODEL,
+        timeout=1,
+        max_retries=0,
+        transport=httpx.MockTransport(handler),
+    )
+    monkeypatch.setattr(agent, "JevClient", lambda **_: model)
+    athlete_facts.add_fact("preference", "Matin", evidence="explicit")
+    install_model(
+        monkeypatch,
+        [
+            tool_call(
+                "remember_fact",
+                {
+                    "kind": "preference",
+                    "text": "Forêt",
+                    "evidence": "explicit",
+                    "source_ref": "Je préfère la forêt",
+                },
+                "remember",
+            ),
+            AIMessage(content="C’est mémorisé."),
+        ],
+    )
+    context = AgentContext(thread_id="memory-thread")
+    result = invoke(state("Je préfère la forêt"), context=context)
+    assert result["messages"][-1].text == "C’est mémorisé."
+    assert context.stats.memory_decision_calls == 1
+    if not enabled:
+        assert not recorder.recorded_runs
+        return
+    runs, roots = assert_trace_tree(recorder)
+    decision = next(r for r in runs if r["name"] == "classify_memory")
+    tool = next(r for r in runs if r["run_type"] == "tool")
+    assert str(decision["parent_run_id"]) == str(tool["id"])
+    assert set(decision["inputs"]) == {"state", "choices"}
+    assert decision["outputs"]["choice"] == "create"
+    assert decision["extra"]["metadata"]["thread_id"] == "memory-thread"
+    assert "never-export-this" not in str(recorder.recorded_runs)
+
+
+def test_jev_service_has_a_generic_llm_trace_without_slack(recorder, jev_api):
+    from pydantic import SecretStr
+
+    from arete.services.jev import JEV_MODEL, JEV_TIMEOUT, JevService
+
+    jev_api.payload["answers"] = {"category": {"type": "choice", "choice": "billing"}}
+    service = JevService(SecretStr("hidden-secret"), JEV_MODEL, JEV_TIMEOUT)
+    request = service.build_request(
+        state={"ticket": "Refund request"},
+        questions={
+            "category": {
+                "type": "choice",
+                "instructions": "Classify the ticket",
+                "criteria": {"billing": "Payment", "other": "Other"},
+            }
+        },
+    )
+
+    async def run():
+        with tracing.agent_tracing():
+            return await service.decide(request)
+
+    asyncio.run(run())
+    runs = list(recorder.recorded_runs.values())
+    assert len(runs) == 1
+    span = runs[0]
+    assert span["name"] == "jev_decision" and span["run_type"] == "llm"
+    assert span["inputs"] == request
+    assert span["outputs"]["answers"] == jev_api.payload["answers"]
+    assert span["extra"]["metadata"]["ls_model_name"] == JEV_MODEL
+    assert "hidden-secret" not in str(span)

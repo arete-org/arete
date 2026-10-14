@@ -32,7 +32,9 @@ function SourceView({ blob, name, group }: { blob: Blob; name: string; group: st
   useEffect(() => {
     const url = URL.createObjectURL(blob);
     if (image.current) image.current.src = url;
-    if (frame.current) frame.current.src = `${url}#page=${/^Page (\d+)$/.exec(group)?.[1] ?? 1}&toolbar=0`;
+    // A number, not the group's text: only a page index may reach the frame's URL.
+    const page = Number(/^Page (\d+)$/.exec(group)?.[1] ?? 1);
+    if (frame.current) frame.current.src = `${url}#page=${page}&toolbar=0`;
     return () => URL.revokeObjectURL(url);
   }, [blob, group]);
   return <div className="flex h-full min-h-0 flex-col">
@@ -116,7 +118,7 @@ function PreviewContent({ threadId, document: doc }: { threadId: string; documen
           {!visible.length && <p className="px-2 py-6 text-sm text-text-muted">Aucun passage incertain sur cette page. Vérifie aussi les valeurs dans l’original.</p>}
           {visible.map((block, index) => <button key={`${offset + index}-${block.locator}`} onClick={() => setSelected(block)} aria-pressed={selected === block} className={cn('mb-1 block w-full rounded-lg border px-3 py-2.5 text-left transition-colors', selected === block ? 'border-neon-cyan/30 bg-neon-cyan/5' : needsReview(block) ? 'border-warning-orange/15 bg-warning-orange/5 hover:bg-warning-orange/10' : 'border-transparent hover:bg-white/[0.03]')}>
             {needsReview(block) && <span className="mb-1.5 flex items-center gap-1.5 text-[11px] text-warning-orange"><AlertCircle size={12} />À vérifier{block.confidence != null ? ` · confiance ${Math.round(block.confidence)} %` : ''}</span>}
-            {block.method === 'cell' && <span className="mb-1 block font-mono text-[10px] text-text-muted">{block.locator}</span>}
+            {block.method === 'cell' && <span className="mb-1 block font-sans text-[10px] text-text-muted">{block.locator}</span>}
             <span className="block whitespace-pre-wrap break-words text-sm leading-7 text-text-primary">{block.text}</span>
           </button>)}
         </div>

@@ -47,7 +47,7 @@ type MetricId = (typeof METRICS)[number]['id'];
 function Block({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
     <section className={cn('bg-abyss rounded-lg border border-text-muted/20 p-4 space-y-3 min-w-0', className)}>
-      <h2 className="text-sm font-mono text-neon-cyan uppercase tracking-wider">{title}</h2>
+      <h2 className="text-sm font-sans text-neon-cyan uppercase tracking-wider">{title}</h2>
       {children}
     </section>
   );
@@ -56,8 +56,8 @@ function Block({ title, children, className }: { title: string; children: ReactN
 function Tile({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-abyss rounded-lg border border-text-muted/20 p-3 min-w-0">
-      <div className="text-[10px] uppercase tracking-wider text-text-muted font-mono">{label}</div>
-      <div className="text-xl sm:text-2xl font-bold font-mono text-text-primary tabular-nums truncate">{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-text-muted font-sans">{label}</div>
+      <div className="text-xl sm:text-2xl font-bold font-sans text-text-primary tabular-nums truncate">{value}</div>
     </div>
   );
 }
@@ -76,7 +76,7 @@ function MonthsChart({ months }: { months: YearMonth[] }) {
             aria-pressed={m.id === metricId}
             onClick={() => setMetricId(m.id)}
             className={cn(
-              'px-3 py-1 text-xs font-mono uppercase rounded transition-colors',
+              'px-3 py-1 text-xs font-sans uppercase rounded transition-colors',
               m.id === metricId ? 'bg-neon-cyan/15 text-neon-cyan' : 'text-text-secondary hover:text-text-primary'
             )}
           >
@@ -134,10 +134,10 @@ function Highlight({ icon, label, session, value }: { icon: ReactNode; label: st
     <div className="flex items-start gap-3 p-3 rounded border border-text-muted/20 min-w-0">
       <span className="text-neon-gold mt-0.5">{icon}</span>
       <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wider text-text-muted font-mono">{label}</div>
+        <div className="text-[10px] uppercase tracking-wider text-text-muted font-sans">{label}</div>
         {session ? (
           <>
-            <div className="text-base font-mono text-text-primary tabular-nums">{value(session)}</div>
+            <div className="text-base font-sans text-text-primary tabular-nums">{value(session)}</div>
             <div className="text-xs text-text-muted truncate">
               {session.name || sportLabel(session.sport)} · {longDate(session.date)}
             </div>
@@ -154,7 +154,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 text-sm">
       <span className="text-text-secondary">{label}</span>
-      <span className="font-mono text-text-primary tabular-nums">{value}</span>
+      <span className="font-sans text-text-primary tabular-nums">{value}</span>
     </div>
   );
 }
@@ -178,7 +178,7 @@ function Review({ data }: { data: YearReview }) {
           <ul className="space-y-2">
             {data.sports.map((s) => (
               <li key={s.sport} className="space-y-1">
-                <div className="flex justify-between gap-3 text-xs font-mono">
+                <div className="flex justify-between gap-3 text-xs font-sans">
                   <span className="text-text-secondary truncate">{sportLabel(s.sport)}</span>
                   <span className="text-text-primary tabular-nums shrink-0">
                     {hours(s.duration_sec)} · {s.sessions} séance{s.sessions > 1 ? 's' : ''}
@@ -223,15 +223,15 @@ function Review({ data }: { data: YearReview }) {
               {data.best_efforts.map((e) => (
                 <li key={e.name} className="py-2 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-mono text-text-primary">{e.name}</div>
+                    <div className="text-sm font-sans text-text-primary">{e.name}</div>
                     <div className="text-xs text-text-muted truncate">
                       {e.activity_name || 'Course'} · {longDate(e.date)}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-sm font-mono text-text-primary tabular-nums">{e.time_display}</div>
+                    <div className="text-sm font-sans text-text-primary tabular-nums">{e.time_display}</div>
                     {e.is_pr && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase text-neon-gold">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-sans uppercase text-neon-gold">
                         <Award className="w-3 h-3" aria-hidden />
                         {e.previous_best_sec === null ? 'Premier chrono' : `Record ${gain(e.previous_best_sec, e.time_sec)}`}
                       </span>
@@ -254,7 +254,7 @@ function Review({ data }: { data: YearReview }) {
               {strength.top_exercises.length > 0 && (
                 <ul className="pt-2 space-y-1">
                   {strength.top_exercises.map((x) => (
-                    <li key={x.name} className="flex justify-between gap-3 text-xs font-mono">
+                    <li key={x.name} className="flex justify-between gap-3 text-xs font-sans">
                       <span className="text-text-secondary truncate">{x.name}</span>
                       <span className="text-text-primary tabular-nums shrink-0">
                         {DECIMAL.format(x.volume_kg / 1000)} t{x.max_weight_kg ? ` · max ${DECIMAL.format(x.max_weight_kg)} kg` : ''}
@@ -288,13 +288,13 @@ export function YearReviewPage() {
     <div className="page-shell space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <Link to="/analytics" className="inline-flex items-center gap-1 text-xs font-mono text-text-muted hover:text-neon-cyan">
+          <Link to="/analytics" className="inline-flex items-center gap-1 text-xs font-sans text-text-muted hover:text-neon-cyan">
             <ArrowLeft className="w-3 h-3" aria-hidden />
             Analyses
           </Link>
-          <h1 className="page-title text-xl font-bold font-mono text-neon-cyan tracking-wider uppercase">Bilan {year}</h1>
+          <h1 className="page-title">Bilan {year}</h1>
           {data && (
-            <p className="text-xs text-text-muted font-mono mt-1">
+            <p className="text-xs text-text-muted font-sans mt-1">
               Du {longDate(data.start)} au {longDate(data.end)}
               {!data.complete && ' · année en cours'}
             </p>

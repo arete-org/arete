@@ -33,7 +33,7 @@ export function AdherenceBar({ score, showLabel = true, size = 'md' }: Adherence
         />
       </div>
       {showLabel && (
-        <span className="text-xs font-mono text-text-muted min-w-[36px]">
+        <span className="text-xs font-sans text-text-muted min-w-[36px]">
           {clampedScore.toFixed(0)}%
         </span>
       )}

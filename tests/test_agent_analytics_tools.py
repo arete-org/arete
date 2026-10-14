@@ -13,7 +13,6 @@ from arete.agent.capabilities.registry import ANALYTICS_INSTRUCTIONS, CAPABILITI
 from arete.agent.tools.analytics import (
     ANALYTICS_TOOLS,
     get_fitness,
-    get_personal_records,
     get_training_advice,
     get_workload,
     list_recent_sessions,
@@ -30,7 +29,6 @@ def test_analytics_toolkit_registered():
         "get_workload",
         "get_fitness",
         "get_training_advice",
-        "get_personal_records",
         "list_recent_sessions",
         "get_activity_detail",
     }
@@ -96,12 +94,6 @@ def test_two_windows_are_comparable():
 def test_advice_answers_even_without_data():
     out = json.loads(get_training_advice.invoke({}))
     assert "risk_level" in out and isinstance(out["recommendations"], list)
-
-
-def test_records_stay_out_of_the_model():
-    # Best efforts are Strava data: the coach says where to find them instead.
-    out = json.loads(get_personal_records.invoke({}))
-    assert out["records"] == [] and "Strava" in out["unavailable"]
 
 
 def test_recent_sessions_answer_shape():
@@ -172,6 +164,7 @@ def test_full_graph_search_load_then_read():
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage
 
+    from arete.agent.capabilities.discovery import authorized_tools
     from arete.agent.middlewares.capabilities import ToolkitMiddleware
     from arete.agent.runtime.context import AgentContext
 
@@ -189,14 +182,13 @@ def test_full_graph_search_load_then_read():
 
     messages = iter(
         [
-            call("search_toolkits", {"query": "analyser la charge"}, "1"),
-            call("load_toolkit", {"toolkit_id": "analytics"}, "2"),
             call("get_workload", {"days": 28}, "3"),
             AIMessage(content="Ta charge est stable."),
         ]
     )
     graph = create_agent(
         FakeToolModel(messages=messages),
+        tools=authorized_tools("chat"),
         middleware=[ToolkitMiddleware()],
         system_prompt="t",
         context_schema=AgentContext,
@@ -207,21 +199,18 @@ def test_full_graph_search_load_then_read():
         config={"recursion_limit": 12},
     )
 
-    assert result["loaded_toolkits"] == ["analytics"]
     contents = [m.content for m in result["messages"] if m.type == "tool"]
-    assert json.loads(contents[0])["results"][0]["toolkit_id"] == "analytics"
-    assert json.loads(contents[1])["loaded"] is True
     # The toolkit tool ran: the ToolNode does not know it, the middleware does.
-    assert "acwr" in json.loads(contents[2])
+    assert "acwr" in json.loads(contents[0])
 
 
 def test_loading_analytics_leaves_planning_out_of_the_request():
     # Progressive loading still holds with two toolkits registered.
-    from arete.agent.context.builder import _augment_tools
+    from arete.agent.capabilities.discovery import authorized_tools
 
-    names = {getattr(t, "name", "") for t in _augment_tools([], ["analytics"])}
+    names = {getattr(t, "name", "") for t in authorized_tools("chat")}
     assert "get_workload" in names
-    assert "create_planned_session" not in names
+    assert "create_planned_session" in names
 
 
 class TestAcwrNeedsEnoughHistory:

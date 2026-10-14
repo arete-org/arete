@@ -1,23 +1,24 @@
-"""New journal entries and durable athlete facts, filed by the server."""
-
-from __future__ import annotations
+"""Model adapter for server-dated notes and session journal entries."""
 
 import json
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
-from langchain_core.tools import tool
+from pydantic import Field
 
-from arete.services import athlete_facts
+from arete.agent.tools.validation import typed_tool
 from arete.services.memory import append_entry
 
 MAX_TITLE_CHARS = 120
 MAX_BODY_CHARS = 2_000
 
 
-@tool
+@typed_tool
 def append_journal(
-    file: Literal["sessions.md", "notes.md"], title: str, body: str, day: str = ""
+    file: Literal["sessions.md", "notes.md"],
+    title: Annotated[str, Field(min_length=1, max_length=MAX_TITLE_CHARS)],
+    body: Annotated[str, Field(min_length=1, max_length=MAX_BODY_CHARS)],
+    day: str = "",
 ) -> str:
     """Ajoute une entrée datée à ton journal. `sessions.md`: une séance dont
     vous avez parlé (faits marquants, ressenti, décision). `notes.md`: une
@@ -44,63 +45,3 @@ def append_journal(
         else {"written": False, "reason": "Cette entrée existe déjà."},
         ensure_ascii=False,
     )
-
-
-@tool
-def remember_fact(
-    kind: Literal["injury", "constraint", "preference", "goal", "other"],
-    text: str,
-    fact_id: int = 0,
-    status: Literal["active", "resolved"] = "active",
-    evidence: Literal["explicit", "hypothesis"] = "hypothesis",
-    expected_revision: int | None = None,
-    source_ref: str = "",
-    since: str = "",
-    valid_until: str = "",
-) -> str:
-    """Enregistre un fait durable sur l'athlète (blessure, contrainte,
-    préférence, objectif), ou corrige celui dont tu donnes `fact_id` (son
-    numéro #N et `expected_revision` dans la liste jointe). `evidence="explicit"`
-    seulement pour une déclaration de l’athlète, sinon `hypothesis`. `source_ref`:
-    courte référence à la déclaration ou à une source connue, jamais inventée ;
-    obligatoire pour une déclaration explicite.
-    `since` et `valid_until`: dates ISO pour une exception temporaire, qui doit
-    rester un fait séparé de la préférence durable. `status="resolved"` quand le fait ne tient
-    plus (blessure guérie, contrainte levée). Un fait par appel, une phrase."""
-    try:
-        if evidence == "explicit" and not source_ref.strip():
-            raise ValueError(
-                "Une déclaration explicite nécessite sa source dans source_ref."
-            )
-        start = date.fromisoformat(since) if since else None
-        end = date.fromisoformat(valid_until) if valid_until else None
-        if fact_id:
-            fact = athlete_facts.update_fact(
-                fact_id,
-                kind=kind,
-                text=text,
-                status=status,
-                evidence=evidence,
-                expected_revision=expected_revision,
-                source_ref=source_ref or None,
-                since=start,
-                valid_until=end,
-            )
-            if fact is None:
-                return json.dumps({"error": f"Fait #{fact_id} introuvable."})
-        else:
-            if status != "active":
-                return json.dumps(
-                    {"error": "Un nouveau fait est actif ; pour clore, donne fact_id."}
-                )
-            fact = athlete_facts.add_fact(
-                kind,
-                text,
-                evidence=evidence,
-                source_ref=source_ref,
-                since=start,
-                valid_until=end,
-            )
-    except ValueError as e:
-        return json.dumps({"error": str(e)})
-    return json.dumps({"saved": True, "fact": fact.to_dict()}, ensure_ascii=False)

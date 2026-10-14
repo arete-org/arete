@@ -44,7 +44,10 @@ TIMEOUT_MESSAGE = (
 
 
 def run_config(
-    recursion_limit: int = MAX_GRAPH_STEPS, *, context: AgentContext | None = None
+    recursion_limit: int = MAX_GRAPH_STEPS,
+    *,
+    context: AgentContext | None = None,
+    graph: Any = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "recursion_limit": recursion_limit,
@@ -60,6 +63,14 @@ def run_config(
             "model": configured_model_name(),
         },
     }
+    # Composition snapshots the route on the graph. Reading the flag again
+    # here could mislabel a run if an administrator toggles it concurrently.
+    graph_config = getattr(graph, "config", None)
+    if isinstance(graph_config, dict):
+        metadata = graph_config.get("metadata", {})
+        for key in ("model", "model_policy"):
+            if key in metadata:
+                result["metadata"][key] = metadata[key]
     # Model requests are spent per athlete: name whose run this is.
     athlete_id = database_athlete_id()
     if athlete_id is not None:
@@ -77,22 +88,30 @@ def _elapsed_ms(started: float) -> int:
 
 
 async def invoke_agent(graph: Any, state: dict, *, context: AgentContext) -> dict:
-    started = monotonic()
-    context.deadline = started + MAX_RUN_SECONDS
+    started = context.started_at or monotonic()
+    context.started_at = started
+    context.deadline = context.deadline or started + MAX_RUN_SECONDS
     error = None
     try:
         with agent_tracing():
-            async with asyncio.timeout(MAX_RUN_SECONDS):
-                return cast(
+            async with asyncio.timeout(max(0, context.deadline - monotonic())):
+                result = cast(
                     dict,
                     await graph.ainvoke(
-                        state, context=context, config=run_config(context=context)
+                        state,
+                        context=context,
+                        config=run_config(context=context, graph=graph),
                     ),
                 )
+                # A tool-free answer is useful only once it has completed.
+                if context.stats.first_result_ms is None:
+                    context.stats.first_result_ms = _elapsed_ms(started)
+                return result
     except BaseException as exc:
         error = type(exc).__name__
         raise
     finally:
+        context.run_logged = True
         record_run(
             profile=context.profile,
             stats=context.stats,
@@ -114,16 +133,17 @@ def invoke_agent_sync(graph: Any, state: dict, *, context: AgentContext) -> dict
 async def stream_agent(
     graph: Any, state: dict, *, context: AgentContext
 ) -> AsyncGenerator[dict, None]:
-    started = monotonic()
-    context.deadline = started + MAX_RUN_SECONDS
+    started = context.started_at or monotonic()
+    context.started_at = started
+    context.deadline = context.deadline or started + MAX_RUN_SECONDS
     error = None
     try:
         with agent_tracing():
-            async with asyncio.timeout(MAX_RUN_SECONDS):
+            async with asyncio.timeout(max(0, context.deadline - monotonic())):
                 stream = graph.astream(
                     state,
                     context=context,
-                    config=run_config(context=context),
+                    config=run_config(context=context, graph=graph),
                     stream_mode=["messages", "updates", "custom"],
                     version="v2",
                 )
@@ -134,10 +154,13 @@ async def stream_agent(
                         ):
                             context.stats.first_token_ms = _elapsed_ms(started)
                         yield part
+                if context.stats.first_result_ms is None:
+                    context.stats.first_result_ms = _elapsed_ms(started)
     except BaseException as exc:
         error = type(exc).__name__
         raise
     finally:
+        context.run_logged = True
         record_run(
             profile=context.profile,
             stats=context.stats,

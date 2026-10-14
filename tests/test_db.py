@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import duckdb
@@ -51,9 +52,10 @@ def test_remote_connection_is_opened_once(opened):
 
 def test_each_remote_caller_gets_a_cursor_on_the_database(opened):
     cursor = db.connect()
-    assert cursor is opened[0].cursor.return_value
-    cursor.execute.assert_any_call("USE arete")
-    cursor.execute.assert_called_with("SET VARIABLE arete_athlete_id = ?", [1])
+    raw = opened[0].cursor.return_value
+    assert cursor._con is raw  # wrapped to count the request's statements
+    raw.execute.assert_any_call("USE arete")
+    raw.execute.assert_called_with("SET VARIABLE arete_athlete_id = ?", [1])
 
 
 def test_a_dead_remote_connection_is_reopened(opened):
@@ -61,7 +63,7 @@ def test_a_dead_remote_connection_is_reopened(opened):
     opened[0].cursor.side_effect = duckdb.ConnectionException("gone")
     cursor = db.connect()
     assert len(opened) == 2
-    assert cursor is opened[1].cursor.return_value
+    assert cursor._con is opened[1].cursor.return_value
 
 
 def test_a_remote_that_stays_down_raises(opened):
@@ -107,6 +109,39 @@ def test_without_a_bundle_nothing_is_seeded(tmp_path, monkeypatch):
     assert not (tmp_path / "home/.duckdb").exists()
 
 
+@pytest.mark.parametrize("home", [None, "", "/home/vercel-missing"])
+def test_motherduck_gets_a_home_that_exists(tmp_path, monkeypatch, home):
+    monkeypatch.setattr(db, "REMOTE_HOME", tmp_path / "home")
+    monkeypatch.setattr(db, "BUNDLED_EXTENSIONS", tmp_path / "missing")
+    if home is None:
+        monkeypatch.delenv("HOME", raising=False)
+    else:
+        monkeypatch.setenv("HOME", home)
+    with patch.object(db.duckdb, "connect"):
+        db._open_remote()
+    assert os.environ["HOME"] == str(tmp_path / "home")
+
+
+def test_a_read_only_home_is_replaced(tmp_path, monkeypatch):
+    read_only = tmp_path / "ro"
+    read_only.mkdir(mode=0o500)
+    monkeypatch.setattr(db, "REMOTE_HOME", tmp_path / "home")
+    monkeypatch.setattr(db, "BUNDLED_EXTENSIONS", tmp_path / "missing")
+    monkeypatch.setenv("HOME", str(read_only))
+    with patch.object(db.duckdb, "connect"):
+        db._open_remote()
+    assert os.environ["HOME"] == str(tmp_path / "home")
+
+
+def test_an_existing_home_is_kept(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "REMOTE_HOME", tmp_path / "home")
+    monkeypatch.setattr(db, "BUNDLED_EXTENSIONS", tmp_path / "missing")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with patch.object(db.duckdb, "connect"):
+        db._open_remote()
+    assert os.environ["HOME"] == str(tmp_path)
+
+
 def test_preview_cannot_open_production_motherduck(monkeypatch):
     monkeypatch.setenv("VERCEL_ENV", "preview")
     monkeypatch.setenv("ARETE_DB", "md:arete")
@@ -119,5 +154,5 @@ def test_preview_cannot_open_production_motherduck(monkeypatch):
 def test_preview_can_open_a_separate_database(monkeypatch, opened):
     monkeypatch.setenv("VERCEL_ENV", "preview")
     monkeypatch.setenv("ARETE_DB", "md:arete_preview")
-    cursor = db.connect()
-    cursor.execute.assert_any_call("USE arete_preview")
+    db.connect()
+    opened[0].cursor.return_value.execute.assert_any_call("USE arete_preview")

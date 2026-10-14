@@ -36,7 +36,7 @@ function DeltaBadge({ headline, previousLabel }: { headline: Headline; previousL
     <span
       title={`Par rapport ${previousLabel} : ${headline.previous}${headline.unit ? ` ${headline.unit}` : ''}`}
       className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono',
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-sans',
         tone === 'good' && 'bg-success-green/10 text-success-green',
         tone === 'bad' && 'bg-danger-red/10 text-danger-red',
         tone === 'neutral' && 'bg-shadow text-text-secondary'
@@ -63,8 +63,8 @@ class CardErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
     if (this.state.error) {
       return (
         <div className="h-[220px] flex flex-col items-center justify-center gap-2 text-center px-4">
-          <span className="text-danger-red font-mono text-xs uppercase tracking-wider">Graphique en erreur</span>
-          <span className="text-text-muted text-xs font-mono">{this.state.error.message}</span>
+          <span className="text-danger-red font-sans text-xs uppercase tracking-wider">Graphique en erreur</span>
+          <span className="text-text-muted text-xs font-sans">{this.state.error.message}</span>
         </div>
       );
     }
@@ -111,32 +111,32 @@ export function StatCard({
     >
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-mono text-neon-cyan uppercase tracking-wider">{title}</h3>
+          <h3 className="text-sm font-sans text-neon-cyan uppercase tracking-wider">{title}</h3>
           <p className="text-xs text-text-muted mt-0.5">{question}</p>
         </div>
         {card && <DeltaBadge headline={card.headline} previousLabel={previousLabel} />}
       </header>
 
       {loading ? (
-        <div className="h-[260px] flex items-center justify-center text-text-muted font-mono text-sm animate-pulse">
+        <div className="h-[260px] flex items-center justify-center text-text-muted font-sans text-sm animate-pulse">
           Chargement…
         </div>
       ) : error || !card ? (
-        <div className="h-[260px] flex items-center justify-center text-danger-red font-mono text-sm">
+        <div className="h-[260px] flex items-center justify-center text-danger-red font-sans text-sm">
           Données indisponibles
         </div>
       ) : (
         <>
           <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-            <span className="text-3xl font-bold font-mono text-text-primary tabular-nums">
+            <span className="text-3xl font-bold font-sans text-text-primary tabular-nums">
               {card.headline.display}
             </span>
             {card.secondary.map((h, i) => (
               <span key={secondaryLabels[i] ?? i} className="flex flex-col">
-                <span className="text-[10px] uppercase tracking-wider text-text-muted font-mono">
+                <span className="text-[10px] uppercase tracking-wider text-text-muted font-sans">
                   {secondaryLabels[i] ?? ''}
                 </span>
-                <span className="text-base font-mono text-text-secondary tabular-nums">{h.display}</span>
+                <span className="text-base font-sans text-text-secondary tabular-nums">{h.display}</span>
               </span>
             ))}
           </div>

@@ -1,8 +1,10 @@
 """Read the same domain data used by each UI page."""
 
 import re
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
+
+from arete.services.settings import athlete_today
 
 
 def _strength_sessions(**filters: Any) -> list[dict[str, Any]]:
@@ -38,7 +40,7 @@ def _dashboard() -> dict[str, Any]:
     from arete.services.plan_repository import PlanDecisionRepository
     from arete.services.planning import _session_to_dict
 
-    today = date.today()
+    today = athlete_today()
     planned = GarminRepository().list_planned_sessions(
         start_date=today, end_date=today, status=None, limit=10
     )
@@ -58,6 +60,13 @@ def _dashboard() -> dict[str, Any]:
         "plan_decisions_today": [
             {
                 "planned_session_id": d.planned_session_id,
+                "id": d.id,
+                "revision": d.revision,
+                "state": d.state,
+                "applied_at": d.applied_at.isoformat() if d.applied_at else None,
+                "readiness_measured_on": str(d.readiness_measured_on)
+                if d.readiness_measured_on
+                else None,
                 "decision": d.decision,
                 "reason": d.reason,
                 "reverted": d.reverted_at is not None,
@@ -104,11 +113,22 @@ def _without_nulls(row: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in row.items() if v is not None and v != ""}
 
 
+#: Completed sessions a Planning read lists, newest first, from the window's start.
+#: The plan alone already fills ~20k of the 32k-character bound on real data.
+PLANNING_DONE_LIMIT = 15
+
+
 def _planning() -> dict[str, Any]:
+    """The plan of the window, and what was actually done in its past days.
+
+    The plan alone hid the athlete's sessions: asked to keep today's run and
+    clear the rest, the coach saw no run and deleted every planned session.
+    """
     from arete.garmin.repository import GarminRepository
+    from arete.services.analytics import list_sessions
     from arete.services.planning import _session_to_dict
 
-    today = date.today()
+    today = athlete_today()
     start = today - timedelta(days=PLANNING_PAST_DAYS)
     end = today + timedelta(days=PLANNING_AHEAD_DAYS)
     # API default params are FastAPI Query objects; call with plain values.
@@ -122,7 +142,15 @@ def _planning() -> dict[str, Any]:
     return {
         "window": {"from": start.isoformat(), "to": end.isoformat()},
         "planned_sessions": rows,
-        "beyond_the_window": "planning toolkit: list_planned(start_date, end_date)",
+        "done_sessions": [
+            _without_nulls(s)
+            for s in list_sessions(limit=PLANNING_DONE_LIMIT, for_model=True)[
+                "sessions"
+            ]
+            if s["date"] >= start.isoformat()
+        ],
+        "beyond_the_window": "planning toolkit: list_planned(start_date, end_date); "
+        "done sessions: list_recent_sessions",
     }
 
 

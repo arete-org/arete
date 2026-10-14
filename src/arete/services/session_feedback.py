@@ -45,6 +45,7 @@ class SessionEvidence:
     rpe: float | None = None
     notes: str | None = None
     session_ref: str | None = None
+    sport: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,11 +63,13 @@ def _facts(
     lines = []
     if evidence is not None:
         lines.append(f"Séance du {evidence.date.isoformat()} : {evidence.title}")
+        if evidence.sport:
+            lines.append(f"Sport : {evidence.sport}")
         if evidence.rpe:
-            lines.append(f"RPE ressenti : {evidence.rpe}/10")
+            lines.append(f"Déclaration de l’athlète — RPE ressenti : {evidence.rpe}/10")
         if evidence.notes:
             lines.append(f"Notes de l'athlète : {evidence.notes}")
-    lines.append(rule_feedback)
+    lines.append("Observation calculée (pas une déclaration) : " + rule_feedback)
     facts = "\n".join(lines)
     if highlights:
         facts += "\n\nPoints clés:\n" + "\n".join(f"- {h}" for h in highlights)
@@ -81,7 +84,11 @@ def _file(evidence: SessionEvidence, facts: str, text: str, source: Source) -> N
     body = (
         reference
         + facts
-        + (f"\n\nRetour du coach : {text}" if source == "agent" else "")
+        + (
+            f"\n\nInterprétation du coach (non confirmée, jamais une preuve) : {text}"
+            if source == "agent"
+            else ""
+        )
     )
     try:
         append_entry(SESSIONS_LEDGER, evidence.title, body, when=evidence.date)

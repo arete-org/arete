@@ -1,8 +1,9 @@
 """The briefing producer: one agent run a day, with a deterministic floor.
 
 Called from two places — the scheduler after a successful sync, and
-``GET /tips/daily`` when the day has no briefing yet. Both go through
-``get_or_create_briefing``.
+``POST /tips/daily``, the request the dashboard sends (without waiting on it)
+when ``GET /tips/daily`` answers that the day has no briefing yet. Both go
+through ``get_or_create_briefing``: a reading request never runs the model.
 
 Sync on purpose. The scheduler already offloads blocking work with
 an AnyIO worker and the API route is a plain ``def``, so staying
@@ -16,6 +17,7 @@ something concrete and numeric to show.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 from collections.abc import Callable
@@ -25,6 +27,7 @@ from typing import TYPE_CHECKING
 from arete.dataio.settings import get_user_settings
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.coaching_repository import Briefing, BriefingRepository
+from arete.services.settings import athlete_today
 
 if TYPE_CHECKING:
     from arete.services.coaching_rules import RuleFacts
@@ -154,6 +157,7 @@ def briefing_facts(
                     f"{s.target_duration_min} min" if s.target_duration_min else None,
                     s.target_hr_zone,
                     s.description,
+                    f"statut : {s.status.value}",
                 )
                 if part
             )
@@ -166,6 +170,9 @@ def briefing_facts(
 
         lines = []
         for d in PlanDecisionRepository().list_for_day(target_date):
+            if d.state in {"pending", "discussion", "dismissed"}:
+                lines.append(f"Proposition {d.state}, non appliquée : {d.reason}")
+                continue
             if d.reverted_at is not None:
                 lines.append(f"décision annulée par l'athlète : {d.reason}")
                 continue
@@ -250,17 +257,21 @@ def generate_briefing(
     trigger: str = "api",
     target_date: date | None = None,
     user_id: int | None = None,
+    keep: Briefing | None = None,
 ) -> Briefing:
     """Produce and persist one briefing. Never raises.
 
     The rule floor is computed first and always: it supplies the priority (the
     card's colour must not depend on a model) and it is the text we store when
     the agent is disabled or fails, or when there is nothing to coach on.
+    ``keep`` is the briefing a rewrite replaces: a failed rewrite records its
+    failure and keeps serving it rather than the rule text.
     """
     user_id = resolve_athlete_id(user_id)
-    target_date = target_date or date.today()
+    target_date = target_date or athlete_today()
     repo = BriefingRepository()
     rule_text, priority, facts = _rule_floor(target_date)
+    digest: str | None = None
 
     def store(text: str, source: str, status: str, error: str | None) -> Briefing:
         repo.create(
@@ -272,6 +283,7 @@ def generate_briefing(
             error=error,
             trigger=trigger,
             user_id=user_id,
+            facts_digest=digest,
         )
         stored = repo.get_for_day(target_date, user_id=user_id)
         if stored is not None:
@@ -293,6 +305,8 @@ def generate_briefing(
         logger.info("Coach briefing disabled; storing the rule tip")
         return store(rule_text, "rules", "ok", None)
 
+    written_from = briefing_facts(target_date, rule_text, facts)
+    digest = facts_digest(written_from)
     # No load, no form, no readiness and nothing planned for the day: a model
     # request would only restate the rule text. Facts that could not be read
     # (None) still go to the model, and so does a plan built before any sync.
@@ -301,7 +315,7 @@ def generate_briefing(
         return store(rule_text, "rules", "ok", None)
 
     try:
-        text = produce(briefing_facts(target_date, rule_text, facts))
+        text = produce(written_from)
     except Exception as exc:
         # A visible failure beats a silently empty card: the failed row is
         # kept for the audit view, and the floor is what gets served.
@@ -316,6 +330,8 @@ def generate_briefing(
             trigger=trigger,
             user_id=user_id,
         )
+        if keep is not None:
+            return keep
         return store(rule_text, "rules", "ok", None)
 
     logger.info("Briefing written by the agent (%d chars)", len(text))
@@ -339,12 +355,15 @@ def _plans_the_day(target_date: date) -> bool:
 
 #: Two tabs of one athlete opening the dashboard at once must not pay for two
 #: briefings, and one athlete's run (up to five minutes) must not hold up the
-#: others: one lock per athlete. Past this many athletes the table starts over,
-#: which at worst lets a concurrent request produce a duplicate briefing (one
-#: extra model request, never an error).
+#: others: one lock per athlete. Past this many athletes the table starts over;
+#: the claim stored in the database still stops a duplicate run.
 MAX_PRODUCE_LOCKS = 256
 _produce_locks: dict[int, threading.Lock] = {}
 _produce_locks_guard = threading.Lock()
+
+#: A claim older than this belongs to a run that cannot still be going: the
+#: run is bounded to 300 s (``MAX_RUN_SECONDS``), and so is the function.
+CLAIM_EXPIRY = timedelta(seconds=330)
 
 
 def _athlete_lock(user_id: int) -> threading.Lock:
@@ -355,23 +374,83 @@ def _athlete_lock(user_id: int) -> threading.Lock:
         return _produce_locks.setdefault(user_id, threading.Lock())
 
 
+def _lost_run(_facts: str) -> str:
+    raise RuntimeError("the previous run was stopped before it stored a briefing")
+
+
 def get_or_create_briefing(
     *,
     produce: Callable[[str], str],
     trigger: str = "api",
     target_date: date | None = None,
     user_id: int | None = None,
-) -> Briefing:
-    """The day's briefing, producing it once if the day has none."""
+    replacing: Briefing | None = None,
+) -> Briefing | None:
+    """The day's briefing, producing it once if the day has none.
+
+    None while another request or instance produces it: the caller reports
+    "pending" instead of holding a worker for the length of a model run.
+    ``replacing`` is a stored briefing the scheduler rewrites (see
+    ``facts_changed``), kept if the rewrite fails; any other briefing of the
+    day is returned.
+    A claim left by a stopped run is settled with the rule text and a failed
+    row, never by a second model run.
+    """
     user_id = resolve_athlete_id(user_id)
-    target_date = target_date or date.today()
-    existing = BriefingRepository().get_for_day(target_date, user_id=user_id)
-    if existing is not None:
+    target_date = target_date or athlete_today()
+    repo = BriefingRepository()
+
+    def current() -> Briefing | None:
+        existing = repo.get_for_day(target_date, user_id=user_id)
+        if existing is not None and replacing is not None:
+            return None if existing.id == replacing.id else existing
         return existing
-    with _athlete_lock(user_id):
-        existing = BriefingRepository().get_for_day(target_date, user_id=user_id)
-        if existing is not None:
+
+    if (existing := current()) is not None:
+        return existing
+    lock = _athlete_lock(user_id)
+    if not lock.acquire(blocking=False):
+        return None
+    try:
+        if (existing := current()) is not None:
             return existing
-        return generate_briefing(
-            produce=produce, trigger=trigger, target_date=target_date, user_id=user_id
+        claim = repo.claim(
+            target_date, trigger=trigger, expiry=CLAIM_EXPIRY, user_id=user_id
         )
+        if claim is None:
+            return None
+        claim_id, lost = claim
+        if lost:
+            logger.warning("Briefing claim of a stopped run settled without a model")
+        try:
+            return generate_briefing(
+                produce=_lost_run if lost else produce,
+                trigger=trigger,
+                target_date=target_date,
+                user_id=user_id,
+                keep=replacing,
+            )
+        finally:
+            repo.release(claim_id)
+    finally:
+        lock.release()
+
+
+def facts_digest(facts_text: str) -> str:
+    """Identifies the facts a briefing was written from (stored with it)."""
+    return hashlib.sha256(facts_text.encode()).hexdigest()
+
+
+def facts_changed(briefing: Briefing) -> bool:
+    """Whether the facts the briefing was written from have changed since.
+
+    Recomputed from the database, without a model request: the day's health,
+    sessions, plan and decisions as the briefing reads them. A briefing stored
+    without a digest (before it existed, or with the briefing disabled)
+    counts as changed.
+    """
+    if briefing.facts_digest is None:
+        return True
+    rule_text, _, facts = _rule_floor(briefing.date)
+    current = facts_digest(briefing_facts(briefing.date, rule_text, facts))
+    return current != briefing.facts_digest

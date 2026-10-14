@@ -5,7 +5,7 @@ import { CalendarRange, Flag, Plus, Trash2 } from 'lucide-react';
 import { Button, Field, Input, Modal, ModalHeader, Panel } from '@/components/ui';
 import { goalsApi } from '@/lib/api';
 import { parseLocalDate, toLocalISODate } from '@/lib/dates';
-import { invalidateAfterSession, qk } from '@/lib/queryKeys';
+import { invalidateAfterSession, invalidateWithDashboard, qk } from '@/lib/queryKeys';
 import { formatKm, formatRaceTime, parseRaceTime } from '@/lib/race';
 import { cn, readableError } from '@/lib/utils';
 import type { Goal, GoalPriority, GoalStatus } from '@/types';
@@ -23,7 +23,7 @@ const STATUS_LABEL: Record<GoalStatus, string> = {
   cancelled: 'annulée',
 };
 
-const CHIP = 'px-3 py-1.5 rounded text-xs font-mono transition-all border';
+const CHIP = 'px-3 py-1.5 rounded text-xs font-sans transition-all border';
 const CHIP_IDLE = 'bg-abyss border-text-muted/30 text-text-muted hover:border-text-muted/50';
 const CHIP_ON = 'bg-neon-cyan/20 border-neon-cyan/50 text-neon-cyan';
 
@@ -45,7 +45,7 @@ function GoalForm({ onDone }: { onDone: () => void }) {
   const create = useMutation({
     mutationFn: goalsApi.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.goals });
+      invalidateWithDashboard(queryClient, qk.goals);
       onDone();
     },
   });
@@ -122,7 +122,7 @@ function GoalForm({ onDone }: { onDone: () => void }) {
         </Field>
       </div>
       {(invalid || create.isError) && (
-        <p role="alert" className="text-xs font-mono text-danger-red">
+        <p role="alert" className="text-xs font-sans text-danger-red">
           {invalid ?? readableError(create.error)}
         </p>
       )}
@@ -144,12 +144,12 @@ function GoalRow({ goal, onPlan, onDelete }: { goal: Goal; onPlan: () => void; o
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm text-text-primary truncate">
-            <span className="font-mono text-neon-gold mr-2" title="Priorité">
+            <span className="font-sans text-neon-gold mr-2" title="Priorité">
               {goal.priority}
             </span>
             {goal.name}
           </p>
-          <p className="text-xs font-mono text-text-muted">
+          <p className="text-xs font-sans text-text-muted">
             {parseLocalDate(goal.race_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
             {' · '}
             {formatKm(goal.distance_km)} km
@@ -157,8 +157,8 @@ function GoalRow({ goal, onPlan, onDelete }: { goal: Goal; onPlan: () => void; o
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-sm font-mono text-neon-cyan">{goal.days_left > 0 ? `J-${goal.days_left}` : 'Jour J'}</p>
-          <p className="text-[11px] font-mono text-text-muted">{STATUS_LABEL[goal.status]}</p>
+          <p className="text-sm font-sans text-neon-cyan">{goal.days_left > 0 ? `J-${goal.days_left}` : 'Jour J'}</p>
+          <p className="text-[11px] font-sans text-text-muted">{STATUS_LABEL[goal.status]}</p>
         </div>
       </div>
       <div className="flex justify-end gap-2">

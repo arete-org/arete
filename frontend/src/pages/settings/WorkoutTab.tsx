@@ -47,10 +47,10 @@ export function WorkoutTab({ settings, updateSetting }: SettingsTabProps) {
       <h2 className="text-lg font-sans text-text-primary mb-4">NOTATION DES SÉANCES</h2>
 
       <div>
-        <label className="text-xs font-mono text-text-muted uppercase block mb-2">
+        <label className="text-xs font-sans text-text-muted uppercase block mb-2">
           Abréviations d'exercices
         </label>
-        <p className="text-xs text-text-muted font-mono mb-4">
+        <p className="text-xs text-text-muted font-sans mb-4">
           Associe tes raccourcis aux noms complets pour que l'analyseur comprenne ta notation.
           <br />
           Exemple : <span className="text-neon-cyan">bp</span> &rarr; <span className="text-neon-cyan">bench press</span>,{' '}
@@ -68,11 +68,11 @@ export function WorkoutTab({ settings, updateSetting }: SettingsTabProps) {
                   'group hover:border-text-muted/40 transition-all'
                 )}
               >
-                <span className="font-mono text-sm text-neon-cyan truncate" title={abbrev}>
+                <span className="font-sans text-sm text-neon-cyan truncate" title={abbrev}>
                   {abbrev}
                 </span>
-                <span className="text-text-muted font-mono text-xs">&rarr;</span>
-                <span className="font-mono text-sm text-text-primary truncate" title={full}>
+                <span className="text-text-muted font-sans text-xs">&rarr;</span>
+                <span className="font-sans text-sm text-text-primary truncate" title={full}>
                   {full}
                 </span>
                 <button
@@ -118,7 +118,7 @@ export function WorkoutTab({ settings, updateSetting }: SettingsTabProps) {
       </div>
 
       <Panel variant="inset" title="Mémo de notation">
-        <div className="space-y-1.5 font-mono text-xs">
+        <div className="space-y-1.5 font-sans text-xs">
           {QUICK_REFERENCE.map(([notation, meaning]) => (
             <div key={notation} className="flex gap-3">
               <span className="text-neon-cyan w-44 shrink-0">{notation}</span>

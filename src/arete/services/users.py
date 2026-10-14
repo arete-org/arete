@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from arete.config import config
@@ -22,6 +22,11 @@ ROLES = ("athlete", "admin")
 _COLUMNS = (
     "id, clerk_user_id, email, name, athlete_id, email_verified_at, "
     "profile_synced_at, deleted_at, coalesce(role, 'athlete')"
+)
+#: The same columns, qualified for a query that joins ``app.athletes``.
+_JOINED_COLUMNS = (
+    "u.id, u.clerk_user_id, u.email, u.name, u.athlete_id, u.email_verified_at, "
+    "u.profile_synced_at, u.deleted_at, coalesce(u.role, 'athlete')"
 )
 
 
@@ -98,6 +103,26 @@ def get_user(clerk_user_id: str) -> AppUser | None:
     finally:
         con.close()
     return _from_row(row) if row else None
+
+
+def get_account(clerk_user_id: str) -> tuple[AppUser, bool] | None:
+    """The login and whether its athlete is live, in one query; None if unknown.
+
+    The flag is False for a deactivated or missing athlete, and True for a
+    login with no athlete yet (nothing to deactivate).
+    """
+    con = connect()
+    try:
+        row = con.execute(
+            f"SELECT {_JOINED_COLUMNS}, u.athlete_id IS NULL OR "
+            "(a.id IS NOT NULL AND a.deleted_at IS NULL) "
+            "FROM app.users u LEFT JOIN app.athletes a ON a.id = u.athlete_id "
+            "WHERE u.clerk_user_id = ?",
+            [clerk_user_id],
+        ).fetchone()
+    finally:
+        con.close()
+    return (_from_row(row[:-1]), bool(row[-1])) if row else None
 
 
 def upsert_user(
@@ -221,9 +246,13 @@ class AthleteAccount:
         return self.athlete_id == OWNER_ATHLETE_ID
 
     def to_dict(self) -> dict:
-        # Stored timestamps are the server's local time: say which one.
+        # Stored timestamps are the server's local time: say which one. The
+        # scheduler stores its daily marker and lease in UTC.
         def aware(value: datetime | None) -> datetime | None:
             return value.astimezone() if value is not None else None
+
+        def utc(value: datetime | None) -> datetime | None:
+            return value.replace(tzinfo=UTC) if value is not None else None
 
         return {
             "athlete_id": self.athlete_id,
@@ -233,8 +262,8 @@ class AthleteAccount:
             "role": self.role,
             "is_owner": self.is_owner,
             "last_seen_at": aware(self.last_seen_at),
-            "last_sync_at": aware(self.last_sync_at),
-            "sync_lease_until": aware(self.sync_lease_until),
+            "last_sync_at": utc(self.last_sync_at),
+            "sync_lease_until": utc(self.sync_lease_until),
             "lease_stuck": self.lease_stuck,
             "deactivated_at": aware(self.deactivated_at),
         }
@@ -251,7 +280,8 @@ def list_accounts() -> list[AthleteAccount]:
         rows = con.execute(
             "SELECT a.id, u.id, u.email, u.name, coalesce(u.role, 'athlete'), "
             "u.last_seen_at, a.last_sync_at, a.sync_lease_until, "
-            "coalesce(a.sync_lease_until < current_timestamp, false), a.deleted_at "
+            "coalesce(a.sync_lease_until < (current_timestamp AT TIME ZONE 'UTC'), false), "
+            "a.deleted_at "
             "FROM app.athletes a LEFT JOIN app.users u ON u.athlete_id = a.id "
             "ORDER BY a.id, u.id"
         ).fetchall()

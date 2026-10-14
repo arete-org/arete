@@ -7,7 +7,6 @@ import secrets
 import time
 from typing import TYPE_CHECKING
 
-import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -15,6 +14,7 @@ from pydantic import BaseModel, Field
 from arete.config import config
 from arete.services import oauth_state
 from arete.services.athlete_scope import athlete_scope, resolve_athlete_id
+from arete.strength.logging_service import link_garmin_strength
 
 if TYPE_CHECKING:
     from arete.strava.client import StravaClient
@@ -165,6 +165,8 @@ RATE_LIMIT_BACKOFF_SEC = 300  # Strava: 100 requests / 15 min
 
 def _with_backoff(fn, *args, retries: int = 2):
     """Call fn, sleeping through Strava 429s up to ``retries`` times."""
+    import httpx  # here, not at module level: the API boot skips httpx
+
     for attempt in range(retries + 1):
         try:
             return fn(*args)
@@ -308,6 +310,8 @@ def sync(body: SyncRequest | None = None):
             else:
                 actual_id = repo.create_actual_session(session)
                 auto_match(repo, actual_id, session, zone_model)
+                if session.sport == "strength":
+                    link_garmin_strength([session.date])
                 imported += 1
 
             # Rate limiting: pause briefly between detail calls
@@ -315,8 +319,10 @@ def sync(body: SyncRequest | None = None):
             if (imported + merged) % 45 == 0:
                 logger.info("Approaching rate limit, pausing 60s...")
                 time.sleep(60)
-        except Exception as exc:
-            errors.append(f"Activity {act_id}: {exc}")
+        except Exception:
+            # The exception may quote URLs or SQL: keep it in the server logs.
+            logger.exception("Strava activity %s failed to import", act_id)
+            errors.append(f"Activity {act_id}: import failed")
 
     return {
         "success": True,

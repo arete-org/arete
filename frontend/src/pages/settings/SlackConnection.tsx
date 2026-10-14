@@ -21,7 +21,7 @@ export function SlackConnection() {
     <div className="flex items-start gap-4 p-4 rounded bg-abyss/50 border border-text-muted/20">
       <MessageSquare className="w-6 h-6 text-text-muted" />
       <div className="flex-1 space-y-2">
-        <div className="font-mono text-sm text-text-primary">Slack</div>
+        <div className="font-sans text-sm text-text-primary">Slack</div>
         <p className="text-xs text-text-muted">
           Écris à Arete en message privé sur Slack. Il te reconnaît à l’adresse
           e-mail de ton profil Slack, qui doit être celle de ton compte Arete.

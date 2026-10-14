@@ -1,5 +1,6 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { strengthApi } from './api';
+import { syncGame } from './gamification';
 
 /**
  * Every react-query key of the app, in one place.
@@ -10,6 +11,8 @@ import { strengthApi } from './api';
  */
 export const qk = {
   settings: ['settings'] as const,
+  /** `GET /dashboard`, one per day (lib/dashboard.ts); it seeds the keys of its slices. */
+  dashboard: (day?: string) => (day ? (['dashboard', day] as const) : (['dashboard'] as const)),
 
   planned: (start?: string, end?: string) =>
     start ? (['planned', start, end ?? start] as const) : (['planned'] as const),
@@ -48,9 +51,6 @@ export const qk = {
   stravaStatus: ['stravaStatus'] as const,
 
   planToday: ['plan', 'today'] as const,
-  /** Watch steps of a planned session; changes whenever the session is adapted. */
-  plannedStructure: (id?: number) =>
-    id == null ? (['plannedStructure'] as const) : (['plannedStructure', id] as const),
   /** Last week's review and its proposals. */
   weeklyReview: ['weeklyReview'] as const,
 
@@ -67,6 +67,7 @@ export const qk = {
 
   /** Every athlete and login of the instance (Settings › Administration). */
   adminAccounts: ['admin', 'accounts'] as const,
+  adminFeatureFlags: ['admin', 'feature-flags'] as const,
 
   vapidKey: ['vapidPublicKey'] as const,
   /** This device's Web Push state (lib/push.ts), not a server answer. */
@@ -82,9 +83,15 @@ export const strengthSessionsQuery = {
   queryFn: () => strengthApi.getSessions(200),
 };
 
+/** `keys` and the dashboard, whose one answer also carries their data (Garmin state, health, goals). */
+export function invalidateWithDashboard(queryClient: QueryClient, ...keys: QueryKey[]): void {
+  for (const key of [...keys, qk.dashboard()]) queryClient.invalidateQueries({ queryKey: key });
+}
+
 /** Everything that changes when a session is logged, uploaded, synced or matched. */
 export function invalidateAfterSession(queryClient: QueryClient): void {
   for (const key of [
+    qk.dashboard(),
     ['workout'],
     ['garmin-exports'],
     qk.planned(),
@@ -99,13 +106,13 @@ export function invalidateAfterSession(queryClient: QueryClient): void {
     qk.sessionDetail(),
     qk.analytics,
     qk.playerStats,
-    ['game'],
     qk.fitness,
     qk.workload,
     qk.planToday,
-    qk.plannedStructure(),
     qk.goalProjection(),
   ]) {
     queryClient.invalidateQueries({ queryKey: key });
   }
+  // Settles the RPG: it replaces the snapshot instead of re-reading it.
+  syncGame(queryClient);
 }

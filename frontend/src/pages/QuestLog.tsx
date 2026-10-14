@@ -1,145 +1,67 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw } from 'lucide-react';
-import { AdherenceBar, CalendarWeek, ErrorState, LoadingState, strengthAsActual } from '@/components';
-import { Button, Field, Input, Modal, ModalHeader, Panel, Textarea } from '@/components/ui';
-import { garminApi, settingsApi, type PlannedSessionCreate } from '@/lib/api';
+import { ChevronLeft, ChevronRight, Plus, RefreshCw, MoreHorizontal } from 'lucide-react';
+import { ErrorState, withStrengthLogs } from '@/components';
+import { Button, Select, Modal, ModalHeader, Skeleton } from '@/components/ui';
+import { WorkoutSelection } from '@/components/WorkoutSelection';
+import { garminApi, settingsApi } from '@/lib/api';
+import { exportApi } from '@/lib/documents';
 import { parseLocalDate, toLocalISODate } from '@/lib/dates';
-import { qk, strengthSessionsQuery } from '@/lib/queryKeys';
-import { weekStats } from '@/lib/sessionMatch';
-import { cn } from '@/lib/utils';
+import { invalidateAfterSession, qk, strengthSessionsQuery } from '@/lib/queryKeys';
+import { linkDay, weekStats } from '@/lib/sessionMatch';
 import type { PlannedSession } from '@/types';
-import { WeekPlanList } from './planning/WeekPlanList';
 import { GarminExportPanel } from './planning/GarminExportPanel';
 import { GoalProjectionPanel } from './planning/GoalProjectionPanel';
 import { WeeklyReviewPanel } from './planning/WeeklyReviewPanel';
+import { SessionEditor, type EditorState } from './planning/SessionEditor';
+import { SessionDetail, MoveSession } from './planning/SessionDetail';
+import { GarminState, PlanningSessionCard, WeekBoard } from './planning/WeekBoard';
+import { dayLabel, sessionTitle, sessionSummary, sportLabel, SPORTS, STATE_LABELS } from './planning/sessionForm';
+import './planning/planning.css';
 
-// Session types per sport category
-const CARDIO_SESSION_TYPES = [
-  { value: 'recovery', label: 'Récupération', color: 'text-success-green' },
-  { value: 'endurance', label: 'Endurance', color: 'text-neon-cyan' },
-  { value: 'tempo', label: 'Seuil', color: 'text-warning-orange' },
-  { value: 'intervals', label: 'Fractionné', color: 'text-danger-red' },
-  { value: 'long_run', label: 'Sortie longue', color: 'text-neon-purple' },
-];
-
-const STRENGTH_SESSION_TYPES = [
-  { value: 'strength', label: 'Force', color: 'text-neon-gold' },
-  { value: 'hypertrophy', label: 'Hypertrophie', color: 'text-neon-cyan' },
-  { value: 'power', label: 'Puissance', color: 'text-danger-red' },
-  { value: 'deload', label: 'Décharge', color: 'text-success-green' },
-];
-
-const OTHER_SESSION_TYPES = [
-  { value: 'recovery', label: 'Récupération', color: 'text-success-green' },
-  { value: 'endurance', label: 'Endurance', color: 'text-neon-cyan' },
-  { value: 'other', label: 'Autre', color: 'text-text-muted' },
-];
-
-const SPORTS = [
-  { value: 'running', label: 'Course', category: 'cardio' },
-  { value: 'cycling', label: 'Vélo', category: 'cardio' },
-  { value: 'swimming', label: 'Natation', category: 'cardio' },
-  { value: 'strength', label: 'Muscu', category: 'strength' },
-  { value: 'other', label: 'Autre', category: 'other' },
-];
-
-const INTENSITIES = [
-  { value: 'easy', label: 'Facile', color: 'text-success-green' },
-  { value: 'moderate', label: 'Modérée', color: 'text-warning-orange' },
-  { value: 'hard', label: 'Dure', color: 'text-danger-red' },
-] as const;
-
-const HR_ZONES = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'];
-
-const getSessionTypesForSport = (sport: string) => {
-  const sportConfig = SPORTS.find((s) => s.value === sport);
-  switch (sportConfig?.category) {
-    case 'cardio':
-      return CARDIO_SESSION_TYPES;
-    case 'strength':
-      return STRENGTH_SESSION_TYPES;
-    default:
-      return OTHER_SESSION_TYPES;
-  }
-};
-
-const getDefaultSessionType = (sport: string) => getSessionTypesForSport(sport)[0]?.value || 'endurance';
-
-const emptyQuest = (date?: string): PlannedSessionCreate => ({
-  date: date ?? toLocalISODate(),
-  sport: 'running',
-  session_type: getDefaultSessionType('running'),
-  target_duration_min: 45,
-  description: '',
-  source: 'manual',
-});
-
-// Monday of the week `offset` weeks from now, ISO date
-const getWeekStart = (offset: number) => {
-  const today = new Date();
-  const day = today.getDay();
-  const diff = today.getDate() - day + (day === 0 ? -6 : 1) + offset * 7;
-  return toLocalISODate(new Date(today.setDate(diff)));
-};
-
-const CHIP = 'px-3 py-1.5 rounded text-xs font-mono transition-all border';
-const CHIP_IDLE = 'bg-abyss border-text-muted/30 text-text-muted hover:border-text-muted/50';
+function monday(date: string) {
+  const d = parseLocalDate(date);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return toLocalISODate(d);
+}
+function validDate(value: string | null, fallback: string) {
+  return value &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number.isFinite(parseLocalDate(value).getTime()) &&
+    toLocalISODate(parseLocalDate(value)) === value
+    ? value
+    : fallback;
+}
 
 export function PlanningPage() {
-  const queryClient = useQueryClient();
-  const [weekOffset, setWeekOffset] = useState(() => {
-    const day = new URLSearchParams(window.location.search).get('date');
-    if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return 0;
-    return Math.floor(Math.round((parseLocalDate(day).getTime() - parseLocalDate(getWeekStart(0)).getTime()) / 86_400_000) / 7);
-  });
-  // `?new=1` (the dashboard's "Ajouter une séance") opens the form once, then leaves the URL.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [showNewQuest, setShowNewQuest] = useState(() => searchParams.get('new') === '1');
-  useEffect(() => {
-    if (searchParams.get('new') !== '1') return;
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('new');
-        return next;
-      },
-      { replace: true }
-    );
-  }, [searchParams, setSearchParams]);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const requestedDate = searchParams.get('date');
-  const [lastRequestedDate, setLastRequestedDate] = useState(requestedDate);
-  if (requestedDate !== lastRequestedDate) {
-    setLastRequestedDate(requestedDate);
-    if (requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
-      setWeekOffset(Math.floor(Math.round((parseLocalDate(requestedDate).getTime() - parseLocalDate(getWeekStart(0)).getTime()) / 86_400_000) / 7));
-      setSelectedDate(null);
-    }
-  }
-
-  const [newQuest, setNewQuest] = useState<PlannedSessionCreate>(emptyQuest());
-  const [toDelete, setToDelete] = useState<PlannedSession | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
-
   const today = toLocalISODate();
-  const weekStart = getWeekStart(weekOffset);
-  const weekEnd = useMemo(() => {
-    const end = parseLocalDate(weekStart);
-    end.setDate(end.getDate() + 6);
-    return toLocalISODate(end);
-  }, [weekStart]);
-  const days = useMemo(
-    () =>
-      Array.from({ length: 7 }, (_, i) => {
-        const d = parseLocalDate(weekStart);
-        d.setDate(d.getDate() + i);
-        return toLocalISODate(d);
-      }),
-    [weekStart]
+  const client = useQueryClient();
+  const busy = useIsMutating({ mutationKey: ['workout-action'] }) > 0;
+  const [params, setParams] = useSearchParams();
+  const selectedDate = validDate(params.get('date'), today);
+  const weekStart = monday(selectedDate);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = parseLocalDate(weekStart);
+    d.setDate(d.getDate() + i);
+    return toLocalISODate(d);
+  });
+  const weekEnd = days[6];
+  const [editor, setEditor] = useState<EditorState | null>(() =>
+    params.get('new') === '1' ? { mode: 'create', date: selectedDate } : null,
   );
-
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [moving, setMoving] = useState<{
+    session: PlannedSession;
+    date?: string;
+  } | null>(null);
+  const [dragged, setDragged] = useState<PlannedSession | null>(null);
+  const [sport, setSport] = useState('');
+  const [selecting, setSelecting] = useState(false);
+  const [message, setMessage] = useState('');
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [analysisOpened, setAnalysisOpened] = useState(false);
   const plannedQuery = useQuery({
     queryKey: qk.planned(weekStart, weekEnd),
     queryFn: () => garminApi.getPlanned(weekStart, weekEnd),
@@ -149,401 +71,456 @@ export function PlanningPage() {
     queryFn: () => garminApi.getActual(weekStart, weekEnd),
   });
   const strengthQuery = useQuery(strengthSessionsQuery);
-  const { data: settings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
-
-  const afterChange = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: qk.planned() });
-    queryClient.invalidateQueries({ queryKey: qk.actual() });
-    setBusyId(null);
-  }, [queryClient]);
-
-  const createQuestMutation = useMutation({
-    mutationFn: garminApi.createPlanned,
-    onSuccess: () => {
-      afterChange();
-      setShowNewQuest(false);
-      setNewQuest(emptyQuest(selectedDate ?? undefined));
-    },
+  const settingsQuery = useQuery({
+    queryKey: qk.settings,
+    queryFn: settingsApi.get,
   });
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: 'completed' | 'skipped' | 'pending' }) =>
-      garminApi.setPlannedStatus(id, status),
-    onSuccess: afterChange,
-    onError: () => setBusyId(null),
+  const exportsQuery = useQuery({
+    queryKey: ['garmin-exports'],
+    queryFn: exportApi.statuses,
+    retry: false,
   });
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => garminApi.deletePlanned(id),
-    onSuccess: () => {
-      afterChange();
-      setToDelete(null);
-    },
-    onError: () => setBusyId(null),
-  });
-
-  const weekActual = useMemo(
-    () => [
-      ...(actualQuery.data ?? []),
-      ...(strengthQuery.data ?? [])
-        .filter((s) => s.date >= weekStart && s.date <= weekEnd)
-        .map(strengthAsActual),
-    ],
-    [actualQuery.data, strengthQuery.data, weekStart, weekEnd]
+  const planned = plannedQuery.data ?? [];
+  const actual = withStrengthLogs(
+    actualQuery.data ?? [],
+    (strengthQuery.data ?? []).filter((s) => s.date >= weekStart && s.date <= weekEnd),
   );
-
-  const stats = useMemo(
-    () => weekStats(days, plannedQuery.data ?? [], weekActual, today),
-    [days, plannedQuery.data, weekActual, today]
+  const rows = days.flatMap(
+    (date) =>
+      linkDay(
+        date,
+        planned.filter((s) => s.date === date),
+        actual,
+        today,
+      ).planned,
   );
+  const stats = weekStats(days, planned, actual, today);
+  const next = rows.find((r) => r.session.date >= today && r.state === 'pending');
+  const active =
+    rows.find((r) => r.session.id === activeId) ??
+    rows.find((r) => r.session.date === selectedDate) ??
+    next ??
+    rows[0];
+  const detail = rows.find((r) => r.session.id === detailId);
+  const restDays = settingsQuery.data?.rest_day_preference ?? [];
+  const freeDays = days.filter((date) => !planned.some((s) => s.date === date)).length;
+  const day = (date: string) => {
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('date', date);
+      next.delete('new');
+      return next;
+    });
+  };
+  const shift = (delta: number) => {
+    const d = parseLocalDate(selectedDate);
+    d.setDate(d.getDate() + delta * 7);
+    day(toLocalISODate(d));
+    setActiveId(null);
+  };
+  const closeEditor = () => {
+    setEditor(null);
+    if (params.has('new')) day(selectedDate);
+  };
+  const saved = (session: PlannedSession, text: string) => {
+    closeEditor();
+    setMoving(null);
+    setDetailId(null);
+    setActiveId(session.id);
+    day(session.date);
+    setMessage(text);
+  };
 
-  const availableSessionTypes = useMemo(
-    () => getSessionTypesForSport(newQuest.sport ?? 'running'),
-    [newQuest.sport]
-  );
-
-  const handleSportChange = useCallback((sport: string) => {
-    setNewQuest((prev) => ({ ...prev, sport, session_type: getDefaultSessionType(sport) }));
-  }, []);
-
-  if (plannedQuery.isLoading || actualQuery.isLoading) {
-    return <LoadingState message="CHARGEMENT DU PLANNING…" />;
-  }
-
-  if (plannedQuery.isError || actualQuery.isError) {
+  // The page frame and week controls show at once; the week fills in when it arrives.
+  const loading = plannedQuery.isPending || actualQuery.isPending;
+  if (plannedQuery.error || actualQuery.error)
     return (
       <ErrorState
         message="ÉCHEC DU CHARGEMENT DU PLANNING"
         onRetry={() => {
-          plannedQuery.refetch();
-          actualQuery.refetch();
+          void plannedQuery.refetch();
+          void actualQuery.refetch();
         }}
       />
     );
-  }
-
   return (
     <div className="page-shell bg-void">
-      <div className="page-content">
-        <header className="flex justify-between items-center mb-4 sm:mb-8 animate-fade-down">
-          <h1 className="page-title text-lg sm:text-2xl font-sans font-bold text-neon-cyan tracking-wider">PLANNING</h1>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={afterChange}
-              className="p-2 rounded transition-all duration-200 text-text-muted hover:text-neon-cyan hover:bg-abyss"
-              aria-label="Rafraîchir"
-            >
-              <RefreshCw className="w-5 h-5" />
-            </button>
-            <Button
-              onClick={() => {
-                setNewQuest(emptyQuest(selectedDate ?? undefined));
-                setShowNewQuest(true);
-              }}
-              className="px-3 py-1.5 sm:px-4 sm:py-2"
-            >
-              <Plus className="w-4 h-4" />
-              NOUVELLE SÉANCE
-            </Button>
+      <div className="page-content planning-content">
+        <header className="planning-header">
+          <div>
+            <h1 className="page-title">Planning</h1>
+            <p className="text-xs text-text-muted font-sans mt-1">Votre semaine, en un regard.</p>
           </div>
+          <Button
+            className="planning-desktop-create"
+            strong
+            onClick={() => setEditor({ mode: 'create', date: selectedDate })}
+          >
+            <Plus className="size-4" />
+            Nouvelle séance
+          </Button>
         </header>
-
-        {/* Week Navigation */}
-        <div className="flex items-center justify-between mb-4 sm:mb-6 animate-fade-in">
-          <button
-            type="button"
-            onClick={() => setWeekOffset((prev) => prev - 1)}
-            className="p-2 text-text-muted hover:text-neon-cyan transition-colors"
-            aria-label="Semaine précédente"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs sm:text-sm text-text-secondary">
-              {parseLocalDate(weekStart).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-              {' — '}
-              {parseLocalDate(weekEnd).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </span>
-            {weekOffset !== 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setWeekOffset(0);
-                  setSelectedDate(null);
-                }}
-                className="text-xs font-mono text-neon-cyan hover:underline"
-              >
-                Aujourd&apos;hui
-              </button>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setWeekOffset((prev) => prev + 1)}
-            className="p-2 text-text-muted hover:text-neon-cyan transition-colors"
-            aria-label="Semaine suivante"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
+        <div className="planning-summary">
+          {loading ? (
+            [0, 1, 2].map((i) => (
+              <section key={i} className="glass-panel p-5">
+                <Skeleton label="Chargement du résumé de la semaine" />
+              </section>
+            ))
+          ) : (
+            <>
+              <section className="glass-panel p-5">
+                <p className="planning-eyebrow">Séances</p>
+                <p className="mt-2 text-[26px] font-semibold tabular-nums">
+                  {rows.filter((r) => r.state === 'done').length}
+                  <span> / {planned.length}</span>
+                </p>
+                <p className="mt-2 text-xs text-text-secondary">
+                  {stats.due
+                    ? `${stats.rate} % des séances dues réalisées`
+                    : 'La semaine est devant vous.'}
+                </p>
+              </section>
+              <section className="glass-panel p-5">
+                <p className="planning-eyebrow">Récupération</p>
+                <p className="mt-2 text-[26px] font-semibold">
+                  {freeDays}{' '}
+                  <span className="text-[26px]">
+                    jour{freeDays > 1 ? 's' : ''} libre{freeDays > 1 ? 's' : ''}
+                  </span>
+                </p>
+                <p className="mt-2 text-xs text-text-secondary">Sans séance planifiée cette semaine.</p>
+              </section>
+              <section className="glass-panel p-5 planning-next">
+                <p className="text-sm font-semibold">Prochaine séance</p>
+                {next ? (
+                  <button
+                    className="planning-next-link block text-left mt-2"
+                    onClick={() => setDetailId(next.session.id)}
+                  >
+                    <span className="text-sm text-text-secondary">
+                      {dayLabel(next.session.date)} · {sessionTitle(next.session)} ·{' '}
+                      {sessionSummary(next.session)}
+                    </span>
+                  </button>
+                ) : (
+                  <p className="text-sm text-text-secondary mt-3">
+                    Aucune séance à venir cette semaine.
+                  </p>
+                )}
+              </section>
+            </>
+          )}
         </div>
-
-        <Panel className="mb-4 sm:mb-8 overflow-x-auto">
-          <CalendarWeek
-            startDate={weekStart}
-            plannedSessions={plannedQuery.data || []}
-            actualSessions={weekActual}
-            onDayClick={(d) => setSelectedDate((prev) => (prev === d ? null : d))}
-          />
-        </Panel>
-
-        <GarminExportPanel sessions={plannedQuery.data ?? []}>{workoutControls => <Panel title="SÉANCES DE LA SEMAINE" className="mb-4 sm:mb-8" delay={0.05}>
-          <WeekPlanList
-            workoutControls={workoutControls}
-            days={days}
-            planned={plannedQuery.data || []}
-            actual={weekActual}
-            selectedDate={selectedDate}
-            today={today}
-            restDays={settings?.rest_day_preference ?? []}
-            busyId={busyId}
-            onSelect={setSelectedDate}
-            onStatus={(id, status) => {
-              setBusyId(id);
-              statusMutation.mutate({ id, status });
-            }}
-            onDelete={setToDelete}
-          />
-        </Panel>}</GarminExportPanel>
-
-        <Panel title="ADHÉRENCE DE LA SEMAINE" className="mb-4 sm:mb-8" delay={0.1}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-text-muted font-mono">Taux d&apos;adhérence</span>
-                <span className="text-base sm:text-lg font-mono text-text-primary">{stats.rate}%</span>
-              </div>
-              <AdherenceBar score={stats.rate} size="lg" showLabel={false} />
+        {message && (
+          <div role="status" className="ui-inset p-4 my-4 text-sm flex justify-between gap-3">
+            <p>{message}</p>
+            <button aria-label="Masquer le message" onClick={() => setMessage('')}>
+              ×
+            </button>
+          </div>
+        )}
+        {strengthQuery.error && (
+          <p role="alert" className="text-sm text-danger-red my-3">
+            Activités de musculation indisponibles.{' '}
+            <button className="underline" onClick={() => void strengthQuery.refetch()}>
+              Réessayer
+            </button>
+          </p>
+        )}
+        {settingsQuery.error && (
+          <p role="alert" className="text-sm text-danger-red my-3">
+            Préférences de repos indisponibles.{' '}
+            <button className="underline" onClick={() => void settingsQuery.refetch()}>
+              Réessayer
+            </button>
+          </p>
+        )}
+        <section className="planning-calendar" aria-label="Planning hebdomadaire">
+          <div className="planning-toolbar">
+            <div className="planning-week-controls">
+              <h2 className="font-semibold tabular-nums">
+                {parseLocalDate(weekStart).toLocaleDateString('fr-FR', {
+                  day: 'numeric',
+                  month: weekStart.slice(0, 7) === weekEnd.slice(0, 7) ? undefined : 'short',
+                })}{' '}
+                –{' '}
+                {parseLocalDate(weekEnd).toLocaleDateString('fr-FR', {
+                  day: 'numeric',
+                  month: 'long',
+                })}
+              </h2>
+              <Button variant="ghost" aria-label="Semaine précédente" onClick={() => shift(-1)}>
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button variant="ghost" aria-label="Semaine suivante" onClick={() => shift(1)}>
+                <ChevronRight className="size-4" />
+              </Button>
+              <Button className="planning-today" variant="ghost" onClick={() => day(today)}>
+                Aujourd’hui
+              </Button>
             </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-text-muted font-mono">Faites / dues à ce jour</span>
-                <span className="text-sm font-mono text-text-secondary">
-                  {stats.done} / {stats.due}
-                </span>
-              </div>
-              <div className="flex gap-1 flex-wrap">
-                {Array.from({ length: stats.due }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={cn('w-4 h-4 rounded-sm', i < stats.done ? 'bg-success-green' : 'bg-text-muted/20')}
-                  />
+            <div className="planning-extra-controls">
+              <Select
+                className="planning-sport-filter"
+                aria-label="Filtrer par sport"
+                value={sport}
+                onChange={(e) => setSport(e.target.value)}
+              >
+                <option value="">Tous les sports</option>
+                {Object.entries(SPORTS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
                 ))}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-6 text-xs font-mono">
-              <div>
-                <div className="text-xl sm:text-2xl font-mono font-bold text-danger-red">{stats.missed}</div>
-                <div className="text-text-muted">manquées</div>
-              </div>
-              <div>
-                <div className="text-xl sm:text-2xl font-mono font-bold text-warning-orange">{stats.offPlan}</div>
-                <div className="text-text-muted">hors plan</div>
-              </div>
+              </Select>
+              <Button
+                variant="ghost"
+                aria-label="Options du planning"
+                onClick={() => setOptionsOpen(true)}
+              >
+                <MoreHorizontal className="size-4" />
+              </Button>
             </div>
           </div>
-        </Panel>
-
-        <WeeklyReviewPanel />
-        <GoalProjectionPanel />
-      </div>
-
-      <Modal open={showNewQuest} onClose={() => setShowNewQuest(false)} className="max-w-md p-4 sm:p-6">
-        <ModalHeader
-          title="NOUVELLE SÉANCE"
-          icon={<Plus className="w-5 h-5" />}
-          onClose={() => setShowNewQuest(false)}
-          className="mb-4 sm:mb-6"
-        />
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            createQuestMutation.mutate(newQuest);
-          }}
-          className="space-y-4"
-        >
-          <Field label="Date">
-            <Input
-              type="date"
-              value={newQuest.date}
-              onChange={(e) => setNewQuest((prev) => ({ ...prev, date: e.target.value }))}
-              required
-            />
-          </Field>
-
-          <Field label="Sport">
-            <div className="flex flex-wrap gap-2">
-              {SPORTS.map((sport) => (
-                <button
-                  key={sport.value}
-                  type="button"
-                  onClick={() => handleSportChange(sport.value)}
-                  className={cn(
-                    CHIP,
-                    newQuest.sport === sport.value ? 'bg-neon-cyan/20 border-neon-cyan/50 text-neon-cyan' : CHIP_IDLE
-                  )}
-                >
-                  {sport.label}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          <Field label="Type">
-            <div className="flex flex-wrap gap-2">
-              {availableSessionTypes.map((type) => (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={() => setNewQuest((prev) => ({ ...prev, session_type: type.value }))}
-                  className={cn(
-                    CHIP,
-                    newQuest.session_type === type.value ? `bg-abyss border-current ${type.color}` : CHIP_IDLE
-                  )}
-                >
-                  {type.label}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Durée (min)">
-              <Input
-                type="number"
-                value={newQuest.target_duration_min || ''}
-                onChange={(e) =>
-                  setNewQuest((prev) => ({ ...prev, target_duration_min: parseInt(e.target.value) || undefined }))
-                }
-                placeholder="45"
-                min={1}
-                max={480}
-              />
-            </Field>
-            <Field label="Distance (km)">
-              <Input
-                type="number"
-                step="0.1"
-                value={newQuest.target_distance_km || ''}
-                onChange={(e) =>
-                  setNewQuest((prev) => ({ ...prev, target_distance_km: parseFloat(e.target.value) || undefined }))
-                }
-                placeholder="10"
-                min={0}
-                max={500}
-              />
-            </Field>
-          </div>
-
-          <Field label="Intensité">
-            <div className="flex flex-wrap gap-2">
-              {INTENSITIES.map((it) => (
-                <button
-                  key={it.value}
-                  type="button"
-                  onClick={() =>
-                    setNewQuest((prev) => ({
-                      ...prev,
-                      target_intensity: prev.target_intensity === it.value ? undefined : it.value,
-                    }))
-                  }
-                  className={cn(
-                    CHIP,
-                    newQuest.target_intensity === it.value ? `bg-abyss border-current ${it.color}` : CHIP_IDLE
-                  )}
-                >
-                  {it.label}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          <Field label="Zone FC">
-            <div className="flex flex-wrap gap-2">
-              {HR_ZONES.map((zone) => (
-                <button
-                  key={zone}
-                  type="button"
-                  onClick={() =>
-                    setNewQuest((prev) => ({
-                      ...prev,
-                      target_hr_zone: prev.target_hr_zone === zone ? undefined : zone,
-                    }))
-                  }
-                  className={cn(
-                    CHIP,
-                    newQuest.target_hr_zone === zone ? 'bg-neon-cyan/20 border-neon-cyan/50 text-neon-cyan' : CHIP_IDLE
-                  )}
-                >
-                  {zone}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          <Field label="Description">
-            <Textarea
-              value={newQuest.description || ''}
-              onChange={(e) => setNewQuest((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="Footing Z2, relâchement…"
-              rows={2}
-            />
-          </Field>
-
-          {createQuestMutation.isError && (
-            <p className="text-xs font-mono text-danger-red">
-              Création impossible : {createQuestMutation.error?.message}
+          {exportsQuery.error && (
+            <p role="alert" className="text-sm text-danger-red px-5 pb-4">
+              État Garmin indisponible.{' '}
+              <button className="underline" onClick={() => void exportsQuery.refetch()}>
+                Réessayer
+              </button>
             </p>
           )}
-
-          <Button type="submit" strong size="lg" fullWidth loading={createQuestMutation.isPending}>
-            {createQuestMutation.isPending ? (
-              'CRÉATION…'
-            ) : (
-              <>
-                <Check className="w-4 h-4" />
-                CRÉER LA SÉANCE
-              </>
-            )}
-          </Button>
-        </form>
-      </Modal>
-
-      <Modal open={toDelete !== null} onClose={() => setToDelete(null)} className="max-w-sm p-4 sm:p-6">
-        <ModalHeader title="SUPPRIMER LA SÉANCE" onClose={() => setToDelete(null)} className="mb-4" />
-        <p className="text-sm font-mono text-text-secondary mb-6">
-          Supprimer la séance prévue le{' '}
-          {toDelete && parseLocalDate(toDelete.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} ?
-        </p>
-        <div className="flex gap-3 justify-end">
-          <Button variant="ghost" onClick={() => setToDelete(null)}>
-            Annuler
-          </Button>
-          <Button
-            variant="danger"
-            loading={deleteMutation.isPending}
-            onClick={() => {
-              if (toDelete) {
-                setBusyId(toDelete.id);
-                deleteMutation.mutate(toDelete.id);
-              }
+          {loading ? (
+            <Skeleton label="Chargement de la semaine" lines={4} className="px-5 pb-5" />
+          ) : (
+            <WorkoutSelection
+              key={`${weekStart}:${selecting}:${sport}`}
+              locked={busy || !!exportsQuery.error || exportsQuery.isPending}
+              sessions={planned.map((session) => ({
+                session: { ...session, revision: session.revision ?? 1 },
+                export: exportsQuery.data?.find((e) => e.session_id === session.id) ?? null,
+              }))}
+              renderWorkout={(workout) => {
+                const row = rows.find((r) => r.session.id === workout.sessionId);
+                return (
+                  row && (
+                    <PlanningSessionCard
+                      planned={row.session}
+                      state={row.state}
+                      realised={row.realised}
+                      workout={workout}
+                      active={active?.session.id === row.session.id}
+                      selecting={selecting}
+                      exportUnavailable={!!exportsQuery.error || exportsQuery.isPending}
+                      onActivate={() => {
+                        setActiveId(row.session.id);
+                        day(row.session.date);
+                      }}
+                      onOpen={() => setDetailId(row.session.id)}
+                      onDrag={setDragged}
+                    />
+                  )
+                );
+              }}
+            >
+              {(render) => (
+                <WeekBoard
+                  days={days}
+                  planned={planned}
+                  actual={actual}
+                  today={today}
+                  selectedDate={selectedDate}
+                  restDays={restDays}
+                  sport={sport}
+                  render={render}
+                  summary={
+                    <>
+                      <span className="text-success-green">
+                        {rows.filter((r) => r.state === 'done').length} / {planned.length} réalisée
+                        {rows.filter((r) => r.state === 'done').length > 1 ? 's' : ''}
+                      </span>
+                      <span>{freeDays} jours libres</span>
+                      {sport && <span>{sportLabel(sport)}</span>}
+                    </>
+                  }
+                  onDay={(date) => {
+                    setActiveId(null);
+                    day(date);
+                  }}
+                  onCreate={(date) => setEditor({ mode: 'create', date })}
+                  onDropSession={(date) => {
+                    if (dragged && dragged.date !== date && !busy)
+                      setMoving({ session: dragged, date });
+                    setDragged(null);
+                  }}
+                />
+              )}
+            </WorkoutSelection>
+          )}
+        </section>
+        {active && (
+          <section className="planning-active glass-panel" aria-label="Séance sélectionnée">
+            <div className="min-w-0">
+              <p className="planning-eyebrow">
+                {dayLabel(active.session.date)} · {STATE_LABELS[active.state]}
+              </p>
+              <h2 className="text-lg font-semibold my-2 break-words">
+                {sessionTitle(active.session)}
+              </h2>
+              <GarminState
+                state={{
+                  session: {
+                    ...active.session,
+                    revision: active.session.revision ?? 1,
+                  },
+                  export:
+                    exportsQuery.data?.find((e) => e.session_id === active.session.id) ?? null,
+                }}
+                unavailable={!!exportsQuery.error || exportsQuery.isPending}
+              />
+            </div>
+            <div className="planning-active-summary">
+              <p className="text-[13px]">{sessionSummary(active.session)}</p>
+              <p className="text-xs text-text-muted mt-2">
+                Consulter le détail pour les cibles et les étapes.
+              </p>
+            </div>
+            <Button strong onClick={() => setDetailId(active.session.id)}>
+              Ouvrir la séance
+            </Button>
+          </section>
+        )}
+        <GarminExportPanel />
+        <Button
+          className="planning-mobile-create"
+          onClick={() => setEditor({ mode: 'create', date: selectedDate })}
+        >
+          <Plus className="size-4" /> Nouvelle séance
+        </Button>
+        <Modal
+          open={optionsOpen}
+          onClose={() => setOptionsOpen(false)}
+          label="Options du planning"
+          mobileSheet
+          className="planning-dialog max-w-sm"
+        >
+          <ModalHeader title="Options du planning" onClose={() => setOptionsOpen(false)} />
+          <div className="flex flex-col gap-3">
+            <Select
+              aria-label="Filtrer par sport"
+              value={sport}
+              onChange={(e) => setSport(e.target.value)}
+            >
+              <option value="">Tous les sports</option>
+              {Object.entries(SPORTS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+            <Button
+              onClick={() => {
+                day(today);
+                setOptionsOpen(false);
+              }}
+            >
+              Aujourd’hui
+            </Button>
+            <Button
+              disabled={busy}
+              aria-pressed={selecting}
+              onClick={() => {
+                setSelecting(!selecting);
+                setOptionsOpen(false);
+              }}
+            >
+              {selecting ? 'Terminer la sélection' : 'Sélectionner'}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                void invalidateAfterSession(client);
+                setOptionsOpen(false);
+              }}
+            >
+              <RefreshCw className="size-4" /> Rafraîchir
+            </Button>
+          </div>
+        </Modal>
+        {/* Collapsed by default: the review and the goal projection load when first opened. */}
+        <details
+          className="planning-analysis"
+          onToggle={(e) => {
+            if (e.currentTarget.open) setAnalysisOpened(true);
+          }}
+        >
+          <summary className="min-h-11 text-sm font-semibold cursor-pointer">
+            Bilan et objectifs
+          </summary>
+          {analysisOpened && (
+            <div className="space-y-5 mt-4">
+              <WeeklyReviewPanel />
+              <GoalProjectionPanel />
+            </div>
+          )}
+        </details>
+        {detail && !editor && !moving && (
+          <SessionDetail
+            session={detail.session}
+            state={detail.state}
+            realised={detail.realised}
+            onClose={() => setDetailId(null)}
+            onEdit={(parsed) =>
+              setEditor({
+                mode: 'edit',
+                // Steps read from the description start the editor; saving fixes them.
+                session: parsed ? { ...detail.session, prescription: parsed } : detail.session,
+                date: detail.session.date,
+              })
+            }
+            onMove={() => setMoving({ session: detail.session })}
+            onDuplicate={() =>
+              setEditor({
+                mode: 'duplicate',
+                session: detail.session,
+                date: detail.session.date,
+              })
+            }
+            onChanged={(session, text) => saved(session, text)}
+            onDeleted={(text) => {
+              setDetailId(null);
+              setActiveId(null);
+              setMessage(text);
             }}
-          >
-            Supprimer
-          </Button>
-        </div>
-      </Modal>
+          />
+        )}
+        {editor && (
+          <SessionEditor
+            editor={editor}
+            onClose={closeEditor}
+            onSaved={(session) =>
+              saved(
+                session,
+                editor.mode === 'edit'
+                  ? 'Séance mise à jour.'
+                  : editor.mode === 'duplicate'
+                    ? 'Copie créée.'
+                    : 'Séance créée.',
+              )
+            }
+          />
+        )}
+        {moving && (
+          <MoveSession
+            session={moving.session}
+            date={moving.date}
+            restDays={restDays}
+            onClose={() => setMoving(null)}
+            onMoved={(session) => saved(session, 'Séance déplacée.')}
+          />
+        )}
+      </div>
     </div>
   );
 }

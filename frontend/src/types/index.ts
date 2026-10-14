@@ -105,22 +105,6 @@ export interface PlanToday {
   decisions: PlanDecision[];
 }
 
-/** Whether a planned session can be sent to Garmin, and the steps it would carry. */
-export interface WorkoutStructure {
-  pushable: boolean;
-  /** e.g. "10' Z2 · 4×(3' Z5 / 2' Z1) · 10' Z1". */
-  text: string | null;
-  estimated_min: number | null;
-  /** French sentence when not pushable. */
-  reason: string | null;
-}
-
-export interface GarminPushResult {
-  garmin_workout_id: string;
-  garmin_schedule_id: string | null;
-  garmin_pushed_at: string;
-}
-
 export interface ActualSession {
   id: number;
   planned_session_id: number | null;
@@ -146,6 +130,8 @@ export interface ActualSession {
   garmin_activity_id: string | null;
   strava_activity_id: string | null;
   adherence_score: number | null;
+  /** Exercises of the Muscu log behind this session, when there is one (browser-side). */
+  exercises?: string[];
 }
 
 export interface MatchSummary {
@@ -222,6 +208,9 @@ export interface StrengthSession {
   exercises_count?: number;
   muscles_worked?: string[];
   exercises?: SessionExercise[];
+  /** Exercise names in order; the list endpoint's light alternative to `exercises`. */
+  exercise_names?: string[];
+  /** actual_sessions.id of the Garmin activity this log was recorded with. */
   garmin_activity_id?: number | null;
 }
 
@@ -263,6 +252,8 @@ export interface SyncResult {
   activities_skipped: number;
   errors: string[];
   last_activity_date: string | null;
+  next_history_offset?: number | null;
+  history_anchor?: number | null;
 }
 
 // ========================= //

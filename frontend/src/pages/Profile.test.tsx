@@ -9,7 +9,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { gameApi, type Player } from '@/lib/gamification';
+import { gameApi, syncGame, type Player } from '@/lib/gamification';
 import { ProfilePage } from './Profile';
 import { GamificationTab } from './settings/GamificationTab';
 
@@ -62,6 +62,7 @@ function mount(node: React.ReactNode, path = '/profile') {
       <MemoryRouter initialEntries={[path]}>{node}</MemoryRouter>
     </QueryClientProvider>
   );
+  return client;
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -71,7 +72,7 @@ beforeEach(() => {
     available: true,
     version: 1,
   });
-  vi.mocked(gameApi.sync).mockResolvedValue(structuredClone(fixture));
+  vi.mocked(gameApi.snapshot).mockResolvedValue(structuredClone(fixture));
 });
 afterEach(cleanup);
 it('gates direct profile links without projecting rewards when opted out', async () => {
@@ -83,11 +84,12 @@ it('gates direct profile links without projecting rewards when opted out', async
   });
   mount(<ProfilePage />);
   expect(await screen.findByText('Ouvrir les Réglages →')).toBeTruthy();
+  expect(gameApi.snapshot).not.toHaveBeenCalled();
   expect(gameApi.sync).not.toHaveBeenCalled();
 });
 it('uses the confirmed purchase result before offering a separate equip action', async () => {
   vi.mocked(gameApi.purchase).mockImplementation(async () => {
-    vi.mocked(gameApi.sync).mockResolvedValue({
+    vi.mocked(gameApi.snapshot).mockResolvedValue({
       ...fixture,
       version: 2,
       shards: 90,
@@ -105,6 +107,7 @@ it('uses the confirmed purchase result before offering a separate equip action',
   ).toBeTruthy();
   expect(gameApi.purchase).toHaveBeenCalledTimes(1);
   expect(gameApi.equip).not.toHaveBeenCalled();
+  expect(gameApi.sync).not.toHaveBeenCalled(); // nothing pending: reads only
   expect(screen.getByText('Solde : 90 Éclats')).toBeTruthy();
 });
 it('keeps the switch at the server value when saving fails', async () => {
@@ -124,4 +127,38 @@ it('keeps the switch at the server value when saving fails', async () => {
     )
   );
   expect(toggle.getAttribute('aria-checked')).toBe('false');
+});
+it('settles evidence imported elsewhere with one projection, never two', async () => {
+  vi.mocked(gameApi.snapshot).mockResolvedValue({ ...structuredClone(fixture), pending: 2 });
+  vi.mocked(gameApi.sync).mockResolvedValue({ ...structuredClone(fixture), pending: 1 });
+  mount(<ProfilePage />);
+  await waitFor(() => expect(gameApi.sync).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText('Niveau 6 · Adepte')).toBeTruthy();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  // What the projection left pending waits for the next read.
+  expect(gameApi.sync).toHaveBeenCalledTimes(1);
+});
+it('shows a failed projection over the snapshot and retries it only on a click', async () => {
+  vi.mocked(gameApi.snapshot).mockResolvedValue({ ...structuredClone(fixture), pending: 2 });
+  vi.mocked(gameApi.sync).mockRejectedValue(new Error('Une autre écriture est en cours.'));
+  mount(<ProfilePage />);
+  expect(
+    await screen.findByText(/Progression non actualisée : Une autre écriture est en cours\./)
+  ).toBeTruthy();
+  expect(screen.getByText('Niveau 6 · Adepte')).toBeTruthy();
+  expect(gameApi.sync).toHaveBeenCalledTimes(1);
+  vi.mocked(gameApi.sync).mockResolvedValue({ ...structuredClone(fixture), pending: 0 });
+  fireEvent.click(screen.getByRole('button', { name: 'Actualiser' }));
+  await waitFor(() => expect(gameApi.sync).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByText(/Progression non actualisée/)).toBeNull());
+});
+it('the read after a failed session-event projection does not project again', async () => {
+  const client = mount(<ProfilePage />);
+  expect(await screen.findByText('Niveau 6 · Adepte')).toBeTruthy();
+  vi.mocked(gameApi.sync).mockRejectedValue(new Error('conflict'));
+  vi.mocked(gameApi.snapshot).mockResolvedValue({ ...structuredClone(fixture), pending: 1 });
+  syncGame(client);
+  await waitFor(() => expect(gameApi.snapshot).toHaveBeenCalledTimes(2));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(gameApi.sync).toHaveBeenCalledTimes(1);
 });

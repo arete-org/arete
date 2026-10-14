@@ -37,6 +37,12 @@ def setup_test_db() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def no_inherited_clerk_jwt_key(monkeypatch) -> None:
+    """A developer's .env may hold the real Clerk key: tests set their own."""
+    monkeypatch.delenv("CLERK_JWT_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def offline_weather(monkeypatch) -> None:
     """Sync and upload paths enrich sessions: Open-Meteo is never called.
 
@@ -46,6 +52,16 @@ def offline_weather(monkeypatch) -> None:
         "arete.services.session_conditions.fetch_weather",
         lambda *args, **kwargs: None,
     )
+
+
+@pytest.fixture(autouse=True)
+def fresh_account_cache() -> Generator[None, None, None]:
+    """Tests rewrite app.users directly: never serve a previous test's account."""
+    from arete.api.auth import forget_accounts
+
+    forget_accounts()
+    yield
+    forget_accounts()
 
 
 class _CountingConnection:
@@ -97,15 +113,74 @@ def router_client() -> Callable[[APIRouter], TestClient]:
     return make
 
 
+@pytest.fixture(autouse=True)
+def isolated_coach_records():
+    """Durable memory replaces per-test filesystem isolation."""
+    from arete.dataio.db import db_connection
+
+    with db_connection() as con:
+        for table in ("coach_memory_files", "coach_memory_imports", "coach_followups"):
+            con.execute(f"DELETE FROM app.{table}")
+
+
 @pytest.fixture
-def progressive_chat(monkeypatch):
-    """Chat with on-demand toolkit loading, as before it preloaded everything.
+def memory_tool():
+    """Exercise the async native tool with server-owned invocation context."""
+    import asyncio
 
-    No shipped profile loads toolkits on demand any more, but the machinery
-    (load before execute, per-run isolation) stays and stays tested.
-    """
-    from dataclasses import replace
+    from langchain.tools import ToolRuntime
 
-    from arete.agent.profiles.catalog import PROFILES
+    from arete.agent.runtime.context import AgentContext
+    from arete.agent.tools.fact_memory import remember_fact
 
-    monkeypatch.setitem(PROFILES, "chat", replace(PROFILES["chat"], preloaded=()))
+    def invoke(args, *, message="Déclaration : je préfère le matin", context=None):
+        context = context or AgentContext(thread_id="memory-test")
+        context.memory_source_message = message
+        runtime = ToolRuntime(
+            state={},
+            context=context,
+            config={},
+            stream_writer=lambda _: None,
+            tool_call_id="memory",
+            store=None,
+        )
+        return asyncio.run(remember_fact.ainvoke({**args, "runtime": runtime}))
+
+    return invoke
+
+
+@pytest.fixture
+def jev_api(monkeypatch):
+    """Mock only HTTP so routing tests exercise Jev parsing and real trace spans."""
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import httpx
+
+    api = SimpleNamespace(
+        payload={
+            "model": "typesafe/jev-1.13-20260917",
+            "answers": {
+                "surface": {"type": "choice", "choice": "product"},
+                "private_data": {"type": "choice", "choice": "no"},
+                "outbound": {"type": "choice", "choice": "no"},
+            },
+            "usage": {"input_tokens": 476, "output_tokens": 70, "cost": 0.000019992},
+        },
+        requests=[],
+        status=200,
+        handler=None,
+    )
+
+    async def handle(request):
+        api.requests.append(request)
+        assert request.url == "https://openrouter.ai/api/alpha/decisions"
+        assert json.loads(request.content)["model"] == "typesafe/jev-1.13"
+        if api.handler is not None:
+            return await api.handler(request)
+        return httpx.Response(api.status, json=api.payload)
+
+    api.transport = Mock(side_effect=lambda **kw: httpx.MockTransport(handle))
+    monkeypatch.setattr(httpx, "AsyncHTTPTransport", api.transport)
+    return api

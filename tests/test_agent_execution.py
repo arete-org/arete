@@ -11,6 +11,7 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
 
+from arete.agent.capabilities.discovery import authorized_tools
 from arete.agent.capabilities.registry import CAPABILITIES
 from arete.agent.middlewares.capabilities import ToolkitMiddleware
 from arete.agent.middlewares.context import ContextBuilderMiddleware
@@ -58,6 +59,7 @@ def test_background_cannot_load_or_execute_training_writes(
                 ]
             )
         ),
+        tools=authorized_tools("chat"),
         middleware=[ToolkitMiddleware(), ContextBuilderMiddleware()],
         context_schema=AgentContext,
     )
@@ -70,18 +72,6 @@ def test_background_cannot_load_or_execute_training_writes(
     )
     assert not invoked
     assert all(m.status == "error" for m in result["messages"] if m.type == "tool")
-
-
-@pytest.mark.usefixtures("progressive_chat")
-def test_unloaded_tool_is_rejected_before_execution():
-    graph = create_agent(
-        Model(messages=iter([call("list_planned", {}), AIMessage(content="Fin.")])),
-        middleware=[ToolkitMiddleware(), ContextBuilderMiddleware()],
-        context_schema=AgentContext,
-    )
-    result = graph.invoke({"messages": [HumanMessage("lis")]}, context=AgentContext())
-    message = next(m for m in result["messages"] if m.type == "tool")
-    assert message.status == "error" and "Load toolkit" in message.content
 
 
 @pytest.mark.parametrize("profile", ["briefing", "feedback"])
@@ -115,11 +105,12 @@ def test_chat_binds_its_toolkits_without_a_loading_round():
 
     graph = create_agent(
         Capture(messages=iter([AIMessage(content="Fin.")])),
+        tools=authorized_tools("chat"),
         middleware=[ToolkitMiddleware(), ContextBuilderMiddleware()],
         context_schema=AgentContext,
     )
     graph.invoke({"messages": [HumanMessage("ma forme ?")]}, context=AgentContext())
-    assert {"get_workload", "list_planned", "read_workout"} <= seen[0]
+    assert {"get_workload", "list_planned", "save_workout"} <= seen[0]
     assert not {"load_toolkit", "search_toolkits"} & seen[0]
 
 
@@ -127,12 +118,10 @@ def test_model_budget_stops_loop():
     graph = create_agent(
         Model(
             messages=iter(
-                [
-                    call("search_toolkits", {"query": "analytics"}, str(i))
-                    for i in range(MAX_MODEL_CALLS + 1)
-                ]
+                [call("list_planned", {}, str(i)) for i in range(MAX_MODEL_CALLS + 1)]
             )
         ),
+        tools=authorized_tools("chat"),
         middleware=[
             *execution_limits(),
             ToolkitMiddleware(),
@@ -152,10 +141,10 @@ def test_model_budget_stops_loop():
 def test_last_model_call_answers_with_all_results_and_no_tools(
     mode, monkeypatch, tmp_path
 ):
-    from arete.agent.backends.memory import build_memory_filesystem
-    from arete.api.agent_streaming import StreamProjection
+    from arete.agent.runtime.streaming import StreamProjection
+    from arete.coaching import build_agent_filesystem
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     requests = []
     executed = []
 
@@ -184,7 +173,7 @@ def test_last_model_call_answers_with_all_results_and_no_tools(
         middleware=[
             *execution_limits(),
             ToolkitMiddleware(),
-            build_memory_filesystem(),
+            build_agent_filesystem(),
             ContextBuilderMiddleware(),
             Capture(),
         ],
@@ -219,8 +208,7 @@ def test_last_model_call_answers_with_all_results_and_no_tools(
         turn = requests[-MAX_MODEL_CALLS:]
         assert len(turn) == MAX_MODEL_CALLS
         assert all(
-            {"record", "read_file", "list_planned"} <= {t.name for t in r.tools}
-            for r in turn[:-1]
+            {"record", "read_file"} <= {t.name for t in r.tools} for r in turn[:-1]
         )
         final = turn[-1]
         assert final.tools == []

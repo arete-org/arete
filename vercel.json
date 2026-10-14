@@ -11,7 +11,8 @@
       "functions": {
         "asgi.py": { "maxDuration": 300 }
       },
-      "buildCommand": "python scripts/bundle_duckdb_extensions.py"
+      "installCommand": "uv sync --frozen --no-dev --no-install-project",
+      "buildCommand": "python scripts/bundle_duckdb_extensions.py && python scripts/bundle_ocr_data.py"
     },
     "frontend": {
       "root": "frontend",
@@ -46,6 +47,10 @@
     { "path": "/api/cron/daily-sync", "schedule": "0 9 * * *" },
     { "path": "/api/cron/daily-sync", "schedule": "0 10 * * *" },
     { "path": "/api/cron/daily-sync", "schedule": "0 11 * * *" },
-    { "path": "/api/cron/daily-sync", "schedule": "0 12 * * *" }
+    { "path": "/api/cron/daily-sync", "schedule": "0 12 * * *" },
+    { "path": "/api/cron/daily-sync", "schedule": "0 13 * * *" },
+    { "path": "/api/cron/daily-sync", "schedule": "0 14 * * *" },
+    { "path": "/api/cron/daily-sync", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/daily-sync", "schedule": "0 16 * * *" }
   ]
 }

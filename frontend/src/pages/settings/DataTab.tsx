@@ -41,7 +41,7 @@ export function DataTab() {
 
       <Panel variant="inset" title="EXPORTER MES DONNÉES">
         <div className="space-y-4">
-          <p className="text-xs text-text-muted font-mono">
+          <p className="text-xs text-text-muted font-sans">
             Séances, santé, force, objectifs, bilans et journal du coach. Les identifiants et jetons de connexion
             (Garmin, Strava, notifications) ne sont jamais exportés.
           </p>
@@ -54,7 +54,7 @@ export function DataTab() {
                 aria-pressed={format === f.id}
                 onClick={() => setFormat(f.id)}
                 className={cn(
-                  'px-3 py-2 rounded text-xs font-mono border transition-colors',
+                  'px-3 py-2 rounded text-xs font-sans border transition-colors',
                   format === f.id
                     ? 'bg-neon-cyan/10 text-neon-cyan border-neon-cyan/30'
                     : 'text-text-muted border-text-muted/30 hover:text-text-secondary'
@@ -64,7 +64,7 @@ export function DataTab() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-text-muted font-mono">{FORMATS.find((f) => f.id === format)?.hint}</p>
+          <p className="text-xs text-text-muted font-sans">{FORMATS.find((f) => f.id === format)?.hint}</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Du" gap="sm">
@@ -74,17 +74,17 @@ export function DataTab() {
               <Input type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
             </Field>
           </div>
-          <p className="text-xs text-text-muted font-mono flex items-start gap-2">
+          <p className="text-xs text-text-muted font-sans flex items-start gap-2">
             <CalendarRange className="w-3 h-3 mt-0.5 shrink-0" aria-hidden />
             Sans date, tout l’historique. La période filtre les séances, la santé et les bilans ; objectifs, faits et
             journal sont toujours complets. Un export dépassant 4 Mo est refusé : réduis alors la période ou passe au ZIP.
           </p>
 
           <fieldset>
-            <legend className="text-xs font-mono text-text-muted uppercase mb-2">Contenu</legend>
+            <legend className="text-xs font-sans text-text-muted uppercase mb-2">Contenu</legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {EXPORT_TABLES.map((t) => (
-                <label key={t.id} className="flex items-center gap-2 text-sm text-text-secondary font-mono">
+                <label key={t.id} className="flex items-center gap-2 text-sm text-text-secondary font-sans">
                   <input
                     type="checkbox"
                     className="accent-neon-cyan"
@@ -114,12 +114,12 @@ export function DataTab() {
 
       <Panel variant="inset" title="BILAN ANNUEL">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-xs text-text-muted font-mono">
+          <p className="text-xs text-text-muted font-sans">
             L’année en chiffres : volume, sports, records, régularité, forme et force.
           </p>
           <Link
             to="/analytics/bilan"
-            className="shrink-0 text-sm font-mono text-neon-cyan hover:underline"
+            className="shrink-0 text-sm font-sans text-neon-cyan hover:underline"
           >
             Voir le bilan →
           </Link>

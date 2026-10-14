@@ -53,5 +53,8 @@ def unsubscribe(body: Unsubscription) -> Response:
 def send_test() -> dict[str, Any]:
     """One test notification to every subscribed browser."""
     return service.notify(
-        "Arete", "Les notifications du coach arrivent bien ici.", "/settings?tab=coach"
+        "Arete",
+        "Les notifications du coach arrivent bien ici.",
+        "/settings?tab=coach",
+        kind=None,  # asked for now: no per-kind choice or quiet hours
     ).to_dict()

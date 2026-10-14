@@ -5,7 +5,12 @@ from __future__ import annotations
 import pytest
 from coach_text_checks import RAW_FIELDS
 
-from arete.services.adaptation import AdaptationInput, Decision, evaluate
+from arete.services.adaptation import (
+    AdaptationInput,
+    Decision,
+    evaluate,
+    one_recovery_per_day,
+)
 
 
 def _input(**overrides) -> AdaptationInput:
@@ -50,6 +55,7 @@ def test_an_eased_tempo_keeps_its_duration_in_z2():
         "session_type": "endurance",
         "target_hr_zone": "Z2",
         "target_intensity": "easy",
+        "description": "Endurance 45' Z2 (séance d'origine : 3x10' au seuil)",
     }
 
 
@@ -107,3 +113,60 @@ def test_reasons_are_french_numbers_with_their_source():
         result = evaluate(_input(readiness=score, readiness_source=source))
         assert result is not None and said in result.reason
         assert not any(field in result.reason for field in RAW_FIELDS)
+
+
+def _day(*sessions: dict, readiness: float = 49.0) -> list:
+    inputs = [_input(readiness=readiness, **s) for s in sessions]
+    return [(inp, evaluate(inp)) for inp in inputs]
+
+
+def test_a_low_day_keeps_one_recovery_on_the_hardest_session():
+    outcomes = one_recovery_per_day(
+        _day(
+            {"session_type": "endurance", "target_duration_min": 90},
+            {"session_type": "intervals", "target_duration_min": 60},
+            {"session_type": "tempo", "target_duration_min": 70},
+        )
+    )
+    decisions = [o.decision for o in outcomes if o is not None]
+    assert decisions == [Decision.REST, Decision.REPLACE_EASY, Decision.REST]
+    assert "fractionné 60 min" in outcomes[0].reason  # names where it went
+    assert outcomes[0].adapted == {}
+
+
+def test_same_type_sessions_give_the_recovery_to_the_longest():
+    outcomes = one_recovery_per_day(
+        _day(
+            {"session_type": "endurance", "target_duration_min": 45},
+            {"session_type": "endurance", "target_duration_min": 60},
+        )
+    )
+    assert [o.decision for o in outcomes if o is not None] == [
+        Decision.REST,
+        Decision.REPLACE_EASY,
+    ]
+
+
+@pytest.mark.parametrize(
+    "sessions",
+    [
+        # Nothing to choose from, or no unambiguous key: per-session outcomes.
+        ({"session_type": "tempo"},),
+        ({"session_type": "tempo"}, {"session_type": "tempo"}),
+        (
+            {"session_type": "tempo"},
+            {"session_type": "endurance"},
+            {"session_type": "race"},
+        ),
+    ],
+)
+def test_without_an_unambiguous_key_the_outcomes_stand(sessions):
+    day = _day(*sessions)
+    assert one_recovery_per_day(day) == [outcome for _, outcome in day]
+
+
+def test_a_rest_day_rests_every_session():
+    outcomes = one_recovery_per_day(
+        _day({"session_type": "intervals"}, {"session_type": "endurance"}, readiness=30)
+    )
+    assert {o.decision for o in outcomes if o is not None} == {Decision.REST}

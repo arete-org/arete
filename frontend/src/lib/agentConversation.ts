@@ -32,6 +32,7 @@ export function restoreConversation(raw: string | null): ChatMessage[] {
       parts = m.parts.map((p: ChatPart) => {
         if (!p || typeof p.id !== 'string')
           throw new Error('Activité sauvegardée invalide.');
+        if (p.kind === 'coach_card' && (p.ref_kind === 'fact' || p.ref_kind === 'followup') && Number.isSafeInteger(p.ref_id) && p.ref_id > 0 && p.id === `${p.ref_kind}:${p.ref_id}`) return p;
         if (p.kind === 'text' && typeof p.text === 'string') return p;
         if (p.kind === 'calendar_action' && /^[a-f0-9]{32}$/.test(p.id))
           return { kind: 'calendar_action', id: p.id };
@@ -82,7 +83,6 @@ export function restoreConversation(raw: string | null): ChatMessage[] {
         } : undefined,
         attachmentIds: Array.isArray(m.attachmentIds) && m.attachmentIds.length <= 20 && m.attachmentIds.every((id: unknown) => typeof id === 'string') ? m.attachmentIds : undefined,
         workouts: m.workouts,
-        imports: Array.isArray(m.imports) && m.imports.length <= 50 && m.imports.every((item: { id?: unknown; version?: unknown }) => typeof item.id === 'string' && Number.isInteger(item.version)) ? m.imports : undefined,
         role: m.role,
         content: m.content,
         parts,

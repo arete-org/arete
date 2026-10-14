@@ -101,8 +101,7 @@ def test_routes(goal, router_client):
     from arete.api.goals import router
 
     client = router_client(router)
-    with patch("arete.services.plan_builder.date") as fake:
-        fake.today.return_value = TODAY
+    with patch("arete.services.plan_builder.athlete_today", return_value=TODAY):
         assert client.post(f"/goals/{goal.id}/plan/preview").status_code == 200
     assert client.post("/goals/999999/plan").status_code == 404
     far = goals.create_goal(

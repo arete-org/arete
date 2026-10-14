@@ -4,24 +4,39 @@ Only this composition root imports the agent factory. Domain producers receive
 plain callbacks, so they remain usable and testable without an agent framework.
 """
 
+from collections.abc import Awaitable, Callable
+from contextlib import aclosing
 from dataclasses import replace
 from datetime import date
 from functools import lru_cache, wraps
 from pathlib import Path
 from threading import Lock
-from typing import Literal
+from typing import Any, Literal
 
-from arete.agent.backends.memory import build_memory_filesystem
-from arete.agent.backends.skills import SystemSkillsBackend
+from deepagents.backends import CompositeBackend, StateBackend
+from langsmith import traceable
+from pydantic import SecretStr
+
+from arete.agent.backends.attachments import ATTACHMENTS_ROUTE
+from arete.agent.backends.journal import (
+    JOURNAL_PERMISSIONS,
+    LEDGER_TOOL_DESCRIPTIONS,
+    LedgerBackend,
+)
+from arete.agent.backends.skills import SYSTEM_SKILLS_ROUTE, SystemSkillsBackend
 from arete.agent.factory import build_agent
+from arete.agent.middlewares.filesystem import build_filesystem_middleware
 from arete.agent.middlewares.skills import SystemSkillsMiddleware
+from arete.agent.models.jev import (
+    JEV_MAX_RETRIES,
+    JEV_MODEL,
+    JEV_TIMEOUT_SECONDS,
+    JevClient,
+)
 from arete.agent.models.providers import build_chat_model
 from arete.agent.models.registry import (
     AGENT_MAX_RETRIES,
     AGENT_MAX_TOKENS,
-    SUGGESTION_MAX_TOKENS,
-    SUGGESTION_TEMPERATURE,
-    SUGGESTION_TIMEOUT_SEC,
 )
 from arete.agent.models.routing import resolve_route
 from arete.agent.profiles.catalog import get_profile
@@ -33,6 +48,7 @@ from arete.config import config
 from arete.services import briefing, coaching_rules, session_feedback, weekly_review
 from arete.services.athlete_scope import current_athlete_id, resolve_athlete_id
 from arete.services.coaching_repository import Briefing
+from arete.services.feature_flags import get_feature_flags, glm_flash_available
 from arete.services.system_skills import publish_bundle
 
 AGENT_RECURSION_LIMIT = MAX_GRAPH_STEPS
@@ -48,57 +64,66 @@ def _serialized(factory):
     @wraps(factory)
     def get():
         with _graph_lock:
-            return factory(current_athlete_id())
+            glm_flash = get_feature_flags().glm_flash and glm_flash_available()
+            return factory(current_athlete_id(), glm_flash=glm_flash)
 
     get.cache_clear = factory.cache_clear
     return get
 
 
-def _assemble(profile_id: str):
+def build_agent_filesystem(*, system_skills: SystemSkillsBackend | None = None):
+    """Compose the application's mounts; the filesystem middleware stays generic."""
+    backend = CompositeBackend(
+        default=LedgerBackend(),
+        routes={
+            ATTACHMENTS_ROUTE: StateBackend(),
+            **(
+                {SYSTEM_SKILLS_ROUTE: system_skills}
+                if system_skills is not None
+                else {}
+            ),
+        },
+    )
+    return build_filesystem_middleware(
+        backend,
+        permissions=JOURNAL_PERMISSIONS,
+        tool_descriptions=LEDGER_TOOL_DESCRIPTIONS,
+    )
+
+
+def _assemble(
+    profile_id: str, *, glm_flash: bool = False, calendar_enabled: bool = True
+):
     profile = get_profile(profile_id)
     calendar = None
-    if profile_id == "chat" and config.google_calendar_configured:
+    if profile_id == "chat" and calendar_enabled and config.google_calendar_configured:
         calendar = get_calendar_service
         profile = replace(
             profile,
             capabilities=(*profile.capabilities, "calendar"),
-            preloaded=(*profile.preloaded, "calendar"),
         )
-    route = resolve_route()
+    route = resolve_route(glm_flash=glm_flash)
     # Use one explicit request per candidate: layering SDK retries and the
     # router's fallback list would multiply requests and exhaust the deadline.
     candidates = tuple(dict.fromkeys((route.model, *route.fallbacks)))
     models = tuple(
         build_chat_model(
             route=replace(route, model=name, fallbacks=()),
-            max_retries=0 if len(candidates) > 1 else AGENT_MAX_RETRIES,
+            max_retries=(
+                0
+                if len(candidates) > 1 or route.openrouter_policy == "glm_flash"
+                else AGENT_MAX_RETRIES
+            ),
         )
         for name in candidates
     )
     model = models[0]
-    suggestion_model = None
-    if profile.id == "chat":
-        suggestion_model = build_chat_model(
-            route=route,
-            max_tokens=SUGGESTION_MAX_TOKENS,
-            timeout=SUGGESTION_TIMEOUT_SEC,
-            max_retries=0,
-            temperature=SUGGESTION_TEMPERATURE,
-            # Reasoning shares the output budget and can consume all 512 tokens
-            # before producing any visible text for this simple drafting task.
-            openrouter_reasoning=False,
-        )
-        # Keep auxiliary tokens out of the coach's answer stream. LangChain
-        # still records the provider request as a child LLM span.
-        suggestion_model = suggestion_model.model_copy(
-            update={"disable_streaming": True}
-        )
     skills_backend = None
     skill_files = {}
-    if profile.journal_tools:
+    if profile.filesystem_tools:
         skill_files = publish_bundle(SYSTEM_SKILLS_ROOT)
         skills_backend = SystemSkillsBackend(skill_files)
-    filesystem = build_memory_filesystem(system_skills=skills_backend)
+    filesystem = build_agent_filesystem(system_skills=skills_backend)
     skills = (
         SystemSkillsMiddleware(
             backend=filesystem.backend,
@@ -107,16 +132,26 @@ def _assemble(profile_id: str):
         if skills_backend is not None
         else None
     )
-    return build_agent(
+    graph = build_agent(
         profile,
         model=model,
         context_tokens=route.context_tokens,
         output_tokens=AGENT_MAX_TOKENS,
         filesystem=filesystem,
         calendar=calendar,
-        suggestion_model=suggestion_model,
+        memory_model=JevClient(
+            api_key=SecretStr(config.openrouter_api_key),
+            model=JEV_MODEL,
+            timeout=JEV_TIMEOUT_SECONDS,
+            max_retries=JEV_MAX_RETRIES,
+        )
+        if profile.fact_memory_tools and config.memory_jev_enabled
+        else None,
         fallback_models=models[1:],
         skills=skills,
+    )
+    return graph.with_config(
+        metadata={"model": route.model, "model_policy": route.openrouter_policy}
     )
 
 
@@ -143,49 +178,74 @@ def system_skill_catalog() -> list[dict]:
 
 @_serialized
 @lru_cache(maxsize=MAX_CACHED_ATHLETES)
-def get_agent(athlete_id: int):
+def get_agent(athlete_id: int, *, glm_flash: bool = False):
     assert athlete_id == current_athlete_id()
-    return _assemble("chat")
+    return _assemble("chat", glm_flash=glm_flash)
 
 
 async def run_slack_coach(
     messages: list[dict[str, str]],
     thread_id: str,
     visibility: Literal["private", "public"],
+    emit: Callable[[dict], Awaitable[None]],
+    *,
+    graph=None,
+    context: AgentContext | None = None,
 ) -> str:
     """Slack supplies its own history; reuse the chat graph and runtime limits."""
-    from arete.agent.runtime.execution import invoke_agent
+    from langchain_core.messages import AIMessage
 
-    result = await invoke_agent(
-        get_agent(),
-        {"messages": messages},
-        context=AgentContext(thread_id=thread_id, slack_visibility=visibility),
-    )
-    replies = result.get("messages", [])
-    if not replies or not (text := replies[-1].text.strip()):
+    from arete.agent.runtime.execution import stream_agent
+    from arete.agent.runtime.streaming import MAX_STREAM_EVENTS, StreamProjection
+
+    context = context or AgentContext(thread_id=thread_id, slack_visibility=visibility)
+    context.slack_visibility = visibility
+    projection = StreamProjection()
+    answer = ""
+    count = 0
+    async with aclosing(
+        stream_agent(
+            graph if graph is not None else get_agent(),
+            {"messages": messages},
+            context=context,
+        )
+    ) as stream:
+        async for part in stream:
+            count += 1
+            if count > MAX_STREAM_EVENTS:
+                raise ValueError("Le stream dépasse la limite d’événements.")
+            # Tokens are provisional: only a completed, tool-free model update
+            # can become canonical Slack history after provider fallback.
+            if part.get("type") == "updates" and not part.get("ns"):
+                for message in (part["data"].get("model") or {}).get("messages", []):
+                    if isinstance(message, AIMessage):
+                        answer = message.text if not message.tool_calls else ""
+            for event in projection.events(part):
+                await emit(event)
+    if not answer.strip():
         raise RuntimeError("Agent returned an empty Slack answer")
-    return str(text)
+    return answer
 
 
 @_serialized
 @lru_cache(maxsize=MAX_CACHED_ATHLETES)
-def build_briefing_agent(athlete_id: int):
+def build_briefing_agent(athlete_id: int, *, glm_flash: bool = False):
     assert athlete_id == current_athlete_id()
-    return _assemble("briefing")
+    return _assemble("briefing", glm_flash=glm_flash)
 
 
 @_serialized
 @lru_cache(maxsize=MAX_CACHED_ATHLETES)
-def build_feedback_agent(athlete_id: int):
+def build_feedback_agent(athlete_id: int, *, glm_flash: bool = False):
     assert athlete_id == current_athlete_id()
-    return _assemble("feedback")
+    return _assemble("feedback", glm_flash=glm_flash)
 
 
 @_serialized
 @lru_cache(maxsize=MAX_CACHED_ATHLETES)
-def build_review_agent(athlete_id: int):
+def build_review_agent(athlete_id: int, *, glm_flash: bool = False):
     assert athlete_id == current_athlete_id()
-    return _assemble("review")
+    return _assemble("review", glm_flash=glm_flash)
 
 
 def _run_mission(graph, profile: str, message: str, max_chars: int) -> str:
@@ -229,7 +289,7 @@ def run_feedback_batch(facts: str, count: int) -> str:
     )
 
 
-def write_sync_feedback(session_ids: list[int]) -> dict[str, int]:
+def write_sync_feedback(session_ids: list[int]) -> dict[str, Any]:
     """Feedback on the sessions a sync imported, in one model request."""
     return coaching_rules.sync_feedback(session_ids, produce=run_feedback_batch)
 
@@ -254,11 +314,19 @@ def generate_briefing(
 
 
 def get_or_create_briefing(
-    *, trigger: str = "api", target_date: date | None = None, user_id: int | None = None
-) -> Briefing:
+    *,
+    trigger: str = "api",
+    target_date: date | None = None,
+    user_id: int | None = None,
+    replacing: Briefing | None = None,
+) -> Briefing | None:
     user_id = resolve_athlete_id(user_id)
     return briefing.get_or_create_briefing(
-        produce=run_briefing, trigger=trigger, target_date=target_date, user_id=user_id
+        produce=run_briefing,
+        trigger=trigger,
+        target_date=target_date,
+        user_id=user_id,
+        replacing=replacing,
     )
 
 
@@ -270,3 +338,146 @@ def enrich_session_feedback(
     return session_feedback.enrich_session_feedback(
         rule_feedback, highlights, produce=run_feedback, evidence=evidence
     )
+
+
+@lru_cache(maxsize=MAX_CACHED_ATHLETES)
+def _slack_graph(athlete_id: int, glm_flash: bool):
+    assert athlete_id == current_athlete_id()
+    return _assemble("slack", glm_flash=glm_flash, calendar_enabled=False)
+
+
+async def dispatch_slack_message(message, *, client):
+    """Keep classification, delivery selection and streamed execution in one trace."""
+    from arete.observability.tracing import agent_tracing
+
+    with agent_tracing():
+        return await _dispatch_slack_message(
+            message,
+            client=client,
+            langsmith_extra={
+                "metadata": {
+                    "thread_id": message.thread_id,
+                    "athlete_id": current_athlete_id(),
+                    "task": "slack",
+                }
+            },
+        )
+
+
+@traceable(
+    name="arete_coach",
+    process_inputs=lambda inputs: {
+        "messages": [{"role": "user", "content": inputs["message"].text}]
+    },
+)
+async def _dispatch_slack_message(message, *, client):
+    from arete.services.slack import dispatch
+
+    # The outer trace must survive prepare() returning: transport picks the
+    # private destination before it invokes the prepared streaming producer.
+    return await dispatch(
+        message, client=client, produce=run_slack_coach, prepare=prepare_slack_agent
+    )
+
+
+async def prepare_slack_agent(messages, message, client):
+    """Compose before delivery starts, so private reads never stream to a channel."""
+    from time import monotonic
+
+    from anyio import to_thread
+
+    from arete.agent.middlewares.surface import SurfaceDetectionMiddleware
+    from arete.observability.agent import record_run
+    from arete.observability.tracing import agent_tracing
+    from arete.services import slack_identity
+    from arete.services.jev import JEV_MODEL, JEV_TIMEOUT, JevService
+    from arete.services.slack import MAX_JOB_SECONDS, HistoryError, SlackPreparation
+    from arete.services.slack_product import SlackProduct, valid_timezone
+
+    identity = await to_thread.run_sync(
+        slack_identity.identity, message.team, message.user
+    )
+    private_owner = await to_thread.run_sync(
+        slack_identity.private_owner, message.thread_id
+    )
+    actor = identity[0] if identity else None
+    if private_owner and (
+        not actor
+        or not actor.is_admin
+        or actor.clerk_user_id != private_owner
+        or message.in_channel
+    ):
+        raise HistoryError("Ce fil privé exige son administrateur Arete actif.")
+    if actor is None or not actor.is_admin:
+        return SlackPreparation(run_slack_coach)
+    context = AgentContext(
+        profile="slack", thread_id=message.thread_id, account_id=actor.clerk_user_id
+    )
+    context.started_at = monotonic()
+    context.deadline = context.started_at + MAX_JOB_SECONDS
+
+    def finalize():
+        if not context.run_logged:
+            context.run_logged = True
+            record_run(
+                profile=context.profile,
+                stats=context.stats,
+                total_ms=round((monotonic() - context.started_at) * 1000),
+                error="NoGraphCompletion",
+            )
+
+    try:
+        glm_flash = await to_thread.run_sync(
+            lambda: get_feature_flags().glm_flash and glm_flash_available()
+        )
+        route = resolve_route(glm_flash=glm_flash)
+        if route.base_url != "https://openrouter.ai/api/v1":
+            raise ValueError("Le classement Slack administrateur exige OpenRouter.")
+        classifier = JevService(
+            api_key=route.api_key, model=JEV_MODEL, timeout=JEV_TIMEOUT
+        )
+        with agent_tracing():
+            decision = await SurfaceDetectionMiddleware(
+                classifier, context_tokens=route.context_tokens
+            ).prepare(messages, context)
+        context.classifier_calls = 1
+        private = decision.private_data or bool(private_owner)
+        context.slack_decision = decision
+        assert identity is not None
+        context.slack_product = SlackProduct(
+            client,
+            message,
+            actor.clerk_user_id,
+            valid_timezone(identity[1]),
+            private=private,
+        )
+        # All intents share one graph. Its policy is resolved per invocation;
+        # neither classification nor the Slack client enters the graph cache.
+        with _graph_lock:
+            graph = _slack_graph(current_athlete_id(), glm_flash)
+
+        async def produce(history, thread_id, visibility, emit):
+            await to_thread.run_sync(
+                slack_identity.require_admin,
+                message.team,
+                message.user,
+                actor.clerk_user_id,
+            )
+            return await run_slack_coach(
+                history, thread_id, visibility, emit, graph=graph, context=context
+            )
+
+        return SlackPreparation(
+            produce,
+            product=private or decision.surface != "coach",
+            private=private,
+            account_id=actor.clerk_user_id,
+            finalize=finalize,
+        )
+    except BaseException as exc:
+        finalize()
+        if isinstance(exc, Exception):
+            raise HistoryError(
+                "Classement Slack indisponible ; aucune action exécutée. " + str(exc)
+            ) from exc
+        raise

@@ -16,7 +16,7 @@ interface Upload {
 }
 
 
-export function CardioTab() {
+export function CardioTab({ showManual, onManualChange }: { showManual: boolean; onManualChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
   const [recentUploads, setRecentUploads] = useState<Upload[]>([]);
   const [feedback, setFeedback] = useState<PostSessionFeedback | null>(null);
@@ -24,7 +24,6 @@ export function CardioTab() {
   // The coach reads the session before answering, which takes seconds, not
   // milliseconds. Say so rather than leaving the page looking finished.
   const [feedbackPending, setFeedbackPending] = useState(false);
-  const [showManual, setShowManual] = useState(false);
 
   // Shared by the FIT upload and the manual entry.
   const requestFeedback = async (id: number) => {
@@ -71,7 +70,7 @@ export function CardioTab() {
         title={
           <span className="flex items-center justify-between gap-2 w-full">
             IMPORTER UNE SÉANCE CARDIO
-            <Button variant="ghost" onClick={() => setShowManual(true)}>
+            <Button variant="ghost" onClick={() => onManualChange(true)}>
               <Plus className="w-4 h-4" />
               SANS MONTRE
             </Button>
@@ -87,7 +86,7 @@ export function CardioTab() {
       </Panel>
 
       {feedbackPending && (
-        <p className="text-sm font-mono text-text-muted flex items-center gap-2">
+        <p className="text-sm font-sans text-text-muted flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin text-neon-cyan" />
           Le coach regarde ta séance…
         </p>
@@ -103,11 +102,11 @@ export function CardioTab() {
           }
           titleTone="text-neon-cyan"
         >
-          <p className="text-sm font-mono text-text-secondary mb-3">{feedback.feedback}</p>
+          <p className="text-sm font-sans text-text-secondary mb-3">{feedback.feedback}</p>
           {feedback.highlights.length > 0 && (
             <ul className="space-y-1">
               {feedback.highlights.map((h, i) => (
-                <li key={i} className="text-xs font-mono text-text-muted flex items-start gap-2">
+                <li key={i} className="text-xs font-sans text-text-muted flex items-start gap-2">
                   <span className="text-neon-cyan mt-0.5">▸</span>
                   {h}
                 </li>
@@ -118,13 +117,13 @@ export function CardioTab() {
       )}
 
       {feedbackError && (
-        <p className="text-xs font-mono text-text-muted">Le coach n'a pas pu commenter cette séance.</p>
+        <p className="text-xs font-sans text-text-muted">Le coach n'a pas pu commenter cette séance.</p>
       )}
 
       <RecentSessions />
       <ManualCardioModal
         open={showManual}
-        onClose={() => setShowManual(false)}
+        onClose={() => onManualChange(false)}
         onCreated={(id) => void requestFeedback(id)}
       />
     </div>

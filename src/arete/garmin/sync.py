@@ -33,10 +33,13 @@ from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import ActivityStreams, from_time_series
 from arete.garmin.threshold import refresh_threshold
 from arete.strava.merge import garmin_takeover
+from arete.strength.logging_service import link_garmin_strength
 
 logger = logging.getLogger(__name__)
 
 MAX_SYNC_ACTIVITIES = 200
+HISTORY_BATCH_SIZE = 20
+MAX_HISTORY_ACTIVITIES = 20_000
 
 
 # Rate limiting configuration (conservative to avoid bans)
@@ -62,6 +65,8 @@ class SyncResult:
     last_activity_date: date | None = None
     #: Sessions this run created or took over from Strava, for the feedback.
     session_ids: list[int] = field(default_factory=list)
+    next_history_offset: int | None = None
+    history_anchor: int | None = None
 
 
 @dataclass(frozen=True)
@@ -94,6 +99,8 @@ class GarminActivity:
     avg_cadence: int | None
     max_cadence: int | None
     moving_duration_sec: int | None = None
+    #: False when Garmin sent no start time and the sync time stands in for it.
+    start_time_known: bool = True
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> GarminActivity:
@@ -131,6 +138,7 @@ class GarminActivity:
             moving_duration_sec=int(data["movingDuration"])
             if data.get("movingDuration")
             else None,
+            start_time_known="startTimeLocal" in data,
         )
 
     def to_actual_session(self) -> ActualSession:
@@ -362,10 +370,17 @@ class GarminSyncClient:
         end_date: date | None = None,
         download_fit: bool = True,
         max_activities: int | None = None,
+        history_offset: int | None = None,
+        history_anchor: int | None = None,
     ) -> SyncResult:
         """Run the same workflow without exposing intermediate progress."""
         for event in self.iter_sync_activities(
-            start_date, end_date, download_fit, max_activities
+            start_date,
+            end_date,
+            download_fit,
+            max_activities,
+            history_offset,
+            history_anchor,
         ):
             if isinstance(event, SyncResult):
                 return event
@@ -377,6 +392,8 @@ class GarminSyncClient:
         end_date: date | None = None,
         download_fit: bool = True,
         max_activities: int | None = None,
+        history_offset: int | None = None,
+        history_anchor: int | None = None,
     ) -> Generator[SyncProgress | SyncResult, None, None]:
         """Yield progress around bounded work without a background job or queue.
 
@@ -394,27 +411,62 @@ class GarminSyncClient:
         if not 1 <= effective_max <= MAX_SYNC_ACTIVITIES:
             raise ValueError("max_activities must be between 1 and 200")
 
+        if history_offset is not None:
+            if not 0 <= history_offset <= MAX_HISTORY_ACTIVITIES:
+                raise ValueError("History offset outside the import limit")
+            if start_date or end_date or effective_max != HISTORY_BATCH_SIZE:
+                raise ValueError("History requires undated batches of 20 activities")
+            if (history_offset > 0) != (history_anchor is not None):
+                raise ValueError("History continuation requires the preceding activity")
+
         # Garmin retests the threshold on its own: pick it up before parsing, so
         # the sessions arriving now are read against the current zones.
-        self.refresh_threshold()
+        if history_offset in (None, 0):
+            self.refresh_threshold()
 
-        # Default to syncing from last activity
-        if start_date is None:
-            # From the newest Garmin activity (not of any source: a newer Strava
-            # or manual row would skip Garmin activities never fetched), or the
-            # last 30 days on a first sync.
-            last_day, _ = self.repository.last_garmin_import()
-            start_date = last_day or date.today() - timedelta(days=30)
-
-        end_date = end_date or date.today()
-
-        logger.info(f"Syncing activities from {start_date} to {end_date}")
+        if history_offset is None:
+            if start_date is None:
+                # A newer Strava or manual row must not skip Garmin activities.
+                last_day, _ = self.repository.last_garmin_import()
+                start_date = last_day or date.today() - timedelta(days=30)
+            end_date = end_date or date.today()
+            logger.info(f"Syncing activities from {start_date} to {end_date}")
+        else:
+            logger.info("Syncing Garmin history at offset %s", history_offset)
 
         try:
             yield SyncProgress("fetching")
-            activities = self.get_activities(
-                start_date=start_date, end_date=end_date, limit=effective_max
-            )
+            if history_offset is None:
+                activities = self.get_activities(
+                    start_date=start_date, end_date=end_date, limit=effective_max
+                )
+            else:
+                # HTTP batches use fresh clients. Pace pages even when every
+                # activity is already imported and no FIT request slows them.
+                self._last_request_time = time.time()
+                self._rate_limit()
+                # Re-read the preceding boundary because Garmin offsets shift
+                # if activities change during a long import. Fail explicitly
+                # instead of silently skipping history.
+                overlap = int(history_offset > 0)
+                raw = self.client.activity_page(
+                    history_offset - overlap, HISTORY_BATCH_SIZE + overlap
+                )
+                if overlap and (not raw or raw[0].get("activityId") != history_anchor):
+                    raise ValueError(
+                        "L’historique Garmin a changé pendant l’import. "
+                        "Relance la synchronisation ; les séances importées sont conservées."
+                    )
+                raw = raw[overlap:]
+                if history_offset + len(raw) > MAX_HISTORY_ACTIVITIES:
+                    raise ValueError(
+                        "Limite de 20 000 activités atteinte ; import incomplet."
+                    )
+                # A malformed page is an error, never the end of the archive.
+                activities = [GarminActivity.from_api_response(item) for item in raw]
+                if len(raw) == HISTORY_BATCH_SIZE:
+                    result.next_history_offset = history_offset + len(raw)
+                    result.history_anchor = activities[-1].activity_id
 
             total = len(activities)
             yield SyncProgress("processing", total=total)
@@ -467,6 +519,10 @@ class GarminSyncClient:
                         if auto_match(self.repository, actual_id, session, self.zones):
                             result.activities_matched += 1
                     result.session_ids.append(actual_id)
+                    # The Muscu log of that day may already be saved; a day
+                    # guessed from the sync time could pair the wrong one.
+                    if session.sport == "strength" and activity.start_time_known:
+                        link_garmin_strength([session.date])
                     if streams is not None:
                         self._save_streams(actual_id, streams)
                     result.last_activity_date = activity.start_time.date()
@@ -497,13 +553,7 @@ class GarminSyncClient:
 
     def _is_already_synced(self, activity_id: int) -> bool:
         """Check if activity is already in database."""
-        # Use cached synced IDs for O(1) lookup instead of O(n)
-        if not hasattr(self, "_synced_ids_cache"):
-            sessions = self.repository.list_actual_sessions(limit=1000)
-            self._synced_ids_cache: set[str] = {
-                s.garmin_activity_id for s in sessions if s.garmin_activity_id
-            }
-        return str(activity_id) in self._synced_ids_cache
+        return self.repository.has_garmin_activity(activity_id)
 
     def _enrich_from_fit(
         self, session: ActualSession, fit_path: Path

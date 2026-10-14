@@ -269,6 +269,7 @@ def test_journal_archive_search_and_explicit_bound(monkeypatch):
     from arete.services.memory import memory_root
 
     root = memory_root()
+    root.mkdir(parents=True, exist_ok=True)
     (root / "sessions-2025-01.md").write_text(
         "## 2025-01-08 — décision\nReporter la traversée des Bauges."
     )
@@ -339,17 +340,13 @@ def test_background_missions_never_search_or_gain_tools(monkeypatch):
     assert build_context(request).tools == []
 
 
-def test_tool_requires_explicit_evidence_and_rejects_stale_revision():
-    from arete.agent.tools.journal import remember_fact
-
+def test_tool_requires_explicit_evidence_and_rejects_stale_revision(memory_tool):
     missing_source = json.loads(
-        remember_fact.invoke(
-            {"kind": "preference", "text": "Matin", "evidence": "explicit"}
-        )
+        memory_tool({"kind": "preference", "text": "Matin", "evidence": "explicit"})
     )
     assert "error" in missing_source
     saved = json.loads(
-        remember_fact.invoke(
+        memory_tool(
             {
                 "kind": "preference",
                 "text": "Matin",
@@ -362,7 +359,7 @@ def test_tool_requires_explicit_evidence_and_rejects_stale_revision():
     fid = saved["fact"]["id"]
     facts.update_fact(fid, text="Soir", expected_revision=1)
     stale = json.loads(
-        remember_fact.invoke(
+        memory_tool(
             {
                 "kind": "preference",
                 "text": "Midi",

@@ -1,24 +1,39 @@
-import { lazy, Suspense, useCallback, useRef, useState, type ReactNode } from 'react';
+import { RouteScroll } from '@/components/RouteScroll';
+import { useVisualViewport } from '@/hooks/useVisualViewport';
+import { useCoachDisplay } from '@/hooks/useCoachDisplay';
+import { AreteMark } from '@/components/AreteBrand';
+import type { CoachReference } from '@/lib/coachToday';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { Navigation, ErrorBoundary } from '@/components';
 import { AgentSidePanel } from '@/components/AgentSidePanel';
+import { preloadAgentMarkdown, preloadAgentMarkdownWhenIdle } from '@/components/agent/markdownRenderer';
+import { EnableNotifications } from '@/components/EnableNotifications';
+import { InstallPrompt } from '@/components/InstallPrompt';
 import { LoadingState } from '@/components/States';
 import { AuthGate } from '@/components/auth/AuthGate';
+import { useAuthState } from '@/components/auth/authState';
+import { athletePersister, keepPersistedQueries, PERSIST_BUSTER, PERSIST_DEHYDRATE, PERSIST_MAX_AGE_MS } from '@/lib/queryPersistence';
 import { SettingsProvider } from '@/contexts';
-import { DashboardPage, PlanningPage, LogPage, SettingsPage } from '@/pages';
+import { DashboardPage, SettingsPage } from '@/pages';
+import { loadLogPage, loadPlanningPage } from '@/pages/routes';
+import { importChunk } from '@/lib/chunkReload';
 
+const PlanningPage = lazy(importChunk(loadPlanningPage));
+const LogPage = lazy(importChunk(loadLogPage));
 // recharts is most of the bundle and only the Analytics page draws charts.
-const ProfilePage = lazy(() => import('@/pages/Profile').then(m => ({ default: m.ProfilePage })));
-const AnalyticsPage = lazy(() =>
+const ProfilePage = lazy(importChunk(() => import('@/pages/Profile').then(m => ({ default: m.ProfilePage }))));
+const AnalyticsPage = lazy(importChunk(() =>
   import('@/pages/Analytics').then((m) => ({ default: m.AnalyticsPage })),
-);
-const SessionDetailPage = lazy(() =>
+));
+const SessionDetailPage = lazy(importChunk(() =>
   import('@/pages/SessionDetail').then((m) => ({ default: m.SessionDetailPage })),
-);
-const YearReviewPage = lazy(() =>
+));
+const YearReviewPage = lazy(importChunk(() =>
   import('@/pages/YearReview').then((m) => ({ default: m.YearReviewPage })),
-);
+));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,8 +44,31 @@ const queryClient = new QueryClient({
   },
 });
 
+keepPersistedQueries(queryClient);
+
+const revalidateRestored = () => queryClient.invalidateQueries();
+
 /** A session that ends takes the query cache with it; the page reloads right after. */
 const dropQueryCache = () => queryClient.clear();
+
+/** A repeat visit paints this athlete's last answers while they revalidate. */
+function PersistedQueries({ children }: { children: ReactNode }) {
+  const { athleteId } = useAuthState();
+  if (athleteId === null) throw new Error('Athlète absent.');
+  const persistOptions = useMemo(() => ({
+    persister: athletePersister(athleteId),
+    maxAge: PERSIST_MAX_AGE_MS,
+    buster: PERSIST_BUSTER,
+    dehydrateOptions: PERSIST_DEHYDRATE,
+  }), [athleteId]);
+  // Restored answers may predate a write the last page made just before closing
+  // (an IndexedDB write does not outlive the page): they paint, then revalidate.
+  return (
+    <PersistQueryClientProvider key={athleteId} client={queryClient} persistOptions={persistOptions} onSuccess={revalidateRestored}>
+      {children}
+    </PersistQueryClientProvider>
+  );
+}
 
 /** Route content can fade independently; the active chat is never remounted. */
 function RouteContent({ children }: { children: ReactNode }) {
@@ -39,22 +77,49 @@ function RouteContent({ children }: { children: ReactNode }) {
 }
 
 function App() {
+  useVisualViewport();
   // Panel state lives above the router so the drawer survives page navigation
   // (the agent's panel_context follows the route, the conversation too).
+  const display = useCoachDisplay();
   const [agentOpen, setAgentOpen] = useState(false);
+  const [coachReference, setCoachReference] = useState<CoachReference | null>(null);
+  useEffect(preloadAgentMarkdownWhenIdle, []);
+  useEffect(() => {
+    const discuss = (event: Event) => {
+      const reference = (event as CustomEvent<CoachReference>).detail;
+      if (!reference || !['proposal', 'followup'].includes(reference.kind) || !Number.isSafeInteger(reference.id)) return;
+      setCoachReference(reference);
+      setAgentOpen(true);
+    };
+    window.addEventListener('arete:coach-discuss', discuss);
+    return () => window.removeEventListener('arete:coach-discuss', discuss);
+  }, []);
   const [agentBusy, setAgentBusy] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const restoreCoachFocus = useRef(false);
   const closeAgent = useCallback(() => {
+    restoreCoachFocus.current = true;
     setAgentOpen(false);
-    triggerRef.current?.focus();
   }, []);
+  useLayoutEffect(() => {
+    if (!agentOpen && restoreCoachFocus.current) {
+      restoreCoachFocus.current = false;
+      // The floating launcher is mounted again only after closing the panel.
+      const launcher = launcherRef.current;
+      const desktopTrigger = document.querySelector<HTMLButtonElement>('nav[aria-label="Navigation principale"] button[aria-controls="coach-panel"]');
+      const target = launcher?.getClientRects().length ? launcher : desktopTrigger ?? triggerRef.current;
+      target?.focus({ preventScroll: true });
+    }
+  }, [agentOpen]);
 
   return (
     <AuthGate onSessionEnd={dropQueryCache}>
-      <QueryClientProvider client={queryClient}>
+      <PersistedQueries>
         <SettingsProvider>
           <BrowserRouter>
-            <div className="min-h-screen bg-void">
+            <div className="app-shell bg-void">
+              <RouteScroll />
               <Navigation
                 agentOpen={agentOpen}
                 agentBusy={agentBusy}
@@ -63,15 +128,15 @@ function App() {
                   setAgentOpen((v) => !v);
                 }}
               />
-              {/* pb-20 on mobile for bottom tab bar clearance, pb-0 on desktop */}
+              {/* Reserve the tab bar and launcher so the final content remains reachable. */}
               <main
-                className={`pb-20 md:pb-0 transition-[margin] duration-[220ms] motion-reduce:transition-none ${agentOpen ? 'xl:mr-[520px]' : ''}`}
+                className={`app-main transition-[margin] duration-[220ms] motion-reduce:transition-none ${agentOpen && display.mode === 'sidebar' ? 'xl:mr-[520px]' : ''}`}
               >
                 <RouteContent>
                   <ErrorBoundary>
                     <Routes>
                       <Route path="/" element={<DashboardPage />} />
-                      <Route path="/planning" element={<PlanningPage />} />
+                      <Route path="/planning" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><PlanningPage /></Suspense>} />
                       <Route
                         path="/analytics"
                         element={
@@ -88,7 +153,7 @@ function App() {
                           </Suspense>
                         }
                       />
-                      <Route path="/log" element={<LogPage />} />
+                      <Route path="/log" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><LogPage /></Suspense>} />
                       <Route
                         path="/log/sessions/:id"
                         element={
@@ -121,15 +186,29 @@ function App() {
                 </RouteContent>
               </main>
 
+              {!agentOpen && <button
+                ref={launcherRef}
+                className={`coach-launcher ${display.mode === 'sidebar' ? 'md:hidden' : ''} fixed z-40 flex min-h-11 items-center gap-2 rounded-full border border-text-muted/20 bg-abyss px-4 text-sm text-text-primary shadow-lg`}
+                aria-controls="coach-panel" aria-expanded={false}
+                onClick={event => { triggerRef.current = event.currentTarget; setAgentOpen(true); }}
+                onPointerEnter={preloadAgentMarkdown} onFocus={preloadAgentMarkdown}
+              ><AreteMark size={18} />{agentBusy ? 'Chiron répond…' : 'Demander à Chiron'}</button>}
               <AgentSidePanel
+                display={display.mode}
+                onDisplayChange={display.setMode}
+                displayError={display.error}
+                reference={coachReference}
+                onClearReference={() => setCoachReference(null)}
                 open={agentOpen}
                 onClose={closeAgent}
                 onBusyChange={setAgentBusy}
               />
+              <InstallPrompt />
+              <EnableNotifications />
             </div>
           </BrowserRouter>
         </SettingsProvider>
-      </QueryClientProvider>
+      </PersistedQueries>
     </AuthGate>
   );
 }

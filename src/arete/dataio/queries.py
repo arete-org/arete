@@ -213,6 +213,57 @@ def daily_metrics_range(
     ]
 
 
+#: Every stored Garmin field of one day, as ``/garmin/health/daily`` shows them.
+HEALTH_DAY_COLUMNS = (
+    "date",
+    "hrv_weekly_avg",
+    "hrv_last_night",
+    "hrv_status",
+    "sleep_duration_sec",
+    "sleep_score",
+    "sleep_deep_sec",
+    "sleep_light_sec",
+    "sleep_rem_sec",
+    "sleep_awake_sec",
+    "body_battery_charged",
+    "body_battery_drained",
+    "body_battery_high",
+    "body_battery_low",
+    "resting_hr",
+    "stress_avg",
+    "stress_max",
+    "steps",
+    "intensity_minutes",
+    "readiness_score",
+    "source",
+    "fetched_at",
+    "training_readiness_score",
+    "training_readiness_level",
+    "training_readiness_feedback",
+    "training_status",
+    "vo2max_run",
+    "race_5k_sec",
+    "race_10k_sec",
+    "race_half_sec",
+    "race_marathon_sec",
+    "endurance_score",
+    "hill_score",
+)
+
+
+def daily_health(con: duckdb.DuckDBPyConnection, day: date) -> dict | None:
+    """The day's stored Garmin metrics and readiness, None before any sync."""
+    row = con.execute(
+        f"""
+        SELECT {", ".join(HEALTH_DAY_COLUMNS)}
+        FROM app.visible_daily_metrics
+        WHERE user_id = getvariable('arete_athlete_id') AND date = ?
+        """,
+        [day],
+    ).fetchone()
+    return dict(zip(HEALTH_DAY_COLUMNS, row, strict=True)) if row else None
+
+
 def earliest_session_date(
     con: duckdb.DuckDBPyConnection, user_id: int | None = None
 ) -> date | None:

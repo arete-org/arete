@@ -82,7 +82,7 @@ export function LogSessionModal({ open, onClose }: LogSessionModalProps) {
   const unparsed = parseResult?.unparsed_lines ?? [];
 
   return (
-    <Modal open={open} onClose={reset} className="max-w-lg max-h-[90vh] overflow-y-auto">
+    <Modal mobileSheet open={open} onClose={reset} className="max-w-lg overflow-y-auto">
       <ModalHeader
         title="SAISIR UNE SÉANCE"
         tone="text-neon-gold"
@@ -92,7 +92,7 @@ export function LogSessionModal({ open, onClose }: LogSessionModalProps) {
 
       {step === 'input' && (
         <div className="space-y-4">
-          <p className="text-sm text-text-muted font-mono">
+          <p className="text-sm text-text-muted font-sans">
             Dicte ta séance ou colle-la ci-dessous. Les exercices, séries et charges sont
             extraits automatiquement.
           </p>
@@ -136,24 +136,24 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
           {heard && (
             <div className="p-3 rounded border border-neon-cyan/30 bg-neon-cyan/5 space-y-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-mono text-neon-cyan uppercase tracking-wider">
+                <span className="text-[10px] font-sans text-neon-cyan uppercase tracking-wider">
                   Ce qui a été entendu
                 </span>
                 {textBeforeDictation !== null && (
                   <button
                     type="button"
                     onClick={undoDictation}
-                    className="text-[10px] font-mono text-text-muted hover:text-text-primary"
+                    className="text-[10px] font-sans text-text-muted hover:text-text-primary"
                   >
                     ANNULER L'INSERTION
                   </button>
                 )}
               </div>
-              <p className="text-xs font-mono text-text-secondary italic max-h-24 overflow-y-auto">
+              <p className="text-xs font-sans text-text-secondary italic max-h-24 overflow-y-auto">
                 {heard.transcript}
               </p>
               {heard.unparsed.length > 0 && (
-                <p className="text-[10px] font-mono text-warning-orange">
+                <p className="text-[10px] font-sans text-warning-orange">
                   Non compris, à écrire à la main : {heard.unparsed.join(' · ')}
                 </p>
               )}
@@ -180,7 +180,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
           </Button>
 
           {parseMutation.isError && (
-            <div className="flex items-center gap-2 text-danger-red text-sm font-mono">
+            <div className="flex items-center gap-2 text-danger-red text-sm font-sans">
               <AlertCircle className="w-4 h-4" />
               {readableError(parseMutation.error) || 'Analyse impossible'}
             </div>
@@ -190,7 +190,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
 
       {step === 'preview' && parseResult && (
         <div className="space-y-4">
-          <div className="flex items-center gap-2 text-success-green text-sm font-mono">
+          <div className="flex items-center gap-2 text-success-green text-sm font-sans">
             <Check className="w-4 h-4" />
             {parseResult.exercises.length} exercice(s) détecté(s)
           </div>
@@ -209,14 +209,14 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
                   )}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-sm text-text-primary">{ex.name}</span>
+                    <span className="font-sans text-sm text-text-primary">{ex.name}</span>
                     {ex.exercise_matched ? (
-                      <span className="text-[10px] font-mono text-success-green">✓ RECONNU</span>
+                      <span className="text-[10px] font-sans text-success-green">✓ RECONNU</span>
                     ) : (
-                      <span className="text-[10px] font-mono text-warning-orange">⚠ INCONNU</span>
+                      <span className="text-[10px] font-sans text-warning-orange">⚠ INCONNU</span>
                     )}
                   </div>
-                  <div className="text-xs font-mono text-text-muted">
+                  <div className="text-xs font-sans text-text-muted">
                     {ex.sets.length - warmups} série(s) •
                     {work?.weight_kg && ` ${work.weight_kg} kg`}
                     {work?.is_failure ? " × jusqu'à l'échec" : work?.reps && ` × ${work.reps} rép.`}
@@ -233,18 +233,18 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
 
           {unparsed.length > 0 && (
             <div className="p-3 rounded border border-warning-orange/30 bg-warning-orange/5">
-              <div className="flex items-center gap-2 text-warning-orange text-xs font-mono uppercase tracking-wider mb-2">
+              <div className="flex items-center gap-2 text-warning-orange text-xs font-sans uppercase tracking-wider mb-2">
                 <AlertTriangle className="w-4 h-4" />
                 Lignes non reconnues ({unparsed.length})
               </div>
               <ul className="space-y-1">
                 {unparsed.map((line, i) => (
-                  <li key={i} className="text-xs font-mono text-text-secondary truncate">
+                  <li key={i} className="text-xs font-sans text-text-secondary truncate">
                     › {line}
                   </li>
                 ))}
               </ul>
-              <p className="text-[10px] font-mono text-text-muted mt-2">
+              <p className="text-[10px] font-sans text-text-muted mt-2">
                 Ces lignes ne seront pas enregistrées. Corrige le texte ou vérifie la notation.
               </p>
             </div>
@@ -275,23 +275,23 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
           </div>
           <div>
             <h4 className="font-sans text-lg text-success-green">SÉANCE ENREGISTRÉE</h4>
-            <p className="text-sm font-mono text-text-muted mt-1">
+            <p className="text-sm font-sans text-text-muted mt-1">
               {parseResult.message || `${parseResult.exercises.length} exercice(s) enregistré(s)`}
             </p>
           </div>
           <RecordsCelebration records={parseResult.records ?? []} />
           {feedback.isLoading && (
-            <p className="text-sm font-mono text-text-muted flex items-center justify-center gap-2">
+            <p className="text-sm font-sans text-text-muted flex items-center justify-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-neon-cyan" />
               Le coach regarde ta séance…
             </p>
           )}
           {feedback.data && (
             <div className="text-left glass-panel p-3">
-              <p className="text-[11px] font-mono text-neon-cyan mb-1">
+              <p className="text-[11px] font-sans text-neon-cyan mb-1">
                 {feedback.data.source === 'agent' ? 'LE COACH' : 'CALCULÉ À PARTIR DE LA SÉANCE'}
               </p>
-              <p className="text-sm font-mono text-text-secondary">{feedback.data.feedback}</p>
+              <p className="text-sm font-sans text-text-secondary">{feedback.data.feedback}</p>
             </div>
           )}
           <Button variant="outline" strong size="lg" fullWidth onClick={reset}>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileText } from 'lucide-react';
+import { Paperclip } from 'lucide-react';
 import { documentsApi, type CoachDocument } from '@/lib/documents';
 import { DocumentPreview } from './DocumentPreview';
 
@@ -18,7 +18,7 @@ export function MessageAttachments({
   });
   const [selected, setSelected] = useState<CoachDocument | null>(null);
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <span className="ml-2 inline-flex max-w-full align-middle gap-2">
       {ids.map((id) => {
         const doc = docs.data?.find((d) => d.id === id);
         return (
@@ -26,9 +26,9 @@ export function MessageAttachments({
             key={id}
             disabled={!doc || doc.status !== 'ready'}
             onClick={() => doc && setSelected(doc)}
-            className="flex min-h-11 max-w-full items-center gap-2 rounded-lg border border-text-muted/20 bg-abyss px-3 text-xs"
+            className="inline-flex min-w-0 max-w-full items-center gap-1 text-xs text-text-secondary hover:text-text-primary hover:underline"
           >
-            <FileText size={16} className="shrink-0" />
+            <Paperclip size={14} className="shrink-0" />
             <span className="truncate">
               {doc?.name ??
                 (docs.isPending
@@ -45,6 +45,6 @@ export function MessageAttachments({
           onClose={() => setSelected(null)}
         />
       )}
-    </div>
+    </span>
   );
 }

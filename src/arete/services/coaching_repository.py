@@ -8,19 +8,21 @@ silently empty.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 import duckdb
 
-from arete.dataio.db import connect, db_connection
+from arete.dataio.db import connect, db_connection, transaction
 from arete.dataio.ownership import require_owned
 from arete.services.athlete_scope import resolve_athlete_id
+from arete.services.settings import athlete_today
 
 Priority = Literal["info", "warning", "alert"]
 Source = Literal["agent", "rules"]
-Status = Literal["ok", "failed"]
+#: 'pending' marks a run in progress (``claim``); it is never served or audited.
+Status = Literal["ok", "failed", "pending"]
 Trigger = Literal["scheduler", "api"]
 
 
@@ -37,6 +39,10 @@ class Briefing:
     error: str | None
     trigger: str
     created_at: datetime | None
+    #: Identifies the facts it was written from (``briefing.facts_digest``).
+    facts_digest: str | None = None
+    #: An earlier usable briefing of the same day was replaced by this one.
+    revised: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -52,7 +58,9 @@ class Briefing:
         }
 
 
-_COLUMNS = "id, date, text, priority, source, status, error, trigger, created_at"
+_COLUMNS = (
+    "id, date, text, priority, source, status, error, trigger, created_at, facts_digest"
+)
 
 
 def _row_to_briefing(row: tuple) -> Briefing:
@@ -66,6 +74,7 @@ def _row_to_briefing(row: tuple) -> Briefing:
         error=row[6],
         trigger=row[7],
         created_at=row[8],
+        facts_digest=row[9],
     )
 
 
@@ -88,6 +97,7 @@ class BriefingRepository:
         error: str | None = None,
         trigger: str = "api",
         user_id: int | None = None,
+        facts_digest: str | None = None,
     ) -> int:
         user_id = resolve_athlete_id(user_id)
         conn = self._get_connection()
@@ -96,13 +106,13 @@ class BriefingRepository:
                 """
                 INSERT INTO coach_briefings
                     (user_id, date, text, priority, source, status, error,
-                     trigger, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     trigger, created_at, facts_digest)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 """,
                 [
                     user_id,
-                    briefing_date or date.today(),
+                    briefing_date or athlete_today(),
                     text,
                     priority,
                     source,
@@ -110,6 +120,7 @@ class BriefingRepository:
                     error,
                     trigger,
                     datetime.now(),
+                    facts_digest,
                 ],
             ).fetchone()
         finally:
@@ -119,7 +130,10 @@ class BriefingRepository:
         return int(result[0])
 
     def get_for_day(
-        self, briefing_date: date | None = None, user_id: int | None = None
+        self,
+        briefing_date: date | None = None,
+        user_id: int | None = None,
+        con: duckdb.DuckDBPyConnection | None = None,
     ) -> Briefing | None:
         """The day's usable briefing — newest first, failures skipped.
 
@@ -128,20 +142,24 @@ class BriefingRepository:
         when there is none the caller falls back to the rule text.
         """
         user_id = resolve_athlete_id(user_id)
-        conn = self._get_connection()
+        conn = con or self._get_connection()
         try:
             row = conn.execute(
                 f"""
-                SELECT {_COLUMNS} FROM visible_coach_briefings
+                SELECT {_COLUMNS}, count(*) OVER () > 1
+                FROM app.visible_coach_briefings
                 WHERE user_id = ? AND date = ? AND status = 'ok'
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """,
-                [user_id, briefing_date or date.today()],
+                [user_id, briefing_date or athlete_today()],
             ).fetchone()
         finally:
-            conn.close()
-        return _row_to_briefing(row) if row else None
+            if con is None:
+                conn.close()
+        if row is None:
+            return None
+        return replace(_row_to_briefing(row), revised=bool(row[10]))
 
     def list_recent(
         self, limit: int = 30, user_id: int | None = None
@@ -153,7 +171,7 @@ class BriefingRepository:
             rows = conn.execute(
                 f"""
                 SELECT {_COLUMNS} FROM visible_coach_briefings
-                WHERE user_id = ?
+                WHERE user_id = ? AND status <> 'pending'
                 ORDER BY date DESC, created_at DESC, id DESC
                 LIMIT ?
                 """,
@@ -162,6 +180,66 @@ class BriefingRepository:
         finally:
             conn.close()
         return [_row_to_briefing(row) for row in rows]
+
+    def claim(
+        self,
+        briefing_date: date,
+        *,
+        trigger: str,
+        expiry: timedelta,
+        user_id: int | None = None,
+    ) -> tuple[int, bool] | None:
+        """Mark the day's briefing as being produced; None while a run holds it.
+
+        The marker is what keeps two instances from paying for the same
+        briefing: the in-process lock only covers one. The flag is True when
+        an expired marker was replaced: its run was stopped before it stored
+        anything. Two instances claiming within the same few milliseconds can
+        still both succeed (no unique key), at worst one extra model request.
+        """
+        user_id = resolve_athlete_id(user_id)
+        # Naive UTC, like the scheduler's markers: instances on other clocks
+        # (Docker in Paris, Vercel in UTC) share the database.
+        now = datetime.now(UTC).replace(tzinfo=None)
+        try:
+            with transaction() as conn:
+                held = conn.execute(
+                    """
+                    SELECT id, created_at FROM app.visible_coach_briefings
+                    WHERE user_id = ? AND date = ? AND status = 'pending'
+                    """,
+                    [user_id, briefing_date],
+                ).fetchall()
+                if any(now - created < expiry for _, created in held):
+                    return None
+                for claim_id, _ in held:
+                    self._release(conn, claim_id)
+                row = conn.execute(
+                    """
+                    INSERT INTO app.coach_briefings
+                        (user_id, date, text, priority, source, status, trigger,
+                         created_at)
+                    VALUES (?, ?, '', 'info', 'agent', 'pending', ?, ?)
+                    RETURNING id
+                    """,
+                    [user_id, briefing_date, trigger, now],
+                ).fetchone()
+        except duckdb.TransactionException:
+            return None  # another instance replaced the same expired marker
+        assert row is not None
+        return int(row[0]), bool(held)
+
+    def release(self, claim_id: int) -> None:
+        """Drop a run's marker once its outcome is stored (or it failed)."""
+        with db_connection() as conn:
+            self._release(conn, claim_id)
+
+    @staticmethod
+    def _release(conn: duckdb.DuckDBPyConnection, claim_id: int) -> None:
+        conn.execute(
+            "DELETE FROM app.coach_briefings WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND (id = ? AND status = 'pending')",
+            [claim_id],
+        )
 
     def delete_for_day(self, briefing_date: date, user_id: int | None = None) -> int:
         """Drop a day's briefings; returns how many went. Used to force a redo."""

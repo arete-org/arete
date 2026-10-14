@@ -24,6 +24,7 @@ from contextlib import contextmanager
 import duckdb
 
 from arete.config import config
+from arete.observability.requests import counted
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
     # Concurrent opens can race DuckDB's instance-cache cleanup when the last
     # connection closes. Serialize opening only; queries keep separate connections.
     with _local_connect_lock:
-        con = duckdb.connect(str(db_path), read_only=read_only)
+        con = counted(duckdb.connect(str(db_path), read_only=read_only))
     con.execute("PRAGMA threads=4;")
     con.execute(f"PRAGMA temp_directory='{db_path.parent}';")
     configure_athlete(con)
@@ -97,8 +98,10 @@ def _open_remote() -> duckdb.DuckDBPyConnection:
     """
     REMOTE_HOME.mkdir(parents=True, exist_ok=True)
     _seed_extensions()
-    # The MotherDuck extension also reads $HOME, which Vercel leaves empty.
-    if not os.environ.get("HOME"):
+    # The MotherDuck extension also reads $HOME, which Vercel leaves empty or,
+    # for a large function, points at a /home/vercel that does not exist.
+    home = os.environ.get("HOME", "")
+    if not (os.path.isdir(home) and os.access(home, os.W_OK)):
         os.environ["HOME"] = str(REMOTE_HOME)
     con = duckdb.connect()
     con.execute(f"SET home_directory='{REMOTE_HOME}'")
@@ -125,7 +128,7 @@ def _remote_cursor() -> duckdb.DuckDBPyConnection:
                 _remote = _open_remote()
             parent = _remote
         try:
-            cursor = parent.cursor()
+            cursor = counted(parent.cursor())
             cursor.execute(f"USE {database}")
             return cursor
         except duckdb.Error:

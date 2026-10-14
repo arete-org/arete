@@ -2,6 +2,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, healthApi } from './api';
 import { authFetch, authHeaders, endSession, onUnauthorized, setTokenGetter } from './auth';
+import { clearPersistedQueries } from './queryPersistence';
+
+vi.mock('./queryPersistence', () => ({ clearPersistedQueries: vi.fn(async () => {}) }));
 
 function answer(status: number, body = '{}') {
   const fetchMock = vi.fn(async () => new Response(body, { status }));
@@ -88,7 +91,7 @@ describe('endSession', () => {
     return { reload, remove };
   }
 
-  it('signs out, resets, drops the API cache, then reloads', async () => {
+  it('signs out, resets, drops the API and persisted query caches, then reloads', async () => {
     const { reload, remove } = browser();
     const order: string[] = [];
     const reset = () => {
@@ -99,13 +102,16 @@ describe('endSession', () => {
       return true;
     });
     reload.mockImplementation(() => order.push('reload'));
+    vi.mocked(clearPersistedQueries).mockImplementation(async () => {
+      order.push('persisted');
+    });
     setTokenGetter(async () => 'jeton');
     const signOut = vi.fn(async (then: () => Promise<void>) => {
       order.push('clerk');
       await then();
     });
     await endSession(signOut, reset);
-    expect(order).toEqual(['clerk', 'reset', 'cache', 'reload']);
+    expect(order).toEqual(['clerk', 'reset', 'cache', 'persisted', 'reload']);
     expect(remove).toHaveBeenCalledWith('api-cache');
     expect(await authHeaders()).toEqual({});
   });

@@ -74,19 +74,19 @@ export function FitDropzone({ onUpload, isUploading = false, recentUploads = [] 
           )}
 
           <div>
-            <span className={cn('text-sm font-mono', isDragOver ? 'text-neon-cyan' : 'text-text-muted')}>
+            <span className={cn('text-sm font-sans', isDragOver ? 'text-neon-cyan' : 'text-text-muted')}>
               {isUploading ? 'IMPORT EN COURS…' : 'DÉPOSE UN FICHIER .FIT ICI'}
             </span>
-            <div className="text-xs text-text-muted/70 mt-1 font-mono">ou clique pour parcourir</div>
+            <div className="text-xs text-text-muted/70 mt-1 font-sans">ou clique pour parcourir</div>
           </div>
         </div>
       </div>
 
       {recentUploads.length > 0 && (
         <div className="space-y-2">
-          <span className="text-xs font-mono text-text-muted">Imports récents :</span>
+          <span className="text-xs font-sans text-text-muted">Imports récents :</span>
           {recentUploads.map((upload, idx) => (
-            <div key={idx} className="flex items-center gap-2 text-xs font-mono">
+            <div key={idx} className="flex items-center gap-2 text-xs font-sans">
               <FileUp className="w-3 h-3 text-text-muted" />
               <span className="text-text-secondary">{upload.filename}</span>
               <span className="text-text-muted">→</span>

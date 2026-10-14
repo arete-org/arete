@@ -20,9 +20,11 @@ from threading import Lock
 from typing import Any, cast
 from urllib.parse import parse_qsl, urlsplit
 
-from garminconnect import Garmin
+from garminconnect import Garmin, GarminConnectAuthenticationError
 
 from arete.config import config
+from arete.dataio import mirror
+from arete.garmin import token_store
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +60,10 @@ class GarminClient:
         return self.token_dir / TOKEN_FILE
 
     def has_tokens(self) -> bool:
+        # Every token use starts here, and the SDK rewrites the file whenever it
+        # refreshes the session, even during a GET: have the request flush it.
+        mirror.mark_dirty()
         if self._durable_auth and config.is_remote_db:
-            from arete.garmin import token_store
-
             return token_store.hydrate(self.token_file)
         return self.token_file.exists()
 
@@ -80,8 +83,16 @@ class GarminClient:
         try:
             api.login(str(self.token_dir))
         except Exception as e:
+            if isinstance(e, GarminConnectAuthenticationError):
+                # Garmin refused the session (a network error or a rate limit
+                # is not a refusal): the status then asks to reconnect.
+                self._record_refusal()
             raise GarminAuthError(f"Garmin session could not be restored: {e}") from e
         self._api = api
+        if token_store.needs_account(self.token_file):
+            # Tokens saved before the account was recorded, or refused before:
+            # this working session records whose account it opens.
+            self._remember_account(api)
         return api
 
     def is_authenticated(self) -> bool:
@@ -141,32 +152,59 @@ class GarminClient:
         self._save(api)
 
     def _save(self, api: Garmin) -> None:
+        mirror.mark_dirty()
         self.token_dir.mkdir(parents=True, exist_ok=True)
         api.client.dump(str(self.token_dir))
         if self.token_file.exists():
             self.token_file.chmod(0o600)  # session tokens: owner-only
         if self._durable_auth:
-            from arete.garmin import auth_state, token_store
+            from arete.garmin import auth_state
 
             auth_state.clear()
             if config.is_remote_db:
                 token_store.save(self.token_file)
+        self._remember_account(api)
         self._api = api
         logger.info("Garmin tokens saved to %s", self.token_file)
 
+    def _remember_account(self, api: Garmin) -> None:
+        """Record whose account the tokens open, for the status endpoint.
+
+        The tokens are already saved: a failure here only costs the name.
+        """
+        # username is only known right after a credential login; fall back to
+        # the profile name so the UI can still show who is connected.
+        name = api.username or api.full_name or api.display_name
+        try:
+            token_store.save_account(
+                self.token_file,
+                name if isinstance(name, str) else None,
+                remote=self._durable_auth and config.is_remote_db,
+            )
+        except Exception:
+            logger.warning("Could not record the Garmin account", exc_info=True)
+
+    def _record_refusal(self) -> None:
+        try:
+            token_store.refused(
+                self.token_file, remote=self._durable_auth and config.is_remote_db
+            )
+        except Exception:
+            logger.warning("Could not record the Garmin refusal", exc_info=True)
+
     def logout(self) -> None:
+        mirror.mark_dirty()
         if self._durable_auth:
             from arete.garmin import auth_state
 
             auth_state.clear()
             if config.is_remote_db:
-                from arete.garmin import token_store
-
                 token_store.delete()
         with self._mfa_lock:
             self._pending_mfa.pop(self.token_dir.resolve(), None)
         if self.token_file.exists():
             self.token_file.unlink()
+        (self.token_dir / token_store.ACCOUNT_FILE).unlink(missing_ok=True)
         self._api = None
         logger.info("Garmin tokens removed from %s", self.token_dir)
 
@@ -187,6 +225,15 @@ class GarminClient:
             list[dict[str, Any]],
             self.connect().get_activities_by_date(start.isoformat(), end.isoformat()),
         )
+
+    def activity_page(self, offset: int, limit: int) -> list[dict[str, Any]]:
+        """Fetch one history page; never let the SDK paginate the whole archive."""
+        raw = self.connect().get_activities(start=offset, limit=limit)
+        if not isinstance(raw, list) or len(raw) > limit:
+            raise ValueError("Invalid Garmin activity page")
+        if not all(isinstance(item, dict) for item in raw):
+            raise ValueError("Invalid Garmin activity in page")
+        return raw
 
     def download_fit(self, activity_id: int | str) -> bytes | None:
         """Original FIT bytes for an activity (Garmin ships them zipped)."""

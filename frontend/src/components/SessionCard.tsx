@@ -1,6 +1,8 @@
 import { createElement, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, ChevronDown, RotateCcw, Trash2, Watch, X } from 'lucide-react';
 import { formatClock } from '@/lib/fr';
+import type { SessionPush } from '@/lib/workouts';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import type { PlannedState } from '@/lib/sessionMatch';
 import { cn, formatDurationCompact, formatPace } from '@/lib/utils';
@@ -73,7 +75,25 @@ export function strengthAsActual(s: StrengthSession): ActualSession {
     garmin_activity_id: null,
     strava_activity_id: null,
     adherence_score: null,
+    exercises: s.exercise_names,
   };
+}
+
+/**
+ * Realised sessions plus the Muscu logs, each workout once. A log linked to an
+ * activity of the list lends it its exercises instead of adding a second entry;
+ * the others come in through `strengthAsActual`.
+ */
+export function withStrengthLogs(actual: ActualSession[], logs: StrengthSession[]): ActualSession[] {
+  const linked = new Map(logs.filter((s) => s.garmin_activity_id != null).map((s) => [s.garmin_activity_id, s]));
+  const shown = new Set(actual.map((a) => a.id));
+  return [
+    ...actual.map((a) => {
+      const log = linked.get(a.id);
+      return log ? { ...a, exercises: log.exercise_names } : a;
+    }),
+    ...logs.filter((s) => s.garmin_activity_id == null || !shown.has(s.garmin_activity_id)).map(strengthAsActual),
+  ];
 }
 
 function SportIcon({ sport, className }: { sport: string; className?: string }) {
@@ -84,7 +104,7 @@ function SportIcon({ sport, className }: { sport: string; className?: string }) 
 export function SessionFacts({ session }: { session: ActualSession }) {
   const km = session.distance_km ?? (session.distance_m ? session.distance_m / 1000 : null);
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-mono min-w-0">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-sans min-w-0">
       <span className="text-text-primary truncate">{session.name || session.sport}</span>
       {session.duration_sec ? (
         <span className="text-text-secondary">{formatDurationCompact(session.duration_sec)}</span>
@@ -96,6 +116,9 @@ export function SessionFacts({ session }: { session: ActualSession }) {
       {session.avg_hr ? <span className="text-text-secondary">{session.avg_hr} bpm</span> : null}
       {session.ascent_m ? <span className="text-text-secondary">{Math.round(session.ascent_m)} m D+</span> : null}
       {session.rpe ? <span className="text-text-secondary">RPE {session.rpe}</span> : null}
+      {session.exercises?.length ? (
+        <span className="basis-full text-text-muted truncate">{session.exercises.join(' · ')}</span>
+      ) : null}
     </div>
   );
 }
@@ -111,7 +134,7 @@ export function OffPlanRow({ session, className }: { session: ActualSession; cla
     >
       <SportIcon sport={session.sport} className={cn('w-4 h-4 shrink-0', getSportColor(session.sport))} />
       <SessionFacts session={session} />
-      <span className="ml-auto shrink-0 text-[11px] font-mono text-warning-orange border border-warning-orange/40 rounded px-1.5">
+      <span className="ml-auto shrink-0 text-[11px] font-sans text-warning-orange border border-warning-orange/40 rounded px-1.5">
         hors plan
       </span>
     </div>
@@ -130,16 +153,79 @@ interface SessionCardProps {
   decision?: PlanDecision | null;
   /** Shown for an applied decision other than keep. */
   onRevert?: () => void;
-  /** "Send to the watch" control; omit when the session cannot be sent. */
+  /** The Garmin line, from the export state; omitted, only a recorded push time shows. */
   push?: SessionPush;
 }
 
-export interface SessionPush {
-  /** Steps the watch will get, e.g. "10' Z2 · 4×(3' Z5 / 2' Z1) · 10' Z1". */
-  text: string | null;
-  onPush: () => void;
-  pending: boolean;
-  error: string | null;
+function SentLabel({ at }: { at: string | null }) {
+  return (
+    <span
+      className="flex items-center gap-1 text-success-green/80"
+      title="La montre la récupère à sa prochaine synchronisation avec le téléphone."
+    >
+      <Watch className="w-3 h-3" />
+      Envoyée à Garmin{at ? ` ${formatClock(at)}` : ''}
+    </span>
+  );
+}
+
+function WatchControl({ push, busy }: { push: SessionPush; busy?: boolean }) {
+  switch (push.kind) {
+    case 'sent':
+      return <SentLabel at={push.at} />;
+    case 'unsettled':
+      return (
+        <>
+          <span className="flex items-center gap-1 text-warning-orange">
+            <Watch className="w-3 h-3" />
+            {push.label}
+          </span>
+          <Link to={push.href} className="text-neon-cyan hover:underline">
+            Vérifier dans le Planning
+          </Link>
+        </>
+      );
+    case 'withdraw':
+      return (
+        <button
+          type="button"
+          disabled={busy || push.pending}
+          onClick={push.onWithdraw}
+          title="La séance est sautée mais encore programmée dans Garmin Connect."
+          className="flex items-center gap-1 rounded border border-warning-orange/30 bg-warning-orange/10 px-2 py-1 text-warning-orange hover:bg-warning-orange/20 disabled:opacity-40"
+        >
+          {push.pending ? <Spinner className="w-3 h-3" /> : <Watch className="w-3 h-3" />}
+          Retirer de la montre
+        </button>
+      );
+    case 'steps':
+      return (
+        <Link
+          to={push.href}
+          title="Les étapes décrites n’ont pas pu être lues : complète-les dans le Planning."
+          className="flex items-center gap-1 rounded border border-neon-gold/30 bg-neon-gold/10 px-2 py-1 text-neon-gold hover:bg-neon-gold/20"
+        >
+          <Watch className="w-3 h-3" />
+          Compléter les étapes
+        </Link>
+      );
+    case 'send':
+      return (
+        <>
+          <button
+            type="button"
+            disabled={busy || push.pending}
+            onClick={push.onPush}
+            title={push.text ?? undefined}
+            className="flex items-center gap-1 rounded border border-neon-cyan/30 bg-neon-cyan/10 px-2 py-1 text-neon-cyan hover:bg-neon-cyan/20 disabled:opacity-40"
+          >
+            {push.pending ? <Spinner className="w-3 h-3" /> : <Watch className="w-3 h-3" />}
+            Envoyer sur la montre
+          </button>
+          {push.text && <span className="text-text-muted">{push.text}</span>}
+        </>
+      );
+  }
 }
 
 /**
@@ -179,7 +265,7 @@ export function SessionCard({
           {realised ? (
             <SessionFacts session={realised} />
           ) : (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-mono">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-sans">
               <span className="text-text-primary uppercase tracking-wider">{typeLabel}</span>
               <span className="text-text-muted capitalize">{planned.sport}</span>
               {targets.map((t) => (
@@ -201,7 +287,7 @@ export function SessionCard({
           )}
 
           {decision && (
-            <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] font-mono">
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] font-sans">
               <DecisionBadge decision={decision.decision} reverted={decision.reverted_at != null} />
               <span className="text-text-secondary">
                 {decision.reverted_at ? 'Séance prévue rétablie.' : decision.reason}
@@ -214,7 +300,7 @@ export function SessionCard({
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="mt-1 flex items-center gap-1 text-[11px] font-mono text-text-muted hover:text-text-secondary"
+              className="mt-1 flex items-center gap-1 text-[11px] font-sans text-text-muted hover:text-text-secondary"
             >
               <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
               Prévu : {typeLabel}
@@ -222,14 +308,14 @@ export function SessionCard({
             </button>
           ) : null}
           {planned.description && (!realised || open) && (
-            <p className="mt-1 text-xs font-mono text-text-secondary whitespace-pre-line">{planned.description}</p>
+            <p className="mt-1 text-xs font-sans text-text-secondary whitespace-pre-line">{planned.description}</p>
           )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
           {state === 'done' && <Check className="w-4 h-4 text-success-green" />}
           {state !== 'done' && state !== 'pending' && (
-            <span className="text-[11px] font-mono text-text-muted">{STATE_LABEL[state]}</span>
+            <span className="text-[11px] font-sans text-text-muted">{STATE_LABEL[state]}</span>
           )}
           {onStatus && state !== 'done' && (
             <>
@@ -268,30 +354,12 @@ export function SessionCard({
       </div>
 
       {!realised && (planned.garmin_pushed_at || push || canRevert(decision, onRevert)) && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono">
-          {planned.garmin_pushed_at ? (
-            <span
-              className="flex items-center gap-1 text-success-green/80"
-              title="La montre la récupère à sa prochaine synchronisation avec le téléphone."
-            >
-              <Watch className="w-3 h-3" />
-              Envoyée à Garmin {formatClock(planned.garmin_pushed_at)}
-            </span>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-sans">
+          {push ? (
+            <WatchControl push={push} busy={busy} />
           ) : (
-            push && (
-              <button
-                type="button"
-                disabled={busy || push.pending}
-                onClick={push.onPush}
-                title={push.text ?? undefined}
-                className="flex items-center gap-1 rounded border border-neon-cyan/30 bg-neon-cyan/10 px-2 py-1 text-neon-cyan hover:bg-neon-cyan/20 disabled:opacity-40"
-              >
-                {push.pending ? <Spinner className="w-3 h-3" /> : <Watch className="w-3 h-3" />}
-                Envoyer sur la montre
-              </button>
-            )
+            planned.garmin_pushed_at && <SentLabel at={planned.garmin_pushed_at} />
           )}
-          {push?.text && !planned.garmin_pushed_at && <span className="text-text-muted">{push.text}</span>}
           {canRevert(decision, onRevert) && (
             <button
               type="button"
@@ -303,12 +371,14 @@ export function SessionCard({
               Rétablir la séance prévue
             </button>
           )}
-          {push?.error && <span className="basis-full text-danger-red">{push.error}</span>}
+          {push && 'error' in push && push.error && (
+            <span className="basis-full text-danger-red">{push.error}</span>
+          )}
         </div>
       )}
 
       {state === 'done' && realised?.adherence_score != null && (
-        <div className="mt-1 text-[11px] font-mono text-success-green/80">
+        <div className="mt-1 text-[11px] font-sans text-success-green/80">
           Adhérence {Math.round(realised.adherence_score)} %
         </div>
       )}

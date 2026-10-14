@@ -23,7 +23,7 @@ function normalize(text: string): string {
 // Only leading slash commands activate a skill. URLs and slashes in prose stay text.
 function commandAt(value: string, caret: number) {
   const prefix = value.slice(0, caret);
-  const match = /^(?:\s*\/[a-z0-9-]+\s+)*\s*\/([a-z0-9-]*)$/i.exec(prefix);
+  const match = /^\s*(?:\/[a-z0-9-]+\s+)*\/([a-z0-9-]*)$/i.exec(prefix);
   if (!match) return null;
   const start = prefix.lastIndexOf('/');
   const suffix = /^\S*/.exec(value.slice(caret))?.[0] ?? '';

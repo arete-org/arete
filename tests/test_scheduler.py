@@ -94,7 +94,7 @@ class TestWriteDailyBriefing:
                 return_value=None,
             ),
             patch(
-                "arete.coaching.generate_briefing",
+                "arete.coaching.get_or_create_briefing",
                 side_effect=RuntimeError("boom"),
             ),
         ):
@@ -122,7 +122,7 @@ class TestWriteDailyBriefing:
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=self._existing("scheduler"),
             ),
-            patch("arete.coaching.generate_briefing") as generate,
+            patch("arete.coaching.get_or_create_briefing") as generate,
         ):
             assert scheduler.write_daily_briefing() == "agent"
         generate.assert_not_called()
@@ -136,24 +136,109 @@ class TestWriteDailyBriefing:
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=None,
             ),
-            patch("arete.coaching.generate_briefing", return_value=fresh),
+            patch("arete.coaching.get_or_create_briefing", return_value=fresh),
             patch("arete.services.notifications.notify") as notify,
         ):
             scheduler.write_daily_briefing()
-        notify.assert_called_once_with("Briefing du coach", "Footing 45'.", "/")
+        notify.assert_called_once_with(
+            "Briefing du coach", "Footing 45'.", "/", kind="briefing"
+        )
 
-    def test_a_briefing_written_before_the_sync_is_rewritten(self):
-        fresh = self._existing("scheduler")
+    def test_a_briefing_written_from_other_facts_is_rewritten(self):
+        fresh, stale = self._existing("scheduler"), self._existing("api")
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=stale,
+            ),
+            patch("arete.services.briefing.facts_changed", return_value=True),
+            patch(
+                "arete.coaching.get_or_create_briefing", return_value=fresh
+            ) as generate,
+        ):
+            scheduler.write_daily_briefing()
+        generate.assert_called_once_with(trigger="scheduler", replacing=stale)
+
+    def test_a_briefing_written_from_the_same_data_is_kept(self):
         with (
             patch("arete.services.briefing.briefing_enabled", return_value=True),
             patch(
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=self._existing("api"),
             ),
-            patch("arete.coaching.generate_briefing", return_value=fresh) as generate,
+            patch("arete.services.briefing.facts_changed", return_value=False),
+            patch("arete.coaching.get_or_create_briefing") as generate,
         ):
-            scheduler.write_daily_briefing()
-        generate.assert_called_once_with(trigger="scheduler")
+            assert scheduler.write_daily_briefing() == "agent"
+        generate.assert_not_called()
+
+    def test_a_run_in_progress_is_awaited_then_compared(self):
+        # The dashboard's request was writing it: once stored, its facts decide.
+        dashboard = self._existing("api")
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                side_effect=[None, dashboard],
+            ),
+            patch("arete.services.briefing.facts_changed", return_value=False),
+            patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch.object(scheduler, "sleep") as sleep,
+            patch("arete.services.notifications.notify") as notify,
+        ):
+            assert scheduler.write_daily_briefing() == "agent"
+        sleep.assert_called_once_with(scheduler.BRIEFING_POLL_SECONDS)
+        notify.assert_not_called()
+
+    def test_a_run_still_in_progress_after_the_wait_is_left_to_finish(self):
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=None,
+            ),
+            patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch.object(scheduler, "BRIEFING_WAIT_SECONDS", 0),
+            patch.object(scheduler, "sleep") as sleep,
+            patch("arete.services.notifications.notify") as notify,
+        ):
+            assert scheduler.write_daily_briefing() == "in progress"
+        sleep.assert_not_called()
+        notify.assert_not_called()
+
+    def test_the_wait_stops_at_the_dispatch_s_model_deadline(self):
+        # A rewrite started past SCHEDULE_MODEL_SECONDS would outlive the function.
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=None,
+            ),
+            patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch.object(scheduler, "sleep") as sleep,
+        ):
+            token = scheduler._model_deadline.set(scheduler.monotonic() - 1)
+            try:
+                assert scheduler.write_daily_briefing() == "in progress"
+            finally:
+                scheduler._model_deadline.reset(token)
+        sleep.assert_not_called()
+
+    def test_a_failed_rewrite_keeps_the_briefing_without_a_notification(self):
+        stale = self._existing("api")
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=stale,
+            ),
+            patch("arete.services.briefing.facts_changed", return_value=True),
+            patch("arete.coaching.get_or_create_briefing", return_value=stale),
+            patch("arete.services.notifications.notify") as notify,
+        ):
+            assert scheduler.write_daily_briefing() == "rewrite failed; kept"
+        notify.assert_not_called()
 
 
 class TestStart:
@@ -245,7 +330,7 @@ class TestDailySync:
         ):
             scheduler.daily_sync()
         notify.assert_called_once_with(
-            "Arete", "2 séance(s) importée(s)", "/log?tab=cardio"
+            "Arete", "2 séance(s) importée(s)", "/log?tab=cardio", kind="imports"
         )
 
     def test_last_status_is_a_copy(self):

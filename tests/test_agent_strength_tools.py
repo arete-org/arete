@@ -16,7 +16,6 @@ from arete.agent.capabilities.registry import CAPABILITIES, STRENGTH_INSTRUCTION
 from arete.agent.tools.strength import (
     MAX_WORKOUT_TEXT_CHARS,
     STRENGTH_TOOLS,
-    read_workout,
     save_workout,
 )
 from arete.strength.repository import StrengthRepository
@@ -42,21 +41,18 @@ def day():
 # ---------------------------------------------------------------------------
 
 
-def test_registered_with_its_three_tools():
+def test_registered_with_its_tools():
     toolkit = CAPABILITIES["strength"]
     assert {t.name for t in toolkit.tools} == {
-        "read_workout",
         "save_workout",
+        "list_strength_sessions",
+        "update_workout",
         "get_strength_progress",
     }
-    assert "get_strength_progress" in toolkit.read_tools
+    # Background missions may read sessions, never correct them.
+    assert toolkit.read_tools == {"get_strength_progress", "list_strength_sessions"}
     assert toolkit.instructions == STRENGTH_INSTRUCTIONS
     assert {t.name for t in STRENGTH_TOOLS} == {t.name for t in toolkit.tools}
-
-
-def test_the_instructions_put_the_dry_run_first():
-    assert "read_workout" in STRENGTH_INSTRUCTIONS
-    assert "not_recognised" in STRENGTH_INSTRUCTIONS
 
 
 # ---------------------------------------------------------------------------
@@ -64,22 +60,9 @@ def test_the_instructions_put_the_dry_run_first():
 # ---------------------------------------------------------------------------
 
 
-def test_reading_reports_what_it_understood(day):
-    out = json.loads(read_workout.invoke({"text": KNOWN, "date_str": day.isoformat()}))
-    assert out["saved"] is False
-    assert out["date"] == day.isoformat()
-    assert out["exercises"][0]["matched"] is True
-    assert len(out["exercises"][0]["sets"]) == 3
-
-
-def test_reading_writes_nothing(day):
-    read_workout.invoke({"text": KNOWN, "date_str": day.isoformat()})
-    assert StrengthRepository().list_sessions(start_date=day, end_date=day) == []
-
-
 def test_an_unmatched_exercise_is_named_not_swallowed(day):
     out = json.loads(
-        read_workout.invoke(
+        save_workout.invoke(
             {"text": f"{KNOWN}\n{UNKNOWN}", "date_str": day.isoformat()}
         )
     )
@@ -90,7 +73,7 @@ def test_an_unmatched_exercise_is_named_not_swallowed(day):
 
 
 def test_unreadable_text_is_an_error_not_a_silent_empty(day):
-    out = json.loads(read_workout.invoke({"text": "il faisait beau ce matin"}))
+    out = json.loads(save_workout.invoke({"text": "il faisait beau ce matin"}))
     assert "error" in out
 
 
@@ -108,23 +91,12 @@ def test_saving_persists_the_session(day):
     assert len(stored) == 1
 
 
-def test_saving_still_names_what_it_left_out(day):
-    out = json.loads(
-        save_workout.invoke(
-            {"text": f"{KNOWN}\n{UNKNOWN}", "date_str": day.isoformat()}
-        )
-    )
-    assert out["saved"] is True
-    assert out["not_recognised"], f"saved silently dropping an exercise: {out}"
-    assert "left out" in out["message"]
-
-
 def test_nothing_matched_means_nothing_saved(day):
     out = json.loads(
         save_workout.invoke({"text": UNKNOWN, "date_str": day.isoformat()})
     )
     assert out["saved"] is False
-    assert out["session_id"] is None
+    assert out.get("session_id") is None
     assert StrengthRepository().list_sessions(start_date=day, end_date=day) == []
 
 
@@ -134,18 +106,18 @@ def test_nothing_matched_means_nothing_saved(day):
 
 
 def test_a_bad_date_says_which_format():
-    out = json.loads(read_workout.invoke({"text": KNOWN, "date_str": "25/09/2026"}))
-    assert "YYYY-MM-DD" in out["error"]
+    out = json.loads(save_workout.invoke({"text": KNOWN, "date_str": "25/09/2026"}))
+    assert "date" in out["error"]
 
 
 def test_empty_text_is_refused():
-    assert "error" in json.loads(read_workout.invoke({"text": "   "}))
+    assert "error" in json.loads(save_workout.invoke({"text": "   "}))
     assert "error" in json.loads(save_workout.invoke({"text": ""}))
 
 
 def test_an_essay_is_refused_before_parsing():
     out = json.loads(save_workout.invoke({"text": "x" * (MAX_WORKOUT_TEXT_CHARS + 1)}))
-    assert "too long" in out["error"]
+    assert "4000" in out["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +139,7 @@ class TestRouteAndToolAgree:
             json={"text": f"{KNOWN}\n{UNKNOWN}", "date": day.isoformat()},
         ).json()
         from_tool = json.loads(
-            read_workout.invoke(
+            save_workout.invoke(
                 {"text": f"{KNOWN}\n{UNKNOWN}", "date_str": day.isoformat()}
             )
         )
@@ -190,3 +162,23 @@ class TestRouteAndToolAgree:
         )
         save_workout.invoke({"text": KNOWN, "date_str": day.isoformat()})
         assert completed == [day]
+
+
+@pytest.mark.parametrize("bad", [UNKNOWN, "et un exercice dont je ne sais plus le nom"])
+def test_incomplete_workout_is_rejected_without_a_partial_session(day, bad):
+    out = json.loads(
+        save_workout.invoke({"text": f"{KNOWN}\n{bad}", "date_str": day.isoformat()})
+    )
+    assert out["saved"] is False and out["error"]
+    assert out["not_recognised"] or out["unparsed_lines"]
+    assert StrengthRepository().list_sessions(start_date=day, end_date=day) == []
+
+
+def test_failed_set_write_rolls_back_the_whole_session(day, monkeypatch):
+    def fail(*args, **kwargs):
+        raise RuntimeError("storage unavailable")
+
+    monkeypatch.setattr(StrengthRepository, "_create_session_exercise", fail)
+    out = json.loads(save_workout.invoke({"text": KNOWN, "date_str": day.isoformat()}))
+    assert out["saved"] is False and "storage unavailable" in out["error"]
+    assert StrengthRepository().list_sessions(start_date=day, end_date=day) == []

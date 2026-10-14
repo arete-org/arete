@@ -170,23 +170,91 @@ class TestReadinessWindow:
             con.close()
 
 
-class TestGarminHealthApi:
+class TestHealthStatusFromLocalState:
+    """Settings asks on every load: answered without Garmin."""
+
+    @pytest.fixture
+    def tokens(self, tmp_path, monkeypatch):
+        directory = tmp_path / "garmin_tokens"
+        monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(directory))
+        return directory
+
     @patch("arete.api.garmin_health.connect")
-    def test_status_endpoint(self, mock_connect, client):
-        mock_conn = mock_connect.return_value
-        mock_conn.execute.return_value.fetchone.return_value = (
+    def test_stored_tokens_answer_the_full_body(self, mock_connect, client, tokens):
+        from arete.garmin.token_store import save_account
+
+        mock_connect.return_value.execute.return_value.fetchone.return_value = (
             5,
-            "2026-05-28",
-            "2026-06-01",
+            date(2026, 5, 28),
+            date(2026, 6, 1),
             None,
         )
-        with patch("arete.garmin.client.GarminClient.has_tokens", return_value=True):
-            resp = client.get("/garmin/health/status")
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["days_stored"] == 5
-            assert data["tokens_present"] is True
+        tokens.mkdir()
+        (tokens / "garmin_tokens.json").write_text("{}")
+        save_account(tokens / "garmin_tokens.json", "me@garmin.test", remote=False)
+        resp = client.get("/garmin/health/status")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "tokens_present": True,
+            "tokens_dir": str(tokens),
+            "days_stored": 5,
+            "first_date": "2026-05-28",
+            "last_date": "2026-06-01",
+            "last_sync": None,
+        }
 
+    def test_tokens_garmin_refused_are_not_present(self, client, tokens):
+        from arete.garmin.token_store import refused, save_account
+
+        tokens.mkdir()
+        token = tokens / "garmin_tokens.json"
+        token.write_text("{}")
+        save_account(token, "me@garmin.test", remote=False)
+        refused(token, remote=False)
+        assert client.get("/garmin/health/status").json()["tokens_present"] is False
+
+    def test_no_tokens_are_not_present(self, client, tokens):
+        body = client.get("/garmin/health/status").json()
+        assert body["tokens_present"] is False
+        assert body["tokens_dir"] == str(tokens)
+
+
+def test_health_status_leaves_garminconnect_out(tmp_path):
+    """A cold instance: the health status must not import Garmin's client."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    tokens = tmp_path / "garmin_tokens"
+    tokens.mkdir()
+    (tokens / "garmin_tokens.json").write_text("{}")
+    code = """
+import json, sys
+from fastapi.testclient import TestClient
+from arete.dataio.init_duckdb import main as init_schema
+init_schema()
+from arete.api.main import app
+body = TestClient(app).get("/garmin/health/status").json()
+print(json.dumps({"body": body, "garmin": "garminconnect" in sys.modules}))
+"""
+    env = {
+        **os.environ,
+        "ARETE_DB": str(tmp_path / "status.duckdb"),
+        "ARETE_DATA_DIR": str(tmp_path / "files"),
+        "ARETE_GARMIN_TOKENS_DIR": str(tokens),
+        "PYTHON_DOTENV_DISABLED": "1",
+    }
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env
+    )
+    assert out.returncode == 0, out.stderr
+    result = json.loads(out.stdout.strip().splitlines()[-1])
+    assert result["body"]["tokens_present"] is True
+    assert result["garmin"] is False
+
+
+class TestGarminHealthApi:
     @patch("arete.api.garmin_health.connect")
     def test_daily_endpoint_404_when_no_data(self, mock_connect, client):
         mock_conn = mock_connect.return_value

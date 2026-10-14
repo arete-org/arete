@@ -9,19 +9,22 @@ resolves the author's athlete and runs ``dispatch`` in that athlete's scope.
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Literal
 
 import duckdb
-import httpx
 from anyio import to_thread
 
 from arete.dataio.db import transaction
 from arete.services import slack_athletes
 from arete.services.athlete_scope import current_athlete_id
+
+if TYPE_CHECKING:
+    import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +57,47 @@ PRIVATE_NOTE = (
 OTHER_PARTICIPANT = "[Autre participant <@{user}>] "
 
 Visibility = Literal["private", "public"]
-Producer = Callable[[list[dict[str, str]], str, Visibility], Awaitable[str]]
+Emitter = Callable[[dict], Awaitable[None]]
+Producer = Callable[[list[dict[str, str]], str, Visibility, Emitter], Awaitable[str]]
+
+# One stream per run; batch UI updates without spending another model request.
+STREAM_FLUSH_SECONDS = 1.0
+MAX_STREAM_APPENDS = 240
+MAX_STREAM_CHARS = 64_000
+MAX_PENDING_CHARS = 10_000
+MAX_PENDING_CHUNKS = 100
+MAX_TASKS = 50
+MAX_MARKDOWN_CHARS = 12_000
+# Keep recognizing interrupted messages produced before the native-only UI.
+PENDING_ANSWER = "⏳ Réponse provisoire — génération en cours."
+ARETE_REACTION = "image-5"
+TOOL_LABELS = {
+    "read_file": "Lecture d’un fichier",
+    "ls": "Recherche dans tes notes",
+    "glob": "Recherche dans tes notes",
+    "grep": "Recherche dans tes notes",
+    "edit_file": "Mise à jour de tes notes",
+    "delete": "Suppression dans tes notes",
+    "append_journal": "Mise à jour du journal",
+    "get_workload": "Analyse de la charge",
+    "get_fitness": "Analyse de la forme",
+    "get_training_advice": "Préparation des recommandations",
+    "list_recent_sessions": "Lecture de tes séances",
+    "get_activity_detail": "Analyse de la séance",
+    "save_workout": "Enregistrement de la séance",
+    "list_strength_sessions": "Lecture de tes séances de musculation",
+    "update_workout": "Correction de la séance",
+    "get_strength_progress": "Lecture de ta progression en force",
+    "list_planned": "Lecture du planning",
+    "inspect_planned_session": "Lecture des étapes",
+    "list_garmin_devices": "Recherche des appareils Garmin",
+    "export_garmin_sessions": "Programmation dans Garmin",
+    "reconcile_garmin_session": "Vérification Garmin",
+    "sync_garmin_activities": "Synchronisation Garmin",
+    "create_planned_session": "Création d’une séance",
+    "update_planned_session": "Modification d’une séance",
+    "delete_planned_session": "Suppression d’une séance",
+}
 
 
 @dataclass(frozen=True)
@@ -82,8 +125,21 @@ class SlackMessage:
         return f"slack:{self.team}:{self.channel}:{self.thread_ts}"
 
 
+@dataclass
+class SlackPreparation:
+    produce: Producer
+    product: bool = False
+    private: bool = False
+    account_id: str = ""
+    finalize: Callable[[], None] | None = None
+
+
 class SlackError(RuntimeError):
     """An operating error, without token or message contents."""
+
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class HistoryError(SlackError):
@@ -115,10 +171,34 @@ def reserve(message: SlackMessage) -> Literal["running", "duplicate", "busy"]:
             "running" if owner[0] == message.key else "busy"
         )
         con.execute(
-            "INSERT INTO app.slack_deliveries (event_key, status) VALUES (?, ?)",
-            [message.key, status],
+            "INSERT INTO app.slack_deliveries (event_key, status, thread_id) VALUES (?, ?, ?)",
+            [message.key, status, message.thread_id],
         )
         return status
+
+
+def set_delivery_thread(message: SlackMessage, destination: SlackMessage) -> None:
+    """Record the actual reply destination before any provisional text can land."""
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.slack_deliveries SET thread_id = ? WHERE event_key = ?",
+            [destination.thread_id, message.key],
+        )
+
+
+def check_thread_delivery(message: SlackMessage) -> None:
+    """An interrupted stream stays untrusted even after Slack stops displaying it."""
+    with transaction() as con:
+        interrupted = con.execute(
+            "SELECT 1 FROM app.slack_deliveries WHERE thread_id = ? "
+            "AND event_key != ? AND status IN ('running', 'failed') LIMIT 1",
+            [message.thread_id, message.key],
+        ).fetchone()
+    if interrupted:
+        raise HistoryError(
+            "Ce fil contient une réponse interrompue ou en cours. Vérifie Arete, "
+            "puis commence un nouveau fil."
+        )
 
 
 def finish(message: SlackMessage, status: str, *, release: bool) -> None:
@@ -148,19 +228,49 @@ def finish(message: SlackMessage, status: str, *, release: bool) -> None:
 class SlackClient:
     def __init__(self, http: httpx.AsyncClient) -> None:
         self.http = http
+        self.author_timezone = "Europe/Paris"
 
     async def call(self, method: str, payload: dict) -> dict:
         # No SDK retries: an uncertain chat.postMessage must not be replayed.
         url = f"https://slack.com/api/{method}"
-        if method in ("conversations.replies", "users.info"):
+        if method in (
+            "conversations.replies",
+            "users.info",
+            "users.list",
+            "conversations.members",
+        ):
             response = await self.http.get(url, params=payload)
         else:
             response = await self.http.post(url, json=payload)
         response.raise_for_status()
         result = response.json()
         if not isinstance(result, dict) or result.get("ok") is not True:
-            raise SlackError(f"Slack {method} failed")
+            code = result.get("error") if isinstance(result, dict) else None
+            raise SlackError(
+                f"Slack {method} failed", code=code if isinstance(code, str) else None
+            )
         return result
+
+    async def react(self, message: SlackMessage) -> None:
+        """Acknowledge once; a cosmetic failure must not cancel the coach."""
+        import httpx  # here, not at module level: the API boot skips httpx
+
+        try:
+            await self.call(
+                "reactions.add",
+                {
+                    "channel": message.channel,
+                    "timestamp": message.ts,
+                    "name": ARETE_REACTION,
+                },
+            )
+        except SlackError as exc:
+            if exc.code != "already_reacted":
+                logger.warning(
+                    "Slack logo reaction failed: %s (%s)", message.key, exc.code
+                )
+        except httpx.HTTPError:
+            logger.exception("Slack logo reaction request failed: %s", message.key)
 
     async def _thread(self, message: SlackMessage) -> list[dict]:
         result = await self.call(
@@ -215,12 +325,14 @@ class SlackClient:
             or user.get("is_email_confirmed") is False
         ):
             return None
+        self.author_timezone = user.get("tz") or "Europe/Paris"
         email = (user.get("profile") or {}).get("email")
         return email if isinstance(email, str) and email.strip() else None
 
     async def history(self, message: SlackMessage) -> list[dict[str, str]]:
         if message.thread_ts == message.ts:
             return [{"role": "user", "content": message.text}]
+        await to_thread.run_sync(check_thread_delivery, message)
         rows = await self._thread(message)
         history = []
         for row in rows:
@@ -236,6 +348,19 @@ class SlackClient:
             else:
                 raise HistoryError("Ce fil contient un participant non autorisé.")
             text = row.get("text")
+            if role == "assistant" and (
+                isinstance(text, str)
+                and text.startswith(PENDING_ANSWER)
+                or any(
+                    block.get("block_id") == "arete_pending"
+                    for block in row.get("blocks", [])
+                    if isinstance(block, dict)
+                )
+            ):
+                raise HistoryError(
+                    "Ce fil contient une réponse interrompue. Vérifie les modifications "
+                    "dans Arete, puis commence un nouveau fil."
+                )
             if row.get("files") or not isinstance(text, str) or not text.strip():
                 raise HistoryError(
                     "Ce fil contient un message non textuel non pris en charge."
@@ -265,7 +390,7 @@ class SlackClient:
             raise SlackError("Slack conversations.open returned no channel")
         return channel
 
-    async def post(self, channel: str, thread_ts: str | None, text: str) -> None:
+    async def post(self, channel: str, thread_ts: str | None, text: str) -> str:
         if not text.strip() or len(text) > MAX_REPLY_CHARS:
             raise SlackError("Coach answer is empty or exceeds Slack's message budget")
         payload: dict = {
@@ -279,10 +404,185 @@ class SlackClient:
         }
         if thread_ts:
             payload["thread_ts"] = thread_ts
-        await self.call("chat.postMessage", payload)
+        result = await self.call("chat.postMessage", payload)
+        return message_timestamp(result)
 
     async def reply(self, message: SlackMessage, text: str) -> None:
         await self.post(message.channel, message.thread_ts, text)
+
+
+def message_timestamp(result: dict) -> str:
+    value = result.get("ts")
+    if not isinstance(value, str) or not value:
+        raise SlackError("Slack returned no message timestamp")
+    return value
+
+
+class SlackStream:
+    """Invocation-local UI, never an owner of execution or conversation state."""
+
+    def __init__(self, client: SlackClient, message: SlackMessage) -> None:
+        self.client = client
+        self.message = message
+        self.ts = ""
+        self.processing = False
+        self.stop_attempted = False
+        self.pending: list[dict] = []
+        self.pending_chars = 0
+        self.chars = 0
+        self.appends = 0
+        self.last_flush = 0.0
+        self.last_message = ""
+        self.tasks: dict[str, str] = {}
+
+    async def status(self, value: str) -> None:
+        await self.client.call(
+            "agents.sessions.setStatus",
+            {
+                "channel_id": self.message.channel,
+                "thread_ts": self.message.thread_ts,
+                "status": value,
+            },
+        )
+
+    async def start(self) -> None:
+        # Even an uncertain status write needs a best-effort clear at exit.
+        self.processing = True
+        await self.status("processing")
+
+    async def emit(self, event: dict) -> None:
+        kind = event["type"]
+        if kind == "token":
+            text = html.escape(event["text"], quote=False)
+            if self.last_message and self.last_message != event["id"]:
+                text = "\n\n" + text
+            self.last_message = event["id"]
+            self.chars += len(text)
+            if self.chars > MAX_STREAM_CHARS or len(text) > MAX_PENDING_CHARS:
+                raise SlackError("Slack stream exceeds its text budget")
+            if self.pending_chars + len(text) > MAX_PENDING_CHARS:
+                await self.flush()
+            if self.pending and self.pending[-1]["type"] == "markdown_text":
+                self.pending[-1]["text"] += text
+            else:
+                self.pending.append({"type": "markdown_text", "text": text})
+            self.pending_chars += len(text)
+        elif kind in ("tool_start", "tool_end"):
+            call_id = event["id"]
+            if call_id not in self.tasks:
+                if len(self.tasks) >= MAX_TASKS:
+                    raise SlackError("Slack stream exceeds its task budget")
+                # Compact transport IDs bound payload size; no arguments or
+                # result previews leave the runtime through these task cards.
+                self.tasks[call_id] = f"task-{len(self.tasks) + 1}"
+            status = (
+                "in_progress"
+                if kind == "tool_start"
+                else "error"
+                if event["status"] == "error"
+                else "complete"
+            )
+            self.pending.append(
+                {
+                    "type": "task_update",
+                    "id": self.tasks[call_id],
+                    "title": TOOL_LABELS.get(event["name"], "Action du coach"),
+                    "status": status,
+                }
+            )
+        else:
+            return
+        if (
+            len(self.pending) >= MAX_PENDING_CHUNKS
+            or time.monotonic() - self.last_flush >= STREAM_FLUSH_SECONDS
+        ):
+            await self.flush()
+
+    async def flush(self) -> None:
+        if not self.pending:
+            return
+        if self.appends >= MAX_STREAM_APPENDS:
+            raise SlackError("Slack stream exceeds its request budget")
+        # Large chunks may force a flush before the usual event-time check.
+        # Backpressure keeps a single run below the append method's rate limit.
+        remaining = STREAM_FLUSH_SECONDS - (time.monotonic() - self.last_flush)
+        if remaining > 0:
+            await asyncio.sleep(remaining)
+        # No retry, even if the connection fails after Slack accepted the append.
+        self.appends += 1
+        chunks, self.pending = self.pending, []
+        self.pending_chars = 0
+        if self.ts:
+            await self.client.call(
+                "chat.appendStream",
+                {"channel": self.message.channel, "ts": self.ts, "chunks": chunks},
+            )
+        else:
+            result = await self.client.call(
+                "chat.startStream",
+                {
+                    "channel": self.message.channel,
+                    "thread_ts": self.message.thread_ts,
+                    "recipient_user_id": self.message.user,
+                    "recipient_team_id": self.message.team,
+                    "task_display_mode": "plan",
+                    "chunks": [
+                        {"type": "plan_update", "title": "Analyse en cours"},
+                        *chunks,
+                    ],
+                },
+            )
+            self.ts = message_timestamp(result)
+        self.last_flush = time.monotonic()
+
+    async def stop(self) -> None:
+        if self.ts and not self.stop_attempted:
+            self.stop_attempted = True
+            await self.client.call(
+                "chat.stopStream",
+                {"channel": self.message.channel, "ts": self.ts},
+            )
+
+    async def finish(self, answer: str) -> None:
+        if not answer.strip() or len(answer) > MAX_REPLY_CHARS:
+            raise SlackError("Coach answer is empty or exceeds Slack's message budget")
+        # Replace provisional text (including failed fallback attempts) with the
+        # canonical answer. Plain-text fallback preserves longer answers in full.
+        self.pending = []
+        await self.stop()
+        escaped = html.escape(answer, quote=False)
+        payload = {
+            "channel": self.message.channel,
+            "text": answer,
+            "mrkdwn": False,
+            "parse": "none",
+            "link_names": False,
+            "blocks": [{"type": "markdown", "text": escaped}]
+            if len(escaped) <= MAX_MARKDOWN_CHARS
+            else [],
+        }
+        if self.ts:
+            payload["ts"] = self.ts
+            await self.client.call("chat.update", payload)
+        else:
+            # Providers can return a completed answer without yielding tokens.
+            # Post it directly rather than manufacturing an empty stream.
+            payload["thread_ts"] = self.message.thread_ts
+            payload["unfurl_links"] = False
+            payload["unfurl_media"] = False
+            await self.client.call("chat.postMessage", payload)
+
+    async def cleanup(self) -> None:
+        # Cleanup failures must remain visible without replacing the run's error.
+        try:
+            await self.stop()
+        except Exception:
+            logger.exception("Slack stream closure failed: %s", self.message.key)
+        if self.processing:
+            try:
+                await self.status("active")
+            except Exception:
+                logger.exception("Slack status cleanup failed: %s", self.message.key)
 
 
 async def resolve(message: SlackMessage, *, client: SlackClient) -> int | None:
@@ -304,14 +604,29 @@ async def resolve(message: SlackMessage, *, client: SlackClient) -> int | None:
         if email
         else None
     )
+    if athlete_id is not None and email:
+        from arete.services.slack_identity import link
+
+        zone = getattr(client, "author_timezone", "Europe/Paris")
+        await to_thread.run_sync(
+            link,
+            message.team,
+            message.user,
+            email,
+            zone if isinstance(zone, str) else "Europe/Paris",
+        )
     if athlete_id is None:
         await client.reply(message, UNLINKED_MESSAGE)
     return athlete_id
 
 
 async def dispatch(
-    message: SlackMessage, *, client: SlackClient, produce: Producer
-) -> None:
+    message: SlackMessage,
+    *,
+    client: SlackClient,
+    produce: Producer,
+    prepare: Callable[..., Awaitable[SlackPreparation]] | None = None,
+) -> str | None:
     """Answer one message; the caller holds the author's athlete scope."""
     try:
         status = await to_thread.run_sync(reserve, message)
@@ -320,46 +635,95 @@ async def dispatch(
         # recorded or executed, so say so rather than dropping the message.
         status = "busy"
     if status == "duplicate":
-        return
+        return None
     if status == "busy":
         await client.reply(message, BUSY_MESSAGE)
-        return
+        return None
     started_coach = False
     completed_coach = False
+    output: SlackStream | None = None
+    delivery_status = "failed"
+    prepared: SlackPreparation | None = None
     try:
         async with asyncio.timeout(MAX_JOB_SECONDS):
             if not message.text.strip() or len(message.text) > MAX_MESSAGE_CHARS:
                 raise HistoryError("Envoie un message texte de 1 à 16 000 caractères.")
-            # A channel answer is public only with the athlete's consent.
+            history = await client.history(message)
+            prepared = (
+                await prepare(history, message, client)
+                if prepare
+                else SlackPreparation(produce)
+            )
+            produce = prepared.produce
+            # Product coordination is public; athlete coaching still requires consent.
             visibility: Visibility = (
                 "public"
                 if message.in_channel
-                and await to_thread.run_sync(slack_athletes.public_replies)
+                and not prepared.private
+                and (
+                    prepared.product
+                    or await to_thread.run_sync(slack_athletes.public_replies)
+                )
                 else "private"
             )
-            history = await client.history(message)
-            started_coach = True
-            answer = await produce(history, message.thread_id, visibility)
-            completed_coach = True
+            destination = message
             if message.in_channel and visibility == "private":
-                await client.post(await client.open_dm(message.user), None, answer)
-                await client.reply(message, PRIVATE_NOTE.format(user=message.user))
-            else:
-                await client.reply(message, answer)
-        await to_thread.run_sync(lambda: finish(message, "sent", release=True))
+                channel = await client.open_dm(message.user)
+                root = await client.post(
+                    channel, None, "Ta demande dans un canal :\n" + message.text
+                )
+                destination = replace(message, channel=channel, thread_ts=root)
+                await to_thread.run_sync(set_delivery_thread, message, destination)
+            if prepared.private:
+                from arete.services.slack_identity import mark_private
+
+                await to_thread.run_sync(
+                    mark_private, destination.thread_id, prepared.account_id
+                )
+            output = SlackStream(client, destination)
+            await output.start()
+            await client.react(message)
+            started_coach = True
+            answer = await produce(history, message.thread_id, visibility, output.emit)
+            completed_coach = True
+            await output.finish(answer)
+            if message.in_channel and visibility == "private":
+                await client.reply(
+                    message,
+                    "Je t’ai répondu en DM administrateur."
+                    if prepared.private
+                    else PRIVATE_NOTE.format(user=message.user),
+                )
+        delivery_status = "sent"
+        return answer
     except HistoryError as exc:
-        await to_thread.run_sync(lambda: finish(message, "rejected", release=True))
+        delivery_status = "rejected"
         await client.reply(message, str(exc))
     except BaseException:
         # A cancelled synchronous tool can still be writing in an AnyIO worker.
         # Keep the reservation until an operator has checked ambiguous runs.
-        await to_thread.run_sync(
-            lambda: finish(
-                message, "failed", release=not started_coach or completed_coach
-            )
-        )
         logger.exception("Slack delivery failed: %s", message.key)
         # A failed send may actually have landed. Do not post another message then.
-        if not completed_coach:
-            await client.reply(message, FAILURE_MESSAGE)
+        if (
+            not completed_coach
+            and output is not None
+            and (output.ts or output.appends == 0)
+        ):
+            try:
+                await output.finish(FAILURE_MESSAGE)
+            except Exception:
+                logger.exception("Slack failure display failed: %s", message.key)
         raise
+    finally:
+        if prepared and prepared.finalize:
+            prepared.finalize()
+        if output is not None:
+            await output.cleanup()
+        # Keep admission locked through status cleanup: an older run must not
+        # clear the loading indicator of this athlete's next run.
+        await to_thread.run_sync(
+            lambda: finish(
+                message, delivery_status, release=not started_coach or completed_coach
+            )
+        )
+    return None

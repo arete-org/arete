@@ -1,7 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import { applyEvent, consumeStream, type ChatMessage } from './agentStream';
 import { restoreConversation } from './agentConversation';
-import { isWorkoutUpdate, mergeWorkout, type WorkoutUpdate } from './workouts';
+import type { Prescription, WorkoutStep } from './documents';
+import { isWorkoutUpdate, mergeWorkout, prescriptionReady, stepAmount, type WorkoutUpdate } from './workouts';
+
+describe('workout steps', () => {
+  it('shows each step amount the same way everywhere', () => {
+    const step = (duration_kind: WorkoutStep['duration_kind'], value: number | null): WorkoutStep => ({ kind: 'effort', duration_kind, value, steps: [] });
+    expect(stepAmount(step('seconds', 1200))).toBe('20:00');
+    expect(stepAmount(step('seconds', 60))).toBe('1:00');
+    expect(stepAmount(step('meters', 400))).toBe('400 m');
+    expect(stepAmount(step('reps', 8))).toBe('8 répétitions');
+    expect(stepAmount(step('lap', null))).toBe('tour manuel');
+    expect(stepAmount(step('seconds', null))).toBe('—');
+  });
+
+  it('is ready to save only with every value and both bounds of every target', () => {
+    const effort: WorkoutStep = { kind: 'effort', duration_kind: 'seconds', value: 60, steps: [] };
+    const repeat = (child: WorkoutStep): Prescription => ({ version: 1, steps: [{ kind: 'repeat', duration_kind: 'lap', repeat: 2, steps: [child] }] });
+    expect(prescriptionReady(repeat(effort))).toBe(true);
+    expect(prescriptionReady(repeat({ ...effort, value: null }))).toBe(false);
+    expect(prescriptionReady(repeat({ ...effort, target: { kind: 'pace_sec_km', low: 210, high: null } }))).toBe(false);
+    expect(prescriptionReady(repeat({ ...effort, duration_kind: 'lap', value: null }))).toBe(true);
+    // What the server would refuse (inverted bounds) or the athlete cannot mean is not saved either.
+    expect(prescriptionReady(repeat({ ...effort, target: { kind: 'heart_rate_bpm', low: 160, high: 150 } }))).toBe(false);
+    expect(prescriptionReady(repeat({ ...effort, target: { kind: 'pace_sec_km', low: 210, high: 210 } }))).toBe(true);
+    expect(prescriptionReady(repeat({ ...effort, secondary_target: { kind: 'pace_sec_km', low: 60, high: 210 } }))).toBe(false);
+    expect(prescriptionReady(repeat({ ...effort, value: 86_400 }))).toBe(true);
+    expect(prescriptionReady(repeat({ ...effort, value: 86_401 }))).toBe(false);
+    expect(prescriptionReady(repeat({ ...effort, duration_kind: 'meters', value: 42_195 }))).toBe(true);
+  });
+});
 
 const update: WorkoutUpdate = {
   type: 'workout_update', id: 'call', thread_id: 'thread', sequence: 100,

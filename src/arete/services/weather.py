@@ -12,9 +12,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import httpx
+if TYPE_CHECKING:
+    import httpx
+
+from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +94,7 @@ def fetch_weather(
     and returns None.
     """
     hour = _hour(start)
-    today = today or date.today()
+    today = today or athlete_today()
     recent = hour.date() >= today - timedelta(days=ARCHIVE_LAG_DAYS)
     url, source = (
         (FORECAST_URL, "open-meteo-forecast")
@@ -109,6 +112,8 @@ def fetch_weather(
     }
     try:
         if client is None:
+            import httpx  # here, not at module level: the API boot skips httpx
+
             with httpx.Client(timeout=TIMEOUT_SEC) as own:
                 response = own.get(url, params=params)
         else:

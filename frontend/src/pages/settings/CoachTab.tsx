@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, BookOpen, Brain, RefreshCw, Sunrise, Wand2 } from 'lucide-react';
 import { Panel, Button } from '@/components/ui';
-import { garminApi, notificationsApi } from '@/lib/api';
+import { IosInstallSteps } from '@/components/InstallPrompt';
+import { garminApi, notificationsApi, type NotificationKind } from '@/lib/api';
 import { authFetch } from '@/lib/auth';
 import { currentState, subscribeDevice, unsubscribeDevice, type PushState } from '@/lib/push';
 import { qk } from '@/lib/queryKeys';
@@ -27,7 +28,7 @@ const FILE_META: Record<string, { label: string; icon: typeof Brain; hint: strin
   'notes.md': {
     label: 'Notes durables',
     icon: Brain,
-    hint: 'Observations long terme : blessures, préférences, objectifs.',
+    hint: 'Observations du coach, à distinguer des faits déclarés ci-dessus.',
   },
 };
 
@@ -71,19 +72,12 @@ function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
     <Panel
       title={
         <span className="flex items-center gap-2">
-          <Wand2 className="size-4 text-neon-purple" /> Adaptation automatique
+          <Wand2 className="size-4 text-neon-purple" /> Propositions du coach
         </span>
       }
     >
       <div className="space-y-3">
-        <SettingSwitch
-          checked={settings.auto_adapt_enabled}
-          onChange={(value) => updateSetting('auto_adapt_enabled', value)}
-          hint="Lit la préparation Garmin du matin, sinon ta récupération Arete ou ta forme estimée par la charge. Tu peux toujours rétablir la séance prévue depuis le tableau de bord."
-        >
-          Chaque matin, après la synchronisation, adapter la séance du jour : maintenue, allégée,
-          remplacée par une récupération ou repos.
-        </SettingSwitch>
+        <p className="text-sm text-text-secondary">Chiron propose des ajustements sur l’accueil. Ton planning change uniquement après ta validation ou ta demande explicite dans le chat.</p>
         <SettingSwitch
           checked={settings.push_to_garmin_enabled}
           onChange={(value) => updateSetting('push_to_garmin_enabled', value)}
@@ -101,10 +95,22 @@ function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
   );
 }
 
+/** What each kind sends; `soon` kinds are stored now, sent by a later release. */
+const KINDS: { kind: NotificationKind; label: string; soon?: boolean }[] = [
+  { kind: 'briefing', label: 'Briefing du matin' },
+  { kind: 'post_session', label: 'Retour du coach après une séance' },
+  { kind: 'weekly_review', label: 'Bilan de la semaine (lundi)' },
+  { kind: 'adapted_session', label: 'Adaptation de la séance du jour', soon: true },
+  { kind: 'imports', label: 'Séances importées' },
+  { kind: 'checkin', label: 'Check-in du matin', soon: true },
+  { kind: 'evening', label: 'Message du soir', soon: true },
+  { kind: 'eve_reminder', label: 'Rappel la veille d’une séance clé', soon: true },
+];
+
 const DEVICE_HINT: Partial<Record<PushState, string>> = {
   unsupported: 'Ce navigateur ne gère pas les notifications push.',
   'ios-not-installed':
-    'Sur iPhone et iPad, les notifications ne marchent que dans l’app installée (iOS 16.4 ou plus) : ajoute Arete à l’écran d’accueil puis active depuis l’app.',
+    'Sur iPhone et iPad, les notifications ne marchent que dans l’app installée (iOS 16.4 ou plus) :',
   'no-worker':
     'Service worker absent : les notifications ne marchent qu’avec l’app compilée, pas en mode développement.',
   denied: 'Notifications refusées pour ce site : autorise-les dans les réglages du navigateur, puis recharge la page.',
@@ -142,6 +148,11 @@ function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
 
   const hint = state ? DEVICE_HINT[state] : undefined;
   const vapidKey = vapid?.key ?? null;
+  const prefs = settings.notification_preferences;
+  const setKind = (kind: NotificationKind, value: boolean) =>
+    updateSetting('notification_preferences', { ...prefs, kinds: { ...prefs.kinds, [kind]: value } });
+  const setQuiet = (quiet: typeof prefs.quiet_hours) =>
+    updateSetting('notification_preferences', { ...prefs, quiet_hours: quiet });
 
   return (
     <Panel
@@ -157,13 +168,69 @@ function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
           onChange={(value) => updateSetting('notifications_enabled', value)}
           hint="Décoché, le serveur n’envoie rien, même aux appareils activés."
         >
-          Me prévenir du briefing du matin, d’une séance adaptée et des séances importées.
+          Recevoir les notifications du coach.
         </SettingSwitch>
 
+        <fieldset className="space-y-2 pl-6" disabled={!settings.notifications_enabled}>
+          <legend className="sr-only">Notifications reçues</legend>
+          {KINDS.map(({ kind, label, soon }) => (
+            <label key={kind} className="flex items-center gap-3 text-sm text-text-secondary">
+              <input
+                type="checkbox"
+                className="accent-neon-cyan"
+                checked={prefs.kinds[kind]}
+                disabled={soon}
+                onChange={(e) => setKind(kind, e.target.checked)}
+              />
+              <span className={soon ? 'text-text-muted' : undefined}>
+                {label}
+                {soon && <span className="ml-2 text-xs">bientôt</span>}
+              </span>
+            </label>
+          ))}
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-sm text-text-secondary">
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                className="accent-neon-cyan"
+                checked={prefs.quiet_hours !== null}
+                onChange={(e) => setQuiet(e.target.checked ? { start: '21:30', end: '07:00' } : null)}
+              />
+              Heures calmes, sans notification :
+            </label>
+            {prefs.quiet_hours && (
+              <span className="flex items-center gap-1">
+                <input
+                  type="time"
+                  aria-label="Début des heures calmes"
+                  className="rounded border border-text-muted/30 bg-abyss px-1 text-sm"
+                  value={prefs.quiet_hours.start}
+                  onChange={(e) => e.target.value && setQuiet({ ...prefs.quiet_hours!, start: e.target.value })}
+                />
+                –
+                <input
+                  type="time"
+                  aria-label="Fin des heures calmes"
+                  className="rounded border border-text-muted/30 bg-abyss px-1 text-sm"
+                  value={prefs.quiet_hours.end}
+                  onChange={(e) => e.target.value && setQuiet({ ...prefs.quiet_hours!, end: e.target.value })}
+                />
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-text-muted">
+            Une notification prévue pendant les heures calmes n’est pas envoyée : tu la retrouves dans
+            l’app. Fuseau horaire : {settings.timezone}.
+          </p>
+        </fieldset>
+
         <div className="border-t border-text-muted/10 pt-3 space-y-2">
-          <p className="text-xs font-mono uppercase tracking-wider text-text-muted">Cet appareil</p>
+          <p className="text-xs font-sans uppercase tracking-wider text-text-muted">Cet appareil</p>
           {hint ? (
-            <p className="text-sm text-text-secondary">{hint}</p>
+            <div className="space-y-2">
+              <p className="text-sm text-text-secondary">{hint}</p>
+              {state === 'ios-not-installed' && <IosInstallSteps />}
+            </div>
           ) : vapid && !vapidKey ? (
             <p className="text-sm text-text-secondary">
               Le serveur n’a pas de clés Web Push (VAPID) configurées.
@@ -243,9 +310,11 @@ export function CoachTab({ settings, updateSetting }: SettingsTabProps) {
       <AdaptationPanel settings={settings} updateSetting={updateSetting} />
       <NotificationsPanel settings={settings} updateSetting={updateSetting} />
       <AthleteFactsPanel />
+      <details>
+      <summary className="min-h-11 cursor-pointer text-sm text-text-muted">Consulter le journal du coach</summary>
       <div className="flex items-center justify-between">
         <p className="text-sm text-text-muted">
-          Le coach tient son journal en markdown dans <code>data/agent/memory/</code>. Lecture seule.
+          Journal du coach : observations et décisions, distinctes de tes déclarations.
         </p>
         <Button variant="ghost" onClick={() => refetch()} disabled={isRefetching}>
           <RefreshCw className={`size-4 ${isRefetching ? 'animate-spin' : ''}`} /> Rafraîchir
@@ -288,6 +357,7 @@ export function CoachTab({ settings, updateSetting }: SettingsTabProps) {
           </Panel>
         );
       })}
+      </details>
     </div>
   );
 }

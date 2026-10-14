@@ -1,7 +1,7 @@
-"""Accounts and athletes for administrators; roles for the owner alone.
+"""Accounts and rollout flags for administrators; roles for the owner alone.
 
-Reads and writes only the account tables (``app.users``, ``app.athletes``),
-never an athlete's private data. The rules live in ``services.users``.
+Reads and writes shared account and rollout tables, never an athlete's private
+data. The rules live in ``services.users`` and ``services.feature_flags``.
 """
 
 from __future__ import annotations
@@ -12,11 +12,17 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool
 
 from arete import scheduler
-from arete.api.auth import require_admin, require_owner
+from arete.api.auth import forget_accounts, require_admin, require_owner
 from arete.services import users
+from arete.services.feature_flags import (
+    FeatureFlags,
+    get_feature_flags,
+    glm_flash_available,
+    set_feature_flags,
+)
 from arete.services.users import AccountError, AppUser
 
 router = APIRouter(
@@ -42,6 +48,32 @@ class RoleUpdate(BaseModel):
     role: Literal["athlete", "admin"]
 
 
+class FeatureFlagsOut(FeatureFlags):
+    glm_flash_available: bool
+
+
+class FeatureFlagsUpdate(FeatureFlags):
+    glm_flash: StrictBool
+
+
+@router.get("/feature-flags", response_model=FeatureFlagsOut)
+def read_feature_flags() -> FeatureFlagsOut:
+    return FeatureFlagsOut(
+        **get_feature_flags().model_dump(), glm_flash_available=glm_flash_available()
+    )
+
+
+@router.put("/feature-flags", response_model=FeatureFlagsOut)
+def update_feature_flags(body: FeatureFlagsUpdate) -> FeatureFlagsOut:
+    try:
+        flags = set_feature_flags(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return FeatureFlagsOut(
+        **flags.model_dump(), glm_flash_available=glm_flash_available()
+    )
+
+
 @contextmanager
 def _rules() -> Iterator[None]:
     try:
@@ -59,13 +91,16 @@ def list_accounts() -> list[dict[str, Any]]:
 @router.post("/accounts/{user_id}/role", dependencies=[Depends(require_owner)])
 def set_role(user_id: int, body: RoleUpdate) -> dict[str, Any]:
     with _rules():
-        return users.set_role(user_id, body.role).to_dict()
+        updated = users.set_role(user_id, body.role)
+    forget_accounts()  # other instances follow within ACCOUNT_TTL_SECONDS
+    return updated.to_dict()
 
 
 @router.post("/athletes/{athlete_id}/deactivate", status_code=204)
 def deactivate(athlete_id: int, actor: AppUser = Depends(require_admin)) -> Response:
     with _rules():
         users.deactivate_athlete(athlete_id, actor=actor)
+    forget_accounts()
     return Response(status_code=204)
 
 
@@ -73,6 +108,7 @@ def deactivate(athlete_id: int, actor: AppUser = Depends(require_admin)) -> Resp
 def reactivate(athlete_id: int) -> Response:
     with _rules():
         users.reactivate_athlete(athlete_id)
+    forget_accounts()
     return Response(status_code=204)
 
 

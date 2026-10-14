@@ -70,5 +70,38 @@ def test_profile_capabilities_are_registered_and_preloads_authorized():
     validate_registry()
     for profile in PROFILES.values():
         assert set(profile.capabilities) <= CAPABILITIES.keys()
-        assert set(profile.preloaded) <= set(profile.capabilities)
-        assert profile.id == "chat" or not profile.training_writes
+        assert profile.id in {"chat", "slack"} or not profile.training_writes
+
+
+def test_memory_and_journal_have_independent_tool_owners_and_policy():
+    from dataclasses import replace
+
+    from arete.agent.capabilities.discovery import tool_available
+    from arete.agent.capabilities.registry import (
+        FACT_MEMORY_TOOL_NAMES,
+        FILESYSTEM_TOOL_NAMES,
+        JOURNAL_TOOL_NAMES,
+    )
+    from arete.agent.middlewares.fact_memory import FactMemoryMiddleware
+    from arete.agent.middlewares.journal import JournalMiddleware
+    from arete.agent.profiles.catalog import get_profile
+
+    facts = FactMemoryMiddleware(model=None)
+    journal = JournalMiddleware()
+    assert {t.name for t in facts.tools} == FACT_MEMORY_TOOL_NAMES
+    assert {t.name for t in journal.tools} == JOURNAL_TOOL_NAMES
+    assert not FACT_MEMORY_TOOL_NAMES & JOURNAL_TOOL_NAMES
+    assert not FILESYSTEM_TOOL_NAMES & (FACT_MEMORY_TOOL_NAMES | JOURNAL_TOOL_NAMES)
+    profile = replace(get_profile("chat"), filesystem_tools=False)
+    assert all(
+        tool_available(profile, name)
+        for name in FACT_MEMORY_TOOL_NAMES | JOURNAL_TOOL_NAMES
+    )
+    assert not any(tool_available(profile, name) for name in FILESYSTEM_TOOL_NAMES)
+    profile = replace(get_profile("chat"), journal_tools=False)
+    assert all(tool_available(profile, name) for name in FILESYSTEM_TOOL_NAMES)
+    assert all(tool_available(profile, name) for name in FACT_MEMORY_TOOL_NAMES)
+    assert not any(tool_available(profile, name) for name in JOURNAL_TOOL_NAMES)
+    profile = replace(get_profile("chat"), fact_memory_tools=False)
+    assert all(tool_available(profile, name) for name in JOURNAL_TOOL_NAMES)
+    assert not any(tool_available(profile, name) for name in FACT_MEMORY_TOOL_NAMES)

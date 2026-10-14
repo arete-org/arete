@@ -1,0 +1,97 @@
+/* Proposal A starts with the day selector; only a wide workspace gets seven columns. */
+.planning-content { container-type: inline-size; container-name: planning; }
+.planning-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+.planning-content button, .planning-content select, .planning-dialog button,
+.planning-dialog input:not([type='checkbox']), .planning-dialog select { min-height: 44px; }
+.planning-desktop-create, .planning-summary, .planning-active, .planning-today,
+.planning-sport-filter, .planning-day-heading, .planning-day-add, .planning-card-title { display: none; }
+.planning-eyebrow { font-size: 12px; font-weight: 400; text-transform: uppercase; color: var(--color-text-muted); }
+.planning-toolbar, .planning-week-controls, .planning-extra-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.planning-toolbar { justify-content: space-between; padding-bottom: 20px; flex-wrap: wrap; }
+.planning-week-controls { flex: 1; gap: 4px; flex-wrap: wrap; }
+.planning-week-controls h2 { margin-right: auto; font-size: 18px; min-width: 0; }
+.planning-week-controls button, .planning-extra-controls button { width: 44px; padding-inline: 0; flex-shrink: 0; }
+.planning-extra-controls button { color: var(--color-text-muted); }
+.planning-toolbar .ui-input { width: auto; background: var(--color-abyss); color: var(--color-text-primary); }
+/* Keep the native arrow for forced colors; the themed arrow is inset from the border. */
+.planning-toolbar .ui-input, .planning-dialog select[aria-label='Filtrer par sport'] {
+  appearance: none; padding-inline: 36px; text-align: center; text-align-last: center;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%), linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+  background-size: 5px 5px; background-repeat: no-repeat;
+}
+@media (forced-colors: active) {
+  .planning-toolbar .ui-input, .planning-dialog select[aria-label='Filtrer par sport'] { appearance: auto; background-image: none; }
+}
+.planning-day-strip { display: grid; grid-template-columns: repeat(7, minmax(44px, 1fr)); gap: clamp(0px, calc((100cqw - 308px) / 6), 6px); overflow-x: auto; }
+.planning-day-strip button { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 2px; border-radius: var(--radius-control); border: 1px solid transparent; }
+.planning-day-strip button[aria-pressed='true'] { background: var(--color-neon-cyan); color: var(--color-on-accent); }
+.planning-day-strip button[aria-current='date']:not([aria-pressed='true']) { border-color: var(--color-neon-cyan); }
+.planning-mobile-summary { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; font-size: 11px; font-weight: 500; color: var(--color-text-muted); }
+.planning-mobile-summary > span { padding: 4px 8px; }
+.planning-week-board { display: block; }
+.planning-day { display: none; min-width: 0; flex-direction: column; gap: 20px; }
+.planning-day-selected { display: flex; }
+.planning-mobile-day-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.planning-mobile-day-heading button { padding-inline: 12px; font-size: 14px; flex-shrink: 0; }
+.planning-mobile-day-heading h3::first-letter { text-transform: uppercase; }
+.planning-session { position: relative; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--color-border); background: var(--color-abyss); border-radius: var(--radius-control); padding: 14px 12px; min-width: 0; overflow-wrap: anywhere; touch-action: pan-y; }
+.planning-session-active { border: 2px solid var(--color-neon-cyan); padding: 13px 11px; }
+@media (pointer: fine) {
+  .planning-session[draggable='true'] { cursor: grab; }
+  .planning-session[draggable='true']:active { cursor: grabbing; }
+}
+/* A card is one generous hit target, with a separate layer for selection checkboxes. */
+.planning-content .planning-card-title, .planning-content .planning-card-open { min-height: 0; }
+.planning-card-open { display: block; }
+.planning-card-title::after, .planning-card-open::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius-control); }
+.planning-card-title:focus-visible, .planning-card-open:focus-visible { outline: none; }
+.planning-session:has(.planning-card-title:focus-visible), .planning-session:has(.planning-card-open:focus-visible) { border-color: transparent; }
+.planning-card-title:focus-visible::after, .planning-card-open:focus-visible::after { outline: 2px solid var(--color-neon-cyan); outline-offset: 0; border-radius: calc(var(--radius-control) - 2px); }
+.planning-session label { position: relative; z-index: 1; }
+.planning-card-cta, .planning-mobile-create { display: inline-flex; margin-top: 20px; }
+.planning-mobile-create { background: var(--color-selection); border-color: transparent; }
+.planning-calendar > p { display: none; }
+.planning-analysis { margin: 24px 0; }
+.planning-field { display: flex; flex-direction: column; gap: 8px; font-size: 12px; font-weight: 500; min-width: 0; }
+.planning-field input, .planning-field select { font-size: 16px; font-weight: 400; }
+.planning-steps { margin-top: 12px; }
+.planning-dialog-footer { padding-top: 12px; border-top: 1px solid var(--color-border); }
+.planning-dialog details > summary::after { content: '⌄'; margin-left: auto; padding-left: 12px; color: var(--color-text-muted); }
+.planning-dialog details[open] > summary::after { transform: rotate(180deg); padding-left: 0; padding-right: 12px; }
+.planning-next { align-self: center; position: relative; }
+.planning-content .planning-next-link { min-height: 0; }
+.planning-next-link::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius-panel); }
+.planning-summary .text-\[26px\] { line-height: 1.2; }
+.planning-content .ui-button[data-variant='ghost'] { color: var(--color-neon-cyan); }
+.planning-cleanup { margin-top: 20px; padding: 16px; border-color: color-mix(in srgb, var(--color-warning-orange) 30%, var(--color-border)); }
+@media (max-width: 767px) {
+  .planning-dialog { padding: 20px; }
+  .planning-dialog-footer { position: sticky; bottom: -20px; background: var(--color-abyss); padding-bottom: 20px; margin-bottom: -20px; }
+  .planning-dialog-footer > button:last-child { flex: 1; }
+}
+/* At 320 px, two rows retain 44 px day targets without hiding the last day. */
+@container planning (max-width: 307px) {
+  .planning-day-strip { grid-template-columns: repeat(4, minmax(44px, 1fr)); }
+  .planning-week-controls h2 { flex-basis: 100%; }
+  .planning-toolbar { align-items: flex-end; }
+}
+/* Available width includes the space taken by a docked coach. */
+@container planning (min-width: 1051px) {
+  .planning-header { margin-bottom: 24px; }
+  .planning-desktop-create, .planning-today, .planning-day-add { display: inline-flex; }
+  .planning-sport-filter, .planning-card-title, .planning-calendar > p { display: block; }
+  .planning-summary { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 260px) minmax(0, 1fr); gap: 16px; margin-bottom: 24px; }
+  .planning-toolbar { padding-bottom: 24px; gap: 12px; }
+  .planning-week-controls { flex: initial; gap: 12px; }
+  .planning-week-controls h2 { font-size: 21px; margin-right: 0; }
+  .planning-week-controls button, .planning-extra-controls button { width: auto; padding-inline: 16px; }
+  .planning-week-controls > button:first-of-type { order: -1; }
+  .planning-week-board { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; }
+  .planning-day { display: flex; gap: 10px; }
+  .planning-day-heading { display: flex; align-items: baseline; gap: 8px; padding-bottom: 12px; }
+  .planning-day-strip, .planning-card-open, .planning-mobile-summary, .planning-mobile-day-heading, .planning-card-cta, .planning-mobile-create { display: none; }
+  .planning-active { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px; margin: 24px 0; }
+  .planning-active-summary { flex: 1; }
+  .planning-active > div:first-child { flex: 0 1 345px; }
+}

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useLayoutEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Check, Database, Dumbbell, Palette, Save, Target, Terminal, User, Users, Watch, X } from 'lucide-react';
@@ -8,22 +8,22 @@ import { ErrorState, LoadingState } from '@/components';
 import { useAuthState } from '@/components/auth/authState';
 import { Button, Spinner } from '@/components/ui';
 import { settingsApi, type UserSettings } from '@/lib/api';
-import { DataTab } from './settings/DataTab';
-import { GamificationTab } from './settings/GamificationTab';
 import { qk } from '@/lib/queryKeys';
 import { applyTheme } from '@/lib/theme';
-import {
-  AdminTab,
-  AppearanceTab,
-  CoachTab,
-  ConnectionsTab,
-  DEFAULT_SETTINGS,
-  GoalsTab,
-  ProfileTab,
-  SystemTab,
-  WorkoutTab,
-  type LocalSettings,
-} from './settings/index';
+import { importChunk } from '@/lib/chunkReload';
+import { DEFAULT_SETTINGS, type LocalSettings } from './settings/types';
+
+// One tab shows at a time: each loads on first view, not with the dashboard.
+const ProfileTab = lazy(importChunk(() => import('./settings/ProfileTab').then((m) => ({ default: m.ProfileTab }))));
+const GoalsTab = lazy(importChunk(() => import('./settings/GoalsTab').then((m) => ({ default: m.GoalsTab }))));
+const WorkoutTab = lazy(importChunk(() => import('./settings/WorkoutTab').then((m) => ({ default: m.WorkoutTab }))));
+const ConnectionsTab = lazy(importChunk(() => import('./settings/ConnectionsTab').then((m) => ({ default: m.ConnectionsTab }))));
+const CoachTab = lazy(importChunk(() => import('./settings/CoachTab').then((m) => ({ default: m.CoachTab }))));
+const GamificationTab = lazy(importChunk(() => import('./settings/GamificationTab').then((m) => ({ default: m.GamificationTab }))));
+const AppearanceTab = lazy(importChunk(() => import('./settings/AppearanceTab').then((m) => ({ default: m.AppearanceTab }))));
+const DataTab = lazy(importChunk(() => import('./settings/DataTab').then((m) => ({ default: m.DataTab }))));
+const SystemTab = lazy(importChunk(() => import('./settings/SystemTab').then((m) => ({ default: m.SystemTab }))));
+const AdminTab = lazy(importChunk(() => import('./settings/AdminTab').then((m) => ({ default: m.AdminTab }))));
 
 const TABS = [
   { id: 'profile', label: 'PROFIL', icon: User },
@@ -128,7 +128,7 @@ export function SettingsPage() {
     <div className="page-shell bg-void">
       <div className="page-content">
         <header className="flex justify-between items-center mb-4 sm:mb-8 animate-fade-down">
-          <h1 className="page-title text-lg sm:text-2xl font-sans font-bold text-text-primary tracking-wider">RÉGLAGES</h1>
+          <h1 className="page-title">Réglages</h1>
           {hasChanges && (
             <Button
               variant="green"
@@ -144,16 +144,17 @@ export function SettingsPage() {
 
         {/* Below md the tabs become one scrolling row above the panel. */}
         <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-          <nav className="md:w-48 md:shrink-0 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto animate-fade-left">
+          <nav aria-label="Sections des réglages" className="settings-nav md:w-48 md:shrink-0 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto animate-fade-left">
             <div className="flex md:flex-col gap-1">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
+                  aria-current={activeTab === tab.id ? 'page' : undefined}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
                     'shrink-0 md:w-full flex items-center gap-2 md:gap-3 px-3 py-2 md:px-4 md:py-3 rounded',
-                    'text-sm font-mono transition-all text-left whitespace-nowrap',
+                    'text-sm font-sans transition-all text-left whitespace-nowrap',
                     activeTab === tab.id
                       ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30'
                       : 'text-text-muted hover:text-text-secondary hover:bg-abyss'
@@ -167,16 +168,18 @@ export function SettingsPage() {
           </nav>
 
           <div key={activeTab} className="flex-1 min-w-0 glass-panel p-4 sm:p-6 animate-fade-up">
-            {activeTab === 'profile' && <ProfileTab {...tabProps} />}
-            {activeTab === 'goals' && <GoalsTab {...tabProps} />}
-            {activeTab === 'workout' && <WorkoutTab {...tabProps} />}
-            {activeTab === 'connections' && <ConnectionsTab />}
-            {activeTab === 'coach' && <CoachTab {...tabProps} />}
-            {activeTab === 'gamification' && <GamificationTab />}
-            {activeTab === 'appearance' && <AppearanceTab {...tabProps} />}
-            {activeTab === 'data' && <DataTab />}
-            {activeTab === 'system' && <SystemTab />}
-            {activeTab === 'admin' && <AdminTab />}
+            <Suspense fallback={<LoadingState />}>
+              {activeTab === 'profile' && <ProfileTab {...tabProps} />}
+              {activeTab === 'goals' && <GoalsTab {...tabProps} />}
+              {activeTab === 'workout' && <WorkoutTab {...tabProps} />}
+              {activeTab === 'connections' && <ConnectionsTab />}
+              {activeTab === 'coach' && <CoachTab {...tabProps} />}
+              {activeTab === 'gamification' && <GamificationTab />}
+              {activeTab === 'appearance' && <AppearanceTab {...tabProps} />}
+              {activeTab === 'data' && <DataTab />}
+              {activeTab === 'system' && <SystemTab />}
+              {activeTab === 'admin' && <AdminTab />}
+            </Suspense>
           </div>
         </div>
       </div>

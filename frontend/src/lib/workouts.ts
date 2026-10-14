@@ -1,12 +1,18 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { documentRequest, type GarminExport, type Prescription } from './documents';
+import { formatElapsed } from './activity';
+import { documentRequest, type GarminExport, type Prescription, type Target, type WorkoutStep } from './documents';
+import { plausibleTime } from './timeMask';
 
 export interface WorkoutSession {
   id: number; revision: number; date: string; sport: string; description: string | null;
   status: string; summary?: string | null; prescription?: Prescription | null;
-  derived?: boolean; exportable?: boolean; reason?: string | null;
+  derived?: boolean; parsed?: boolean; needs_steps?: boolean; exportable?: boolean; reason?: string | null;
   target_duration_min?: number | null; target_distance_km?: number | null;
 }
+/** Derived steps of a described tempo or interval session: the type's template, not the workout. */
+export const GENERIC_STEPS_LABEL = 'Estimation générique selon le type de séance, pas les étapes décrites';
+/** Steps the server read from the description: exportable, and the editor's starting point. */
+export const PARSED_STEPS_LABEL = 'Étapes lues dans la description';
 export interface WorkoutView { session: WorkoutSession; export: GarminExport | null }
 export interface WorkoutUpdate extends WorkoutView {
   type: 'workout_update'; id: string; thread_id: string | null; sequence: number;
@@ -14,9 +20,15 @@ export interface WorkoutUpdate extends WorkoutView {
 export interface ExportBatchResult {
   results: GarminExport[]; not_attempted: number[]; blocked?: number; error?: string;
 }
+export interface WorkoutBatch { workouts: WorkoutView[]; errors: Record<string, string> }
+/** The server's bound per read (services/garmin_export.MAX_INSPECT_SESSIONS). */
+const MAX_INSPECT_SESSIONS = 50;
 export const workoutKey = (id: number) => ['workout', id] as const;
+/** Under `['workout']`, so a write's invalidation refreshes a whole list in one request. */
+export const workoutsKey = (scope: 'cards' | 'progress', ids: number[]) => ['workout', scope, ...ids] as const;
 export const workoutApi = {
   inspect: (id: number) => documentRequest<WorkoutView>(`/garmin/planned/${id}/workout`),
+  inspectMany: (ids: number[]) => documentRequest<WorkoutBatch>(`/garmin/workouts?${ids.map(id => `ids=${id}`).join('&')}`),
   export: (sessions: WorkoutSession[], deviceId: number | null) => documentRequest<ExportBatchResult>(
     '/garmin/exports/batch', { method: 'POST', body: JSON.stringify({ session_ids: sessions.map(s => s.id), revisions: sessions.map(s => s.revision), device_id: deviceId }) }, 150_000),
 };
@@ -48,6 +60,17 @@ export function mergeWorkout(previous: WorkoutView | undefined, next: WorkoutVie
 export function cacheWorkout(queryClient: QueryClient, view: WorkoutView): void {
   queryClient.setQueryData<WorkoutView>(workoutKey(view.session.id), previous => mergeWorkout(previous, view));
 }
+/** Reads several cards at once and seeds each card's entry; per-session errors stay per session. */
+export async function readWorkouts(queryClient: QueryClient, ids: number[]): Promise<WorkoutBatch> {
+  const result: WorkoutBatch = { workouts: [], errors: {} };
+  for (let offset = 0; offset < ids.length; offset += MAX_INSPECT_SESSIONS) {
+    const batch = await workoutApi.inspectMany(ids.slice(offset, offset + MAX_INSPECT_SESSIONS));
+    batch.workouts.forEach(view => cacheWorkout(queryClient, view));
+    result.workouts.push(...batch.workouts);
+    Object.assign(result.errors, batch.errors);
+  }
+  return result;
+}
 export const exportLabels: Record<string, string> = {
   scheduled: 'Programmée dans Garmin Connect', transfer_requested: 'Transfert demandé · synchronise la montre',
   working: 'Envoi vers Garmin', dirty: 'À resynchroniser', pending_removal: 'Retrait Garmin à effectuer',
@@ -58,4 +81,79 @@ export function exportLabel(state: GarminExport | null): string {
   if (!state) return 'Pas encore envoyée';
   if (state.state === 'working' && ['created', 'updated', 'scheduled', 'unscheduled'].includes(state.phase ?? '')) return 'Vérification dans Garmin';
   return exportLabels[state.state] ?? 'État à vérifier';
+}
+/** Where today's session stands with Garmin (the export view, ARE-100). */
+export type SessionPush =
+  | {
+      kind: 'send';
+      /** Steps the watch will get, e.g. "10 min · 4 × (3 min / 2 min) · 10 min". */
+      text: string | null;
+      onPush: () => void;
+      pending: boolean;
+      error: string | null;
+    }
+  /** `at` is the UTC push instant; older explicit exports have none. */
+  | { kind: 'sent'; at: string | null }
+  /** In flight, uncertain or in conflict: settled from the session in Planning. */
+  | { kind: 'unsettled'; label: string; error: string | null; href: string }
+  /** A described session whose steps the server could not read. */
+  | { kind: 'steps'; href: string }
+  /** A skipped session whose copy is still on Garmin. */
+  | { kind: 'withdraw'; onWithdraw: () => void; pending: boolean; error: string | null };
+
+/** The athlete's own send or withdrawal; `result` is newer than the view until it refreshes. */
+export interface WatchAction {
+  run: () => void;
+  pending: boolean;
+  error: string | null;
+  result: GarminExport | null;
+}
+
+/** The Garmin line for a session still to do, or skipped, from its export view. */
+export function watchLine(view: WorkoutView, sentAt: string | null, action: WatchAction): SessionPush | undefined {
+  const current = newerExport(view.export, action.result);
+  const state = current?.state;
+  const planning = `/planning?date=${view.session.date}`;
+  if (current && (state === 'working' || state === 'uncertain' || state === 'conflict'))
+    return { kind: 'unsettled', label: exportLabel(current), error: state === 'working' ? null : current.error, href: planning };
+  const failure = state === 'failed' ? (current?.error ?? exportLabel(current ?? null)) : null;
+  if (view.session.status === 'skipped') {
+    const held = current && state !== 'removed' && (current.workout_id != null || current.schedule_id != null);
+    return held ? { kind: 'withdraw', onWithdraw: action.run, pending: action.pending, error: action.error ?? failure } : undefined;
+  }
+  if (state === 'scheduled' || state === 'transfer_requested') return { kind: 'sent', at: sentAt };
+  if (view.session.needs_steps) return { kind: 'steps', href: planning };
+  if (!view.session.exportable) return undefined;
+  return { kind: 'send', text: view.session.summary ?? null, onPush: action.run, pending: action.pending, error: action.error ?? failure };
+}
+
+/** A step's end as the athlete reads it: "20:00", "400 m", "8 répétitions", "tour manuel". */
+export function stepAmount(step: WorkoutStep): string {
+  if (step.duration_kind === 'lap') return 'tour manuel';
+  if (step.value == null) return '—';
+  if (step.duration_kind === 'seconds') return formatElapsed(step.value);
+  return `${step.value} ${step.duration_kind === 'meters' ? 'm' : 'répétitions'}`;
+}
+
+export const SKIPPED_LAST_RECOVERY = 'sans la dernière récup';
+
+/** A repeat whose last recovery Garmin may skip (services/prescriptions.ends_with_recovery). */
+export function endsWithRecovery(step: WorkoutStep): boolean {
+  const last = step.steps.at(-1);
+  return step.kind === 'repeat' && last?.kind === 'recovery' && last.duration_kind !== 'lap';
+}
+
+export const INCOMPLETE_STEPS = 'Étapes incomplètes ou invalides : vérifie chaque durée, distance et borne de cible.';
+
+/** Both bounds set, in order (services/prescriptions.Target), and a pace within plausible bounds. */
+const targetReady = (target: Target) => target.low != null && target.high != null && target.low <= target.high
+  && (target.kind !== 'pace_sec_km' || (plausibleTime(target.low, 'pace') && plausibleTime(target.high, 'pace')));
+
+/** Whether every step has a plausible value and every target valid bounds: nothing partial or rejected is saved. */
+export function prescriptionReady(prescription: Prescription): boolean {
+  const ready = (step: WorkoutStep): boolean => step.kind === 'repeat'
+    ? step.steps.every(ready)
+    : (step.duration_kind === 'lap' || (step.value != null && (step.duration_kind !== 'seconds' || plausibleTime(step.value, 'duration'))))
+      && [step.target, step.secondary_target].every(t => !t || targetReady(t));
+  return prescription.steps.every(ready);
 }

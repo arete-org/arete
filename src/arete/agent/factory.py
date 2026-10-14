@@ -14,18 +14,22 @@ from langchain_core.tools import BaseTool
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import Timeout as RequestsTimeout
 
+from arete.agent.capabilities.discovery import authorized_tools
 from arete.agent.capabilities.registry import CAPABILITIES
-from arete.agent.middlewares.autosuggestion import AutoSuggestionMiddleware
 from arete.agent.middlewares.capabilities import ToolkitMiddleware
 from arete.agent.middlewares.context import (
     ContextBudgetMiddleware,
     ContextBuilderMiddleware,
 )
 from arete.agent.middlewares.events import ToolEventMiddleware
+from arete.agent.middlewares.fact_memory import FactMemoryMiddleware
+from arete.agent.middlewares.journal import JournalMiddleware
 from arete.agent.middlewares.limits import execution_limits
 from arete.agent.middlewares.observability import ModelTelemetryMiddleware
 from arete.agent.middlewares.policy import ProfilePolicyMiddleware
+from arete.agent.middlewares.provider_affinity import ProviderAffinityMiddleware
 from arete.agent.middlewares.responses import ModelResponseMiddleware
+from arete.agent.models.jev import JevClient
 from arete.agent.profiles.models import AgentProfile
 from arete.agent.prompts.coach import SYSTEM_SKILL
 from arete.agent.runtime.budget import (
@@ -34,7 +38,7 @@ from arete.agent.runtime.budget import (
     READ_TOOL_RETRY_DELAY_SECONDS,
 )
 from arete.agent.runtime.context import AgentContext
-from arete.agent.tools.journal import append_journal, remember_fact
+from arete.agent.tools.coach_followup import respond_coach_followup
 from arete.services.calendar import CalendarService
 
 #: Builds the calendar of one signed-in account (its Clerk user id).
@@ -49,18 +53,23 @@ def build_agent(
     output_tokens: int,
     filesystem: AgentMiddleware[Any, Any, Any],
     calendar: CalendarFactory | None = None,
-    suggestion_model: BaseChatModel | None = None,
+    memory_model: JevClient | None = None,
     fallback_models: tuple[BaseChatModel, ...] = (),
     skills: AgentMiddleware[Any, Any, Any] | None = None,
 ):
     assert len(fallback_models) <= MAX_MODEL_FALLBACKS, "Too many fallback models"
     middleware = [
         ProfilePolicyMiddleware(profile.id, profile=profile, calendar=calendar),
+        *(
+            [FactMemoryMiddleware(model=memory_model)]
+            if profile.fact_memory_tools
+            else []
+        ),
         *execution_limits(),
     ]
     if profile.page_context:
         middleware.append(ToolEventMiddleware())
-    # Wrap dynamic execution, but never replay writes or infer retryability
+    # Wrap native execution, but never replay writes or infer retryability
     # from error strings. Each attempt still traverses ToolkitMiddleware's budget.
     retry_tools: list[BaseTool | str] = [
         name
@@ -90,6 +99,8 @@ def build_agent(
     )
     middleware.append(ToolkitMiddleware())
     if profile.journal_tools:
+        middleware.append(JournalMiddleware())
+    if profile.filesystem_tools:
         middleware.append(filesystem)
         if skills is not None:
             middleware.append(skills)
@@ -107,21 +118,17 @@ def build_agent(
     # measured separately; model fallback never encloses tool execution.
     if fallback_models:
         middleware.append(ModelFallbackMiddleware(*fallback_models))
+    middleware.append(ProviderAffinityMiddleware())
     middleware.append(ModelTelemetryMiddleware())
     middleware.append(ModelResponseMiddleware())
-    if profile.id == "chat" and suggestion_model is not None:
-        middleware.append(
-            AutoSuggestionMiddleware(
-                model=suggestion_model, context_tokens=context_tokens
-            )
-        )
     return create_agent(
         model,
         tools=[
-            *([append_journal, remember_fact] if profile.journal_tools else []),
+            *authorized_tools(profile),
+            *([respond_coach_followup] if profile.journal_tools else []),
         ],
         middleware=middleware,
-        system_prompt=SYSTEM_SKILL,
+        system_prompt=profile.system_prompt or SYSTEM_SKILL,
         context_schema=AgentContext,
         name=profile.name,
     )

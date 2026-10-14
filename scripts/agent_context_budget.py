@@ -95,7 +95,6 @@ def main() -> None:
     from arete.agent.runtime.context import AgentContext
     from arete.agent.tools.analytics import (
         get_fitness,
-        get_personal_records,
         get_training_advice,
         get_workload,
         list_recent_sessions,
@@ -133,7 +132,6 @@ def main() -> None:
         ("get_workload(28)", get_workload, {"days": 28}),
         ("get_fitness(42)", get_fitness, {"days": 42}),
         ("get_training_advice", get_training_advice, {}),
-        ("get_personal_records", get_personal_records, {}),
         ("list_recent_sessions(20)", list_recent_sessions, {"limit": 20}),
     ):
         print(f"  {label:26s} {tokens(tool.invoke(args)):7d}")

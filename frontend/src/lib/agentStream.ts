@@ -17,6 +17,8 @@ export interface ToolPart {
   output?: Preview;
   status: ToolStatus;
   elapsed_ms?: number;
+  /** Id of the failed identical call this one repeats, known when it starts. */
+  retryOf?: string;
 }
 export interface TextPart {
   kind: 'text';
@@ -27,7 +29,8 @@ export interface CalendarActionPart {
   kind: 'calendar_action';
   id: string;
 }
-export type ChatPart = ToolPart | TextPart | CalendarActionPart;
+export interface CoachCardPart { kind: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
+export type ChatPart = ToolPart | TextPart | CalendarActionPart | CoachCardPart;
 export interface ChatMessage {
   trace?: TraceReceipt;
   feedback?: MessageFeedback;
@@ -36,7 +39,6 @@ export interface ChatMessage {
   streamAccepted?: boolean;
   attachmentIds?: string[];
   workouts?: WorkoutUpdate[];
-  imports?: { id: string; version: number }[];
   role: 'user' | 'assistant';
   content: string;
   parts?: ChatPart[];
@@ -46,9 +48,8 @@ export interface ChatMessage {
 }
 export type StreamEvent =
   | WorkoutUpdate
-  | { type: 'suggestion'; text: string }
-  | { type: 'import_preview'; id: string; version: number }
   | { type: 'calendar_action'; id: string }
+  | { type: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
   | { type: 'token'; id: string; text: string }
   | { type: 'message'; id: string; text: string }
   | { type: 'tool_start'; id: string; name: string; args: Preview }
@@ -93,19 +94,14 @@ function isPreview(value: unknown): value is Preview {
   );
 }
 
-/** Fail on malformed required events; optional drafts may be omitted with a warning. */
+/** Fail on malformed required events; retired optional events are ignored. */
 export function parseEvent(data: string): StreamEvent | null {
   const e: unknown = JSON.parse(data);
   if (!record(e)) throw new Error('Événement du coach invalide.');
   if (isWorkoutUpdate(e)) return e;
-  if (e.type === 'suggestion') {
-    // Match Python's Unicode code-point limit, including emoji. An optional
-    // draft must never turn a completed answer into a retryable failure.
-    if (typeof e.text === 'string' && e.text.trim() && Array.from(e.text).length <= MAX_SUGGESTION_CHARS) return e as StreamEvent;
-    console.warn('Suggestion du coach invalide : brouillon ignoré.');
-    return null;
-  }
-  if (e.type === 'import_preview' && typeof e.id === 'string' && /^[0-9a-f-]{36}$/i.test(e.id) && Number.isInteger(e.version) && Number(e.version) > 0) return e as StreamEvent;
+  if (e.type === 'suggestion') return null;
+  if (e.type === 'coach_card' && (e.ref_kind === 'fact' || e.ref_kind === 'followup') && Number.isSafeInteger(e.ref_id) && Number(e.ref_id) > 0 && e.id === `${e.ref_kind}:${e.ref_id}`) return e as StreamEvent;
+
   const identified = typeof e.id === 'string' && e.id.length > 0;
   if (
     e.type === 'calendar_action' &&
@@ -169,8 +165,6 @@ export function applyEvent(
   message: ChatMessage,
   event: StreamEvent
 ): ChatMessage {
-  // Suggestions belong to the editable draft, never to conversation history.
-  if (event.type === 'suggestion') return message;
   if (event.type === 'workout_update') {
     const current = message.workouts ?? [];
     const previous = current.find(w => w.session.id === event.session.id);
@@ -178,11 +172,14 @@ export function applyEvent(
     if (!previous && current.length >= 50) throw new Error('Maximum 50 séances par réponse.');
     return { ...message, workouts: previous ? current.map(w => w.session.id === event.session.id ? event : w) : [...current, event] };
   }
-  if (event.type === 'import_preview') return { ...message, imports: [...(message.imports ?? []).filter(item => item.id !== event.id), { id: event.id, version: event.version }] };
   if (event.type === 'error') return settleMessage(message, event.detail);
   if (event.type === 'done')
     return settleMessage({ ...message, content: event.message.content, trace: event.trace });
   const parts = [...(message.parts ?? [])];
+  if (event.type === 'coach_card') {
+    if (!parts.some(p => p.kind === 'coach_card' && p.id === event.id)) parts.push({ kind: 'coach_card', id: event.id, ref_kind: event.ref_kind, ref_id: event.ref_id });
+    return { ...message, parts };
+  }
   if (event.type === 'calendar_action') {
     if (!parts.some((p) => p.kind === 'calendar_action' && p.id === event.id))
       parts.push({ kind: 'calendar_action', id: event.id });
@@ -202,6 +199,7 @@ export function applyEvent(
   }
   const idx = parts.findIndex((p) => p.kind === 'tool' && p.id === event.id);
   const previous = idx < 0 ? undefined : parts[idx];
+  const retryOf = event.type === 'tool_start' ? failedCall(parts, event.name, event.args) : undefined;
   const part: ToolPart =
     event.type === 'tool_start'
       ? {
@@ -210,6 +208,7 @@ export function applyEvent(
           name: event.name,
           args: event.args,
           status: 'running',
+          ...(retryOf && { retryOf }),
         }
       : {
           ...(previous?.kind === 'tool' ? previous : {}),
@@ -223,6 +222,17 @@ export function applyEvent(
   if (idx < 0) parts.push(part);
   else parts[idx] = part;
   return { ...message, parts };
+}
+
+/** A parallel duplicate starts before its twin ends, so it is never a retry. */
+function failedCall(parts: ChatPart[], name: string, args: Preview): string | undefined {
+  if (args.truncated) return undefined;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i];
+    if (part.kind === 'tool' && part.status === 'error' && part.name === name
+      && part.args?.truncated === false && part.args.text === args.text) return part.id;
+  }
+  return undefined;
 }
 
 /** Bounded SSE decoder, also used in tests with deliberately split network chunks. */
@@ -296,7 +306,6 @@ export async function runAgentStream(
       messages: history.map(({ role, content }) => ({ role, content })),
       thread_id: threadId,
       ...(documentIds !== undefined ? { document_ids: documentIds } : {}),
-      supports_suggestions: true,
       panel_context,
     }),
     signal: AbortSignal.any([signal, AbortSignal.timeout(STREAM_TIMEOUT_MS)]),

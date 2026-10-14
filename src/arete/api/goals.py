@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from arete.services import goals as service
+from arete.services.settings import athlete_today
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -49,7 +50,7 @@ def next_goal() -> dict[str, Any] | None:
 
 @router.post("", status_code=201)
 def create_goal(body: GoalCreate) -> dict[str, Any]:
-    if body.race_date < date.today():
+    if body.race_date < athlete_today():
         raise HTTPException(status_code=422, detail="La date de course est passée")
     return service.create_goal(**body.model_dump()).to_dict()
 

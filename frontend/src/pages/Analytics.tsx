@@ -84,9 +84,9 @@ export function AnalyticsPage() {
       >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="page-title text-xl font-bold font-mono text-neon-cyan tracking-wider uppercase">Analyses</h1>
+            <h1 className="page-title">Analyses</h1>
             {data && (
-              <p className="text-xs text-text-muted font-mono mt-1">
+              <p className="text-xs text-text-muted font-sans mt-1">
                 Du {new Date(`${data.start}T00:00:00`).toLocaleDateString('fr-FR')} au{' '}
                 {new Date(`${data.end}T00:00:00`).toLocaleDateString('fr-FR')}
                 {data.prev_start && ` · comparé ${previousLabel}`}
@@ -97,7 +97,7 @@ export function AnalyticsPage() {
             <PeriodSelector period={period} onChange={setPeriod} />
             <Link
               to="/analytics/bilan"
-              className="px-3 py-1 text-xs font-mono uppercase tracking-wider rounded border border-neon-gold/30 text-neon-gold hover:bg-neon-gold/10"
+              className="px-3 py-1 text-xs font-sans uppercase tracking-wider rounded border border-neon-gold/30 text-neon-gold hover:bg-neon-gold/10"
             >
               Bilan annuel
             </Link>

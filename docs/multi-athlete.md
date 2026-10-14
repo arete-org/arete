@@ -74,8 +74,8 @@ lists each athlete with its logins, role, last activity (refreshed hourly with t
 Clerk profile) and daily sync, and acts on the account tables only, never on an
 athlete's private data:
 
-- **Désactiver / Réactiver** an athlete: its logins are refused at once and its
-  data is hidden, then restored as it was. Nobody deactivates athlete 1, and only
+- **Désactiver / Réactiver** an athlete: its logins are refused (within the
+  bound below) and its data is hidden, then restored as it was. Nobody deactivates athlete 1, and only
   the owner deactivates an administrator's athlete.
 - **Libérer la synchro**: clears a lease kept by a failed or stopped daily run, so
   the next window runs the day again. Check first what that run already did at
@@ -83,7 +83,10 @@ athlete's private data:
   in progress and is not released.
 - **Nommer admin / Retirer admin**: the owner only, never on its own logins.
 
-A change applies at the account's next request: every request reads its row.
+A change applies at the account's next request on the instance that made it.
+Each instance reuses a resolved account (the login and whether its athlete is
+live, read in one query) for 30 seconds (`ACCOUNT_TTL_SECONDS` in
+`api/auth.py`, at most 60), so other instances follow within that bound.
 
 ## Migrations and deployment
 
@@ -113,27 +116,47 @@ configuration is ready. Production uses the repository's manual deployment workf
 Each athlete is synced once a day: Garmin activities and health, plan
 adaptation, Strava, the calendar and the session feedback, then the briefing
 and, on Mondays, the week's review. Vercel's Hobby plan runs a cron at most once
-a day, so `vercel.json` lists six daily windows on the same path, from 07:00 to
-12:00 UTC (each fires within its hour). The first window waits for Garmin to
+a day, so `vercel.json` lists ten daily windows on the same path, from 07:00 to
+16:00 UTC (each fires within its hour). The first window waits for Garmin to
 have the night's sleep and HRV, which arrive when the watch syncs after waking.
 
-A dispatch reads the athletes still owed today, oldest sync first, and claims
-them one at a time. Time bounds it rather than a count: one athlete's run lasts
-from seconds to minutes, and Vercel stops the function at 300 seconds. No
+An athlete is owed from 07:00 on their own clock (their timezone setting), or
+from `ARETE_AUTO_SYNC_HOUR` when set, and never during their quiet hours
+(21:30-07:00 by default): a run there would sync before the night's data and
+lose the briefing, feedback and review pushes that quiet hours drop. With the
+default quiet hours, athletes from UTC-9 to UTC+5 run in their morning, those
+further east in their afternoon or evening; west of UTC-9 no window falls after
+07:00 local, so the scheduler skips them until a later window is added to
+`vercel.json`.
+
+A dispatch reads the athletes still owed today, least recent run or claim
+first, and claims them one at a time. Time bounds it rather than a count: one
+athlete's run lasts from seconds to minutes, and Vercel stops the function at
+300 seconds. No
 athlete is claimed after 120 seconds and no briefing or review starts after 210;
-a deferred briefing is written when the athlete opens the dashboard, and the
-review stays one click away in Planning. Later windows take whoever is still
-owed; a window with nothing to do costs one query.
+a deferred briefing is written by the dashboard's own request (`POST
+/tips/daily`) when the athlete opens it, and the review stays one click away in
+Planning. Later windows take whoever is still owed; a window with nothing to do
+costs one query, which also reads each athlete's timezone and quiet hours. A
+dispatch that reaches the 500-athlete scan bound reports `deferred` like one
+stopped by time.
 
 Each athlete carries a daily marker (`last_sync_at`) and a lease
-(`sync_lease_until`). A failed or stopped run keeps its lease for the rest of the
-day, so the same day never replays it. The next day's dispatch reclaims a lease
+(`sync_lease_until`), both naive UTC timestamps written from the dispatch's
+clock, so Docker and Vercel writers agree whatever their timezone. Both are
+dated by the claim: a run claimed at 23:58 that ends after midnight counts for
+the day it started, and skips its briefing and review once that day has ended.
+Markers stored by a non-UTC writer before this rule are read as UTC: shifted by
+that writer's offset, they can skip one day or hold a lease longer, once. A
+failed or stopped run keeps its lease for the rest of the day, so the same day
+never replays it. The next day's dispatch reclaims a lease
 dated before today and starts a new day: every step is idempotent per day
 (activities are deduplicated by id, the scheduler writes one briefing a day and
 one review a week). Overlapping windows skip what the other claimed. To park an
 athlete, set its `sync_lease_until` far in the future; to force a run at the
 next window, clear both columns. An always-on Docker scheduler dispatches every
-five minutes after `ARETE_AUTO_SYNC_HOUR`. No queue infrastructure is introduced.
+five minutes around the clock; `ARETE_AUTO_SYNC_HOUR` is read on each athlete's
+clock, not the host's. No queue infrastructure is introduced.
 
 ## Local validation
 
@@ -144,3 +167,14 @@ external Garmin/Clerk calls and use temporary local databases. In particular,
 Garmin import/disconnect, shared storage, files, documents, coach memory and jobs.
 The browser connection test covers the visible form → MFA → sync → logout flow.
 A real Garmin login and a dedicated MotherDuck preview remain rollout checks.
+
+### Private administrator consultation in Slack
+
+The Slack product assistant additionally permits verified Arete administrators
+to read an active athlete's settings, training, health, facts, journal and stored
+document extraction. This is separate from the administration HTTP endpoints,
+which retain their account-management scope. Reads are restricted to an
+administrator-owned DM, audited by actor/target/section, and have no training
+writes or outbound communication tools. Revocation is checked at each privileged
+operation. A private consultation thread never becomes a public product thread.
+See [Slack administrator behavior](slack.md#administrator-product-assistant).

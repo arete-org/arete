@@ -6,9 +6,7 @@ from datetime import date as Date
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from arete.garmin.models import SessionType
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 MAX_STEPS = 100
 MAX_REPEAT_DEPTH = 2
@@ -48,6 +46,13 @@ class Step(StrictModel):
     weight_kg: float | None = Field(default=None, ge=0, le=1000)
     stroke: Literal["free", "back", "breast", "butterfly", "mixed"] | None = None
     notes: str = Field(default="", max_length=500)
+    # Unset (every step stored before it existed) reads as false and leaves the
+    # Garmin payload as it was, so a copy already sent stays as is.
+    skip_last_recovery: bool | None = Field(
+        default=None,
+        description="Repeat ending with a timed or measured recovery only: true "
+        "skips that recovery after the last repetition.",
+    )
 
     @model_validator(mode="after")
     def consistent(self):
@@ -63,10 +68,21 @@ class Step(StrictModel):
                 or self.stroke
             ):
                 raise ValueError(
-                    "Un bloc répété doit seulement définir ses répétitions et ses étapes."
+                    "Un bloc kind='repeat' exige repeat (entier de 2 à 100) et "
+                    "steps (sous-étapes non vides). Place durée, distance et cible "
+                    "sur chaque sous-étape, pas sur le bloc."
+                )
+            if self.skip_last_recovery and not ends_with_recovery(self):
+                raise ValueError(
+                    "Sauter la dernière récupération exige un bloc qui finit par "
+                    "une récupération en durée ou en distance."
                 )
         elif self.steps or self.repeat:
             raise ValueError("Seul un bloc répété peut contenir des étapes.")
+        elif self.skip_last_recovery:
+            raise ValueError(
+                "Seul un bloc répété peut sauter sa dernière récupération."
+            )
         elif (self.duration_kind == "lap") != (self.value is None):
             raise ValueError(
                 "Indique une valeur pour la durée, la distance ou les répétitions."
@@ -78,6 +94,12 @@ class Step(StrictModel):
         ):
             raise ValueError("Le nombre de répétitions doit être entier.")
         return self
+
+
+def ends_with_recovery(step: Step) -> bool:
+    """Whether a repeat's last child is a timed or measured recovery to skip."""
+    last = step.steps[-1] if step.steps else None
+    return bool(last and last.kind == "recovery" and last.duration_kind != "lap")
 
 
 class Prescription(StrictModel):
@@ -111,21 +133,17 @@ class Prescription(StrictModel):
 
 class Provenance(StrictModel):
     document_id: UUID
-    locator: str = Field(min_length=1, max_length=200)
-    quote: str = Field(min_length=1, max_length=4000)
-
-
-class ImportedSession(StrictModel):
-    date: Date | None = None
-    sport: Literal[
-        "running", "cycling", "swimming", "strength", "walking", "hiking", "other"
-    ]
-    session_type: SessionType = SessionType.OTHER
-    description: str = Field(min_length=1, max_length=500)
-    prescription: Prescription
-    provenance: list[Provenance] = Field(min_length=1, max_length=20)
-    strength_text: str = Field(default="", max_length=4000)
-    uncertainties: list[str] = Field(default_factory=list, max_length=20)
+    locator: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Exact block identifier shown in square brackets in the source, "
+        "e.g. lignes 1-12. Never invent a description or use read_file line numbers.",
+    )
+    quote: str = Field(
+        min_length=1,
+        max_length=4000,
+        description="Exact substring of that block, without read_file line numbers.",
+    )
 
 
 def strength_prescription(text: str, day: Date | None) -> Prescription:
@@ -161,6 +179,25 @@ def strength_prescription(text: str, day: Date | None) -> Prescription:
     return Prescription(steps=steps)
 
 
+def prescription_from_description(text: str, sport: str) -> Prescription | None:
+    """The run the description writes out, or None unless every part is read.
+
+    Running only: cycling and swimming notations are not covered. Deterministic
+    (Lark grammar); never a partial workout.
+    """
+    if sport != "running":
+        return None
+    from arete.llm.running_grammar import parse_running
+
+    steps = parse_running(text)
+    if steps is None:
+        return None
+    try:
+        return Prescription.model_validate({"steps": steps})
+    except ValidationError:  # a bound the text exceeds (steps, repeats)
+        return None
+
+
 def strength_sets(
     prescription: Prescription,
 ) -> list[tuple[str, float | None, float | None]]:
@@ -185,10 +222,10 @@ def strength_sets(
 
 
 def conversation_prescription(
-    raw: str, sport: str, day: Date, strength_text: str = ""
+    prescription: Prescription | None, sport: str, day: Date, strength_text: str = ""
 ) -> Prescription:
     """Validate model input without allowing it to replace the strength grammar."""
-    if len(raw) > 32_000 or len(strength_text) > 4_000:
+    if len(strength_text) > 4_000:
         raise ValueError("Prescription trop volumineuse.")
     if strength_text and sport != "strength":
         raise ValueError('strength_text exige sport="strength".')
@@ -198,15 +235,16 @@ def conversation_prescription(
                 "Fournis le texte exact de musculation pour vérifier les séries."
             )
         parsed = strength_prescription(strength_text, day)
-        if not raw:
+        if prescription is None:
             return parsed
-        prescription = Prescription.model_validate_json(raw)
         if strength_sets(prescription) != strength_sets(parsed):
             raise ValueError(
                 "Les séries ne correspondent pas au texte reconnu par la grammaire."
             )
         return prescription
-    return Prescription.model_validate_json(raw)
+    if prescription is None:
+        raise ValueError("Une prescription structurée est requise.")
+    return prescription
 
 
 def describe(prescription: Prescription) -> str:
@@ -218,6 +256,7 @@ def describe(prescription: Prescription) -> str:
                 f"{step.repeat} × ("
                 + " / ".join(step_text(s) for s in step.steps)
                 + ")"
+                + (", sans la dernière récup" if step.skip_last_recovery else "")
             )
         value = step.value or 0
         amount = {

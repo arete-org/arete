@@ -26,7 +26,7 @@ from arete.agent.runtime.context import (
 from arete.api.agent_feedback import TraceReceipt, chat_trace
 from arete.api.agent_feedback import router as feedback_router
 from arete.api.auth import clerk_account
-from arete.services.memory import NOTES_LEDGER, SESSIONS_LEDGER, memory_root
+from arete.services.memory import NOTES_LEDGER, SESSIONS_LEDGER, read_file
 
 if TYPE_CHECKING:
     from langchain_core.messages import BaseMessage as LangchainMessage
@@ -107,8 +107,7 @@ class ChatMessageOut(BaseModel):
 class ChatResponse(BaseModel):
     message: ChatMessageOut
     trace: TraceReceipt | None = None
-    suggestion: str | None = Field(default=None, max_length=300)
-    imports: list[dict] = Field(default_factory=list)
+    cards: list[dict] = Field(default_factory=list)
 
 
 def _to_langchain(role: str, content: str) -> LangchainMessage:
@@ -148,7 +147,6 @@ def _to_agent_context(
     source: dict[str, str],
     thread_id: UUID | None = None,
     *,
-    suggest_reply: bool,
     account_id: str = "",
 ) -> AgentContext:
     """Coerce the raw source dict into the declared context schema.
@@ -160,41 +158,24 @@ def _to_agent_context(
     return AgentContext(
         source=source,
         thread_id=str(thread_id) if thread_id else None,
-        suggest_reply=suggest_reply,
         account_id=account_id,
     )
 
 
-def _document_state(context: AgentContext) -> tuple[dict, dict[str, int]]:
+def _document_state(context: AgentContext) -> dict:
     """Rehydrate per invocation, never on a shared compiled graph."""
     from arete.agent.backends.attachments import attachment_files
-    from arete.services import documents, imports
+    from arete.services import documents
 
     if not context.thread_id:
         if context.document_ids:
             raise documents.DocumentError(
                 "Un fil est requis pour lire les pièces jointes."
             )
-        return {}, {}
+        return {}
     files = documents.filesystem(context.thread_id, context.document_ids)
     context.attachment_paths = tuple(files)
-    context.document_import_pending = imports.has_unvalidated_documents(
-        context.thread_id
-    )
-    drafts = {d["id"]: d["version"] for d in imports.list_drafts(context.thread_id)}
-    return {"files": attachment_files(files)}, drafts
-
-
-def _changed_imports(context: AgentContext, previous: dict[str, int]) -> list[dict]:
-    from arete.services.imports import list_drafts
-
-    if not context.thread_id:
-        return []
-    return [
-        {"type": "import_preview", "id": d["id"], "version": d["version"]}
-        for d in list_drafts(context.thread_id)
-        if d["status"] == "draft" and previous.get(d["id"]) != d["version"]
-    ]
+    return {"files": attachment_files(files)}
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -216,7 +197,6 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     context = _to_agent_context(
         source,
         body.thread_id,
-        suggest_reply=True,
         account_id=clerk_account(request),
     )
     context.document_ids = (
@@ -225,7 +205,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         else None
     )
     try:
-        document_state, previous = await to_thread.run_sync(_document_state, context)
+        document_state = await to_thread.run_sync(_document_state, context)
         graph = get_agent()
         result = await invoke_agent(
             graph,
@@ -246,17 +226,19 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         # Model misconfiguration (missing key, unknown provider).
         raise HTTPException(status_code=500, detail=str(exc)) from None
     except Exception as exc:
+        # The details stay in the logs: provider errors may quote requests.
         logger.exception("Agent run failed")
-        raise HTTPException(status_code=502, detail=f"Agent run failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="Agent run failed") from exc
 
     messages = result.get("messages", [])
     if not messages:
         raise HTTPException(status_code=502, detail="Agent returned no messages")
+    from arete.agent.runtime.events import coach_card
+
     final = messages[-1]
     return ChatResponse(
+        cards=[card for message in messages if (card := coach_card(message))],
         trace=chat_trace(context.run_id, context.thread_id, context.account_id),
-        suggestion=result.get("suggestion"),
-        imports=await to_thread.run_sync(_changed_imports, context, previous),
         message=ChatMessageOut(
             role="assistant",
             content=final.text() if hasattr(final, "text") else str(final.content),
@@ -269,7 +251,6 @@ class StreamRequest(ChatRequest):
 
     # Cached clients reject unknown SSE events; only spend a model call when
     # the caller can consume the optional draft.
-    supports_suggestions: bool = Field(default=False, strict=True)
 
 
 def _sse(event: dict) -> str:
@@ -284,7 +265,7 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
         TIMEOUT_MESSAGE,
         stream_agent,
     )
-    from arete.api.agent_streaming import MAX_STREAM_EVENTS, StreamProjection
+    from arete.agent.runtime.streaming import MAX_STREAM_EVENTS, StreamProjection
 
     projection = StreamProjection()
     from anyio import to_thread
@@ -294,7 +275,6 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
         context = _to_agent_context(
             _panel_context_source(body),
             body.thread_id,
-            suggest_reply=body.supports_suggestions,
             account_id=account_id,
         )
         context.document_ids = (
@@ -302,7 +282,7 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
             if body.document_ids is not None
             else None
         )
-        document_state, previous = await to_thread.run_sync(_document_state, context)
+        document_state = await to_thread.run_sync(_document_state, context)
         graph = get_agent()
         event_count = 0
         async with aclosing(
@@ -316,8 +296,6 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
                     raise ValueError("Le stream dépasse la limite d'événements.")
                 for event in projection.events(part):
                     yield _sse(event)
-        for preview in await to_thread.run_sync(_changed_imports, context, previous):
-            yield _sse(preview)
         done = projection.done()
         trace = chat_trace(context.run_id, context.thread_id, context.account_id)
         if trace is not None:
@@ -334,9 +312,9 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
         yield _sse({"type": "error", "detail": LIMIT_MESSAGE})
     except ValueError as exc:
         yield _sse({"type": "error", "detail": str(exc)})
-    except Exception as exc:
+    except Exception:
         logger.exception("Agent stream failed")
-        yield _sse({"type": "error", "detail": f"Agent run failed: {exc}"})
+        yield _sse({"type": "error", "detail": "Agent run failed"})
 
 
 @router.post("/chat/stream")
@@ -372,14 +350,9 @@ _LEDGER_FILES = (NOTES_LEDGER, SESSIONS_LEDGER)
 @router.get("/memory", response_model=LedgerResponse)
 def get_memory() -> LedgerResponse:
     """Read the agent's memory ledger (bounded files, 64k chars each)."""
-    root = memory_root().resolve()
     files: list[LedgerFile] = []
     for name in _LEDGER_FILES:
-        path = (root / name).resolve()
-        # Defense in depth: the frontend only ever asks for the two known
-        # names, but assert the path stays inside the memory root anyway.
-        assert path.parent == root, f"ledger path escaped memory root: {name}"
-        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        content = read_file(name).content
         if len(content) > MAX_PANEL_CONTEXT_CHARS:
             content = (
                 content[:MAX_PANEL_CONTEXT_CHARS] + "\n\n… (tronqué à l'affichage)"

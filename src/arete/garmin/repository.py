@@ -1,7 +1,7 @@
 """Repository for Garmin sessions database operations."""
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import duckdb
@@ -65,7 +65,8 @@ def _planned_from_row(row: tuple) -> PlannedSession:
         structure_json=row[13],
         garmin_workout_id=row[14],
         garmin_schedule_id=row[15],
-        garmin_pushed_at=row[16],
+        # Stored as naive UTC (TIMESTAMP); tagged so it serializes with an offset.
+        garmin_pushed_at=row[16].replace(tzinfo=UTC) if row[16] else None,
         prescription=json.loads(row[17]) if row[17] else None,
         provenance=json.loads(row[18]) if row[18] else None,
         revision=row[19],
@@ -156,6 +157,21 @@ class GarminRepository:
 
         return _planned_from_row(result)
 
+    def get_planned_sessions(
+        self, session_ids: list[int], connection: duckdb.DuckDBPyConnection
+    ) -> dict[int, PlannedSession]:
+        """The visible planned sessions among ``session_ids``, in one statement."""
+        if not session_ids:
+            return {}
+        rows = connection.execute(
+            f"""
+            SELECT {PLANNED_COLUMNS}
+            FROM app.visible_planned_sessions WHERE id IN ({", ".join("?" * len(session_ids))})
+            """,
+            list(session_ids),
+        ).fetchall()
+        return {row[0]: _planned_from_row(row) for row in rows}
+
     def list_planned_sessions(
         self,
         start_date: date | None = None,
@@ -163,17 +179,18 @@ class GarminRepository:
         status: SessionStatus | None = None,
         limit: int = 50,
         ascending: bool = False,
+        connection: duckdb.DuckDBPyConnection | None = None,
     ) -> list[PlannedSession]:
         """List planned sessions with optional date filter.
 
         Newest first by default (the HTTP list); ``ascending`` returns the
         earliest first, so a limit keeps the sessions closest to the start.
         """
-        conn = self._get_connection()
+        conn = connection or self._get_connection()
 
         query = f"""
             SELECT {PLANNED_COLUMNS}
-            FROM visible_planned_sessions WHERE 1=1
+            FROM app.visible_planned_sessions WHERE 1=1
         """
         params: list = []
 
@@ -192,7 +209,8 @@ class GarminRepository:
         params.append(limit)
 
         results = conn.execute(query, params).fetchall()
-        conn.close()
+        if connection is None:
+            conn.close()
 
         return [_planned_from_row(row) for row in results]
 
@@ -202,23 +220,36 @@ class GarminRepository:
         """Update the status of a planned session."""
         return self.update_planned_session_fields(session_id, status=status)
 
-    def update_planned_session_fields(self, session_id: int, **fields: Any) -> bool:
+    def update_planned_session_fields(
+        self,
+        session_id: int,
+        *,
+        expected_revision: int | None = None,
+        connection: duckdb.DuckDBPyConnection | None = None,
+        prescription: dict | None = None,
+        **fields: Any,
+    ) -> bool:
         """Overwrite some fields of a planned session (whitelisted columns)."""
         unknown = set(fields) - PLANNED_EDITABLE
         if unknown:
             raise ValueError(f"Not editable on a planned session: {sorted(unknown)}")
-        if not fields:
+        if not fields and prescription is None:
             return self.get_planned_session(session_id) is not None
+        if prescription is not None:
+            fields["prescription"] = json.dumps(prescription)
         values = [
             v.value if isinstance(v, SessionType | SessionStatus) else v
             for v in fields.values()
         ]
-        conn = self._get_connection()
+        conn = connection or self._get_connection()
+        if connection is not None:
+            conn.execute("SET search_path = 'app'")
         try:
-            conn.execute("BEGIN TRANSACTION")
+            if connection is None:
+                conn.execute("BEGIN TRANSACTION")
             require_owned(conn, "goals", fields.get("goal_id"))
             row = conn.execute(
-                "SELECT prescription FROM visible_planned_sessions WHERE id=?",
+                "SELECT prescription,garmin_workout_id,garmin_schedule_id FROM visible_planned_sessions WHERE id=?",
                 [session_id],
             ).fetchone()
             active = conn.execute(
@@ -229,37 +260,78 @@ class GarminRepository:
                 raise ValueError(
                     "Réconcilie l’export Garmin avant de modifier la séance."
                 )
+            if prescription is not None and row and (row[1] or row[2]) and not active:
+                raise ValueError(
+                    "Vérifie d’abord l’ancien export Garmin avant de modifier ses étapes."
+                )
             if (
                 row
-                and row[0]
-                and set(fields) - {"date", "description", "status", "garmin_pushed_at"}
+                and (row[0] or prescription)
+                and any(
+                    value
+                    for key, value in fields.items()
+                    if key
+                    in {
+                        "target_duration_min",
+                        "target_distance_km",
+                        "target_hr_zone",
+                        "target_intensity",
+                        "sport",
+                        "structure_json",
+                    }
+                )
             ):
                 raise ValueError(
-                    "Modifie les étapes dans l’éditeur de prescription du Planning."
+                    "Modifie les étapes de la prescription pour changer ses objectifs."
                 )
             # Both planning editors share the version used to reserve exports.
             result = conn.execute(
-                f"UPDATE planned_sessions SET {', '.join(f'{k} = ?' for k in fields)}, revision=revision+1 WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
-                [*values, session_id],
+                f"UPDATE planned_sessions SET {', '.join(f'{k} = ?' for k in fields)}, revision=revision+1 WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?){' AND revision = ?' if expected_revision is not None else ''} RETURNING id",
+                [
+                    *values,
+                    session_id,
+                    *([expected_revision] if expected_revision is not None else []),
+                ],
             ).fetchone()
-            conn.execute(
-                "UPDATE garmin_exports SET state='dirty',updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=? AND state<>'removed') ",
-                [session_id],
-            )
-            conn.execute("COMMIT")
+            if result is None:
+                if connection is None:
+                    conn.execute("ROLLBACK")
+                return False
+            # Garmin holds no status: marking a session done or skipped leaves
+            # its verified export as is instead of asking for a re-export.
+            if set(fields) - {"status", "garmin_pushed_at"}:
+                conn.execute(
+                    "UPDATE garmin_exports SET state='dirty',updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=? AND state<>'removed') ",
+                    [session_id],
+                )
+            if connection is None:
+                conn.execute("COMMIT")
         except BaseException:
-            conn.execute("ROLLBACK")
+            if connection is None:
+                conn.execute("ROLLBACK")
             raise
         finally:
-            conn.close()
-        plan_changes.touch()
+            if connection is None:
+                conn.close()
+        if connection is None:
+            plan_changes.touch()
         return result is not None
 
-    def delete_planned_session(self, session_id: int) -> bool:
+    def delete_planned_session(
+        self, session_id: int, *, expected_revision: int | None = None
+    ) -> bool:
         """Delete a planned session by ID."""
         conn = self._get_connection()
         try:
             conn.execute("BEGIN TRANSACTION")
+            current = conn.execute(
+                "SELECT revision FROM visible_planned_sessions WHERE id=?", [session_id]
+            ).fetchone()
+            if current is None or (
+                expected_revision is not None and current[0] != expected_revision
+            ):
+                conn.execute("ROLLBACK")
+                return False
             active = conn.execute(
                 "SELECT state FROM visible_garmin_exports WHERE session_id=?",
                 [session_id],
@@ -473,6 +545,7 @@ class GarminRepository:
         unmatched_only: bool = False,
         limit: int = 50,
         include_blobs: bool = True,
+        connection: duckdb.DuckDBPyConnection | None = None,
     ) -> list[ActualSession]:
         """List actual sessions with optional filters.
 
@@ -480,7 +553,7 @@ class GarminRepository:
         as None: lists shown to the athlete never read them, and they are
         most of a row's bytes.
         """
-        conn = self._get_connection()
+        conn = connection or self._get_connection()
 
         blobs = (
             "laps_json, splits_json, best_efforts_json"
@@ -499,7 +572,7 @@ class GarminRepository:
                    name, notes, rpe, workout_type, moving_time_sec,
                    suffer_score, {blobs},
                    avg_watts, weighted_avg_watts, device_name, strava_activity_id
-            FROM visible_actual_sessions WHERE 1=1
+            FROM app.visible_actual_sessions WHERE 1=1
         """
         params: list = []
 
@@ -512,11 +585,12 @@ class GarminRepository:
         if unmatched_only:
             query += " AND planned_session_id IS NULL"
 
-        query += " ORDER BY date DESC LIMIT ?"
+        query += " ORDER BY date DESC, id DESC LIMIT ?"
         params.append(limit)
 
         results = conn.execute(query, params).fetchall()
-        conn.close()
+        if connection is None:
+            conn.close()
 
         return [self._row_to_actual_session(row) for row in results]
 
@@ -591,6 +665,21 @@ class GarminRepository:
             conn.close()
         return self.get_actual_session(int(row[0])) if row else None
 
+    def has_garmin_activity(self, activity_id: int) -> bool:
+        """Check the athlete's entire archive without loading their sessions."""
+        conn = self._get_connection()
+        try:
+            return (
+                conn.execute(
+                    "SELECT 1 FROM visible_actual_sessions "
+                    "WHERE source != 'strava' AND garmin_activity_id = ? LIMIT 1",
+                    [str(activity_id)],
+                ).fetchone()
+                is not None
+            )
+        finally:
+            conn.close()
+
     def known_strava_ids(self) -> set[str]:
         """Strava activity IDs already imported (own rows or merged into Garmin rows)."""
         conn = self._get_connection()
@@ -653,20 +742,31 @@ class GarminRepository:
         conn.execute("BEGIN TRANSACTION")
         try:
             result = conn.execute(
-                "UPDATE actual_sessions SET deleted_at = current_timestamp WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
+                "UPDATE actual_sessions SET deleted_at = current_timestamp WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id, date",
                 [session_id],
             ).fetchone()
             conn.execute(
                 "UPDATE app.game_events SET eligible=false,reason='removed',processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) ",
                 [f"actual:{session_id}"],
             )
+            # A Muscu log recorded with it is free to pair again.
+            conn.execute(
+                "UPDATE app.strength_sessions SET actual_session_id = NULL WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (actual_session_id = ?) ",
+                [session_id],
+            )
             conn.execute("COMMIT")
-            return result is not None
         except BaseException:
             conn.execute("ROLLBACK")
             raise
         finally:
             conn.close()
+        if result is None:
+            return False
+        from arete.strength.logging_service import link_garmin_strength
+
+        # Another strength activity of that day may now be the log's lone match.
+        link_garmin_strength([result[1]])
+        return True
 
     # ─────────────────────────────────────────────────────────────────────
     # Activity streams (one row per session, see garmin/streams.py)
@@ -773,7 +873,9 @@ class GarminRepository:
         within [start, end] and not after today. Without a window, everything
         planned up to today counts. Skipped = due, still pending, date before today.
         """
-        today = date.today()
+        from arete.services.settings import athlete_today
+
+        today = athlete_today()
         end_due = min(end, today) if end else today
         due = "date <= ?" + (" AND date >= ?" if start else "")
         due_params: list = [end_due] + ([start] if start else [])

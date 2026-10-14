@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -386,7 +387,8 @@ def test_chat_stream_endpoint_error_event(client):
         if line.startswith("data: ")
     ]
     assert events[-1]["type"] == "error"
-    assert "boom" in events[-1]["detail"]
+    # The exception's text stays in the server logs, out of the response.
+    assert events[-1]["detail"] == "Agent run failed"
 
 
 # ---------------------------------------------------------------------------
@@ -451,6 +453,21 @@ class TestBuildChatModel:
         # The free router once answered a briefing with a safety classifier.
         assert "openrouter/free" not in payload["extra_body"]["models"]
 
+    def test_free_only_routing_requires_the_openrouter_host(self, monkeypatch):
+        from dataclasses import replace
+
+        from arete.agent.models.providers import build_chat_model
+        from arete.agent.models.routing import resolve_route
+
+        self._openrouter(monkeypatch)
+        lookalike = replace(
+            resolve_route(), base_url="https://openrouter.ai.example.com/api/v1"
+        )
+        assert (
+            "provider"
+            not in self._payload(build_chat_model(route=lookalike))["extra_body"]
+        )
+
     def test_only_auxiliary_openrouter_calls_disable_reasoning(self, monkeypatch):
         from arete import coaching
 
@@ -459,15 +476,8 @@ class TestBuildChatModel:
             coaching._assemble("chat")
         models = assemble.call_args.kwargs
         coach_payload = self._payload(models["model"])
-        draft_payload = self._payload(models["suggestion_model"])
+        assert "suggestion_model" not in models
         assert "reasoning" not in coach_payload["extra_body"]
-        assert draft_payload["extra_body"]["reasoning"] == {"enabled": False}
-        assert draft_payload["max_completion_tokens"] == 512
-        assert (
-            draft_payload["extra_body"]["provider"]
-            == coach_payload["extra_body"]["provider"]
-        )
-        assert models["suggestion_model"].max_retries == 0
         # Main graph fallback owns candidate selection, with one attempt each.
         candidates = [models["model"], *models["fallback_models"]]
         assert len(candidates) == 3
@@ -487,6 +497,41 @@ class TestBuildChatModel:
         assert models["model"].max_retries == 2
         assert models["fallback_models"] == ()
         assert "models" not in self._payload(models["model"])["extra_body"]
+
+    @pytest.mark.parametrize("profile", ["chat", "briefing", "feedback", "review"])
+    def test_glm_flag_overrides_pinned_route_with_bounded_paid_requests(
+        self, monkeypatch, profile
+    ):
+        from arete import coaching
+
+        self._openrouter(monkeypatch, "custom:free", "fallback:free")
+        with patch.object(coaching, "build_agent") as assemble:
+            coaching._assemble(profile, glm_flash=True)
+        models = assemble.call_args.kwargs
+        model = models["model"]
+        payload = self._payload(model)
+        assert payload["model"] == "z-ai/glm-5.3-flash"
+        assert payload["extra_body"] == {
+            "provider": {
+                "sort": "latency",
+                "allow_fallbacks": True,
+                "require_parameters": True,
+                "max_price": {"prompt": 0.15, "completion": 0.5},
+            },
+            "reasoning": {"effort": "low"},
+        }
+        assert model.max_retries == 0
+        assert model.max_tokens == 4096
+        assert model.request_timeout == 60
+        assert models["fallback_models"] == ()
+        with patch.object(coaching, "build_agent") as reverted:
+            coaching._assemble(profile, glm_flash=False)
+        restored = self._payload(reverted.call_args.kwargs["model"])
+        assert restored["model"] == "custom:free"
+        assert restored["extra_body"]["provider"]["max_price"] == {
+            "prompt": 0,
+            "completion": 0,
+        }
 
     @pytest.mark.parametrize("provider", ["ollama", "github"])
     def test_openrouter_reasoning_controls_do_not_reach_other_providers(
@@ -514,7 +559,8 @@ class TestBuildChatModel:
         self._openrouter(monkeypatch, pinned)
         payload = self._payload(build_chat_model())
         assert payload["extra_body"]["provider"] == {
-            "max_price": {"prompt": 0, "completion": 0}
+            "sort": "latency",
+            "max_price": {"prompt": 0, "completion": 0},
         }
 
     def test_a_pinned_model_takes_explicit_fallbacks_in_order(self, monkeypatch):
@@ -555,7 +601,9 @@ class TestBuildChatModel:
         monkeypatch.delenv("LLM_MODEL", raising=False)
         model = build_chat_model()
         assert model.model_name == DEFAULT_GITHUB_MODEL
-        assert "models.inference.ai.azure.com" in model.openai_api_base
+        assert urlsplit(model.openai_api_base).hostname == (
+            "models.inference.ai.azure.com"
+        )
 
     def test_github_without_a_token_is_actionable(self, monkeypatch):
         import pytest
@@ -729,6 +777,33 @@ class TestPlanningPageRead:
         assert dates == sorted(dates)
         assert all(value is not None for row in rows for value in row.values())
 
+    def test_the_read_shows_what_was_done_in_the_window(self):
+        """A run synced today must be visible next to the plan it replaces."""
+        from datetime import date, timedelta
+
+        from arete.garmin.models import ActualSession
+        from arete.garmin.repository import GarminRepository
+        from arete.services.pages import PLANNING_PAST_DAYS
+
+        repo = GarminRepository()
+        today = date.today()
+        ids = [
+            repo.create_actual_session(
+                ActualSession(date=day, sport="running", name=name, duration_sec=2400)
+            )
+            for day, name in (
+                (today, "Run 8 km"),
+                (today - timedelta(days=PLANNING_PAST_DAYS + 5), "Old run"),
+            )
+        ]
+        try:
+            done = get_page_data("planning")["done_sessions"]
+        finally:
+            for i in ids:
+                repo.delete_actual_session(i)
+        names = {row["name"] for row in done}
+        assert "Run 8 km" in names and "Old run" not in names
+
     def test_the_read_says_where_to_look_beyond_it(self):
         out = get_page_data("planning")
         assert out["window"]["from"] < out["window"]["to"]
@@ -768,9 +843,13 @@ class TestLedgerTools:
     """The journal supports targeted corrections without arbitrary file creation."""
 
     def _tools(self):
-        from arete.agent.backends.memory import build_memory_filesystem
+        from arete.agent.middlewares.journal import JournalMiddleware
+        from arete.coaching import build_agent_filesystem
 
-        return {t.name: t for t in build_memory_filesystem().tools}
+        return {
+            t.name: t
+            for t in [*build_agent_filesystem().tools, *JournalMiddleware().tools]
+        }
 
     def test_reading_points_at_the_end_of_the_journal(self):
         """`read_file` reads 100 lines from the top; new entries are appended.
@@ -780,7 +859,7 @@ class TestLedgerTools:
         """
         assert "fin" in self._tools()["read_file"].description
 
-    def test_the_filesystem_can_correct_and_delete_but_not_create(self):
+    def test_journal_supports_dated_append_but_not_arbitrary_file_creation(self):
         assert set(self._tools()) == {
             "read_file",
             "ls",
@@ -788,6 +867,7 @@ class TestLedgerTools:
             "grep",
             "edit_file",
             "delete",
+            "append_journal",
         }
 
 

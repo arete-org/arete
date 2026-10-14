@@ -27,6 +27,7 @@ from arete.features.recommendations import (
 )
 from arete.features.workload import (
     ACWRZone,
+    DailyLoad,
     compute_workload_metrics,
 )
 from arete.garmin.readiness import (
@@ -35,6 +36,7 @@ from arete.garmin.readiness import (
     training_readiness_from_rows,
 )
 from arete.services.athlete_scope import resolve_athlete_id
+from arete.services.settings import athlete_today, today_in
 
 logger = logging.getLogger(__name__)
 TSS_PER_SESSION = 50.0
@@ -184,7 +186,7 @@ def fitness_series(
 
 
 def fitness_model(
-    by_date: Mapping[date, float], today: date
+    by_date: Mapping[date, float], today: date, con=None
 ) -> PerformanceModel | None:
     """CTL/ATL/TSB for ``today`` over the whole history; None without any load.
 
@@ -197,7 +199,7 @@ def fitness_model(
     history = [
         DailyTSS(date=d, tss=t) for d, t in sorted(by_date.items()) if d <= today
     ]
-    return compute_performance_model(history, today)
+    return compute_performance_model(history, today, con=con)
 
 
 @dataclass(frozen=True)
@@ -235,19 +237,38 @@ def current_readiness(
     )
 
 
+@dataclass(frozen=True)
+class Form:
+    """The daily load history, the model over it and the readiness: one read."""
+
+    by_date: dict[date, float]
+    model: PerformanceModel | None
+    readiness: Readiness | None
+
+
+def read_form(con, today: date) -> Form:
+    """Up to three statements on ``con``: readiness window, load history and,
+    when there is a load, the Banister coefficients."""
+    window = fetch_window(con, today)
+    by_date = daily_tss_by_date(con)
+    model = fitness_model(by_date, today, con=con)
+    return Form(by_date, model, current_readiness(today, window, model))
+
+
+def _read_form(today: date) -> Form:
+    con = connect()
+    try:
+        return read_form(con, today)
+    finally:
+        con.close()
+
+
 def load_form(
     today: date | None = None,
 ) -> tuple[PerformanceModel | None, Readiness | None]:
     """The fitness model and the readiness for ``today``, on one connection."""
-    today = today or date.today()
-    con = connect()
-    try:
-        window = fetch_window(con, today)
-        by_date = daily_tss_by_date(con)
-    finally:
-        con.close()
-    model = fitness_model(by_date, today)
-    return model, current_readiness(today, window, model)
+    form = _read_form(today or athlete_today())
+    return form.model, form.readiness
 
 
 def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
@@ -302,21 +323,18 @@ def get_player_stats():
     Four statements: settings, the readiness window, the daily TSS series
     (whole history, ~one row per training day) and the Banister coefficients.
     """
-    today = date.today()
     settings = get_user_settings(user_id=resolve_athlete_id()) or {}
+    today = today_in(settings.get("timezone"))
+    return player_stats(settings, today, _read_form(today))
+
+
+def player_stats(settings: dict, today: date, form: Form) -> PlayerStats:
+    """The bars of ``get_player_stats`` from settings and a form already read."""
     goal_tss = _weekly_goal_tss(settings)
-
-    con = connect()
-    try:
-        window = fetch_window(con, today)
-        by_date = daily_tss_by_date(con)
-    finally:
-        con.close()
-
-    model = fitness_model(by_date, today)
+    by_date, model = form.by_date, form.model
 
     # --- HP: recovery ---
-    hp = _recovery_bar(current_readiness(today, window, model), today)
+    hp = _recovery_bar(form.readiness, today)
 
     # --- MP: form (TSB) ---
     tsb = model.tsb if model else 0.0
@@ -362,9 +380,12 @@ def get_workload_metrics(
     - Monotony: Training load variability
     - Strain: Accumulated fatigue
     """
-    loads = training_loads(days=days)
-    target_date = date.today()
+    target_date = athlete_today()
+    return workload_metrics(training_loads(days=days, end=target_date), target_date)
 
+
+def workload_metrics(loads: list[DailyLoad], target_date: date) -> WorkloadMetricsOut:
+    """``get_workload_metrics`` over loads already read up to ``target_date``."""
     # Check if there's any training data
     has_data = any(load.duration_min > 0 for load in loads)
     if not has_data:
@@ -411,16 +432,13 @@ def get_fitness_metrics(
     ``days`` only bounds ``days_analyzed``: the averages always walk the whole
     history, so this endpoint and every other surface read the same numbers.
     """
-    target_date = date.today()
-    con = connect()
-    try:
-        window = fetch_window(con, target_date)
-        by_date = daily_tss_by_date(con)
-    finally:
-        con.close()
+    target_date = athlete_today()
+    return fitness_metrics(target_date, _read_form(target_date), days)
 
-    model = fitness_model(by_date, target_date)
-    readiness = current_readiness(target_date, window, model)
+
+def fitness_metrics(target_date: date, form: Form, days: int = 42) -> FitnessMetricsOut:
+    """``get_fitness_metrics`` from a form already read for ``target_date``."""
+    by_date, model, readiness = form.by_date, form.model, form.readiness
     if model is None:
         return FitnessMetricsOut(
             ctl=0.0,
@@ -460,13 +478,13 @@ def get_recommendations(
 
     Analyzes workload and fitness metrics to provide actionable advice.
     """
-    target_date = date.today()
+    target_date = athlete_today()
 
     # Get current metrics
     workload = None
     loads = None
     try:
-        loads = training_loads(days=28)
+        loads = training_loads(days=28, end=target_date)
         if any(load.duration_min > 0 for load in loads):
             workload = compute_workload_metrics(loads, target_date)
     except Exception:

@@ -8,6 +8,8 @@ on:
     branches: [main]
     # `labeled`: adding the `preview` label deploys the PR's preview.
     types: [opened, synchronize, reopened, labeled]
+  # The merge queue checks each entry merged onto main before it lands.
+  merge_group:
   # Full verification remains available before opening a PR.
   workflow_dispatch:
 
@@ -16,9 +18,14 @@ permissions:
 
 # A new push to a PR supersedes its run in flight. A main run completes: the
 # "Deploy preview" workflow follows it (workflow_run) and needs its verdict.
+# A label leaves the commit unchanged, so its run queues behind the one in
+# flight instead: a run cancelled mid-flight leaves its required checks
+# CANCELLED on the commit, and GitHub may then block the PR although a later
+# run passed. A queued run replaced by a newer one never starts and leaves no
+# check. Dependabot opens its PRs without labels (`dependabot.yml`).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
 
 jobs:
   lint:
@@ -42,7 +49,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PUSH_BASE: ${{ github.event.before }}
         run: |
-          if [[ "$EVENT_NAME" == pull_request ]]; then
+          if [[ "$EVENT_NAME" == pull_request || "$EVENT_NAME" == merge_group ]]; then
             mode=(--base HEAD^1)
           elif [[ "$EVENT_NAME" == push && "$PUSH_BASE" != 0000000000000000000000000000000000000000 ]]; then
             mode=(--base "$PUSH_BASE" --full-tests)
@@ -80,7 +87,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     needs: lint
     if: needs.lint.outputs.backend == 'true'
     steps:
@@ -91,6 +98,7 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen --extra dev
+      - run: python3 scripts/bundle_ocr_data.py
       # Two bounded workers, each with its own temporary DuckDB from conftest.
       # Keep each file together to preserve module fixtures and test ordering.
       - uses: actions/download-artifact@v4
@@ -139,7 +147,16 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
+      # Planning E2E starts the real API against a disposable DuckDB database.
+      # Jobs have separate filesystems: the backend job's .venv is not available here.
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+        working-directory: .
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -167,6 +184,10 @@ jobs:
       (needs.typecheck.result == 'success' || needs.typecheck.result == 'skipped') &&
       (needs.frontend.result == 'success' || needs.frontend.result == 'skipped')
     needs: [lint, test, typecheck, frontend]
+    # Closing a PR must wait for its deployment before deleting its preview.
+    concurrency:
+      group: pr-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -184,17 +205,28 @@ jobs:
       - name: Deploy the preview
         id: deploy
         run: |
+          # Cleanup may have finished while this job was waiting for CI.
+          state=$(gh pr view "$PR" --json state --jq .state)
+          case "$state" in
+            OPEN) ;;
+            CLOSED|MERGED) echo "PR $PR is closed; skipping preview."; exit 0 ;;
+            *) echo "Unexpected PR state: $state" >&2; exit 1 ;;
+          esac
           url=$(vercel deploy --archive=tgz --yes --token "$VERCEL_TOKEN" --meta pr="$PR")
           echo "url=$url" >> "$GITHUB_OUTPUT"
         env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
       - name: Remove the PR's superseded previews
+        if: steps.deploy.outputs.url != ''
         run: scripts/ci/prune_deployments.sh 1 meta-pr="$PR"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
       - name: Link the preview on the pull request
+        if: steps.deploy.outputs.url != ''
         run: |
           gh pr comment "$PR" --edit-last --create-if-none --body \
             "Preview de ${SHA::7} (branche fusionnée dans main) : $URL"

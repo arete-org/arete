@@ -9,13 +9,15 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-
-import numpy as np
+from typing import TYPE_CHECKING
 
 from arete.dataio.db import connect
 from arete.dataio.queries import RUNNING_SPORTS, daily_tss, sql_in
 from arete.features.fitness import DailyTSS
 from arete.services.athlete_scope import resolve_athlete_id
+
+if TYPE_CHECKING:
+    import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,8 @@ def _ridge(
     solve (X'X + alpha*I) w = X'y, intercept = mean(y) - mean(X) @ w.
     Returns (coefficients, intercept, r2).
     """
+    import numpy as np  # here, not at module level: the API boot skips numpy
+
     x_mean = X.mean(axis=0)
     y_mean = float(y.mean())
     Xc = X - x_mean
@@ -99,6 +103,7 @@ def fit_coefficients(sessions: list[dict]) -> dict | None:
     """
     if len(sessions) < 10:
         return None
+    import numpy as np  # here, not at module level: the API boot skips numpy
 
     X = np.column_stack(
         [
@@ -126,13 +131,14 @@ def fit_coefficients(sessions: list[dict]) -> dict | None:
     }
 
 
-def load_coefficients(user_id: int | None = None) -> dict | None:
-    """Load personalized Banister coefficients from DB.
+def load_coefficients(user_id: int | None = None, con=None) -> dict | None:
+    """Load personalized Banister coefficients from DB (on ``con`` if given).
 
     Returns None if coefficients are not available or R² is too low.
     """
     user_id = resolve_athlete_id(user_id)
-    con = connect()
+    own = con is None
+    con = con or connect()
     try:
         row = con.execute(
             "SELECT k1, k2, baseline, r2 FROM app.visible_banister_coefficients WHERE user_id = ?",
@@ -147,7 +153,8 @@ def load_coefficients(user_id: int | None = None) -> dict | None:
             }
         return None
     finally:
-        con.close()
+        if own:
+            con.close()
 
 
 def store_coefficients(coeffs: dict, user_id: int | None = None) -> None:

@@ -81,6 +81,7 @@ it('creates a thread without erasing the old one and retains a stream when hidde
     target: { value: 'Préparer mon trail' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Historique des conversations' }));
   fireEvent.click(
     screen.getByRole('button', { name: 'Nouvelle conversation' })
   );
@@ -97,7 +98,6 @@ it('creates a thread without erasing the old one and retains a stream when hidde
   expect(stream.signal?.aborted).toBe(false);
   await act(async () => {
     stream.emit?.({ type: 'message', id: 'm1', text: '**Réponse au trail**' });
-    stream.emit?.({ type: 'suggestion', text: 'Prépare la première semaine.' });
     stream.emit?.({
       type: 'done',
       message: { role: 'assistant', content: '**Réponse au trail**' },
@@ -119,11 +119,12 @@ it('creates a thread without erasing the old one and retains a stream when hidde
   expect(screen.getByLabelText('Ton message').textContent).toBe(
     'Préparer mon trail'
   );
-  expect(screen.getByText('Réponse au trail').tagName).toBe('STRONG');
-  expect((screen.getByRole('textbox', { name: 'Message au coach' }) as HTMLTextAreaElement).value).toBe('Prépare la première semaine.');
+  // The markdown renderer loads with the panel: the answer is formatted once it arrives.
+  expect((await screen.findByText('Réponse au trail')).tagName).toBe('STRONG');
+  expect((screen.getByRole('textbox', { name: 'Message au coach' }) as HTMLTextAreaElement).value).toBe('');
 });
 
-it('puts one contextual suggestion in the composer without sending it', async () => {
+it('leaves the composer empty after answering and preserves subsequent manual drafts', async () => {
   render(<Harness />);
   fireEvent.click(screen.getAllByRole('button', { name: 'Ouvrir le coach' })[0]);
   const input = screen.getByRole('textbox', { name: 'Message au coach' }) as HTMLTextAreaElement;
@@ -131,7 +132,6 @@ it('puts one contextual suggestion in the composer without sending it', async ()
   fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
   await act(async () => {
     stream.emit?.({ type: 'message', id: 'answer', text: 'Repos aujourd’hui.' });
-    stream.emit?.({ type: 'suggestion', text: 'Comment reprendre demain ?' });
   });
   expect(input.value).toBe('');
   await act(async () => {
@@ -139,21 +139,21 @@ it('puts one contextual suggestion in the composer without sending it', async ()
     stream.resolve?.();
   });
   expect(screen.queryByLabelText('Suggestions de suivi')).toBeNull();
-  expect(input.value).toBe('Comment reprendre demain ?');
+  expect(input.value).toBe('');
   expect(screen.getAllByRole('article', { name: 'Ton message' })).toHaveLength(1);
-  // Persist as a normal editable draft, not as a generated conversation turn.
+  // Reloading a completed answer does not manufacture a draft.
   fireEvent(window, new Event('pagehide'));
   cleanup();
   render(<Harness />);
   fireEvent.click(screen.getAllByRole('button', { name: 'Ouvrir le coach' })[0]);
   const restored = screen.getByRole('textbox', { name: 'Message au coach' }) as HTMLTextAreaElement;
-  expect(restored.value).toBe('Comment reprendre demain ?');
+  expect(restored.value).toBe('');
   fireEvent.change(restored, { target: { value: 'Et après-demain ?' } });
   fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
   expect(screen.getAllByRole('article', { name: 'Ton message' }).at(-1)?.textContent).toBe('Et après-demain ?');
 });
 
-it.each(['Mon brouillon', ''])('preserves typing while a suggestion is in flight: %j', async (draft) => {
+it.each(['Mon brouillon', ''])('preserves typing while an answer is in flight: %j', async (draft) => {
   render(<Harness />);
   fireEvent.click(screen.getAllByRole('button', { name: 'Ouvrir le coach' })[0]);
   const input = screen.getByRole('textbox', { name: 'Message au coach' }) as HTMLTextAreaElement;
@@ -162,21 +162,19 @@ it.each(['Mon brouillon', ''])('preserves typing while a suggestion is in flight
   fireEvent.change(input, { target: { value: 'Texte commencé' } });
   fireEvent.change(input, { target: { value: draft } });
   await act(async () => {
-    stream.emit?.({ type: 'suggestion', text: 'Oui, prépare cette séance.' });
     stream.emit?.({ type: 'done', message: { role: 'assistant', content: 'Une séance facile ?' } });
     stream.resolve?.();
   });
   expect(input.value).toBe(draft);
 });
 
-it('discards suggestions when the stream is interrupted', async () => {
+it('keeps the composer empty when the stream is interrupted', async () => {
   render(<Harness />);
   fireEvent.click(screen.getAllByRole('button', { name: 'Ouvrir le coach' })[0]);
   const input = screen.getByRole('textbox', { name: 'Message au coach' }) as HTMLTextAreaElement;
   fireEvent.change(input, { target: { value: 'Demain ?' } });
   fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
   await act(async () => {
-    stream.emit?.({ type: 'suggestion', text: 'Oui, prépare cette séance.' });
     fireEvent.click(screen.getByRole('button', { name: 'Arrêter la réponse' }));
   });
   expect(input.value).toBe('');

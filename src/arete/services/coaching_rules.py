@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -29,6 +29,7 @@ from arete.services.session_feedback import (
     SessionFacts,
     batch_session_feedback,
 )
+from arete.services.settings import athlete_today
 from arete.strength.repository import StrengthRepository
 
 logger = logging.getLogger(__name__)
@@ -158,7 +159,7 @@ def rule_facts(target_date: date | None = None) -> RuleFacts:
     surface shows (Garmin first), and the athlete's own thresholds."""
     from arete.services.metrics import load_form
 
-    target_date = target_date or date.today()
+    target_date = target_date or athlete_today()
     complete = True
 
     acwr: float | None = None
@@ -275,7 +276,7 @@ def _generate_strength_feedback(
     if session is None:
         raise LookupError("Strength session not found")
     evidence = SessionEvidence(
-        date=session.date if isinstance(session.date, date) else date.today(),
+        date=session.date if isinstance(session.date, date) else athlete_today(),
         # The id keeps two same-named sessions of one day apart in the journal
         # (it files each heading once), while the same session stays one entry.
         title=f"musculation — {session.name or 'séance'} (#{session_id})",
@@ -303,7 +304,7 @@ def _generate_strength_feedback(
         ), evidence
 
     # Compare vs last 4 weeks average
-    session_date = session.date if isinstance(session.date, date) else date.today()
+    session_date = session.date if isinstance(session.date, date) else athlete_today()
     end_ref = session_date - timedelta(days=1)
     start_ref = end_ref - timedelta(days=28)
     ref_volume = repo.get_volume_by_muscle(
@@ -376,6 +377,7 @@ def _generate_cardio_feedback(
             )
         ),
         session_ref=f"actual:{session_id}",
+        sport=session.sport,
         rpe=session.rpe,
         notes=session.notes,
     )
@@ -388,8 +390,14 @@ def _generate_cardio_feedback(
 
     feedback_parts.append(f"Séance de {sport} terminée ({duration_min} min).")
 
-    # HR feedback
-    if session.avg_hr and session.max_hr:
+    # Imported strength activities often contain only HR, not mechanical load.
+    is_strength = sport in {"strength", "strength_training", "musculation"}
+    if is_strength:
+        feedback_parts.append(
+            "Le cardio seul ne permet pas de juger ce renforcement. "
+            "Précise les exercices, séries, charges ou ton ressenti."
+        )
+    if not is_strength and session.avg_hr and session.max_hr:
         zone_num, zone_desc = _hr_zone_label(int(session.avg_hr))
         highlights.append(
             f"FC moyenne à {session.avg_hr:.0f} bpm, zone {zone_num} {zone_desc}"
@@ -436,12 +444,14 @@ def sync_feedback(
     session_ids: list[int],
     *,
     produce: Callable[[str, int], str],
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """The coach's word on the sessions a sync imported: one model request.
 
     Strava rows stay out of the model's input, and a session that already has
     a stored feedback is not paid for twice. Each answer is stored for the
     session page (``trigger='sync'``). Never raises for one session's error.
+    ``written`` lists the feedback stored by this run, which is what the
+    post-session push announces: a session gets it once, like its feedback.
     """
     repo = GarminRepository()
     feedback_repo = SessionFeedbackRepository()
@@ -464,12 +474,18 @@ def sync_feedback(
     answers = batch_session_feedback(
         [facts for _, facts in candidates], produce=produce
     )
-    for (session_id, _), (text, source) in zip(candidates, answers, strict=True):
+    written: list[dict[str, Any]] = []
+    for (session_id, facts), (text, source) in zip(candidates, answers, strict=True):
         try:
             feedback_repo.save(session_id, text=text, source=source, trigger="sync")
         except Exception:
             logger.warning("Could not store feedback of %s", session_id, exc_info=True)
+            continue
+        written.append(
+            {"session_id": session_id, "date": facts.evidence.date, "text": text}
+        )
     return {
         "sessions": len(candidates),
         "agent": sum(1 for _, source in answers if source == "agent"),
+        "written": written,
     }

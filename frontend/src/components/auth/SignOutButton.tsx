@@ -23,7 +23,7 @@ export function SignOutButton({ signOut }: { signOut: () => Promise<void> }) {
         Se déconnecter
       </Button>
       {failed && (
-        <p role="alert" className="mt-2 text-xs font-mono text-danger-red">
+        <p role="alert" className="mt-2 text-xs font-sans text-danger-red">
           Déconnexion impossible. Réessaie.
         </p>
       )}

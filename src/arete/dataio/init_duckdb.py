@@ -208,6 +208,7 @@ CREATE TABLE IF NOT EXISTS app.user_settings (
     max_hr                  INTEGER,                   -- fallback reference when no threshold
     threshold_pace_sec_km   INTEGER,                   -- pace held at threshold, seconds per km
     lthr_measured_on        DATE,                      -- when Garmin measured that threshold
+    notification_preferences VARCHAR,                  -- JSON kinds + quiet hours, NULL = all on, 21:30-07:00
     updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -304,7 +305,8 @@ CREATE TABLE IF NOT EXISTS app.coach_briefings (
     status       VARCHAR NOT NULL DEFAULT 'ok',     -- 'ok', 'failed'
     error        VARCHAR,                    -- why the agent run failed, when it did
     trigger      VARCHAR NOT NULL DEFAULT 'api',    -- 'scheduler', 'api'
-    created_at   TIMESTAMP DEFAULT now()
+    created_at   TIMESTAMP DEFAULT now(),
+    facts_digest VARCHAR                     -- SHA-256 of the facts it was written from
 );
 
 -- ============================================================
@@ -463,6 +465,7 @@ CREATE TABLE IF NOT EXISTS app.activity_weather (
 CREATE TABLE IF NOT EXISTS app.slack_deliveries (
     event_key VARCHAR PRIMARY KEY,
     status VARCHAR NOT NULL,
+    thread_id VARCHAR,
     updated_at TIMESTAMP DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS app.slack_execution (
@@ -470,6 +473,11 @@ CREATE TABLE IF NOT EXISTS app.slack_execution (
     event_key VARCHAR
 );
 INSERT INTO app.slack_execution (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS app.feature_flags (
+    name VARCHAR PRIMARY KEY,
+    enabled BOOLEAN NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS app.system_skills (
     bundle VARCHAR NOT NULL,
@@ -771,6 +779,64 @@ def _m40_slack_athletes(con) -> None:
     con.execute(DDL[start : DDL.index(");", start) + 2])
 
 
+def _m41_feature_flags(con) -> None:
+    # Global rollout state contains neither credentials nor athlete data.
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.feature_flags (")
+    con.execute(DDL[start : DDL.index(");", start) + 2])
+
+
+def _m42_slack_delivery_threads(con) -> None:
+    # Track interrupted output without rendering a technical marker in Slack.
+    # Nullable preserves existing deliveries and compatibility with older releases.
+    con.execute(
+        "ALTER TABLE app.slack_deliveries ADD COLUMN IF NOT EXISTS thread_id VARCHAR"
+    )
+
+
+def _m43_proactive_coaching(con) -> None:
+    from arete.dataio.coaching_schema import migrate
+
+    migrate(con)
+    _m36_private_relations(con)
+
+
+def _m44_slack_product(con) -> None:
+    from arete.dataio.slack_schema import migrate
+
+    migrate(con)
+
+
+def _m45_notification_preferences(con) -> None:
+    """Per-kind notification choices and quiet hours (ARE-57).
+
+    Nullable: NULL reads as every kind on with the default quiet hours, so
+    existing athletes keep receiving what they received.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute(
+        "ALTER TABLE app.user_settings "
+        "ADD COLUMN IF NOT EXISTS notification_preferences VARCHAR"
+    )
+    # DuckDB binds a view's columns at creation: refresh the private projection.
+    _view(con, "user_settings")
+
+
+def _m46_briefing_facts_digest(con) -> None:
+    """Which facts a briefing was written from (ARE-39).
+
+    The daily sync rewrites a briefing only when its facts changed since.
+    Nullable: an older briefing has none and counts as changed.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute(
+        "ALTER TABLE app.coach_briefings ADD COLUMN IF NOT EXISTS facts_digest VARCHAR"
+    )
+    # DuckDB binds a view's columns at creation: refresh the private projection.
+    _view(con, "coach_briefings")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -801,6 +867,12 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (38, _m38_system_skills),
     (39, _m39_user_roles),
     (40, _m40_slack_athletes),
+    (41, _m41_feature_flags),
+    (42, _m42_slack_delivery_threads),
+    (43, _m43_proactive_coaching),
+    (44, _m44_slack_product),
+    (45, _m45_notification_preferences),
+    (46, _m46_briefing_facts_digest),
 ]
 
 

@@ -6,6 +6,7 @@ from datetime import date
 import pytest
 
 from arete.agent.tools.journal import MAX_BODY_CHARS, append_journal
+from arete.services.memory import read_file as read_memory_file
 
 
 @pytest.fixture
@@ -26,12 +27,12 @@ def test_an_entry_is_filed_under_a_server_dated_heading(memory):
     out = _call(file="notes.md", title="tendon", body="gêne à l'Achille droit")
     assert out["written"] is True
     today = date.today().isoformat()
-    assert (memory / "notes.md").read_text().startswith(f"- {today} — tendon :")
+    assert read_memory_file("notes.md").content.startswith(f"- {today} — tendon :")
 
 
 def test_a_session_can_be_filed_on_its_own_day(memory):
     _call(file="sessions.md", title="trail", body="20 km", day="2026-10-05")
-    assert (memory / "sessions.md").read_text().startswith("## 2026-10-05 — trail")
+    assert read_memory_file("sessions.md").content.startswith("## 2026-10-05 — trail")
 
 
 def test_the_same_entry_twice_writes_once(memory):
@@ -44,7 +45,7 @@ def test_bad_input_is_an_error_for_the_model_not_an_exception(memory):
     assert "error" in _call(file="notes.md", title="x", body="y", day="hier")
     assert "error" in _call(file="notes.md", title="x", body="y" * (MAX_BODY_CHARS + 1))
     assert "error" in _call(file="notes.md", title=" ", body="y")
-    assert not (memory / "notes.md").exists()
+    assert read_memory_file("notes.md").forgotten
 
 
 def test_the_schema_has_no_nullable_parameter():

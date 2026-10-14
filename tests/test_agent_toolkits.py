@@ -1,604 +1,280 @@
-"""Tests for the toolkit middleware (progressive tool loading) + planning tools."""
+"""Native binding, versioned planning patches and provider-facing schemas."""
 
-from __future__ import annotations
-
+import asyncio
 import json
-from datetime import date, timedelta
+from datetime import date
 
 import pytest
-from langchain_core.messages import SystemMessage
+from langchain.agents import create_agent
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
-from arete.agent.capabilities.discovery import (
-    _search_toolkits,
-    loaded_toolkits,
-    tool_instructions_suffix,
-)
-from arete.agent.capabilities.registry import CAPABILITIES, PLANNING_INSTRUCTIONS
-from arete.agent.context.builder import _augment_tools
+from arete.agent.capabilities.discovery import authorized_tools
 from arete.agent.middlewares.capabilities import ToolkitMiddleware
 from arete.agent.middlewares.context import ContextBuilderMiddleware
-from arete.agent.runtime.state import merge_loaded
-from arete.agent.tools.planning import PLANNING_TOOLS
-from arete.agent.tools.toolkits import _load
+from arete.agent.runtime.context import AgentContext
+from arete.agent.tools.planning import create_planned_session, update_planned_session
+from arete.garmin.repository import GarminRepository
+from arete.garmin.workouts import convert
+from arete.services import planning
+from arete.services.garmin_export import inspect_session
+from arete.services.prescriptions import Prescription
 
 
-class _Runtime:
-    """The two ToolRuntime fields load_toolkit reads. The real injection is
-    covered by the full-graph tests at the bottom of this file."""
-
-    def __init__(self, state=None):
-        self.state = state if state is not None else {}
-        self.tool_call_id = "call-1"
+class Model(GenericFakeChatModel):
+    def bind_tools(self, tools, **kwargs):
+        return self
 
 
-def load_toolkit(toolkit_id: str, state=None) -> dict:
-    """Run the load_toolkit tool body, returning its Command state update."""
-    return _load(_Runtime(state), toolkit_id).update
-
-
-# ---------------------------------------------------------------------------
-# Registry + search/load state machine
-# ---------------------------------------------------------------------------
-
-
-def test_planning_toolkit_registered():
-    tk = CAPABILITIES["planning"]
-    assert tk.id == "planning"
-    assert {t.name for t in tk.tools} == {
-        "list_planned",
-        "inspect_planned_session",
-        "update_session_prescription",
-        "create_planned_session",
-        "update_planned_status",
-        "update_planned_session",
-        "delete_planned_session",
-        "prepare_import",
-        "inspect_import",
-    }
-    assert "planning" in tk.instructions.lower()
-    assert "update_planned_session" not in tk.read_tools  # a write, chat only
-
-
-def test_search_finds_planning_by_capability():
-    out = json.loads(_search_toolkits("planifier", []))
-    assert out["results"][0]["toolkit_id"] == "planning"
-    assert out["results"][0]["loaded"] is False
-
-
-def test_search_unknown_returns_available_list():
-    out = json.loads(_search_toolkits("cuisine italienne moleculaire", []))
-    assert out["results"] == []
-    assert any(a["toolkit_id"] == "planning" for a in out["available"])
-
-
-def test_search_empty_query_returns_catalog():
-    out = json.loads(_search_toolkits("", []))
-    assert out["results"] == []
-    assert any(a["toolkit_id"] == "planning" for a in out["available"])
-
-
-def test_search_french_capability_finds_planning():
-    # Token matching must bridge "planifier une séance" ↔ "créer… des séances"
-    out = json.loads(_search_toolkits("planifier une séance", []))
-    assert out["results"][0]["toolkit_id"] == "planning"
-
-
-def test_load_returns_a_state_update_not_a_mutation():
-    update = load_toolkit("planning")
-    assert update["loaded_toolkits"] == ["planning"]
-    assert json.loads(update["messages"][0].content)["loaded"] is True
-
-
-def test_instructions_are_a_function_of_the_loaded_list():
-    assert tool_instructions_suffix([]) == ""
-    assert tool_instructions_suffix(["planning"]) == PLANNING_INSTRUCTIONS
-    # An id no longer in the registry must not blow up the prompt.
-    assert tool_instructions_suffix(["planning", "ghost"]) == PLANNING_INSTRUCTIONS
-
-
-def test_load_unknown_toolkit_errors_without_touching_state():
-    update = load_toolkit("nope")
-    assert "loaded_toolkits" not in update
-    assert "error" in json.loads(update["messages"][0].content)
-
-
-def test_merge_loaded_dedups_parallel_loads():
-    # Two load_toolkit calls in one turn must not pin the instructions twice.
-    assert merge_loaded(["planning"], ["planning"]) == ["planning"]
-    assert merge_loaded(["planning"], ["strength"]) == ["planning", "strength"]
-    assert merge_loaded(None, None) == []
-
-
-def test_loaded_toolkits_tolerates_a_state_without_the_key():
-    assert loaded_toolkits({}) == []
-    assert loaded_toolkits({"loaded_toolkits": None}) == []
-    assert loaded_toolkits({"loaded_toolkits": ["planning"]}) == ["planning"]
-
-
-def test_augment_tools_meta_always_present_and_deduped():
-    out = _augment_tools([], [])
-    names = [getattr(t, "name", "") for t in out]
-    assert names.count("search_toolkits") == 1
-    assert names.count("load_toolkit") == 1
-
-
-def test_augment_tools_includes_loaded_toolkit_tools():
-    out = _augment_tools([], ["planning"])
-    names = {getattr(t, "name", "") for t in out}
-    assert {"list_planned", "create_planned_session"} <= names
-
-
-class _Request:
-    """Minimal ModelRequest stand-in: the fields the middleware touches plus
-    the immutable ``override`` contract it goes through."""
-
-    def __init__(self, tools=None, system_message=None, state=None):
-        self.tools = tools if tools is not None else []
-        self.system_message = system_message
-        self.state = state if state is not None else {}
-
-    def override(self, **overrides):
-        return _Request(
-            tools=overrides.get("tools", self.tools),
-            system_message=overrides.get("system_message", self.system_message),
-            state=self.state,
-        )
-
-
-@pytest.mark.usefixtures("progressive_chat")
-def test_toolkit_tools_not_in_primary_request_until_loaded():
-    seen: list[list[str]] = []
-
-    def capture(request):
-        seen.append([getattr(t, "name", "") for t in request.tools])
-        return "ok"
-
-    ContextBuilderMiddleware().wrap_model_call(_Request(), capture)
-    ContextBuilderMiddleware().wrap_model_call(
-        _Request(state={"loaded_toolkits": ["planning"]}), capture
+def call(name, args, identifier="call"):
+    return AIMessage(
+        content="", tool_calls=[{"name": name, "args": args, "id": identifier}]
     )
 
-    assert "create_planned_session" not in seen[0]
-    assert "create_planned_session" in seen[1]
-    # Meta-tools ride every request.
-    assert "search_toolkits" in seen[0] and "load_toolkit" in seen[0]
 
-
-def test_wrap_model_call_leaves_caller_request_untouched():
-    # override() is the contract: the request the caller holds must not be
-    # mutated (direct attribute assignment is deprecated in LangChain 1.x).
-    request = _Request()
-    ContextBuilderMiddleware().wrap_model_call(request, lambda r: "ok")
-    assert request.tools == []
-
-
-@pytest.mark.usefixtures("progressive_chat")
-def test_two_interleaved_runs_keep_their_own_toolkits():
-    """The reason the loaded set lives in graph state and not on the middleware.
-
-    The compiled graph is process-wide (``get_agent`` is lru_cached) and two
-    runs overlap easily — two tabs, or a /tips/daily refetch landing while the
-    panel is mid-turn. With the set held on the middleware instance, one run's
-    entry node wiped the other's toolkits between turns: the tool list and the
-    pinned instructions silently shrank, and an already-emitted toolkit call
-    fell through to the ToolNode ("not a valid tool") and burnt the turn
-    budget on retries.
-
-    One middleware instance, two states, interleaved: each must see only its
-    own.
-    """
-    run_a = {"loaded_toolkits": ["planning"]}
-    run_b: dict = {}
-    seen: list[set[str]] = []
-
-    def capture(request):
-        seen.append({getattr(t, "name", "") for t in request.tools})
-        return "ok"
-
-    # A has planning, B starts bare, A takes another turn, B takes one.
-    ContextBuilderMiddleware().wrap_model_call(_Request(state=run_a), capture)
-    ContextBuilderMiddleware().wrap_model_call(_Request(state=run_b), capture)
-    ContextBuilderMiddleware().wrap_model_call(_Request(state=run_a), capture)
-    ContextBuilderMiddleware().wrap_model_call(_Request(state=run_b), capture)
-
-    assert "create_planned_session" in seen[0]
-    assert "create_planned_session" not in seen[1]
-    # A kept its toolkit across B's turn — this is the assertion that fails
-    # when the loaded set is instance state.
-    assert "create_planned_session" in seen[2]
-    assert "create_planned_session" not in seen[3]
-
-
-@pytest.mark.usefixtures("progressive_chat")
-def test_interleaved_runs_keep_their_own_instructions():
-    seen: list[str] = []
-
-    def capture(request):
-        seen.append(request.system_message.text if request.system_message else "")
-        return "ok"
-
-    base = SystemMessage(content="Tu es le coach.")
-    ContextBuilderMiddleware().wrap_model_call(
-        _Request(system_message=base, state={"loaded_toolkits": ["planning"]}), capture
-    )
-    ContextBuilderMiddleware().wrap_model_call(
-        _Request(system_message=base, state={}), capture
-    )
-
-    assert PLANNING_INSTRUCTIONS in seen[0]
-    assert PLANNING_INSTRUCTIONS not in seen[1]
-
-
-@pytest.mark.usefixtures("progressive_chat")
-def test_pinned_instructions_reach_the_system_message_after_load():
-    """The point of a toolkit: loading it must teach the model how to use it.
-
-    Regression guard — carrying the loaded ids is not enough, the toolkit's
-    instructions have to be appended to the system message of every later
-    model call, without dropping the base prompt.
-    """
-    seen: list[str | None] = []
-
-    def capture(request):
-        seen.append(request.system_message.text if request.system_message else None)
-        return "ok"
-
-    base = SystemMessage(content="Tu es le coach.")
-    ContextBuilderMiddleware().wrap_model_call(_Request(system_message=base), capture)
-    ContextBuilderMiddleware().wrap_model_call(
-        _Request(system_message=base, state={"loaded_toolkits": ["planning"]}), capture
-    )
-
-    # Before loading: base prompt + current catalog, no detailed instructions.
-    assert seen[0].startswith("Tu es le coach.")
-    assert "Skills disponibles" in seen[0]
-    assert PLANNING_INSTRUCTIONS not in seen[0]
-    # After: the base prompt is kept and the instructions appended, not replaced.
-    assert seen[1].startswith("Tu es le coach.")
-    assert PLANNING_INSTRUCTIONS in seen[1]
-
-
-def test_full_graph_load_then_execute_planning():
-    """End-to-end through create_agent: load_toolkit then a toolkit tool.
-
-    Guards the two wiring traps found the hard way:
-    - toolkit tools added to request.tools reach the model but NOT the
-      ToolNode — wrap_tool_call must execute them (request.override pattern);
-    - the meta-tools and the middleware state must close over ONE state
-      object, or 'loaded' silently diverges from 'bound'.
-    """
-    from langchain.agents import create_agent
-    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-    from langchain_core.messages import AIMessage
-
-    from arete.agent.backends.memory import build_memory_filesystem
-    from arete.agent.runtime.context import AgentContext
-
-    class FakeToolModel(GenericFakeChatModel):
-        def bind_tools(self, tools, **kwargs):
-            return self
-
-    middleware = ToolkitMiddleware()
-    messages = iter(
-        [
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "load_toolkit",
-                        "args": {"toolkit_id": "planning"},
-                        "id": "1",
-                        "type": "tool_call",
-                    }
-                ],
-            ),
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "create_planned_session",
-                        "args": {
-                            "date_str": "2099-01-15",
-                            "session_type": "tempo",
-                            "target_duration_min": 45,
-                        },
-                        "id": "2",
-                        "type": "tool_call",
-                    }
-                ],
-            ),
-            AIMessage(content="Séance planifiée."),
-        ]
-    )
-    graph = create_agent(
-        FakeToolModel(messages=messages),
-        middleware=[middleware, build_memory_filesystem(), ContextBuilderMiddleware()],
-        system_prompt="t",
+def graph(*responses):
+    return create_agent(
+        Model(messages=iter(responses)),
+        tools=authorized_tools("chat"),
+        middleware=[ToolkitMiddleware(), ContextBuilderMiddleware()],
         context_schema=AgentContext,
     )
-    result = graph.invoke(
-        {"messages": [{"role": "user", "content": "planifie"}]},
-        context=AgentContext(source={}),
-        config={"recursion_limit": 10},
+
+
+@pytest.mark.parametrize("async_mode", [False, True])
+def test_native_validation_error_can_be_corrected_without_a_partial_write(async_mode):
+    day = "2099-01-13" if async_mode else "2099-01-12"
+    agent = graph(
+        call(
+            "create_planned_session",
+            {"date_str": day, "session_type": "endurance", "invented": True},
+            "bad",
+        ),
+        call(
+            "create_planned_session",
+            {"date_str": day, "session_type": "endurance"},
+            "good",
+        ),
+        AIMessage(content="Séance créée."),
     )
-    tool_messages = [m for m in result["messages"] if m.type == "tool"]
-    assert len(tool_messages) == 2
-    assert '"loaded": true' in tool_messages[0].content
-    assert '"created": true' in tool_messages[1].content
-
-
-# ---------------------------------------------------------------------------
-# Planning tools over the real repository (shared session test DB)
-# ---------------------------------------------------------------------------
-
-
-def test_create_and_list_planned():
-    """Dates here are relative and cleaned up on the way out.
-
-    The suite shares one database. A row left behind on a hard-coded date is
-    invisible until that day arrives, and then it breaks a test in another
-    file — `test_summary_counts_only_due_sessions` counted it as due the
-    morning of 2026-09-25.
-    """
-    from arete.agent.tools.planning import (
-        create_planned_session,
-        delete_planned_session,
-        list_planned,
+    context = AgentContext()
+    state = {"messages": [HumanMessage("Crée une séance.")]}
+    result = (
+        asyncio.run(agent.ainvoke(state, context=context))
+        if async_mode
+        else agent.invoke(state, context=context)
     )
+    messages = [m for m in result["messages"] if isinstance(m, ToolMessage)]
+    assert [m.status for m in messages] == ["error", "success"]
+    saved = GarminRepository().list_planned_sessions(
+        start_date=date.fromisoformat(day), end_date=date.fromisoformat(day)
+    )
+    assert len(saved) == 1
+    assert context.stats.tool_calls == 2
 
-    day = (date.today() + timedelta(days=400)).isoformat()
-    out = json.loads(
-        create_planned_session.invoke(
+
+def create(**kwargs):
+    return json.loads(
+        planning.create_planned_session("2099-02-01", "endurance", **kwargs)
+    )["session"]
+
+
+def patch(session, **changes):
+    return json.loads(
+        update_planned_session.invoke(
             {
-                "date_str": day,
-                "session_type": "tempo",
-                "description": "6x3' au seuil",
-                "sport": "running",
-                "target_duration_min": 60,
+                "session_id": session["id"],
+                "revision": session["revision"],
+                "changes": changes,
             }
         )
     )
-    try:
-        assert out["created"] is True
-        assert out["session"]["source"] == "coach"
-
-        listing = json.loads(list_planned.invoke({"end_date": day}))
-        assert listing["count"] >= 1
-        assert any(s["id"] == out["session"]["id"] for s in listing["sessions"])
-    finally:
-        delete_planned_session.invoke({"session_id": out["session"]["id"]})
 
 
-def test_create_planned_rejects_bad_type():
-    from arete.agent.tools.planning import create_planned_session
-
-    out = json.loads(
-        create_planned_session.invoke(
-            {"date_str": "2099-01-05", "session_type": "yoga_hot"}
-        )
+def test_one_patch_moves_changes_status_and_clears_targets():
+    session = create(
+        description="ancienne", target_duration_min=45, target_distance_km=8
     )
-    assert "error" in out
-
-
-def test_update_and_delete_planned():
-    from arete.agent.tools.planning import (
-        create_planned_session,
-        delete_planned_session,
-        update_planned_status,
+    result = patch(
+        session,
+        date_str="2099-02-02",
+        status="skipped",
+        description="",
+        target_duration_min=0,
     )
-
-    created = json.loads(
-        create_planned_session.invoke(
-            {"date_str": "2099-01-06", "session_type": "recovery"}
-        )
-    )
-    sid = created["session"]["id"]
-
-    updated = json.loads(
-        update_planned_status.invoke({"session_id": sid, "status": "skipped"})
-    )
-    assert updated["updated"] is True
-    assert updated["session"]["status"] == "skipped"
-
-    deleted = json.loads(delete_planned_session.invoke({"session_id": sid}))
-    assert deleted["deleted"] is True
-
-    missing = json.loads(delete_planned_session.invoke({"session_id": sid}))
-    assert "error" in missing
+    updated = result["session"]
+    assert updated["id"] == session["id"] and updated["revision"] == 2
+    assert updated["date"] == "2099-02-02" and updated["status"] == "skipped"
+    assert updated["target_duration_min"] is None and updated["description"] is None
+    assert updated["target_distance_km"] == 8
+    assert "error" in patch(session, description="stale")
+    assert GarminRepository().get_planned_session(session["id"]).description is None
 
 
-def test_planning_tools_have_names_matching_registry():
-    assert {t.name for t in PLANNING_TOOLS} == {
-        t.name for t in CAPABILITIES["planning"].tools
+def test_prescription_replaces_stale_targets_and_cannot_be_downgraded():
+    session = create(target_duration_min=45)
+    prescription = {
+        "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 1800}]
     }
+    updated = patch(session, prescription=prescription)["session"]
+    assert updated["structured"] and updated["target_duration_min"] is None
+    assert "error" in patch(updated, target_duration_min=90)
+    assert "error" in patch(updated, prescription=None)
+    assert (
+        GarminRepository().get_planned_session(session["id"]).revision
+        == updated["revision"]
+    )
 
 
-def test_full_graph_async_path_executes_toolkit_tools():
-    """Same flow over astream/ainvoke — guards the sync-handler-in-async-chain
-    coroutine bug ("Unsupported message type: <class 'coroutine'>")."""
-    import asyncio
+@pytest.mark.parametrize("edge_seconds", [None, 600, 0])
+def test_incomplete_repeat_is_correctable_without_losing_workout_steps(edge_seconds):
+    """The failed trace dropped the prescription after this validation error.
 
-    from langchain.agents import create_agent
-    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-    from langchain_core.messages import AIMessage
+    Replay its invalid argument, then a complete correction through native tools.
+    This proves persistence/export, not the model's ability to choose the correction.
+    """
+    session = create(description="20x300")
+    bad = patch(
+        session,
+        description="20x300 r100",
+        prescription={"steps": [{"kind": "repeat", "duration_kind": "meters"}]},
+    )
+    assert "repeat (entier de 2 à 100)" in bad["error"]
+    assert "steps (sous-étapes non vides)" in bad["error"]
+    saved = GarminRepository().get_planned_session(session["id"])
+    assert saved.revision == session["revision"]
+    assert saved.description == "20x300" and saved.prescription is None
 
-    from arete.agent.backends.memory import build_memory_filesystem
-    from arete.agent.middlewares.events import ToolEventMiddleware
-    from arete.agent.runtime.context import AgentContext
-
-    class FakeToolModel(GenericFakeChatModel):
-        def bind_tools(self, tools, **kwargs):
-            return self
-
-    async def run() -> list[str]:
-        middleware = ToolkitMiddleware()
-        messages = iter(
-            [
-                AIMessage(
-                    content="",
-                    tool_calls=[
-                        {
-                            "name": "load_toolkit",
-                            "args": {"toolkit_id": "planning"},
-                            "id": "1",
-                            "type": "tool_call",
-                        }
-                    ],
-                ),
-                AIMessage(
-                    content="",
-                    tool_calls=[
-                        {
-                            "name": "create_planned_session",
-                            "args": {
-                                "date_str": "2099-01-21",
-                                "session_type": "endurance",
-                                "target_duration_min": 30,
-                            },
-                            "id": "2",
-                            "type": "tool_call",
-                        }
-                    ],
-                ),
-                AIMessage(content="Planifié."),
-            ]
-        )
-        graph = create_agent(
-            FakeToolModel(messages=messages),
-            middleware=[
-                middleware,
-                ToolEventMiddleware(),
-                build_memory_filesystem(),
-                ContextBuilderMiddleware(),
+    steps = [
+        {
+            "kind": "repeat",
+            "repeat": 20,
+            "steps": [
+                {"kind": "effort", "duration_kind": "meters", "value": 300},
+                {"kind": "recovery", "duration_kind": "meters", "value": 100},
             ],
-            system_prompt="t",
-            context_schema=AgentContext,
-        )
-        result = await graph.ainvoke(
-            {"messages": [{"role": "user", "content": "planifie"}]},
-            context=AgentContext(source={}),
-            config={"recursion_limit": 10},
-        )
-        return [m.content for m in result["messages"] if m.type == "tool"]
-
-    contents = asyncio.run(run())
-    assert len(contents) == 2
-    assert '"loaded": true' in contents[0]
-    assert '"created": true' in contents[1]
-
-
-def test_list_planned_is_chronological_and_reports_truncation(monkeypatch):
-    from arete.agent.tools.planning import (
-        create_planned_session,
-        delete_planned_session,
-        list_planned,
-    )
-    from arete.services import planning
-
-    monkeypatch.setattr(planning, "_MAX_LIST", 2)
-    base = date.today() + timedelta(days=500)
-    days = [(base + timedelta(days=i)).isoformat() for i in (2, 0, 1)]
-    ids = [
-        json.loads(
-            create_planned_session.invoke({"date_str": d, "session_type": "endurance"})
-        )["session"]["id"]
-        for d in days
+        }
     ]
-    try:
-        listing = json.loads(
-            list_planned.invoke(
-                {
-                    "start_date": base.isoformat(),
-                    "end_date": (base + timedelta(days=2)).isoformat(),
-                }
-            )
+    if edge_seconds != 0:
+        duration = (
+            {"duration_kind": "seconds", "value": edge_seconds}
+            if edge_seconds
+            else {"duration_kind": "lap"}
         )
-        assert [s["date"] for s in listing["sessions"]] == [
-            base.isoformat(),
-            (base + timedelta(days=1)).isoformat(),
+        steps = [
+            {"kind": "warmup", **duration},
+            *steps,
+            {"kind": "cooldown", **duration},
         ]
-        assert listing["truncated"] is True
-        assert listing["next_start_date"] == (base + timedelta(days=2)).isoformat()
-    finally:
-        for session_id in ids:
-            delete_planned_session.invoke({"session_id": session_id})
-
-
-def test_bad_dates_are_tool_errors_not_exceptions():
-    from arete.agent.tools.planning import create_planned_session, list_planned
-
-    listing = json.loads(list_planned.invoke({"start_date": "jeudi prochain"}))
-    assert "start_date" in listing["error"] and "YYYY-MM-DD" in listing["error"]
-    created = json.loads(
-        create_planned_session.invoke(
-            {"date_str": "2026-13-40", "session_type": "endurance"}
-        )
+    expected = Prescription.model_validate({"steps": steps})
+    updated = patch(session, description="20x300 r100", prescription={"steps": steps})
+    assert updated["session"]["id"] == session["id"]
+    assert updated["session"]["revision"] == session["revision"] + 1
+    inspected = inspect_session(session["id"])["session"]
+    assert inspected["structured"] and inspected["exportable"]
+    assert inspected["target_duration_min"] is None
+    assert Prescription.model_validate(inspected["prescription"]) == expected
+    payload = convert(session["id"], "20x300 r100", "running", expected)
+    exported = payload["workoutSegments"][0]["workoutSteps"]
+    assert len(exported) == len(steps)
+    group = exported[1 if edge_seconds != 0 else 0]
+    assert group["numberOfIterations"] == 20
+    assert [s["endConditionValue"] for s in group["workoutSteps"]] == [300, 100]
+    assert all(
+        s["endCondition"]["conditionTypeKey"] == "distance"
+        for s in group["workoutSteps"]
     )
-    assert "date_str" in created["error"]
-
-
-def test_update_planned_session_moves_the_date_and_keeps_the_rest():
-    from arete.agent.tools.planning import (
-        create_planned_session,
-        delete_planned_session,
-        update_planned_session,
-    )
-
-    day = date.today() + timedelta(days=450)
-    created = json.loads(
-        create_planned_session.invoke(
-            {
-                "date_str": day.isoformat(),
-                "session_type": "tempo",
-                "description": "3x10' seuil",
-                "target_duration_min": 50,
-            }
-        )
-    )
-    session_id = created["session"]["id"]
-    try:
-        moved = json.loads(
-            update_planned_session.invoke(
-                {
-                    "session_id": session_id,
-                    "date_str": (day + timedelta(days=1)).isoformat(),
-                    "target_hr_zone": "z4",
-                }
+    if edge_seconds != 0:
+        for edge in (exported[0], exported[-1]):
+            assert edge["endCondition"]["conditionTypeKey"] == (
+                "time" if edge_seconds else "lap.button"
             )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {},
+        {"date_str": "Monday"},
+        {"target_duration_min": -1},
+        {"target_distance_km": float("inf")},
+        {"status": "validated"},
+        {"unknown": "field"},
+    ],
+)
+def test_invalid_patch_never_writes(changes):
+    session = create()
+    assert "error" in patch(session, **changes)
+    assert GarminRepository().get_planned_session(session["id"]).revision == 1
+
+
+def test_workout_tool_wire_schema_keeps_nested_intervals_typed():
+    for tool in (create_planned_session, update_planned_session):
+        params = convert_to_openai_tool(tool)["function"]["parameters"]
+        properties = params["properties"]
+        assert params["additionalProperties"] is False
+        assert (
+            not {"runtime", "config", "thread_id", "prescription_json"}
+            & properties.keys()
         )
-        session = moved["session"]
-        assert session["date"] == (day + timedelta(days=1)).isoformat()
-        assert session["target_hr_zone"] == "Z4"
-        assert (session["session_type"], session["target_duration_min"]) == (
-            "tempo",
-            50,
-        )
-        assert session["description"] == "3x10' seuil"
-    finally:
-        delete_planned_session.invoke({"session_id": session_id})
+        if tool is update_planned_session:
+            properties = properties["changes"]["properties"]
+        prescription = properties["prescription"]["anyOf"][0]
+        step = prescription["properties"]["steps"]["items"]
+        for _ in range(2):
+            assert step["properties"]["repeat"]["anyOf"][0]["maximum"] == 100
+            assert "recovery" in step["properties"]["skip_last_recovery"]["description"]
+            step = step["properties"]["steps"]["items"]
+        assert "repeat" not in step["properties"]["kind"]["enum"]
+        # No repeat at the leaf depth, so nothing to skip there either.
+        assert step["properties"]["skip_last_recovery"] == {"type": "null"}
+        assert step["properties"]["duration_kind"]["enum"] == [
+            "seconds",
+            "meters",
+            "reps",
+            "lap",
+        ]
 
 
-def test_update_planned_session_rejects_bad_input():
-    from arete.agent.tools.planning import update_planned_session
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"date_str": "Monday"},
+        {"sport": "invented"},
+        {"target_duration_min": -1},
+        {"target_distance_km": float("inf")},
+        {"prescription": '{"steps": []}'},
+        {"surprise": True},
+    ],
+)
+def test_typed_creation_rejects_bad_arguments_before_domain_write(monkeypatch, patch):
+    def unexpected(**kwargs):
+        pytest.fail("Invalid arguments reached persistence")
 
-    for args, word in (
-        ({"target_hr_zone": "Z7"}, "target_hr_zone"),
-        ({"date_str": "demain"}, "date_str"),
-        ({"session_type": "sprint"}, "session_type"),
-        ({}, "Nothing to change"),
-    ):
-        out = json.loads(update_planned_session.invoke({"session_id": 1, **args}))
-        assert word in out["error"]
-
-
-@pytest.mark.parametrize("profile", ["briefing", "feedback", "review"])
-def test_background_profiles_cannot_move_a_session(profile):
-    from arete.agent.runtime.policy import resolve_policy
-
-    planning = CAPABILITIES["planning"]
-    assert not resolve_policy(profile).can_execute(
-        "planning", "update_planned_session", planning.read_tools
+    monkeypatch.setattr(planning, "create_planned_session", unexpected)
+    result = create_planned_session.invoke(
+        {"date_str": "2026-10-12", "session_type": "intervals", **patch}
     )
-    assert resolve_policy("chat").can_execute(
-        "planning", "update_planned_session", planning.read_tools
+    assert "error" in json.loads(result)
+
+
+def test_clearable_targets_have_portable_schemas_and_strict_validation():
+    from pydantic import ValidationError
+
+    from arete.agent.tools.planning import SessionChangesInput
+
+    assert (
+        SessionChangesInput(target_intensity="", target_hr_zone="").target_hr_zone == ""
     )
+    with pytest.raises(ValidationError):
+        SessionChangesInput(target_intensity="maximal")
+    for tool in (create_planned_session, update_planned_session):
+        properties = convert_to_openai_tool(tool)["function"]["parameters"][
+            "properties"
+        ]
+        if "changes" in properties:
+            properties = properties["changes"]["properties"]
+        field = properties["target_intensity"]
+        field = field.get("anyOf", [field])[0]
+        assert "enum" not in field and "pattern" in field

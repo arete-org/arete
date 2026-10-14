@@ -148,6 +148,7 @@ export const athleteFactsApi = {
 // ========================= //
 
 export interface PlannedSessionCreate {
+  prescription?: import("./documents").Prescription | null;
   date: string;
   sport?: string;
   session_type: string;
@@ -218,23 +219,18 @@ export const garminApi = {
       body: JSON.stringify(session),
     }),
 
-  deletePlanned: (id: number) =>
-    fetchAPI<{ message: string }>(`/garmin/planned/${id}`, { method: "DELETE" }),
-
-  setPlannedStatus: (id: number, status: "pending" | "completed" | "skipped") =>
+  updatePlanned: (id: number, revision: number, session: Omit<PlannedSessionCreate, 'source' | 'sport'>) =>
     fetchAPI<import("@/types").PlannedSession>(`/garmin/planned/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status }),
+      method: "PUT", body: JSON.stringify({ ...session, revision }),
     }),
 
-  /** Lazy: only asked for today's sessions, when Garmin is connected. */
-  getStructure: (id: number) =>
-    fetchAPI<import("@/types").WorkoutStructure>(`/garmin/planned/${id}/structure`),
+  deletePlanned: (id: number, revision?: number) =>
+    fetchAPI<{ message: string }>(`/garmin/planned/${id}${revision ? `?revision=${revision}` : ''}`, { method: "DELETE" }),
 
-  /** Schedules the session on the Garmin calendar; the watch takes it at its next phone sync. */
-  pushToWatch: (id: number) =>
-    fetchAPI<import("@/types").GarminPushResult>(`/garmin/planned/${id}/push`, {
-      method: "POST",
+  setPlannedStatus: (id: number, status: "pending" | "completed" | "skipped", revision?: number) =>
+    fetchAPI<import("@/types").PlannedSession>(`/garmin/planned/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, revision }),
     }),
 
   getSummary: (startDate?: string, endDate?: string) => {
@@ -433,7 +429,18 @@ export interface AdminAccount {
 }
 
 /** Admins and the owner; the server enforces who may do what and answers a French `detail` otherwise. */
+export interface AdminFeatureFlags {
+  glm_flash: boolean;
+  glm_flash_available: boolean;
+}
+
 export const adminApi = {
+  featureFlags: () => fetchAPI<AdminFeatureFlags>("/admin/feature-flags"),
+  setFeatureFlags: (glmFlash: boolean) =>
+    fetchAPI<AdminFeatureFlags>("/admin/feature-flags", {
+      method: "PUT",
+      body: JSON.stringify({ glm_flash: glmFlash }),
+    }),
   accounts: () => fetchAPI<AdminAccount[]>("/admin/accounts"),
 
   /** Owner only, never on an owner's row. */
@@ -484,6 +491,25 @@ export interface UserSettings {
   threshold_pace_sec_km: number | null;
   /** Date of the Garmin test the threshold comes from; null when typed by hand. */
   lthr_measured_on: string | null;
+  /** Which pushes arrive (every kind spelled out) and the local quiet hours. */
+  notification_preferences: NotificationPreferences;
+}
+
+/** Mirrors services/settings.NotificationKind; `soon` kinds in CoachTab are not sent yet. */
+export type NotificationKind =
+  | 'briefing'
+  | 'post_session'
+  | 'weekly_review'
+  | 'adapted_session'
+  | 'imports'
+  | 'checkin'
+  | 'evening'
+  | 'eve_reminder';
+
+export interface NotificationPreferences {
+  kinds: Record<NotificationKind, boolean>;
+  /** "HH:MM" in the athlete's timezone; null sends at any hour. */
+  quiet_hours: { start: string; end: string } | null;
 }
 
 /** The coach's word on a finished session, or the rule engine's when it is away. */
@@ -493,15 +519,24 @@ export interface PostSessionFeedback {
   source: "agent" | "rules";
 }
 
+/** The day's briefing, or `pending` (no other field) while the coach writes it. */
+export interface DailyTip {
+  status: "ready" | "pending";
+  tip: string | null;
+  priority: "info" | "warning" | "alert" | null;
+  /** Who wrote it: the coaching agent, or the deterministic rule engine. */
+  source: "agent" | "rules" | null;
+  generated_at: string | null;
+  /** The daily sync rewrote a briefing written before its data. */
+  updated_after_sync: boolean;
+}
+
 export const tipsApi = {
-  getDaily: () =>
-    fetchAPI<{
-      tip: string;
-      priority: "info" | "warning" | "alert";
-      /** Who wrote it: the coaching agent, or the deterministic rule engine. */
-      source: "agent" | "rules";
-      generated_at: string;
-    }>("/tips/daily"),
+  /** Reads only: never runs the coach. */
+  getDaily: () => fetchAPI<DailyTip>("/tips/daily"),
+
+  /** Writes the day's briefing if it has none: a long request nobody waits on. */
+  writeDaily: () => fetchAPI<DailyTip>("/tips/daily", { method: "POST" }),
 
   getPostSession: (
     sessionType: "strength" | "cardio",

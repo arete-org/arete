@@ -108,3 +108,12 @@ it('shows an empty result without inventing a skill or trapping Tab', async () =
   fireEvent.keyDown(input, { key: 'Enter' });
   expect(send).not.toHaveBeenCalled();
 });
+
+it('rejects a long run of slash commands without backtracking exponentially', () => {
+  const input = setup();
+  const started = performance.now();
+  // The former pattern spent several seconds on this draft, growing exponentially with each repeat.
+  fireEvent.change(input, { target: { value: `/-${'  /-'.repeat(25)}!` } });
+  expect(performance.now() - started).toBeLessThan(1000);
+  expect(screen.queryByRole('listbox')).toBeNull();
+});

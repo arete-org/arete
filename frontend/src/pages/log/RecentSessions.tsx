@@ -6,7 +6,7 @@ import { cn, formatDurationCompact } from '@/lib/utils';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
 import { Button, Panel, RPE_TEXT, RpeBadge, Textarea, rpeTone } from '@/components/ui';
 import { analyticsApi } from '@/lib/api';
-import { qk } from '@/lib/queryKeys';
+import { qk, strengthSessionsQuery } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import type { CardioSession } from '@/types';
 
@@ -23,6 +23,9 @@ export function RecentSessions() {
     queryKey: qk.cardioSessions,
     queryFn: () => analyticsApi.getSessions(20),
   });
+  // A Garmin activity linked to a Muscu log is shown once, as that log (Force tab).
+  const { data: strength } = useQuery(strengthSessionsQuery);
+  const linked = new Set((strength ?? []).map((l) => l.garmin_activity_id));
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRpe, setEditRpe] = useState<number | null>(null);
@@ -55,7 +58,7 @@ export function RecentSessions() {
   if (isLoading) return <LoadingState message="CHARGEMENT DES SÉANCES…" />;
   if (isError) return <ErrorState message="ÉCHEC DU CHARGEMENT DES SÉANCES" onRetry={() => refetch()} />;
 
-  const sessions = data?.sessions || [];
+  const sessions = (data?.sessions || []).filter((s) => !linked.has(s.id));
   if (sessions.length === 0) {
     return (
       <Panel animate={false}>
@@ -84,13 +87,13 @@ export function RecentSessions() {
                       className="flex items-center gap-2 group"
                       title="Voir le détail de la séance"
                     >
-                      <span className="text-sm font-mono text-text-muted">{s.date}</span>
-                      <span className="text-sm font-mono text-text-primary truncate group-hover:text-neon-cyan group-hover:underline">
+                      <span className="text-sm font-sans text-text-muted">{s.date}</span>
+                      <span className="text-sm font-sans text-text-primary truncate group-hover:text-neon-cyan group-hover:underline">
                         {s.name || 'Sans titre'}
                       </span>
                       <ChevronRight className="w-4 h-4 shrink-0 text-text-muted group-hover:text-neon-cyan" />
                     </Link>
-                    <div className="text-xs font-mono text-text-muted mt-0.5 flex flex-wrap gap-x-3">
+                    <div className="text-xs font-sans text-text-muted mt-0.5 flex flex-wrap gap-x-3">
                       <span>{formatDurationCompact(s.duration_sec)}</span>
                       {s.distance_m && <span>{(s.distance_m / 1000).toFixed(1)} km</span>}
                       {s.avg_hr && <span>{s.avg_hr} bpm</span>}
@@ -104,7 +107,7 @@ export function RecentSessions() {
                   {s.source && (
                     <span
                       className={cn(
-                        'px-1.5 py-0.5 rounded text-[10px] font-mono uppercase',
+                        'px-1.5 py-0.5 rounded text-[10px] font-sans uppercase',
                         SOURCE_BADGE[s.source] ?? SOURCE_BADGE.manual
                       )}
                     >
@@ -127,7 +130,7 @@ export function RecentSessions() {
               {editing && (
                 <div className="mt-3 pt-3 border-t border-text-muted/10 space-y-3 animate-fade-in">
                   <div>
-                    <label className="text-xs font-mono text-text-muted uppercase block mb-1">RPE (1-10)</label>
+                    <label className="text-xs font-sans text-text-muted uppercase block mb-1">RPE (1-10)</label>
                     <input
                       type="range"
                       min={1}
@@ -136,7 +139,7 @@ export function RecentSessions() {
                       onChange={(e) => setEditRpe(Number(e.target.value))}
                       className="w-full accent-neon-cyan"
                     />
-                    <div className="flex justify-between items-center text-xs font-mono text-text-muted">
+                    <div className="flex justify-between items-center text-xs font-sans text-text-muted">
                       <span>1</span>
                       <span className={cn('text-sm font-bold', editRpe === null ? 'text-text-muted' : RPE_TEXT[rpeTone(editRpe)])}>
                         {editRpe ?? 'non renseigné'}
@@ -156,7 +159,7 @@ export function RecentSessions() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-mono text-text-muted uppercase block mb-1">Notes</label>
+                    <label className="text-xs font-sans text-text-muted uppercase block mb-1">Notes</label>
                     <Textarea
                       value={editNotes}
                       onChange={(e) => setEditNotes(e.target.value)}
@@ -177,7 +180,7 @@ export function RecentSessions() {
               )}
 
               {!editing && s.notes && (
-                <div className="mt-2 text-xs font-mono text-text-muted italic">{s.notes}</div>
+                <div className="mt-2 text-xs font-sans text-text-muted italic">{s.notes}</div>
               )}
             </div>
           );

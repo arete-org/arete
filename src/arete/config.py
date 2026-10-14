@@ -131,6 +131,13 @@ class Config:
         return _env("OPENROUTER_API_KEY", "") or ""
 
     @property
+    def memory_jev_enabled(self) -> bool:
+        raw = (_env("MEMORY_JEV_ENABLED", "true") or "true").lower().strip()
+        if raw not in ("true", "false"):
+            raise ValueError("MEMORY_JEV_ENABLED must be true or false")
+        return raw == "true"
+
+    @property
     def github_token(self) -> str:
         return _env("GITHUB_TOKEN", "") or ""
 
@@ -210,10 +217,12 @@ class Config:
     # --- background jobs / logging -----------------------------------------
     @property
     def auto_sync_hour(self) -> int | None:
-        """Local hour (0-23) of the daily Garmin/Strava sync; None disables it.
+        """Hour (0-23) on each athlete's clock from which the daily sync runs.
 
-        Garmin publishes the night's HRV and sleep score at wake-up, so an hour
-        before the athlete is up leaves the day without recovery data.
+        None disables the in-process loop (Vercel Cron dispatches instead, from
+        ``scheduler.DEFAULT_SYNC_HOUR``). Garmin publishes the night's HRV and
+        sleep score at wake-up, so an hour before the athlete is up leaves the
+        day without recovery data.
         """
         raw = _env("ARETE_AUTO_SYNC_HOUR")
         if raw is None:
@@ -266,6 +275,12 @@ class Config:
     @property
     def clerk_secret_key(self) -> str:
         return _env("CLERK_SECRET_KEY", "") or ""
+
+    @property
+    def clerk_jwt_key(self) -> str:
+        """The Clerk instance's PEM public key: session tokens are then verified
+        offline instead of fetching Clerk's JWKS. Empty = fetch (5 min cache)."""
+        return _env("CLERK_JWT_KEY", "") or ""
 
     @property
     def clerk_publishable_key(self) -> str:

@@ -281,3 +281,277 @@ def test_duplicate_during_opt_out_does_not_erase_earned_reward(game_db):
         )
     state = game.sync()
     assert (state["sessions"], state["xp"], state["shards"]) == (1, 50, 10)
+
+
+def _ledger() -> list[tuple]:
+    with db_connection() as con:
+        return sorted(
+            con.execute(
+                "SELECT cause,CAST(week_start AS VARCHAR),xp,shards,label FROM app.game_ledger"
+            ).fetchall()
+        )
+
+
+def test_receipts_of_caps_aliases_and_moved_duplicates_are_unchanged(game_db):
+    """Characterizes every receipt a multi-week projection writes."""
+    enable()
+    with transaction() as con:  # opted in for three weeks already
+        con.execute(
+            "UPDATE app.game_periods SET started_at=started_at - INTERVAL 20 DAY"
+        )
+    today = athlete_today()
+    last_week = today - timedelta(days=7)
+    for n in range(7):
+        evidence(f"session:{n}")
+    evidence("earlier", last_week)
+    game.sync()
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.game_events SET canonical_key='session:0',processed=false WHERE source_key='session:6'"
+        )
+        capture(con, "dup", last_week, "Doublon", True, canonical="session:1")
+    game.sync()
+    game.sync()
+    week, previous = (str(d - timedelta(days=d.weekday())) for d in (today, last_week))
+    fix = "Correction de doublon · "
+    assert _ledger() == sorted(
+        [
+            ("activity:earlier", previous, 50, 10, "Course"),
+            *[(f"activity:session:{n}", week, 50, 10, "Course") for n in range(6)],
+            # Known bug, tracked in Linear ARE-93: the duplicate dated last
+            # week moves session 1 there, but its sum per cause is already
+            # credited, so only the current week's reversal is written and the
+            # session ends uncredited. Pinned here until ARE-93 fixes it.
+            ("activity:session:1", week, -50, -10, fix + "Séance rapprochée"),
+            ("week:" + week, week, 200, 40, "Objectif hebdomadaire respecté"),
+            ("week:" + week, week, -200, -40, fix + "Objectif hebdomadaire respecté"),
+        ]
+    )
+
+
+WRITES = ("INSERT", "UPDATE", "DELETE", "BEGIN")
+
+
+def _statements(monkeypatch, statement_log, run) -> list[str]:
+    """The statements ``run`` sends, on the raw connections it opens."""
+    real = duckdb.connect
+    monkeypatch.setattr(
+        duckdb, "connect", lambda *a, **k: statement_log.wrap(real(*a, **k))
+    )
+    run()
+    monkeypatch.setattr(duckdb, "connect", real)
+    return [" ".join(sql.split()).upper() for sql in statement_log]
+
+
+def test_a_sync_with_nothing_to_settle_writes_nothing(
+    game_db, monkeypatch, statement_log
+):
+    enable()
+    for n in range(7):
+        evidence(f"session:{n}")
+    settled = game.sync()
+    statements = _statements(monkeypatch, statement_log, game.sync)
+    assert [s for s in statements if s.startswith(WRITES)] == []
+    assert game.sync() == settled  # same snapshot, same version
+
+
+def test_settling_more_activities_costs_no_more_reads(
+    game_db, monkeypatch, statement_log
+):
+    enable()
+
+    def selects(keys: list[str]) -> int:
+        for key in keys:
+            evidence(key)
+        statement_log.clear()
+        statements = _statements(monkeypatch, statement_log, game.sync)
+        return sum(s.startswith(("SELECT", "WITH")) for s in statements)
+
+    assert selects(["a", "b"]) == selects([f"k:{n}" for n in range(6)])
+
+
+def test_a_rest_applied_since_the_last_sync_is_still_due(game_db):
+    from arete.services.settings import UserSettingsUpdate, update_settings
+
+    update_settings(UserSettingsUpdate(weekly_training_goal=2))
+    enable()
+    evidence("one")
+    game.sync()
+    with db_connection() as con:
+        assert not game._due(con)
+    with transaction() as con:
+        con.execute(
+            "INSERT INTO app.planned_sessions (date,sport,session_type,description) VALUES (?,'running','endurance','Repos')",
+            [athlete_today()],
+        )
+        planned = con.execute("SELECT max(id) FROM app.planned_sessions").fetchone()[0]
+        con.execute(
+            "INSERT INTO app.plan_decisions (user_id,date,planned_session_id,decision,reason,applied_at) VALUES (1,?,?,'rest','Prescribed',CURRENT_TIMESTAMP)",
+            [athlete_today(), planned],
+        )
+    with db_connection() as con:
+        assert game._due(con)
+    assert game.sync()["week"]["complete"] is True
+
+
+def test_concurrent_syncs_with_nothing_to_settle_never_conflict(game_db):
+    enable()
+    evidence("one")
+    game.sync()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(lambda _: game.sync()["xp"], range(4)))
+    assert results == [50] * 4
+
+
+def test_the_daily_sync_settles_what_it_imported(game_db):
+    from arete.scheduler import settle_game
+
+    evidence("before opt-in")
+    assert settle_game() is None  # opted out: nothing to report
+    enable()
+    evidence("imported")
+    assert settle_game() == "0 pending"
+    assert game.snapshot()["xp"] == 50
+
+
+def strength_log() -> int:
+    from arete.strength.models import (
+        Exercise,
+        ExerciseSet,
+        SessionExercise,
+        StrengthSession,
+    )
+    from arete.strength.repository import StrengthRepository
+
+    repo = StrengthRepository()
+    exercise = repo.create_exercise(Exercise(name="Squat"))
+    session = StrengthSession(date=athlete_today(), name="Muscu")
+    session.exercises.append(
+        SessionExercise(
+            exercise_id=exercise, order=1, sets=[ExerciseSet(set_number=1, reps=5)]
+        )
+    )
+    return repo.create_session(session)
+
+
+def strength_activity() -> int:
+    return GarminRepository().create_actual_session(
+        ActualSession(
+            date=athlete_today(), sport="strength", duration_sec=3600, source="manual"
+        )
+    )
+
+
+def auto_link() -> None:
+    from arete.strength.repository import StrengthRepository
+
+    assert len(StrengthRepository().link_lone_garmin_pairs([athlete_today()])) == 1
+
+
+def debits(state) -> list:
+    return [row for row in state["history"] if row["xp"] < 0 or row["shards"] < 0]
+
+
+def test_auto_link_keeps_a_pair_already_rewarded_twice(game_db):
+    enable()
+    strength_log()
+    strength_activity()
+    assert (game.sync()["xp"], game.snapshot()["shards"]) == (100, 20)
+    auto_link()
+    for _ in range(2):
+        state = game.sync()
+        assert (state["xp"], state["shards"], debits(state)) == (100, 20, [])
+    # A kept pair is settled as it is: loading a page writes nothing more.
+    with db_connection() as con:
+        assert not game._due(con)
+
+
+def test_auto_link_credits_a_pair_not_yet_rewarded_once(game_db):
+    enable()
+    strength_log()
+    strength_activity()
+    auto_link()
+    state = game.sync()
+    assert (state["sessions"], state["xp"], state["shards"]) == (1, 50, 10)
+
+
+def test_auto_link_after_one_side_was_rewarded_neither_debits_nor_doubles(game_db):
+    enable()
+    strength_log()
+    assert game.sync()["shards"] == 10
+    strength_activity()
+    auto_link()
+    for _ in range(2):
+        state = game.sync()
+        assert (state["sessions"], state["shards"], debits(state)) == (1, 10, [])
+
+
+def test_manual_link_still_merges_a_rewarded_pair(game_db):
+    from arete.strength.repository import StrengthRepository
+
+    enable()
+    log, activity = strength_log(), strength_activity()
+    assert game.sync()["shards"] == 20
+    auto_link()
+    assert game.sync()["shards"] == 20
+    # Relinking by hand keeps the manual link's semantics: one session.
+    assert StrengthRepository().link_to_actual_session(log, activity)
+    state = game.sync()
+    assert (state["sessions"], state["shards"]) == (1, 10)
+
+
+def test_auto_link_never_moves_a_reward_out_of_its_week(game_db):
+    enable()
+    activity = strength_activity()
+    assert game.sync()["shards"] == 10
+    log = strength_log()
+    # The log's evidence sits in the previous week: a merge would settle the
+    # pair there and take back this week's reward.
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.game_events SET week_start=week_start - 7,"
+            " activity_date=activity_date - 7 WHERE source_key=?",
+            [f"strength:{log}"],
+        )
+        con.execute(
+            "INSERT INTO app.game_weeks (week_start,goal,timezone)"
+            " SELECT week_start,6,'Europe/Paris' FROM app.game_events"
+            " WHERE source_key=? ON CONFLICT DO NOTHING",
+            [f"strength:{log}"],
+        )
+    auto_link()
+    for _ in range(2):
+        state = game.sync()
+        assert state["shards"] >= 10 and debits(state) == []
+    with db_connection() as con:
+        keys = con.execute(
+            "SELECT count(DISTINCT canonical_key) FROM app.game_events"
+            " WHERE source_key IN (?, ?)",
+            [f"strength:{log}", f"actual:{activity}"],
+        ).fetchone()[0]
+    assert keys == 2
+
+
+def test_an_ineligible_counted_log_is_not_a_past_reward(game_db):
+    from arete.strength.models import StrengthSession
+    from arete.strength.repository import StrengthRepository
+
+    enable()
+    # No set: the log is captured ineligible, processed without credit.
+    log = StrengthRepository().create_session(
+        StrengthSession(date=athlete_today(), name="Muscu")
+    )
+    activity = strength_activity()
+    assert game.sync()["shards"] == 10
+    auto_link()
+    state = game.sync()
+    assert (state["sessions"], state["shards"], debits(state)) == (1, 10, [])
+    with db_connection() as con:
+        rows = con.execute(
+            "SELECT canonical_key, reason FROM app.game_events"
+            " WHERE source_key IN (?, ?) ORDER BY source_key",
+            [f"actual:{activity}", f"strength:{log}"],
+        ).fetchall()
+    # Re-keyed into the rewarded activity, not kept apart as a past reward.
+    assert rows[0][0] == rows[1][0]
+    assert not rows[1][1].endswith("+kept_at_link")

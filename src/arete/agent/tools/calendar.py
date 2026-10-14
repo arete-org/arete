@@ -1,17 +1,19 @@
 """Calendar schemas: reads and proposals only. Approval is exclusively HTTP/UI."""
 
 import json
+from datetime import datetime
+from typing import Any, Literal
 
-from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
 from pydantic import ValidationError
 
 from arete.agent.runtime.budget import MAX_TOOL_OUTPUT_CHARS
+from arete.agent.tools.validation import typed_tool
 from arete.services.calendar_models import CalendarError, CalendarProposal, EventDraft
 
 
-def _run(config: RunnableConfig, operation, *, proposal: bool = False) -> str:
-    context = config.get("configurable", {}).get("arete_context")
+def _run(runtime: ToolRuntime[Any], operation, *, proposal: bool = False) -> str:
+    context = runtime.context
     if context is None or context.calendar is None or context.profile != "chat":
         return json.dumps({"error": "Google Calendar indisponible pour cette mission."})
     try:
@@ -30,28 +32,37 @@ def _run(config: RunnableConfig, operation, *, proposal: bool = False) -> str:
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
 
-@tool
-def list_calendar_events(start: str, end: str, config: RunnableConfig) -> str:
+@typed_tool
+def list_calendar_events(
+    start: datetime, end: datetime, runtime: ToolRuntime[Any]
+) -> str:
     """Read events in selected calendars. ISO timestamps with UTC offsets; 31 days maximum."""
     return _run(
-        config, lambda service, ctx: service.events(start, end, deadline=ctx.deadline)
+        runtime,
+        lambda service, ctx: service.events(
+            start.isoformat(), end.isoformat(), deadline=ctx.deadline
+        ),
     )
 
 
-@tool
-def get_calendar_availability(start: str, end: str, config: RunnableConfig) -> str:
+@typed_tool
+def get_calendar_availability(
+    start: datetime, end: datetime, runtime: ToolRuntime[Any]
+) -> str:
     """Read busy intervals in selected calendars. ISO timestamps with offsets; maximum 31 days."""
     return _run(
-        config,
-        lambda service, ctx: service.availability(start, end, deadline=ctx.deadline),
+        runtime,
+        lambda service, ctx: service.availability(
+            start.isoformat(), end.isoformat(), deadline=ctx.deadline
+        ),
     )
 
 
-@tool
+@typed_tool
 def propose_calendar_event(
-    operation: str,
+    operation: Literal["create", "update", "delete"],
     calendar_id: str,
-    config: RunnableConfig,
+    runtime: ToolRuntime[Any],
     event_id: str | None = None,
     event: EventDraft | None = None,
 ) -> str:
@@ -67,7 +78,7 @@ def propose_calendar_event(
     Only individual occurrences, no recurring series or attendees.
     """
     return _run(
-        config,
+        runtime,
         lambda service, ctx: service.propose(
             CalendarProposal.model_validate(
                 {

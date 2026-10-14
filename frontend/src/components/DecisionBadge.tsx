@@ -14,7 +14,7 @@ export function DecisionBadge({ decision, reverted = false }: { decision: PlanDe
   return (
     <span
       className={cn(
-        'border rounded px-1.5 py-0.5 text-[11px] font-mono',
+        'border rounded px-1.5 py-0.5 text-[11px] font-sans',
         reverted ? 'text-text-muted border-text-muted/30 line-through' : DECISION_TONE[decision]
       )}
       title={reverted ? 'Décision annulée : séance prévue rétablie' : undefined}

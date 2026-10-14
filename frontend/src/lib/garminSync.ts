@@ -7,6 +7,12 @@ export interface SyncOptions {
   end_date?: string;
   download_fit?: boolean;
   max_activities?: number;
+  full_history?: boolean;
+}
+
+interface SyncBatchOptions extends Omit<SyncOptions, 'full_history'> {
+  history_offset?: number;
+  history_anchor?: number;
 }
 
 const STAGES = ['preparing', 'fetching', 'processing', 'fit', 'saving', 'finalizing'] as const;
@@ -15,6 +21,7 @@ export interface SyncProgress {
   completed: number;
   total: number | null;
   activity_name: string | null;
+  full_history?: boolean;
 }
 
 type SyncEvent =
@@ -27,6 +34,11 @@ const MAX_EVENTS = MAX_ACTIVITIES * 3 + 10;
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_READS = MAX_BYTES;
 const SYNC_TIMEOUT_MS = 20 * 60 * 1000;
+const HISTORY_BATCH_SIZE = 20;
+const MAX_HISTORY_ACTIVITIES = 20_000;
+// One extra empty page proves completion when the archive ends on a full batch.
+const MAX_HISTORY_BATCHES = MAX_HISTORY_ACTIVITIES / HISTORY_BATCH_SIZE + 1;
+const HISTORY_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 const INTERRUPTED = 'Suivi interrompu. Des activités peuvent déjà avoir été importées. Vérifie le résultat avant de relancer.';
 
 function parseEvent(data: string): SyncEvent {
@@ -85,6 +97,51 @@ export async function consumeGarminSync(
 
 export async function streamGarminSync(
   options: SyncOptions,
+  onProgress: (progress: SyncProgress) => void,
+  signal: AbortSignal,
+): Promise<SyncResult> {
+  const { full_history, ...batchOptions } = options;
+  if (!full_history) return streamBatch(batchOptions, onProgress, signal);
+
+  const historySignal = AbortSignal.any([signal, AbortSignal.timeout(HISTORY_TIMEOUT_MS)]);
+  const aggregate: SyncResult = { success: true, activities_synced: 0, activities_merged: 0, activities_matched: 0, activities_skipped: 0, errors: [], last_activity_date: null };
+  let offset = 0;
+  let anchor: number | undefined;
+  for (let batch = 0; batch < MAX_HISTORY_BATCHES; batch++) {
+    if (historySignal.aborted) throw new Error(INTERRUPTED);
+    let completed = 0;
+    const result = await streamBatch({
+      download_fit: options.download_fit,
+      max_activities: HISTORY_BATCH_SIZE,
+      history_offset: offset,
+      ...(anchor === undefined ? {} : { history_anchor: anchor }),
+    }, progress => {
+      completed = Math.max(completed, progress.completed);
+      onProgress({ ...progress, full_history: true, completed: offset + completed, total: null });
+    }, historySignal);
+    aggregate.success = result.success;
+    aggregate.activities_synced += result.activities_synced;
+    aggregate.activities_merged += result.activities_merged;
+    aggregate.activities_matched += result.activities_matched;
+    aggregate.activities_skipped += result.activities_skipped;
+    aggregate.errors.push(...result.errors);
+    aggregate.last_activity_date = result.last_activity_date ?? aggregate.last_activity_date;
+    if (!result.success) return aggregate;
+    // Both fields must be explicit: an old server cannot silently stop after page one.
+    if (result.next_history_offset === null && result.history_anchor === null) return aggregate;
+    if (result.next_history_offset !== offset + HISTORY_BATCH_SIZE
+      || result.next_history_offset > MAX_HISTORY_ACTIVITIES
+      || !Number.isSafeInteger(result.history_anchor) || Number(result.history_anchor) <= 0) {
+      throw new Error('Suite de l’historique Garmin invalide. Import incomplet.');
+    }
+    offset = result.next_history_offset;
+    anchor = Number(result.history_anchor);
+  }
+  throw new Error('Limite de 20 000 activités atteinte ; import incomplet.');
+}
+
+async function streamBatch(
+  options: SyncBatchOptions,
   onProgress: (progress: SyncProgress) => void,
   signal: AbortSignal,
 ): Promise<SyncResult> {
