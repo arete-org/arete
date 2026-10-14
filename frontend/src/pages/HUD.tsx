@@ -293,8 +293,8 @@ export function DashboardPage() {
               >
                 {playerStats.recent_weeks_at_goal}/{playerStats.recent_weeks}
               </div>
-              <p aria-hidden className="text-[11px] font-sans text-text-muted mt-1 max-w-[6.5rem] ml-auto leading-tight">
-                semaines à l’objectif
+              <p aria-hidden className="text-[11px] font-sans text-text-muted mt-1 max-w-[8rem] ml-auto leading-tight">
+                {playerStats.recent_weeks > 1 ? 'semaines' : 'semaine'} à l’objectif de charge
               </p>
               <p className="sr-only">
                 Régularité : {weeksAtGoalText(playerStats.recent_weeks_at_goal, playerStats.recent_weeks)}
@@ -337,7 +337,7 @@ export function DashboardPage() {
                   <p className="text-sm font-sans text-text-muted">Repos — aucune séance prévue</p>
                   <div className="flex items-center gap-4 text-xs font-sans">
                     <Link to="/planning?new=1" className="text-neon-cyan hover:underline">
-                      + Ajouter une séance
+                      + Planifier une séance
                     </Link>
                     <LogSessionLink />
                   </div>
@@ -397,14 +397,14 @@ export function DashboardPage() {
               <div className="grid grid-cols-2 gap-3">
                 {/* Plain words first, the acronym the coach never says as a secondary line. */}
                 <MetricCard
-                  title="Charge"
+                  title="Équilibre de charge"
                   value={workload?.acwr != null ? formatDecimal(workload.acwr, 2) : '—'}
                   kind="acwr"
                   zone={workload?.acwr_zone}
                   subtitle="ACWR · cette semaine face aux quatre dernières"
                 />
                 <MetricCard
-                  title="Fraîcheur"
+                  title="Forme"
                   value={fitness?.tsb != null ? formatDecimal(fitness.tsb, 1, true) : '—'}
                   kind="form"
                   zone={fitness?.form_zone}

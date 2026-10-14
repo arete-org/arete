@@ -115,10 +115,13 @@ export const FACT_KIND_LABEL: Record<string, string> = {
   other: 'autre',
 };
 
-/** "9 des 12 dernières semaines à l’objectif": the regularity a missed week lowers by one. */
+/**
+ * "9 des 12 dernières semaines à l’objectif de charge": the regularity a missed
+ * week lowers by one. The goal is the weekly load (TSS), not a session count.
+ */
 export function weeksAtGoalText(hit: number, weeks: number): string {
-  if (weeks === 1) return hit ? 'Dernière semaine à l’objectif' : 'Dernière semaine sous l’objectif';
-  return `${hit} des ${weeks} dernières semaines à l’objectif`;
+  if (weeks === 1) return hit ? 'Dernière semaine à l’objectif de charge' : 'Dernière semaine sous l’objectif de charge';
+  return `${hit} des ${weeks} dernières semaines à l’objectif de charge`;
 }
 
 /** "1,12", "+4,2": French decimals with a fixed precision; `signed` marks a positive value. */

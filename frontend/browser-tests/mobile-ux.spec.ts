@@ -98,7 +98,8 @@ for (const width of [320, 390, 430]) {
     const form = page.locator('.dashboard-secondary');
     await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
     await expect(form.getByText('Charge de la semaine')).toBeVisible();
-    await expect(form.getByText(/\b(HP|MP|XP)\b|joueur|Niveau/)).toHaveCount(0);
+    await expect(form.getByText(/^(HP|MP|XP|TSS)$/)).toHaveCount(0);
+    await expect(form.getByText(/joueur|niveau/i)).toHaveCount(0);
     await noOverflow(page);
     await page.getByRole('link', { name: 'Saisir une séance', exact: true }).tap();
     await expect(dialog.getByRole('heading', { name: 'SAISIR UNE SÉANCE' })).toBeVisible();
