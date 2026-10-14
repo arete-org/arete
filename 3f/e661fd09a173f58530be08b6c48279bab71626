@@ -1,0 +1,919 @@
+.env.example
+  s_5ed3b392cc71d8::t_ae1f89375636ad 15-16,38-40,89-99
+.github/dependabot.yml
+  s_5ed3b392cc71d8::t_f01150f4ecee73 1-18
+.github/pull_request_template.md
+  s_5ed3b392cc71d8::t_a65bb2065a9c7d 1-50
+.github/workflows/ci.yml
+  s_5ed3b392cc71d8::t_47663b73dffdb1 11-12,21-25,28,52,90,101,150-159,187-190,208-214,218-219,223,229
+.github/workflows/deploy-preview.yml
+  s_5ed3b392cc71d8::t_19f875fc4d0cac 23-27
+.github/workflows/deploy-production.yml
+  s_5ed3b392cc71d8::t_8749b2821c7f83 9,20-24,61-63,65-68,72-74,76-101,104-106
+.github/workflows/preview-cleanup.yml
+  s_5ed3b392cc71d8::t_90b31382139391 15-18
+.gitignore
+  s_5ed3b392cc71d8::t_2078b50a870e99 64-66
+.vercelignore
+  s_5ed3b392cc71d8::t_e492c02b44f153 22-24
+AGENTS.md
+  s_5ed3b392cc71d8::t_cbd9406039ec4c 40-41,67-76,86-92,94,126-128,147-148
+LICENSE
+  s_5ed3b392cc71d8::t_47517b3fe35a4c 1-47
+Makefile
+  s_5ed3b392cc71d8::t_7f85a76ddadaf6 28,57,63,88-91
+README.md
+  s_5ed3b392cc71d8::t_896cb4969f91ac 24-27
+backend.Dockerfile
+  s_5ed3b392cc71d8::t_0066eb7c84abd5 19
+design.md
+  s_5ed3b392cc71d8::t_e3fbb4e9390f3b 1-232
+docs/architecture.md
+  s_5ed3b392cc71d8::t_26a3fc39b68811 3-5,17,24,36,45-46,56-58,63,65-68,71,82-121,129-135,143-156,159-162,168-175,184-198,201,205,219-220,223-241,245-252,260,262-263,271-283,341-362,364-387,390-392,397-414,446-451,476-482,486,515-549,557-559,565-596,606-664
+docs/conversational-workouts.md
+  s_5ed3b392cc71d8::t_1e7b791bf5f692 8-17,33-35,46-47,91-92
+docs/deployment.md
+  s_5ed3b392cc71d8::t_73134b19ef4693 24,27-30,36-98,152-162,178-181,242-261,265,274,279-281
+docs/document-imports.md
+  s_5ed3b392cc71d8::t_92f9b1e234523b 5-11,20,22,34-38,45-75,96-98,100,139-148,158-159,163-166,175-176,186-188
+docs/gamification-design.md
+  s_5ed3b392cc71d8::t_8e8e1f47186921 107,122
+docs/google-calendar.md
+  s_5ed3b392cc71d8::t_2237c5cded11ea 168-170
+docs/multi-athlete.md
+  s_5ed3b392cc71d8::t_a3ba3ad9ac3899 77-78,86-89,119-120,123-135,137-142,145-152,158-159,170-180
+docs/personal-memory.md
+  s_5ed3b392cc71d8::t_0814c465ff2b6c 20-23,55-56,61-135
+docs/slack.md
+  s_5ed3b392cc71d8::t_a2f650c22ed540 32,34-35,37,48-49,56,62-90,107-111,117-145,148-165,168-169,203-289
+frontend/browser-tests/admin-flags.spec.ts
+  s_5ed3b392cc71d8::t_3b0e098a5ca3c2 1-47
+frontend/browser-tests/auth-build.spec.ts
+  s_5ed3b392cc71d8::t_ad24ddf21d3b35 1-56
+frontend/browser-tests/chiron.spec.ts
+  s_5ed3b392cc71d8::t_2a1df76abc3278 2,7,54-58,60,62-63,66-69,78-80,127,129,277,283,291,307-517
+frontend/browser-tests/coachStream.ts
+  s_5ed3b392cc71d8::t_b7e11ad61d2bf6 1-48
+frontend/browser-tests/daily-tip.spec.ts
+  s_5ed3b392cc71d8::t_35adbbfedf018e 1-41
+frontend/browser-tests/dashboard-loading.spec.ts
+  s_5ed3b392cc71d8::t_fc5bdefb3f306b 1-241
+frontend/browser-tests/dashboardAnswer.ts
+  s_5ed3b392cc71d8::t_50102ba029678b 1-41
+frontend/browser-tests/design-system.spec.ts
+  s_5ed3b392cc71d8::t_f531c9cfefb749 1-58
+frontend/browser-tests/documents.spec.ts
+  s_5ed3b392cc71d8::t_50b9798bbccddb 2,29,32,37,43-49,62-64,66-67,71-72,76-81,84-91,95-96,115-117,162
+frontend/browser-tests/feedback.spec.ts
+  s_5ed3b392cc71d8::t_2bf193abf0fb99 40
+frontend/browser-tests/gamification-load.spec.ts
+  s_5ed3b392cc71d8::t_5f86b1d6cae8f8 1-57
+frontend/browser-tests/garmin-connection.spec.ts
+  s_5ed3b392cc71d8::t_d848871e121ef8 2,117-188
+frontend/browser-tests/install-notifications.spec.ts
+  s_5ed3b392cc71d8::t_8ebab401133880 1-83
+frontend/browser-tests/layout.spec.ts
+  s_5ed3b392cc71d8::t_a434ad9a7cdd3e 3,7,13
+frontend/browser-tests/mobile-ux.spec.ts
+  s_5ed3b392cc71d8::t_8e3f00b698a1a5 1-231
+frontend/browser-tests/planning-crud.spec.ts
+  s_5ed3b392cc71d8::t_af3ca30cade524 1-370
+frontend/browser-tests/requests.spec.ts
+  s_5ed3b392cc71d8::t_165c52538cfc3f 1-68
+frontend/browser-tests/rpe.spec.ts
+  s_5ed3b392cc71d8::t_78d4dc552fba0f 1-43
+frontend/browser-tests/skills.spec.ts
+  s_5ed3b392cc71d8::t_2a55a4de54d673 25
+frontend/browser-tests/workouts.spec.ts
+  s_5ed3b392cc71d8::t_5ef8057de33c76 22-25,32,37,127-128,135-136,139,144-228,245-246,254-255,257-259,271-273,278-279,281-285,289-324
+frontend/index.html
+  s_5ed3b392cc71d8::t_4fde2a9957c657 5-6
+frontend/package-lock.json
+  s_5ed3b392cc71d8::t_cb577f96bc71cb 13,15,23,109-111,115,124-126,134-136,140-148,165-167,171-172,195-197,201-202,269-271,293-295,299-300,307-309,313-315,398-400,408-410,418-420,443-445,449-450,457-459,463,1635-1637,1641-1643,1650-1652,1656-1661,1669-1671,1675-1676,2111-2113,2116-2118,2124-2126,2130-2131,2138-2147,3341-3353,3370-3386,3909-3911,3919-3921,3925,4311-4313,4317-4320,4340-4342,4351-4353,4371-4375,4452-4454,5086-5088,5553-5555,5611-5613,5665-5667,5915-5917,5924,5928-5930,5934,6827-6829,6831-6840,8285-8287,8314-8316,8382-8384,8386-8389,8698-8700,8718,8720,8896-8898,8918-8920,8923,9571-9573,10377-10379
+frontend/package.json
+  s_5ed3b392cc71d8::t_b61a71b6fa05ab 19,21,29,61-64
+frontend/playwright.config.ts
+  s_5ed3b392cc71d8::t_3320425563993a 3-6,12-16,21-35
+frontend/public/favicon.svg
+  s_5ed3b392cc71d8::t_b4794de254e906 1-4
+frontend/src/App.tsx
+  s_5ed3b392cc71d8::t_42d0152a0aba47 1-6,8-9,12-14,17-18,20-22,24-25,27-28,30-31,33-34,36,47-50,54-72,80,83,85-96,99-100,102,105-114,118,121-122,131,133,139,156,189-195,197-201,206-207,211
+frontend/src/assets/brand/README.md
+  s_5ed3b392cc71d8::t_b08ff1a2c4ed3b 23-24,27-36
+frontend/src/assets/brand/arete-laurel-prune.svg
+  s_5ed3b392cc71d8::t_f2de14f70ae613 1-4
+frontend/src/assets/fonts/Inter-LICENSE.txt
+  s_5ed3b392cc71d8::t_4dffec71e6b842 1-92
+frontend/src/components/AdherenceBar.tsx
+  s_5ed3b392cc71d8::t_f850446c076282 36
+frontend/src/components/AgentSidePanel.test.tsx
+  s_5ed3b392cc71d8::t_5662879f8a499e 84,122-124,127,142,144,150,156,171
+frontend/src/components/AgentSidePanel.tsx
+  s_5ed3b392cc71d8::t_fb46835fbb2bb0 1-5,16-18,23,40,84,95,99,118-119,123-125,127-131,136-139,145,163-182,185,196,198,201,206-209,218,224,248-249,253-255,259-265,270,273,276-277,282,284-288,295,298,340-343,355,397,400-401,403,406,408,415,486-490,496-497,504-505,519-520,525,534,537,542
+frontend/src/components/CalendarWeek.tsx
+  s_5ed3b392cc71d8::t_0ca406f8e28ee9 57-58,78,91,96
+frontend/src/components/DecisionBadge.tsx
+  s_5ed3b392cc71d8::t_a72cdddcb48d9f 17
+frontend/src/components/EnableNotifications.tsx
+  s_5ed3b392cc71d8::t_58d79f9849fc53 3-9,11-22,24-25,27-36,38-40,42-48,51-76
+frontend/src/components/ErrorBoundary.tsx
+  s_5ed3b392cc71d8::t_c63aa7012f994f 32,40
+frontend/src/components/FitDropzone.tsx
+  s_5ed3b392cc71d8::t_ae8defec355943 77,80,87,89
+frontend/src/components/GarminLoginModal.tsx
+  s_5ed3b392cc71d8::t_af12f0d09fbdfa 1,6,14-15,43,77,83,100,107,133,145,154
+frontend/src/components/InstallPrompt.tsx
+  s_5ed3b392cc71d8::t_885b95dd22619c 1-85
+frontend/src/components/MetricCard.tsx
+  s_5ed3b392cc71d8::t_25c45b612c403b 14,36,38,51,54
+frontend/src/components/Navigation.tsx
+  s_5ed3b392cc71d8::t_bdcea0c513faf6 3,9-11,14-18,45,66-67,71,75,88-89,97,102-104,121,129-130,134,136,142-143,151
+frontend/src/components/PlayerSummary.tsx
+  s_5ed3b392cc71d8::t_dfae86064284dc 2,6,27,47-51
+frontend/src/components/PrescriptionEditor.test.tsx
+  s_5ed3b392cc71d8::t_fabc2ebbe97ce4 1-185
+frontend/src/components/PrescriptionEditor.tsx
+  s_5ed3b392cc71d8::t_5e31d2a468978e 1,5-6,8,10-11,13,17,21-24,26-27,32-36,38-40,43,48-50,54-55,67
+frontend/src/components/RouteScroll.tsx
+  s_5ed3b392cc71d8::t_3dddb7b39225e0 1-53
+frontend/src/components/RpePicker.tsx
+  s_5ed3b392cc71d8::t_a771ed8c21e035 1-101
+frontend/src/components/SessionCard.test.tsx
+  s_5ed3b392cc71d8::t_cf7ab8e4bea429 3,5-7,52-67,70-71,74,76-134,136-144,155-168
+frontend/src/components/SessionCard.tsx
+  s_5ed3b392cc71d8::t_61623d25a9751c 2,5,78,82-98,107,119-121,137,156,160-228,268,290,303,311,318,357-359,361,374-376,381
+frontend/src/components/States.tsx
+  s_5ed3b392cc71d8::t_129f2a95f38dbf 13,29,35,59-60,89
+frontend/src/components/TimeInput.tsx
+  s_5ed3b392cc71d8::t_53cf22ecafa038 1-61
+frontend/src/components/WorkoutCard.test.tsx
+  s_5ed3b392cc71d8::t_5a3710d5a8da36 1-80
+frontend/src/components/WorkoutCard.tsx
+  s_5ed3b392cc71d8::t_603b338eab211b 1,4,10,12-13,15,21-22,32-33,37-38,43-45,50,59,65,75-76,85,91,100-104,108,110-112
+frontend/src/components/WorkoutSelection.test.tsx
+  s_5ed3b392cc71d8::t_f688a29d55bbf5 1-50
+frontend/src/components/WorkoutSelection.tsx
+  s_5ed3b392cc71d8::t_0790bde003ead0 1-2,6,9-12,14-15,26-46,55-72
+frontend/src/components/agent/AgentMarkdown.test.tsx
+  s_5ed3b392cc71d8::t_6a4155b70f8f2f 1-3,6-12,15-34
+frontend/src/components/agent/AgentMarkdown.tsx
+  s_5ed3b392cc71d8::t_3250119211b08b 1-2,4,7,10-18
+frontend/src/components/agent/CalendarActionCard.test.tsx
+  s_5ed3b392cc71d8::t_fa6c70420da675 151-176
+frontend/src/components/agent/CalendarActionCard.tsx
+  s_5ed3b392cc71d8::t_d22c014cefe7ba 64-72,76,81
+frontend/src/components/agent/CoachActivity.test.tsx
+  s_5ed3b392cc71d8::t_1bdbbc4966ff13 32,35,48,54-82,128,151,158-166
+frontend/src/components/agent/CoachActivity.tsx
+  s_5ed3b392cc71d8::t_b3c531986b488e 3,60,74,80,87,101
+frontend/src/components/agent/CoachDisplayOptions.tsx
+  s_5ed3b392cc71d8::t_f490d0e95ca5dd 1-96
+frontend/src/components/agent/CoachMemory.tsx
+  s_5ed3b392cc71d8::t_bf9cad41dbfe4a 1-40
+frontend/src/components/agent/CoachReferenceCard.tsx
+  s_5ed3b392cc71d8::t_8eb58c791b2cb9 1-15
+frontend/src/components/agent/CoachToday.test.tsx
+  s_5ed3b392cc71d8::t_5b8fde40f19cfb 1-104
+frontend/src/components/agent/CoachToday.tsx
+  s_5ed3b392cc71d8::t_146387376a875e 1-121
+frontend/src/components/agent/DocumentAttachments.tsx
+  s_5ed3b392cc71d8::t_4112c1ce03d593 3,9,32,46-69,71-94,96-97
+frontend/src/components/agent/DocumentPreview.tsx
+  s_5ed3b392cc71d8::t_72007747bd8f01 35-37,121
+frontend/src/components/agent/MarkdownContent.test.tsx
+  s_5ed3b392cc71d8::t_6c9cbb4e11674e 1-52
+frontend/src/components/agent/MarkdownContent.tsx
+  s_5ed3b392cc71d8::t_1432bfe75ed0df 1-36
+frontend/src/components/agent/MessageAttachments.tsx
+  s_5ed3b392cc71d8::t_f77ee01d224cff 3,21,29,31,48
+frontend/src/components/agent/SkillInput.test.tsx
+  s_5ed3b392cc71d8::t_8529e730256649 111-119
+frontend/src/components/agent/SkillInput.tsx
+  s_5ed3b392cc71d8::t_5ffe012148044d 26
+frontend/src/components/agent/ToolActivity.tsx
+  s_5ed3b392cc71d8::t_869047c4ed6dad 11,42,63,74
+frontend/src/components/agent/markdownRenderer.ts
+  s_5ed3b392cc71d8::t_4ab546ecdd5b85 1-39
+frontend/src/components/auth/AuthGate.test.tsx
+  s_5ed3b392cc71d8::t_44380b56c104b8 3,7,90,92,95-100,112-122,137,185-233
+frontend/src/components/auth/AuthGate.tsx
+  s_5ed3b392cc71d8::t_a89ee0e0049eea 1-2,7,10-15,30-33,36-39,41-44,47,60,63-66,81,94-98,105-116
+frontend/src/components/auth/ClerkGate.tsx
+  s_5ed3b392cc71d8::t_3bed766dd903dc 5,7,17,25,30,38-43,52,55-57,73,80,94,97,144-146,148,187-199,243-244,267,270
+frontend/src/components/auth/SignOutButton.tsx
+  s_5ed3b392cc71d8::t_609182ae8ea9fc 26
+frontend/src/components/auth/buildConfig.ts
+  s_5ed3b392cc71d8::t_5ffd4a5fe77774 1-16
+frontend/src/components/index.ts
+  s_5ed3b392cc71d8::t_f77b9d9ca9d0ae 6
+frontend/src/components/muscle-map/MuscleMap.tsx
+  s_5ed3b392cc71d8::t_7816343c605e20 62,64,75-76,79,93,119-120,127,131
+frontend/src/components/ui/Button.tsx
+  s_5ed3b392cc71d8::t_f0ad1cf59ed3de 29,74
+frontend/src/components/ui/Input.tsx
+  s_5ed3b392cc71d8::t_9460c32ffb55e3 14-16,67,74
+frontend/src/components/ui/Modal.tsx
+  s_5ed3b392cc71d8::t_d9ada3dcabf323 2,16-17,24,35,46,79,82-83,101,109-110,125,135
+frontend/src/components/ui/Panel.tsx
+  s_5ed3b392cc71d8::t_266331c48b75a9 10,37,46
+frontend/src/components/ui/RpeBadge.tsx
+  s_5ed3b392cc71d8::t_23f24b00d49919 35
+frontend/src/components/ui/Skeleton.tsx
+  s_5ed3b392cc71d8::t_fe0e394c53b961 1-16
+frontend/src/components/ui/index.ts
+  s_5ed3b392cc71d8::t_1a4b58574ac323 6
+frontend/src/hooks/useCoachDisplay.test.ts
+  s_5ed3b392cc71d8::t_d517b362425ad2 1-38
+frontend/src/hooks/useCoachDisplay.ts
+  s_5ed3b392cc71d8::t_f72da9e3fff1a9 1-26
+frontend/src/hooks/useCoachThreads.ts
+  s_5ed3b392cc71d8::t_3c8f427d0d3a2c 5,37,42,85-88,162,232
+frontend/src/hooks/useVisualViewport.ts
+  s_5ed3b392cc71d8::t_6262c20483d3ee 1-24
+frontend/src/hooks/useWorkoutActions.ts
+  s_5ed3b392cc71d8::t_c038796dcef15d 2,14-15,60
+frontend/src/index.css
+  s_5ed3b392cc71d8::t_6b3f9e80880220 31-46,95,97-103,117-128,143-144,183,193-236,352,354,370-374,393,404,415-416,429-431,444-445,451,459-479,491-581
+frontend/src/lib/agentActivity.test.ts
+  s_5ed3b392cc71d8::t_98f3cfe693143a 1-17
+frontend/src/lib/agentActivity.ts
+  s_5ed3b392cc71d8::t_e8abb96606eadf 5,24,30-40,45-51,60
+frontend/src/lib/agentConversation.ts
+  s_5ed3b392cc71d8::t_6a0a1707332426 35
+frontend/src/lib/agentStream.test.ts
+  s_5ed3b392cc71d8::t_d9533f22c23a8f 223-224,226-227
+frontend/src/lib/agentStream.ts
+  s_5ed3b392cc71d8::t_e383cff52f7e06 20-21,32-33,52,97,102-104,179-182,202,211,227-237
+frontend/src/lib/api.ts
+  s_5ed3b392cc71d8::t_6117e43bcee595 151,222,224,227-228,230-233,432-436,438-443,494-512,522-533,535-539
+frontend/src/lib/auth.test.ts
+  s_5ed3b392cc71d8::t_7e1a4152093bf3 5-7,94,105-107,114
+frontend/src/lib/auth.ts
+  s_5ed3b392cc71d8::t_472445247cd42b 2,6-7,59-64,74,87
+frontend/src/lib/chunkReload.test.ts
+  s_5ed3b392cc71d8::t_a9f9c4b3751bf8 1-43
+frontend/src/lib/chunkReload.ts
+  s_5ed3b392cc71d8::t_d61fd934b6bec5 1-68
+frontend/src/lib/coachCards.test.ts
+  s_5ed3b392cc71d8::t_3b688ae36a9599 1-20
+frontend/src/lib/coachToday.ts
+  s_5ed3b392cc71d8::t_8f34c382f78210 1-47
+frontend/src/lib/dailyTip.test.tsx
+  s_5ed3b392cc71d8::t_60b449c10148f1 1-162
+frontend/src/lib/dailyTip.ts
+  s_5ed3b392cc71d8::t_396a727a02843e 1-65
+frontend/src/lib/dashboard.test.ts
+  s_5ed3b392cc71d8::t_b0c8957eddeccd 1-116
+frontend/src/lib/dashboard.ts
+  s_5ed3b392cc71d8::t_71c63912fe6a95 1-52
+frontend/src/lib/documentExtraction.ts
+  s_5ed3b392cc71d8::t_8dd10ae839101e 56-65
+frontend/src/lib/documents.test.ts
+  s_5ed3b392cc71d8::t_dde74138b40d5a 3,8,14,31,33,37-41
+frontend/src/lib/documents.ts
+  s_5ed3b392cc71d8::t_8241adce04945a 12-13,27-28,32,73,77-78
+frontend/src/lib/gamification.test.ts
+  s_5ed3b392cc71d8::t_30144e27d44f14 1-58
+frontend/src/lib/gamification.ts
+  s_5ed3b392cc71d8::t_07ed5469d8dad1 1-2,78-131,137
+frontend/src/lib/garminSync.test.ts
+  s_5ed3b392cc71d8::t_cf6daf6249234b 1,6,45-119
+frontend/src/lib/garminSync.ts
+  s_5ed3b392cc71d8::t_ce013fec7f972f 10-15,24,37-41,102-146
+frontend/src/lib/install.test.ts
+  s_5ed3b392cc71d8::t_8bdf7d4fe89caf 1-50
+frontend/src/lib/install.ts
+  s_5ed3b392cc71d8::t_bbeaf0580bd678 1-95
+frontend/src/lib/push.ts
+  s_5ed3b392cc71d8::t_20eefd2f76d96a 28,34-35
+frontend/src/lib/queryKeys.ts
+  s_5ed3b392cc71d8::t_4444fd681c260c 1,3,14-15,70,86-90,94,116-117
+frontend/src/lib/queryPersistence.test.ts
+  s_5ed3b392cc71d8::t_c05ffef6d4847c 1-48
+frontend/src/lib/queryPersistence.ts
+  s_5ed3b392cc71d8::t_18bf3aea891bf6 1-119
+frontend/src/lib/sessionMatch.test.ts
+  s_5ed3b392cc71d8::t_a95395ab4d3110 2-3,57-99
+frontend/src/lib/theme.ts
+  s_5ed3b392cc71d8::t_82d19be7cc4831 2-9
+frontend/src/lib/timeMask.test.ts
+  s_5ed3b392cc71d8::t_71fb0f10649fec 1-99
+frontend/src/lib/timeMask.ts
+  s_5ed3b392cc71d8::t_636a6f12adf98b 1-67
+frontend/src/lib/utils.test.ts
+  s_5ed3b392cc71d8::t_b34df2660adcdf 1-12
+frontend/src/lib/utils.ts
+  s_5ed3b392cc71d8::t_f6ee290478e813 46-50
+frontend/src/lib/workouts.test.ts
+  s_5ed3b392cc71d8::t_62c487cd210f87 4-33
+frontend/src/lib/workouts.ts
+  s_5ed3b392cc71d8::t_3d66658961e3f2 2-4,9,12-15,23-25,27-28,31,63-73,85-159
+frontend/src/main.tsx
+  s_5ed3b392cc71d8::t_b8fd88df4230a9 6-8,11-18
+frontend/src/pages/Analytics.tsx
+  s_5ed3b392cc71d8::t_1bab2ffe3c2991 87,89,100
+frontend/src/pages/HUD.tsx
+  s_5ed3b392cc71d8::t_b846e2d4d1dd35 1-2,4,6-7,10-16,21,35-75,81,87-89,94,98,103,105-108,112,118-126,130,136-140,147,149,152-167,169-185,187,189-190,194,197,199,201,203,205-207,215,218,221,225,235,240,254-258,265,271,275,282-283,291-292,295-299,302-307,310,312-313,321,331,335-338,354,361,365,394,397-401,409,415-416,423-424,436-437,449-450,457-458,466,468-475
+frontend/src/pages/Log.tsx
+  s_5ed3b392cc71d8::t_8a138024a9c0b3 7-8,29-34,71-77,87,103-105,111-115,121,130,140,143,146
+frontend/src/pages/Profile.test.tsx
+  s_5ed3b392cc71d8::t_d4ca5c024995a5 12,65,75,87,92,110,131-164
+frontend/src/pages/Profile.tsx
+  s_5ed3b392cc71d8::t_0d94a184035920 13,48,65-66,103,105,111-118,131,153,182,198,216,228,245,271,330,416,542,585
+frontend/src/pages/QuestLog.tsx
+  s_5ed3b392cc71d8::t_5b43ce90a3b982 1-2,4-9,11-12,17-35,39-51,53-64,74-76,78-81,83-86,88-95,97-136,141-142,148-152,154-157,159-213,215-220,222-261,263-283,286-345,347-381,383-419,421-464,467-494,496-523
+frontend/src/pages/RecordSource.tsx
+  s_5ed3b392cc71d8::t_5ae61f6f0de627 33
+frontend/src/pages/SessionDetail.test.tsx
+  s_5ed3b392cc71d8::t_5a61f26995f05f 4,10,12-15,147-173
+frontend/src/pages/SessionDetail.tsx
+  s_5ed3b392cc71d8::t_839c035d02c1cb 3,6,59,80-81,101,104,112-113,139,145,205-207,216-217,219,310,318,324,347,362,401,442
+frontend/src/pages/Settings.test.tsx
+  s_5ed3b392cc71d8::t_07cfa82beb09e4 42-43,48,52-53,63-64,68,77,87,100,114,117,126
+frontend/src/pages/Settings.tsx
+  s_5ed3b392cc71d8::t_3f76986a5907d9 1,13-26,131,147,153,157,171-182
+frontend/src/pages/YearReview.tsx
+  s_5ed3b392cc71d8::t_29f5b12d0ce70a 50,59-60,79,137,140,157,181,226,232,234,257,291,295,297
+frontend/src/pages/analytics/PeriodSelector.tsx
+  s_5ed3b392cc71d8::t_63cc710149b673 23
+frontend/src/pages/analytics/Section.tsx
+  s_5ed3b392cc71d8::t_9ea12daa98ef95 31,50
+frontend/src/pages/analytics/StatCard.tsx
+  s_5ed3b392cc71d8::t_e0fbf99602e19e 39,66-67,114,121,125,131,136,139
+frontend/src/pages/analytics/cards/RecordsCard.tsx
+  s_5ed3b392cc71d8::t_2b19e7567c8103 28,37,60,69-71
+frontend/src/pages/analytics/cards/SportsCard.tsx
+  s_5ed3b392cc71d8::t_dcb79478752114 45,54,57
+frontend/src/pages/analytics/cards/ZonesCard.tsx
+  s_5ed3b392cc71d8::t_ea4f6b9d070f2e 75
+frontend/src/pages/analytics/chartParts.tsx
+  s_5ed3b392cc71d8::t_b84195b8520c8e 52
+frontend/src/pages/log/CardioTab.tsx
+  s_5ed3b392cc71d8::t_a42eb3fd976d62 19,73,89,105,109,120,126
+frontend/src/pages/log/ExerciseProgress.tsx
+  s_5ed3b392cc71d8::t_0bb4e3636a9b47 56,73,80,86,100
+frontend/src/pages/log/LogSessionModal.tsx
+  s_5ed3b392cc71d8::t_cdbe45f9e56346 85,95,139,146,152,156,183,193,212,214,216,219,236,242,247,278,284,291,294
+frontend/src/pages/log/ManualCardioModal.tsx
+  s_5ed3b392cc71d8::t_30885f86f293ce 64,159
+frontend/src/pages/log/RecentSessions.tsx
+  s_5ed3b392cc71d8::t_ff287dc7687aaf 9,26-28,61,90-91,96,110,133,142,162,183
+frontend/src/pages/log/SessionDetailModal.tsx
+  s_5ed3b392cc71d8::t_387b4473e3371e 41,52,60,64,67,86,91,94,102,121-122,127,136,152,167-168,172,179,194-195
+frontend/src/pages/log/SessionRow.tsx
+  s_5ed3b392cc71d8::t_50eda1221b909a 29,33,35
+frontend/src/pages/log/VoiceDictation.tsx
+  s_5ed3b392cc71d8::t_d183ac893a40b6 134,140,150
+frontend/src/pages/log/WeeklyVolumeTracker.tsx
+  s_5ed3b392cc71d8::t_b41e8db5fd9184 32-33,36-37,40,43,49
+frontend/src/pages/log/progression.tsx
+  s_5ed3b392cc71d8::t_6e35765df92193 12,47
+frontend/src/pages/planning/GarminExportPanel.tsx
+  s_5ed3b392cc71d8::t_c758b26e5e9d3f 5,7-13,15-97
+frontend/src/pages/planning/GoalProjectionPanel.tsx
+  s_5ed3b392cc71d8::t_6b4420d8bc9fca 37,45
+frontend/src/pages/planning/ProjectionChart.tsx
+  s_5ed3b392cc71d8::t_d6b02fee46a9f8 71
+frontend/src/pages/planning/SessionDetail.tsx
+  s_5ed3b392cc71d8::t_67bf3b76ef9a82 1-464
+frontend/src/pages/planning/SessionEditor.tsx
+  s_5ed3b392cc71d8::t_126e3d4374e647 1-359
+frontend/src/pages/planning/WeekBoard.tsx
+  s_5ed3b392cc71d8::t_a899fd234bcd91 1-6,8-9,11-12,14-35,38-155,160,162-167,173,175-180,183-236,238-315
+frontend/src/pages/planning/WeeklyReviewPanel.tsx
+  s_5ed3b392cc71d8::t_e7bcc10c73e214 47,86
+frontend/src/pages/planning/planning.css
+  s_5ed3b392cc71d8::t_d1627f88c6f282 1-97
+frontend/src/pages/planning/sessionForm.test.ts
+  s_5ed3b392cc71d8::t_d120474c05a3e8 1-27
+frontend/src/pages/planning/sessionForm.ts
+  s_5ed3b392cc71d8::t_4c83dfad7bd1b7 1-168
+frontend/src/pages/profileRecords.tsx
+  s_5ed3b392cc71d8::t_699e8eea47cdd8 60,94
+frontend/src/pages/routes.ts
+  s_5ed3b392cc71d8::t_f87082652d9e2c 1-13
+frontend/src/pages/session/StreamChart.tsx
+  s_5ed3b392cc71d8::t_727e5b8ae418c8 61
+frontend/src/pages/settings/AdminTab.test.tsx
+  s_5ed3b392cc71d8::t_ffab09a5559860 60,86-133
+frontend/src/pages/settings/AdminTab.tsx
+  s_5ed3b392cc71d8::t_86389df527146f 34-79,133,153,167,186
+frontend/src/pages/settings/AppearanceTab.tsx
+  s_5ed3b392cc71d8::t_e99cc822a4f352 1,10-16,22,24,26-36
+frontend/src/pages/settings/AthleteFactsPanel.test.tsx
+  s_5ed3b392cc71d8::t_ab0e4f7964cacb 65,68,139
+frontend/src/pages/settings/AthleteFactsPanel.tsx
+  s_5ed3b392cc71d8::t_8cf19a6a55a83a 23,39,57-58,93,96,98,100,118,126,187,189,204,206,208,211,214-215,217-218,239,242-243
+frontend/src/pages/settings/CoachTab.tsx
+  s_5ed3b392cc71d8::t_a40277cf43feba 5-6,31,75,80,98-109,113,151-155,171,174-226,228,230-233,313-314,317,360
+frontend/src/pages/settings/ConnectionsTab.tsx
+  s_5ed3b392cc71d8::t_cc8af1fd91c3f4 8,34,110,139,144,147
+frontend/src/pages/settings/DataTab.tsx
+  s_5ed3b392cc71d8::t_90c39dd1b32c49 44,57,67,77,84,87,117,122
+frontend/src/pages/settings/GarminSyncProgress.tsx
+  s_5ed3b392cc71d8::t_f977e007430f5b 2,26,37,41,43-44,47-48,60
+frontend/src/pages/settings/GoalsTab.tsx
+  s_5ed3b392cc71d8::t_1928715ed300fb 53,67-68,84,91,105,118,179
+frontend/src/pages/settings/GoogleCalendarConnection.tsx
+  s_5ed3b392cc71d8::t_fc5a9cc7b8a135 126
+frontend/src/pages/settings/PlanCalendarSync.tsx
+  s_5ed3b392cc71d8::t_ad5bced9feaa55 56
+frontend/src/pages/settings/PlanPreviewModal.tsx
+  s_5ed3b392cc71d8::t_b55d01d58a0be1 40,55,59-61,122
+frontend/src/pages/settings/ProfileTab.tsx
+  s_5ed3b392cc71d8::t_46e123b54dc405 42
+frontend/src/pages/settings/RaceGoalsPanel.tsx
+  s_5ed3b392cc71d8::t_af11115927bec5 8,26,48,125,147,152,160-161
+frontend/src/pages/settings/SlackConnection.tsx
+  s_5ed3b392cc71d8::t_9048ea9c9fd290 24
+frontend/src/pages/settings/StatusRow.tsx
+  s_5ed3b392cc71d8::t_ba613452871535 28,31
+frontend/src/pages/settings/SyncOptionsForm.tsx
+  s_5ed3b392cc71d8::t_976f78d87d75c3 2,13,18-21,23,32,36-37,42-43,45-47,56-61,70,75
+frontend/src/pages/settings/SystemTab.tsx
+  s_5ed3b392cc71d8::t_39e1d42a56d192 12,43,60-64,96-100,153,156,160,184,186-187,206,217,230,246
+frontend/src/pages/settings/TrainingPacesPanel.tsx
+  s_5ed3b392cc71d8::t_e9cab02bce6edf 18,22,48,64,69
+frontend/src/pages/settings/WorkoutTab.tsx
+  s_5ed3b392cc71d8::t_cf39f63d29591e 50,53,71,74-75,121
+frontend/src/pages/settings/types.ts
+  s_5ed3b392cc71d8::t_2052ecf14fce46 29-41
+frontend/src/sw.ts
+  s_5ed3b392cc71d8::t_4b180e0091726f 5-6,21-34,77-79
+frontend/src/types/index.ts
+  s_5ed3b392cc71d8::t_b1a665d8c7153d 133-134,211-213,255-256
+frontend/vite.config.ts
+  s_5ed3b392cc71d8::t_aada66658120e9 14,50-51,53-58,62-78
+pyproject.toml
+  s_5ed3b392cc71d8::t_96624046c0e63d 6-7,10,27-29,34,36,51-52
+scripts/bundle_ocr_data.py
+  s_5ed3b392cc71d8::t_1e8024ef90fbf1 1-34
+scripts/ci/test_preview_workflow.py
+  s_5ed3b392cc71d8::t_000f50b7ffbd04 1-130
+scripts/latency_probe.py
+  s_5ed3b392cc71d8::t_e5b87ea84aaa3e 12-19,25,27,36-42,44-47,51-52,54-57,60-77,92,94-97,100-104,106-108
+slack-manifest.json
+  s_5ed3b392cc71d8::t_2a5e4a63c283e0 15-33,40-41,47-48,51-52,61,66-68
+src/arete/agent/backends/journal.py
+  s_5ed3b392cc71d8::t_5836ee7abed3a4 1,3-6,8-9,11,15-17,21,33-34,49-50,52-53,55-60,62-70
+src/arete/agent/backends/skills.py
+  s_5ed3b392cc71d8::t_548506b11ebd2c 1,3,6,8,11,15
+src/arete/agent/backends/text.py
+  s_5ed3b392cc71d8::t_a4f1e5782ea2a5 1-143
+src/arete/agent/capabilities/discovery.py
+  s_5ed3b392cc71d8::t_8aba2c3b806eee 1,8-13,20-21,39,41-43,47-48,51-63
+src/arete/agent/capabilities/models.py
+  s_5ed3b392cc71d8::t_c442e2f7f36ee0 1
+src/arete/agent/capabilities/registry.py
+  s_5ed3b392cc71d8::t_2ab399cae8a27a 8,11,13,18,21-22,25,27-33,36,45-46,50-53,57-60,63,68-91,96,107,123,155-157,162,167-173,175-180
+src/arete/agent/context/attachments.py
+  s_5ed3b392cc71d8::t_59389718f4ddc5 1,25,28-29,31-33
+src/arete/agent/context/builder.py
+  s_5ed3b392cc71d8::t_381160d10ef3ee 13,20,22,40-48,50-54,56-58,74-82,89-92,95,99,106,109,123-126,131-133,136-141,146-148,165,200-204
+src/arete/agent/context/sections.py
+  s_5ed3b392cc71d8::t_3c1e433f42d3aa 64-70,120-137
+src/arete/agent/context/skills.py
+  s_5ed3b392cc71d8::t_49031820763cbd 1,5,17,31
+src/arete/agent/factory.py
+  s_5ed3b392cc71d8::t_0eb78da8ff7cd3 17,25-26,30,32,41,56,63-67,72,102-103,121,127-128,131
+src/arete/agent/middlewares/capabilities.py
+  s_5ed3b392cc71d8::t_618d05ca6a8158 5-6,11,14,24,100-148,151-152,154-155,157,159,163-164,166-167,169,171
+src/arete/agent/middlewares/events.py
+  s_5ed3b392cc71d8::t_f21e2c0206cd0f 16,73-74,95-96
+src/arete/agent/middlewares/fact_memory.py
+  s_5ed3b392cc71d8::t_ae91d338bca8a9 1,5-8,11-12,14,16-29
+src/arete/agent/middlewares/filesystem.py
+  s_5ed3b392cc71d8::t_8fbebb1c474a2e 1-62
+src/arete/agent/middlewares/journal.py
+  s_5ed3b392cc71d8::t_4db3a075ce6a2c 1-9
+src/arete/agent/middlewares/limits.py
+  s_5ed3b392cc71d8::t_bf5aae0edfdc45 16,35-48
+src/arete/agent/middlewares/observability.py
+  s_5ed3b392cc71d8::t_6cb0de64680748 7,41,58
+src/arete/agent/middlewares/policy.py
+  s_5ed3b392cc71d8::t_8a91b2af2b7288 9,31-33
+src/arete/agent/middlewares/provider_affinity.py
+  s_5ed3b392cc71d8::t_0cac824125098f 1,3,5,7-9,11-12,15-34,36-44,46-59
+src/arete/agent/middlewares/skills.py
+  s_5ed3b392cc71d8::t_b3570de82d70c0 7,36-43,45-48,52-64,66-77
+src/arete/agent/middlewares/surface.py
+  s_5ed3b392cc71d8::t_d7a69711769e33 1-12
+src/arete/agent/models/jev.py
+  s_5ed3b392cc71d8::t_463ab1f5a778d7 1-114
+src/arete/agent/models/providers.py
+  s_5ed3b392cc71d8::t_bf5bc9c11d6b17 3-4,14,37-45
+src/arete/agent/models/registry.py
+  s_5ed3b392cc71d8::t_464b1227b8a631 4,16,33-48,65
+src/arete/agent/models/responses.py
+  s_5ed3b392cc71d8::t_9f921adce80f64 7-8,12-25,36-43
+src/arete/agent/models/routing.py
+  s_5ed3b392cc71d8::t_4286bf21375bb6 9,25,49-56
+src/arete/agent/profiles/catalog.py
+  s_5ed3b392cc71d8::t_c81e8414209f93 3-4,8,12-25,27-39
+src/arete/agent/profiles/models.py
+  s_5ed3b392cc71d8::t_8bf685b8b6fc36 6,17-19,21-26
+src/arete/agent/prompts/coach.py
+  s_5ed3b392cc71d8::t_bcac1b832f1e4f 27-29,76-77
+src/arete/agent/prompts/product.py
+  s_5ed3b392cc71d8::t_26532e657ce4c1 1-72
+src/arete/agent/runtime/context.py
+  s_5ed3b392cc71d8::t_9c491debc22dba 16,18,20,45-49,56,60-65,77,81-82,89-96,98-99,101,105-106
+src/arete/agent/runtime/events.py
+  s_5ed3b392cc71d8::t_585a9aa99cd74f 135-165
+src/arete/agent/runtime/execution.py
+  s_5ed3b392cc71d8::t_eb70e84ea47a94 47-50,66-73,91-93,97-98,101-103,106-109,114,136-138,142,146,157-158,163
+src/arete/agent/runtime/fact_memory.py
+  s_5ed3b392cc71d8::t_5adbe46217edff 1,4-5,8-9,11-12,14-17,19,22-52,54-55,57-58,60-72,74,77-79,81-82,84,89-98,100-122
+src/arete/agent/runtime/policy.py
+  s_5ed3b392cc71d8::t_a7405299d66a1c 3,7-9,20-22,33-78
+src/arete/agent/runtime/streaming.py
+  s_5ed3b392cc71d8::t_e7781add762dda 44-50
+src/arete/agent/runtime/surface.py
+  s_5ed3b392cc71d8::t_68f47b3d8e7d89 1-114
+src/arete/agent/skills/system/athlete-learning/SKILL.md
+  s_5ed3b392cc71d8::t_4e003679096573 1-11
+src/arete/agent/skills/system/coaching-follow-up/SKILL.md
+  s_5ed3b392cc71d8::t_5d09a38c17578a 1-11
+src/arete/agent/skills/system/document-planning/SKILL.md
+  s_5ed3b392cc71d8::t_e9925989629c72 3,17-35
+src/arete/agent/skills/system/session-debrief/SKILL.md
+  s_5ed3b392cc71d8::t_d5f3a118554d2c 1-11
+src/arete/agent/skills/system/training-adjustment/SKILL.md
+  s_5ed3b392cc71d8::t_911b0ec4e9450c 1-11
+src/arete/agent/tools/analytics.py
+  s_5ed3b392cc71d8::t_c2c0e33cf17e48 17,19-20,23,98-99,122-123,144-147,161,168-172,196-197
+src/arete/agent/tools/calendar.py
+  s_5ed3b392cc71d8::t_079e84b09a1bcf 4-5,7,11,15-16,35-38,41-44,48-51,54-57,61,63,65,81
+src/arete/agent/tools/coach_followup.py
+  s_5ed3b392cc71d8::t_b2a10bc28f0304 1,3-4,6,8,11-19,21,23-27
+src/arete/agent/tools/fact_memory.py
+  s_5ed3b392cc71d8::t_d80d1072a9925e 1-107
+src/arete/agent/tools/garmin.py
+  s_5ed3b392cc71d8::t_f776628b9a6c2b 4,6-7,9-10,17-18,26-27,32,39,41-45,47,49-50,54-55,57-71,76,84-87,90,99-118
+src/arete/agent/tools/journal.py
+  s_5ed3b392cc71d8::t_3a9d663c1d7c5c 1,5,7,9,16,18-21
+src/arete/agent/tools/planning.py
+  s_5ed3b392cc71d8::t_6a1c6a542fb87d 3-8,13-15,17,19-28,30-31,33-34,42-45,48,50-64,66-73,76-77,83,85-86,90-94,97,99-101,103,105-108,110,113-115
+src/arete/agent/tools/prescriptions.py
+  s_5ed3b392cc71d8::t_4f28105c83a247 1-44
+src/arete/agent/tools/slack_product.py
+  s_5ed3b392cc71d8::t_a99eb3f5c2a63f 1-143
+src/arete/agent/tools/strength.py
+  s_5ed3b392cc71d8::t_64315bfc71228a 1,7,9-10,13,81-86,88-89,91,96-99,102,107-123,126-128,130,132-150,154,156,162-173,176,185-188,210-215
+src/arete/agent/tools/validation.py
+  s_5ed3b392cc71d8::t_5ecddf1e0cd61b 1,3,5-7,10,13-16,19-28,31-35,37-41,43
+src/arete/api/admin.py
+  s_5ed3b392cc71d8::t_c6fed758f16eec 1,3-4,15,18,20-25,51-76,94-96,103,111
+src/arete/api/agent.py
+  s_5ed3b392cc71d8::t_b8a31979f7e5d4 29,110,165,168,175,178,208,229,231,236-237,240,268,285,315,317,355
+src/arete/api/ai_tips.py
+  s_5ed3b392cc71d8::t_cbb2e1df28d2af 12,24,26-36,38-39,42-60,72-84,90
+src/arete/api/auth.py
+  s_5ed3b392cc71d8::t_acf23f82135c87 11-13,17-20,25,28,30-31,100-101,110-127,150-151,154,210,212,218-269,336-338
+src/arete/api/coach.py
+  s_5ed3b392cc71d8::t_f02a3405841f54 1-74
+src/arete/api/dashboard.py
+  s_5ed3b392cc71d8::t_93a83f9e425ab5 1-70
+src/arete/api/documents.py
+  s_5ed3b392cc71d8::t_eed1b3830572a9 1,9
+src/arete/api/garmin.py
+  s_5ed3b392cc71d8::t_10486a4490b2da 16,31-32,53-54,57-58,220,223,225-228,252-288,293,299-309,317,320,325-328,387,440-442,510-511
+src/arete/api/garmin_export.py
+  s_5ed3b392cc71d8::t_db837113b2fa04 4,6,72-82
+src/arete/api/garmin_health.py
+  s_5ed3b392cc71d8::t_3e47d0f20a858b 18,20,22,76-77,120,124,129-133,141-145,151-152,163-168,170,183-184
+src/arete/api/garmin_sync.py
+  s_5ed3b392cc71d8::t_de4c888bcdd1fd 14,40-60,73-74,95,97-100,102,196-197,213-214
+src/arete/api/goals.py
+  s_5ed3b392cc71d8::t_7a37ecde5c3ee8 12,53
+src/arete/api/google_calendar.py
+  s_5ed3b392cc71d8::t_2bab30366bb896 176-182
+src/arete/api/main.py
+  s_5ed3b392cc71d8::t_88a3dfd42d502b 20-21,46-53,101-102,104-105,107-108,198-199
+src/arete/api/notifications.py
+  s_5ed3b392cc71d8::t_1ce561d009b3d7 56-59
+src/arete/api/plan.py
+  s_5ed3b392cc71d8::t_bae04653a00cf6 13,18,20,28-29,35-38,63
+src/arete/api/slack.py
+  s_5ed3b392cc71d8::t_9369978ca80a3e 32-34,37,55
+src/arete/api/strava.py
+  s_5ed3b392cc71d8::t_2bc32f83db5183 17,168-169,313-314,322-325
+src/arete/api/strength.py
+  s_5ed3b392cc71d8::t_04b3e271c7be29 20-23,31,127-128,412,425-448,464-465,467-468,650-651
+src/arete/api/year_review.py
+  s_5ed3b392cc71d8::t_a9b285df4216cb 10,19
+src/arete/coaching.py
+  s_5ed3b392cc71d8::t_349fbcc1956b30 7-8,14,16-26,28,30-35,51,67-68,74-96,99,105,112-116,123,126,135,142-149,153-155,181,183,190-193,196-225,227,232,234,239,241,246,248,292,317-322,325-329,341-483
+src/arete/config.py
+  s_5ed3b392cc71d8::t_fdd18c5a53aba8 133-139,220,222-225,279-284
+src/arete/dataio/coaching_schema.py
+  s_5ed3b392cc71d8::t_048ff378c2e774 1-57
+src/arete/dataio/db.py
+  s_5ed3b392cc71d8::t_bca84c6d086917 27,65,101-104,131
+src/arete/dataio/game_events.py
+  s_5ed3b392cc71d8::t_d0165e821aa7c2 6-10
+src/arete/dataio/init_duckdb.py
+  s_5ed3b392cc71d8::t_8efb1c7790ac3d 211,308-309,468,477-481,782-839,870-875
+src/arete/dataio/mirror.py
+  s_5ed3b392cc71d8::t_8882640c62e46d 11-13,26,28,34-37,40,63-80,168,195-196,200-205
+src/arete/dataio/queries.py
+  s_5ed3b392cc71d8::t_b9fcfb1db42acc 216-266
+src/arete/dataio/settings.py
+  s_5ed3b392cc71d8::t_5fcd021f5a48a6 8-9,46,48-49,53-68,70-71,80-81,89-90,112,114,116-120,138-140,146-147,168,185-186,188,194-195,217
+src/arete/dataio/slack_schema.py
+  s_5ed3b392cc71d8::t_777f018fa6136e 1-37
+src/arete/dataio/tenant_schema.py
+  s_5ed3b392cc71d8::t_8594e7b308ff05 58-60,97,103
+src/arete/features/banister.py
+  s_5ed3b392cc71d8::t_7cf660d3ffc1d8 12,19-21,79-80,106,134-135,140-141,156-157
+src/arete/features/fitness.py
+  s_5ed3b392cc71d8::t_0c567d61a0952a 477,487,508
+src/arete/features/hr_drift.py
+  s_5ed3b392cc71d8::t_97b5ffe341aec5 190-191
+src/arete/features/overview.py
+  s_5ed3b392cc71d8::t_b8735a9a6421f3 479,776
+src/arete/garmin/client.py
+  s_5ed3b392cc71d8::t_269dfbade314a9 23,26-27,63-65,86-89,92-95,155,161,166,170-194,196,207,229-237
+src/arete/garmin/repository.py
+  s_5ed3b392cc71d8::t_34813039287d4e 4,68-69,160-174,182,189,193,212-213,223-231,236,238-239,244-246,248-249,252,263-266,269-282,285,289-294,296-308,310-311,314-317,320-322,327-334,548,556,575,588,592-593,668-682,745,752-756,763-769,876-878
+src/arete/garmin/sync.py
+  s_5ed3b392cc71d8::t_7dd3346e732e49 36,41-42,68-69,102-103,141,373-374,378-383,395-396,414-421,424-435,439-469,522-525,556
+src/arete/garmin/threshold.py
+  s_5ed3b392cc71d8::t_263fc102560f40 89-94,102-103
+src/arete/garmin/token_store.py
+  s_5ed3b392cc71d8::t_3365dcfbe876be 9-10,13,17-21,25-30,33-40,42,44,46-50,54-132,146-147
+src/arete/garmin/workout_structure.py
+  s_5ed3b392cc71d8::t_ff6f11f0faa47a 26-28,81-110
+src/arete/garmin/workouts.py
+  s_5ed3b392cc71d8::t_b733479657949c 97-99
+src/arete/llm/running_grammar.py
+  s_5ed3b392cc71d8::t_fa427cf89eb573 1-352
+src/arete/llm/speech_grammar.py
+  s_5ed3b392cc71d8::t_a84da7ede4f04e 160-161
+src/arete/llm/workout_parser.py
+  s_5ed3b392cc71d8::t_d587968b7d20af 91-93,108,179,191,198
+src/arete/observability/agent.py
+  s_5ed3b392cc71d8::t_22b1dd7a974872 48-61,68,75,78-80,84-85
+src/arete/observability/http.py
+  s_5ed3b392cc71d8::t_6474127bd28ce6 1-120
+src/arete/observability/requests.py
+  s_5ed3b392cc71d8::t_2f25606e920a5d 1-97
+src/arete/scheduler.py
+  s_5ed3b392cc71d8::t_4bac1f381f18bf 3-7,18-19,21,28-34,96,123,162-166,173-176,180,182-186,192-210,214-215,223-264,274-275,280-286,288-304,308-309,313,319,327-332,350-369,373-432,442-444,446-452,454-456,460-465,473-475,479-490,494-498,506-508,516-519,525-539,543,546-547,562-564,568-575,598-599
+src/arete/services/adaptation.py
+  s_5ed3b392cc71d8::t_8dad13a5a66e0e 146,154-156,161-213
+src/arete/services/admin_athlete_data.py
+  s_5ed3b392cc71d8::t_e335e4d4aa3e6c 1-162
+src/arete/services/analytics.py
+  s_5ed3b392cc71d8::t_22e7dedcfa1205 43,171
+src/arete/services/athlete_facts.py
+  s_5ed3b392cc71d8::t_81466a6787cbf3 6,9,14,66,120-165,168-214,216-237,259,277,307,342
+src/arete/services/briefing.py
+  s_5ed3b392cc71d8::t_056d37b4a1010f 4-6,20,30,160,173-175,260,267-268,271,274,286,308-309,318,333-334,358-359,364-367,377-380,387-398,400-406,408-415,417-418,420-456
+src/arete/services/calendar_provider.py
+  s_5ed3b392cc71d8::t_3a8607e788dc1f 8-9,15,32-34,47-48,117-118
+src/arete/services/coach_followup.py
+  s_5ed3b392cc71d8::t_4e7bab19f1b603 1,6-7,9,11-12,14-19,22-23,26,28-29,33-35,37-62,64-65,69,71-73,75-107,109-140,142-148,151-155,158-169
+src/arete/services/coach_today.py
+  s_5ed3b392cc71d8::t_63891940e1762d 1-94
+src/arete/services/coaching_repository.py
+  s_5ed3b392cc71d8::t_76efc8429a0f9a 11-12,17,20,24-25,42-45,61-63,77,100,109-110,115,123,133-136,145,149-150,155,158-162,174,184-243
+src/arete/services/coaching_rules.py
+  s_5ed3b392cc71d8::t_6d945541c4a1ae 15,32,162,279,307,380,393-400,447,453-454,477-478,483-486,490
+src/arete/services/dashboard.py
+  s_5ed3b392cc71d8::t_747a5d627334be 1-90
+src/arete/services/data_export.py
+  s_5ed3b392cc71d8::t_0cca2e9b21df5a 27-28,147,246
+src/arete/services/documents.py
+  s_5ed3b392cc71d8::t_21c23493c3c133 399-401,429
+src/arete/services/fact_memory.py
+  s_5ed3b392cc71d8::t_f4dbe6eedbfb96 1-180
+src/arete/services/feature_flags.py
+  s_5ed3b392cc71d8::t_1ea362cd4207eb 1-44
+src/arete/services/gamification.py
+  s_5ed3b392cc71d8::t_15ebb1769b07f9 15,160-198,201-202,214,217-218,221,226-228,240-246,248-255,265-304,308-312,315-317,328-329,331-340,353-358,360-361,364,377-409
+src/arete/services/garmin_export.py
+  s_5ed3b392cc71d8::t_08a0395f0ab0d8 7,18,28,30,120-122,129-156,187-188,253-265,276-293,295-298,330-335,339-347,349,356-364,366-371,374-381,389-403,406-407,411-415,422-430,442,446-447,542-546,564-565,567-577,599,601-602,627,634,637,646,668,678,682,693,716,734,737-747,759,882-899,901,903-907,909,938,943,963,975-995,1046-1094,1098-1100,1103-1107,1109,1123
+src/arete/services/garmin_sync.py
+  s_5ed3b392cc71d8::t_a2cc71474ef907 1,3-7,9,11-13,15,17-23,26-27,29-77
+src/arete/services/goals.py
+  s_5ed3b392cc71d8::t_b38b668f2ee4f3 10,34,73-74,76-77,95,97-108,163
+src/arete/services/jev.py
+  s_5ed3b392cc71d8::t_44f42fb6808082 1-200
+src/arete/services/journal.py
+  s_5ed3b392cc71d8::t_d3c4dd3f7cc24e 36,107-111,113
+src/arete/services/memory.py
+  s_5ed3b392cc71d8::t_a3774b04be57d8 1,3-4,9,12,14,18,20-22,29-31,34-50,55,65-66,69-75,78-152,155-201,203-231,235-236,238-243,245-265
+src/arete/services/metrics.py
+  s_5ed3b392cc71d8::t_1517709398beb4 30,39,189,202,240-258,261,264-271,327-328,331-334,337,383-385,387-388,435-437,439-441,481,487
+src/arete/services/notifications.py
+  s_5ed3b392cc71d8::t_06b190282a019a 7-12,26-31,110-128,130-131,133-135
+src/arete/services/pages.py
+  s_5ed3b392cc71d8::t_78120abf2c3044 4,7-8,43,63-69,116-120,122-126,128,131,145-153
+src/arete/services/pdf_extraction.py
+  s_5ed3b392cc71d8::t_0f1513688caeb8 1-221
+src/arete/services/personal_context.py
+  s_5ed3b392cc71d8::t_82e0f08b9bc4d3 20,210-213,216,227,302
+src/arete/services/plan_adaptation.py
+  s_5ed3b392cc71d8::t_c738ac5c75ca0b 12-14,17,20-26,33,36-37,39,45-54,88-89,95,102-114,117,122-135,137-151,164-166,170,182-185,191-195,207,214,216-217,220-221,223-227,231,233,240-247,249,251-254,258-270,272-279,281-304,307-314,318-345,347-516,518-519
+src/arete/services/plan_builder.py
+  s_5ed3b392cc71d8::t_13c5b792ad3468 24,58,197,226
+src/arete/services/plan_repository.py
+  s_5ed3b392cc71d8::t_3d1890ca10fce5 8,19,42-46,66-70,93-97,117-119,130-131,145-147,169-171,173-174,181-182
+src/arete/services/planning.py
+  s_5ed3b392cc71d8::t_fa7139ce62a8d1 4,11,13-15,24,27-28,32,36-42,94,101,133,135-136,168,170,173-206,219,221-224,236-237,239-258,261-274,277,279-285,287-288,290-329,331-339,341-361,363-368,375
+src/arete/services/prescriptions.py
+  s_5ed3b392cc71d8::t_f517c2a2832581 9,49-55,71-78,82-85,99-104,136-146,182-200,225,228,238,245-247,259
+src/arete/services/session_feedback.py
+  s_5ed3b392cc71d8::t_86f3d28926371a 48,66-67,69,72,87-91
+src/arete/services/settings.py
+  s_5ed3b392cc71d8::t_d278d5eb2fe3eb 3-6,9,14-120,133,145-146,170,179-186,213,238-242,244
+src/arete/services/slack.py
+  s_5ed3b392cc71d8::t_22ed6caac03460 12,16-17,26-28,60-100,128-136,140-143,174-175,180-203,231,236-241,248-251,254-274,328,335,351-363,393,407-408,414-587,607-617,624-629,638,641,644-646,651-658,662-666,669-685,687,689,691-698,700,705-723,726,729
+src/arete/services/slack_identity.py
+  s_5ed3b392cc71d8::t_127bc36a1b33ef 1-118
+src/arete/services/slack_product.py
+  s_5ed3b392cc71d8::t_33724e306c0b18 1-382
+src/arete/services/strength_progress.py
+  s_5ed3b392cc71d8::t_9358b79188fd0b 15,119
+src/arete/services/users.py
+  s_5ed3b392cc71d8::t_f8592a64a97302 12,26-30,108-127,249-250,254-256,265-266,283-284
+src/arete/services/weather.py
+  s_5ed3b392cc71d8::t_d92c2b6e9d16fd 15,17-20,97,115-116
+src/arete/services/weekly_review.py
+  s_5ed3b392cc71d8::t_8717925a5c4547 24,336,351-353
+src/arete/services/year_review.py
+  s_5ed3b392cc71d8::t_7fb20690b69f04 26,257
+src/arete/strength/logging_service.py
+  s_5ed3b392cc71d8::t_a5ea7539628059 17,67,80-84,88-89,94,100,117-120,130-136,145-148,158,179-306,349-365
+src/arete/strength/models.py
+  s_5ed3b392cc71d8::t_c5c335bafa5c93 219-241
+src/arete/strength/repository.py
+  s_5ed3b392cc71d8::t_0539a0f727a961 10,17,27,503-584,650-687,981,983-984,994-1116
+tests/conftest.py
+  s_5ed3b392cc71d8::t_d28213b97691bd 39-44,57-66,116-125,127-129,131-147,149-174,176-186
+tests/dashboard_fixture.py
+  s_5ed3b392cc71d8::t_ae30f5940d9265 1-144
+tests/data/running_descriptions.jsonl
+  s_5ed3b392cc71d8::t_22b04853c38128 1-54
+tests/pdf_samples.py
+  s_5ed3b392cc71d8::t_4ec71c8efb55e5 1-71
+tests/test_adaptation.py
+  s_5ed3b392cc71d8::t_0ab83b3b3a8d06 8-13,58,116-172
+tests/test_admin.py
+  s_5ed3b392cc71d8::t_ff0835691c6c96 32-35,49,54,137-179,182-183,282,284
+tests/test_agent_analytics_tools.py
+  s_5ed3b392cc71d8::t_3662764a89cc22 167,191,204,209,211,213
+tests/test_agent_api.py
+  s_5ed3b392cc71d8::t_ff0b5b7b09c5e3 7,390-391,456-470,479,501-535,562-563,604-606,780-806,846-847,849-852,862,870
+tests/test_agent_context.py
+  s_5ed3b392cc71d8::t_95f3066a50ca05 67,77,82-85,95
+tests/test_agent_evals.py
+  s_5ed3b392cc71d8::t_ea6ce894649536 57,252-322,334,336,340-342
+tests/test_agent_execution.py
+  s_5ed3b392cc71d8::t_ddd56d6aa4ec08 14,62,108,113,121,124,144-145,147,176,211
+tests/test_agent_fallback.py
+  s_5ed3b392cc71d8::t_f86251e8bdb648 15-18,22,58,89-98,183,232,261,285-317
+tests/test_agent_feedback.py
+  s_5ed3b392cc71d8::t_8fa74550310de1 256
+tests/test_agent_filesystem.py
+  s_5ed3b392cc71d8::t_6d0380a8c08cfd 1-151
+tests/test_agent_journal_memory.py
+  s_5ed3b392cc71d8::t_846a6253b06584 117,132
+tests/test_agent_journal_tool.py
+  s_5ed3b392cc71d8::t_75c8d337007ce7 9,30,35,48
+tests/test_agent_memory_filesystem.py
+  s_5ed3b392cc71d8::t_36ccb95c76a4d4 11,50,79-80,82,85,88,132-146
+tests/test_agent_prompts.py
+  s_5ed3b392cc71d8::t_ad201426208512 20-21,54-64
+tests/test_agent_run_telemetry.py
+  s_5ed3b392cc71d8::t_21692983ef4695 11,27,41,68-69,81,93,111-112
+tests/test_agent_streaming.py
+  s_5ed3b392cc71d8::t_a8724ca35900df 17,68,83,89,181-182,212-216,225,244-245,254,276-318
+tests/test_agent_strength_tools.py
+  s_5ed3b392cc71d8::t_d1212e7969d221 44,48-49,52-53,65,76,99,109-110,114,120,142,165-184
+tests/test_agent_tool_retry.py
+  s_5ed3b392cc71d8::t_1f253482a24d31 32,90-93,105-112,115,138-142,187,191,220-260
+tests/test_agent_toolkits.py
+  s_5ed3b392cc71d8::t_2018c67bb88bff 1,3,5,8-11,13,16-22,25-27,30-32,36-41,45-59,61-66,68-71,73-74,77-80,83-85,87-89,95-97,99-104,106-118,120-127,130-132,134-141,143-157,159-163,165-168,170-192,195-219,221-237,240-253,255-257,259,262-263,265,267-268,270-280
+tests/test_agent_tracing.py
+  s_5ed3b392cc71d8::t_6713537aa81be4 97-100,272-273,294-298,317-319,321-325,473-477,610-667,671,674-677,679-754,756-757,759-913
+tests/test_ai_tips.py
+  s_5ed3b392cc71d8::t_e3743c934e953d 288,307,312,318-330,356-358,362-363,383,393-487
+tests/test_api.py
+  s_5ed3b392cc71d8::t_dd13c5022028bb 84-99,106-107,114-115,131-132
+tests/test_architecture.py
+  s_5ed3b392cc71d8::t_ebfcb8ecb57b8f 73-107
+tests/test_athlete_day.py
+  s_5ed3b392cc71d8::t_bffa57956802cc 1-161
+tests/test_athlete_facts.py
+  s_5ed3b392cc71d8::t_43f6a982dc0d6e 48,50,55,66,69,114-145
+tests/test_athlete_sql_contract.py
+  s_5ed3b392cc71d8::t_81d4520d266718 8,46-47
+tests/test_auth.py
+  s_5ed3b392cc71d8::t_a34774f614c3bc 5-8,169-259,272,405-484
+tests/test_coach_briefing.py
+  s_5ed3b392cc71d8::t_141fb276775fed 24,333-492,531-532,537,590-593,614-616,651,661,669,676,692,853,855-858,866,874
+tests/test_dashboard.py
+  s_5ed3b392cc71d8::t_c13048749a47db 1-235
+tests/test_data_export.py
+  s_5ed3b392cc71d8::t_a766a3dc0bce74 61
+tests/test_db.py
+  s_5ed3b392cc71d8::t_bdb4af580cb3e3 5,55-58,66,112-144,157-158
+tests/test_document_imports.py
+  s_5ed3b392cc71d8::t_09b091c721dcdd 1,12,17,145,147,150-163,166-176,178-181,193,195,216-217,239,253,255,282,378,380,443,460,462,466,528,530,539,553-557,562,578-792
+tests/test_fact_memory.py
+  s_5ed3b392cc71d8::t_c7427f2196360a 1-293
+tests/test_feature_flags.py
+  s_5ed3b392cc71d8::t_636f85bad27386 1-51
+tests/test_gamification.py
+  s_5ed3b392cc71d8::t_1c45ce3075be98 284-557
+tests/test_garmin.py
+  s_5ed3b392cc71d8::t_51a21e23401526 233-266
+tests/test_garmin_client.py
+  s_5ed3b392cc71d8::t_9409eb640b4b9f 6,77,80-159,187-200
+tests/test_garmin_export.py
+  s_5ed3b392cc71d8::t_bf3bb5146cd260 6,13-14,17-23,184-295,543-545,556,558-561,569-573,580-582,593-611,621,657,760,767-780,783,785-795,799,802-805,814-819,821-823,825-827,859-863,876,881,911,981-998,1105,1162-1619
+tests/test_garmin_health.py
+  s_5ed3b392cc71d8::t_42eeca9dc5a9e5 173-181,183-186,188-189,192-214,216-257
+tests/test_garmin_sync.py
+  s_5ed3b392cc71d8::t_9d1e503dad8d9b 249,259,294,341,517,604-717,808-978
+tests/test_goals.py
+  s_5ed3b392cc71d8::t_2a52ae11c64a47 89-134
+tests/test_google_calendar.py
+  s_5ed3b392cc71d8::t_788572103c8892 554,562,571,588
+tests/test_jev.py
+  s_5ed3b392cc71d8::t_25acf8838e4942 1-170
+tests/test_jev_memory.py
+  s_5ed3b392cc71d8::t_703e9b09b23cb2 1,5,7,9,14,16-17,19-25,27-49,52-58,62-79,81-83,86-110,112-113,116-118,120-122,124-126,128-139,143-147,151-153,155-167,170-171,173-179,182-221,223-245,247-262,265-285,288-291,293-294,296,298-309,311-314,316-325,327-333,337-341,343-349,351,353-363,365-373
+tests/test_memory_jev_evals.py
+  s_5ed3b392cc71d8::t_618df6b76b43a5 1-91
+tests/test_migrations.py
+  s_5ed3b392cc71d8::t_459805310d3457 405-432
+tests/test_mirror.py
+  s_5ed3b392cc71d8::t_6812160601fbc5 50-51,53,80-81,86,89,150-151,153-197
+tests/test_multi_athlete.py
+  s_5ed3b392cc71d8::t_57634455c821d4 3,5-6,33-56,254,268,318,328,335,372,376,382,387-388,397-399,407-409,439,455,472-474,503,505,511,525-780,933-966,1050-1052,1058-1059,1077-1129
+tests/test_notification_preferences.py
+  s_5ed3b392cc71d8::t_8fe68c7eef74aa 1-185
+tests/test_notifications.py
+  s_5ed3b392cc71d8::t_86001ae04e9330 56-57,61,86
+tests/test_pdf_extraction.py
+  s_5ed3b392cc71d8::t_c5fe576ba9ba96 1-145
+tests/test_personal_memory.py
+  s_5ed3b392cc71d8::t_f94209fb31b57e 272,343,345,349,362
+tests/test_plan_adaptation.py
+  s_5ed3b392cc71d8::t_8aa7e00ad31b58 13,41-42,52,72-76,84,95,107-109,114-135,138,164,168-173,177-208,219-220,223-227,229-231,234-238,241-301,306,308-309,311-315,318-346,348-362,364-374,376-454,458-488
+tests/test_plan_builder.py
+  s_5ed3b392cc71d8::t_da8bcedc4c1a99 104
+tests/test_planning_crud.py
+  s_5ed3b392cc71d8::t_510eb9f08847c5 1-128
+tests/test_proactive_coach.py
+  s_5ed3b392cc71d8::t_735df1e83297e5 1-624
+tests/test_provider_affinity.py
+  s_5ed3b392cc71d8::t_de5da2cb63a226 1-241
+tests/test_request_timing.py
+  s_5ed3b392cc71d8::t_f826865832ef33 1-223
+tests/test_running_grammar.py
+  s_5ed3b392cc71d8::t_b0fcd7cae8dbc0 1-97
+tests/test_scheduler.py
+  s_5ed3b392cc71d8::t_a25765ac5a8c8c 97,125,139,143-145,147-148,153,155-158,161-241,333
+tests/test_slack.py
+  s_5ed3b392cc71d8::t_a68f810de8cdc3 10,22-36,300,310,312-313,317,323,327-334,339-342,411,420,424,443,449-457,459,461-463,465-469,499,583,590,632,639,642-643,646-649,697,702-1089
+tests/test_slack_product.py
+  s_5ed3b392cc71d8::t_db254a82f05e5d 1-954
+tests/test_slack_surface_evals.py
+  s_5ed3b392cc71d8::t_358568ccc80eb8 1-104
+tests/test_strength_garmin_link.py
+  s_5ed3b392cc71d8::t_51d8e891ced646 1-240
+tests/test_strength_session_update.py
+  s_5ed3b392cc71d8::t_f79a78bca9d375 1-190
+tests/test_strength_training.py
+  s_5ed3b392cc71d8::t_fae970aeebf171 441-528
+tests/test_sync_feedback.py
+  s_5ed3b392cc71d8::t_9dfb601311fc77 13,72,74-77,91,110,123,127,153-155,179,296-385
+tests/test_system_skills.py
+  s_5ed3b392cc71d8::t_5f300c16dd7208 15,21,59,62,178,181,186-212,214,218-224,226-228,234-239,241-244,246,250,254-261,263-274,276-278,281-285,287,289-291,293-298,300-301
+tests/test_weekly_review.py
+  s_5ed3b392cc71d8::t_15d312fad4f16c 163-165
+uv.lock
+  s_5ed3b392cc71d8::t_cf31e6c10e6012 64-72,102,108,110,135,142,152,163,182-184,186-187,193,195,373-385,456,459-460,464,466,468,1295,1297,1299,1325-1354,1357,1366,1368,1386,1388,1390,1395,1397,1399,1630,1636,1638,1650-1665,1746,1748,1750
+vercel.json
+  s_5ed3b392cc71d8::t_d7623e3fb20560 14-15,50-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3fe661fd09a173f58530be08b6c48279bab71626",
+  "prompts": {},
+  "sessions": {
+    "s_5ed3b392cc71d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5fd06cf5-67a2-4a89-beaa-d26593d3419d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nicolas Edmond <nicolas@MacBook-Pro.local>"
+    }
+  }
+}
