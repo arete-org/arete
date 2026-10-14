@@ -27,6 +27,13 @@ export default tseslint.config(
         "warn",
         { allowConstantExport: true },
       ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ExportAllDeclaration",
+          message: "Name what the module re-exports.",
+        },
+      ],
     },
   }
 );
