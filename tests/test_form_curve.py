@@ -115,8 +115,13 @@ def test_today_is_the_dashboards_form_even_with_a_session_planned_today(
     planning = {p["date"]: p for p in projection["series"]}
     for point in body["series"]:
         if point["date"] in planning:
-            assert {k: planning[point["date"]][k] for k in point} == point
-    assert planning[athlete.isoformat()]["tss"] == 0
+            form = ("ctl", "atl", "tsb")
+            assert [planning[point["date"]][k] for k in form] == [
+                point[k] for k in form
+            ]
+    # Planning still marks today as a planned day, with its planned load.
+    assert planning[athlete.isoformat()]["planned"] is True
+    assert planning[athlete.isoformat()]["tss"] > 0
     assert projection["planned_sessions"] == 1
 
 

@@ -167,9 +167,13 @@ def form_curve() -> dict[str, Any]:
     return {
         "today": today.isoformat(),
         "goal_id": goal.id,
-        # Up to today the logged load only, as the projection answers it.
+        # Up to today the logged form, as the projection answers it; today's
+        # planned load is not drawn there, so today stays on the solid line.
         "series": [
-            {k: p[k] for k in ("date", "ctl", "atl", "tsb", "planned")}
+            {
+                **{k: p[k] for k in ("date", "ctl", "atl", "tsb")},
+                "planned": p["planned"] and p["date"] > today.isoformat(),
+            }
             for p in answer["series"]
         ],
         "race_day": answer["race_day"],

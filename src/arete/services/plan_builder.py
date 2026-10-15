@@ -290,12 +290,13 @@ def project(
     # Read before today's point is replaced: a race tomorrow follows today's plan.
     morning = shown[-2] if len(shown) > 1 else (shown[-1] if shown else None)
     if today in future:
-        # Today's point is the logged form, as on the dashboard and
-        # /metrics/fitness; today's plan weighs from tomorrow on.
+        # Today's form is the logged one, as on the dashboard and
+        # /metrics/fitness; today's plan weighs from tomorrow on. The point
+        # keeps its planned load: Planning still marks today as a planned day.
         logged = fitness_series(history, today)
         _, ctl, atl = logged[-1] if logged else (None, 0.0, 0.0)
         shown = [
-            _point(today, ctl, atl, history.get(today, 0.0), planned=False)
+            _point(today, ctl, atl, future[today], planned=True)
             if p["date"] == today.isoformat()
             else p
             for p in shown
