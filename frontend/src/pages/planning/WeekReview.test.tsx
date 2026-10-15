@@ -140,3 +140,42 @@ it('says when the week has no review yet', async () => {
   expect(await screen.findByText(/le coach l’écrit dimanche soir/)).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Faire le bilan maintenant' })).toBeTruthy();
 });
+
+it('on Sunday before the evening, shows last week’s past proposals without offering them', async () => {
+  // Last week's review, read on this Sunday afternoon: its days are gone.
+  const last: WeeklyReview = {
+    ...review,
+    id: 6,
+    week_start: '2026-10-05',
+    proposals: [proposal(0, '2026-10-14'), proposal(1, '2026-10-18')],
+  };
+  vi.spyOn(planApi, 'getReviewWeek').mockResolvedValue({
+    today: '2026-10-18',
+    review: last,
+    recap: { ...week.recap!, week_start: '2026-10-05', week_end: '2026-10-11' },
+  });
+  const accept = vi.spyOn(planApi, 'acceptReview');
+  mount();
+  expect(await screen.findByText('Les propositions de ce bilan')).toBeTruthy();
+  const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+  expect(boxes.map((b) => [b.checked, b.disabled])).toEqual([
+    [false, true],
+    [false, true],
+  ]);
+  expect(screen.getAllByText('Passée')).toHaveLength(2);
+  expect(screen.queryByRole('button', { name: /^Accepter/ })).toBeNull();
+  expect(screen.getByText(/arrivent dimanche soir/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Ajuster avec le coach' })).toBeTruthy();
+  expect(accept).not.toHaveBeenCalled();
+});
+
+it('says an answer that adds nothing sent nothing', async () => {
+  vi.spyOn(planApi, 'getReviewWeek').mockResolvedValue(week);
+  vi.spyOn(planApi, 'acceptReview').mockResolvedValue({
+    applied: [], stale: [], garmin: { state: 'unchanged', sessions: [] }, calendar: 'unchanged',
+  });
+  mount();
+  fireEvent.click(await screen.findByRole('button', { name: 'Accepter (2)' }));
+  expect(await screen.findByText('Montre : rien de nouveau à envoyer.')).toBeTruthy();
+  expect(screen.queryByText(/^Calendrier/)).toBeNull();
+});

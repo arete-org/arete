@@ -824,7 +824,8 @@ export interface WeekPushSession {
 
 /** `POST /plan/review/{id}/accept`: the plan is written whatever Garmin and the calendar say. */
 export interface ReviewAccepted extends ReviewApplyResult {
-  garmin: { state: "done" | "disabled" | "disconnected" | "failed"; sessions: WeekPushSession[] };
-  /** Training plan calendar sync: synced, partial, busy, failed, disabled (several connections: joined). */
+  /** `unchanged`: nothing new accepted, nothing sent. */
+  garmin: { state: "done" | "disabled" | "disconnected" | "failed" | "unchanged"; sessions: WeekPushSession[] };
+  /** Training plan calendar sync: synced, partial, busy, failed, disabled, unchanged (several connections: joined). */
   calendar: string;
 }

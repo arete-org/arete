@@ -1,25 +1,35 @@
 import { expect, test, type Page } from '@playwright/test';
 import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
-import { dashboardAnswer, localDay } from './dashboardAnswer';
+import { dashboardAnswer } from './dashboardAnswer';
+
+/** Sunday 18 October 2026, 18:30 in Paris: the evening the review is written. */
+const NOW = new Date('2026-10-18T16:30:00Z');
+const DAY = '2026-10-18';
+/** The day `offset` days from the pinned Sunday. */
+const day = (offset: number) => {
+  const d = new Date(`${DAY}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().slice(0, 10);
+};
 
 /** Where the screens land: ARE60_SCREENS, else the untracked `.context`. */
 const SCREENS = process.env.ARE60_SCREENS ?? '../.context/week-review';
 
 const review = {
   id: 7,
-  week_start: localDay(-6),
+  week_start: day(-6),
   text: 'Semaine tenue : 4 séances sur 5, 4 h de volume. La charge monte vite : le fractionné de mardi passe en endurance.',
   source: 'agent',
   proposals: [
-    { index: 0, planned_session_id: 21, date: localDay(2), session: 'intervals 50 min Z4', change: {}, before: {}, reason: 'Charge aiguë/chronique à 1.45 : la séance la plus dure passe en endurance Z2.' },
-    { index: 1, planned_session_id: 22, date: localDay(7), session: 'long_run 90 min Z2', change: {}, before: {}, reason: 'Charge aiguë/chronique à 1.45 : sortie longue raccourcie à 75 min.' },
+    { index: 0, planned_session_id: 21, date: day(2), session: 'intervals 50 min Z4', change: {}, before: {}, reason: 'Charge aiguë/chronique à 1.45 : la séance la plus dure passe en endurance Z2.' },
+    { index: 1, planned_session_id: 22, date: day(7), session: 'long_run 90 min Z2', change: {}, before: {}, reason: 'Charge aiguë/chronique à 1.45 : sortie longue raccourcie à 75 min.' },
   ],
   applied: [] as number[],
-  created_at: `${localDay()}T16:10:00`,
+  created_at: `${DAY}T16:10:00`,
   applied_at: null as string | null,
 };
 const recap = {
-  week_start: localDay(-6), week_end: localDay(), planned: 5, completed: 4,
+  week_start: day(-6), week_end: DAY, planned: 5, completed: 4,
   minutes_done: 240, minutes_planned: 300, adherence: 0.8, tsb: -8,
 };
 
@@ -27,6 +37,7 @@ const recap = {
 async function sunday(page: Page, theme = 'dark') {
   const requests: string[] = [];
   const accepted: unknown[] = [];
+  await page.clock.setFixedTime(NOW);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => {
     localStorage.setItem('arete.install.dismissed', '1');
@@ -43,7 +54,8 @@ async function sunday(page: Page, theme = 'dark') {
       const answered = accepted.length > 0;
       return route.fulfill({
         json: dashboardAnswer({
-          checkin: { date: localDay(), sleep: 4, legs: 4, mood: null, note: null, answered_at: `${localDay()}T06:00:00`, updated_at: `${localDay()}T06:00:00` },
+          date: DAY,
+          checkin: { date: DAY, sleep: 4, legs: 4, mood: null, note: null, answered_at: `${DAY}T06:00:00`, updated_at: `${DAY}T06:00:00` },
           weekly_review: answered ? null : { id: 7, week_start: review.week_start, open: 2 },
         }),
       });
@@ -52,7 +64,7 @@ async function sunday(page: Page, theme = 'dark') {
     if (path === '/api/plan/review/week') {
       const applied = accepted.length ? [1] : [];
       return route.fulfill({
-        json: { today: localDay(), review: { ...review, applied, applied_at: accepted.length ? `${localDay()}T18:30:00` : null }, recap },
+        json: { today: DAY, review: { ...review, applied, applied_at: accepted.length ? `${DAY}T18:30:00` : null }, recap },
       });
     }
     if (path === '/api/plan/review/7/accept') {
@@ -64,8 +76,8 @@ async function sunday(page: Page, theme = 'dark') {
           garmin: {
             state: 'done',
             sessions: [
-              { planned_session_id: 22, date: localDay(7), session_type: 'long_run', outcome: 'sent' },
-              { planned_session_id: 23, date: localDay(4), session_type: 'tempo', outcome: 'already' },
+              { planned_session_id: 22, date: day(7), session_type: 'long_run', outcome: 'sent' },
+              { planned_session_id: 23, date: day(4), session_type: 'tempo', outcome: 'already' },
             ],
           },
           calendar: 'synced',

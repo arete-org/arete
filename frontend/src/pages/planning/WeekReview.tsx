@@ -7,7 +7,7 @@ import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
 import { Button, Panel, Skeleton } from '@/components/ui';
 import { planApi } from '@/lib/api';
 import { discussWithCoach } from '@/lib/coachToday';
-import { parseLocalDate } from '@/lib/dates';
+import { parseLocalDate, toLocalISODate } from '@/lib/dates';
 import { formatDecimal, formatHoursMinutes } from '@/lib/fr';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { readableError } from '@/lib/utils';
@@ -18,6 +18,12 @@ const dayMonth = (iso: string) => parseLocalDate(iso).toLocaleDateString('fr-FR'
 const shortDay = (iso: string) =>
   parseLocalDate(iso).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
 const minutes = (value: number) => formatHoursMinutes(value * 60);
+/** The last day a review's proposals reach: the Sunday after its week. */
+const reviewReach = (weekStart: string) => {
+  const day = parseLocalDate(weekStart);
+  day.setDate(day.getDate() + 13);
+  return toLocalISODate(day);
+};
 
 /** What the server says it did with each key session (no inference here). */
 const GARMIN_OUTCOME: Record<WeekPushSession['outcome'], string> = {
@@ -30,6 +36,7 @@ const GARMIN_OUTCOME: Record<WeekPushSession['outcome'], string> = {
 };
 const GARMIN_STATE: Record<Exclude<ReviewAccepted['garmin']['state'], 'done'>, string> = {
   disabled: 'Montre : envoi automatique désactivé (Réglages › Coach).',
+  unchanged: 'Montre : rien de nouveau à envoyer.',
   disconnected: 'Montre : Garmin n’est pas connecté.',
   failed: 'Montre : l’envoi n’a pas pu démarrer, réessaie depuis le planning.',
 };
@@ -150,10 +157,12 @@ function Proposals({ week, review }: { week: ReviewWeek; review: WeeklyReview })
   const [stale, setStale] = useState<number[]>([]);
   const [picked, setPicked] = useState<number[] | null>(null);
   // Every proposal still open is ticked until the athlete changes the selection.
+  const past = review.proposals.filter((p) => p.date <= week.today).map((p) => p.index);
   const open = review.proposals
-    .filter((p) => p.date > week.today)
     .map((p) => p.index)
-    .filter((i) => !review.applied.includes(i) && !stale.includes(i));
+    .filter((i) => !past.includes(i) && !review.applied.includes(i) && !stale.includes(i));
+  // Last week's review on a Sunday before the evening's: nothing left to plan.
+  const ahead = reviewReach(review.week_start) > week.today;
   const selected = (picked ?? open).filter((i) => open.includes(i));
 
   const accept = useMutation({
@@ -183,7 +192,7 @@ function Proposals({ week, review }: { week: ReviewWeek; review: WeeklyReview })
   const answered = review.applied_at !== null;
 
   return (
-    <Panel title="Pour la semaine qui vient">
+    <Panel title={ahead ? 'Pour la semaine qui vient' : 'Les propositions de ce bilan'}>
       <div className="space-y-4">
         {review.proposals.length > 0 ? (
           <ReviewProposals
@@ -191,6 +200,7 @@ function Proposals({ week, review }: { week: ReviewWeek; review: WeeklyReview })
             applied={review.applied}
             stale={stale}
             selected={selected}
+            past={past}
             disabled={accept.isPending}
             onToggle={(index) =>
               setPicked(selected.includes(index) ? selected.filter((i) => i !== index) : [...selected, index])
@@ -208,7 +218,12 @@ function Proposals({ week, review }: { week: ReviewWeek; review: WeeklyReview })
         {answered && !result && (
           <p className="text-sm text-text-secondary">Semaine déjà acceptée.</p>
         )}
-        {(!answered || open.length > 0) && !result && (
+        {!ahead && (
+          <p className="text-sm text-text-secondary">
+            Cette semaine se termine : son bilan et les propositions pour la suivante arrivent dimanche soir.
+          </p>
+        )}
+        {ahead && (!answered || open.length > 0) && !result && (
           <p className="text-xs text-text-muted">
             « Accepter » applique {review.proposals.length > 0 ? 'les propositions cochées' : 'la semaine'}, puis
             envoie les séances clés sur ta montre et ton calendrier.
@@ -222,7 +237,7 @@ function Proposals({ week, review }: { week: ReviewWeek; review: WeeklyReview })
           >
             <MessageCircle className="size-4" /> Ajuster avec le coach
           </Button>
-          {(!answered || open.length > 0) && !(result && open.length === 0) && (
+          {ahead && (!answered || open.length > 0) && !(result && open.length === 0) && (
             <Button strong className="min-h-11" loading={accept.isPending} onClick={() => accept.mutate(selected)}>
               {selected.length > 0 ? `Accepter (${selected.length})` : 'Accepter'}
             </Button>

@@ -28,6 +28,7 @@ export function ReviewProposals({
   stale,
   selected,
   disabled,
+  past = [],
   onToggle,
 }: {
   proposals: ReviewProposal[];
@@ -35,26 +36,30 @@ export function ReviewProposals({
   stale: number[];
   selected: number[];
   disabled?: boolean;
+  /** Proposals for a day already gone: shown, never offered. */
+  past?: number[];
   onToggle: (index: number) => void;
 }) {
   return (
     <ul className="space-y-2">
       {proposals.map((p) => {
         const done = applied.includes(p.index);
+        const gone = !done && past.includes(p.index);
         return (
-          <li key={p.index} className={cn('rounded border border-text-muted/20 p-3', done && 'opacity-60')}>
+          <li key={p.index} className={cn('rounded border border-text-muted/20 p-3', (done || gone) && 'opacity-60')}>
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 className="accent-neon-cyan mt-1"
-                checked={done || selected.includes(p.index)}
-                disabled={done || disabled}
+                checked={done || (!gone && selected.includes(p.index))}
+                disabled={done || gone || disabled}
                 onChange={() => onToggle(p.index)}
               />
               <span className="min-w-0 space-y-0.5">
                 <span className="block text-xs font-sans text-text-muted">
                   {dayLabel(p.date)} · <span className="text-text-primary">{sessionLabel(p.session)}</span>
                   {done && <span className="ml-2 text-success-green">Appliquée</span>}
+                  {gone && <span className="ml-2">Passée</span>}
                 </span>
                 <span className="block text-sm text-text-secondary">{p.reason}</span>
                 {stale.includes(p.index) && (
