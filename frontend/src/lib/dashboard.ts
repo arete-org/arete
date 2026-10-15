@@ -21,6 +21,8 @@ export interface Dashboard {
   /** Null where `/garmin/health/daily` answers 404. */
   health: Awaited<ReturnType<typeof garminHealthApi.getDaily>> | null;
   garmin_connected: boolean;
+  /** Any load ever logged: the form curve has something to draw (rounded CTL/ATL can read 0). */
+  has_load: boolean;
   briefing: DailyTip;
   coach: CoachToday;
 }

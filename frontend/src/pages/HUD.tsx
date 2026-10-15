@@ -4,9 +4,9 @@ import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Dumbbell, Flag, Sunrise, Zap } from 'lucide-react';
+import { Calendar, Dumbbell, Sunrise, TrendingUp, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { Panel, Skeleton } from '@/components/ui';
 import { planApi, settingsApi } from '@/lib/api';
@@ -15,8 +15,8 @@ import { exportApi } from '@/lib/documents';
 import { readWorkouts, watchLine, workoutsKey, type WorkoutView } from '@/lib/workouts';
 import { useDailyTip } from '@/lib/dailyTip';
 import { formatDecimal, formatHoursMinutes, weeksAtGoalText } from '@/lib/fr';
-import { goalCountdown } from '@/lib/race';
 import { cn } from '@/lib/utils';
+import { importChunk } from '@/lib/chunkReload';
 import { toLocalISODate } from '@/lib/dates';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { linkDay, type DayLink } from '@/lib/sessionMatch';
@@ -33,6 +33,12 @@ const readinessTone = (score: number, threshold: number) =>
 const stressTone = (avg: number) => (avg > 40 ? 'text-danger-red' : avg > 25 ? 'text-neon-gold' : 'text-success-green');
 
 
+
+// The race goal and the form curve keep the entry chunk unchanged (ARE-46): their
+// code, and recharts after it, load beside the dashboard's answer.
+const loadOutlook = importChunk(() => import('@/components/dashboard/outlook'));
+const GoalCard = lazy(() => loadOutlook().then((m) => ({ default: m.GoalCard })));
+const FormCurvePanel = lazy(() => loadOutlook().then((m) => ({ default: m.FormCurvePanel })));
 
 /** Shown on a repeat visit while cached data waits for its refresh (a cold server can take seconds). */
 const STALE_HINT_MS = 10 * 60_000;
@@ -256,6 +262,17 @@ export function DashboardPage() {
   const { data: workload } = useDashboard((d) => d.workload);
 
   const { data: healthData, isPending: healthPending } = useDashboard((d) => d.health);
+  // No row for the board's day yet, while yesterday's Garmin night drives the recovery.
+  const fromGarmin = fitness != null && fitness.readiness_source !== 'model';
+  const morningScore = healthData?.readiness_score ?? healthData?.training_readiness_score ?? null;
+  // A sync before the watch uploads the night still writes the day's row, empty.
+  const morningIn =
+    healthData != null &&
+    (morningScore != null ||
+      healthData.hrv_last_night != null ||
+      healthData.sleep_score != null ||
+      healthData.stress_avg != null);
+  const { data: hasLoad } = useDashboard((d) => d.has_load);
 
   const { tip, day: tipDay, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
@@ -274,15 +291,6 @@ export function DashboardPage() {
               {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             <UpdatedAgo at={plannedAt} />
-            {nextGoal && (
-              <Link
-                to="/planning"
-                className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded border border-neon-gold/30 bg-neon-gold/10 px-2 py-0.5 text-[11px] font-sans text-neon-gold hover:bg-neon-gold/20 transition-colors"
-              >
-                <Flag className="w-3 h-3 shrink-0" />
-                <span className="truncate">{goalCountdown(nextGoal)}</span>
-              </Link>
-            )}
           </div>
           {/* Regularity, not a level: a missed week lowers it by one, never to zero. */}
           {playerStats && playerStats.recent_weeks > 0 && (
@@ -302,6 +310,13 @@ export function DashboardPage() {
             </div>
           )}
         </header>
+
+        {/* The race leads once the dashboard says whether there is one. */}
+        {nextGoal !== undefined && (
+          <Suspense fallback={<Skeleton label="Chargement de l’objectif" lines={1} className="glass-panel px-4 py-3" />}>
+            <GoalCard goal={nextGoal} day={boardDay} ready={boardSettled} />
+          </Suspense>
+        )}
 
         <div className="dashboard-grid">
           <div className="dashboard-primary">
@@ -403,6 +418,26 @@ export function DashboardPage() {
               </div>
             </Panel>
 
+            {/* One curve for forme de fond, fatigue and forme: its own lazy request. */}
+            <Panel className="p-4">
+              <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="COURBE DE FORME" />
+              <Suspense
+                fallback={
+                  <div className="min-h-[19rem]">
+                    <Skeleton label="Chargement de la courbe de forme" lines={6} />
+                  </div>
+                }
+              >
+                <FormCurvePanel
+                  day={boardDay}
+                  ready={boardSettled}
+                  hasLoad={hasLoad}
+                  failed={boardFailed}
+                  retry={() => void retryBoard()}
+                />
+              </Suspense>
+            </Panel>
+
             {/* Block 3: Readiness (Garmin) */}
             <Panel className="p-4">
               <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="RÉCUPÉRATION" />
@@ -411,15 +446,17 @@ export function DashboardPage() {
                 <Skeleton label="Chargement de la récupération" />
               ) : boardFailed ? (
                 <Unavailable what="Récupération" retry={() => void retryBoard()} />
-              ) : healthData && healthData.readiness_score != null ? (
+              ) : healthData && morningIn ? (
+                // This morning's row is in: its numbers show even when Arete's own
+                // score is missing (an HRV fetch that failed leaves only Garmin's).
                 <div className="flex items-center gap-6">
                   <div
                     className={cn(
                       'flex-shrink-0 w-20 h-20 rounded-full bg-abyss border-2 flex items-center justify-center',
-                      readinessTone(healthData.readiness_score, fatigueThreshold)
+                      morningScore != null ? readinessTone(morningScore, fatigueThreshold) : 'text-text-muted border-text-muted/40'
                     )}
                   >
-                    <span className="text-2xl font-sans font-bold">{healthData.readiness_score}</span>
+                    <span className="text-2xl font-sans font-bold">{morningScore ?? '—'}</span>
                   </div>
 
                   <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
@@ -477,13 +514,15 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <p className="text-sm font-sans text-text-muted">
-                  Pas de données santé aujourd&apos;hui.{' '}
+                  {/* Yesterday's Garmin night still drives the recovery above: Garmin
+                      is known, only this morning's sync is missing. */}
+                  {fromGarmin ? 'Pas encore synchronisé ce matin.' : 'Pas de données santé aujourd’hui.'}{' '}
                   {garminConnected !== undefined && (
                     <Link
                       to={garminConnected ? '/settings?tab=system' : '/settings?tab=connections'}
                       className="text-neon-cyan hover:underline"
                     >
-                      {garminConnected ? 'Synchroniser' : 'Connecter Garmin'}
+                      {garminConnected ? 'Synchroniser' : fromGarmin ? 'Reconnecter Garmin' : 'Connecter Garmin'}
                     </Link>
                   )}
                 </p>

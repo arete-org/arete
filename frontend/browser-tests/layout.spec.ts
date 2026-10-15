@@ -17,6 +17,8 @@ test('desktop aligns the brand and content, uses the workspace and reflows besid
   await page.goto('/');
   const heading = page.getByRole('heading', { name: 'Bonjour, HUNTER' });
   await expect(heading).toBeVisible();
+  // Settled: the form curve's lazy read has answered (no load in this fixture).
+  await expect(page.getByText(/Pas encore de charge enregistrée/)).toBeVisible();
   await page.emulateMedia({ reducedMotion: 'reduce' });
 
   for (const width of [1440, 1920]) {

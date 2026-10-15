@@ -81,6 +81,8 @@ def test_every_slice_equals_its_former_endpoint(history, client):
     board = client.get("/dashboard").json()
     expected = _endpoints(client, day)
 
+    # The one field without a former endpoint: whether any load was ever logged.
+    assert board.pop("has_load") is True
     assert board.keys() == expected.keys()
     for field, value in expected.items():
         assert board[field] == value, field
@@ -233,4 +235,5 @@ def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
     assert theirs["next_goal"] is None and theirs["health"] is None
     assert theirs["fitness"]["ctl"] == 0.0
     assert theirs["briefing"]["status"] == "pending"
+    assert mine.pop("has_load") is True and theirs.pop("has_load") is False
     assert theirs == _endpoints(client, today.isoformat(), headers=as_second)

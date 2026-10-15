@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { settingsApi, type DailyTip } from '@/lib/api';
 import { coachApi } from '@/lib/coachToday';
 import type { DashboardData } from '@/lib/dashboard';
+import { formCurveApi } from '@/lib/formCurve';
 import { gameApi, type Player } from '@/lib/gamification';
 import { weeksAtGoalText } from '@/lib/fr';
 import { DashboardPage } from './HUD';
@@ -37,6 +38,7 @@ const board: DashboardData = {
   },
   health: null,
   garmin_connected: false,
+  has_load: true,
 };
 
 const player = {
@@ -58,14 +60,29 @@ vi.mock('@/lib/dailyTip', () => ({
 }));
 
 const stats = board.player_stats;
+const fitness = board.fitness;
 let client: QueryClient;
 beforeEach(() => {
   board.player_stats = stats;
+  board.fitness = fitness;
+  board.health = null;
+  board.has_load = true;
   daily.tip = written;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(settingsApi, 'get').mockResolvedValue({ display_name: 'Arthur' } as Awaited<ReturnType<typeof settingsApi.get>>);
   vi.spyOn(coachApi, 'today').mockResolvedValue({ date: '2026-10-14', items: [], remaining: 0, briefing: null });
   vi.spyOn(gameApi, 'snapshot').mockResolvedValue(player);
+  vi.spyOn(formCurveApi, 'get').mockResolvedValue({
+    today: '2026-10-14', goal_id: 3, planned_sessions: 4, last_planned: '2026-11-22', key_session: null,
+    race_day: { ctl: 45, tsb: 8 },
+    // Today is the dashboard's form (+4,2 in `board.fitness`, shown +4); the projection,
+    // with today's planned session, starts the next day.
+    series: [
+      { date: '2026-10-14', ctl: 40, atl: 36, tsb: 4.2, planned: false },
+      { date: '2026-10-15', ctl: 40.9, atl: 44.8, tsb: -3.9, planned: true },
+    ],
+  });
+  board.next_goal = null;
 });
 afterEach(() => {
   cleanup();
@@ -168,4 +185,68 @@ it('says when the sync rewrote the briefing, and when it was first written', asy
   daily.tip = { ...written, updated_after_sync: true, first_written_at: '2026-10-14T07:12:00', generated_at: '2026-10-14T08:05:00' };
   await mount(false);
   expect(screen.getByText('Écrit à 7 h 12 · mis à jour après la synchro de 8 h 05')).toBeTruthy();
+});
+
+it('leads with the race goal above the briefing, and the one form curve in plain words', async () => {
+  board.next_goal = {
+    id: 3, name: 'Semi de Lyon', race_date: '2026-11-23', distance_km: 21.1, target_time_sec: null,
+    priority: 'A', status: 'active', days_left: 40, created_at: null,
+  };
+  await mount(false);
+  const goal = screen.getByRole('region', { name: 'Objectif de course' });
+  const briefing = screen.getByRole('heading', { name: 'BRIEFING DU JOUR' });
+  expect(goal.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(await screen.findByText('entre +3 et +13')).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'COURBE DE FORME' })).toBeTruthy();
+  expect(await screen.findByText(/Aujourd’hui : fatigue 36, forme \+4\./)).toBeTruthy();
+  // The goal card and the curve share one request.
+  expect(formCurveApi.get).toHaveBeenCalledTimes(1);
+});
+
+it('offers to set a goal when there is none', async () => {
+  await mount(false);
+  expect(screen.getByRole('link', { name: 'Fixer un objectif' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Objectif de course' })).toBeNull();
+});
+
+it('says this morning is not synced yet when the recovery still comes from Garmin', async () => {
+  board.fitness = { ...board.fitness, readiness_source: 'garmin', readiness_measured_on: '2026-10-13' };
+  board.player_stats = { ...stats, hp: { ...stats.hp, source: 'garmin_previous', detail: 'Garmin, mesure du 13/10' } };
+  await mount(false);
+  expect(screen.getByText(/Pas encore synchronisé ce matin/)).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Reconnecter Garmin' })).toBeTruthy();
+  expect(screen.queryByRole('link', { name: 'Connecter Garmin' })).toBeNull();
+  expect(screen.queryByText(/Pas de données santé/)).toBeNull();
+});
+
+it('shows this morning when it is in, even without Arete’s own score (HRV missing)', async () => {
+  // Garmin's Training Readiness arrived, the HRV fetch failed: no Arete score.
+  board.health = {
+    date: '2026-10-14', readiness_score: null, training_readiness_score: 64, hrv_last_night: null, hrv_status: null,
+    sleep_score: 78, sleep_duration_sec: 25200, stress_avg: 22, steps: 4100,
+  } as unknown as DashboardData['health'];
+  await mount(false);
+  expect(screen.queryByText(/Pas encore synchronisé ce matin/)).toBeNull();
+  expect(screen.queryByText(/Pas de données santé/)).toBeNull();
+  expect(screen.getByText('64/100')).toBeTruthy();
+  expect(screen.getByText('64')).toBeTruthy();
+});
+
+it('still says not synced when an early sync wrote the day’s row empty', async () => {
+  // A sync before the watch uploads the night writes the date and nothing else.
+  board.fitness = { ...board.fitness, readiness_source: 'garmin', readiness_measured_on: '2026-10-13' };
+  board.health = {
+    date: '2026-10-14', readiness_score: null, training_readiness_score: null, hrv_last_night: null, hrv_status: null,
+    sleep_score: null, sleep_duration_sec: null, stress_avg: null, steps: 0,
+  } as unknown as DashboardData['health'];
+  await mount(false);
+  expect(screen.getByText(/Pas encore synchronisé ce matin/)).toBeTruthy();
+  expect(screen.queryByText('—')).toBeNull();
+});
+
+it('draws the curve after months off, when rounded fitness reads zero', async () => {
+  board.fitness = { ...fitness, ctl: 0, atl: 0, tsb: 0, days_analyzed: 0 };
+  await mount(false);
+  expect(await screen.findByText(/Aujourd’hui : fatigue/)).toBeTruthy();
+  expect(screen.queryByText(/Pas encore de charge enregistrée/)).toBeNull();
 });
