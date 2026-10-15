@@ -33,6 +33,7 @@
 - [ ] I have respected the ownership and dependency rules in `AGENTS.md` and `docs/architecture.md`, and updated documentation
 - [ ] I have updated/added relevant tests, including the failure path
 - [ ] I have proofread user-facing copy, which stays in French, if this PR changes it
+- [ ] UI changes reuse `design.md` components/tokens, link the relevant Figma reference, and include mobile/desktop evidence; coaching entry points preserve thread context and drafts
 - [ ] I have done a self review of my PR
 - [ ] Migrations (if this PR adds one): a fresh number, never a renumbered one, and the previous release still runs on the new schema
 - [ ] No `.env`, personal data, `data/`, FIT files or `PROG_*.md` in the diff; logs and traces carry no journal content

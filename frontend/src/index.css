@@ -579,3 +579,21 @@ body:has(.coach-panel) .install-invitation, body:has([aria-modal='true']) .insta
   .modal-panel input:not([type='checkbox'], [type='radio']), .modal-panel select, .modal-panel textarea { font-size: 16px; }
   .ui-button, .navigation-item, .modal-panel button { min-height: 44px; }
 }
+
+/* Coach feedback has one visual owner across stored briefings and live answers. */
+.coach-feedback-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+}
+.coach-feedback-action:hover { background: var(--color-shadow); color: var(--color-text-primary); }
+.coach-feedback-action[aria-pressed="true"] { background: var(--color-selection); color: var(--color-neon-cyan); }
+.coach-feedback-action:disabled { opacity: 0.4; }
+@media (pointer: coarse) { .coach-feedback-action { width: 44px; height: 44px; } }
+.briefing-entry, .briefing-history-link { border-radius: var(--radius-control); }
+.briefing-entry:enabled:hover, .briefing-history-link:hover { background: var(--color-selection); }
+.briefing-history-link { padding: 8px; min-height: 44px; }

@@ -3,12 +3,13 @@ import { markWorkout, measureWorkout } from '@/lib/workoutPerformance';
 import { cacheWorkout } from '@/lib/workouts';
 import { canRetryMessage } from '@/lib/agentActivity';
 import { holdReloads } from '@/lib/chunkReload';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { documentsApi } from '@/lib/documents';
 import type { MessageFeedback } from '@/lib/agentFeedback';
 import { invalidateAfterGarminRefresh, invalidateAfterSession, qk } from '@/lib/queryKeys';
 import type { PanelPageContext } from '@/lib/pageContext';
+import { isCoachReference } from '@/lib/coachToday';
 import {
   applyEvent,
   MAX_MESSAGE_CHARS,
@@ -25,6 +26,7 @@ import {
   saveThreads,
   titleFromMessage,
   updateThread,
+  type ThreadStore,
 } from '@/lib/agentThreads';
 
 // One model run for the whole coach. Switching threads can never fan out requests.
@@ -46,7 +48,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   const { athleteId } = useAuthState();
   if (athleteId === null) throw new Error("Athlète absent.");
   const [initial] = useState(() => loadThreads(athleteId));
-  const [store, setStore] = useState(initial.store);
+  const [store, commitStore] = useState(initial.store);
   const [storageError, setStorageError] = useState(initial.error);
   const [error, setError] = useState('');
   const [runningId, setRunningId] = useState<string | null>(null);
@@ -56,14 +58,39 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     controller: AbortController;
   } | null>(null);
   const storeRef = useRef(store);
+  // Native discussion events and SSE chunks can share a React batch. Apply all
+  // updates to the latest store synchronously so opening a thread loses neither.
+  const setStore = useCallback((update: SetStateAction<ThreadStore>) => {
+    const next = typeof update === 'function' ? update(storeRef.current) : update;
+    storeRef.current = next;
+    commitStore(next);
+  }, []);
   const active = store.threads.find((t) => t.id === store.activeId);
   if (!active)
     throw new Error('Invariant violated: active coach thread missing.');
 
+  useEffect(() => {
+    const discuss = (event: Event) => {
+      const reference: unknown = (event as CustomEvent).detail;
+      if (!isCoachReference(reference)) return;
+      try {
+        const current = storeRef.current;
+        const next = reference.kind === 'briefing'
+          ? addThread(current, { ...createThread(), title: 'Briefing avec Chiron', reference })
+          : updateThread(current, current.activeId, thread => ({ ...thread, reference }));
+        setStore(next);
+        setError('');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Impossible d’ouvrir la discussion.');
+      }
+    };
+    window.addEventListener('arete:coach-discuss', discuss);
+    return () => window.removeEventListener('arete:coach-discuss', discuss);
+  }, [setStore]);
+
   // Debounce writes while streaming and flush on page exit. Keep corrupt source
   // storage untouched if loading failed, and make quota errors visible in the UI.
   useEffect(() => {
-    storeRef.current = store;
     if (initial.error) return;
     const timeout = window.setTimeout(
       () => setStorageError(saveThreads(storeRef.current, athleteId)),
@@ -96,7 +123,6 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   const create = () => {
     try {
       const candidate = createThread();
-      addThread(store, candidate); // Check the bound before queuing the update.
       setStore((prev) => addThread(prev, candidate));
       setError('');
     } catch (err) {
@@ -116,7 +142,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   };
   const attachments = useCallback((ids: string[]) => {
     setStore(prev => updateThread(prev, active.id, thread => JSON.stringify(thread.attachmentIds ?? []) === JSON.stringify(ids) ? thread : { ...thread, attachmentIds: ids }));
-  }, [active.id]);
+  }, [active.id, setStore]);
   const draft = (text: string) => {
     setStore((prev) =>
       updateThread(prev, prev.activeId, (t) => ({ ...t, draft: text }))
@@ -203,7 +229,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       );
     void runAgentStream(
       history,
-      context,
+      { ...context, params: { ...context.params, ...(active.reference ? { coach_ref: `${active.reference.kind}:${active.reference.id}` } : {}) } },
       (event) => {
         if (controller.signal.aborted) return;
         if (event.type === 'values') {
@@ -297,6 +323,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       ...t, messages: t.messages.map(m => m.trace?.trace_id === traceId ? { ...m, feedback } : m),
     }))),
     recordAction,
+    clearReference: () => setStore(prev => updateThread(prev, prev.activeId, thread => ({ ...thread, reference: undefined }))),
     store,
     active,
     runningId,
