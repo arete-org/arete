@@ -39,6 +39,7 @@ const board: DashboardData = {
   health: null,
   garmin_connected: false,
   has_load: true,
+  checkin: null,
 };
 
 const player = {
@@ -67,6 +68,7 @@ beforeEach(() => {
   board.fitness = fitness;
   board.health = null;
   board.has_load = true;
+  board.checkin = null;
   daily.tip = written;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(settingsApi, 'get').mockResolvedValue({ display_name: 'Arthur' } as Awaited<ReturnType<typeof settingsApi.get>>);
@@ -179,6 +181,21 @@ it('leads with the briefing, today\'s session right below it', async () => {
   expect(screen.getByText('Écrit à 7 h 12')).toBeTruthy();
   // The coach card no longer repeats it.
   expect(screen.getAllByText(written.tip!)).toHaveLength(1);
+});
+
+it('asks the morning check-in before the briefing until the day is answered', async () => {
+  await mount(false);
+  const card = screen.getByRole('region', { name: 'Check-in du matin' });
+  const briefing = screen.getByRole('heading', { name: 'BRIEFING DU JOUR' });
+  expect(card.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  cleanup();
+  client.clear();
+  board.checkin = {
+    date: '2026-10-14', sleep: 4, legs: 4, mood: null, note: null,
+    answered_at: '2026-10-14T05:12:00+00:00', updated_at: '2026-10-14T05:12:00+00:00',
+  };
+  await mount(false);
+  expect(screen.queryByRole('region', { name: 'Check-in du matin' })).toBeNull();
 });
 
 it('says when the sync rewrote the briefing, and when it was first written', async () => {

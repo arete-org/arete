@@ -9,7 +9,9 @@ Every scheduled push names its kind; the athlete can turn each kind off, and
 nothing is sent during their quiet hours (21:30-07:00 by default, in their
 timezone). A push that falls in quiet hours is dropped, not delayed: there is
 no durable queue to hold it, and each kind is either repeated in the app
-(briefing, review, decisions, imports) or obsolete by morning.
+(briefing, review, decisions, imports) or obsolete by morning. The morning
+check-in checks ``withheld`` before it spends its one push of the day, so a
+later window sends it instead (``checkins.prompt``).
 """
 
 from __future__ import annotations
@@ -102,12 +104,17 @@ def _subscriptions() -> list[tuple[str, str, str]]:
         con.close()
 
 
+def subscribed() -> bool:
+    """Whether the scoped athlete has a browser to reach."""
+    return bool(_subscriptions())
+
+
 def _status_of(error: Exception) -> int | None:
     response = getattr(error, "response", None)
     return getattr(response, "status_code", None)
 
 
-def _withheld(settings: dict, kind: NotificationKind) -> str | None:
+def withheld(settings: dict, kind: NotificationKind) -> str | None:
     """Why the athlete's preferences hold this kind back now, None to send."""
     prefs = stored_preferences(settings.get("notification_preferences"))
     if not prefs.allows(kind):
@@ -130,7 +137,7 @@ def notify(
         settings = get_user_settings() or {}
         if not bool(settings.get("notifications_enabled", True)):
             return NotifyResult(0, 0, "notifications désactivées")
-        reason = _withheld(settings, kind) if kind is not None else None
+        reason = withheld(settings, kind) if kind is not None else None
         if reason is not None:
             return NotifyResult(0, 0, reason)
         if not configured():

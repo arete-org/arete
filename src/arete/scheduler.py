@@ -208,6 +208,25 @@ def settle_game() -> str | None:
     return f"{state['pending']} pending"
 
 
+def settle_checkin() -> str | None:
+    """A low check-in given while the run went on reaches the day's decision.
+
+    The run decided before the answer, and the answer, seeing the run still
+    going, waited for it: once the run is stamped finished, the day's
+    preparation runs again (``checkins.replan``: only undecided sessions, a
+    proposal to validate). None when the day has no answer. Never raises.
+    """
+    from arete.services import checkins
+
+    try:
+        checkin = checkins.get()
+    except Exception as e:  # noqa: BLE001 - background job must not die
+        return f"failed: {type(e).__name__}"
+    if checkin is None:
+        return None
+    return "replanned" if checkins.replan(checkin) else "unchanged"
+
+
 def write_sync_feedback(session_ids: list[int]) -> tuple[str, list[dict] | None]:
     """The coach's word on the sessions the sync imported. Never raises.
 
@@ -547,6 +566,9 @@ def _run_athlete(
                     "UPDATE app.athletes SET last_sync_at=?,sync_lease_until=NULL WHERE id=?",
                     [_naive_utc(claimed_at), athlete_id],
                 )
+            # Stamped: an answer given from now on replans on its own.
+            if (settled := settle_checkin()) is not None:
+                status["checkin"] = settled
         except Exception:
             logger.exception(
                 "Scheduled work failed for athlete %s; lease kept until tomorrow",
@@ -554,6 +576,68 @@ def _run_athlete(
             )
             return {"status": "failed; next attempt tomorrow"}
     return status
+
+
+#: The morning check-in's push (ARE-59) has its own cron windows, 05:00 and
+#: 06:00 UTC (``vercel.json``), before the daily sync's first at 07:00: the
+#: answer then reaches the day's decision. It goes out in the first window
+#: between ``CHECKIN_FROM_HOUR`` and ``CHECKIN_UNTIL_HOUR`` on the athlete's
+#: clock and outside their quiet hours. The default quiet hours end at 07:00,
+#: so in Paris 05:00 UTC serves summer time (07:00) and 06:00 UTC winter time
+#: (07:00 too, when 05:00 UTC is still 06:00 and quiet).
+CHECKIN_FROM_HOUR = 6
+CHECKIN_UNTIL_HOUR = 12
+#: No check-in push starts after this: each may wait on a device's timeout.
+CHECKIN_DISPATCH_SECONDS = 150
+
+
+def checkin_owed(now: float, zone: str | None, quiet_hours: QuietHours | None) -> bool:
+    """Whether ``now`` (epoch seconds) is in the athlete's check-in morning."""
+    local = datetime.fromtimestamp(now, zone_of(zone))
+    if not CHECKIN_FROM_HOUR <= local.hour < CHECKIN_UNTIL_HOUR:
+        return False
+    return quiet_hours is None or not quiet_hours.covers(local.time())
+
+
+def _parked(lease: float | None, now: float, zone: str | None) -> bool:
+    """A lease that outlasts the athlete's day: an operator parked them."""
+    if lease is None:
+        return False
+    tz = zone_of(zone)
+    return (
+        datetime.fromtimestamp(lease, tz).date()
+        > datetime.fromtimestamp(now, tz).date()
+    )
+
+
+def run_checkin_prompts() -> dict:
+    """Send the morning check-in push to the athletes in their morning.
+
+    Each athlete gets it at most once a day, and not once the day is answered
+    (``checkins.prompt`` claims it first); a parked athlete (lease set past
+    today) gets none. Independent of the daily run's claim and markers: the
+    daily sync's windows are unchanged by it.
+    """
+    from arete.services import checkins
+
+    started = monotonic()
+    with db_connection() as con:
+        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    deferred = len(candidates) == MAX_SCANNED_ATHLETES
+    outcomes: dict[str, str] = {}
+    for row in candidates:
+        athlete_id, lease, zone, preferences = row[0], row[4], row[5], row[6]
+        now = utc_now().timestamp()
+        if not checkin_owed(now, zone, _quiet_hours(preferences)):
+            continue
+        if _parked(lease, now, zone):
+            continue
+        if monotonic() - started >= CHECKIN_DISPATCH_SECONDS:
+            deferred = True
+            break
+        with athlete_scope(athlete_id):
+            outcomes[str(athlete_id)] = checkins.prompt()
+    return {"athletes": outcomes, "deferred": deferred}
 
 
 async def run_forever(hour: int, tick_seconds: int = TICK_SECONDS) -> None:
@@ -568,6 +652,13 @@ async def run_forever(hour: int, tick_seconds: int = TICK_SECONDS) -> None:
     while True:
         # ARETE_AUTO_SYNC_HOUR is read on each athlete's clock, not the host's:
         # every tick dispatches, and the batch decides who is owed.
+        try:
+            # Before the batch, in the same tick when both are due: an answer
+            # given while the run goes on is read once it is stamped
+            # (``settle_checkin``), one given after replans on its own.
+            await to_thread.run_sync(run_checkin_prompts)
+        except Exception:
+            logger.exception("Check-in dispatch failed; next tick will retry")
         try:
             await to_thread.run_sync(run_scheduled_batch)
         except Exception:

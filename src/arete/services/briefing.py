@@ -106,7 +106,8 @@ def briefing_facts(
     The agent used to read its load and form through tools — at least three
     model requests and 99 s on the free tier — while the rule floor had just
     computed the same numbers. It never saw today's plan either. ``facts``
-    are the floor's; without them the load section reads its own.
+    are the floor's; without them the load section reads its own. The
+    morning check-in (today's and yesterday's) appears only once answered.
     """
     from arete.garmin.repository import GarminRepository
     from arete.services.analytics import list_sessions
@@ -237,11 +238,28 @@ def briefing_facts(
         return [previous.text] if previous else []
 
     weekday = _WEEKDAYS[target_date.weekday()]
+    try:
+        from arete.services import checkins
+
+        # Yesterday's too: one answered after its briefing reaches the next.
+        declared = [
+            f"{'ce matin' if c.date == target_date else 'hier'} : {c.describe()}"
+            for c in checkins.recent(2, today=target_date)
+        ]
+    except Exception:
+        logger.warning("Briefing facts: check-in unavailable", exc_info=True)
+        declared = ["indisponible"]
     return "\n\n".join(
         [
             f"Nous sommes {weekday} {target_date.isoformat()}.",
             f"Conseil calculé par les règles : {rule_text}",
             _block("Charge, forme et récupération", load),
+            # Only once answered: a day without one keeps its facts (and digest).
+            *(
+                [_block("Check-in déclaré par l'athlète", lambda: declared)]
+                if declared
+                else []
+            ),
             _block("Séance(s) prévue(s) aujourd'hui", planned),
             _block("Décision du coach pour aujourd'hui", decisions),
             _block("Prédictions de course Garmin", predictions),

@@ -59,6 +59,7 @@ PRIVATE_TABLES = (
     "coach_memory_files",
     "coach_memory_imports",
     "coach_followups",
+    "daily_checkins",
 )
 # Natural keys must be unique within an athlete, not across the deployment.
 SCOPED_KEYS = {

@@ -10,6 +10,7 @@ export const EXPORT_TABLES = [
   { id: 'strength_sets', label: 'Séries de force' },
   { id: 'goals', label: 'Objectifs' },
   { id: 'athlete_facts', label: 'Ce que le coach sait' },
+  { id: 'daily_checkins', label: 'Check-ins du matin' },
   { id: 'weekly_reviews', label: 'Bilans hebdomadaires' },
   { id: 'journal', label: 'Journal du coach' },
 ] as const;

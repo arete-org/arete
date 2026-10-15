@@ -67,6 +67,7 @@ class TestCronDailySync:
 
         Several daily entries on the same path are its way to dispatch the
         sync more than once a day; each dispatch skips what is already done.
+        The morning check-in's push has its own windows, before the sync's.
         """
         import json
         import re
@@ -76,9 +77,15 @@ class TestCronDailySync:
             "crons"
         ]
         schedules = [cron["schedule"] for cron in crons]
-        assert {cron["path"] for cron in crons} == {"/api/cron/daily-sync"}
+        paths = {"/api/cron/daily-sync", "/api/cron/checkin"}
+        assert {cron["path"] for cron in crons} == paths
         assert len(set(schedules)) == len(schedules) > 1
         assert all(re.fullmatch(r"0 \d{1,2} \* \* \*", s) for s in schedules)
+        hours = {
+            path: [int(c["schedule"].split()[1]) for c in crons if c["path"] == path]
+            for path in paths
+        }
+        assert max(hours["/api/cron/checkin"]) < min(hours["/api/cron/daily-sync"])
 
 
 def test_the_backend_bundle_ships_its_dependencies():

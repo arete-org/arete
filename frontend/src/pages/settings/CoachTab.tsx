@@ -102,7 +102,7 @@ const KINDS: { kind: NotificationKind; label: string; soon?: boolean }[] = [
   { kind: 'weekly_review', label: 'Bilan de la semaine (lundi)' },
   { kind: 'adapted_session', label: 'Adaptation de la séance du jour', soon: true },
   { kind: 'imports', label: 'Séances importées' },
-  { kind: 'checkin', label: 'Check-in du matin', soon: true },
+  { kind: 'checkin', label: 'Check-in du matin' },
   { kind: 'evening', label: 'Message du soir', soon: true },
   { kind: 'eve_reminder', label: 'Rappel la veille d’une séance clé', soon: true },
 ];

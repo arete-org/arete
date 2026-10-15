@@ -73,11 +73,14 @@ def _endpoints(client, day: str, headers=None) -> dict:
         "garmin_connected": get("/garmin/sync/status")["garmin_authenticated"],
         "briefing": get("/tips/daily"),
         "coach": get("/coach/today"),
+        "checkin": next(iter(get("/checkins?days=1")), None),
     }
 
 
 def test_every_slice_equals_its_former_endpoint(history, client):
     day = history.isoformat()
+    answer = {"sleep": 4, "legs": 3, "mood": None, "note": None}
+    assert client.put(f"/checkins/{day}", json=answer).status_code == 200
     board = client.get("/dashboard").json()
     expected = _endpoints(client, day)
 
@@ -91,6 +94,7 @@ def test_every_slice_equals_its_former_endpoint(history, client):
     assert board["plan_today"]["decisions"] and board["coach"]["items"]
     assert board["next_goal"] and board["health"]
     assert board["briefing"]["status"] == "ready"
+    assert board["checkin"]["legs"] == 3
     # Ties on the date keep a stable order: the newest session first.
     assert [s["name"] for s in board["actual"]] == ["Velo", "Réveil musculaire"]
 
@@ -224,6 +228,9 @@ def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
     as_first = {"Authorization": f"Bearer {first.clerk_user_id}"}
     as_second = {"Authorization": f"Bearer {second.clerk_user_id}"}
 
+    answer = {"sleep": 2, "legs": 4}
+    put = client.put(f"/checkins/{today}", json=answer, headers=as_first)
+    assert put.status_code == 200
     mine = client.get("/dashboard", headers=as_first).json()
     theirs = client.get("/dashboard", headers=as_second).json()
 
@@ -233,6 +240,7 @@ def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
     assert theirs["planned"] == theirs["actual"] == theirs["strength"] == []
     assert theirs["plan_today"]["decisions"] == theirs["coach"]["items"] == []
     assert theirs["next_goal"] is None and theirs["health"] is None
+    assert mine["checkin"]["sleep"] == 2 and theirs["checkin"] is None
     assert theirs["fitness"]["ctl"] == 0.0
     assert theirs["briefing"]["status"] == "pending"
     assert mine.pop("has_load") is True and theirs.pop("has_load") is False

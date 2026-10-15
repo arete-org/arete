@@ -13,6 +13,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from arete.api.ai_tips import DailyTipResponse, _daily_tip
+from arete.api.checkins import CheckinResponse
 from arete.api.garmin import (
     ActualSessionResponse,
     PlannedSessionResponse,
@@ -49,6 +50,9 @@ class DashboardResponse(BaseModel):
     has_load: bool = Field(description="Any load ever logged (the form curve's data)")
     briefing: DailyTipResponse = Field(description="GET /tips/daily")
     coach: dict[str, Any] = Field(description="/coach/today")
+    checkin: CheckinResponse | None = Field(
+        description="Today's row of /checkins; null until answered"
+    )
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
@@ -69,6 +73,7 @@ def get_dashboard() -> DashboardResponse:
         has_load=board.has_load,
         briefing=_daily_tip(board.briefing),
         coach=board.coach,
+        checkin=CheckinResponse(**board.checkin.to_dict()) if board.checkin else None,
     )
 
 

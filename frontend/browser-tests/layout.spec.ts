@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
-import { dashboardAnswer } from './dashboardAnswer';
+import { dashboardAnswer, localDay } from './dashboardAnswer';
+
+const ANSWERED = { date: localDay(), sleep: 4, legs: 4, mood: null, note: null, answered_at: `${localDay()}T05:12:00+00:00`, updated_at: `${localDay()}T05:12:00+00:00` };
 
 // Local fixtures keep layout checks independent of training data or model calls.
 test('desktop aligns the brand and content, uses the workspace and reflows beside the coach', async ({ page }) => {
@@ -10,7 +12,8 @@ test('desktop aligns the brand and content, uses the workspace and reflows besid
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'odyssey', display_name: 'HUNTER' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
-    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer() });
+    // The morning answered: the open check-in card scrolls the page until then (checkin.spec.ts).
+    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer({ checkin: ANSWERED }) });
     if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh', complete: true } });
     return route.fulfill({ json: [] });
   });

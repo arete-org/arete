@@ -17,6 +17,7 @@ from arete.api.analytics import router as analytics_router
 from arete.api.athlete_facts import router as athlete_facts_router
 from arete.api.auth import AuthMiddleware, auth_misconfigured
 from arete.api.auth import router as auth_router
+from arete.api.checkins import router as checkins_router
 from arete.api.coach import router as coach_router
 from arete.api.dashboard import router as dashboard_router
 from arete.api.data_export import router as data_export_router
@@ -180,21 +181,31 @@ def sync_status():
     }
 
 
-@app.get("/cron/daily-sync")
-def cron_daily_sync(authorization: str | None = Header(default=None)):
-    """The daily sync, triggered by Vercel Cron where no process stays up.
-
-    Vercel sends ``Authorization: Bearer $CRON_SECRET``; without a configured
-    secret the endpoint stays closed rather than open to anyone.
-    """
+def _require_cron(authorization: str | None) -> None:
+    """Vercel sends ``Authorization: Bearer $CRON_SECRET``; without a configured
+    secret the cron endpoints stay closed rather than open to anyone."""
     secret = config.cron_secret
     expected = f"Bearer {secret}"
     if not secret or not hmac.compare_digest(authorization or "", expected):
         raise HTTPException(status_code=401, detail="Non autorisé")
+
+
+@app.get("/cron/daily-sync")
+def cron_daily_sync(authorization: str | None = Header(default=None)):
+    """The daily sync, triggered by Vercel Cron where no process stays up."""
+    _require_cron(authorization)
     return scheduler.run_scheduled_batch()
 
 
+@app.get("/cron/checkin")
+def cron_checkin(authorization: str | None = Header(default=None)):
+    """The morning check-in's push, in its own windows before the daily sync's."""
+    _require_cron(authorization)
+    return scheduler.run_checkin_prompts()
+
+
 for router in (
+    checkins_router,
     coach_router,
     dashboard_router,
     gamification_router,

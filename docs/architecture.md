@@ -575,6 +575,43 @@ itself does not read it before any load was ever logged (the aggregate's
 still does, for its race. The goal card and the curve, with recharts, load in
 their own chunk.
 
+The morning check-in (`services/checkins.py`, migration 49) stores one row
+per athlete and day: sleep and legs 1-5, an optional "motivation / stress"
+1-5 and a short note (280 characters), 1 always the worst. `PUT
+/checkins/{date}` replaces the day's answer (today or the 13 days before);
+`GET /checkins?days=14` reads at most 14 days; `GET /dashboard` carries
+today's (`checkin`, null until answered), so the card adds no request. It
+weighs one band in the day's decision, downwards only
+(`adaptation.declared_fatigue`): legs or sleep at 2 or less move the
+readiness to the band below (80 / 60 / 40: keep, ease, recovery, rest), once
+whatever the number of low answers; good answers never raise a band, no
+answer changes nothing, and without a readiness there is still no decision.
+The proposal's reason says it ("jambes lourdes déclarées", "nuit difficile
+déclarée"). An answer before the day's scheduled run waits for it, which
+reads it with the night's Garmin data; a low one after it runs the existing
+preparation (`coach_today.prepare`) again, which decides the sessions the run
+kept, as a proposal to validate: answering never changes the plan. One given
+while the run goes on (after its decision, before it is stamped finished,
+common on Docker where the push and the run share a tick) is read by the run
+itself once stamped (`scheduler.settle_checkin`). `replanned` says whether a
+new proposal came of it; a failed replan leaves the saved answer and the
+day's decision as they were. A low answer corrected to a good one leaves its
+proposal for the athlete to decline. The
+briefing's facts list today's and yesterday's answers once given (a day
+without one keeps its facts and digest); a briefing already written is not
+rewritten for it outside the daily run's usual digest check, and the next
+day's briefing reads it. No model reads the note on its own. One push a day
+asks for it (kind `checkin`): `GET /cron/checkin` at 05:00 and 06:00 UTC,
+before the sync's first window, claims the day in the same row before
+sending, so a second window or the Docker tick never repeats it, and skips
+an answered day or a parked athlete. A window outside 06:00-12:00 on the
+athlete's clock, in their quiet hours, without Web Push keys or without a
+subscribed device claims nothing, so the next one sends it: 07:00 in Paris in
+both summer and winter with the default quiet hours. On a rest day the push
+does not mention a session. The data export includes the answers. It opens `/?checkin=1`,
+which shows the card even when put off for the day ("Plus tard" is
+remembered on the device) and focuses it.
+
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References
 in HTTP/SSE and browser storage contain identifiers; the server reloads the

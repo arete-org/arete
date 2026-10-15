@@ -60,17 +60,22 @@ class TestRunForever:
     @pytest.mark.anyio
     async def test_dispatches_then_waits(self):
         with (
+            patch.object(scheduler, "run_checkin_prompts", return_value={}) as ask,
             patch.object(scheduler, "run_scheduled_batch", return_value={}) as dispatch,
             patch("asyncio.sleep", side_effect=StopAsyncIteration) as sleep,
             pytest.raises(StopAsyncIteration),
         ):
             await scheduler.run_forever(0, tick_seconds=1)
+        ask.assert_called_once()
         dispatch.assert_called_once()
         sleep.assert_awaited_once_with(1)
 
     @pytest.mark.anyio
     async def test_a_dispatch_failure_does_not_stop_the_clock(self):
         with (
+            patch.object(
+                scheduler, "run_checkin_prompts", side_effect=RuntimeError("db down")
+            ),
             patch.object(
                 scheduler, "run_scheduled_batch", side_effect=RuntimeError("db down")
             ),

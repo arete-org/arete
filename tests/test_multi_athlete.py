@@ -580,9 +580,9 @@ def test_vercel_windows_run_each_athlete_once_out_of_quiet_hours(
     }
 
 
-def _cron_hours() -> list[int]:
+def _cron_hours(path: str = "/api/cron/daily-sync") -> list[int]:
     crons = json.loads((Path(__file__).parents[1] / "vercel.json").read_text())["crons"]
-    return sorted(int(cron["schedule"].split()[1]) for cron in crons)
+    return sorted(int(c["schedule"].split()[1]) for c in crons if c["path"] == path)
 
 
 @pytest.mark.parametrize(
