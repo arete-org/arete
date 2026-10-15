@@ -169,8 +169,9 @@ def tss_history(days: int, end: date | None = None) -> list[DailyTSS]:
         return daily_tss(con, end - timedelta(days=days), end)
 
 
-def training_loads(days: int, end: date | None = None) -> list[DailyLoad]:
-    end = end or date.today()
+def training_loads(days: int, end: date) -> list[DailyLoad]:
+    """``end`` is the athlete's day (``athlete_today``), which this layer cannot
+    read: no default."""
     with db_connection() as con:
         return daily_loads(con, end - timedelta(days=days), end)
 

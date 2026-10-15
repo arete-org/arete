@@ -342,11 +342,40 @@ def test_expired_or_foreign_followup_cannot_write(athlete):
             coach_followup.respond(item["id"], 1, "answer", rpe=5)
     with db_connection() as con:
         con.execute(
-            "UPDATE app.coach_followups SET expires_at=now()-INTERVAL '1 hour' WHERE id=?",
+            "UPDATE app.coach_followups SET expires_at=(now() AT TIME ZONE 'UTC')-INTERVAL '1 hour' WHERE id=?",
             [item["id"]],
         )
     with pytest.raises(coach_followup.FollowupConflict):
         coach_followup.respond(item["id"], 1, "answer", rpe=5)
+
+
+def test_followup_lifetime_runs_on_one_clock(athlete):
+    # conftest puts the server's date a day apart from the athlete's (Paris):
+    # an expiry built from the athlete's date and the server's time was 24 h off.
+    # Instants are naive UTC, whatever the server's zone.
+    GarminRepository().create_actual_session(
+        ActualSession(date=athlete_today(), sport="running", duration_sec=6000)
+    )
+    coach_followup.prepare()
+    item = coach_followup.pending()[0]
+    with db_connection() as con:
+        left = con.execute(
+            "SELECT epoch(expires_at - (now() AT TIME ZONE 'UTC')) FROM app.coach_followups WHERE id=?",
+            [item["id"]],
+        ).fetchone()[0]
+    assert abs(left - coach_followup.MAX_FOLLOWUP_HOURS * 3600) < 60
+    # The home card and the coach's context agree on the expiry, either side.
+    for shift, visible in (
+        ("+ INTERVAL '1 hour'", True),
+        ("- INTERVAL '1 hour'", False),
+    ):
+        with db_connection() as con:
+            con.execute(
+                f"UPDATE app.coach_followups SET expires_at=(now() AT TIME ZONE 'UTC') {shift} WHERE id=?",
+                [item["id"]],
+            )
+        assert bool(coach_followup.pending()) is visible
+        assert (item["question"] in coach_followup.context_block()) is visible
 
 
 def test_strength_hr_is_not_interpreted_as_cardio_quality(athlete):

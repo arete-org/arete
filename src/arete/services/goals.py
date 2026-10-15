@@ -67,14 +67,14 @@ def _validate(fields: dict[str, Any]) -> None:
         raise ValueError("name must not be empty")
 
 
-def list_goals(*, include_past: bool = False) -> list[Goal]:
+def list_goals(*, include_past: bool = False, today: date | None = None) -> list[Goal]:
     con = connect()
     try:
         # The athlete's day, not the database clock's (UTC on Vercel).
         where = "" if include_past else "AND race_date >= ?"
         rows = con.execute(
             f"SELECT {_COLUMNS} FROM app.visible_goals WHERE user_id = getvariable('arete_athlete_id') {where} ORDER BY race_date, id",
-            [] if include_past else [athlete_today()],
+            [] if include_past else [today or athlete_today()],
         ).fetchall()
     finally:
         con.close()

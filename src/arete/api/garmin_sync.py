@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
 from arete.garmin.repository import GarminRepository
+from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,17 @@ class SyncStatusResponse(BaseModel):
     freshness: dict = Field(default_factory=dict)
 
 
+PERIOD_ERROR = "La date de fin doit suivre ou égaler la date de début."
+
+
+def _check_open_period(request: SyncRequest) -> None:
+    """Without an end date the sync ends on the athlete's day, which only the
+    scoped request can read: the server's date is behind theirs after midnight."""
+    start, end = request.start_date, request.end_date
+    if start and end is None and start > athlete_today():
+        raise HTTPException(status_code=422, detail=PERIOD_ERROR)
+
+
 class SyncRequest(BaseModel):
     """Sync request parameters."""
 
@@ -43,8 +55,8 @@ class SyncRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_period(self) -> SyncRequest:
-        if self.start_date and self.start_date > (self.end_date or date.today()):
-            raise ValueError("La date de fin doit suivre ou égaler la date de début.")
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError(PERIOD_ERROR)
         if self.history_offset is not None:
             if self.start_date or self.end_date or self.max_activities != 20:
                 raise ValueError(
@@ -183,6 +195,8 @@ def sync_activities(request: SyncRequest):
     """
     from arete.garmin import token_store
 
+    _check_open_period(request)
+
     if not token_store.session_status()[0]:
         raise HTTPException(
             status_code=409,
@@ -221,6 +235,7 @@ def stream_activities(request: SyncRequest) -> StreamingResponse:
     from arete.garmin.sync import SyncProgress, SyncResult
     from arete.services.garmin_sync import iter_manual
 
+    _check_open_period(request)
     if not token_store.session_status()[0]:
         raise HTTPException(
             status_code=409,

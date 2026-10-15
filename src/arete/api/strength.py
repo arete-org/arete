@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from arete.data.cardio_muscle_impact import CARDIO_MUSCLE_IMPACT
 from arete.features import muscles as muscle_map
+from arete.services.settings import athlete_today
 from arete.strength.logging_service import (
     complete_planned_strength,
     link_garmin_strength,
@@ -579,7 +580,7 @@ def get_muscle_stats(
     regions the silhouette paints, and the heat level is relative to the busiest
     region of the window.
     """
-    end = date_type.today()
+    end = athlete_today()
     start = end - timedelta(days=days - 1)
     prev_end = start - timedelta(days=1)
     prev_start = prev_end - timedelta(days=days - 1)

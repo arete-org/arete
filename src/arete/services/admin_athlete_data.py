@@ -76,12 +76,15 @@ def _read(
     start_date: str,
 ) -> object:
     from arete.services import analytics, athlete_facts, documents, memory, planning
+    from arete.services.settings import athlete_today
 
-    start = (
-        date.fromisoformat(start_date)
-        if start_date
-        else date.today() - timedelta(days=days - 1)
-    )
+    def first_day(back: int) -> date:
+        """The requested day, else the scoped athlete's today less ``back`` days:
+        the server's date is behind theirs after their midnight."""
+        if start_date:
+            return date.fromisoformat(start_date)
+        return athlete_today() - timedelta(days=back)
+
     if section == "settings":
         from arete.dataio.settings import get_user_settings
 
@@ -93,6 +96,7 @@ def _read(
         if section == "strength_session":
             session = repo.get_session(int(resource))
             return asdict(session) if session else None
+        start = first_day(days - 1)
         sessions = repo.list_sessions(
             start_date=start, end_date=start + timedelta(days=days - 1), limit=51
         )
@@ -104,13 +108,14 @@ def _read(
     if section == "session":
         return analytics.get_session(int(resource))
     if section == "planning":
-        today = date.fromisoformat(start_date) if start_date else date.today()
+        today = first_day(0)
         return planning.list_planned(
             today.isoformat(), (today + timedelta(days=days)).isoformat()
         )
     if section == "health":
         from arete.dataio.queries import daily_metrics_range
 
+        start = first_day(days - 1)
         with db_connection() as con:
             return daily_metrics_range(con, start, start + timedelta(days=days - 1))
     if section == "facts":
