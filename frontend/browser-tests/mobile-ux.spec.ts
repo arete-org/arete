@@ -241,14 +241,18 @@ test('touch: the morning check-in is three taps at 375 px and then gives the pag
   await page.setViewportSize({ width: 375, height: 812 });
   await fixture(page);
   const answers: unknown[] = [];
-  // Registered after the fixture's catch-all, so it answers first.
+  let answered: Record<string, unknown> | null = null;
+  // Registered after the fixture's catch-all, so they answer first.
   await page.route('**/api/checkins/*', (route) => {
     const body = route.request().postDataJSON();
     answers.push(body);
     const at = '2026-10-15T05:12:00+00:00';
     const date = new URL(route.request().url()).pathname.split('/').pop();
-    return route.fulfill({ json: { date, ...body, answered_at: at, updated_at: at, replanned: false } });
+    answered = { date, ...body, answered_at: at, updated_at: at };
+    return route.fulfill({ json: { ...answered, replanned: false } });
   });
+  // The dashboard read again after the answer carries it.
+  await page.route('**/api/dashboard', (route) => route.fulfill({ json: dashboardAnswer({ checkin: answered }) }));
   await page.goto('/');
   const card = page.getByRole('region', { name: 'Check-in du matin' });
   await expect(card).toBeVisible();
@@ -258,5 +262,7 @@ test('touch: the morning check-in is three taps at 375 px and then gives the pag
   await card.getByRole('button', { name: 'Valider' }).tap();
   await expect(card).toBeHidden();
   expect(answers).toEqual([{ sleep: 4, legs: 1, mood: null, note: null }]);
+  await page.waitForLoadState('networkidle');
+  await expect(card).toBeHidden();
   await expect(page.getByRole('heading', { name: 'BRIEFING DU JOUR' })).toBeInViewport();
 });

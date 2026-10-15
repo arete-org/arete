@@ -31,8 +31,10 @@ export const checkinApi = {
  * The answer is the dashboard's `checkin` slice: written into it, the card
  * hides without a read. A dashboard read already in flight was read before
  * the answer: it is cancelled first, or it would land later and show the
- * card again. A new proposal (`replanned`) refreshes the dashboard and the
- * coach card, which carry it.
+ * card again. The dashboard is then read again anyway, since the cancelled
+ * read was a refresh the page still needs; the new read carries the answer,
+ * so the card stays hidden. A new proposal (`replanned`) also refreshes the
+ * coach card, which carries it.
  */
 export async function afterCheckin(client: QueryClient, saved: CheckinSaved): Promise<void> {
   const { replanned, ...checkin } = saved;
@@ -40,9 +42,8 @@ export async function afterCheckin(client: QueryClient, saved: CheckinSaved): Pr
   client.setQueriesData<DashboardData>({ queryKey: qk.dashboard() }, (board) =>
     board && board.date === checkin.date ? { ...board, checkin } : board,
   );
-  if (!replanned) return;
   void client.invalidateQueries({ queryKey: qk.dashboard() });
-  void client.invalidateQueries({ queryKey: coachTodayKey });
+  if (replanned) void client.invalidateQueries({ queryKey: coachTodayKey });
 }
 
 const DISMISSED_KEY = 'arete.checkin.dismissed';

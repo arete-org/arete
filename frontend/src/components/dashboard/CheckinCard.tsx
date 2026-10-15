@@ -35,12 +35,14 @@ function Scale({
   onClear?: () => void;
   firstRef?: RefObject<HTMLInputElement | null>;
 }) {
+  const group = useRef<HTMLDivElement>(null);
+  // « Effacer » leaves with the answer: the focus goes back to the question.
+  const clear = () => {
+    onClear?.();
+    group.current?.querySelector('input')?.focus();
+  };
   return (
-    <div
-      role="radiogroup"
-      aria-labelledby={`${name}-label`}
-      className="min-w-0 sm:grid sm:grid-cols-[9rem_minmax(0,20rem)] sm:items-start sm:gap-3"
-    >
+    <div className="min-w-0 sm:grid sm:grid-cols-[9rem_minmax(0,20rem)] sm:items-start sm:gap-3">
       <div className="mb-1 flex flex-wrap items-baseline gap-x-2 sm:mb-0 sm:block sm:pt-3">
         <p id={`${name}-label`} className="text-sm font-sans text-text-primary">
           {legend}
@@ -49,7 +51,7 @@ function Scale({
         {onClear && value !== undefined && (
           <button
             type="button"
-            onClick={onClear}
+            onClick={clear}
             disabled={disabled}
             aria-label={`Effacer la réponse ${legend}`}
             className="-my-3 inline-flex min-h-11 items-center text-xs font-sans text-neon-cyan hover:underline"
@@ -58,7 +60,7 @@ function Scale({
           </button>
         )}
       </div>
-      <div>
+      <div ref={group} role="radiogroup" aria-labelledby={`${name}-label`}>
         <div className="grid grid-cols-5 gap-1.5">
           {words.map((word, index) => (
             <label key={word} className="relative">

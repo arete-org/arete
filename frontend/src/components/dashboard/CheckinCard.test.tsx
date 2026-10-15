@@ -33,6 +33,7 @@ const region = () => screen.queryByRole('region', { name: 'Check-in du matin' })
 
 it('answers in three taps and writes the answer into the dashboard', async () => {
   const save = vi.spyOn(checkinApi, 'save').mockResolvedValue(saved());
+  const refresh = vi.spyOn(client, 'invalidateQueries');
   client.setQueryData(qk.dashboard(DAY), { date: DAY, checkin: null });
   mount();
   const send = screen.getByRole<HTMLButtonElement>('button', { name: 'Valider' });
@@ -49,6 +50,9 @@ it('answers in three taps and writes the answer into the dashboard', async () =>
   await waitFor(() => expect(save).toHaveBeenCalledWith(DAY, { sleep: 2, legs: 4, mood: null, note: null }));
   await waitFor(() => expect(client.getQueryData(qk.dashboard(DAY))).toMatchObject({ checkin: { sleep: 2, legs: 4 } }));
   expect(client.getQueryData<{ checkin: object }>(qk.dashboard(DAY))?.checkin).not.toHaveProperty('replanned');
+  // The dashboard is read again (its refresh was cancelled); the coach card only with a proposal.
+  expect(refresh).toHaveBeenCalledWith({ queryKey: qk.dashboard() });
+  expect(refresh).not.toHaveBeenCalledWith({ queryKey: ['coachToday'] });
 });
 
 it('sends the optional answer and word, and a new proposal refreshes the coach card', async () => {
@@ -104,6 +108,9 @@ it('the optional answer can be withdrawn, and the word field takes the focus', a
   fireEvent.click(calm);
   fireEvent.click(screen.getByRole('button', { name: 'Effacer la réponse Motivation / stress' }));
   expect(calm.checked).toBe(false);
+  // The button leaves with the answer: the focus goes back to the question, not the page.
+  expect(document.activeElement).toBe(screen.getByRole('radio', { name: '1 sur 5 — stressé, sans envie' }));
+  expect(screen.getByRole('radiogroup', { name: 'Motivation / stress (facultatif)' }).contains(document.activeElement)).toBe(true);
   expect(screen.queryByRole('button', { name: /Effacer/ })).toBeNull();
 
   fireEvent.click(screen.getByRole('button', { name: '+ Ajouter un mot' }));

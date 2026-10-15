@@ -5,7 +5,9 @@ import { dashboardAnswer, localDay } from './dashboardAnswer';
 /** The dashboard with today unanswered; every request but the auth configuration is recorded. */
 async function morning(page: Page, theme = 'dark', replanned = false) {
   const requests: string[] = [];
-  const answers: unknown[] = [];
+  const answers: Record<string, unknown>[] = [];
+  const at = `${localDay()}T05:12:00+00:00`;
+  const stored = () => (answers.length ? { date: localDay(), ...answers.at(-1), answered_at: at, updated_at: at } : null);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.addInitScript(() => {
     localStorage.setItem('arete.install.dismissed', '1');
@@ -18,13 +20,12 @@ async function morning(page: Page, theme = 'dark', replanned = false) {
     requests.push(`${request.method()} ${path}`);
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER', theme } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, opted_in: false, available: true, version: 1 } });
-    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer() });
+    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer({ checkin: stored() }) });
     if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh' } });
     if (path === `/api/checkins/${localDay()}` && request.method() === 'PUT') {
       const body = request.postDataJSON();
       answers.push(body);
-      const at = `${localDay()}T05:12:00+00:00`;
-      return route.fulfill({ json: { date: localDay(), ...body, answered_at: at, updated_at: at, replanned } });
+      return route.fulfill({ json: { ...stored(), replanned } });
     }
     return route.fulfill({ json: [] });
   });
@@ -63,9 +64,11 @@ for (const { width, height } of [{ width: 375, height: 812 }, { width: 1440, hei
     expect(answers).toEqual([{ sleep: 2, legs: 4, mood: null, note: null }]);
     // Answered, the desktop dashboard fits its screen again (layout.spec.ts).
     if (width === 1440) expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
-    // The answer is the dashboard's slice: no read again without a new proposal.
+    // One read again after the answer (it carries the answer: the card stays hidden).
+    await expect.poll(() => requests.filter((r) => r === 'GET /api/dashboard').length).toBe(2);
     await page.waitForLoadState('networkidle');
-    expect(requests.filter((r) => r === 'GET /api/dashboard')).toHaveLength(1);
+    await expect(card).toBeHidden();
+    expect(requests.filter((r) => r === 'GET /api/dashboard')).toHaveLength(2);
   });
 }
 
