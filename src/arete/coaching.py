@@ -343,6 +343,11 @@ def generate_weekly_review(*, refresh: bool = False) -> weekly_review.Review:
     return weekly_review.generate_review(run_review, refresh=refresh)
 
 
+def write_scheduled_review() -> weekly_review.Review | None:
+    """The scheduler's review: written once per week, None when it exists."""
+    return weekly_review.write_review(run_review, scheduled=True)
+
+
 def generate_briefing(
     *, trigger: str = "api", target_date: date | None = None, user_id: int | None = None
 ) -> Briefing:

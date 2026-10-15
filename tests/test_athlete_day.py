@@ -99,14 +99,15 @@ def test_the_weekly_review_runs_on_the_paris_monday(frozen, router_client):
     from arete.services import weekly_review
 
     with (
-        patch("arete.coaching.generate_weekly_review") as generate,
-        patch("arete.services.notifications.notify"),
+        patch("arete.coaching.write_scheduled_review") as write,
+        patch("arete.services.notifications.notify") as notify,
     ):
-        generate.return_value = weekly_review.Review(
+        notify.return_value.skipped_reason = "heures calmes"
+        write.return_value = weekly_review.Review(
             1, PARIS_DAY, "Semaine tenue.", "agent", [], [], None, None
         )
         # Sunday on the server's clock; Monday on the athlete's.
-        assert scheduler.write_weekly_review() == "agent, 0 proposals"
+        assert scheduler.write_weekly_review() == "agent, 0 proposals; heures calmes"
     with patch.object(weekly_review, "get_review", return_value=None) as get:
         router_client(router).get("/plan/review")
     get.assert_called_once_with(date(2026, 10, 5))

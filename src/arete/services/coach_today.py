@@ -84,12 +84,19 @@ def reference(raw: str) -> dict[str, Any]:
         from arete.services.automations import run_detail
 
         return {"kind": "automation_run", "record": run_detail(raw.split(":", 1)[1])}
-    match = re.fullmatch(r"(proposal|followup|briefing):([1-9][0-9]{0,9})", raw)
+    match = re.fullmatch(r"(proposal|followup|briefing|review):([1-9][0-9]{0,9})", raw)
     if not match:
         raise ValueError("Référence de suivi invalide")
     kind, ident = match[1], int(match[2])
     if kind == "followup":
         record = coach_followup.get(ident)
+    elif kind == "review":
+        # « Ajuster avec le coach » on « Ma semaine »: the week's review and
+        # its proposals, read from the athlete's own rows.
+        from arete.services.weekly_review import get_review_by_id
+
+        review = get_review_by_id(ident)
+        record = review.to_dict() if review else None
     elif kind == "briefing":
         # The athlete asks about a briefing: the coach reads its text, quoted.
         briefing = BriefingRepository().get(ident)

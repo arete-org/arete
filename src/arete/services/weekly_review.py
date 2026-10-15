@@ -3,9 +3,11 @@
 Rules propose, the model explains, the athlete applies with one tap. The
 proposals touch only sessions still to come this week (after today: today is
 the daily adaptation's), and applying one checks the session has not changed
-since it was proposed. One review per finished week; the text falls back to
-the rules' own sentence when the model fails, and is that sentence alone for
-a week with nothing planned or done.
+since it was proposed. One review per week, written once: on Sunday evening
+for the week ending that day (``review_week``), on Monday as a fallback. A
+claimed row (``PENDING``) keeps two runs from paying for the same review. The
+text falls back to the rules' own sentence when the model fails, and is that
+sentence alone for a week with nothing planned or done.
 """
 
 from __future__ import annotations
@@ -14,14 +16,16 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from arete.dataio.db import connect
+import duckdb
+
+from arete.dataio.db import connect, db_connection, transaction
 from arete.dataio.queries import RUNNING_SPORTS, sql_in
 from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
-from arete.services.settings import athlete_today
+from arete.services.settings import athlete_now, athlete_today, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +81,17 @@ class Proposal:
 
 def last_monday(today: date) -> date:
     return today - timedelta(days=today.weekday() + 7)
+
+
+def review_week(today: date) -> date:
+    """Monday of the week a review written ``today`` covers.
+
+    On Sunday the week ending that day (the evening's review); any other day
+    the last finished week, so Monday's fallback writes the same one.
+    """
+    if today.weekday() == 6:
+        return today - timedelta(days=6)
+    return last_monday(today)
 
 
 def week_facts(week_start: date, today: date) -> WeekFacts:
@@ -302,11 +317,27 @@ def _from_row(row: tuple) -> Review:
     )
 
 
+#: Source of a row a run claimed and has not written yet: never served.
+PENDING = "pending"
+#: A claim older than this belongs to a run stopped before it stored the
+#: review (the function's 300 s, a crash): another run may take it over.
+CLAIM_SECONDS = 600
+_SCOPE = (
+    "user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS "
+    "(SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id "
+    "AND scope_owner.deleted_at IS NULL)"
+)
+
+
+class ReviewInProgress(Exception):
+    """Another run is writing this week's review."""
+
+
 def get_review(week_start: date) -> Review | None:
     con = connect()
     try:
         row = con.execute(
-            f"SELECT {_COLUMNS} FROM app.visible_weekly_reviews WHERE user_id = getvariable('arete_athlete_id') AND week_start = ?",
+            f"SELECT {_COLUMNS} FROM app.visible_weekly_reviews WHERE user_id = getvariable('arete_athlete_id') AND week_start = ? AND source <> '{PENDING}'",
             [week_start],
         ).fetchone()
     finally:
@@ -318,7 +349,7 @@ def get_review_by_id(review_id: int) -> Review | None:
     con = connect()
     try:
         row = con.execute(
-            f"SELECT {_COLUMNS} FROM app.visible_weekly_reviews WHERE id = ?",
+            f"SELECT {_COLUMNS} FROM app.visible_weekly_reviews WHERE id = ? AND source <> '{PENDING}'",
             [review_id],
         ).fetchone()
     finally:
@@ -326,18 +357,23 @@ def get_review_by_id(review_id: int) -> Review | None:
     return _from_row(row) if row else None
 
 
-def generate_review(
-    produce: Callable[[str], str] | None,
-    *,
-    today: date | None = None,
-    refresh: bool = False,
-) -> Review:
-    """Last week's review, produced once (``refresh`` writes it again)."""
+def current_review(today: date | None = None) -> Review | None:
+    """The review the athlete reads now.
+
+    On Sunday the week ending that day's once written, last week's until
+    then; any other day the last finished week's.
+    """
     today = today or athlete_today()
-    week_start = last_monday(today)
-    existing = get_review(week_start)
-    if existing is not None and not refresh:
-        return existing
+    review = get_review(review_week(today))
+    if review is None and today.weekday() == 6:
+        review = get_review(last_monday(today))
+    return review
+
+
+def _compose(
+    produce: Callable[[str], str] | None, today: date, week_start: date
+) -> tuple[str, str, str, list[Proposal]]:
+    """The review's text, its source, the facts it was written from, its proposals."""
     facts = week_facts(week_start, today)
     this_week_end = week_start + timedelta(days=13)
     upcoming = GarminRepository().list_planned_sessions(
@@ -360,6 +396,139 @@ def generate_review(
             text, source = produce(facts_message), "agent"
         except Exception:  # noqa: BLE001 - the rule text is the floor
             logger.warning("Weekly review agent run failed", exc_info=True)
+    return text, source, facts_message, proposals
+
+
+def _claim(week_start: date, *, scheduled: bool) -> int | None:
+    """Mark the week's review as being written; the row's id, None when taken.
+
+    Taken: written already, or claimed by a run still within
+    ``CLAIM_SECONDS``. An older claim belongs to a run stopped before it
+    stored anything and is taken over, except by a scheduled run on the
+    athlete's day it was claimed: the scheduler retries the next day, never
+    the same one. The unique week key makes concurrent claims exclusive.
+    """
+    now = utc_now()
+    local = athlete_now()
+    try:
+        with transaction() as con:
+            row = con.execute(
+                "SELECT id, source, created_at FROM app.visible_weekly_reviews "
+                "WHERE user_id = getvariable('arete_athlete_id') AND week_start = ?",
+                [week_start],
+            ).fetchone()
+            if row is not None:
+                if row[1] != PENDING:
+                    return None
+                claimed_at = row[2].replace(tzinfo=UTC)
+                if now - claimed_at < timedelta(seconds=CLAIM_SECONDS):
+                    return None
+                if scheduled and claimed_at.astimezone(local.tzinfo).date() == (
+                    local.date()
+                ):
+                    return None
+                logger.warning("Weekly review: stopped claim %s taken over", row[0])
+                con.execute(
+                    f"DELETE FROM app.weekly_reviews WHERE {_SCOPE} "
+                    f"AND id = ? AND source = '{PENDING}'",
+                    [row[0]],
+                )
+            claimed = con.execute(
+                "INSERT INTO app.weekly_reviews "
+                "(week_start, text, source, proposals_json, created_at) "
+                f"VALUES (?, '', '{PENDING}', '[]', ?) "
+                "ON CONFLICT DO NOTHING RETURNING id",
+                [week_start, now.replace(tzinfo=None)],
+            ).fetchone()
+    except duckdb.TransactionException:
+        return None  # a concurrent run claimed the same week first
+    return int(claimed[0]) if claimed else None
+
+
+def _release(claim_id: int) -> None:
+    try:
+        with db_connection() as con:
+            con.execute(
+                f"DELETE FROM app.weekly_reviews WHERE {_SCOPE} "
+                f"AND id = ? AND source = '{PENDING}'",
+                [claim_id],
+            )
+    except Exception:  # noqa: BLE001 - it expires after CLAIM_SECONDS anyway
+        logger.warning("Weekly review claim %s not released", claim_id, exc_info=True)
+
+
+def write_review(
+    produce: Callable[[str], str] | None,
+    *,
+    today: date | None = None,
+    scheduled: bool = True,
+) -> Review | None:
+    """Write the week's review once; None when it exists or a run holds it.
+
+    Only the call that returns a review may announce it, so the week's push
+    goes out at most once. A failure after the claim keeps it for a
+    scheduled run (its next attempt is the next day's) and frees it for the
+    athlete's own request, which they may repeat.
+    """
+    today = today or athlete_today()
+    week_start = review_week(today)
+    claim_id = _claim(week_start, scheduled=scheduled)
+    if claim_id is None:
+        return None
+    try:
+        text, source, facts_message, proposals = _compose(produce, today, week_start)
+        with db_connection() as con:
+            row = con.execute(
+                "UPDATE app.weekly_reviews SET text = ?, source = ?, facts = ?, "
+                f"proposals_json = ?, created_at = ? WHERE {_SCOPE} "
+                f"AND id = ? AND source = '{PENDING}' RETURNING {_COLUMNS}",
+                [
+                    text,
+                    source,
+                    facts_message,
+                    json.dumps([asdict(p) for p in proposals], ensure_ascii=False),
+                    utc_now().replace(tzinfo=None),
+                    claim_id,
+                ],
+            ).fetchone()
+    except Exception:
+        if not scheduled:
+            _release(claim_id)
+        raise
+    # None: a rewrite asked meanwhile replaced the claim; that one stands.
+    return _from_row(row) if row else None
+
+
+def generate_review(
+    produce: Callable[[str], str] | None,
+    *,
+    today: date | None = None,
+    refresh: bool = False,
+) -> Review:
+    """The week's review, produced once (``refresh`` writes it again).
+
+    Raises ``ReviewInProgress`` while another run writes it.
+    """
+    today = today or athlete_today()
+    week_start = review_week(today)
+    if refresh:
+        return _rewrite(produce, today, week_start)
+    existing = get_review(week_start)
+    if existing is not None:
+        return existing
+    written = write_review(produce, today=today, scheduled=False)
+    if written is None:
+        written = get_review(week_start)
+    if written is None:
+        raise ReviewInProgress(week_start.isoformat())
+    return written
+
+
+def _rewrite(
+    produce: Callable[[str], str] | None, today: date, week_start: date
+) -> Review:
+    """The athlete's « Refaire le bilan »: replaces the week's row, claim included."""
+    text, source, facts_message, proposals = _compose(produce, today, week_start)
     con = connect()
     try:
         con.execute(
@@ -381,6 +550,63 @@ def generate_review(
         con.close()
     assert row is not None
     return _from_row(row)
+
+
+def _open(review: Review, today: date) -> int:
+    """Proposals still to answer: not applied, for a day still to come."""
+    return sum(
+        1
+        for p in review.proposals
+        if p["index"] not in review.applied and p["date"] > today.isoformat()
+    )
+
+
+def pending_entry(today: date, con: duckdb.DuckDBPyConnection) -> dict[str, Any] | None:
+    """The dashboard's way into « Ma semaine », on its shared connection.
+
+    The current review until the athlete accepts it: on the evening it is
+    written and the next day whatever it proposes, then while a proposal is
+    still open. None otherwise.
+    """
+    weeks = [review_week(today)]
+    if today.weekday() == 6:
+        weeks.append(last_monday(today))
+    rows = con.execute(
+        f"SELECT {_COLUMNS} FROM app.visible_weekly_reviews "
+        "WHERE user_id = getvariable('arete_athlete_id') "
+        f"AND week_start IN (?, ?) AND source <> '{PENDING}' "
+        "ORDER BY week_start DESC LIMIT 1",
+        [weeks[0], weeks[-1]],
+    ).fetchall()
+    if not rows:
+        return None
+    review = _from_row(rows[0])
+    remaining = _open(review, today)
+    if review.applied_at is not None:
+        return None
+    if today > review.week_start + timedelta(days=7) and remaining == 0:
+        return None
+    return {
+        "id": review.id,
+        "week_start": review.week_start.isoformat(),
+        "open": remaining,
+    }
+
+
+def recap(review: Review, today: date) -> dict[str, Any]:
+    """The reviewed week in numbers, read now: a session imported since counts."""
+    end = review.week_start + timedelta(days=6)
+    facts = week_facts(review.week_start, min(today, end))
+    return {
+        "week_start": review.week_start.isoformat(),
+        "week_end": end.isoformat(),
+        "planned": facts.planned_due,
+        "completed": facts.completed,
+        "minutes_done": facts.minutes_done,
+        "minutes_planned": facts.minutes_planned,
+        "adherence": facts.adherence,
+        "tsb": facts.tsb,
+    }
 
 
 class AlreadyApplied(Exception):
@@ -421,3 +647,80 @@ def apply_review(review_id: int, indices: list[int]) -> dict[str, Any]:
         finally:
             con.close()
     return {"applied": applied, "stale": stale}
+
+
+#: Sessions the accepted week sends to Garmin besides the ones it changed.
+KEY_TYPES = (SessionType.INTERVALS, SessionType.TEMPO, SessionType.LONG_RUN)
+
+
+def accept(
+    review_id: int,
+    indices: list[int],
+    *,
+    follow_calendar: Callable[[], str] | None = None,
+) -> dict[str, Any]:
+    """« Accepter » on « Ma semaine »: the chosen proposals, then the watch.
+
+    The plan is written first and stays written: a stale proposal is
+    reported and left as it is, and the Garmin push and the calendar follow
+    best effort, each outcome reported as it came (``plan_adaptation.push_week``,
+    ``follow_calendar``), never failing the answer. The review counts as
+    answered from now on, even with nothing applied. Raises ``LookupError``
+    for an unknown review only.
+    """
+    result = apply_review(review_id, indices)
+    review = get_review_by_id(review_id)
+    assert review is not None
+    try:
+        with db_connection() as con:
+            con.execute(
+                "UPDATE app.weekly_reviews SET applied_at = coalesce(applied_at, now()) "
+                f"WHERE {_SCOPE} AND id = ?",
+                [review_id],
+            )
+    except Exception:  # noqa: BLE001 - the plan is written; the entry stays
+        logger.warning("Weekly review %s not marked answered", review_id, exc_info=True)
+    garmin: dict[str, Any]
+    try:
+        from arete.services.plan_adaptation import push_week
+
+        changed = {
+            p["planned_session_id"]
+            for p in review.proposals
+            if p["index"] in result["applied"]
+        }
+        today = athlete_today()
+        upcoming = GarminRepository().list_planned_sessions(
+            start_date=today + timedelta(days=1),
+            end_date=review.week_start + timedelta(days=13),
+            status=None,
+            limit=20,
+            ascending=True,
+        )
+        withdraw = [
+            s for s in upcoming if s.id in changed and s.status == SessionStatus.SKIPPED
+        ]
+        # The changed sessions first: their copy on Garmin no longer matches.
+        send = sorted(
+            (
+                s
+                for s in upcoming
+                if s.status in (SessionStatus.PENDING, SessionStatus.MODIFIED)
+                and (s.id in changed or s.session_type in KEY_TYPES)
+            ),
+            key=lambda s: (s.id not in changed, s.date),
+        )
+        garmin = push_week(send, withdraw)
+    except Exception:  # noqa: BLE001 - the plan is written; the watch is best effort
+        logger.warning("Weekly review %s: Garmin push failed", review_id, exc_info=True)
+        garmin = {"state": "failed", "sessions": []}
+    calendar = "disabled"
+    if follow_calendar is not None:
+        try:
+            calendar = follow_calendar()
+        except Exception:  # noqa: BLE001 - its contract is never to raise
+            logger.warning(
+                "Weekly review %s: calendar failed", review_id, exc_info=True
+            )
+            calendar = "failed"
+    return {**result, "garmin": garmin, "calendar": calendar}

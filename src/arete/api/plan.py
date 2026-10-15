@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from datetime import date as date_type
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from arete.services import plan_adaptation as service
 from arete.services.plan_repository import PlanDecisionRepository
@@ -57,19 +58,40 @@ class ReviewApply(BaseModel):
 
 @router.get("/review")
 def get_review() -> dict[str, Any] | None:
-    """Last week's review, if it was written."""
-    from arete.services.weekly_review import get_review, last_monday
+    """The current review, if it was written (on Sunday, the week ending)."""
+    from arete.services.weekly_review import current_review
 
-    review = get_review(last_monday(athlete_today()))
+    review = current_review(athlete_today())
     return review.to_dict() if review else None
+
+
+@router.get("/review/week")
+def get_review_week() -> dict[str, Any]:
+    """« Ma semaine »: the current review and its week in numbers, read now."""
+    from arete.services.weekly_review import current_review, recap
+
+    today = athlete_today()
+    review = current_review(today)
+    return {
+        "today": today.isoformat(),
+        "review": review.to_dict() if review else None,
+        "recap": recap(review, today) if review else None,
+    }
 
 
 @router.post("/review")
 def write_review(refresh: bool = False) -> dict[str, Any]:
-    """Write last week's review (once; ``refresh`` writes it again)."""
+    """Write the week's review (once; ``refresh`` writes it again)."""
     from arete import coaching
+    from arete.services.weekly_review import ReviewInProgress
 
-    return coaching.generate_weekly_review(refresh=refresh).to_dict()
+    try:
+        return coaching.generate_weekly_review(refresh=refresh).to_dict()
+    except ReviewInProgress:
+        raise HTTPException(
+            status_code=409,
+            detail="Le coach écrit déjà ce bilan : réessaie dans quelques minutes.",
+        ) from None
 
 
 @router.post("/review/{review_id}/apply")
@@ -79,5 +101,47 @@ def apply_review(review_id: int, body: ReviewApply) -> dict[str, Any]:
 
     try:
         return apply_review(review_id, body.indices)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Bilan introuvable") from None
+
+
+class GarminWeekSession(BaseModel):
+    planned_session_id: int
+    date: date_type
+    session_type: str
+    outcome: Literal["sent", "already", "withdrawn", "skipped", "failed", "not_started"]
+
+
+class GarminWeekPush(BaseModel):
+    state: Literal["done", "disabled", "disconnected", "failed"] = Field(
+        description="Whether the push ran; each session's outcome otherwise"
+    )
+    sessions: list[GarminWeekSession]
+
+
+class ReviewAccepted(BaseModel):
+    applied: list[int]
+    stale: list[int] = Field(description="Proposals whose session changed since")
+    garmin: GarminWeekPush
+    calendar: str = Field(
+        description="Training plan calendar sync: synced, partial, busy, failed, disabled"
+    )
+
+
+@router.post("/review/{review_id}/accept", response_model=ReviewAccepted)
+def accept_review(review_id: int, body: ReviewApply) -> dict[str, Any]:
+    """« Accepter »: the chosen proposals, then the week's key sessions on
+    Garmin and the plan's calendar, each outcome reported. The plan stays
+    written whatever the watch or the calendar answer."""
+    from arete.calendar import sync_training_plan
+    from arete.services.calendar_plan import AFTER_PLAN_WRITE
+    from arete.services.weekly_review import accept
+
+    try:
+        return accept(
+            review_id,
+            body.indices,
+            follow_calendar=lambda: sync_training_plan(AFTER_PLAN_WRITE),
+        )
     except LookupError:
         raise HTTPException(status_code=404, detail="Bilan introuvable") from None

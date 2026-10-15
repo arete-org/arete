@@ -16,7 +16,7 @@ import asyncio
 import json
 import logging
 from contextvars import ContextVar
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from time import monotonic, sleep
 
@@ -334,26 +334,47 @@ def write_daily_briefing() -> str:
     return briefing.source
 
 
+#: The week's push: once per week, by the run that wrote the review.
+REVIEW_TITLE = "Ta semaine est prête"
+REVIEW_URL = "/planning/semaine"
+
+
 def write_weekly_review(today: date | None = None) -> str:
-    """On Mondays, review the week that just ended. Never raises."""
+    """Monday's fallback: the week's review when Sunday's was missed. Never raises.
+
+    Sunday evening writes it (``run_sunday_reviews``); a review already
+    written, by then or by the athlete, is neither written nor announced again.
+    """
     today = today or athlete_today()
     if today.weekday() != 0:
         return "not monday"
-    try:
-        from arete.coaching import generate_weekly_review
-        from arete.services.notifications import first_sentence, notify
+    return announce_review()
 
-        review = generate_weekly_review()
-        notify(
-            "Bilan de la semaine",
-            first_sentence(review.text),
-            "/planning",
-            kind="weekly_review",
-        )
+
+def announce_review() -> str:
+    """Write the week's review and push it, once per week. Never raises.
+
+    One model request at most (``coaching.write_scheduled_review``); only the
+    run that wrote it sends « Ta semaine est prête », which the athlete's
+    ``weekly_review`` choice and quiet hours may hold back (dropped, as every
+    push: the review waits in the app).
+    """
+    try:
+        from arete.coaching import write_scheduled_review
+
+        review = write_scheduled_review()
     except Exception as e:  # noqa: BLE001 - background job must not die
         logger.warning("Weekly review failed: %s", e)
         return f"failed: {e}"
-    return f"{review.source}, {len(review.proposals)} proposals"
+    if review is None:
+        return "already written"
+    from arete.services.notifications import first_sentence, notify
+
+    result = notify(
+        REVIEW_TITLE, first_sentence(review.text), REVIEW_URL, kind="weekly_review"
+    )
+    pushed = result.skipped_reason or f"{result.sent} sent"
+    return f"{review.source}, {len(review.proposals)} proposals; {pushed}"
 
 
 #: Most athletes one dispatch reads. Time, not this count, bounds a dispatch:
@@ -456,7 +477,8 @@ def run_scheduled_batch() -> dict:
     Each athlete has a durable daily marker (``last_sync_at``) and a lease. A
     failed or interrupted run keeps its lease until the next day: it is never
     replayed the same day. Several cron windows a day may overlap; a dispatch
-    skips an athlete another one claimed first.
+    skips an athlete another one claimed first. On Sunday evening it then
+    writes the week's reviews (``run_sunday_reviews``).
     """
     started = monotonic()
     sync_hour = config.auto_sync_hour
@@ -493,7 +515,12 @@ def run_scheduled_batch() -> dict:
         outcomes[str(athlete_id)] = _run_athlete(
             athlete_id, started, claimed_at, row[5]
         )
-    return {"athletes": outcomes, "deferred": deferred}
+    # After the day's runs, in the time they left.
+    return {
+        "athletes": outcomes,
+        "deferred": deferred,
+        "reviews": run_sunday_reviews(started),
+    }
 
 
 def _claim(
@@ -576,6 +603,108 @@ def _run_athlete(
             )
             return {"status": "failed; next attempt tomorrow"}
     return status
+
+
+#: The week's review goes out on Sunday evening on the athlete's clock (ARE-60):
+#: from ``REVIEW_FROM_HOUR``, and not before ``REVIEW_WINDOW_UTC_HOUR``, the
+#: daily sync's last cron window (``vercel.json``), which serves it on Vercel
+#: (Hobby runs each cron once a day, within its hour): 18:00 in Paris in
+#: summer, 17:00 in winter. Docker's ticks follow the same rule. Outside
+#: quiet hours only, so the push is not dropped; an athlete whose Sunday
+#: evening no window reaches (east of UTC+7 on Vercel) gets it on Monday.
+REVIEW_FROM_HOUR = 17
+REVIEW_WINDOW_UTC_HOUR = 16
+
+
+def review_evening(
+    now: float, zone: str | None, quiet_hours: QuietHours | None
+) -> bool:
+    """Whether ``now`` (epoch seconds) is the athlete's Sunday review evening."""
+    tz = zone_of(zone)
+    local = datetime.fromtimestamp(now, tz)
+    if local.weekday() != 6:
+        return False
+    if quiet_hours is not None and quiet_hours.covers(local.time()):
+        return False
+    start = max(
+        datetime.combine(local.date(), time(REVIEW_FROM_HOUR), tz),
+        datetime.combine(local.date(), time(REVIEW_WINDOW_UTC_HOUR), UTC),
+    )
+    return now >= start.timestamp()
+
+
+def run_sunday_reviews(started: float) -> dict:
+    """Write the week's review for the athletes whose Sunday evening it is.
+
+    Exactly once per week and athlete, whatever the overlapping dispatches:
+    the review's row is claimed before its one model request
+    (``weekly_review.write_review``), a written week is skipped with one
+    read, and a run that failed keeps its claim until the next day (Monday's
+    fallback, ``write_weekly_review``). No review starts past
+    ``SCHEDULE_MODEL_SECONDS`` of the dispatch nor beyond
+    ``MAX_SCHEDULED_ATHLETES``: those left wait for Monday. A parked athlete
+    gets none. Independent of the daily run's claim and markers.
+    """
+    with db_connection() as con:
+        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    deferred = len(candidates) == MAX_SCANNED_ATHLETES
+    outcomes: dict[str, str] = {}
+    written = 0
+    for row in candidates:
+        athlete_id, lease, zone, preferences = row[0], row[4], row[5], row[6]
+        now = utc_now().timestamp()
+        if not review_evening(now, zone, _quiet_hours(preferences)):
+            continue
+        if _parked(lease, now, zone):
+            continue
+        if written >= MAX_SCHEDULED_ATHLETES:
+            deferred = True
+            break
+        with athlete_scope(athlete_id):
+            outcome = write_sunday_review(started)
+        outcomes[str(athlete_id)] = outcome
+        if outcome == "deferred":
+            deferred = True
+            break
+        if outcome != "already written":
+            written += 1
+    return {"athletes": outcomes, "deferred": deferred}
+
+
+def write_sunday_review(started: float) -> str:
+    """One athlete's Sunday review, after their afternoon's Garmin sessions.
+
+    The morning's run did not import the day's sessions: a refresh within
+    ``SCHEDULE_DISPATCH_SECONDS`` of the dispatch brings them in first (their
+    feedback follows in the next daily run), so the week counts them. Never
+    raises.
+    """
+    from arete.dataio import mirror
+    from arete.services import weekly_review
+
+    try:
+        week = weekly_review.review_week(athlete_today())
+        if weekly_review.get_review(week) is not None:
+            return "already written"
+        if monotonic() - started >= SCHEDULE_DISPATCH_SECONDS:
+            return "deferred"
+        if config.is_remote_db:
+            mirror.hydrate()
+        from arete.services.garmin_sync import ensure_fresh
+
+        try:
+            ensure_fresh(deadline=started + SCHEDULE_DISPATCH_SECONDS)
+        except Exception as e:  # noqa: BLE001 - the review reads what is there
+            logger.warning("Sunday Garmin refresh failed: %s", e)
+        if monotonic() - started >= SCHEDULE_MODEL_SECONDS:
+            return "deferred"
+        outcome = announce_review()
+        if config.is_remote_db:
+            mirror.flush()
+    except Exception as e:  # noqa: BLE001 - background job must not die
+        logger.warning("Sunday review failed: %s", e)
+        return f"failed: {e}"
+    return outcome
 
 
 #: The morning check-in's push (ARE-59) has its own cron windows, 05:00 and

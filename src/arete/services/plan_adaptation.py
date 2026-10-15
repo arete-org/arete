@@ -335,19 +335,116 @@ def _send(
     return False
 
 
-def _withdraw(exchange: Exchange, session_id: int) -> None:
-    """One withdrawal attempt, logged when unconfirmed. Never raises."""
+def _withdraw(exchange: Exchange, session_id: int) -> bool:
+    """One withdrawal attempt, logged when unconfirmed; whether Garmin
+    confirmed it. Never raises."""
     from arete.services import garmin_export
 
     try:
         result = garmin_export.withdraw_skipped(session_id, exchange=exchange)
     except Exception:  # noqa: BLE001 - refused before any write, or unreadable
         logger.warning("Could not withdraw %s from Garmin", session_id, exc_info=True)
-        return
+        return False
     if result["state"] != "removed":
         logger.warning(
             "Garmin withdrawal unconfirmed for %s: %s", session_id, result["error"]
         )
+        return False
+    return True
+
+
+#: The accepted week (« Ma semaine », ARE-60): at most this many sessions go
+#: to Garmin in one answer, within this wait.
+MAX_WEEK_PUSHES = 4
+WEEK_PUSH_SECONDS = 60
+
+
+def push_week(
+    send: list[PlannedSession],
+    withdraw: list[PlannedSession],
+    client: GarminClient | None = None,
+) -> dict:
+    """The accepted week's key sessions through the export circuit. Never raises.
+
+    Under the athlete's standing authorization only, as the daily push: the
+    automatic push on and Garmin connected (``state`` says which is missing).
+    A skipped session Garmin holds is withdrawn; the others are sent, the
+    first ``MAX_WEEK_PUSHES``, except one Garmin holds as it is or whose
+    export view cannot send it. One attempt each, nothing replayed: an
+    ambiguous export stays ``uncertain`` until reconciled. Each session's
+    outcome is ``sent``, ``already``, ``withdrawn``, ``skipped``, ``failed``
+    or ``not_started`` (budget).
+    """
+    from arete.services import garmin_export
+
+    if not _pushing():
+        return {"state": "disabled", "sessions": []}
+    try:
+        if client is None:
+            from arete.garmin.client import GarminClient
+
+            client = GarminClient()
+        if not client.has_tokens():
+            return {"state": "disconnected", "sessions": []}
+        exchange = garmin_export.Exchange(
+            client,
+            deadline=monotonic() + WEEK_PUSH_SECONDS,
+            max_calls=MAX_WEEK_PUSHES * ANSWER_SESSION_REQUESTS,
+        )
+    except Exception:  # noqa: BLE001 - the plan is written; the watch is best effort
+        logger.warning("Week push not started", exc_info=True)
+        return {"state": "failed", "sessions": []}
+    outcomes: list[dict] = []
+
+    def report(session: PlannedSession, outcome: str) -> None:
+        outcomes.append(
+            {
+                "planned_session_id": session.id,
+                "date": session.date.isoformat(),
+                "session_type": session.session_type.value,
+                "outcome": outcome,
+            }
+        )
+
+    for session in withdraw:
+        assert session.id is not None
+        try:
+            held = garmin_export.on_garmin(session.id)
+        except Exception:  # noqa: BLE001 - one unreadable session, not the answer
+            logger.warning("Garmin state of %s unreadable", session.id, exc_info=True)
+            report(session, "failed")
+            continue
+        if not held:
+            continue
+        if not _affords(exchange, ANSWER_SESSION_REQUESTS):
+            report(session, "not_started")
+        else:
+            report(
+                session, "withdrawn" if _withdraw(exchange, session.id) else "failed"
+            )
+    for position, session in enumerate(send):
+        assert session.id is not None
+        if position >= MAX_WEEK_PUSHES:
+            report(session, "not_started")
+            continue
+        try:
+            prepared = garmin_export.prepare(session.id)
+        except Exception:  # noqa: BLE001 - one unreadable session, not the answer
+            logger.warning("Garmin push check failed for %s", session.id, exc_info=True)
+            report(session, "failed")
+            continue
+        reason = _skip_reason(prepared)
+        if reason == "already on Garmin":
+            report(session, "already")
+        elif reason is not None:
+            logger.info("Week push of %s skipped: %s", session.id, reason)
+            report(session, "skipped")
+        elif not _affords(exchange, ANSWER_SESSION_REQUESTS):
+            report(session, "not_started")
+        else:
+            sent = _send(exchange, session.id, prepared, why="week push")
+            report(session, "sent" if sent else "failed")
+    return {"state": "done", "sessions": outcomes}
 
 
 def follow_on_garmin(

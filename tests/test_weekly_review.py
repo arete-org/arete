@@ -148,21 +148,32 @@ def test_an_empty_week_is_reviewed_by_the_rules_without_a_model_request(week):
     assert review.text.startswith("Semaine passée : 0 séances faites sur 0 prévues")
 
 
-def test_the_scheduler_reviews_on_mondays_only():
+def test_the_scheduler_falls_back_on_mondays_only():
     from arete import scheduler
 
     assert scheduler.write_weekly_review(date(2026, 10, 13)) == "not monday"
     with (
-        patch("arete.coaching.generate_weekly_review") as generate,
+        patch("arete.coaching.write_scheduled_review") as write,
         patch("arete.services.notifications.notify") as notify,
     ):
-        generate.return_value = wr.Review(
+        notify.return_value = Mock(skipped_reason=None, sent=1)
+        write.return_value = wr.Review(
             1, TODAY, "Semaine tenue. Bravo.", "agent", [], [], None, None
         )
-        assert scheduler.write_weekly_review(date(2026, 10, 12)) == "agent, 0 proposals"
-    notify.assert_called_once_with(
-        "Bilan de la semaine", "Semaine tenue.", "/planning", kind="weekly_review"
-    )
+        assert (
+            scheduler.write_weekly_review(date(2026, 10, 12))
+            == "agent, 0 proposals; 1 sent"
+        )
+        notify.assert_called_once_with(
+            "Ta semaine est prête",
+            "Semaine tenue.",
+            "/planning/semaine",
+            kind="weekly_review",
+        )
+        # Written on Sunday (or by the athlete): no second push.
+        write.return_value = None
+        assert scheduler.write_weekly_review(date(2026, 10, 12)) == "already written"
+        assert notify.call_count == 1
 
 
 def test_reviewed_prescriptions_are_left_alone():
