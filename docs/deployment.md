@@ -275,6 +275,11 @@ on their own clock nor during their quiet hours; the rules, and how to park or
 force an athlete, are in `docs/multi-athlete.md`. A preview syncs
 only when called by hand with that header.
 
+`/api/cron/checkin` runs at 05:00 and 06:00 UTC, with the same secret: it only
+sends the morning check-in push (at most one per athlete and day, none once
+answered, none in quiet hours, which hold it for the next window) and never
+starts the daily sync, so the sync's windows behave as before.
+
 ## Local stack
 
 `make dev` runs the API and Vite on a local DuckDB file. `make docker` builds

@@ -8,6 +8,13 @@ action. Bands follow the Garmin integration plan (80 / 60 / 40); ACWR above
 ``fatigue_threshold`` (Settings) is deliberately not an input: it was set
 against Arete's own readiness score, and Garmin's Training Readiness, read
 first, is on another scale. One threshold for two scales would mislead.
+
+The morning check-in weighs one band, downwards only: legs or sleep declared
+at ``CHECKIN_LOW_AT`` or less out of 5 move the readiness to the band below
+(keep → ease → recovery → rest), once whatever the number of low answers.
+Good answers never raise a band, and no answer changes nothing. The athlete
+knows how the legs feel; the watch does not, so a bad morning counts, but a
+good one never overrides a low measure.
 """
 
 from __future__ import annotations
@@ -22,6 +29,8 @@ REPLACE_AT = 40
 ACWR_REST_AT = 1.5
 TSB_EASE_AT = -25.0
 RECOVERY_MIN = 30
+#: A check-in answer at or below this (out of 5) lowers the readiness band.
+CHECKIN_LOW_AT = 2
 
 ADAPTABLE_SPORTS = frozenset({"running", "cycling", "swimming"})
 HARD_TYPES = frozenset({"tempo", "intervals"})
@@ -58,6 +67,9 @@ class AdaptationInput:
     acwr: float | None
     tsb: float | None
     fitness_goal: str
+    #: The morning check-in (1-5), None when the day has no answer.
+    sleep: int | None = None
+    legs: int | None = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +87,35 @@ def readiness_phrase(score: float, source: str) -> str:
     if source == "garmin":
         return f"Récupération (VFC, sommeil) {score:.0f}/100"
     return f"Forme estimée par la charge {score:.0f}/100"
+
+
+def declared_fatigue(sleep: int | None, legs: int | None) -> str | None:
+    """What the morning check-in declares against training, None for nothing.
+
+    Only low answers count (``CHECKIN_LOW_AT``): this is the reason's wording.
+    """
+    night = sleep is not None and sleep <= CHECKIN_LOW_AT
+    heavy = legs is not None and legs <= CHECKIN_LOW_AT
+    if night and heavy:
+        return "nuit difficile et jambes lourdes déclarées"
+    if night:
+        return "nuit difficile déclarée"
+    if heavy:
+        return "jambes lourdes déclarées"
+    return None
+
+
+def _band(score: float) -> int:
+    """3 keep, 2 ease, 1 recovery, 0 rest: the readiness bands."""
+    return (score >= KEEP_AT) + (score >= EASE_AT) + (score >= REPLACE_AT)
+
+
+def _said(inp: AdaptationInput) -> str:
+    """The readiness and, when it weighs, the check-in (starts a sentence)."""
+    assert inp.readiness is not None
+    said = readiness_phrase(inp.readiness, inp.readiness_source)
+    declared = declared_fatigue(inp.sleep, inp.legs)
+    return f"{said}, {declared}" if declared else said
 
 
 def describe(session_type: str, duration_min: int | None, zone: str | None) -> str:
@@ -104,9 +145,11 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
     if inp.readiness is None:
         return None
 
-    score = inp.readiness
-    said = readiness_phrase(score, inp.readiness_source)
+    said = _said(inp)
     planned = describe(inp.session_type, inp.target_duration_min, inp.target_hr_zone)
+    band = _band(inp.readiness)
+    if declared_fatigue(inp.sleep, inp.legs):
+        band = max(0, band - 1)
 
     if inp.acwr is not None and inp.acwr > ACWR_REST_AT:
         return Adaptation(
@@ -114,12 +157,12 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
             f"Charge aiguë très au-dessus de la chronique (ACWR {inp.acwr:.2f}) : "
             f"repos à la place de la séance {planned}.",
         )
-    if score < REPLACE_AT:
+    if band == 0:
         return Adaptation(
             Decision.REST,
             f"{said} : repos à la place de la séance {planned}.",
         )
-    if score < EASE_AT:
+    if band == 1:
         return Adaptation(
             Decision.REPLACE_EASY,
             f"{said} : la séance {planned} devient "
@@ -134,11 +177,11 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
             },
         )
     tired = inp.tsb is not None and inp.tsb < TSB_EASE_AT
-    if score < KEEP_AT or tired or inp.fitness_goal == "recovery":
+    if band < 3 or tired or inp.fitness_goal == "recovery":
         if inp.session_type in HARD_TYPES:
             why = (
                 said
-                if score < KEEP_AT
+                if band < 3
                 else f"Fraîcheur à {inp.tsb:.0f}"
                 if tired
                 else "Objectif de récupération"
@@ -206,7 +249,7 @@ def one_recovery_per_day(
         )
         outcomes[i] = Adaptation(
             Decision.REST,
-            f"{readiness_phrase(inp.readiness, inp.readiness_source)} : repos à la "
+            f"{_said(inp)} : repos à la "
             f"place de la séance {planned} ; la récupération du jour remplace "
             f"la séance {kept}.",
         )

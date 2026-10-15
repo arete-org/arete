@@ -133,6 +133,8 @@ def adapt_today(
             acwr=facts.acwr,
             tsb=facts.tsb,
             fitness_goal=facts.fitness_goal,
+            sleep=facts.checkin.sleep if facts.checkin else None,
+            legs=facts.checkin.legs if facts.checkin else None,
         )
         for session in pending
     ]

@@ -117,7 +117,10 @@ Each athlete is synced once a day: Garmin activities and health, plan
 adaptation, Strava, the calendar and the session feedback, then the briefing
 and, on Mondays, the week's review. Vercel's Hobby plan runs a cron at most once
 a day, so `vercel.json` lists ten daily windows on the same path, from 07:00 to
-16:00 UTC (each fires within its hour). The first window waits for Garmin to
+16:00 UTC (each fires within its hour). Two earlier windows, 05:00 and 06:00
+UTC on `/api/cron/checkin`, only send the morning check-in push, between
+06:00 and 12:00 on the athlete's clock and outside their quiet hours; the
+answer then reaches the day's decision. The first window waits for Garmin to
 have the night's sleep and HRV, which arrive when the watch syncs after waking.
 
 An athlete is owed from 07:00 on their own clock (their timezone setting), or

@@ -321,6 +321,23 @@ CREATE TABLE IF NOT EXISTS app.coach_briefings (
     reacted_at   TIMESTAMP
 );
 
+-- The morning check-in (ARE-59): one row per athlete and day, the answers 1-5
+-- (1 is the worst) and the day's one push. A row with no answer only records
+-- that push: readers keep the answered rows. Times are naive UTC.
+CREATE TABLE IF NOT EXISTS app.daily_checkins (
+    athlete_id  INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    date        DATE NOT NULL,
+    sleep       INTEGER,                     -- Sommeil
+    legs        INTEGER,                     -- Jambes
+    mood        INTEGER,                     -- Motivation / stress, optional
+    note        VARCHAR,
+    answered_at TIMESTAMP,
+    updated_at  TIMESTAMP,
+    prompted_at TIMESTAMP,                   -- the day's push, sent at most once
+    deleted_at  TIMESTAMP,
+    PRIMARY KEY (athlete_id, date)
+);
+
 -- ============================================================
 -- Plan decisions: what the morning's readiness did to a planned session
 -- ============================================================
@@ -887,6 +904,25 @@ def _m48_briefing_reactions(con) -> None:
         raise
 
 
+def _m49_daily_checkins(con) -> None:
+    """The morning check-in (ARE-59): a new table and its private view.
+
+    A new relation only, so the previous release runs unchanged on it. One
+    transaction: no table without the view that scopes it to its athlete.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.daily_checkins")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        con.execute(DDL[start : DDL.index(");", start) + 2])
+        _view(con, "daily_checkins")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -925,6 +961,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (46, _m46_briefing_facts_digest),
     (47, _m47_garmin_freshness),
     (48, _m48_briefing_reactions),
+    (49, _m49_daily_checkins),
 ]
 
 

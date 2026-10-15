@@ -18,7 +18,7 @@ from arete.dataio.settings import get_user_settings
 from arete.garmin import token_store
 from arete.garmin.models import ActualSession, PlannedSession, SessionType
 from arete.garmin.repository import GarminRepository
-from arete.services import coach_today, goals, metrics
+from arete.services import checkins, coach_today, goals, metrics
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.coaching_repository import Briefing, BriefingRepository
 from arete.services.plan_repository import PlanDecision, PlanDecisionRepository
@@ -53,6 +53,8 @@ class Dashboard:
     has_load: bool
     briefing: Briefing | None
     coach: dict[str, Any]
+    #: Today's morning check-in, None until answered (the card asks for it).
+    checkin: checkins.Checkin | None
 
 
 def load() -> Dashboard:
@@ -91,6 +93,7 @@ def load() -> Dashboard:
             has_load=form.model is not None,
             briefing=briefing,
             coach=coach_today.card(con, today, decisions, briefing),
+            checkin=checkins.get(today, con),
         )
 
 
