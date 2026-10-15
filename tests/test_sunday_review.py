@@ -169,7 +169,7 @@ def test_sunday_reviews_the_week_ending_and_monday_the_same_week():
 def test_every_cron_window_includes_the_review_s(clock):
     from pathlib import Path
 
-    from arete.scheduler import REVIEW_WINDOW_UTC_HOUR
+    from arete.services.weekly_review import REVIEW_WINDOW_UTC_HOUR
 
     crons = json.loads((Path(__file__).parents[1] / "vercel.json").read_text())
     sync = [
@@ -219,8 +219,10 @@ def test_overlapping_dispatches_pay_for_one_review(clock, coach):
     first = threading.Thread(target=lambda: results.append(_sunday_pass()))
     first.start()
     assert started.wait(10)
-    # The second dispatch finds the claim: no model request, no push.
-    assert _sunday_pass() == {"1": "already written"}
+    # The second dispatch finds the claim: no Garmin refresh, no model
+    # request, no push.
+    assert _sunday_pass() == {"1": "in progress"}
+    assert _refresh.call_count == 1
     release.set()
     first.join(10)
     assert results == [{"1": "agent, 0 proposals; 1 sent"}]
@@ -231,10 +233,13 @@ def test_a_failed_sunday_is_left_to_monday_never_replayed_the_same_day(clock, co
     run, _refresh, push = coach
     with patch.object(wr, "week_facts", side_effect=RuntimeError("db down")):
         assert _sunday_pass() == {"1": "failed: db down"}
-    # The claim stays: later Sunday ticks, even past its expiry, wait.
+    # The claim stays: later Sunday ticks, even past its expiry, wait, and
+    # say why, without refreshing Garmin again.
+    assert _sunday_pass() == {"1": "in progress"}
     clock[0] = SUNDAY + timedelta(seconds=wr.CLAIM_SECONDS + 60)
-    assert _sunday_pass() == {"1": "already written"}
+    assert _sunday_pass() == {"1": "failed earlier today; next attempt tomorrow"}
     assert run.call_count == 0 and push.call_count == 0
+    assert _refresh.call_count == 1
     from arete import scheduler
 
     clock[0] = MONDAY
@@ -544,3 +549,141 @@ def test_the_week_push_reports_every_session(pushing):
         "not_started",  # past MAX_WEEK_PUSHES: never started
     ]
     assert sent.call_count == 2
+
+
+# --------------------------------------------------------------------------- #
+# The athlete's own request (review findings)
+# --------------------------------------------------------------------------- #
+def test_a_sunday_afternoon_rewrite_keeps_the_week_on_screen(clock, coach):
+    run, refresh, push = coach
+    clock[0] = SUNDAY - timedelta(days=6, hours=9)  # last Monday
+    last = wr.write_review(run)
+    assert last is not None
+    clock[0] = SUNDAY - timedelta(hours=4)  # Sunday 14:10 in Paris
+    assert wr.current_review() == last  # Planning shows last week's
+    redone = wr.generate_review(run, refresh=True)
+    assert redone.week_start == last.week_start
+    # The evening still writes the ending week, after the afternoon's
+    # sessions, and announces it.
+    clock[0] = SUNDAY
+    assert _sunday_pass() == {"1": "agent, 0 proposals; 1 sent"}
+    refresh.assert_called_once()
+    assert push.call_count == 1
+
+
+def test_a_sunday_afternoon_first_review_is_last_week_s(clock, coach):
+    run, _refresh, _push = coach
+    clock[0] = SUNDAY - timedelta(hours=4)
+    written = wr.generate_review(run)
+    assert written.week_start == wr.last_monday(athlete_today())
+    clock[0] = SUNDAY  # from the evening on, the ending week
+    assert wr.generate_review(run).week_start == wr.review_week(athlete_today())
+
+
+def test_a_rewrite_waits_for_the_run_holding_the_claim(clock, coach):
+    run, _refresh, _push = coach
+    week = wr.review_week(athlete_today())
+    assert wr._claim(week, scheduled=True) is not None
+    with pytest.raises(wr.ReviewInProgress):
+        wr.generate_review(run, refresh=True)
+    run.assert_not_called()  # no second model request
+    assert _rows() == [(week, "pending")]  # the run's claim, and its push, stand
+    # A claim abandoned by a stopped run is replaced.
+    clock[0] = SUNDAY + timedelta(seconds=wr.CLAIM_SECONDS + 60)
+    assert wr.generate_review(run, refresh=True).source == "agent"
+    assert _rows() == [(week, "agent")]
+
+
+def test_the_rewrite_endpoint_answers_409_while_a_run_writes(clock, coach, client):
+    assert wr._claim(wr.review_week(athlete_today()), scheduled=True) is not None
+    response = client.post("/plan/review?refresh=true")
+    assert response.status_code == 409
+
+
+def test_the_daily_run_writes_a_missed_review_until_sunday(clock, coach):
+    from arete import scheduler
+
+    run, refresh, push = coach
+    clock[0] = MONDAY + timedelta(days=2)  # Wednesday: Sunday and Monday missed
+    assert scheduler.write_weekly_review() == "agent, 0 proposals; 1 sent"
+    assert scheduler.write_weekly_review() == "already written"
+    assert run.call_count == 1 and push.call_count == 1
+    refresh.assert_not_called()  # the daily run already synced
+    clock[0] = SUNDAY + timedelta(days=7, hours=-8)  # the next Sunday morning
+    assert scheduler.write_weekly_review() == "sunday evening"
+
+
+# --------------------------------------------------------------------------- #
+# « Accepter » twice
+# --------------------------------------------------------------------------- #
+def test_a_second_accept_applies_and_sends_nothing(clock, coach):
+    run, _refresh, _push = coach
+    review, _ids = _accepted_week(run)
+    pushed = {"state": "done", "sessions": []}
+    with patch("arete.services.plan_adaptation.push_week", return_value=pushed) as push:
+        first = wr.accept(review.id, [0, 1], follow_calendar=lambda: "synced")
+        again = wr.accept(review.id, [0, 1], follow_calendar=lambda: "synced")
+    assert first["applied"] == [0, 1]
+    assert again == {
+        "applied": [],
+        "stale": [],
+        "garmin": {"state": "unchanged", "sessions": []},
+        "calendar": "unchanged",
+    }
+    assert push.call_count == 1
+
+
+def test_concurrent_accepts_push_once(clock, coach):
+    """Two tabs read the review before either answers: the second is refused."""
+    run, _refresh, _push = coach
+    review, _ids = _accepted_week(run)
+    snapshot = wr._read(review.id)
+    with patch("arete.services.plan_adaptation.push_week", return_value={}) as push:
+        wr.accept(review.id, [0])
+        with (
+            patch.object(wr, "_read", return_value=snapshot),
+            pytest.raises(wr.AcceptInProgress),
+        ):
+            wr.accept(review.id, [0, 1])
+    assert push.call_count == 1
+    assert wr.get_review_by_id(review.id).applied == [0]
+
+
+def test_a_later_accept_of_the_rest_still_applies_it(clock, coach):
+    run, _refresh, _push = coach
+    review, _ids = _accepted_week(run)
+    with patch("arete.services.plan_adaptation.push_week", return_value={}) as push:
+        wr.accept(review.id, [0])
+        assert wr.accept(review.id, [1])["applied"] == [1]
+    assert push.call_count == 2
+
+
+def test_a_review_rewritten_before_accept_is_not_found(clock, coach):
+    run, _refresh, _push = coach
+    review, _ids = _accepted_week(run)
+    wr.generate_review(run, refresh=True)
+    with pytest.raises(LookupError):
+        wr.accept(review.id, [0])
+
+
+def test_a_rewrite_during_accept_still_reports_the_written_plan(clock, coach):
+    run, _refresh, _push = coach
+    review, (intervals, _long_run) = _accepted_week(run)
+    real = wr._apply
+
+    def then_rewritten(*args):
+        out = real(*args)
+        wr.generate_review(run, refresh=True)  # « Refaire » in another tab
+        return out
+
+    with (
+        patch.object(wr, "_apply", side_effect=then_rewritten),
+        patch(
+            "arete.services.plan_adaptation.push_week",
+            return_value={"state": "done", "sessions": []},
+        ),
+    ):
+        result = wr.accept(review.id, [0])
+    assert result["applied"] == [0]  # written, and said so
+    eased = GarminRepository().get_planned_session(intervals)
+    assert eased is not None and eased.session_type == SessionType.ENDURANCE

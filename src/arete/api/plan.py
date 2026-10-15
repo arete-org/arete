@@ -113,8 +113,9 @@ class GarminWeekSession(BaseModel):
 
 
 class GarminWeekPush(BaseModel):
-    state: Literal["done", "disabled", "disconnected", "failed"] = Field(
-        description="Whether the push ran; each session's outcome otherwise"
+    state: Literal["done", "disabled", "disconnected", "failed", "unchanged"] = Field(
+        description="Whether the push ran (unchanged: nothing new was accepted); "
+        "each session's outcome otherwise"
     )
     sessions: list[GarminWeekSession]
 
@@ -124,7 +125,8 @@ class ReviewAccepted(BaseModel):
     stale: list[int] = Field(description="Proposals whose session changed since")
     garmin: GarminWeekPush
     calendar: str = Field(
-        description="Training plan calendar sync: synced, partial, busy, failed, disabled"
+        description="Training plan calendar sync: synced, partial, busy, failed, "
+        "disabled, unchanged"
     )
 
 
@@ -135,7 +137,7 @@ def accept_review(review_id: int, body: ReviewApply) -> dict[str, Any]:
     written whatever the watch or the calendar answer."""
     from arete.calendar import sync_training_plan
     from arete.services.calendar_plan import AFTER_PLAN_WRITE
-    from arete.services.weekly_review import accept
+    from arete.services.weekly_review import AcceptInProgress, accept
 
     try:
         return accept(
@@ -145,3 +147,8 @@ def accept_review(review_id: int, body: ReviewApply) -> dict[str, Any]:
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="Bilan introuvable") from None
+    except AcceptInProgress:
+        raise HTTPException(
+            status_code=409,
+            detail="Cette semaine vient d’être acceptée ailleurs : recharge la page.",
+        ) from None
