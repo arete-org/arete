@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import UTC, date, datetime, time
 from threading import Barrier
 from uuid import uuid4
 
@@ -295,7 +295,7 @@ def test_context_steering_is_independent_of_retrieval_and_refreshes():
     fact = facts.add_fact(
         "constraint", "Jamais le mercredi", evidence="explicit", since=TODAY
     )
-    context = AgentContext(current_date=TODAY)
+    context = AgentContext(current_datetime=datetime.combine(TODAY, time(), UTC))
     request = _request(context)
     first = build_context(request)
     assert "Jamais le mercredi" in first.system_message.text
@@ -317,7 +317,7 @@ def test_memory_budget_and_missing_memory_are_explicit(monkeypatch):
     monkeypatch.setattr(
         "arete.agent.context.builder.search_personal_context", lambda *_: result
     )
-    context = AgentContext(current_date=TODAY)
+    context = AgentContext(current_datetime=datetime.combine(TODAY, time(), UTC))
     text = personal_context_section(_request(context), context, 100)
     assert '"selected": 0' in text or "budget" in text
 
@@ -336,7 +336,11 @@ def test_background_missions_never_search_or_gain_tools(monkeypatch):
     monkeypatch.setattr(
         "arete.agent.context.builder.search_personal_context", unexpected
     )
-    request = _request(AgentContext(profile="briefing", current_date=TODAY))
+    request = _request(
+        AgentContext(
+            profile="briefing", current_datetime=datetime.combine(TODAY, time(), UTC)
+        )
+    )
     assert build_context(request).tools == []
 
 

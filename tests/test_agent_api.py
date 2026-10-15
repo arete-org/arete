@@ -717,6 +717,63 @@ def test_chat_routes_preserve_thread_id(client, endpoint):
 
 
 @pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_chat_clock_roundtrips_history_and_returns_server_timestamp(client, endpoint):
+    from langchain_core.messages import AIMessage
+
+    from arete.agent.runtime.context import MESSAGE_SENT_AT_KEY
+
+    sent_at = "2026-10-15T23:59:59+02:00"
+    observed = []
+
+    class Graph:
+        async def ainvoke(self, state, *, context, config):
+            assert (
+                state["messages"][0].additional_kwargs[MESSAGE_SENT_AT_KEY] == sent_at
+            )
+            observed.append(context.current_datetime.isoformat(timespec="seconds"))
+            return {"messages": [AIMessage("ok")]}
+
+        async def astream(self, state, *, context, config, **kwargs):
+            result = await self.ainvoke(state, context=context, config=config)
+            yield {"type": "updates", "data": {"model": result}}
+
+    with patch("arete.api.agent.get_agent", return_value=Graph()):
+        response = client.post(
+            endpoint,
+            json={
+                "messages": [
+                    {"role": "user", "content": "Ancien", "sent_at": sent_at},
+                    {"role": "assistant", "content": "Réponse"},
+                    {"role": "user", "content": "Aujourd’hui ?"},
+                ]
+            },
+        )
+    assert response.status_code == 200
+    assert observed == [
+        response.headers["X-Arete-Sent-At"]
+        if endpoint.endswith("stream")
+        else response.json()["sent_at"]
+    ]
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_chat_rejects_timestamp_without_timezone(client, endpoint):
+    response = client.post(
+        endpoint,
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Question",
+                    "sent_at": "2026-10-15T14:32:00",
+                },
+            ]
+        },
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
 def test_chat_routes_reject_invalid_thread_id(client, endpoint):
     response = client.post(
         endpoint,

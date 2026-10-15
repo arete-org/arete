@@ -32,6 +32,28 @@ def test_the_athlete_day_follows_their_timezone(frozen):
     assert settings.today_in(None) == PARIS_DAY
 
 
+def test_agent_clock_is_local_and_fixed_across_midnight(frozen, monkeypatch):
+    from arete.agent.runtime.context import AgentContext
+
+    before = datetime(2026, 10, 11, 21, 59, 59, tzinfo=UTC)
+    after = datetime(2026, 10, 11, 22, 0, 1, tzinfo=UTC)
+    clock = iter((before, after))
+    monkeypatch.setattr(settings, "utc_now", lambda: next(clock))
+    first, second = AgentContext(), AgentContext()
+    assert first.current_datetime.isoformat() == "2026-10-11T23:59:59+02:00"
+    assert first.current_date == date(2026, 10, 11)
+    assert second.current_datetime.isoformat() == "2026-10-12T00:00:01+02:00"
+    assert second.current_date == PARIS_DAY
+    assert str(first.current_datetime.tzinfo) == "Europe/Paris"
+
+
+def test_agent_clock_rejects_an_ambiguous_naive_datetime():
+    from arete.agent.runtime.context import AgentContext
+
+    with pytest.raises(AssertionError, match="aware datetime"):
+        AgentContext(current_datetime=datetime(2026, 10, 12))
+
+
 def test_plan_today_answers_for_the_paris_day(frozen, router_client):
     from arete.api.plan import router
     from arete.services.plan_repository import PlanDecisionRepository

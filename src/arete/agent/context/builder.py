@@ -2,7 +2,6 @@
 
 import json
 import logging
-from datetime import timedelta
 
 import duckdb
 from langchain.agents.middleware import ModelRequest
@@ -93,15 +92,6 @@ def build_context(
         system = SystemMessage(profile.system_prompt or "")
     instructions = profile.instructions
     context = getattr(getattr(request, "runtime", None), "context", None)
-    date_instruction = ""
-    if context is not None:
-        today = context.current_date
-        tomorrow = today + timedelta(days=1)
-        date_instruction = (
-            f"\nDate actuelle : {today.isoformat()}. Demain : {tomorrow.isoformat()}. "
-            "Résous les dates relatives à partir de cette date, même si "
-            "l’historique contient d’anciennes dates."
-        )
     sections = [
         ContextSection("harness", system.text if system else "", "server"),
         ContextSection("profile", instructions, "server"),
@@ -124,7 +114,6 @@ def build_context(
         ContextSection(
             "capabilities", tool_instructions_suffix(profile_id), "registry"
         ),
-        ContextSection("date", date_instruction, "server"),
         ContextSection(
             "garmin_freshness",
             (

@@ -18,14 +18,15 @@ const runs = vi.hoisted(
       resolve: () => void;
       reject: (e: Error) => void;
       signal: AbortSignal;
+      stamp: (sentAt: string) => void;
     }[]
 );
 vi.mock('@/lib/agentStream', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/agentStream')>()),
   runAgentStream: vi.fn(
-    (history, _context, emit, signal, threadId, documentIds) =>
+    (history, _context, emit, signal, threadId, documentIds, _onAccepted, stamp) =>
       new Promise<void>((resolve, reject) => {
-        runs.push({ history, emit, resolve, reject, signal, threadId, documentIds });
+        runs.push({ history, emit, resolve, reject, signal, threadId, documentIds, stamp });
         signal.addEventListener(
           'abort',
           () => reject(new DOMException('Stopped', 'AbortError')),
@@ -49,6 +50,32 @@ afterEach(() => {
   cleanup();
   queryClient.clear();
   vi.restoreAllMocks();
+});
+
+it('keeps the server timestamp with its originating human message across turns and reloads', async () => {
+  const { result, unmount } = renderHook(() => useCoachThreads(context), { wrapper });
+  const first = '2026-10-15T23:59:59+02:00';
+  act(() => { result.current.send('Demain ?'); });
+  const origin = result.current.active.id;
+  act(() => {
+    result.current.create();
+    runs[0].stamp(first);
+    runs[0].stamp('2026-10-16T00:00:01+02:00');
+  });
+  expect(result.current.active.messages).toHaveLength(0);
+  await act(async () => {
+    runs[0].emit({ type: 'done', message: { role: 'assistant', content: 'Réponse' } });
+    runs[0].resolve();
+  });
+  act(() => result.current.select(origin));
+  expect(result.current.active.messages[0].sentAt).toBe(first);
+  unmount();
+  const restored = renderHook(() => useCoachThreads(context), { wrapper });
+  expect(restored.result.current.active.messages[0].sentAt).toBe(first);
+  act(() => { restored.result.current.send('Et aujourd’hui ?'); });
+  expect(runs[1].history[0].sentAt).toBe(first);
+  expect(runs[1].history.at(-1)?.sentAt).toBeUndefined();
+  await act(async () => { runs[1].reject(new Error('Interrompu')); });
 });
 
 it.each(['complete', 'error', 'abort'])('keeps counters in the originating thread and clears compaction on %s', async ending => {

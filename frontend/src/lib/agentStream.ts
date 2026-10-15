@@ -32,6 +32,8 @@ export interface CalendarActionPart {
 export interface CoachCardPart { kind: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
 export type ChatPart = ToolPart | TextPart | CalendarActionPart | CoachCardPart;
 export interface ChatMessage {
+  /** Server-stamped local ISO time, replayed unchanged with this human message. */
+  sentAt?: string;
   syncStatus?: string;
   trace?: TraceReceipt;
   feedback?: MessageFeedback;
@@ -94,6 +96,11 @@ export const STREAM_TIMEOUT_MS = 310_000;
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
+}
+export function isSentAt(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/.test(value)
+    && Number.isFinite(Date.parse(value));
 }
 export function isContextWindowUsage(value: unknown): value is ContextWindowUsage {
   return record(value)
@@ -316,6 +323,7 @@ export async function runAgentStream(
   threadId: string,
   documentIds?: string[],
   onAccepted?: () => void,
+  onSentAt?: (sentAt: string) => void,
 ): Promise<void> {
   const panel_context: Record<string, string> = { page: context.page, path: context.path };
   for (const [key, value] of Object.entries(context.params))
@@ -324,7 +332,7 @@ export async function runAgentStream(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      messages: history.map(({ role, content }) => ({ role, content })),
+      messages: history.map(({ role, content, sentAt }) => ({ role, content, ...(sentAt ? { sent_at: sentAt } : {}) })),
       thread_id: threadId,
       ...(documentIds !== undefined ? { document_ids: documentIds } : {}),
       panel_context,
@@ -339,5 +347,12 @@ export async function runAgentStream(
     );
   if (!response.body) throw new Error('Le serveur ne fournit pas de stream.');
   onAccepted?.();
+  // A header is compatible with cached clients that reject unknown SSE events.
+  // Capture it before consuming tokens so even an interrupted turn keeps its time.
+  const sentAt = response.headers.get('X-Arete-Sent-At');
+  if (sentAt !== null) {
+    if (!isSentAt(sentAt)) throw new Error('Horodatage du coach invalide.');
+    onSentAt?.(sentAt);
+  }
   await consumeStream(response.body, onEvent);
 }

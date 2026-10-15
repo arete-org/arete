@@ -92,7 +92,8 @@ responsibility a testable owner. Do not create empty architectural scaffolding.
   search/load tools or model-controlled loading state.
 - Preserve optional LangSmith tracing across async invocation and stream closure.
   Preserve native tool callbacks and retain thread metadata. The
-  context builder owns bounded journal injection and the current chat date.
+  context builder owns bounded journal injection. RuntimeContextMiddleware owns
+  per-message timestamps and runtime date rendering after native compaction.
 - Keep state local to the invocation. Compiled graphs are cached and multiple tabs
   or scheduled jobs may overlap. Cancellation cannot undo a committed write or
   forcibly stop a synchronous tool already running in a thread.

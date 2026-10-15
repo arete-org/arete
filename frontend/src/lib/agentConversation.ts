@@ -2,6 +2,7 @@ import { isWorkoutUpdate } from './workouts';
 import { isTraceReceipt, isFeedbackState } from './agentFeedback';
 import {
   settleMessage,
+  isSentAt,
   type ChatMessage,
   type ChatPart,
   type ToolPart,
@@ -26,6 +27,8 @@ export function restoreConversation(raw: string | null): ChatMessage[] {
       typeof m.content !== 'string'
     )
       throw new Error('Message sauvegardé invalide.');
+    if (m.sentAt !== undefined && !isSentAt(m.sentAt))
+      throw new Error('Horodatage sauvegardé invalide.');
     if (m.attachmentIds !== undefined && (!Array.isArray(m.attachmentIds) || m.attachmentIds.length > 20 || !m.attachmentIds.every((id: unknown) => typeof id === 'string'))) throw new Error('Pièces jointes sauvegardées invalides.');
     let parts: ChatPart[] | undefined;
     if (Array.isArray(m.parts)) {
@@ -84,6 +87,7 @@ export function restoreConversation(raw: string | null): ChatMessage[] {
         attachmentIds: Array.isArray(m.attachmentIds) && m.attachmentIds.length <= 20 && m.attachmentIds.every((id: unknown) => typeof id === 'string') ? m.attachmentIds : undefined,
         workouts: m.workouts,
         role: m.role,
+        sentAt: m.sentAt,
         content: m.content,
         parts,
       },
