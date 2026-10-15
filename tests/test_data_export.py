@@ -164,3 +164,32 @@ def test_api_refuses_an_export_past_the_response_limit(router_client, monkeypatc
     response = router_client(router).get("/export/json")
     assert response.status_code == 413
     assert "période plus courte" in response.json()["detail"]
+
+
+def test_the_morning_check_ins_leave_with_their_answers_only():
+    con = connect()
+    con.execute(
+        "INSERT INTO app.daily_checkins (date, sleep, legs, mood, note, answered_at, "
+        "updated_at) VALUES ('2001-01-10', 2, 4, NULL, 'test-export nuit courte', "
+        "'2001-01-10 05:12', '2001-01-10 05:12')"
+    )
+    # The push of a day never answered: no answer to export.
+    con.execute(
+        "INSERT INTO app.daily_checkins (date, prompted_at) "
+        "VALUES ('2001-01-11', '2001-01-11 05:05')"
+    )
+    con.close()
+    try:
+        body = json.loads(
+            data_export.build(
+                "json", start=date(2001, 1, 1), end=date(2001, 1, 31)
+            ).content
+        )
+    finally:
+        con = connect()
+        con.execute("DELETE FROM app.daily_checkins WHERE date < '2002-01-01'")
+        con.close()
+    [row] = body["tables"]["daily_checkins"]
+    assert (row["date"], row["sleep"], row["legs"]) == ("2001-01-10", 2, 4)
+    assert row["note"] == "test-export nuit courte"
+    assert "prompted_at" not in row

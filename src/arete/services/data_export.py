@@ -2,7 +2,7 @@
 
 Only an allowlist of tables leaves the database: sessions done and planned,
 daily health metrics, strength sessions and their sets, goals, athlete facts,
-weekly reviews, plus the coach's journal files. Credentials never do: Strava
+morning check-ins, weekly reviews, plus the coach's journal files. Credentials never do: Strava
 tokens, push subscriptions, accounts, calendar actions and ``app.files`` (which
 holds the Garmin session tokens) are not read at all. Strava rows are included:
 this is the athlete's own download, not model input.
@@ -97,6 +97,15 @@ TABLES: tuple[ExportTable, ...] = (
         "SELECT * FROM app.visible_athlete_facts WHERE user_id = getvariable('arete_athlete_id')",
         None,
         "since, id",
+    ),
+    # The answers only: a row holding just the day's push record says nothing.
+    ExportTable(
+        "daily_checkins",
+        "SELECT date, sleep, legs, mood, note, answered_at, updated_at "
+        "FROM app.visible_daily_checkins "
+        "WHERE athlete_id = getvariable('arete_athlete_id') AND answered_at IS NOT NULL",
+        "date",
+        "date",
     ),
     ExportTable(
         "weekly_reviews",
