@@ -28,6 +28,8 @@ export interface Dashboard {
   coach: CoachToday;
   /** Today's morning check-in, null until answered (the card asks for it). */
   checkin: Checkin | null;
+  /** The week's review still to answer (« Ma semaine »); absent from an older server. */
+  weekly_review?: { id: number; week_start: string; open: number } | null;
 }
 
 /** What the dashboard query keeps: the briefing and the coach card live under their own keys. */

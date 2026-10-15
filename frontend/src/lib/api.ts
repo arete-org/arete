@@ -733,6 +733,16 @@ export const planApi = {
       method: "POST",
     }),
 
+  /** « Ma semaine »: the current review and its week in numbers. */
+  getReviewWeek: () => fetchAPI<import("@/types").ReviewWeek>("/plan/review/week"),
+
+  /** Applies the ticked proposals, then the week's key sessions go to Garmin and the calendar. */
+  acceptReview: (reviewId: number, indices: number[]) =>
+    fetchAPI<import("@/types").ReviewAccepted>(`/plan/review/${reviewId}/accept`, {
+      method: "POST",
+      body: JSON.stringify({ indices }),
+    }),
+
   applyReview: (reviewId: number, indices: number[]) =>
     fetchAPI<import("@/types").ReviewApplyResult>(`/plan/review/${reviewId}/apply`, {
       method: "POST",

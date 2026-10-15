@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { planApi } from '@/lib/api';
 import { qk } from '@/lib/queryKeys';
@@ -42,7 +43,9 @@ afterEach(() => {
 const renderPanel = () =>
   render(
     <QueryClientProvider client={client}>
-      <WeeklyReviewPanel />
+      <MemoryRouter>
+        <WeeklyReviewPanel />
+      </MemoryRouter>
     </QueryClientProvider>
   );
 

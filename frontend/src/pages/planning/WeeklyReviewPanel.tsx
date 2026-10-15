@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClipboardCheck, Loader2, RefreshCw } from 'lucide-react';
+import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
 import { Button, Panel } from '@/components/ui';
 import { planApi } from '@/lib/api';
 import { parseLocalDate } from '@/lib/dates';
@@ -9,6 +11,12 @@ import { cn, readableError } from '@/lib/utils';
 import type { ReviewProposal, WeeklyReview } from '@/types';
 
 const STALE_TEXT = 'Séance modifiée depuis : proposition ignorée';
+
+/** The server describes a session as « intervals 50 min Z4 »: the type reads in French. */
+const sessionLabel = (session: string) => {
+  const [kind, ...rest] = session.split(' ');
+  return [SESSION_TYPE_LABEL[kind] ?? kind, ...rest].join(' ');
+};
 
 const dayLabel = (iso: string) =>
   parseLocalDate(iso).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -45,7 +53,7 @@ export function ReviewProposals({
               />
               <span className="min-w-0 space-y-0.5">
                 <span className="block text-xs font-sans text-text-muted">
-                  {dayLabel(p.date)} · <span className="text-text-primary">{p.session}</span>
+                  {dayLabel(p.date)} · <span className="text-text-primary">{sessionLabel(p.session)}</span>
                   {done && <span className="ml-2 text-success-green">Appliquée</span>}
                 </span>
                 <span className="block text-sm text-text-secondary">{p.reason}</span>
@@ -120,7 +128,7 @@ function ReviewBody({ review, refreshing }: { review: WeeklyReview; refreshing: 
   );
 }
 
-/** Last week's review: written on demand (the coach may take a minute), applied by choice. */
+/** The week's review: written on Sunday evening or on demand (the coach may take a minute), applied by choice. */
 export function WeeklyReviewPanel() {
   const queryClient = useQueryClient();
   const review = useQuery({ queryKey: qk.weeklyReview, queryFn: planApi.getReview });
@@ -160,7 +168,10 @@ export function WeeklyReviewPanel() {
       {review.data && (
         <>
           <ReviewBody key={review.data.id} review={review.data} refreshing={write.isPending} />
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+            <Link to="/planning/semaine" className="inline-flex min-h-11 items-center text-sm text-neon-cyan hover:underline">
+              Ouvrir Ma semaine <span aria-hidden className="ml-1">→</span>
+            </Link>
             <Button variant="ghost" size="sm" disabled={write.isPending} onClick={() => write.mutate(true)}>
               <RefreshCw className="size-3.5" /> Refaire le bilan
             </Button>

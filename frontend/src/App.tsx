@@ -19,13 +19,14 @@ import { useAuthState } from '@/components/auth/authState';
 import { athletePersister, keepPersistedQueries, PERSIST_BUSTER, PERSIST_DEHYDRATE, PERSIST_MAX_AGE_MS } from '@/lib/queryPersistence';
 import { SettingsProvider } from '@/contexts';
 import { DashboardPage, SettingsPage } from '@/pages';
-import { loadLogPage, loadPlanningPage } from '@/pages/routes';
+import { loadLogPage, loadPlanningPage, loadWeekReviewPage } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
 
 const FollowUpPage = lazy(importChunk(() => import('@/pages/FollowUp').then(m => ({ default: m.FollowUpPage }))));
 
 const PlanningPage = lazy(importChunk(loadPlanningPage));
 const LogPage = lazy(importChunk(loadLogPage));
+const WeekReviewPage = lazy(importChunk(loadWeekReviewPage));
 // recharts is most of the bundle and only the Analytics page draws charts.
 const ProfilePage = lazy(importChunk(() => import('@/pages/Profile').then(m => ({ default: m.ProfilePage }))));
 const AnalyticsPage = lazy(importChunk(() =>
@@ -140,6 +141,7 @@ function App() {
                       <Route path="/" element={<DashboardPage />} />
                       <Route path="/follow-up" element={<FollowUpPage />} />
                       <Route path="/planning" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><PlanningPage /></Suspense>} />
+                      <Route path="/planning/semaine" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><WeekReviewPage /></Suspense>} />
                       <Route
                         path="/analytics"
                         element={

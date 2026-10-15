@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Plus, RefreshCw, MoreHorizontal } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, ClipboardCheck, Plus, RefreshCw, MoreHorizontal } from 'lucide-react';
 import { ErrorState, withStrengthLogs } from '@/components';
 import { Button, Select, Modal, ModalHeader, Skeleton } from '@/components/ui';
 import { WorkoutSelection } from '@/components/WorkoutSelection';
@@ -150,6 +150,12 @@ export function PlanningPage() {
           <div>
             <h1 className="page-title">Planning</h1>
             <p className="text-xs text-text-muted font-sans mt-1">Votre semaine, en un regard.</p>
+            <Link
+              to="/planning/semaine"
+              className="inline-flex min-h-11 items-center gap-1 text-sm font-sans text-neon-cyan hover:underline"
+            >
+              <ClipboardCheck className="size-4" aria-hidden /> Ma semaine : bilan et propositions
+            </Link>
           </div>
           <Button
             className="planning-desktop-create"

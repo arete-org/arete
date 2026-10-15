@@ -10,6 +10,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, Dumbbell, TrendingUp, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { CheckinCard } from '@/components/dashboard/CheckinCard';
+import { WeekReviewEntry } from '@/components/dashboard/WeekReviewEntry';
 import { Panel, Skeleton } from '@/components/ui';
 import { planApi, settingsApi } from '@/lib/api';
 import { fetchDashboard, type DashboardData } from '@/lib/dashboard';
@@ -277,6 +278,8 @@ export function DashboardPage() {
   const { data: hasLoad } = useDashboard((d) => d.has_load);
   // Null until today is answered; undefined until the dashboard says (or from a server without it).
   const { data: checkin } = useDashboard((d) => d.checkin);
+  // The week's review waiting for an answer: a field of the same answer, no request.
+  const { data: weekReview } = useDashboard((d) => d.weekly_review ?? null);
   // The check-in push opens `/?checkin=1`: the card shows and takes the focus,
   // once; the parameter then goes, so a reload keeps « Plus tard ».
   const [params, setParams] = useSearchParams();
@@ -347,6 +350,8 @@ export function DashboardPage() {
                 onFocused={checkinFocused}
               />
             )}
+
+            {weekReview && <WeekReviewEntry open={weekReview.open} />}
 
             {/* The coach's briefing leads (on a phone, right after the greeting); the first
                 visit of the day may wait for the coach. */}

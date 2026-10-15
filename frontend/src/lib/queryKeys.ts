@@ -57,6 +57,8 @@ export const qk = {
   planToday: ['plan', 'today'] as const,
   /** Last week's review and its proposals. */
   weeklyReview: ['weeklyReview'] as const,
+  /** « Ma semaine »: the review with its week's numbers. */
+  reviewWeek: ['weeklyReview', 'week'] as const,
 
   /** Race goals: invalidating `goals` refreshes the list, the next race and projections. */
   goals: ['goals'] as const,
