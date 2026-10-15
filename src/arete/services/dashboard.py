@@ -149,9 +149,6 @@ def form_curve() -> dict[str, Any]:
             }
         projected = plan_builder.project(goal, today, con, CURVE_HISTORY_DAYS)
     answer = projected.answer
-    # Up to today the logged load only; after it the projection, which still
-    # counts today's plan when nothing is logged yet.
-    future = [p for p in answer["series"] if p["date"] > today.isoformat()]
     training = [
         s.date
         for s in projected.planned
@@ -170,8 +167,11 @@ def form_curve() -> dict[str, Any]:
     return {
         "today": today.isoformat(),
         "goal_id": goal.id,
-        "series": _history_points(projected.history, today)
-        + [{k: p[k] for k in ("date", "ctl", "atl", "tsb", "planned")} for p in future],
+        # Up to today the logged load only, as the projection answers it.
+        "series": [
+            {k: p[k] for k in ("date", "ctl", "atl", "tsb", "planned")}
+            for p in answer["series"]
+        ],
         "race_day": answer["race_day"],
         "planned_sessions": answer["planned_sessions"],
         # The projection assumes rest after the last planned session.

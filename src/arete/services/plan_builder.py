@@ -226,11 +226,22 @@ class Projected:
     than ``projection``'s answer (the dashboard's curve) on its own connection."""
 
     answer: dict[str, Any]
-    #: The athlete's daily load up to today, as the projection read it.
-    history: dict[date, float]
     #: The sessions still to do from today to race day, today's included even
     #: when a session is already logged (the evening run of a double day).
     planned: list[PlannedSession]
+
+
+def _point(
+    day: date, ctl: float, atl: float, tss: float, planned: bool
+) -> dict[str, Any]:
+    return {
+        "date": day.isoformat(),
+        "ctl": round(ctl, 1),
+        "atl": round(atl, 1),
+        "tsb": round(ctl - atl, 1),
+        "tss": round(tss, 1),
+        "planned": planned,
+    }
 
 
 def project(
@@ -274,18 +285,21 @@ def project(
     for day, ctl, atl in fitness_series(loads, goal.race_date):
         if day.date < today - timedelta(days=history_days):
             continue
-        shown.append(
-            {
-                "date": day.date.isoformat(),
-                "ctl": round(ctl, 1),
-                "atl": round(atl, 1),
-                "tsb": round(ctl - atl, 1),
-                "tss": round(day.tss, 1),
-                "planned": day.date in future,
-            }
-        )
+        shown.append(_point(day.date, ctl, atl, day.tss, planned=day.date in future))
     # Race morning: the form the day before, before the race's own load lands.
+    # Read before today's point is replaced: a race tomorrow follows today's plan.
     morning = shown[-2] if len(shown) > 1 else (shown[-1] if shown else None)
+    if today in future:
+        # Today's point is the logged form, as on the dashboard and
+        # /metrics/fitness; today's plan weighs from tomorrow on.
+        logged = fitness_series(history, today)
+        _, ctl, atl = logged[-1] if logged else (None, 0.0, 0.0)
+        shown = [
+            _point(today, ctl, atl, history.get(today, 0.0), planned=False)
+            if p["date"] == today.isoformat()
+            else p
+            for p in shown
+        ]
     ctls = [float(p["ctl"]) for p in shown]
     answer = {
         "goal": goal.to_dict(today),
@@ -297,7 +311,7 @@ def project(
         "peak_ctl": max(ctls) if ctls else None,
         "planned_sessions": len(future),
     }
-    return Projected(answer, history, planned)
+    return Projected(answer, planned)
 
 
 def projection(goal_id: int, today: date | None = None) -> dict[str, Any]:

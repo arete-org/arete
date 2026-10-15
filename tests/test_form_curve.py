@@ -110,12 +110,29 @@ def test_today_is_the_dashboards_form_even_with_a_session_planned_today(
     # Today's plan still weighs on the projection, from tomorrow on.
     tomorrow = next(p for p in body["series"] if p["date"] > athlete.isoformat())
     assert tomorrow["atl"] > today[0]["atl"]
-    # Planning's projection is unchanged: its today still counts today's plan.
+    # Planning's projection shows the same today, and the same days after it.
     projection = client.get(f"/goals/{body['goal_id']}/projection").json()
-    planning_today = next(
-        p for p in projection["series"] if p["date"] == athlete.isoformat()
+    planning = {p["date"]: p for p in projection["series"]}
+    for point in body["series"]:
+        if point["date"] in planning:
+            assert {k: planning[point["date"]][k] for k in point} == point
+    assert planning[athlete.isoformat()]["tss"] == 0
+    assert projection["planned_sessions"] == 1
+
+
+def test_race_morning_counts_the_plan_of_the_day_before(athlete, client):
+    goal = goals.create_goal(
+        name="10 km", race_date=athlete + timedelta(days=1), distance_km=10
     )
-    assert planning_today["planned"] is True
+    _plan(athlete, "intervals", 90)  # today, the day before the race
+
+    projection = client.get(f"/goals/{goal.id}/projection").json()
+
+    today = next(p for p in projection["series"] if p["date"] == athlete.isoformat())
+    fitness = client.get("/metrics/fitness").json()
+    assert today["tsb"] == fitness["tsb"]
+    # Race morning is the form after today's planned session, not before it.
+    assert projection["race_day"]["tsb"] < today["tsb"]
 
 
 def test_the_key_session_never_comes_after_the_race(athlete, client):

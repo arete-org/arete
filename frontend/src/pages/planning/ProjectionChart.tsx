@@ -5,9 +5,9 @@ import type { ProjectionPoint } from '@/types';
 import { AXIS, ChartGrid, ChartTooltip, TICK } from '../analytics/chartParts';
 
 const SERIES_NAME: Record<string, string> = {
-  ctl: 'Forme (CTL)',
-  atl: 'Fatigue (ATL)',
-  tsb: 'Fraîcheur (TSB)',
+  ctl: 'Forme de fond',
+  atl: 'Fatigue',
+  tsb: 'Forme',
   plannedTss: 'Charge prévue',
 };
 
@@ -15,13 +15,14 @@ const shortDate = (iso: string) =>
   parseLocalDate(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 
 const LEGEND = [
-  { label: 'Forme', className: 'bg-neon-cyan' },
+  { label: 'Forme de fond', className: 'bg-neon-cyan' },
   { label: 'Fatigue', className: 'bg-chart-red' },
-  { label: 'Fraîcheur', className: 'bg-neon-gold' },
+  { label: 'Forme', className: 'bg-neon-gold' },
   { label: 'Jour prévu', className: 'bg-chart-grey opacity-50' },
 ];
 
-/** CTL / ATL / TSB until race day; bars mark the days whose load comes from the plan. */
+/** Forme de fond, fatigue and forme until race day, in the dashboard's words; bars
+ * mark the days whose load comes from the plan. */
 export function ProjectionChart({ series, today }: { series: ProjectionPoint[]; today: string }) {
   const data = series.map((p) => ({
     date: p.date,
