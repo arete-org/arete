@@ -122,9 +122,11 @@ TABLES: tuple[ExportTable, ...] = (
         "date",
         "date",
     ),
+    # A claimed review being written (``pending``) is no review yet.
     ExportTable(
         "weekly_reviews",
-        "SELECT * FROM app.visible_weekly_reviews WHERE user_id = getvariable('arete_athlete_id')",
+        "SELECT * FROM app.visible_weekly_reviews WHERE user_id = getvariable('arete_athlete_id') "
+        "AND source <> 'pending'",
         "week_start",
         "week_start",
     ),

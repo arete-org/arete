@@ -193,3 +193,24 @@ def test_the_morning_check_ins_leave_with_their_answers_only():
     assert (row["date"], row["sleep"], row["legs"]) == ("2001-01-10", 2, 4)
     assert row["note"] == "test-export nuit courte"
     assert "prompted_at" not in row
+
+
+def test_a_review_being_written_is_not_exported():
+    con = connect()
+    con.execute(
+        "INSERT INTO app.weekly_reviews (week_start, text, source, proposals_json) "
+        "VALUES ('2001-01-01', 'Semaine tenue.', 'agent', '[]'), "
+        "('2001-01-08', '', 'pending', '[]')"
+    )
+    con.close()
+    try:
+        body = json.loads(
+            data_export.build(
+                "json", start=date(2001, 1, 1), end=date(2001, 1, 31)
+            ).content
+        )
+    finally:
+        con = connect()
+        con.execute("DELETE FROM app.weekly_reviews WHERE week_start < '2002-01-01'")
+        con.close()
+    assert [r["week_start"] for r in body["tables"]["weekly_reviews"]] == ["2001-01-01"]
