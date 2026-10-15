@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -10,8 +10,9 @@ from arete.dataio.db import connect
 from arete.garmin.models import PlannedSession, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services import goals
+from arete.services.settings import athlete_today, today_in
 
-FAR = date.today() + timedelta(days=900)
+FAR = today_in(None) + timedelta(days=900)  # from the default athlete's day
 
 
 @pytest.fixture(autouse=True)
@@ -73,7 +74,7 @@ def test_the_routes(router_client):
     assert created.status_code == 201
     body = created.json()
     assert body["days_left"] == 900 and body["priority"] == "A"
-    past = (date.today() - timedelta(days=1)).isoformat()
+    past = (athlete_today() - timedelta(days=1)).isoformat()
     assert (
         client.post(
             "/goals", json={"name": "test-p", "race_date": past, "distance_km": 10}

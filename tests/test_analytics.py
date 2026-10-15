@@ -13,8 +13,9 @@ from arete.api.analytics import router
 from arete.dataio.db import connect
 from arete.dataio.queries import OverviewRow, daily_loads, daily_tss, overview_rows
 from arete.services import analytics
+from arete.services.settings import today_in
 
-TODAY = date.today()
+TODAY = today_in(None)  # the default athlete's day, which the services read
 
 CARD_KEYS = {
     "volume",
