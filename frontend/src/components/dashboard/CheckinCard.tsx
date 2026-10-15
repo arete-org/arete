@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ClipboardCheck, X } from 'lucide-react';
-import { Button, Input } from '@/components/ui';
+import { Button, inputClasses } from '@/components/ui';
 import {
   afterCheckin, checkinApi, checkinDismissed, dismissCheckin, MAX_CHECKIN_NOTE, type CheckinAnswer,
 } from '@/lib/checkins';
@@ -22,7 +22,7 @@ const QUESTIONS: { field: Field; legend: string; optional?: boolean; words: read
 ];
 
 function Scale({
-  name, legend, optional, words, value, disabled, onChange, firstRef,
+  name, legend, optional, words, value, disabled, onChange, onClear, firstRef,
 }: {
   name: string;
   legend: string;
@@ -31,6 +31,8 @@ function Scale({
   value: number | undefined;
   disabled: boolean;
   onChange: (value: number) => void;
+  /** An optional answer can be withdrawn: a native radio cannot be unchecked. */
+  onClear?: () => void;
   firstRef?: RefObject<HTMLInputElement | null>;
 }) {
   return (
@@ -39,10 +41,23 @@ function Scale({
       aria-labelledby={`${name}-label`}
       className="min-w-0 sm:grid sm:grid-cols-[9rem_minmax(0,20rem)] sm:items-start sm:gap-3"
     >
-      <p id={`${name}-label`} className="mb-1 text-sm font-sans text-text-primary sm:mb-0 sm:pt-3">
-        {legend}
-        {optional && <> <span className="text-xs text-text-muted">(facultatif)</span></>}
-      </p>
+      <div className="mb-1 flex flex-wrap items-baseline gap-x-2 sm:mb-0 sm:block sm:pt-3">
+        <p id={`${name}-label`} className="text-sm font-sans text-text-primary">
+          {legend}
+          {optional && <> <span className="text-xs text-text-muted">(facultatif)</span></>}
+        </p>
+        {onClear && value !== undefined && (
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={disabled}
+            aria-label={`Effacer la réponse ${legend}`}
+            className="-my-3 inline-flex min-h-11 items-center text-xs font-sans text-neon-cyan hover:underline"
+          >
+            Effacer
+          </button>
+        )}
+      </div>
       <div>
         <div className="grid grid-cols-5 gap-1.5">
           {words.map((word, index) => (
@@ -80,12 +95,23 @@ function Scale({
 /**
  * The morning check-in: sleep, legs, then « Valider » — three taps. Shown
  * until the day is answered; « Plus tard » hides it for the day on this
- * device. `focus` (the push's `?checkin=1`) brings it back and into view.
+ * device. `focus` (the push's `?checkin=1`) brings it back and into view,
+ * once: `onFocused` lets the page drop the parameter.
  */
-export function CheckinCard({ day, focus = false }: { day: string; focus?: boolean }) {
+export function CheckinCard({
+  day,
+  focus = false,
+  onFocused,
+}: {
+  day: string;
+  focus?: boolean;
+  /** Called once the card took the focus: the caller drops `?checkin=1`. */
+  onFocused?: () => void;
+}) {
   const client = useQueryClient();
   const id = useId();
   const first = useRef<HTMLInputElement>(null);
+  const noteInput = useRef<HTMLInputElement>(null);
   const [hidden, setHidden] = useState(() => !focus && checkinDismissed(day));
   const [answer, setAnswer] = useState<Partial<Record<Field, number>>>({});
   const [noting, setNoting] = useState(false);
@@ -99,7 +125,13 @@ export function CheckinCard({ day, focus = false }: { day: string; focus?: boole
     if (!focus || hidden) return;
     first.current?.closest('section')?.scrollIntoView?.({ block: 'center' });
     first.current?.focus({ preventScroll: true });
-  }, [focus, hidden]);
+    onFocused?.();
+  }, [focus, hidden, onFocused]);
+
+  // « + Ajouter un mot » leaves with its button: the focus goes to the field.
+  useEffect(() => {
+    if (noting) noteInput.current?.focus();
+  }, [noting]);
 
   if (hidden) return null;
   const ready = answer.sleep !== undefined && answer.legs !== undefined;
@@ -147,19 +179,21 @@ export function CheckinCard({ day, focus = false }: { day: string; focus?: boole
             value={answer[q.field]}
             disabled={save.isPending}
             onChange={(value) => setAnswer((current) => ({ ...current, [q.field]: value }))}
+            onClear={q.optional ? () => setAnswer(({ [q.field]: _, ...rest }) => rest) : undefined}
             firstRef={q.field === 'sleep' ? first : undefined}
           />
         ))}
         {noting && (
           <label className="block">
             <span className="mb-1 block text-xs font-sans text-text-muted">Un mot (facultatif)</span>
-            <Input
+            <input
+              ref={noteInput}
               type="text"
               value={note}
               maxLength={MAX_CHECKIN_NOTE}
               onChange={(event) => setNote(event.target.value)}
               disabled={save.isPending}
-              className="text-base sm:text-sm"
+              className={inputClasses('cyan', 'text-base sm:text-sm')}
             />
           </label>
         )}

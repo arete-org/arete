@@ -29,11 +29,14 @@ export const checkinApi = {
 
 /**
  * The answer is the dashboard's `checkin` slice: written into it, the card
- * hides without a read. A new proposal (`replanned`) refreshes the dashboard
- * and the coach card, which carry it.
+ * hides without a read. A dashboard read already in flight was read before
+ * the answer: it is cancelled first, or it would land later and show the
+ * card again. A new proposal (`replanned`) refreshes the dashboard and the
+ * coach card, which carry it.
  */
-export function afterCheckin(client: QueryClient, saved: CheckinSaved): void {
+export async function afterCheckin(client: QueryClient, saved: CheckinSaved): Promise<void> {
   const { replanned, ...checkin } = saved;
+  await client.cancelQueries({ queryKey: qk.dashboard() });
   client.setQueriesData<DashboardData>({ queryKey: qk.dashboard() }, (board) =>
     board && board.date === checkin.date ? { ...board, checkin } : board,
   );

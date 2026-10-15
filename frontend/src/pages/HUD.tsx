@@ -4,7 +4,7 @@ import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useCallback, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, Dumbbell, Sunrise, TrendingUp, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
@@ -276,8 +276,20 @@ export function DashboardPage() {
   const { data: hasLoad } = useDashboard((d) => d.has_load);
   // Null until today is answered; undefined until the dashboard says (or from a server without it).
   const { data: checkin } = useDashboard((d) => d.checkin);
-  // The check-in push opens `/?checkin=1`: the card shows and takes the focus.
-  const [params] = useSearchParams();
+  // The check-in push opens `/?checkin=1`: the card shows and takes the focus,
+  // once; the parameter then goes, so a reload keeps « Plus tard ».
+  const [params, setParams] = useSearchParams();
+  const checkinFocused = useCallback(
+    () =>
+      setParams(
+        (current) => {
+          current.delete('checkin');
+          return current;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
 
   const { tip, day: tipDay, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
@@ -327,7 +339,12 @@ export function DashboardPage() {
           <div className="dashboard-primary">
             {/* Ten seconds before the briefing: the answer feeds the day's decision. */}
             {checkin === null && boardDay && (
-              <CheckinCard key={boardDay} day={boardDay} focus={params.get('checkin') === '1'} />
+              <CheckinCard
+                key={boardDay}
+                day={boardDay}
+                focus={params.get('checkin') === '1'}
+                onFocused={checkinFocused}
+              />
             )}
 
             {/* The coach's briefing leads (on a phone, right after the greeting); the first

@@ -84,6 +84,8 @@ test('the push link brings back a card put off for the day, focused, and a propo
   await expect(card).toBeVisible();
   const first = card.getByRole('radio', { name: '1 sur 5 — très mauvais', exact: true });
   await expect(first).toBeFocused();
+  // Used once: a reload or the installed app reopening keeps « Plus tard ».
+  await expect(page).not.toHaveURL(/checkin=1/);
   // Keyboard only: arrows move within a question, Tab to the next.
   await page.keyboard.press('ArrowRight');
   await expect(card.getByRole('radio', { name: '2 sur 5 — mauvais', exact: true })).toBeChecked();

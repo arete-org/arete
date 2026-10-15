@@ -95,3 +95,28 @@ it('« Plus tard » hides it for the day; the push link brings it back focused',
   expect(region()).not.toBeNull();
   expect(document.activeElement).toBe(screen.getByRole('radio', { name: '1 sur 5 — très mauvais' }));
 });
+
+it('the optional answer can be withdrawn, and the word field takes the focus', async () => {
+  const save = vi.spyOn(checkinApi, 'save').mockResolvedValue(saved());
+  mount();
+  expect(screen.queryByRole('button', { name: /Effacer/ })).toBeNull();
+  const calm = screen.getByRole<HTMLInputElement>('radio', { name: '5 sur 5 — motivé et serein' });
+  fireEvent.click(calm);
+  fireEvent.click(screen.getByRole('button', { name: 'Effacer la réponse Motivation / stress' }));
+  expect(calm.checked).toBe(false);
+  expect(screen.queryByRole('button', { name: /Effacer/ })).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: '+ Ajouter un mot' }));
+  expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Un mot (facultatif)' }));
+
+  fireEvent.click(screen.getByRole('radio', { name: '2 sur 5 — mauvais' }));
+  fireEvent.click(screen.getByRole('radio', { name: '4 sur 5 — légères' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Valider' }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith(DAY, { sleep: 2, legs: 4, mood: null, note: null }));
+});
+
+it('tells the page once it took the focus from the push link', () => {
+  const focused = vi.fn();
+  mount({ focus: true, onFocused: focused });
+  expect(focused).toHaveBeenCalledTimes(1);
+});
