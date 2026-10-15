@@ -1,7 +1,7 @@
 """End-to-end domain boundaries of propose / respond / remember, with no LLM."""
 
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +12,7 @@ from arete.garmin.repository import GarminRepository
 from arete.services import coach_followup, coach_today, memory, plan_adaptation
 from arete.services.athlete_scope import athlete_scope
 from arete.services.coaching_rules import RuleFacts, _generate_cardio_feedback
+from arete.services.settings import athlete_today
 
 
 @pytest.fixture
@@ -44,7 +45,7 @@ def proposal():
     repo = GarminRepository()
     sid = repo.create_planned_session(
         PlannedSession(
-            date=date.today(),
+            date=athlete_today(),
             sport="running",
             session_type=SessionType.TEMPO,
             target_duration_min=50,
@@ -57,7 +58,7 @@ def proposal():
         fatigue_threshold=85,
         fitness_goal="build",
         readiness_source="garmin_training",
-        readiness_measured_on=date.today() - timedelta(days=1),
+        readiness_measured_on=athlete_today() - timedelta(days=1),
     )
     with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
         decision = plan_adaptation.adapt_today()[0]
@@ -72,7 +73,7 @@ def low_adapt():
         fatigue_threshold=85,
         fitness_goal="build",
         readiness_source="garmin_training",
-        readiness_measured_on=date.today(),
+        readiness_measured_on=athlete_today(),
     )
     with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
         return plan_adaptation.adapt_today()
@@ -81,7 +82,7 @@ def low_adapt():
 def planned(kind, minutes):
     return GarminRepository().create_planned_session(
         PlannedSession(
-            date=date.today(),
+            date=athlete_today(),
             sport="running",
             session_type=kind,
             target_duration_min=minutes,
@@ -178,7 +179,7 @@ def test_a_snooze_hides_the_whole_day_and_a_legacy_one_hides_its_member(athlete)
     with db_connection() as con:  # a row snoozed alone before the grouping
         con.execute(
             "UPDATE app.plan_decisions SET snoozed_until=?,revision=revision+1 WHERE id=?",
-            [date.today() + timedelta(days=1), rest["id"]],
+            [athlete_today() + timedelta(days=1), rest["id"]],
         )
     (item,) = coach_today.today()["items"]
     assert [d["id"] for d in item["group"]] == [key["id"]]
@@ -201,7 +202,7 @@ def test_a_proposal_created_meanwhile_makes_the_answer_conflict(athlete, monkeyp
 
     def racing():
         PlanDecisionRepository().create(
-            day=date.today(),
+            day=athlete_today(),
             planned_session_id=late,
             decision="rest",
             reason="r",
@@ -246,7 +247,7 @@ def test_proposal_requires_validation_and_replay_cannot_apply_twice(athlete):
     assert repo.get_planned_session(sid).revision == 1
     assert decision.state == "pending" and decision.applied_at is None
     assert coach_today.today()["items"][0]["record"]["readiness_measured_on"] == str(
-        date.today() - timedelta(days=1)
+        athlete_today() - timedelta(days=1)
     )
     result = plan_adaptation.respond(decision.id, 1, "apply")
     assert result.state == "applied" and repo.get_planned_session(sid).revision == 2
@@ -287,14 +288,14 @@ def test_followup_prioritizes_accepted_adaptation_and_saves_actual_rpe(athlete):
     repo = GarminRepository()
     actual = repo.create_actual_session(
         ActualSession(
-            date=date.today(),
+            date=athlete_today(),
             sport="running",
             duration_sec=1800,
             planned_session_id=sid,
         )
     )
     repo.create_actual_session(
-        ActualSession(date=date.today(), sport="running", duration_sec=7200)
+        ActualSession(date=athlete_today(), sport="running", duration_sec=7200)
     )
     coach_followup.prepare()
     coach_followup.prepare()
@@ -318,7 +319,7 @@ def test_followup_prioritizes_accepted_adaptation_and_saves_actual_rpe(athlete):
 
 def test_snooze_does_not_renew_expiry_and_skip_closes_it(athlete):
     GarminRepository().create_actual_session(
-        ActualSession(date=date.today(), sport="running", duration_sec=6000)
+        ActualSession(date=athlete_today(), sport="running", duration_sec=6000)
     )
     coach_followup.prepare()
     item = coach_followup.pending()[0]
@@ -331,7 +332,7 @@ def test_snooze_does_not_renew_expiry_and_skip_closes_it(athlete):
 
 def test_expired_or_foreign_followup_cannot_write(athlete):
     GarminRepository().create_actual_session(
-        ActualSession(date=date.today(), sport="running", duration_sec=6000)
+        ActualSession(date=athlete_today(), sport="running", duration_sec=6000)
     )
     coach_followup.prepare()
     item = coach_followup.pending()[0]
@@ -351,7 +352,7 @@ def test_expired_or_foreign_followup_cannot_write(athlete):
 def test_strength_hr_is_not_interpreted_as_cardio_quality(athlete):
     sid = GarminRepository().create_actual_session(
         ActualSession(
-            date=date.today(),
+            date=athlete_today(),
             sport="strength",
             duration_sec=1020,
             avg_hr=79,

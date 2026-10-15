@@ -440,10 +440,11 @@ class TestGarminRepository:
 
     def test_summary_counts_only_due_sessions(self, repo):
         """Future planned sessions do not lower the adherence rate; past pending ones are skipped."""
-        from datetime import date as _date
         from datetime import timedelta
 
-        today = _date.today()
+        from arete.services.settings import athlete_today
+
+        today = athlete_today()
         ids = [
             repo.create_planned_session(
                 PlannedSession(

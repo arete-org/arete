@@ -2,12 +2,38 @@
 
 import os
 import tempfile
+import time
 from collections.abc import Callable, Generator
+from datetime import UTC, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
+
+
+def _server_zone_on_another_day(athlete_zone: str) -> str:
+    """A server timezone whose date is not the athlete's at this moment.
+
+    Services date the athlete's day with ``athlete_today()``; a fixture dated
+    with the server's ``date.today()`` only breaks while the two dates differ
+    (22:00-24:00 UTC for Paris, ARE-109). UTC+14 is on another date than Paris
+    from about noon to midnight, UTC-11 from midnight to about noon: every run
+    exercises the divergent case, the server ahead or behind the athlete.
+    """
+    now = datetime.now(UTC)
+    athlete_day = now.astimezone(ZoneInfo(athlete_zone)).date()
+    for zone in ("Pacific/Kiritimati", "Pacific/Pago_Pago"):
+        if now.astimezone(ZoneInfo(zone)).date() != athlete_day:
+            return zone
+    raise AssertionError(f"no candidate timezone is a day apart from {athlete_zone}")
+
+
+# Before importing app modules: DuckDB reads TZ once, when it is imported.
+# Europe/Paris is the default athlete timezone (services.settings.DEFAULT_TIMEZONE).
+os.environ["TZ"] = _server_zone_on_another_day("Europe/Paris")
+time.tzset()
 
 # Set test database path before importing app modules
 _test_db_dir = tempfile.mkdtemp()
