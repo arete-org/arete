@@ -272,6 +272,24 @@ def test_a_failed_replan_keeps_the_saved_answer(tempo_today, client, monkeypatch
     assert checkins.get() is not None
 
 
+def test_a_proposal_made_before_a_later_step_failed_is_still_reported(
+    tempo_today, client, monkeypatch
+):
+    """The decision is written, then the follow-up step fails: the browser
+    must still learn of the proposal to show it."""
+    _daily_run_done_today()
+
+    def conflict(*_args, **_kwargs):
+        raise RuntimeError("TransactionContext Error: Conflict")
+
+    monkeypatch.setattr("arete.services.coach_followup.prepare", conflict)
+    day = athlete_today().isoformat()
+    response = client.put(f"/checkins/{day}", json={"sleep": 1, "legs": 3})
+    assert response.status_code == 200
+    assert len(_decisions()) == 1
+    assert response.json()["replanned"] is True
+
+
 def test_replanned_only_when_a_new_proposal_exists(db, client, monkeypatch):
     """No readiness: a low answer cannot decide anything, so nothing was replanned."""
     monkeypatch.setattr(

@@ -226,9 +226,10 @@ def replan(checkin: Checkin) -> bool:
     it ran (after its decision, before its stamp).
 
     Whether a new proposal came of it: none without a readiness, a session
-    to adapt or one not already decided. Never raises: the answer is already
-    saved, and a failure here (a write conflict with a concurrent run) only
-    leaves the day's decision as it was.
+    to adapt or one not already decided. Read after the preparation whatever
+    its outcome, so a proposal written before a later step failed counts.
+    Never raises: the answer is already saved, and a failure here (a write
+    conflict with a concurrent run) is logged, never replayed.
     """
     from arete.services.adaptation import declared_fatigue
     from arete.services.coach_today import prepare
@@ -243,9 +244,18 @@ def replan(checkin: Checkin) -> bool:
             return False
         decisions = PlanDecisionRepository()
         before = {d.id for d in decisions.list_for_day(checkin.date)}
-        prepare()
-        after = {d.id for d in decisions.list_for_day(checkin.date)}
     except Exception:  # noqa: BLE001 - the answer stands; the decision is unchanged
+        logger.warning("Check-in replan not started", exc_info=True)
+        return False
+    try:
+        prepare()
+    except Exception:  # noqa: BLE001 - a step may fail after the proposal was written
         logger.warning("Check-in replan failed", exc_info=True)
+    try:
+        # Read whatever happened: a proposal written before a later step
+        # failed still exists, and the browser must show it.
+        after = {d.id for d in decisions.list_for_day(checkin.date)}
+    except Exception:  # noqa: BLE001
+        logger.warning("Check-in replan outcome unread", exc_info=True)
         return False
     return bool(after - before)
