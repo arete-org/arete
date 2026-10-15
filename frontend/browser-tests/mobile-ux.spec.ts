@@ -236,3 +236,27 @@ test('landscape respects lateral safe areas and preserves the draft through rota
   await expect(input).toHaveValue('Brouillon en paysage');
   await noOverflow(page);
 });
+
+test('touch: the morning check-in is three taps at 375 px and then gives the page back', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fixture(page);
+  const answers: unknown[] = [];
+  // Registered after the fixture's catch-all, so it answers first.
+  await page.route('**/api/checkins/*', (route) => {
+    const body = route.request().postDataJSON();
+    answers.push(body);
+    const at = '2026-10-15T05:12:00+00:00';
+    const date = new URL(route.request().url()).pathname.split('/').pop();
+    return route.fulfill({ json: { date, ...body, answered_at: at, updated_at: at, replanned: false } });
+  });
+  await page.goto('/');
+  const card = page.getByRole('region', { name: 'Check-in du matin' });
+  await expect(card).toBeVisible();
+  await noOverflow(page);
+  await card.getByRole('radio', { name: '4 sur 5 — bon', exact: true }).tap();
+  await card.getByRole('radio', { name: '1 sur 5 — très lourdes', exact: true }).tap();
+  await card.getByRole('button', { name: 'Valider' }).tap();
+  await expect(card).toBeHidden();
+  expect(answers).toEqual([{ sleep: 4, legs: 1, mood: null, note: null }]);
+  await expect(page.getByRole('heading', { name: 'BRIEFING DU JOUR' })).toBeInViewport();
+});

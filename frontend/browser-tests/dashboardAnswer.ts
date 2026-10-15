@@ -7,7 +7,7 @@ export function localDay(offset = 0): string {
 
 /**
  * A `GET /dashboard` answer (src/lib/dashboard.ts): an empty day with no load,
- * no Garmin night and a written briefing, unless `fields` says otherwise.
+ * no Garmin night, a written briefing and no check-in, unless `fields` says otherwise.
  */
 export function dashboardAnswer(fields: Record<string, unknown> = {}) {
   const date = (fields.date as string | undefined) ?? localDay();
@@ -37,6 +37,8 @@ export function dashboardAnswer(fields: Record<string, unknown> = {}) {
     has_load: false,
     briefing: { status: 'ready', tip: 'Prépare tes prochaines séances.', priority: 'info', source: 'rules', generated_at: `${date}T07:00:00`, updated_after_sync: false, id: 1, first_written_at: null, reaction: null, reaction_comment: null },
     coach: { date, items: [], remaining: 0, briefing: null },
+    // Not answered yet: the morning check-in card asks.
+    checkin: null,
     ...fields,
   };
 }
