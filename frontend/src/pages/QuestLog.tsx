@@ -150,13 +150,14 @@ export function PlanningPage() {
           <div>
             <h1 className="page-title">Planning</h1>
             <p className="text-xs text-text-muted font-sans mt-1">Votre semaine, en un regard.</p>
-            <Link
-              to="/planning/semaine"
-              className="inline-flex min-h-11 items-center gap-1 text-sm font-sans text-neon-cyan hover:underline"
-            >
-              <ClipboardCheck className="size-4" aria-hidden /> Ma semaine : bilan et propositions
-            </Link>
           </div>
+          {/* In the title's row: the sessions keep their place on a phone. */}
+          <Link
+            to="/planning/semaine"
+            className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-1 text-sm font-sans text-neon-cyan hover:underline"
+          >
+            <ClipboardCheck className="size-4" aria-hidden /> Ma semaine
+          </Link>
           <Button
             className="planning-desktop-create"
             strong
