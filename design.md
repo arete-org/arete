@@ -249,3 +249,41 @@ existants vérifient les huit thèmes à 390, 430, 768 et 1440 px, les flux SSE 
 les écritures Planning sur une base jetable. Les captures sont enregistrées
 sous `.context/`. L’émulation ne remplace pas une recette sur iPhone et Android
 réels, notamment pour le clavier système, les barres du navigateur et le mode installé.
+
+## Briefing → conversation Chiron
+
+[Proposition UX éditable : aperçu, nouveau fil, échange](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=166-632).
+
+Le briefing est une entrée vers le coach. Le tableau de bord montre un titre
+Inter actionnable, un aperçu limité à trois lignes et l’heure d’écriture.
+« Briefing du jour » et « En parler avec Chiron » ouvrent une **nouvelle
+conversation**, avec le briefing complet visible avant les échanges. Les anciens
+briefings utilisent le même parcours. Le texte complet n’est jamais tronqué dans
+la conversation ni dans le contexte envoyé au modèle.
+
+- L’ouverture ne lance aucun appel modèle et ne remplit pas la saisie. Le brouillon,
+  les pièces jointes et une réponse en cours restent dans leur fil d’origine.
+- La référence appartient à `CoachThread`, pas à `App` ni à la page. Elle est
+  sauvegardée avec le fil, restaurée au rechargement et incluse dans chaque demande
+  de ce fil. Le serveur relit le briefing par son identifiant, dans le périmètre
+  de l’athlète. Une autre conversation ne reçoit pas cette référence.
+- Le briefing est présenté comme un document de contexte, sans inventer un message
+  assistant ni un reçu de trace. Sa lecture HTTP ne charge pas la pile agent.
+- Les avis sont dans la conversation. `FeedbackRating` possède les deux icônes
+  Lucide et leurs états ; `MessageFeedback` et `BriefingDiscussion` le réutilisent.
+  `index.css` possède `.coach-feedback-action` : rayon de contrôle commun,
+  couleurs du thème, cible tactile de 44 px. Pas de boutons 👍/👎 autonomes,
+  de cercles décoratifs ni de formulaire de commentaire parallèle au chat.
+- Les commentaires déjà enregistrés restent lisibles. Pour préciser son avis,
+  l’athlète écrit à Chiron dans la saisie commune. Les avis du briefing restent
+  enregistrés sur le briefing ; ceux d’une réponse tracée utilisent son reçu.
+- Une erreur de lecture reste visible, avec nouvelle tentative explicite. Un avis
+  non confirmé bloque les autres votes jusqu’à vérification par lecture.
+- La limite de 30 conversations échoue explicitement, sans effacer un brouillon.
+  Les modes flottant et latéral réutilisent la même conversation et le même contexte.
+
+Garde-fous : tests de restauration et d’isolation dans `agentThreads.test.ts` et
+`useCoachThreads.test.tsx`, lectures privées dans `test_briefing_reactions.py`,
+avis partagés dans `BriefingDiscussion.test.tsx`, parcours clavier et captures
+mobile/bureau Pierre/Prune dans `briefing.spec.ts`. Toute évolution de ce parcours
+met à jour ces contrats et conserve la référence de marque `5:81` et le chat `70:201`.

@@ -114,20 +114,32 @@ class BriefingHistoryItem(BaseModel):
     reaction_comment: str | None
 
 
+def _briefing_item(b: Briefing) -> BriefingHistoryItem:
+    return BriefingHistoryItem(
+        id=b.id,
+        date=b.date,
+        tip=b.text,
+        source=b.source,  # type: ignore[arg-type]
+        generated_at=_iso(b.created_at),
+        reaction=b.reaction,  # type: ignore[arg-type]
+        reaction_comment=b.reaction_comment,
+    )
+
+
+@router.get("/briefings/{briefing_id}", response_model=BriefingHistoryItem)
+def get_briefing(briefing_id: int) -> BriefingHistoryItem:
+    """Read the same athlete-scoped record used by chat context, without a model."""
+    briefing = BriefingRepository().get(briefing_id)
+    if briefing is None:
+        raise HTTPException(status_code=404, detail="Briefing introuvable.")
+    return _briefing_item(briefing)
+
+
 @router.get("/history", response_model=list[BriefingHistoryItem])
 def get_briefing_history() -> list[BriefingHistoryItem]:
     """The athlete's previous days' briefings, newest first, at most seven."""
     return [
-        BriefingHistoryItem(
-            id=b.id,
-            date=b.date,
-            tip=b.text,
-            source=b.source,  # type: ignore[arg-type]
-            generated_at=_iso(b.created_at),
-            reaction=b.reaction,  # type: ignore[arg-type]
-            reaction_comment=b.reaction_comment,
-        )
-        for b in BriefingRepository().history(before=athlete_today())
+        _briefing_item(b) for b in BriefingRepository().history(before=athlete_today())
     ]
 
 

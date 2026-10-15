@@ -551,6 +551,7 @@ export interface PastBriefing {
 }
 
 export const tipsApi = {
+  briefing: (id: number) => fetchAPI<PastBriefing>(`/tips/briefings/${id}`),
   /** Reads only: never runs the coach. */
   getDaily: () => fetchAPI<DailyTip>("/tips/daily"),
 

@@ -56,7 +56,7 @@ test('with a race, the goal card leads and the curve projects to race day in pla
   // On a phone: the greeting, then the race, then the briefing.
   const greeting = (await page.getByRole('heading', { name: 'Bonjour, HUNTER' }).boundingBox())!;
   const race = (await card.boundingBox())!;
-  const briefing = (await page.getByRole('heading', { name: 'BRIEFING DU JOUR' }).boundingBox())!;
+  const briefing = (await page.getByRole('heading', { name: 'Briefing du jour' }).boundingBox())!;
   expect(greeting.y).toBeLessThan(race.y);
   expect(race.y).toBeLessThan(briefing.y);
 

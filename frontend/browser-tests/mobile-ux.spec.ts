@@ -264,5 +264,5 @@ test('touch: the morning check-in is three taps at 375 px and then gives the pag
   expect(answers).toEqual([{ sleep: 4, legs: 1, mood: null, note: null }]);
   await page.waitForLoadState('networkidle');
   await expect(card).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'BRIEFING DU JOUR' })).toBeInViewport();
+  await expect(page.getByRole('heading', { name: 'Briefing du jour' })).toBeInViewport();
 });
