@@ -3,7 +3,7 @@ briefing (ARE-59). Its push: ``test_checkin_push.py``."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import duckdb
 import pytest
@@ -128,6 +128,19 @@ def test_an_athlete_never_reads_another_s_check_in(db, client, monkeypatch):
 # The day's decision
 # --------------------------------------------------------------------------- #
 @pytest.fixture
+def frozen_morning(db, monkeypatch):
+    """Every clock at 08:00 UTC of today: the daily run is owed, outside quiet hours."""
+    from arete import scheduler
+    from arete.services import notifications, settings
+
+    now = datetime.combine(athlete_today(), time(8, 0), UTC)
+    for module in (scheduler, notifications, settings, checkins):
+        monkeypatch.setattr(module, "utc_now", lambda: now)
+    monkeypatch.delenv("ARETE_AUTO_SYNC_HOUR", raising=False)
+    return now
+
+
+@pytest.fixture
 def tempo_today(db, monkeypatch):
     """Today's tempo, against a Garmin readiness of 85: kept without a check-in."""
     readiness = Readiness(score=85.0, source="garmin_training", measured_on=None)
@@ -212,6 +225,69 @@ def test_a_good_answer_after_the_run_asks_nothing_again(tempo_today, client):
     _daily_run_done_today()
     day = athlete_today().isoformat()
     response = client.put(f"/checkins/{day}", json={"sleep": 5, "legs": 4})
+    assert response.json()["replanned"] is False
+    assert _decisions() == []
+
+
+def test_a_low_answer_during_the_run_reaches_the_day_s_decision(
+    frozen_morning, tempo_today, client, monkeypatch
+):
+    """Docker sends the push and starts the run in the same tick: the athlete
+    may answer after the run decided but before it is stamped finished."""
+    from arete import scheduler
+    from arete.services.plan_adaptation import adapt_today
+
+    answered = []
+
+    def daily_run():
+        adapt_today()  # the run's decision: 85 keeps the tempo, nothing stored
+        day = athlete_today().isoformat()
+        answer = client.put(f"/checkins/{day}", json={"sleep": 1, "legs": 3})
+        answered.append(answer.json())
+        return {}
+
+    monkeypatch.setattr(scheduler, "daily_sync", daily_run)
+    monkeypatch.setattr(scheduler, "write_daily_briefing", lambda: "rules")
+    monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "not monday")
+    result = scheduler.run_scheduled_batch()
+
+    assert answered[0]["replanned"] is False  # the run was not finished yet
+    assert result["athletes"]["1"]["checkin"] == "replanned"
+    [(decision, reason, state)] = _decisions()
+    assert (decision, state) == ("ease", "pending")
+    assert "nuit difficile déclarée" in reason
+
+
+def test_a_failed_replan_keeps_the_saved_answer(tempo_today, client, monkeypatch):
+    _daily_run_done_today()
+
+    def conflict():
+        raise RuntimeError("TransactionContext Error: Conflict")
+
+    monkeypatch.setattr("arete.services.coach_today.prepare", conflict)
+    day = athlete_today().isoformat()
+    response = client.put(f"/checkins/{day}", json={"sleep": 1, "legs": 1})
+    assert response.status_code == 200
+    assert response.json()["replanned"] is False
+    assert checkins.get() is not None
+
+
+def test_replanned_only_when_a_new_proposal_exists(db, client, monkeypatch):
+    """No readiness: a low answer cannot decide anything, so nothing was replanned."""
+    monkeypatch.setattr(
+        "arete.services.metrics.load_form", lambda day=None: (None, None)
+    )
+    GarminRepository().create_planned_session(
+        PlannedSession(
+            date=athlete_today(),
+            sport="running",
+            session_type=SessionType.TEMPO,
+            target_duration_min=45,
+        )
+    )
+    _daily_run_done_today()
+    day = athlete_today().isoformat()
+    response = client.put(f"/checkins/{day}", json={"sleep": 1, "legs": 1})
     assert response.json()["replanned"] is False
     assert _decisions() == []
 

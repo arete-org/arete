@@ -907,8 +907,12 @@ def _m48_briefing_reactions(con) -> None:
 def _m49_daily_checkins(con) -> None:
     """The morning check-in (ARE-59): a new table and its private view.
 
-    A new relation only, so the previous release runs unchanged on it. One
-    transaction: no table without the view that scopes it to its athlete.
+    A new relation only, so the previous release runs unchanged on it. On a
+    boot, the DDL (``CREATE TABLE IF NOT EXISTS``) has already created the
+    table outside any transaction, so this creates the view; called on its
+    own (or after a boot stopped in between), table and view are created in
+    one transaction, rolled back together. A table without its view is only
+    unreachable to the domain code, which reads through the view.
     """
     from arete.dataio.tenant_schema import _view
 

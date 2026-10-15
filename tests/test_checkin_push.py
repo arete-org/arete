@@ -10,7 +10,7 @@ import pytest
 
 from arete.dataio.db import connect
 from arete.dataio.init_duckdb import main as init_schema
-from arete.services import checkins
+from arete.services import checkins, notifications
 from arete.services.settings import athlete_today
 
 
@@ -130,3 +130,52 @@ def test_outside_the_morning_nothing_is_asked(device):
     assert _dispatch(now, SUMMER - timedelta(hours=3)) == {}
     assert _dispatch(now, SUMMER + timedelta(hours=5)) == {}
     assert push.call_count == 0
+
+
+def test_a_parked_athlete_is_not_asked(device):
+    now, push = device
+    _prefs()
+    con = connect()
+    con.execute(
+        "UPDATE app.athletes SET sync_lease_until = ? WHERE id = 1",
+        [(SUMMER + timedelta(days=365)).replace(tzinfo=None)],
+    )
+    con.close()
+    assert _dispatch(now, SUMMER) == {}
+    assert push.call_count == 0 and _rows() == []
+
+
+def test_no_device_to_reach_does_not_spend_the_day(device, monkeypatch):
+    now, push = device
+    _prefs()
+    monkeypatch.delenv("WEB_PUSH_VAPID_PRIVATE_KEY")
+    assert _dispatch(now, SUMMER) == {"1": "clés Web Push absentes du serveur"}
+    monkeypatch.setenv("WEB_PUSH_VAPID_PRIVATE_KEY", "priv")
+    notifications.unsubscribe("https://push.test/checkin")
+    assert _dispatch(now, SUMMER) == {"1": "aucun appareil abonné"}
+    assert push.call_count == 0 and _rows() == []
+    # Subscribed later that morning: the next window still asks.
+    notifications.subscribe("https://push.test/checkin", "p", "a")
+    assert _dispatch(now, SUMMER + timedelta(hours=1)) == {"1": "1 sent"}
+
+
+def test_the_push_speaks_of_the_session_only_when_there_is_one(device):
+    from arete.garmin.models import PlannedSession, SessionType
+    from arete.garmin.repository import GarminRepository
+
+    now, push = device
+    _prefs()
+    _dispatch(now, SUMMER)
+    assert "séance" not in json.loads(push.call_args.kwargs["data"])["body"]
+
+    con = connect()
+    con.execute("DELETE FROM app.daily_checkins")
+    con.close()
+    GarminRepository().create_planned_session(
+        PlannedSession(
+            date=athlete_today(), sport="running", session_type=SessionType.TEMPO
+        )
+    )
+    _dispatch(now, SUMMER + timedelta(hours=1))
+    body = json.loads(push.call_args.kwargs["data"])["body"]
+    assert "ajuster la séance du jour" in body

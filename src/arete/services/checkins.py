@@ -13,12 +13,15 @@ never sent once the day is answered.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from arete.dataio.db import db_connection
 from arete.services.settings import athlete_today, utc_now, zone_of
+
+logger = logging.getLogger(__name__)
 
 #: How far back an answer may be given or corrected, and read (``recent``).
 MAX_DAYS = 14
@@ -157,6 +160,8 @@ def decided_today() -> bool:
 # --------------------------------------------------------------------------- #
 PROMPT_TITLE = "Check-in du matin"
 PROMPT_BODY = "Sommeil, jambes : deux réponses pour ajuster la séance du jour."
+#: A rest day has no session to adjust: the answer still reaches the coach.
+PROMPT_BODY_REST = "Sommeil, jambes : deux réponses pour le coach ce matin."
 #: The dashboard opens with the card in view.
 PROMPT_URL = "/?checkin=1"
 
@@ -165,7 +170,8 @@ def prompt() -> str:
     """Send the day's check-in push, at most once a day. Never raises.
 
     Nothing is sent, and the day is not spent, when the athlete has turned
-    notifications or this kind off, or is in quiet hours: a later dispatch
+    notifications or this kind off, is in quiet hours, or has no device to
+    reach (no Web Push keys on the server, no subscription): a later dispatch
     may still send it. Once claimed the day's push is never sent again, even
     when no device received it.
     """
@@ -179,6 +185,11 @@ def prompt() -> str:
             return "notifications désactivées"
         if (reason := notifications.withheld(settings, "checkin")) is not None:
             return reason
+        if not notifications.configured():
+            return "clés Web Push absentes du serveur"
+        if not notifications.subscribed():
+            return "aucun appareil abonné"
+        body = PROMPT_BODY if _trains(day) else PROMPT_BODY_REST
         with db_connection() as con:
             claimed = con.execute(
                 "INSERT INTO app.daily_checkins (date, prompted_at) VALUES (?, ?) "
@@ -189,8 +200,18 @@ def prompt() -> str:
         return f"failed: {e}"
     if claimed is None:
         return "already answered or prompted"
-    result = notifications.notify(PROMPT_TITLE, PROMPT_BODY, PROMPT_URL, kind="checkin")
+    result = notifications.notify(PROMPT_TITLE, body, PROMPT_URL, kind="checkin")
     return result.skipped_reason or f"{result.sent} sent"
+
+
+def _trains(day: date) -> bool:
+    """Whether a session is still to do that day: the answer may adjust it."""
+    from arete.garmin.repository import GarminRepository
+
+    sessions = GarminRepository().list_planned_sessions(
+        start_date=day, end_date=day, status=None, limit=10
+    )
+    return any(s.status.value in {"pending", "modified"} for s in sessions)
 
 
 def replan(checkin: Checkin) -> bool:
@@ -200,14 +221,31 @@ def replan(checkin: Checkin) -> bool:
     the night's Garmin data. After it, the existing preparation
     (``coach_today.prepare``) decides the sessions the run kept; one it
     already proposed to change keeps its proposal. Either way the result is a
-    proposal the athlete validates, never a change to the plan. Whether it ran.
+    proposal the athlete validates, never a change to the plan. The scheduled
+    run calls this too once it is stamped finished, for an answer given while
+    it ran (after its decision, before its stamp).
+
+    Whether a new proposal came of it: none without a readiness, a session
+    to adapt or one not already decided. Never raises: the answer is already
+    saved, and a failure here (a write conflict with a concurrent run) only
+    leaves the day's decision as it was.
     """
     from arete.services.adaptation import declared_fatigue
     from arete.services.coach_today import prepare
+    from arete.services.plan_repository import PlanDecisionRepository
 
-    if checkin.date != athlete_today():
+    try:
+        if checkin.date != athlete_today():
+            return False
+        if declared_fatigue(checkin.sleep, checkin.legs) is None:
+            return False
+        if not decided_today():
+            return False
+        decisions = PlanDecisionRepository()
+        before = {d.id for d in decisions.list_for_day(checkin.date)}
+        prepare()
+        after = {d.id for d in decisions.list_for_day(checkin.date)}
+    except Exception:  # noqa: BLE001 - the answer stands; the decision is unchanged
+        logger.warning("Check-in replan failed", exc_info=True)
         return False
-    if declared_fatigue(checkin.sleep, checkin.legs) is None or not decided_today():
-        return False
-    prepare()
-    return True
+    return bool(after - before)

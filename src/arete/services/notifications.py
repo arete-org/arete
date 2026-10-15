@@ -104,6 +104,11 @@ def _subscriptions() -> list[tuple[str, str, str]]:
         con.close()
 
 
+def subscribed() -> bool:
+    """Whether the scoped athlete has a browser to reach."""
+    return bool(_subscriptions())
+
+
 def _status_of(error: Exception) -> int | None:
     response = getattr(error, "response", None)
     return getattr(response, "status_code", None)

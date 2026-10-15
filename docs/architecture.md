@@ -590,7 +590,13 @@ The proposal's reason says it ("jambes lourdes déclarées", "nuit difficile
 déclarée"). An answer before the day's scheduled run waits for it, which
 reads it with the night's Garmin data; a low one after it runs the existing
 preparation (`coach_today.prepare`) again, which decides the sessions the run
-kept, as a proposal to validate: answering never changes the plan. The
+kept, as a proposal to validate: answering never changes the plan. One given
+while the run goes on (after its decision, before it is stamped finished,
+common on Docker where the push and the run share a tick) is read by the run
+itself once stamped (`scheduler.settle_checkin`). `replanned` says whether a
+new proposal came of it; a failed replan leaves the saved answer and the
+day's decision as they were. A low answer corrected to a good one leaves its
+proposal for the athlete to decline. The
 briefing's facts list today's and yesterday's answers once given (a day
 without one keeps its facts and digest); a briefing already written is not
 rewritten for it outside the daily run's usual digest check, and the next
@@ -598,9 +604,11 @@ day's briefing reads it. No model reads the note on its own. One push a day
 asks for it (kind `checkin`): `GET /cron/checkin` at 05:00 and 06:00 UTC,
 before the sync's first window, claims the day in the same row before
 sending, so a second window or the Docker tick never repeats it, and skips
-an answered day. A window outside 06:00-12:00 on the athlete's clock or in
-their quiet hours claims nothing, so the next one sends it: 07:00 in Paris in
-both summer and winter with the default quiet hours. It opens `/?checkin=1`,
+an answered day or a parked athlete. A window outside 06:00-12:00 on the
+athlete's clock, in their quiet hours, without Web Push keys or without a
+subscribed device claims nothing, so the next one sends it: 07:00 in Paris in
+both summer and winter with the default quiet hours. On a rest day the push
+does not mention a session. The data export includes the answers. It opens `/?checkin=1`,
 which shows the card even when put off for the day ("Plus tard" is
 remembered on the device) and focuses it.
 
