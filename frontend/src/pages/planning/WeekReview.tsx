@@ -217,12 +217,13 @@ function Proposals({ week, review }: { week: ReviewWeek; review: WeeklyReview })
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button
             variant="outline"
+            className="min-h-11"
             onClick={() => discussWithCoach({ kind: 'review', id: review.id })}
           >
             <MessageCircle className="size-4" /> Ajuster avec le coach
           </Button>
           {(!answered || open.length > 0) && !(result && open.length === 0) && (
-            <Button strong loading={accept.isPending} onClick={() => accept.mutate(selected)}>
+            <Button strong className="min-h-11" loading={accept.isPending} onClick={() => accept.mutate(selected)}>
               {selected.length > 0 ? `Accepter (${selected.length})` : 'Accepter'}
             </Button>
           )}
@@ -246,7 +247,7 @@ function NoReview() {
           Pas encore de bilan : le coach l’écrit dimanche soir et te prévient.
         </p>
         {write.isError && <p className="text-xs text-danger-red">{readableError(write.error)}</p>}
-        <Button variant="purple" loading={write.isPending} onClick={() => write.mutate()}>
+        <Button variant="purple" className="min-h-11" loading={write.isPending} onClick={() => write.mutate()}>
           Faire le bilan maintenant
         </Button>
       </div>
