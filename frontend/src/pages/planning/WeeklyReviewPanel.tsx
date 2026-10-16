@@ -85,7 +85,9 @@ function ReviewBody({ review, refreshing }: { review: WeeklyReview; refreshing: 
   const selected = (picked ?? open).filter((i) => open.includes(i));
 
   const apply = useMutation({
-    mutationFn: (indices: number[]) => planApi.applyReview(review.id, indices),
+    mutationFn: (indices: number[]) => planApi.applyReview(review.id, indices, review.created_at),
+    // Refused (rewritten or answered elsewhere): read the review again.
+    onError: () => void queryClient.invalidateQueries({ queryKey: qk.weeklyReview }),
     onSuccess: (result) => {
       setStale((prev) => [...new Set([...prev, ...result.stale])]);
       setPicked(null);

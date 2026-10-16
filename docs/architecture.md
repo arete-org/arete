@@ -719,9 +719,13 @@ unchanged since the read (`created_at` as its version, which every rewrite
 moves forward, and its answer), else 409; new proposals start unanswered and
 the week is not announced again. A request stopped mid-way leaves the review
 as it was. Two concurrent rewrites may both pay a model request; the second
-gets 409. An answer sent with the version the page read (`created_at`) is
-refused (409) once the review was rewritten, since its indices name other
-proposals. A stopped claim that still holds a review's text is shown again as
+gets 409. Every answer, « Accepter » and Planning's « Appliquer »
+(`POST /plan/review/{id}/apply`) alike, must send the version its page read
+(`created_at`; without it 422, so an older bundle fails safe) and is refused
+(409) once the review was rewritten, since its indices name other proposals;
+both reserve their proposals by compare-and-set on that version and the
+answer fields, so a rewrite landing between the read and the reservation
+applies nothing. A stopped claim that still holds a review's text is shown again as
 written, never rewritten nor announced. A week with nothing planned or done is never announced, and
 the later days' fallback does not write it (a new athlete's first push is
 not « 0 séances sur 0 »). Proposal generation is unchanged.

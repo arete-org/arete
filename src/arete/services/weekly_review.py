@@ -779,21 +779,38 @@ def _apply(
     return applied, stale
 
 
-def apply_review(review_id: int, indices: list[int]) -> dict[str, Any]:
-    """Apply the chosen proposals; one whose session changed since is skipped."""
-    review = get_review_by_id(review_id)
-    if review is None:
-        raise LookupError(f"review {review_id}")
-    applied, stale = _apply(review, indices)
-    if applied:
-        con = connect()
-        try:
-            con.execute(
-                "UPDATE app.weekly_reviews SET applied_json = ?, applied_at = now() WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) ",
-                [json.dumps(sorted({*review.applied, *applied})), review_id],
-            )
-        finally:
-            con.close()
+def apply_review(
+    review_id: int, indices: list[int], *, seen: datetime | None = None
+) -> dict[str, Any]:
+    """Planning's « Appliquer »: the chosen proposals, without the watch.
+
+    Under the same guards as ``accept``: ``seen`` (the version the page
+    read) refused once rewritten (``ReviewChanged``), the proposals reserved
+    by compare-and-set before they are written, the stale ones given back.
+    One whose session changed since is skipped.
+    """
+    review, raw = _read(review_id)
+    if seen is not None and seen != review.created_at:
+        raise ReviewChanged(str(review_id))
+    known = {p["index"] for p in review.proposals}
+    todo = [i for i in indices if i in known and i not in review.applied]
+    if not todo:
+        return {"applied": [], "stale": []}
+    _reserve(review, raw, todo)
+    applied: list[int] = []
+    stale: list[int] = []
+    unanswered = review.applied_at is None
+    try:
+        _apply(review, todo, applied, stale)
+    except Exception:
+        _give_back(
+            review_id,
+            [i for i in todo if i not in applied],
+            unanswered=unanswered and not applied,
+        )
+        raise
+    if stale:
+        _give_back(review_id, stale, unanswered=unanswered and not applied)
     return {"applied": applied, "stale": stale}
 
 
@@ -854,11 +871,12 @@ def _read(review_id: int) -> tuple[Review, str | None]:
 def _reserve(review: Review, raw: str | None, indices: list[int]) -> None:
     """Take this answer's proposals before writing them, or refuse.
 
-    Compare-and-set on the review's ``applied_json`` and ``applied_at`` as
-    this answer read them: of two concurrent « Accepter » (two tabs, a retry
-    during the push), the second finds them changed (or loses the write
-    conflict) and applies and pushes nothing. Raises ``LookupError`` when the
-    review is gone (rewritten meanwhile), ``AcceptInProgress`` when taken.
+    Compare-and-set on the review's version (``created_at``), ``applied_json``
+    and ``applied_at`` as this answer read them: of two concurrent answers
+    (two tabs, a retry during the push), the second finds them changed (or
+    loses the write conflict) and applies and pushes nothing. Raises
+    ``LookupError`` when the review is gone, ``ReviewChanged`` when it was
+    rewritten since the read, ``AcceptInProgress`` when taken.
     """
     reserved = json.dumps(sorted({*review.applied, *indices}))
     try:
@@ -866,15 +884,19 @@ def _reserve(review: Review, raw: str | None, indices: list[int]) -> None:
             taken = con.execute(
                 "UPDATE app.weekly_reviews SET applied_json = ?, "
                 f"applied_at = coalesce(applied_at, now()) WHERE {_SCOPE} AND id = ? "
+                "AND created_at IS NOT DISTINCT FROM ? "
                 "AND applied_json IS NOT DISTINCT FROM ? "
                 "AND applied_at IS NOT DISTINCT FROM ? RETURNING id",
-                [reserved, review.id, raw, review.applied_at],
+                [reserved, review.id, review.created_at, raw, review.applied_at],
             ).fetchone()
     except duckdb.TransactionException:
         taken = None
     if taken is None:
-        if get_review_by_id(review.id) is None:
+        current = get_review_by_id(review.id)
+        if current is None:
             raise LookupError(f"review {review.id}")
+        if current.created_at != review.created_at:
+            raise ReviewChanged(str(review.id))
         raise AcceptInProgress(str(review.id))
 
 

@@ -465,7 +465,8 @@ def test_the_accept_endpoint_follows_the_calendar_inline(clock, coach, client):
         patch("arete.calendar.sync_training_plan", return_value="disabled") as sync,
     ):
         response = client.post(
-            f"/plan/review/{review.id}/accept", json={"indices": [0]}
+            f"/plan/review/{review.id}/accept",
+            json={"indices": [0], "created_at": review.created_at.isoformat()},
         )
     assert response.status_code == 200
     assert response.json() == {
@@ -475,7 +476,10 @@ def test_the_accept_endpoint_follows_the_calendar_inline(clock, coach, client):
         "calendar": "disabled",
     }
     sync.assert_called_once()
-    missing = client.post("/plan/review/999999/accept", json={"indices": []})
+    missing = client.post(
+        "/plan/review/999999/accept",
+        json={"indices": [], "created_at": review.created_at.isoformat()},
+    )
     assert missing.status_code == 404
 
 
@@ -845,7 +849,10 @@ def test_accept_refuses_unknown_indices_and_reports_past_ones_stale(
     review, (intervals, long_run) = _accepted_week(run)
     with pytest.raises(ValueError):
         wr.accept(review.id, [99])
-    response = client.post(f"/plan/review/{review.id}/accept", json={"indices": [99]})
+    response = client.post(
+        f"/plan/review/{review.id}/accept",
+        json={"indices": [99], "created_at": review.created_at.isoformat()},
+    )
     assert response.status_code == 422
     assert _stored(review.id) == (None, None)  # nothing reserved, not answered
     # Tuesday's proposal went by since the page was read: stale, the rest applied.
@@ -916,3 +923,72 @@ def test_a_give_back_that_loses_a_conflict_is_retried_once(clock, coach):
         result = wr.accept(review.id, [0, 1])
     assert result["stale"] == [1] and len(calls) == 2
     assert json.loads(_stored(review.id)[0]) == [0]
+
+
+# --------------------------------------------------------------------------- #
+# Fourth review pass: every answer carries the version it read
+# --------------------------------------------------------------------------- #
+def test_a_stale_page_cannot_apply_after_a_rewrite(clock, coach, client):
+    run, _refresh, _push = coach
+    review, (intervals, _long_run) = _accepted_week(run)
+    seen = review.created_at.isoformat()
+    with patch.object(wr, "week_facts", return_value=_facts()):
+        wr.generate_review(run, refresh=True, review_id=review.id)  # same id
+    with pytest.raises(wr.ReviewChanged):
+        wr.apply_review(review.id, [0], seen=review.created_at)
+    for path in ("apply", "accept"):
+        response = client.post(
+            f"/plan/review/{review.id}/{path}",
+            json={"indices": [0], "created_at": seen},
+        )
+        assert response.status_code == 409, path
+        assert (
+            response.json()["detail"]
+            == "Le bilan a été refait depuis : recharge la page."
+        )
+    untouched = GarminRepository().get_planned_session(intervals)
+    assert untouched is not None and untouched.session_type == SessionType.INTERVALS
+
+
+def test_an_answer_without_the_version_is_refused(clock, coach, client):
+    run, _refresh, _push = coach
+    review, _ids = _accepted_week(run)
+    for path in ("apply", "accept"):
+        response = client.post(
+            f"/plan/review/{review.id}/{path}", json={"indices": [0]}
+        )
+        assert response.status_code == 422, path
+    assert _stored(review.id) == (None, None)
+
+
+def test_a_rewrite_between_the_read_and_the_reservation_applies_nothing(clock, coach):
+    run, _refresh, _push = coach
+    review, (intervals, _long_run) = _accepted_week(run)
+    real = wr._reserve
+
+    def rewritten_first(*args):
+        with patch.object(wr, "week_facts", return_value=_facts()):
+            wr.generate_review(run, refresh=True, review_id=review.id)
+        return real(*args)
+
+    with (
+        patch.object(wr, "_reserve", side_effect=rewritten_first),
+        patch("arete.services.plan_adaptation.push_week") as push,
+        pytest.raises(wr.ReviewChanged),
+    ):
+        wr.accept(review.id, [0], seen=review.created_at)
+    push.assert_not_called()
+    assert _stored(review.id) == (None, None)
+    untouched = GarminRepository().get_planned_session(intervals)
+    assert untouched is not None and untouched.session_type == SessionType.INTERVALS
+
+
+def test_planning_s_apply_reserves_like_accept(clock, coach, client):
+    run, _refresh, _push = coach
+    review, _ids = _accepted_week(run)
+    response = client.post(
+        f"/plan/review/{review.id}/apply",
+        json={"indices": [0], "created_at": review.created_at.isoformat()},
+    )
+    assert response.json() == {"applied": [0], "stale": []}
+    assert wr.get_review_by_id(review.id).applied == [0]

@@ -92,7 +92,7 @@ it('applies the ticked proposals and refreshes the planned sessions', async () =
   expect(boxes.every((b) => b.checked)).toBe(true);
   fireEvent.click(boxes[1]);
   fireEvent.click(screen.getByRole('button', { name: 'Appliquer' }));
-  await waitFor(() => expect(apply).toHaveBeenCalledWith(4, [0, 2]));
+  await waitFor(() => expect(apply).toHaveBeenCalledWith(4, [0, 2], '2026-10-05T07:00:00'));
   expect(await screen.findByText('Séance modifiée depuis : proposition ignorée')).toBeTruthy();
   expect(client.getQueryState(qk.planned())?.isInvalidated).toBe(true);
 });

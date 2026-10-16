@@ -54,11 +54,9 @@ def revert_decision(decision_id: int) -> dict[str, Any]:
 
 class ReviewApply(BaseModel):
     indices: list[int]
-
-
-class ReviewAccept(ReviewApply):
-    created_at: datetime | None = Field(
-        default=None,
+    # Required: a rewrite keeps the review's id, so the same indices may name
+    # other proposals. A client without it (an older bundle) fails safe (422).
+    created_at: datetime = Field(
         description="The review's created_at as the page read it: a rewrite since answers 409",
     )
 
@@ -114,12 +112,26 @@ def write_review(refresh: bool = False, review_id: int | None = None) -> dict[st
 @router.post("/review/{review_id}/apply")
 def apply_review(review_id: int, body: ReviewApply) -> dict[str, Any]:
     """Apply the chosen proposals; ones whose session changed come back stale."""
-    from arete.services.weekly_review import apply_review
+    from arete.services.weekly_review import (
+        AcceptInProgress,
+        ReviewChanged,
+        apply_review,
+    )
 
     try:
-        return apply_review(review_id, body.indices)
+        return apply_review(review_id, body.indices, seen=body.created_at)
     except LookupError:
         raise HTTPException(status_code=404, detail="Bilan introuvable") from None
+    except ReviewChanged:
+        raise HTTPException(
+            status_code=409,
+            detail="Le bilan a été refait depuis : recharge la page.",
+        ) from None
+    except AcceptInProgress:
+        raise HTTPException(
+            status_code=409,
+            detail="Cette semaine vient d’être acceptée ailleurs : recharge la page.",
+        ) from None
 
 
 class GarminWeekSession(BaseModel):
@@ -148,7 +160,7 @@ class ReviewAccepted(BaseModel):
 
 
 @router.post("/review/{review_id}/accept", response_model=ReviewAccepted)
-def accept_review(review_id: int, body: ReviewAccept) -> dict[str, Any]:
+def accept_review(review_id: int, body: ReviewApply) -> dict[str, Any]:
     """« Accepter »: the chosen proposals, then the week's key sessions on
     Garmin and the plan's calendar, each outcome reported. The plan stays
     written whatever the watch or the calendar answer."""
