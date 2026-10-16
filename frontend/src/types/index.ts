@@ -96,7 +96,8 @@ export interface PlanDecision {
   /** French sentence with the figure that justifies the decision. */
   reason: string;
   readiness_score: number | null;
-  readiness_source: "garmin_training" | "garmin" | "model";
+  /** `athlete`: the athlete's own choice (« Modifier »), no readiness behind it. */
+  readiness_source: "garmin_training" | "garmin" | "model" | "athlete" | null;
   acwr: number | null;
   original: Record<string, unknown> | null;
   adapted: Record<string, unknown> | null;

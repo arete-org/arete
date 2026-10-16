@@ -718,8 +718,9 @@ export const planApi = {
   adaptNow: () =>
     fetchAPI<import("@/types").PlanToday>("/plan/today/adapt", { method: "POST" }),
 
+  /** `garmin`: what Garmin did after it (absent from an older server). */
   revert: (decisionId: number) =>
-    fetchAPI<import("@/types").PlanDecision>(`/plan/decisions/${decisionId}/revert`, {
+    fetchAPI<import("@/types").PlanDecision & { garmin?: import("@/types").RenegotiationGarmin }>(`/plan/decisions/${decisionId}/revert`, {
       method: "POST",
     }),
 

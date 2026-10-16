@@ -6,13 +6,9 @@ import { ApiError, planApi } from '@/lib/api';
 import { coachTodayKey, discussWithCoach } from '@/lib/coachToday';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { readableError } from '@/lib/utils';
-import type { PlannedSession, Renegotiated, RenegotiationReason } from '@/types';
+import type { Renegotiation } from '@/lib/renegotiation';
+import type { PlannedSession, RenegotiationReason } from '@/types';
 
-/** What the athlete chose and what the server did with it, for the day's panel. */
-export interface Renegotiation {
-  result: Renegotiated;
-  option: RenegotiationReason['options'][number];
-}
 
 const renegotiationKey = (sessionId: number) => ['renegotiation', sessionId] as const;
 

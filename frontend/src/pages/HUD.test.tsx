@@ -328,3 +328,40 @@ it('keeps a session moved away today on the card, with « Rétablir », and no �
     board.plan_today = { date: '2026-10-14', decisions: [] };
   }
 });
+
+it('reports a moved session’s « Rétablir » with Garmin’s part, and focuses it', async () => {
+  board.plan_today = { date: '2026-10-14', decisions: [decision] };
+  vi.spyOn(planApi, 'revert').mockResolvedValue({ ...decision, reverted_at: '2026-10-14T18:00:00', garmin: 'sent' });
+  try {
+    await mount(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Rétablir la séance prévue' }));
+    const box = (await screen.findByText('Séance rétablie à aujourd’hui.')).closest('[role="status"]');
+    expect(box).toBeTruthy();
+    expect(box!.textContent).toContain('Garmin : la séance est à jour sur ta montre.');
+    await vi.waitFor(() => expect(document.activeElement).toBe(box));
+  } finally {
+    board.plan_today = { date: '2026-10-14', decisions: [] };
+  }
+});
+
+it('keeps the focus on the card when another tab’s decision closes the open menu', async () => {
+  board.planned = [tempo];
+  vi.spyOn(planApi, 'renegotiationOptions').mockResolvedValue({
+    session_id: 12, date: '2026-10-14', version: '0123456789abcdef', blocked: 'Séance déjà ajustée aujourd’hui.', reasons: [],
+  });
+  try {
+    await mount(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }));
+    const other = await screen.findByRole('button', { name: /Autre… en parler au coach/ });
+    await vi.waitFor(() => expect(document.activeElement).toBe(other));
+    // Another tab eased it: the refetch shows the decision, the menu leaves.
+    board.plan_today = { date: '2026-10-14', decisions: [{ ...decision, decision: 'ease', reason: 'Je suis cuit : allégée.' }] };
+    await client.refetchQueries({ queryKey: ['dashboard'] });
+    await screen.findByText('Je suis cuit : allégée.');
+    expect(screen.queryByRole('button', { name: 'Modifier' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('group', { name: 'Séance du jour : Seuil' }));
+  } finally {
+    board.planned = [];
+    board.plan_today = { date: '2026-10-14', decisions: [] };
+  }
+});

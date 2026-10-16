@@ -4,7 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError, planApi } from '@/lib/api';
 import type { PlannedSession, Renegotiated, RenegotiationMenu } from '@/types';
-import { RenegotiateMenu, type Renegotiation } from './RenegotiateMenu';
+import { renegotiationOutcome, type Renegotiation } from '@/lib/renegotiation';
+import { RenegotiateMenu } from './RenegotiateMenu';
 import { RenegotiationOutcome } from './RenegotiationOutcome';
 
 const session: PlannedSession = {
@@ -158,9 +159,10 @@ it('closes on Escape and gives the focus back to « Modifier »', async () => {
 });
 
 it('reports the written choice apart from Garmin, and takes the focus', () => {
+  const lighter = menu.reasons[0].options[0];
   render(
     <RenegotiationOutcome
-      done={{ result: { ...written, garmin: 'failed' }, option: menu.reasons[0].options[0] }}
+      outcome={renegotiationOutcome({ result: { ...written, garmin: 'failed' }, option: lighter })}
       onDismiss={() => {}}
     />,
   );
@@ -169,14 +171,37 @@ it('reports the written choice apart from Garmin, and takes the focus', () => {
   expect(status.textContent).toContain('Séance modifiée : Endurance 35 min Z2.');
   expect(status.textContent).toContain('Garmin n’a pas confirmé la mise à jour');
   cleanup();
+  // Garmin holds no copy: nothing to say, whatever the push setting.
   render(
     <RenegotiationOutcome
-      done={{
+      outcome={renegotiationOutcome({
         result: { ...written, date: '2026-10-15', garmin: 'unchanged', decision: { ...written.decision, decision: 'move' } },
         option: menu.reasons[0].options[1],
-      }}
+      })}
       onDismiss={() => {}}
     />,
   );
   expect(screen.getByRole('status').textContent).toBe('Séance déplacée à jeudi 15 octobre.');
+});
+
+it('says a copy left by the push off is to remove for a rest, to send again otherwise', () => {
+  const rest = menu.reasons[2].options[0];
+  render(
+    <RenegotiationOutcome
+      outcome={renegotiationOutcome({
+        result: { ...written, garmin: 'disabled', decision: { ...written.decision, decision: 'rest' } },
+        option: rest,
+      })}
+      onDismiss={() => {}}
+    />,
+  );
+  expect(screen.getByRole('status').textContent).toContain('retire-la depuis le Planning');
+  cleanup();
+  render(
+    <RenegotiationOutcome
+      outcome={renegotiationOutcome({ result: { ...written, garmin: 'disabled' }, option: menu.reasons[0].options[0] })}
+      onDismiss={() => {}}
+    />,
+  );
+  expect(screen.getByRole('status').textContent).toContain('renvoie-la depuis le Planning');
 });

@@ -25,6 +25,7 @@ const menu = {
       options: [
         { id: 'lighter', decision: 'ease', label: 'Version allégée', detail: 'Endurance 35 min Z2' },
         { id: 'move', decision: 'move', label: 'Déplacer à jeudi 15 octobre', detail: 'Premier jour libre, sans séance dure la veille ni le lendemain.' },
+        { id: 'rest', decision: 'rest', label: 'Repos aujourd’hui', detail: 'La séance est sautée.' },
       ],
     },
     {
@@ -140,12 +141,13 @@ for (const { width, height, name } of [
     await page.screenshot({ path: `${SCREENS}/menu-${name}-dark.png`, animations: 'disabled' });
 
     // Tap 2: one option, written once.
-    await page.getByRole('button', { name: /Version allégée/ }).click();
+    await page.getByRole('region', { name: 'Je suis cuit' }).getByRole('button', { name: /Version allégée/ }).click();
     const outcome = page.getByRole('status').filter({ hasText: 'Séance modifiée' });
     await expect(outcome).toBeVisible();
     await expect(outcome).toBeFocused();
     await expect(outcome).toContainText('Séance modifiée : Endurance 35 min Z2.');
-    await expect(outcome).toContainText('Envoi automatique vers Garmin désactivé');
+    // The watch kept the old version (automatic push off): said apart, never a failed choice.
+    await expect(outcome).toContainText('Ta montre a l’ancienne version (envoi automatique désactivé) : renvoie-la depuis le Planning.');
     expect(chosen).toEqual([{ reason: 'tired', option: 'lighter', version: menu.version }]);
     // The card reads the written session and its reason, with « Rétablir ».
     await expect(page.getByText(eased.reason)).toBeVisible();
