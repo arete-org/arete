@@ -637,7 +637,8 @@ def _claim_rewrite(week_start: date) -> tuple[int, tuple | None]:
             kept = None
             if state == "written":
                 kept = con.execute(
-                    f"SELECT {_KEPT} FROM app.weekly_reviews WHERE id = ?", [row[0]]
+                    f"SELECT {_KEPT} FROM app.visible_weekly_reviews WHERE id = ?",
+                    [row[0]],
                 ).fetchone()
             con.execute(
                 f"UPDATE app.weekly_reviews SET source = '{PENDING}', created_at = ? "
@@ -836,7 +837,7 @@ def _give_back(review_id: int, indices: list[int], *, unanswered: bool = False) 
     try:
         with transaction() as con:
             row = con.execute(
-                f"SELECT applied_json FROM app.weekly_reviews WHERE {_SCOPE} AND id = ?",
+                "SELECT applied_json FROM app.visible_weekly_reviews WHERE id = ?",
                 [review_id],
             ).fetchone()
             if row is None:
