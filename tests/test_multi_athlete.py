@@ -497,6 +497,8 @@ def test_model_steps_are_deferred_past_the_model_deadline(
             }
         },
         "deferred": True,
+        # Not a Sunday evening: no review pass.
+        "reviews": {"athletes": {}, "deferred": False},
     }
     con = connect()
     assert con.execute(
@@ -514,7 +516,11 @@ def test_scheduler_defers_unclaimed_work_at_the_dispatch_deadline(
 
     clock = iter([0, scheduler.SCHEDULE_DISPATCH_SECONDS])
     monkeypatch.setattr(scheduler, "monotonic", lambda: next(clock))
-    assert scheduler.run_scheduled_batch() == {"athletes": {}, "deferred": True}
+    assert scheduler.run_scheduled_batch() == {
+        "athletes": {},
+        "deferred": True,
+        "reviews": {"athletes": {}, "deferred": False},
+    }
     con = connect()
     assert con.execute(
         "SELECT count(*) FROM app.athletes WHERE sync_lease_until IS NOT NULL"
@@ -775,6 +781,8 @@ def test_the_scan_bound_defers_the_athletes_beyond_it(
             }
         },
         "deferred": True,
+        # The review pass reads under the same bound.
+        "reviews": {"athletes": {}, "deferred": True},
     }
 
 

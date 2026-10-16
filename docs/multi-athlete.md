@@ -115,7 +115,8 @@ configuration is ready. Production uses the repository's manual deployment workf
 
 Each athlete is synced once a day: Garmin activities and health, plan
 adaptation, Strava, the calendar and the session feedback, then the briefing
-and, on Mondays, the week's review. Vercel's Hobby plan runs a cron at most once
+and, any day but Sunday, the week's review when Sunday evening's was missed
+(the last window, 16:00 UTC, writes it on Sunday: `docs/architecture.md`). Vercel's Hobby plan runs a cron at most once
 a day, so `vercel.json` lists ten daily windows on the same path, from 07:00 to
 16:00 UTC (each fires within its hour). Two earlier windows, 05:00 and 06:00
 UTC on `/api/cron/checkin`, only send the morning check-in push, between

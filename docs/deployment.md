@@ -272,8 +272,9 @@ on the production deployment. The endpoint answers 401 unless the environment
 has `CRON_SECRET`, which Vercel sends as a bearer token. Each dispatch syncs the
 athletes still owed today within the function's 300 seconds, none before 07:00
 on their own clock nor during their quiet hours; the rules, and how to park or
-force an athlete, are in `docs/multi-athlete.md`. A preview syncs
-only when called by hand with that header.
+force an athlete, are in `docs/multi-athlete.md`. On Sunday the 16:00 UTC
+window also writes the week's review (« Ma semaine », `docs/architecture.md`);
+no cron is added for it. A preview syncs only when called by hand with that header.
 
 `/api/cron/checkin` runs at 05:00 and 06:00 UTC, with the same secret: it only
 sends the morning check-in push (at most one per athlete and day, none once

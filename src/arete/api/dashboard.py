@@ -29,6 +29,12 @@ from arete.services.metrics import FitnessMetricsOut, PlayerStats, WorkloadMetri
 router = APIRouter(tags=["dashboard"])
 
 
+class WeekReviewEntry(BaseModel):
+    id: int
+    week_start: date_type
+    open: int = Field(description="Proposals not applied, for a day still to come")
+
+
 class DashboardResponse(BaseModel):
     date: date_type = Field(description="The athlete's today, which every slice reads")
     planned: list[PlannedSessionResponse] = Field(description="/garmin/planned")
@@ -53,6 +59,9 @@ class DashboardResponse(BaseModel):
     checkin: CheckinResponse | None = Field(
         description="Today's row of /checkins; null until answered"
     )
+    weekly_review: WeekReviewEntry | None = Field(
+        description="The week's review still to answer (« Ma semaine »), else null"
+    )
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
@@ -74,6 +83,9 @@ def get_dashboard() -> DashboardResponse:
         briefing=_daily_tip(board.briefing),
         coach=board.coach,
         checkin=CheckinResponse(**board.checkin.to_dict()) if board.checkin else None,
+        weekly_review=WeekReviewEntry(**board.weekly_review)
+        if board.weekly_review
+        else None,
     )
 
 

@@ -69,6 +69,7 @@ beforeEach(() => {
   board.health = null;
   board.has_load = true;
   board.checkin = null;
+  board.weekly_review = null;
   daily.tip = written;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.spyOn(settingsApi, 'get').mockResolvedValue({ display_name: 'Arthur' } as Awaited<ReturnType<typeof settingsApi.get>>);
@@ -266,4 +267,17 @@ it('draws the curve after months off, when rounded fitness reads zero', async ()
   await mount(false);
   expect(await screen.findByText(/Aujourd’hui : fatigue/)).toBeTruthy();
   expect(screen.queryByText(/Pas encore de charge enregistrée/)).toBeNull();
+});
+
+it('leads to « Ma semaine » while the week waits for an answer, from the same answer', async () => {
+  board.weekly_review = { id: 9, week_start: '2026-10-05', open: 2 };
+  await mount(false);
+  const entry = screen.getByRole('link', { name: /Ta semaine est prête/ });
+  expect(entry.getAttribute('href')).toBe('/planning/semaine');
+  expect(within(entry).getByText('Le bilan et 2 propositions du coach pour la semaine qui vient')).toBeTruthy();
+});
+
+it('shows no week entry once answered', async () => {
+  await mount(false);
+  expect(screen.queryByRole('link', { name: /Ta semaine est prête/ })).toBeNull();
 });

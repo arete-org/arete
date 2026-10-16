@@ -688,6 +688,73 @@ does not mention a session. The data export includes the answers. It opens `/?ch
 which shows the card even when put off for the day ("Plus tard" is
 remembered on the device) and focuses it.
 
+The week's review (ARE-60) is written on Sunday evening for the week ending
+that day (`weekly_review.review_week`); any later daily run until the next
+Sunday writes it if it was missed (`scheduler.write_weekly_review`). No cron
+of its own: the daily sync's last window, 16:00 UTC, runs a pass after the
+day's runs (`scheduler.run_sunday_reviews`) for the athletes whose Sunday
+evening it is (`weekly_review.review_evening`): from 17:00 on their clock and
+not before 16:00 UTC, outside quiet hours. Hobby fires that window within its
+hour, so on Vercel, with the default quiet hours (21:30-07:00), it reaches
+UTC+1 to UTC+4, and UTC+5 when it fires before 16:30: Paris at 18:00 in
+summer and 17:00 in winter, but not London or Lisbon in winter, the Americas,
+Dakar, Kolkata or Bangkok, who get it from their next daily run. Docker's
+five-minute ticks reach every zone from UTC-12 to UTC+5. The pass first
+refreshes Garmin (the morning's run missed the afternoon's sessions), then
+writes the review in one model request at most, as before. Exactly once per
+week: the row is claimed first (`pending`, never served nor exported; the
+unique week key makes concurrent claims exclusive), a week written, claimed
+or failed that day costs one read and no Garmin request, and only the run
+that wrote it pushes « Ta semaine est prête » (kind `weekly_review`, quiet
+hours respected, dropped like every push). A failed scheduled run keeps its
+claim until the next day, so the next daily run retries it, never the same
+evening; a claim older than ten minutes belongs to a stopped run. The
+athlete's « Faire le bilan » writes the week on screen
+(`weekly_review.requested_week`): on Sunday before the evening, last week's,
+so the evening still reviews the ending week after its afternoon.
+« Refaire le bilan » names the review it shows (`review_id`) and rewrites that
+week, whatever the hour. The written review is never hidden: the new one is
+composed first, then written over the same row (same id) only if it is
+unchanged since the read (`created_at` as its version, which every rewrite
+moves forward, and its answer), else 409; new proposals start unanswered and
+the week is not announced again. A request stopped mid-way leaves the review
+as it was. Two concurrent rewrites may both pay a model request; the second
+gets 409. Every answer, « Accepter » and Planning's « Appliquer »
+(`POST /plan/review/{id}/apply`) alike, must send the version its page read
+(`created_at`; without it 422, so an older bundle fails safe) and is refused
+(409) once the review was rewritten, since its indices name other proposals;
+both reserve their proposals by compare-and-set on that version and the
+answer fields, so a rewrite landing between the read and the reservation
+applies nothing. A stopped claim that still holds a review's text is shown again as
+written, never rewritten nor announced. A week with nothing planned or done is never announced, and
+the later days' fallback does not write it (a new athlete's first push is
+not « 0 séances sur 0 »). Proposal generation is unchanged.
+
+« Ma semaine » (`/planning/semaine`) reads `GET /plan/review/week`: the
+current review (on Sunday this week's once written, last week's until then)
+and its week in numbers, read now, so a session imported since counts. The
+push, Planning's title row and review panel, and a compact dashboard entry
+lead there; the entry is the `weekly_review` field of `GET /dashboard` (no
+request of its own): the review until the athlete accepts it, on its evening
+and the next day whatever it proposes, then while a proposal is still open.
+Past proposals are shown, not offered, and a review with no week left to
+plan offers no « Accepter ». « Accepter » (`POST /plan/review/{id}/accept`)
+reads the review once, refuses (422) an index the review never had, reports
+one whose day went by since the page was read as stale, reserves the ticked proposals by compare-and-set on what it read (a concurrent answer, from another tab or a retry, gets 409 and
+applies and sends nothing; an answer adding nothing to an answered review
+sends nothing, `unchanged`), applies them (a changed session comes back
+stale; reserved proposals not written are given back from the stored value,
+retried once on a write conflict, so a concurrent answer's stay, and an
+answer that wrote nothing leaves the review unanswered), then sends the coming week's key sessions to Garmin (the changed
+ones, then intervals, tempo and long runs; at most four, 60 s, one attempt
+each, under the automatic-push setting like the daily push) and syncs the
+plan's calendar inline (`AFTER_PLAN_WRITE` budget). Each outcome is the
+server's; a failed watch or calendar, or a review rewritten meanwhile, never
+fails the written plan. Nothing is applied without the click. « Ajuster avec
+le coach » attaches the review to the active browser thread as its
+`coach_ref` (`review:<id>`), which the context builder resolves by id: the
+browser sends the identifier only and the composer stays as it was.
+
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References
 in HTTP/SSE and browser storage contain identifiers; the server reloads the

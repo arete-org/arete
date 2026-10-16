@@ -727,16 +727,29 @@ export const planApi = {
   getReview: async () =>
     recordOrNull<import("@/types").WeeklyReview>(await fetchAPI<unknown>("/plan/review")),
 
-  /** Written once per week; `refresh` writes it again. May wait for the coach (~60 s). */
-  writeReview: (refresh = false) =>
-    fetchAPI<import("@/types").WeeklyReview>(`/plan/review?refresh=${refresh}`, {
+  /** Written once per week; `refresh` writes again the review shown (`reviewId`). May wait for the coach (~60 s). */
+  writeReview: (refresh = false, reviewId?: number) =>
+    fetchAPI<import("@/types").WeeklyReview>(
+      `/plan/review?refresh=${refresh}${reviewId != null ? `&review_id=${reviewId}` : ""}`,
+      { method: "POST" },
+    ),
+
+  /** « Ma semaine »: the current review and its week in numbers. */
+  getReviewWeek: () => fetchAPI<import("@/types").ReviewWeek>("/plan/review/week"),
+
+  /** Applies the ticked proposals, then the week's key sessions go to Garmin and the calendar. */
+  /** `createdAt`: the review's version as the page read it (required); a rewrite since answers 409. */
+  acceptReview: (reviewId: number, indices: number[], createdAt: string | null) =>
+    fetchAPI<import("@/types").ReviewAccepted>(`/plan/review/${reviewId}/accept`, {
       method: "POST",
+      body: JSON.stringify({ indices, created_at: createdAt }),
     }),
 
-  applyReview: (reviewId: number, indices: number[]) =>
+  /** `createdAt`: the review's version as the page read it (required); a rewrite since answers 409. */
+  applyReview: (reviewId: number, indices: number[], createdAt: string | null) =>
     fetchAPI<import("@/types").ReviewApplyResult>(`/plan/review/${reviewId}/apply`, {
       method: "POST",
-      body: JSON.stringify({ indices }),
+      body: JSON.stringify({ indices, created_at: createdAt }),
     }),
 };
 

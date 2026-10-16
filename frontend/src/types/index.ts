@@ -794,3 +794,38 @@ export interface ReviewApplyResult {
   applied: number[];
   stale: number[];
 }
+
+/** « Ma semaine » (GET /plan/review/week): the reviewed week in numbers, read now. */
+export interface WeekRecap {
+  week_start: string;
+  week_end: string;
+  planned: number;
+  completed: number;
+  minutes_done: number;
+  minutes_planned: number;
+  /** Completed over planned, null without a session due. */
+  adherence: number | null;
+  tsb: number | null;
+}
+
+export interface ReviewWeek {
+  today: string;
+  review: WeeklyReview | null;
+  recap: WeekRecap | null;
+}
+
+/** One key session's Garmin outcome after « Accepter », as the server reports it. */
+export interface WeekPushSession {
+  planned_session_id: number;
+  date: string;
+  session_type: string;
+  outcome: "sent" | "already" | "withdrawn" | "skipped" | "failed" | "not_started";
+}
+
+/** `POST /plan/review/{id}/accept`: the plan is written whatever Garmin and the calendar say. */
+export interface ReviewAccepted extends ReviewApplyResult {
+  /** `unchanged`: nothing new accepted, nothing sent. */
+  garmin: { state: "done" | "disabled" | "disconnected" | "failed" | "unchanged"; sessions: WeekPushSession[] };
+  /** Training plan calendar sync: synced, partial, busy, failed, disabled, unchanged (several connections: joined). */
+  calendar: string;
+}
