@@ -3,7 +3,7 @@ import { RouteScroll } from '@/components/RouteScroll';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
 import { useCoachDisplay } from '@/hooks/useCoachDisplay';
 import { AreteMark } from '@/components/AreteBrand';
-import type { CoachReference } from '@/lib/coachToday';
+import { isCoachReference } from '@/lib/coachToday';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient } from '@tanstack/react-query';
@@ -83,13 +83,11 @@ function App() {
   // (the agent's panel_context follows the route, the conversation too).
   const display = useCoachDisplay();
   const [agentOpen, setAgentOpen] = useState(false);
-  const [coachReference, setCoachReference] = useState<CoachReference | null>(null);
   useEffect(preloadAgentMarkdownWhenIdle, []);
   useEffect(() => {
     const discuss = (event: Event) => {
-      const reference = (event as CustomEvent<CoachReference>).detail;
-      if (!reference || !['proposal', 'followup', 'briefing'].includes(reference.kind) || !Number.isSafeInteger(reference.id)) return;
-      setCoachReference(reference);
+      const reference: unknown = (event as CustomEvent).detail;
+      if (!isCoachReference(reference)) return;
       setAgentOpen(true);
     };
     window.addEventListener('arete:coach-discuss', discuss);
@@ -199,8 +197,6 @@ function App() {
                 display={display.mode}
                 onDisplayChange={display.setMode}
                 displayError={display.error}
-                reference={coachReference}
-                onClearReference={() => setCoachReference(null)}
                 open={agentOpen}
                 onClose={closeAgent}
                 onBusyChange={setAgentBusy}

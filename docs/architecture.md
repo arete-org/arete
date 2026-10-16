@@ -164,12 +164,18 @@ written. A rewrite is marked `updated_after_sync`; a failed rewrite keeps the
 briefing it would have replaced. The dashboard leads with it and says when it was
 written and, after a sync rewrite, when the sync replaced it; briefing times
 are naive UTC, like the claim, since instances on other clocks share the
-database. The athlete's 👍/👎 and
-optional short word live on the briefing's row (migration 48): one per briefing,
+database. The athlete's useful/not-useful rating and
+legacy short comment live on the briefing's row (migration 48): one per briefing,
 idempotent, stored only, since no prompt reads them. `GET /tips/history` lists
-the previous seven days on demand. "Demander au coach" selects the briefing as
-the page's `coach_ref`, which the context builder resolves by id like a
-proposal; nothing is sent and the draft stays. Athletes never wait for each other's run. The
+previous days on demand. `GET /tips/briefings/{id}` reads the athlete's selected
+usable briefing without loading the agent stack. Dashboard title/actions create a
+fresh browser thread and store its `CoachReference` beside messages and drafts.
+The full briefing and shared `FeedbackRating` controls appear inside Chiron;
+opening makes no model request and leaves the previous draft/attachments intact.
+Each explicit message includes this thread's `coach_ref`, which the context
+builder resolves by id. Switching threads switches references; reload restores
+both. The briefing is context, not an invented assistant message or trace receipt.
+Existing comments remain readable, while further discussion uses the common composer. Athletes never wait for each other's run. The
 server files the feedback's ledger entry itself (`services/memory.append_entry`,
 dated heading, never twice), so neither mission can mutate training data or
 forget to write. Every invocation captures one timezone-aware instant on the

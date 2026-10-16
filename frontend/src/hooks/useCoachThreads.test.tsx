@@ -12,6 +12,7 @@ const runs = vi.hoisted(
   () =>
     [] as {
       history: ChatMessage[];
+      context: { page: string; path: string; params: Record<string, string> };
       threadId: string;
       documentIds?: string[];
       emit: (e: StreamEvent) => void;
@@ -26,7 +27,7 @@ vi.mock('@/lib/agentStream', async (importOriginal) => ({
   runAgentStream: vi.fn(
     (history, _context, emit, signal, threadId, documentIds, _onAccepted, stamp) =>
       new Promise<void>((resolve, reject) => {
-        runs.push({ history, emit, resolve, reject, signal, threadId, documentIds, stamp });
+        runs.push({ history, context: _context, emit, resolve, reject, signal, threadId, documentIds, stamp });
         signal.addEventListener(
           'abort',
           () => reject(new DOMException('Stopped', 'AbortError')),
@@ -457,4 +458,47 @@ it('refreshes the athlete facts after the coach remembers one', async () => {
   await act(async () => {
     runs[0].resolve();
   });
+});
+
+
+it('opens each briefing in a fresh thread, keeps drafts and binds context only to that thread', async () => {
+  const { result, rerender } = renderHook(({ page }) => useCoachThreads(page, true), { wrapper, initialProps: { page: context } });
+  const original = result.current.active.id;
+  act(() => { result.current.draft('My manual draft'); result.current.attachments(['document-a']); });
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'briefing', id: 41 } })));
+  const briefing = result.current.active.id;
+  expect(briefing).not.toBe(original);
+  expect(result.current.active).toMatchObject({ draft: '', messages: [], reference: { kind: 'briefing', id: 41 } });
+  expect(result.current.store.threads.find(t => t.id === original)).toMatchObject({ draft: 'My manual draft', attachmentIds: ['document-a'] });
+  expect(runs).toHaveLength(0);
+  rerender({ page: { page: 'planning', path: '/planning', params: {} } });
+  act(() => result.current.send('Pourquoi du repos ?'));
+  expect(runs[0].context.page).toBe('planning');
+  expect(runs[0].context.params).toEqual({ coach_ref: 'briefing:41' });
+  act(() => {
+    runs[0].emit({ type: 'token', id: 'a', text: 'Rest ' });
+    window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'briefing', id: 42 } }));
+  });
+  expect(result.current.active.id).not.toBe(briefing);
+  expect(result.current.active.reference?.id).toBe(42);
+  expect(runs[0].signal.aborted).toBe(false);
+  await act(async () => { runs[0].emit({ type: 'token', id: 'a', text: 'today.' }); runs[0].resolve(); });
+  expect(result.current.active.messages).toEqual([]);
+  expect(result.current.store.threads.find(t => t.id === briefing)?.messages[1].content).toBe('Rest today.');
+  act(() => result.current.select(original));
+  act(() => result.current.send());
+  expect(runs[1].context.params).toEqual({});
+  await act(async () => runs[1].resolve());
+});
+
+it('reports a full thread store without overwriting a draft or starting a request', () => {
+  const threads = Array.from({ length: 30 }, (_, i) => ({ id: `thread-${i}`, title: 'Keep', createdAt: i, updatedAt: i, messages: [], draft: `draft-${i}` }));
+  localStorage.setItem(THREADS_KEY, JSON.stringify({ version: 1, activeId: threads[0].id, threads }));
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'briefing', id: 41 } })));
+  expect(result.current.error).toContain('Limite de 30');
+  expect(result.current.active.draft).toBe('draft-0');
+  expect(result.current.active.reference).toBeUndefined();
+  expect(result.current.store.threads).toHaveLength(30);
+  expect(runs).toHaveLength(0);
 });

@@ -173,8 +173,8 @@ it('offers one way to log a session and no duplicate quick links', async () => {
 it('leads with the briefing, today\'s session right below it', async () => {
   await mount(false);
   const headings = screen.getAllByRole('heading').map((h) => h.textContent);
-  expect(headings.indexOf('BRIEFING DU JOUR')).toBeGreaterThanOrEqual(0);
-  expect(headings.indexOf('BRIEFING DU JOUR') + 1).toBe(headings.indexOf('SÉANCE DU JOUR'));
+  expect(headings.indexOf('Briefing du jour')).toBeGreaterThanOrEqual(0);
+  expect(headings.indexOf('Briefing du jour') + 1).toBe(headings.indexOf('SÉANCE DU JOUR'));
   const briefing = screen.getByText(written.tip!);
   const session = screen.getByText('Repos — aucune séance prévue');
   expect(briefing.compareDocumentPosition(session) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -186,7 +186,7 @@ it('leads with the briefing, today\'s session right below it', async () => {
 it('asks the morning check-in before the briefing until the day is answered', async () => {
   await mount(false);
   const card = screen.getByRole('region', { name: 'Check-in du matin' });
-  const briefing = screen.getByRole('heading', { name: 'BRIEFING DU JOUR' });
+  const briefing = screen.getByRole('heading', { name: 'Briefing du jour' });
   expect(card.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   cleanup();
   client.clear();
@@ -211,7 +211,7 @@ it('leads with the race goal above the briefing, and the one form curve in plain
   };
   await mount(false);
   const goal = screen.getByRole('region', { name: 'Objectif de course' });
-  const briefing = screen.getByRole('heading', { name: 'BRIEFING DU JOUR' });
+  const briefing = screen.getByRole('heading', { name: 'Briefing du jour' });
   expect(goal.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(await screen.findByText('entre +3 et +13')).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'COURBE DE FORME' })).toBeTruthy();

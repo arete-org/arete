@@ -2,7 +2,7 @@ import type { CoachDisplay } from '@/hooks/useCoachDisplay';
 import { CoachDisplayOptions } from './agent/CoachDisplayOptions';
 import { CoachMemory, MemoryReceipt } from './agent/CoachMemory';
 import { CoachReferenceCard } from './agent/CoachReferenceCard';
-import type { CoachReference } from '@/lib/coachToday';
+import { BriefingDiscussion } from './agent/BriefingDiscussion';
 import { MessageFeedback } from './agent/MessageFeedback';
 import { SkillInput } from './agent/SkillInput';
 import { ContextWindowGauge } from './agent/ContextWindowGauge';
@@ -116,8 +116,6 @@ const MessageSurfaces = memo(function MessageSurfaces({
 });
 
 export function AgentSidePanel({
-  reference,
-  onClearReference,
   open,
   onClose,
   onBusyChange,
@@ -128,15 +126,12 @@ export function AgentSidePanel({
   display?: CoachDisplay;
   onDisplayChange?: (mode: CoachDisplay) => void;
   displayError?: string | null;
-  reference?: CoachReference | null;
-  onClearReference?: () => void;
   open: boolean;
   onClose: () => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
   const floating = display === 'floating';
-  const pageContext = usePanelContext();
-  const panelContext = { ...pageContext, params: { ...pageContext.params, ...(reference ? { coach_ref: `${reference.kind}:${reference.id}` } : {}) } };
+  const panelContext = usePanelContext();
   const [showMemory, setShowMemory] = useState(false);
   const { data: preference } = useGamePreference();
   const rpg = preference?.enabled === true;
@@ -145,6 +140,7 @@ export function AgentSidePanel({
   const dragDepth = useRef(0);
   const coach = useCoachThreads(panelContext, true);
   const { active, store, runningId } = coach;
+  const reference = active.reference;
   const messages = active.messages;
   const attachmentsRef = useRef<AttachmentsHandle>(null);
   const [documentBusyByThread, setDocumentBusyByThread] = useState<Record<string, boolean>>({});
@@ -224,6 +220,12 @@ export function AgentSidePanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose, showHistory, showMemory, deleteId]);
 
+  useEffect(() => {
+    const reveal = () => { setShowHistory(false); setShowMemory(false); followRef.current = true; setFollowing(true); };
+    window.addEventListener('arete:coach-discuss', reveal);
+    return () => window.removeEventListener('arete:coach-discuss', reveal);
+  }, []);
+
   const followLatest = () => {
     followRef.current = true;
     setFollowing(true);
@@ -243,7 +245,7 @@ export function AgentSidePanel({
   };
 
   if (!open) return null;
-  const page = PAGE_LABELS[panelContext.page] ?? panelContext.page;
+  const page = reference?.kind === 'briefing' ? 'Briefing' : PAGE_LABELS[panelContext.page] ?? panelContext.page;
   return (
     <aside
       onDragEnter={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
@@ -338,8 +340,8 @@ export function AgentSidePanel({
           </div>
         </div>
       )}
-      {reference && <div className="border-b border-text-muted/15 px-4 py-2">
-        {reference && <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné', briefing: 'Briefing sélectionné' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={onClearReference}>Retirer</button></p>}
+      {reference && reference.kind !== 'briefing' && <div className="border-b border-text-muted/15 px-4 py-2">
+        <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={coach.clearReference}>Retirer</button></p>
       </div>}
       {showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
         <ThreadHistory
@@ -397,7 +399,8 @@ export function AgentSidePanel({
             }}
             className="coach-thread min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6"
           >
-            {!messages.length && (
+            {reference?.kind === 'briefing' && <BriefingDiscussion key={reference.id} id={reference.id} />}
+            {!messages.length && reference?.kind !== 'briefing' && (
               <div className="coach-empty mx-auto mt-10 max-w-sm">
                 {!floating && <AreteMark size={48} />}
                 <h3 className="text-lg font-semibold">On prépare la suite ?</h3>

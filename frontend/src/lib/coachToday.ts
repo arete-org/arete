@@ -3,6 +3,12 @@ import type { PlanDecision } from '@/types';
 
 /** What the athlete asks the coach about: the server reads it by id, the browser sends nothing else. */
 export interface CoachReference { kind: 'proposal' | 'followup' | 'briefing'; id: number }
+const MAX_COACH_REFERENCE_ID = 9_999_999_999; // Matches the server reference parser.
+export function isCoachReference(value: unknown): value is CoachReference {
+  if (!value || typeof value !== 'object') return false;
+  const ref = value as CoachReference;
+  return ['proposal', 'followup', 'briefing'].includes(ref.kind) && Number.isSafeInteger(ref.id) && ref.id > 0 && ref.id <= MAX_COACH_REFERENCE_ID;
+}
 export interface Proposal extends PlanDecision {
   state: 'pending' | 'discussion' | 'applied' | 'dismissed' | 'stale';
   revision: number;

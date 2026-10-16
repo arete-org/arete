@@ -147,6 +147,13 @@ do not add tests that merely repeat an implementation. Live model evaluations in
 - UI text is French. Code, comments and commit messages are English.
 - UI identity follows [design.md](design.md): reuse the shared tokens and components;
   `font-sans` is interface text, `font-display` is brand/headings, and `font-mono` is code.
+- Before changing a coaching UI, read `design.md` and the relevant Figma reference.
+  Reuse `FeedbackRating`, `MessageFeedback`, the shared composer and design tokens;
+  do not introduce standalone emoji vote buttons or a second comment composer.
+  Briefing entry points open a fresh Chiron thread without a model call. Context
+  belongs to the browser thread, survives reloads, and must not leak when switching
+  threads. Preserve drafts, attachments and in-flight work. Verify these boundaries
+  and the mobile/desktop flow in `frontend/browser-tests/briefing.spec.ts`.
 - Workout parsing uses the Lark grammars, not an LLM. A new spoken phrase needs a
   grammar change and an example in `tests/data/dictations.jsonl`.
 - Heart-rate zones come from the athlete's threshold refreshed by Garmin sync.
