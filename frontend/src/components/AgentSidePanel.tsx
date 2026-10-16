@@ -1,3 +1,4 @@
+import { AutomationReview } from './agent/AutomationReview';
 import type { CoachDisplay } from '@/hooks/useCoachDisplay';
 import { CoachDisplayOptions } from './agent/CoachDisplayOptions';
 import { CoachMemory, MemoryReceipt } from './agent/CoachMemory';
@@ -47,6 +48,7 @@ import { CalendarActionCard } from './agent/CalendarActionCard';
 
 const PAGE_LABELS: Record<string, string> = {
   dashboard: 'Tableau de bord',
+  follow_up: 'Suivi',
   planning: 'Planning',
   analytics: 'Analyses',
   log: 'Carnet',
@@ -340,10 +342,10 @@ export function AgentSidePanel({
           </div>
         </div>
       )}
-      {reference && reference.kind !== 'briefing' && <div className="border-b border-text-muted/15 px-4 py-2">
-        <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={coach.clearReference}>Retirer</button></p>
+      {reference && reference.kind !== 'briefing' && (reference.kind !== 'automation_run' || reference.mode === 'discussion') && <div className="border-b border-text-muted/15 px-4 py-2">
+        <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné', automation_run: 'Exécution sélectionnée' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={coach.clearReference}>Retirer</button></p>
       </div>}
-      {showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
+      {!showMemory && !showHistory && reference?.kind === 'automation_run' && reference.mode !== 'discussion' ? <AutomationReview id={reference.id} /> : showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
         <ThreadHistory
           threads={store.threads}
           activeId={active.id}

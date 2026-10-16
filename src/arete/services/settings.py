@@ -68,6 +68,7 @@ NotificationKind = Literal[
     "checkin",
     "evening",
     "eve_reminder",
+    "automation",
 ]
 NOTIFICATION_KINDS: tuple[NotificationKind, ...] = get_args(NotificationKind)
 _CLOCK = r"^([01][0-9]|2[0-3]):[0-5][0-9]$"

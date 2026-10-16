@@ -100,7 +100,11 @@ def build_agent_filesystem(
 
 
 def _assemble(
-    profile_id: str, *, glm_flash: bool = False, calendar_enabled: bool = True
+    profile_id: str,
+    *,
+    glm_flash: bool = False,
+    calendar_enabled: bool = True,
+    checkpointer=None,
 ):
     profile = get_profile(profile_id)
     calendar = None
@@ -117,9 +121,14 @@ def _assemble(
     models = tuple(
         build_chat_model(
             route=replace(route, model=name, fallbacks=()),
+            max_tokens=AGENT_MAX_TOKENS,
+            temperature=AGENT_TEMPERATURE,
+            timeout=AGENT_TIMEOUT_SEC,
             max_retries=(
                 0
-                if len(candidates) > 1 or route.openrouter_policy == "glm_flash"
+                if profile_id == "automation"
+                or len(candidates) > 1
+                or route.openrouter_policy == "glm_flash"
                 else AGENT_MAX_RETRIES
             ),
         )
@@ -147,6 +156,7 @@ def _assemble(
     )
     graph = build_agent(
         profile,
+        checkpointer=checkpointer,
         model=model,
         context_tokens=route.context_tokens,
         output_tokens=AGENT_MAX_TOKENS,
@@ -510,3 +520,105 @@ async def prepare_slack_agent(messages, message, client):
                 "Classement Slack indisponible ; aucune action exécutée. " + str(exc)
             ) from exc
         raise
+
+
+def run_automation(run: dict) -> None:
+    """Bridge dispatcher workers to the event loop; only missions use checkpoints."""
+    from anyio import from_thread
+
+    from_thread.run(_run_automation, run)
+
+
+async def _run_automation(run: dict) -> None:
+    import asyncio
+    import json
+    from time import monotonic
+
+    from anyio import to_thread
+    from langgraph.types import Command
+
+    from arete.agent.runtime.checkpoints import AutomationSaver
+    from arete.agent.runtime.execution import invoke_agent, run_config
+    from arete.services import automation_execution as execution
+    from arete.services.automation_schedule import MAX_ACTIVE_SECONDS, SEGMENT_SECONDS
+
+    started = monotonic()
+    identifier = run["id"]
+    context = AgentContext(profile="automation", thread_id=identifier)
+    context.tool_slots = asyncio.Semaphore(1)
+    context.deadline = started + min(
+        SEGMENT_SECONDS, MAX_ACTIVE_SECONDS - run["active_seconds"]
+    )
+    result, interrupts, error = None, [], None
+    try:
+        # Persist only the non-secret route identity; credentials and clients
+        # are resolved at composition and never serialized in graph state.
+        from arete.dataio.db import db_connection
+        from arete.services.automations import OWNER
+
+        glm = get_feature_flags().glm_flash and glm_flash_available()
+        route = resolve_route(glm_flash=glm)
+        policy = json.dumps(
+            {"model": route.model, "policy": route.openrouter_policy}, sort_keys=True
+        )
+        if run["model_policy"] and run["model_policy"] != policy:
+            raise RuntimeError("La configuration du modèle a changé ; reprise annulée.")
+        with db_connection() as con:
+            con.execute(
+                f"UPDATE app.automation_runs SET model_policy=? WHERE {OWNER} AND id=?",
+                [policy, identifier],
+            )
+        graph = _assemble("automation", glm_flash=glm, checkpointer=AutomationSaver())
+        cfg = run_config(context=context, graph=graph)
+        snapshot = await graph.aget_state(cfg)
+        state: Any
+        if snapshot.values:
+            decisions = await to_thread.run_sync(execution.decisions, identifier)
+            pending_ids = {
+                item.id for task in snapshot.tasks for item in task.interrupts
+            }
+            answers = {
+                key: value for key, value in decisions.items() if key in pending_ids
+            }
+            if not answers:
+                raise RuntimeError("Aucune décision nouvelle pour cette reprise")
+            state = Command(resume=answers)
+        else:
+            state = {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Mission planifiée à exécuter maintenant :\n"
+                        + run["definition_json"]
+                        + "\nSéance concernée : "
+                        + str(run["session_key"] or "aucune"),
+                    }
+                ]
+            }
+        output = await invoke_agent(graph, state, context=context)
+        snapshot = await graph.aget_state(cfg)
+        interrupts = [
+            {"id": item.id, "value": item.value, "schema": item.response_schema}
+            for task in snapshot.tasks
+            for item in task.interrupts
+        ]
+        if not interrupts:
+            messages = output.get("messages", [])
+            result = messages[-1].text if messages else None
+            if not result:
+                raise RuntimeError("La mission n’a produit aucun résultat")
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+    finally:
+        from functools import partial
+
+        await to_thread.run_sync(
+            partial(
+                execution.finish,
+                identifier,
+                seconds=monotonic() - started,
+                result=result,
+                interrupts=interrupts,
+                error=error,
+            )
+        )

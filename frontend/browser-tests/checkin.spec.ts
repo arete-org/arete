@@ -16,6 +16,7 @@ async function morning(page: Page, theme = 'dark', replanned = false) {
   await page.route('**/api/**', (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     requests.push(`${request.method()} ${path}`);
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER', theme } });

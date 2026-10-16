@@ -7,6 +7,7 @@ test('connect Garmin with MFA, sync and disconnect from Connections', async ({ p
   const loginBodies: unknown[] = [];
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/garmin/sync/ensure')) return route.fulfill({ json: { state: 'complete', complete: true } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { available: false, opted_in: false } });
@@ -58,6 +59,7 @@ test('connect Garmin with MFA, sync and disconnect from Connections', async ({ p
 test('one live progress bar follows Garmin work in System, including partial failures', async ({ page }) => {
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/garmin/sync/ensure')) return route.fulfill({ json: { state: 'complete', complete: true } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { available: false, opted_in: false } });
@@ -123,6 +125,7 @@ test('complete history runs multiple batches from one click with mobile progress
   const gate = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/garmin/sync/ensure')) return route.fulfill({ json: { state: 'complete', complete: true } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { available: false, opted_in: false } });
@@ -196,6 +199,7 @@ test('opening the app refreshes Garmin once and reports a partial result', async
   const completed = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { available: false, opted_in: false } });
     if (path.endsWith('/garmin/sync/ensure')) {

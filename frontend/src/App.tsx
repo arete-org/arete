@@ -22,6 +22,8 @@ import { DashboardPage, SettingsPage } from '@/pages';
 import { loadLogPage, loadPlanningPage } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
 
+const FollowUpPage = lazy(importChunk(() => import('@/pages/FollowUp').then(m => ({ default: m.FollowUpPage }))));
+
 const PlanningPage = lazy(importChunk(loadPlanningPage));
 const LogPage = lazy(importChunk(loadLogPage));
 // recharts is most of the bundle and only the Analytics page draws charts.
@@ -136,6 +138,7 @@ function App() {
                   <ErrorBoundary>
                     <Routes>
                       <Route path="/" element={<DashboardPage />} />
+                      <Route path="/follow-up" element={<FollowUpPage />} />
                       <Route path="/planning" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><PlanningPage /></Suspense>} />
                       <Route
                         path="/analytics"

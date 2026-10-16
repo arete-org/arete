@@ -80,6 +80,10 @@ def reference(raw: str) -> dict[str, Any]:
     """Only identifiers cross the browser boundary; scope is checked by services."""
     import re
 
+    if re.fullmatch(r"automation_run:[0-9a-f-]{36}", raw):
+        from arete.services.automations import run_detail
+
+        return {"kind": "automation_run", "record": run_detail(raw.split(":", 1)[1])}
     match = re.fullmatch(r"(proposal|followup|briefing):([1-9][0-9]{0,9})", raw)
     if not match:
         raise ValueError("Référence de suivi invalide")

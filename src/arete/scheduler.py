@@ -640,38 +640,41 @@ def run_checkin_prompts() -> dict:
     return {"athletes": outcomes, "deferred": deferred}
 
 
-async def run_forever(hour: int, tick_seconds: int = TICK_SECONDS) -> None:
+async def run_forever(hour: int | None, tick_seconds: int = TICK_SECONDS) -> None:
     from anyio import to_thread
 
-    logger.info(
-        "Automatic sync armed for %02d:00 athlete time, dispatch every %ds",
-        hour,
-        tick_seconds,
-    )
+    logger.info("Background dispatch every %ds; daily sync hour=%s", tick_seconds, hour)
     # This task intentionally lives as long as the server; each dispatch is bounded.
     while True:
         # ARETE_AUTO_SYNC_HOUR is read on each athlete's clock, not the host's:
         # every tick dispatches, and the batch decides who is owed.
+        if hour is not None:
+            try:
+                # Before the batch, in the same tick when both are due: an answer
+                # given while the run goes on is read once it is stamped
+                # (``settle_checkin``), one given after replans on its own.
+                await to_thread.run_sync(run_checkin_prompts)
+            except Exception:
+                logger.exception("Check-in dispatch failed; next tick will retry")
+            try:
+                await to_thread.run_sync(run_scheduled_batch)
+            except Exception:
+                logger.exception(
+                    "Scheduled dispatch failed; next tick will check unclaimed work"
+                )
         try:
-            # Before the batch, in the same tick when both are due: an answer
-            # given while the run goes on is read once it is stamped
-            # (``settle_checkin``), one given after replans on its own.
-            await to_thread.run_sync(run_checkin_prompts)
-        except Exception:
-            logger.exception("Check-in dispatch failed; next tick will retry")
-        try:
-            await to_thread.run_sync(run_scheduled_batch)
+            await to_thread.run_sync(run_automations)
         except Exception:
             logger.exception(
-                "Scheduled dispatch failed; next tick will check unclaimed work"
+                "Automation dispatch failed; claimed work is never replayed"
             )
         await asyncio.sleep(tick_seconds)
 
 
 def start() -> asyncio.Task[None] | None:
-    """Start the loop if ARETE_AUTO_SYNC_HOUR is set; returns the task."""
+    """Start explicitly configured daily sync or the standalone Docker worker."""
     hour = config.auto_sync_hour
-    if hour is None:
+    if hour is None and not config.automation_worker:
         logger.info("Automatic sync disabled (ARETE_AUTO_SYNC_HOUR unset)")
         return None
     return asyncio.create_task(run_forever(hour), name="arete-daily-sync")
@@ -692,3 +695,15 @@ def release_sync_lease(athlete_id: int) -> bool:
             [athlete_id],
         ).fetchone()
     return row is not None
+
+
+def run_automations() -> dict:
+    from arete.services.automation_dispatch import dispatch
+
+    def execute(run):
+        # No agent stack is imported when the queue is empty.
+        from arete.coaching import run_automation
+
+        run_automation(run)
+
+    return dispatch(execute)

@@ -11,6 +11,7 @@ for (const width of [390, 430, 768, 1440]) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.route('**/api/**', route => {
       const path = new URL(route.request().url()).pathname;
+      if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
       if (path === '/api/garmin/sync/ensure') {
         refreshes++;
         return route.fulfill({ json: { state: 'disconnected' } });

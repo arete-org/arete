@@ -280,6 +280,21 @@ sends the morning check-in push (at most one per athlete and day, none once
 answered, none in quiet hours, which hold it for the next window) and never
 starts the daily sync, so the sync's windows behave as before.
 
+## Scheduled follow-ups
+
+`/api/cron/automations` uses the same `CRON_SECRET` bearer protection and shared
+dispatcher on Vercel and Docker. `vercel.json` adds one daily window in each of the
+24 UTC hours. A deadline means the next dispatcher passage after that time, not
+exact-time execution; the interface explains that an hourly window may make a
+run nearly two hours late ([Vercel cron limits](https://vercel.com/docs/cron-jobs/usage-and-pricing)). Preview deployments do not receive automatic cron runs.
+
+Docker enables `ARETE_AUTOMATION_WORKER=true` in Compose and checks every five
+minutes, independently of `ARETE_AUTO_SYNC_HOUR`. Outside Compose it is opt-in; leave
+it unset for an API-only process. Both workers must use the same database for
+their durable occurrence claims and global two-slot limit to coordinate.
+Migration 50 is additive. Preserve the database on rollback: an ambiguous or
+abandoned run is never replayed automatically, and human decisions remain durable.
+
 ## Local stack
 
 `make dev` runs the API and Vite on a local DuckDB file. `make docker` builds

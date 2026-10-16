@@ -27,6 +27,7 @@ export async function coachStream(page: Page, enabled = true, initialDisplay: 's
   }, `http://127.0.0.1:${address.port}/stream`);
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { enabled, opted_in: enabled, available: true, version: 1 } });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'pierre' } });

@@ -17,6 +17,8 @@ export function pageFromPath(pathname: string): string {
   switch (first) {
     case '':
       return 'dashboard';
+    case 'follow-up':
+      return 'follow_up';
     case 'planning':
       return 'planning';
     case 'analytics':

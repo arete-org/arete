@@ -2,11 +2,12 @@ import { fetchAPI } from './api';
 import type { PlanDecision } from '@/types';
 
 /** What the athlete asks the coach about: the server reads it by id, the browser sends nothing else. */
-export interface CoachReference { kind: 'proposal' | 'followup' | 'briefing'; id: number }
+export type CoachReference = { kind: 'proposal' | 'followup' | 'briefing'; id: number } | { kind: 'automation_run'; id: string; mode?: 'review' | 'discussion' };
 const MAX_COACH_REFERENCE_ID = 9_999_999_999; // Matches the server reference parser.
 export function isCoachReference(value: unknown): value is CoachReference {
   if (!value || typeof value !== 'object') return false;
   const ref = value as CoachReference;
+  if (ref.kind === 'automation_run') return typeof ref.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(ref.id) && (ref.mode === undefined || ref.mode === 'review' || ref.mode === 'discussion');
   return ['proposal', 'followup', 'briefing'].includes(ref.kind) && Number.isSafeInteger(ref.id) && ref.id > 0 && ref.id <= MAX_COACH_REFERENCE_ID;
 }
 export interface Proposal extends PlanDecision {

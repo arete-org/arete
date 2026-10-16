@@ -34,6 +34,7 @@ async function fixture(page: Page, withGoal: boolean, requests: string[]) {
   });
   await page.route('**/api/**', (route: Route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     requests.push(path);
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' } });

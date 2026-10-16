@@ -34,7 +34,7 @@ MAX_PANEL_CONTEXT_CHARS = 64_000
 #: Route names the frontend can send. Anything else is rejected at the API
 #: boundary before any server-side page read.
 PANEL_PAGES = frozenset(
-    {"dashboard", "planning", "analytics", "log", "settings", "profile"}
+    {"dashboard", "follow_up", "planning", "analytics", "log", "settings", "profile"}
 )
 
 
@@ -75,7 +75,9 @@ class AgentContext:
 
     source: dict[str, Any] = field(default_factory=dict)
     # Selected by the server entrypoint, never from panel_context or messages.
-    profile: Literal["chat", "briefing", "feedback", "review", "slack"] = "chat"
+    profile: Literal[
+        "chat", "briefing", "feedback", "review", "slack", "automation"
+    ] = "chat"
     resolved_profile: AgentProfile | None = field(default=None, init=False, repr=False)
     calendar: CalendarService | None = field(default=None, init=False, repr=False)
     thread_id: str | None = None

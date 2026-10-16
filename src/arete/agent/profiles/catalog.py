@@ -13,7 +13,7 @@ CHAT_PROFILE = AgentProfile(
     "chat",
     "arete_coach",
     CHAT_INSTRUCTIONS,
-    ("analytics", "planning", "strength", "garmin"),
+    ("analytics", "planning", "strength", "garmin", "automations"),
     # Native binding avoids discovery round trips. Permissions are still
     # checked independently at execution, including cached graphs.
     training_writes=True,
@@ -25,6 +25,21 @@ CHAT_PROFILE = AgentProfile(
 
 PROFILES: dict[ProfileId, AgentProfile] = {
     "chat": CHAT_PROFILE,
+    "automation": replace(
+        CHAT_PROFILE,
+        id="automation",
+        name="arete_automation",
+        capabilities=("analytics", "planning", "strength", "garmin"),
+        fact_memory_tools=False,
+        page_context=False,
+        instructions="""Exécute uniquement la mission planifiée avec les données actuelles.
+Toute écriture attend une validation humaine. Ne contourne jamais une validation refusée.
+Une réponse à ask_athlete fournit une information, jamais une permission implicite d'écrire.
+Pose seulement les questions indispensables. Réutilise un suivi de ressenti existant :
+si une question sur la même séance est déjà en attente, indique son lien sans la répéter.
+Après 7 tours, conclus les résultats réellement obtenus, sans nouveaux outils.
+Signale les données absentes, erreurs et actions non effectuées.""",
+    ),
     "slack": replace(
         CHAT_PROFILE,
         id="slack",

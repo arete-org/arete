@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS: LocalSettings = {
       checkin: true,
       evening: true,
       eve_reminder: true,
+      automation: true,
     },
     quiet_hours: { start: '21:30', end: '07:00' },
   },

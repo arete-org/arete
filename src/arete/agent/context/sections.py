@@ -26,6 +26,7 @@ class ContextSection:
 
 _PAGE_LABELS = {
     "dashboard": "Tableau de bord",
+    "follow_up": "Suivi",
     "planning": "Planning",
     "analytics": "Analytics",
     "log": "Journal d'entraînement",

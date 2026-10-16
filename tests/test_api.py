@@ -77,14 +77,15 @@ class TestCronDailySync:
             "crons"
         ]
         schedules = [cron["schedule"] for cron in crons]
-        paths = {"/api/cron/daily-sync", "/api/cron/checkin"}
+        paths = {"/api/cron/daily-sync", "/api/cron/checkin", "/api/cron/automations"}
         assert {cron["path"] for cron in crons} == paths
-        assert len(set(schedules)) == len(schedules) > 1
+        assert len({(c["path"], c["schedule"]) for c in crons}) == len(crons) > 1
         assert all(re.fullmatch(r"0 \d{1,2} \* \* \*", s) for s in schedules)
         hours = {
             path: [int(c["schedule"].split()[1]) for c in crons if c["path"] == path]
             for path in paths
         }
+        assert sorted(hours["/api/cron/automations"]) == list(range(24))
         assert max(hours["/api/cron/checkin"]) < min(hours["/api/cron/daily-sync"])
 
 

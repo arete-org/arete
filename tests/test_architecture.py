@@ -70,7 +70,9 @@ def test_profile_capabilities_are_registered_and_preloads_authorized():
     validate_registry()
     for profile in PROFILES.values():
         assert set(profile.capabilities) <= CAPABILITIES.keys()
-        assert profile.id in {"chat", "slack"} or not profile.training_writes
+        assert (
+            profile.id in {"chat", "slack", "automation"} or not profile.training_writes
+        )
 
 
 def test_memory_and_journal_have_independent_tool_owners_and_policy():

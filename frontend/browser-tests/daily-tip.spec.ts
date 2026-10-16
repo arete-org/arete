@@ -16,6 +16,7 @@ test('a pending briefing is written in its own request and shown by the next pol
   await page.route('**/api/**', (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (request.method() === 'POST') {
       posts.push(path);
       if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'disconnected' } });

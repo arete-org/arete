@@ -1,3 +1,4 @@
+import { InboxPriority } from '@/components/AutomationInbox';
 import { CoachTodayPanel } from '@/components/agent/CoachToday';
 import { BriefingCard } from '@/components/BriefingCard';
 import { PlayerSummary } from '@/components/PlayerSummary';
@@ -394,6 +395,7 @@ export function DashboardPage() {
             </Panel>
 
             <CoachTodayPanel enabled={boardSettled} refetchOnFocus={false} />
+            <InboxPriority />
 
           </div>
           <div className="dashboard-secondary">
