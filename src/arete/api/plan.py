@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from datetime import date as date_type
 from typing import Any, Literal
 
@@ -56,6 +56,13 @@ class ReviewApply(BaseModel):
     indices: list[int]
 
 
+class ReviewAccept(ReviewApply):
+    created_at: datetime | None = Field(
+        default=None,
+        description="The review's created_at as the page read it: a rewrite since answers 409",
+    )
+
+
 @router.get("/review")
 def get_review() -> dict[str, Any] | None:
     """The current review, if it was written (on Sunday, the week ending)."""
@@ -84,7 +91,7 @@ def write_review(refresh: bool = False, review_id: int | None = None) -> dict[st
     """Write the week on screen's review (once; ``refresh`` writes again the
     review the screen shows, ``review_id``)."""
     from arete import coaching
-    from arete.services.weekly_review import ReviewInProgress
+    from arete.services.weekly_review import ReviewChanged, ReviewInProgress
 
     try:
         return coaching.generate_weekly_review(
@@ -92,6 +99,11 @@ def write_review(refresh: bool = False, review_id: int | None = None) -> dict[st
         ).to_dict()
     except LookupError:
         raise HTTPException(status_code=404, detail="Bilan introuvable") from None
+    except ReviewChanged:
+        raise HTTPException(
+            status_code=409,
+            detail="Un autre bilan vient d’être écrit : recharge la page.",
+        ) from None
     except ReviewInProgress:
         raise HTTPException(
             status_code=409,
@@ -136,20 +148,26 @@ class ReviewAccepted(BaseModel):
 
 
 @router.post("/review/{review_id}/accept", response_model=ReviewAccepted)
-def accept_review(review_id: int, body: ReviewApply) -> dict[str, Any]:
+def accept_review(review_id: int, body: ReviewAccept) -> dict[str, Any]:
     """« Accepter »: the chosen proposals, then the week's key sessions on
     Garmin and the plan's calendar, each outcome reported. The plan stays
     written whatever the watch or the calendar answer."""
     from arete.calendar import sync_training_plan
     from arete.services.calendar_plan import AFTER_PLAN_WRITE
-    from arete.services.weekly_review import AcceptInProgress, accept
+    from arete.services.weekly_review import AcceptInProgress, ReviewChanged, accept
 
     try:
         return accept(
             review_id,
             body.indices,
             follow_calendar=lambda: sync_training_plan(AFTER_PLAN_WRITE),
+            seen=body.created_at,
         )
+    except ReviewChanged:
+        raise HTTPException(
+            status_code=409,
+            detail="Le bilan a été refait depuis : recharge la page.",
+        ) from None
     except LookupError:
         raise HTTPException(status_code=404, detail="Bilan introuvable") from None
     except ValueError as exc:

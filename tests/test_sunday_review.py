@@ -659,12 +659,23 @@ def test_a_later_accept_of_the_rest_still_applies_it(clock, coach):
     assert push.call_count == 2
 
 
-def test_a_review_rewritten_before_accept_is_not_found(clock, coach):
+def test_a_rewrite_keeps_the_id_and_starts_unanswered(clock, coach, client):
     run, _refresh, _push = coach
     review, _ids = _accepted_week(run)
-    wr.generate_review(run, refresh=True)
-    with pytest.raises(LookupError):
+    with patch("arete.services.plan_adaptation.push_week", return_value={}):
         wr.accept(review.id, [0])
+    with patch.object(wr, "week_facts", return_value=_facts()):
+        redone = wr.generate_review(run, refresh=True, review_id=review.id)
+    assert redone.id == review.id and redone.created_at != review.created_at
+    assert (redone.applied, redone.applied_at) == ([], None)  # new proposals
+    # A page that read the review before its rewrite cannot answer it.
+    with pytest.raises(wr.ReviewChanged):
+        wr.accept(review.id, [1], seen=review.created_at)
+    response = client.post(
+        f"/plan/review/{review.id}/accept",
+        json={"indices": [1], "created_at": review.created_at.isoformat()},
+    )
+    assert response.status_code == 409
 
 
 def test_a_rewrite_during_accept_still_reports_the_written_plan(clock, coach):
@@ -731,41 +742,77 @@ def test_the_rewrite_endpoint_rewrites_the_review_it_names(clock, coach, client)
     assert client.post("/plan/review?refresh=true&review_id=999999").status_code == 404
 
 
-def test_a_second_rewrite_is_refused_before_paying_the_model(clock, coach):
+def test_of_two_concurrent_rewrites_the_second_is_refused(clock, coach, client):
     run, _refresh, _push = coach
     review = wr.write_review(run)
     assert review is not None
-    refused: list[Exception] = []
 
-    def second_tab(_facts):
-        try:
-            wr.generate_review(run, refresh=True, review_id=review.id)
-        except wr.ReviewInProgress as exc:
-            refused.append(exc)
-        # The evening pass, meanwhile, finds the week held.
-        assert _sunday_pass() == {"1": "in progress"}
+    def another_tab_first(_facts):
+        # The other tab's rewrite lands while this one waits for the coach.
+        wr.generate_review(
+            Mock(return_value="Autre bilan."), refresh=True, review_id=review.id
+        )
+        # The review stays visible throughout: the evening pass finds it written.
+        assert _sunday_pass() == {"1": "already written"}
         return "Semaine refaite."
 
     run.reset_mock()
-    run.side_effect = second_tab
-    redone = wr.generate_review(run, refresh=True, review_id=review.id)
-    assert redone.text == "Semaine refaite." and redone.id != review.id
-    assert len(refused) == 1 and run.call_count == 1
+    run.side_effect = another_tab_first
+    with pytest.raises(wr.ReviewChanged):
+        wr.generate_review(run, refresh=True, review_id=review.id)
+    kept = wr.current_review()
+    assert kept is not None and kept.id == review.id and kept.text == "Autre bilan."
+    assert run.call_count == 1  # each tab paid its own request (explicit action)
 
 
-def test_a_failed_rewrite_puts_the_review_back(clock, coach):
-    run, _refresh, _push = coach
-    review, _ids = _accepted_week(run)
+def test_a_killed_rewrite_leaves_the_review_visible_and_announced_once(clock, coach):
+    """A « Refaire » stopped mid-request (Vercel's 300 s, a redeploy) on Monday."""
+    from arete import scheduler
+
+    run, _refresh, push = coach
+    review, _ids = _accepted_week(run)  # Sunday's, announced? not here: no push
     with patch("arete.services.plan_adaptation.push_week", return_value={}):
         wr.accept(review.id, [0])
+    clock[0] = MONDAY
     with (
-        patch.object(wr, "propose", side_effect=RuntimeError("db down")),
-        pytest.raises(RuntimeError),
+        patch.object(wr, "propose", side_effect=SystemExit("killed")),
+        pytest.raises(SystemExit),
     ):
         wr.generate_review(run, refresh=True, review_id=review.id)
     kept = wr.current_review()
-    assert kept is not None and kept.id == review.id and kept.applied == [0]
-    assert kept.text == review.text
+    assert kept is not None and kept.id == review.id
+    assert kept.text == review.text and kept.applied == [0]
+    # The next days' runs find it written: no model request, no second push.
+    run.reset_mock()
+    clock[0] = MONDAY + timedelta(days=1)
+    assert scheduler.write_weekly_review() == "already written"
+    assert run.call_count == 0 and push.call_count == 0
+
+
+def test_a_stopped_claim_holding_a_review_is_shown_again_not_rewritten(clock, coach):
+    """An older in-place claim stopped mid-way: the review it hid comes back."""
+    from arete import scheduler
+
+    run, refresh, push = coach
+    week = wr.review_week(athlete_today())
+    con = connect()
+    con.execute(
+        "INSERT INTO app.weekly_reviews (week_start, text, source, proposals_json, "
+        "applied_json, applied_at, created_at) VALUES (?, 'Semaine tenue.', 'pending', "
+        "'[]', '[]', ?, ?)",
+        [
+            week,
+            (SUNDAY - timedelta(hours=1)).replace(tzinfo=None),
+            (SUNDAY - timedelta(hours=1)).replace(tzinfo=None),
+        ],
+    )
+    con.close()
+    clock[0] = MONDAY + timedelta(days=1)  # the next daily run
+    assert scheduler.write_weekly_review() == "already written"
+    kept = wr.get_review(week)
+    assert kept is not None and (kept.source, kept.text) == ("agent", "Semaine tenue.")
+    assert kept.applied_at is not None  # answered, as it was
+    assert run.call_count == 0 and push.call_count == 0
 
 
 def test_a_new_athlete_s_empty_week_is_neither_written_nor_announced(clock, coach):
@@ -791,18 +838,23 @@ def test_a_new_athlete_s_empty_week_is_neither_written_nor_announced(clock, coac
     assert run.call_count == 0 and push.call_count == 0
 
 
-def test_accept_takes_only_open_proposals(clock, coach, client):
+def test_accept_refuses_unknown_indices_and_reports_past_ones_stale(
+    clock, coach, client
+):
     run, _refresh, _push = coach
-    review, _ids = _accepted_week(run)
+    review, (intervals, long_run) = _accepted_week(run)
     with pytest.raises(ValueError):
         wr.accept(review.id, [99])
-    # A day gone by: its proposal is no longer offered.
-    clock[0] = SUNDAY + timedelta(days=3)
-    with pytest.raises(ValueError):
-        wr.accept(review.id, [0])
     response = client.post(f"/plan/review/{review.id}/accept", json={"indices": [99]})
     assert response.status_code == 422
     assert _stored(review.id) == (None, None)  # nothing reserved, not answered
+    # Tuesday's proposal went by since the page was read: stale, the rest applied.
+    clock[0] = SUNDAY + timedelta(days=3)
+    with patch("arete.services.plan_adaptation.push_week", return_value={}):
+        result = wr.accept(review.id, [0, 1])
+    assert (result["applied"], result["stale"]) == ([1], [0])
+    untouched = GarminRepository().get_planned_session(intervals)
+    assert untouched is not None and untouched.session_type == SessionType.INTERVALS
 
 
 def test_giving_back_a_stale_proposal_keeps_a_concurrent_answer(clock, coach):
@@ -840,3 +892,27 @@ def test_a_failed_apply_claims_nothing_it_did_not_write(clock, coach):
         wr.accept(review.id, [0, 1])
     push.assert_not_called()
     assert _stored(review.id) == ("[]", None)  # not applied, not answered
+
+
+def test_a_give_back_that_loses_a_conflict_is_retried_once(clock, coach):
+    import duckdb
+
+    run, _refresh, _push = coach
+    review, (_intervals, long_run) = _accepted_week(run)
+    GarminRepository().update_planned_session_fields(long_run, target_duration_min=100)
+    real = wr.transaction
+    calls: list[int] = []
+
+    def conflicted_once():
+        calls.append(1)
+        if len(calls) == 1:
+            raise duckdb.TransactionException("Conflict on update")
+        return real()
+
+    with (
+        patch("arete.services.plan_adaptation.push_week", return_value={}),
+        patch.object(wr, "transaction", side_effect=conflicted_once),
+    ):
+        result = wr.accept(review.id, [0, 1])
+    assert result["stale"] == [1] and len(calls) == 2
+    assert json.loads(_stored(review.id)[0]) == [0]
