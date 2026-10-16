@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { settingsApi, type DailyTip } from '@/lib/api';
+import { planApi, settingsApi, type DailyTip } from '@/lib/api';
 import { coachApi } from '@/lib/coachToday';
 import type { DashboardData } from '@/lib/dashboard';
 import { formCurveApi } from '@/lib/formCurve';
@@ -280,4 +280,51 @@ it('leads to « Ma semaine » while the week waits for an answer, from the same 
 it('shows no week entry once answered', async () => {
   await mount(false);
   expect(screen.queryByRole('link', { name: /Ta semaine est prête/ })).toBeNull();
+});
+
+const tempo = {
+  id: 12, date: '2026-10-14', sport: 'running', session_type: 'tempo', target_duration_min: 50,
+  target_distance_km: null, target_hr_zone: 'Z4', target_intensity: 'hard', description: null,
+  source: 'manual', status: 'pending', garmin_workout_id: null, garmin_pushed_at: null, revision: 1,
+} satisfies DashboardData['planned'][number];
+const decision = {
+  id: 5, date: '2026-10-14', planned_session_id: 12, decision: 'move', reason: 'Pas le temps : la séance tempo 50 min Z4 passe à jeudi 15 octobre.',
+  readiness_score: null, readiness_source: 'model', acwr: null, original: { session_type: 'tempo' }, adapted: { date: '2026-10-15' },
+  applied_at: '2026-10-14T17:00:00', reverted_at: null, created_at: null,
+} satisfies DashboardData['plan_today']['decisions'][number];
+
+it('offers « Modifier » on today’s session and reads its options only once opened', async () => {
+  board.planned = [tempo];
+  const read = vi.spyOn(planApi, 'renegotiationOptions').mockResolvedValue({
+    session_id: 12, date: '2026-10-14', version: '0123456789abcdef', blocked: null, reasons: [],
+  });
+  try {
+    await mount(false);
+    expect(read).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }));
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  } finally {
+    board.planned = [];
+  }
+});
+
+it('keeps a session moved away today on the card, with « Rétablir », and no « Modifier » once adjusted', async () => {
+  board.plan_today = { date: '2026-10-14', decisions: [decision] };
+  try {
+    await mount(false);
+    expect(screen.getByText(decision.reason)).toBeTruthy();
+    expect(screen.getByText('→ jeudi 15 octobre')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Rétablir la séance prévue' })).toBeTruthy();
+    cleanup();
+    client.clear();
+    // Eased today and still on it: « Rétablir » first, no second renegotiation.
+    board.planned = [{ ...tempo, session_type: 'endurance', status: 'modified' }];
+    board.plan_today = { date: '2026-10-14', decisions: [{ ...decision, decision: 'ease', reason: 'Je suis cuit : allégée.' }] };
+    await mount(false);
+    expect(screen.getByText('Je suis cuit : allégée.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Modifier' })).toBeNull();
+  } finally {
+    board.planned = [];
+    board.plan_today = { date: '2026-10-14', decisions: [] };
+  }
 });

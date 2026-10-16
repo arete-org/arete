@@ -723,6 +723,17 @@ export const planApi = {
       method: "POST",
     }),
 
+  /** « Modifier »: the rules' options for today's session, read when the menu opens. */
+  renegotiationOptions: (sessionId: number, signal?: AbortSignal) =>
+    fetchAPI<import("@/types").RenegotiationMenu>(`/plan/today/sessions/${sessionId}/options`, { signal }),
+
+  /** One option; `version` is the menu's as read: a change since answers 409 and writes nothing. */
+  renegotiate: (sessionId: number, choice: { reason: string; option: string; version: string }) =>
+    fetchAPI<import("@/types").Renegotiated>(`/plan/today/sessions/${sessionId}/renegotiate`, {
+      method: "POST",
+      body: JSON.stringify(choice),
+    }),
+
   /** Last week's review, or null when it was not written yet. */
   getReview: async () =>
     recordOrNull<import("@/types").WeeklyReview>(await fetchAPI<unknown>("/plan/review")),

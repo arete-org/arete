@@ -5,11 +5,13 @@ import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, Dumbbell, TrendingUp, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { CheckinCard } from '@/components/dashboard/CheckinCard';
+import { MovedSession, RenegotiationOutcome } from '@/components/dashboard/RenegotiationOutcome';
+import { RenegotiateMenu, type Renegotiation } from '@/components/dashboard/RenegotiateMenu';
 import { WeekReviewEntry } from '@/components/dashboard/WeekReviewEntry';
 import { Panel, Skeleton } from '@/components/ui';
 import { planApi, settingsApi } from '@/lib/api';
@@ -155,10 +157,14 @@ function TodaySession({
   row,
   decision,
   view,
+  onRenegotiated,
+  onReverted,
 }: {
   row: DayLink['planned'][number];
   decision: PlanDecision | null;
   view: WorkoutView | undefined;
+  onRenegotiated: (done: Renegotiation) => void;
+  onReverted: () => void;
 }) {
   const queryClient = useQueryClient();
   const { session, realised, state } = row;
@@ -173,7 +179,10 @@ function TodaySession({
   const revert = useMutation({
     mutationFn: (decisionId: number) => planApi.revert(decisionId),
     // The reverted session is no longer the copy sent: forget the local answer.
-    onSuccess: () => push.reset(),
+    onSuccess: () => {
+      push.reset();
+      onReverted();
+    },
     // 409 means it was already reverted elsewhere: a refetch shows it.
     onSettled: () => invalidateAfterSession(queryClient),
   });
@@ -200,6 +209,10 @@ function TodaySession({
     >
       {/* Cardio only: strength rows carry negative ids and their own RPE. */}
       {realised && realised.id > 0 && realised.rpe == null && <RpePicker sessionId={realised.id} className="mt-2" />}
+      {/* Still to do and not already adjusted today (« Rétablir » first): the athlete renegotiates it. */}
+      {!realised && state === 'pending' && session.session_type !== 'race' && !(decision && !decision.reverted_at && decision.decision !== 'keep') && (
+        <RenegotiateMenu session={session} onDone={onRenegotiated} />
+      )}
     </SessionCard>
   );
 }
@@ -251,6 +264,18 @@ export function DashboardPage() {
   const { data: planToday } = useDashboard((d) => d.plan_today);
   const decisionFor = (sessionId: number) =>
     planToday?.decisions.find((d) => d.planned_session_id === sessionId && d.applied_at) ?? null;
+  // A session moved away today leaves its decision here, with its « Rétablir ».
+  const moved = (planToday?.decisions ?? []).filter(
+    (d) =>
+      d.decision === 'move' &&
+      d.applied_at &&
+      !d.reverted_at &&
+      !todayLink.planned.some((row) => row.session.id === d.planned_session_id),
+  );
+  // The last « Modifier » answer, shown above the day's sessions until dismissed.
+  const [renegotiated, setRenegotiated] = useState<Renegotiation | null>(null);
+  // A moved session's row leaves on « Rétablir »: the focus stays in the day's list.
+  const dayList = useRef<HTMLDivElement>(null);
 
 
   const {
@@ -366,14 +391,29 @@ export function DashboardPage() {
                 <Skeleton label="Chargement de la séance du jour" />
               ) : boardFailed ? (
                 <Unavailable what="Séance du jour" retry={() => void retryBoard()} />
-              ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 ? (
-                <div className="space-y-2">
+              ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 || moved.length > 0 ? (
+                <div ref={dayList} tabIndex={-1} className="space-y-2 focus:outline-none">
+                  {renegotiated && (
+                    <RenegotiationOutcome done={renegotiated} onDismiss={() => setRenegotiated(null)} />
+                  )}
                   {todayLink.planned.map((row) => (
                     <TodaySession
                       key={row.session.id}
                       row={row}
                       decision={decisionFor(row.session.id)}
                       view={viewFor(row.session.id)}
+                      onRenegotiated={setRenegotiated}
+                      onReverted={() => setRenegotiated(null)}
+                    />
+                  ))}
+                  {moved.map((decision) => (
+                    <MovedSession
+                      key={decision.id}
+                      decision={decision}
+                      onReverted={() => {
+                        setRenegotiated(null);
+                        dayList.current?.focus();
+                      }}
                     />
                   ))}
                   {todayLink.offPlan.map((a) => (
