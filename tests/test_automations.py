@@ -150,6 +150,14 @@ def test_linked_strength_import_is_one_occurrence_without_rpg(
         if runs:
             due = datetime.fromisoformat(runs[0]["due_at"])
             assert now + timedelta(minutes=29) < due < now + timedelta(minutes=31)
+            if runs[0]["session_key"] == f"strength:{strength_id}":
+                strength.delete_session(strength_id)
+            else:
+                garmin.delete_actual_session(actual_id)
+            assert service.claim(runs[0]["id"], due + timedelta(seconds=1)) is None
+            deleted = service.run_detail(runs[0]["id"])
+            assert deleted["state"] == "failed"
+            assert "séance" in deleted["error"]
     finally:
         with db_connection() as con:
             con.execute("DELETE FROM app.strength_sessions WHERE id=?", [strength_id])

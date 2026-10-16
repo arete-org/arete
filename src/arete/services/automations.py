@@ -89,7 +89,11 @@ def _validate_session(con, spec: AutomationInput) -> None:
     trigger = spec.trigger
     if not isinstance(trigger, AfterSession) or not trigger.session_key:
         return
-    kind, identifier = trigger.session_key.split(":")
+    _require_session(con, trigger.session_key)
+
+
+def _require_session(con, session_key: str) -> None:
+    kind, identifier = session_key.split(":")
     table = {
         "actual": "actual_sessions",
         "strength": "strength_sessions",
@@ -439,6 +443,15 @@ def claim(identifier: str, now: datetime | None = None) -> dict | None:
                 or owner["revision"] != json.loads(run["definition_json"])["revision"]
             ):
                 return None
+            if run["session_key"] is not None:
+                try:
+                    _require_session(con, run["session_key"])
+                except ValueError as exc:
+                    con.execute(
+                        f"UPDATE app.automation_runs SET state='failed',error=?,finished_at=?,revision=revision+1 WHERE {OWNER} AND id=?",
+                        [str(exc), now, identifier],
+                    )
+                    return None
             con.execute(
                 "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id')"
             )
