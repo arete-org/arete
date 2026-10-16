@@ -339,8 +339,12 @@ def run_review(facts: str) -> str:
     )
 
 
-def generate_weekly_review(*, refresh: bool = False) -> weekly_review.Review:
-    return weekly_review.generate_review(run_review, refresh=refresh)
+def generate_weekly_review(
+    *, refresh: bool = False, review_id: int | None = None
+) -> weekly_review.Review:
+    return weekly_review.generate_review(
+        run_review, refresh=refresh, review_id=review_id
+    )
 
 
 def write_scheduled_review() -> weekly_review.Review | None:

@@ -345,14 +345,15 @@ def write_weekly_review(today: date | None = None) -> str:
     Every daily run but Sunday's (whose evening pass writes the ending week,
     ``run_sunday_reviews``) writes it if still missing, until the next
     Sunday: a written week costs one read and no import of the coach, a
-    failed run waits for the next day (``weekly_review._claim``). A review
+    failed run waits for the next day (``weekly_review._claim``), and a week
+    with nothing planned or done (a new athlete's) is not written. A review
     already written, by then or by the athlete, is neither written nor
     announced again. Never raises.
     """
     today = today or athlete_today()
     if today.weekday() == 6:
         return "sunday evening"
-    return announce_review(today)
+    return announce_review(today, fallback=True)
 
 
 #: What a week's state says when there is nothing to write (``week_state``).
@@ -370,20 +371,26 @@ def _held(week: date) -> str | None:
     return _HELD.get(week_state(week))
 
 
-def announce_review(today: date | None = None) -> str:
+def announce_review(today: date | None = None, *, fallback: bool = False) -> str:
     """Write the week's review and push it, once per week. Never raises.
 
     One model request at most (``coaching.write_scheduled_review``); only the
     run that wrote it sends « Ta semaine est prête », which the athlete's
     ``weekly_review`` choice and quiet hours may hold back (dropped, as every
-    push: the review waits in the app).
+    push: the review waits in the app). A week with nothing planned or done
+    is never announced (its review is the rules' « 0 séances sur 0 »); the
+    ``fallback`` does not even write it.
     """
     try:
-        from arete.services.weekly_review import review_week
+        from arete.services.weekly_review import review_week, week_facts
 
-        week = review_week(today or athlete_today())
+        today = today or athlete_today()
+        week = review_week(today)
         if (held := _held(week)) is not None:
             return held
+        empty = week_facts(week, today).is_empty
+        if empty and fallback:
+            return "empty week: nothing to review"
         from arete.coaching import write_scheduled_review
 
         review = write_scheduled_review()
@@ -392,13 +399,15 @@ def announce_review(today: date | None = None) -> str:
     except Exception as e:  # noqa: BLE001 - background job must not die
         logger.warning("Weekly review failed: %s", e)
         return f"failed: {e}"
+    written = f"{review.source}, {len(review.proposals)} proposals"
+    if empty:
+        return f"{written}; no push: empty week"
     from arete.services.notifications import first_sentence, notify
 
     result = notify(
         REVIEW_TITLE, first_sentence(review.text), REVIEW_URL, kind="weekly_review"
     )
-    pushed = result.skipped_reason or f"{result.sent} sent"
-    return f"{review.source}, {len(review.proposals)} proposals; {pushed}"
+    return f"{written}; {result.skipped_reason or f'{result.sent} sent'}"
 
 
 #: Most athletes one dispatch reads. Time, not this count, bounds a dispatch:

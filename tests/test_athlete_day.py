@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -98,8 +98,10 @@ def test_the_weekly_review_runs_on_the_paris_monday(frozen, router_client):
     from arete.api.plan import router
     from arete.services import weekly_review
 
+    loaded = Mock(is_empty=False)  # a week to review: the fallback writes it
     with (
         patch("arete.coaching.write_scheduled_review") as write,
+        patch.object(weekly_review, "week_facts", return_value=loaded) as facts,
         patch("arete.services.notifications.notify") as notify,
     ):
         notify.return_value.skipped_reason = "heures calmes"
@@ -108,6 +110,8 @@ def test_the_weekly_review_runs_on_the_paris_monday(frozen, router_client):
         )
         # Sunday on the server's clock; Monday on the athlete's.
         assert scheduler.write_weekly_review() == "agent, 0 proposals; heures calmes"
+    # The Paris Monday reviews the Paris week that just ended.
+    assert facts.call_args.args[0] == date(2026, 10, 5)
     with patch.object(weekly_review, "get_review", return_value=None) as get:
         router_client(router).get("/plan/review")
     get.assert_called_once_with(date(2026, 10, 5))

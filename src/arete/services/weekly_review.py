@@ -569,14 +569,28 @@ def generate_review(
     *,
     today: date | None = None,
     refresh: bool = False,
+    review_id: int | None = None,
 ) -> Review:
-    """The athlete's review of the week on screen (``requested_week``),
-    produced once; ``refresh`` writes it again.
+    """The athlete's own request: « Faire le bilan » writes the week on screen
+    (``requested_week``) once; « Refaire » (``refresh``) writes again the
+    review the screen shows, ``review_id``, read from the athlete's own rows.
 
-    Raises ``ReviewInProgress`` while another run writes it.
+    Raises ``LookupError`` for an unknown ``review_id`` and
+    ``ReviewInProgress`` while another run writes the week.
     """
     today = today or athlete_today()
-    week_start = requested_week(today)
+    if review_id is not None:
+        # Its row, claimed or not: a rewrite in progress answers in progress.
+        with db_connection() as con:
+            shown = con.execute(
+                "SELECT week_start FROM app.visible_weekly_reviews WHERE id = ?",
+                [review_id],
+            ).fetchone()
+        if shown is None:
+            raise LookupError(f"review {review_id}")
+        week_start = shown[0]
+    else:
+        week_start = requested_week(today)
     if refresh:
         return _rewrite(produce, today, week_start)
     existing = get_review(week_start)
@@ -590,31 +604,78 @@ def generate_review(
     return written
 
 
-def _rewrite(
-    produce: Callable[[str], str] | None, today: date, week_start: date
-) -> Review:
-    """The athlete's « Refaire le bilan »: replaces the week's written review.
+#: What a rewrite puts back when its model run fails: the review it replaced.
+_KEPT = "text, source, facts, proposals_json, applied_json, applied_at, created_at"
 
-    Refused (``ReviewInProgress``) while a run holds the week's claim, before
-    the model request and again at the write: replacing the claim would pay
-    twice and cancel that run's push. An abandoned claim is replaced.
+
+def _claim_rewrite(week_start: date) -> tuple[int, tuple | None]:
+    """Claim the week for a rewrite before its model request.
+
+    The written review becomes the claim (``pending``, hidden meanwhile); its
+    content is returned to put back if the rewrite fails. Without a row, an
+    ordinary claim. Raises ``ReviewInProgress`` while a run holds the week (a
+    scheduled run, a second tab), so neither pays a second model request.
     """
-    if week_state(week_start, scheduled=False) == "running":
-        raise ReviewInProgress(week_start.isoformat())
-    text, source, facts_message, proposals = _compose(produce, today, week_start)
+    now = utc_now().replace(tzinfo=None)
     try:
         with transaction() as con:
             row = con.execute(_ROW, [week_start]).fetchone()
-            if row is not None:
-                if _state(row[1:], scheduled=False) == "running":
+            state = _state(row[1:] if row else None, scheduled=False)
+            if state == "running":
+                raise ReviewInProgress(week_start.isoformat())
+            if row is None:
+                claimed = con.execute(
+                    "INSERT INTO app.weekly_reviews "
+                    "(week_start, text, source, proposals_json, created_at) "
+                    f"VALUES (?, '', '{PENDING}', '[]', ?) "
+                    "ON CONFLICT DO NOTHING RETURNING id",
+                    [week_start, now],
+                ).fetchone()
+                if claimed is None:
                     raise ReviewInProgress(week_start.isoformat())
-                con.execute(
-                    f"DELETE FROM app.weekly_reviews WHERE {_SCOPE} AND id = ?",
-                    [row[0]],
-                )
+                return int(claimed[0]), None
+            kept = None
+            if state == "written":
+                kept = con.execute(
+                    f"SELECT {_KEPT} FROM app.weekly_reviews WHERE id = ?", [row[0]]
+                ).fetchone()
+            con.execute(
+                f"UPDATE app.weekly_reviews SET source = '{PENDING}', created_at = ? "
+                f"WHERE {_SCOPE} AND id = ?",
+                [now, row[0]],
+            )
+            return int(row[0]), kept
+    except duckdb.TransactionException:
+        raise ReviewInProgress(week_start.isoformat()) from None
+
+
+def _rewrite(
+    produce: Callable[[str], str] | None, today: date, week_start: date
+) -> Review:
+    """« Refaire le bilan »: the week's review written again, under a claim.
+
+    The claim comes before the model request (``_claim_rewrite``); a failed
+    rewrite puts the replaced review back. The new review replaces the
+    claim's row (a new id: the screen forgets its ticks).
+    """
+    claim_id, kept = _claim_rewrite(week_start)
+    try:
+        text, source, facts_message, proposals = _compose(produce, today, week_start)
+    except Exception:
+        _restore(claim_id, kept)
+        raise
+    try:
+        with transaction() as con:
+            mine = con.execute(
+                f"DELETE FROM app.weekly_reviews WHERE {_SCOPE} "
+                f"AND id = ? AND source = '{PENDING}' RETURNING id",
+                [claim_id],
+            ).fetchone()
+            if mine is None:  # taken over after expiring: that run's stands
+                raise ReviewInProgress(week_start.isoformat())
             written = con.execute(
                 "INSERT INTO app.weekly_reviews (week_start, text, source, facts, proposals_json) "
-                f"VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING {_COLUMNS}",
+                f"VALUES (?, ?, ?, ?, ?) RETURNING {_COLUMNS}",
                 [
                     week_start,
                     text,
@@ -623,11 +684,31 @@ def _rewrite(
                     json.dumps([asdict(p) for p in proposals], ensure_ascii=False),
                 ],
             ).fetchone()
-            if written is None:  # a run claimed the week meanwhile
-                raise ReviewInProgress(week_start.isoformat())
     except duckdb.TransactionException:
         raise ReviewInProgress(week_start.isoformat()) from None
+    assert written is not None
     return _from_row(written)
+
+
+def _restore(claim_id: int, kept: tuple | None) -> None:
+    """Put back the review a failed rewrite claimed (or drop a fresh claim)."""
+    try:
+        with db_connection() as con:
+            if kept is None:
+                con.execute(
+                    f"DELETE FROM app.weekly_reviews WHERE {_SCOPE} "
+                    f"AND id = ? AND source = '{PENDING}'",
+                    [claim_id],
+                )
+            else:
+                con.execute(
+                    "UPDATE app.weekly_reviews SET text = ?, source = ?, facts = ?, "
+                    "proposals_json = ?, applied_json = ?, applied_at = ?, created_at = ? "
+                    f"WHERE {_SCOPE} AND id = ? AND source = '{PENDING}'",
+                    [*kept, claim_id],
+                )
+    except Exception:  # noqa: BLE001 - it expires after CLAIM_SECONDS anyway
+        logger.warning("Weekly review rewrite %s not restored", claim_id, exc_info=True)
 
 
 def _open(review: Review, today: date) -> int:
@@ -691,10 +772,20 @@ class AlreadyApplied(Exception):
     pass
 
 
-def _apply(review: Review, indices: list[int]) -> tuple[list[int], list[int]]:
-    """Write the chosen proposals' sessions; (applied, stale) indices."""
+def _apply(
+    review: Review,
+    indices: list[int],
+    applied: list[int] | None = None,
+    stale: list[int] | None = None,
+) -> tuple[list[int], list[int]]:
+    """Write the chosen proposals' sessions; (applied, stale) indices.
+
+    Given lists are filled as it goes, so a caller still knows what was
+    written when a later proposal raises.
+    """
     repo = GarminRepository()
-    applied, stale = [], []
+    applied = [] if applied is None else applied
+    stale = [] if stale is None else stale
     for proposal in review.proposals:
         if proposal["index"] not in indices or proposal["index"] in review.applied:
             continue
@@ -731,6 +822,36 @@ def apply_review(review_id: int, indices: list[int]) -> dict[str, Any]:
         finally:
             con.close()
     return {"applied": applied, "stale": stale}
+
+
+def _give_back(review_id: int, indices: list[int], *, unanswered: bool = False) -> None:
+    """Drop reserved ``indices`` that were not written from the stored value.
+
+    Read and written in one transaction, so a concurrent answer's own
+    indices stay. ``unanswered`` also clears ``applied_at``. Never raises:
+    the plan is written and the answer reports what was.
+    """
+    if not indices and not unanswered:
+        return
+    try:
+        with transaction() as con:
+            row = con.execute(
+                f"SELECT applied_json FROM app.weekly_reviews WHERE {_SCOPE} AND id = ?",
+                [review_id],
+            ).fetchone()
+            if row is None:
+                return
+            kept = sorted(set(json.loads(row[0] or "[]")) - set(indices))
+            con.execute(
+                "UPDATE app.weekly_reviews SET applied_json = ?, "
+                "applied_at = CASE WHEN ? THEN NULL ELSE applied_at END "
+                f"WHERE {_SCOPE} AND id = ?",
+                [json.dumps(kept), unanswered and not kept, review_id],
+            )
+    except Exception:  # noqa: BLE001 - reported as stale; the plan is written
+        logger.warning(
+            "Weekly review %s: reservation not given back", review_id, exc_info=True
+        )
 
 
 class AcceptInProgress(Exception):
@@ -795,10 +916,16 @@ def accept(
     ``follow_calendar``), never failing the answer. The review counts as
     answered from now on, even with nothing applied. An answer that applies
     nothing new to a review already answered sends nothing (``unchanged``).
-    Raises ``LookupError`` for an unknown or replaced review and
-    ``AcceptInProgress`` while another answer to it runs (``_reserve``).
+    Only open proposals (known, for a day after today) may be chosen:
+    another index raises ``ValueError``. Raises ``LookupError`` for an
+    unknown or replaced review and ``AcceptInProgress`` while another answer
+    to it runs (``_reserve``).
     """
     review, raw = _read(review_id)
+    today = athlete_today()
+    offered = {p["index"] for p in review.proposals if p["date"] > today.isoformat()}
+    if not set(indices) <= offered:
+        raise ValueError("Proposition inconnue ou passée")
     todo = [i for i in indices if i not in review.applied]
     if not todo and review.applied_at is not None:
         return {
@@ -808,19 +935,22 @@ def accept(
             "calendar": "unchanged",
         }
     _reserve(review, raw, todo)
-    applied, stale = _apply(review, todo)
+    applied: list[int] = []
+    stale: list[int] = []
+    try:
+        _apply(review, todo, applied, stale)
+    except Exception:
+        # Nothing claims a proposal that was not written, nor an answer that
+        # wrote nothing.
+        _give_back(
+            review_id,
+            [i for i in todo if i not in applied],
+            unanswered=review.applied_at is None and not applied,
+        )
+        raise
     result = {"applied": applied, "stale": stale}
-    if stale:
-        try:  # the reservation took them: give back the ones not written
-            with db_connection() as con:
-                con.execute(
-                    f"UPDATE app.weekly_reviews SET applied_json = ? WHERE {_SCOPE} AND id = ?",
-                    [json.dumps(sorted({*review.applied, *applied})), review_id],
-                )
-        except Exception:  # noqa: BLE001 - the plan is written; reported as stale
-            logger.warning(
-                "Weekly review %s: stale left reserved", review_id, exc_info=True
-            )
+    if stale:  # the reservation took them: give back the ones not written
+        _give_back(review_id, stale)
     garmin: dict[str, Any]
     try:
         from arete.services.plan_adaptation import push_week

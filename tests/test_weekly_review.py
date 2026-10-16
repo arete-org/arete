@@ -156,6 +156,7 @@ def test_the_daily_run_falls_back_on_any_day_but_sunday():
     with (
         patch("arete.coaching.write_scheduled_review") as write,
         patch("arete.scheduler._held", return_value=None),
+        patch.object(wr, "week_facts", return_value=_facts()),
         patch("arete.services.notifications.notify") as notify,
     ):
         notify.return_value = Mock(skipped_reason=None, sent=1)

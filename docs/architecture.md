@@ -709,11 +709,16 @@ that wrote it pushes « Ta semaine est prête » (kind `weekly_review`, quiet
 hours respected, dropped like every push). A failed scheduled run keeps its
 claim until the next day, so the next daily run retries it, never the same
 evening; a claim older than ten minutes belongs to a stopped run. The
-athlete's « Faire / Refaire le bilan » writes the week on screen
+athlete's « Faire le bilan » writes the week on screen
 (`weekly_review.requested_week`): on Sunday before the evening, last week's,
-so the evening still reviews the ending week after its afternoon; it answers
-409 while a run holds the week's claim, and replaces an abandoned one.
-Proposal generation is unchanged.
+so the evening still reviews the ending week after its afternoon.
+« Refaire le bilan » names the review it shows (`review_id`) and rewrites that
+week, whatever the hour. A rewrite claims the week before its model request
+(the written review becomes the claim, hidden meanwhile, and is put back if
+the rewrite fails): a run holding the week, or a second tab, answers 409
+before paying. A week with nothing planned or done is never announced, and
+the later days' fallback does not write it (a new athlete's first push is
+not « 0 séances sur 0 »). Proposal generation is unchanged.
 
 « Ma semaine » (`/planning/semaine`) reads `GET /plan/review/week`: the
 current review (on Sunday this week's once written, last week's until then)
@@ -724,11 +729,13 @@ request of its own): the review until the athlete accepts it, on its evening
 and the next day whatever it proposes, then while a proposal is still open.
 Past proposals are shown, not offered, and a review with no week left to
 plan offers no « Accepter ». « Accepter » (`POST /plan/review/{id}/accept`)
-reads the review once, reserves the ticked proposals by compare-and-set on
-what it read (a concurrent answer, from another tab or a retry, gets 409 and
+reads the review once, refuses (422) a proposal that is unknown or for a day
+already gone, reserves the ticked proposals by compare-and-set on what it read (a concurrent answer, from another tab or a retry, gets 409 and
 applies and sends nothing; an answer adding nothing to an answered review
 sends nothing, `unchanged`), applies them (a changed session comes back
-stale), then sends the coming week's key sessions to Garmin (the changed
+stale; reserved proposals not written are given back from the stored value,
+so a concurrent answer's stay, and an answer that wrote nothing leaves the
+review unanswered), then sends the coming week's key sessions to Garmin (the changed
 ones, then intervals, tempo and long runs; at most four, 60 s, one attempt
 each, under the automatic-push setting like the daily push) and syncs the
 plan's calendar inline (`AFTER_PLAN_WRITE` budget). Each outcome is the

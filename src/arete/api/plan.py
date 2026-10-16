@@ -80,13 +80,18 @@ def get_review_week() -> dict[str, Any]:
 
 
 @router.post("/review")
-def write_review(refresh: bool = False) -> dict[str, Any]:
-    """Write the week's review (once; ``refresh`` writes it again)."""
+def write_review(refresh: bool = False, review_id: int | None = None) -> dict[str, Any]:
+    """Write the week on screen's review (once; ``refresh`` writes again the
+    review the screen shows, ``review_id``)."""
     from arete import coaching
     from arete.services.weekly_review import ReviewInProgress
 
     try:
-        return coaching.generate_weekly_review(refresh=refresh).to_dict()
+        return coaching.generate_weekly_review(
+            refresh=refresh, review_id=review_id
+        ).to_dict()
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Bilan introuvable") from None
     except ReviewInProgress:
         raise HTTPException(
             status_code=409,
@@ -147,6 +152,8 @@ def accept_review(review_id: int, body: ReviewApply) -> dict[str, Any]:
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="Bilan introuvable") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     except AcceptInProgress:
         raise HTTPException(
             status_code=409,
