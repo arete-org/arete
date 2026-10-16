@@ -785,8 +785,10 @@ athlete's (`readiness_source` `athlete`): the RPG never counts such a rest as a
 prescribed one toward the week's goal. An open proposal must be answered first
 and an applied decision reverted first; a declined or reverted one, or a
 proposal snoozed past the day, is replaced in place, keeping one row per session
-and day without a migration, and what it replaced stays in its
-`original.replaced` for the briefing and the coach. The menu's `version` covers
+and day without a migration, and the morning's suggestion it replaced stays
+in its `original.replaced` for the briefing and the coach (an earlier choice of
+the athlete passes on the suggestion it had replaced; `readiness_source`
+doubles as the origin until a dedicated column earns a migration). The menu's `version` covers
 the session's revision, its decision and every option (a day planned since
 changes a move): any change answers 409 and writes nothing. Inside the
 transaction, a move's day is read again, and the session's revision guard
@@ -796,7 +798,8 @@ before the decision (with the decision first, a revision bump committed in
 between was seen to pass). An athlete's choice stores the revision it wrote,
 and « Rétablir » refuses (409) once the session changed since, so a later edit
 is never undone; a move is reverted only on its own day and gives back its day
-alone. Garmin follows after the commit and after a revert as for a proposal
+alone, a rest its status alone (a copy never withdrawn is left as it is).
+Garmin follows after the commit and after a revert as for a proposal
 (`follow_on_garmin`, now returning each outcome): with the automatic push on, a
 copy Garmin holds is replaced in place (a move reschedules it) or withdrawn for
 a rest, once, never replayed. Each answer reports it apart (`sent`,

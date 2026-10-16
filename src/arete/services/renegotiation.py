@@ -607,9 +607,15 @@ def apply(session_id: int, reason: str, option_id: str, version: str) -> dict[st
     original = snapshot(session)
     if option.decision == Decision.MOVE:
         original["date"] = session.date.isoformat()
-    if day.decision is not None:
+    before = day.decision
+    if before is not None and before.readiness_source == ATHLETE_CHOICE:
+        # Only the morning's (the system's) suggestion is ever "replaced": an
+        # earlier choice of the athlete passes on what it had replaced.
+        carried = (before.original or {}).get("replaced")
+        if carried:
+            original["replaced"] = carried
+    elif before is not None:
         # The morning's suggestion stays readable (briefing, coach) once replaced.
-        before = day.decision
         original["replaced"] = {
             "decision": before.decision,
             "reason": before.reason,

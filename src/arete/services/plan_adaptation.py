@@ -231,11 +231,9 @@ def revert_reporting(decision_id: int) -> tuple[PlanDecision, str]:
         if decision.decision != Decision.REST:
             raise NothingToRevert("Cette séance possède une prescription validée.")
         fields = _STRUCTURED_FIELDS
-    elif (
-        session is not None
-        and session.structure_json
-        and decision.decision == Decision.REST
-    ):
+    elif decision.decision == Decision.REST:
+        # A rest changed the status alone: restoring only it leaves an export
+        # Garmin still holds as it is (not dirty), so nothing is sent again.
         fields = _STRUCTURED_FIELDS
     original = {k: v for k, v in (decision.original or {}).items() if k in fields}
     if "date" in original:
@@ -522,6 +520,12 @@ def follow_on_garmin(
             session_id = decision.planned_session_id
             rest = decision.decision == Decision.REST
             if garmin_export.on_garmin(session_id):
+                if reverted and rest:
+                    state = garmin_export.export_state(session_id)
+                    if state is None or state["state"] != "dirty":
+                        # Never withdrawn (the push was off): Garmin still
+                        # holds the session as it is.
+                        continue
                 actions.append(
                     (session_id, "withdraw" if rest and not reverted else "export")
                 )

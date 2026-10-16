@@ -54,6 +54,8 @@ def revert_decision(decision_id: int) -> dict[str, Any]:
         raise HTTPException(
             status_code=409, detail="Rien à rétablir pour cette décision"
         ) from None
+    except ValueError as exc:  # the plan's guards (an unsettled Garmin export)
+        raise HTTPException(status_code=409, detail=str(exc)) from None
 
 
 class RenegotiationOption(BaseModel):

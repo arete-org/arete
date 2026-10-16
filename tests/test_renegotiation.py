@@ -700,3 +700,70 @@ def test_other_opens_the_coach_with_the_session_and_the_rules(today):
     ]
     with pytest.raises(LookupError):
         reference("session:999999")
+
+
+def test_only_the_mornings_suggestion_is_ever_replaced(today):
+    from arete.services.briefing import briefing_facts
+    from arete.services.coaching_rules import RuleFacts
+
+    facts = RuleFacts(
+        acwr=1.0,
+        tsb=-30.0,
+        readiness_score=30.0,
+        fatigue_threshold=85,
+        fitness_goal="build",
+        readiness_source="garmin_training",
+        readiness_measured_on=DAY,
+    )
+    with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
+        (proposal,) = plan_adaptation.adapt_today(DAY)
+    plan_adaptation.respond(proposal.id, proposal.revision, "keep")
+    with _pushing(False):
+        _choose(today, "tired", "lighter")
+        (first,) = _decisions()
+        plan_adaptation.revert(first.id)
+        _choose(today, "pain", "rest")
+    (decision,) = _decisions()
+    # The athlete's earlier choice passes on the morning's suggestion it replaced.
+    replaced = decision.original["replaced"]
+    assert replaced["reason"] == proposal.reason
+    assert replaced["readiness_source"] == "garmin_training"
+    with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
+        text = briefing_facts(DAY, "rules", facts)
+    (line,) = [line for line in text.splitlines() if "proposition du matin" in line]
+    assert proposal.reason in line and "Je suis cuit" not in line
+
+
+def test_a_rest_never_withdrawn_reverts_with_nothing_to_send(today, monkeypatch):
+    client = _garmin()
+    monkeypatch.setattr("arete.garmin.client.GarminClient", lambda: client)
+    garmin_export.export(today, client=client)
+    with _pushing(False):
+        _choose(today, "pain", "rest")
+        (decision,) = _decisions()
+        _, garmin = plan_adaptation.revert_reporting(decision.id)
+    # The push was off: the copy was never withdrawn, Garmin holds it as it is.
+    assert garmin == "unchanged"
+    with _pushing():
+        assert garmin_export.export_state(today)["state"] == "scheduled"
+
+
+def test_a_revert_refused_by_an_unsettled_export_is_a_409(
+    today, router_client, monkeypatch
+):
+    from arete.api.plan import router
+
+    client = _garmin()
+    garmin_export.export(today, client=client)
+    with _pushing(False):
+        _choose(today, "tired", "lighter")
+    (decision,) = _decisions()
+    con = connect()
+    con.execute(
+        "UPDATE app.garmin_exports SET state='working' WHERE session_id=?", [today]
+    )
+    con.close()
+    answer = router_client(router).post(f"/plan/decisions/{decision.id}/revert")
+    assert answer.status_code == 409
+    assert "Réconcilie" in answer.json()["detail"]
+    assert _decisions()[0].reverted_at is None
