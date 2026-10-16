@@ -7,6 +7,12 @@ name: Deploy preview
 # did this application's inputs reach the preview healthy? Documentation-only
 # merges retain the previous healthy preview. Only the newest preview is kept.
 on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: "Diagnose an existing preview (Vercel URL or deployment ID); deploys nothing"
+        required: true
+        type: string
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -26,6 +32,54 @@ defaults:
     shell: bash
 
 jobs:
+  diagnose:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      # Resolve through Vercel before sending the bypass key to a supplied URL.
+      - name: Resolve a preview belonging to this project
+        id: resolve
+        env:
+          DEPLOYMENT: ${{ inputs.deployment }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          deployment=${DEPLOYMENT#https://}
+          if [[ ! "$deployment" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+            echo 'Expected a Vercel deployment ID or hostname.' >&2
+            exit 1
+          fi
+          url=$(curl -fsS --connect-timeout 10 --max-time 30 \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v13/deployments/$deployment?teamId=$VERCEL_ORG_ID" \
+            | jq -er --arg project "$VERCEL_PROJECT_ID" \
+              'select(.projectId == $project and .target != "production") | .url | select(type == "string" and length > 0)')
+          echo "url=https://$url" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm install --global vercel@63.1.2
+      - name: Read the health response
+        env:
+          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          URL: ${{ steps.resolve.outputs.url }}
+        run: |
+          curl --fail-with-body -sS --connect-timeout 10 --max-time 60 \
+            -H "x-vercel-protection-bypass: $BYPASS" \
+            "$URL/api/health" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Read runtime errors even when health is degraded
+        if: always() && !cancelled() && steps.resolve.outputs.url != ''
+        timeout-minutes: 2
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          URL: ${{ steps.resolve.outputs.url }}
+        run: |
+          vercel logs "$URL" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" \
+            --since 24h --limit 30 --level error --expand
+
   select:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
@@ -94,12 +148,25 @@ jobs:
       # preview database: the fixed URL keeps serving the previous build and this
       # run stays red until it is fixed.
       - name: Check the health of the deployment
+        id: health
         run: |
-          curl -fsS --retry 5 --retry-delay 10 --retry-all-errors \
+          # Preserve the JSON explaining a 503, while still failing the job.
+          curl --fail-with-body -sS --connect-timeout 10 --max-time 60 \
+            --retry 5 --retry-delay 10 --retry-all-errors --retry-max-time 300 \
             -H "x-vercel-protection-bypass: $BYPASS" \
             "$URL/api/health" | tee -a "$GITHUB_STEP_SUMMARY"
         env:
           BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          URL: ${{ steps.deploy.outputs.url }}
+      # A missing migration is only the symptom: its startup error is in Vercel.
+      - name: Show runtime errors when the health check fails
+        if: failure() && steps.health.outcome == 'failure'
+        timeout-minutes: 2
+        run: |
+          vercel logs "$URL" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" \
+            --since 1h --limit 30 --level error --expand
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           URL: ${{ steps.deploy.outputs.url }}
       # REST, as `vercel alias set` cannot resolve `--scope` with the token.
       - name: Point the fixed URL at it

@@ -162,7 +162,12 @@ the emoji is textual feedback, not an undocumented LangSmith UI reaction endpoin
    The deployment's first request migrates `arete_preview`; the
    workflow checks `/api/health` and moves the fixed URL only onto a healthy
    build. A failed migration leaves the URL on the previous build and the
-   workflow red.
+   workflow red. Failed health checks retain the JSON response and fetch the
+   deployment's recent runtime errors. To inspect an existing preview without
+   deploying, run **Deploy preview** manually with its Vercel URL or deployment
+   ID. This uses the repository's Vercel credentials, verifies the preview
+   belongs to this project, and reads health and runtime errors; it never moves
+   the fixed URL. A degraded health response deliberately keeps this run red.
 4. **Production.** Run **Deploy production** (Actions → Deploy production →
    Run workflow, on `main`). The fixed preview must be READY and healthy, and
    its tagged commit must be an ancestor of the requested release with no
