@@ -18,7 +18,7 @@ arete/
 │   ├── tools/               Model schemas and domain-service adapters
 │   ├── middlewares/         Framework interception/completion hooks
 │   ├── backends/            Deep Agents memory filesystem adapter and permissions
-│   ├── profiles/            Declarative chat, briefing and feedback configurations
+│   ├── profiles/            Declarative chat, briefing, feedback and review configurations
 │   └── prompts/             Versioned general/mission instructions
 ├── services/                Metrics, analytics, planning, settings, pages, coaching, memory
 ├── observability/           Provider usage, model-boundary and HTTP request timing

@@ -1,7 +1,8 @@
 # Arete — coding-session instructions
 
-Arete is a self-hosted, single-athlete training assistant: FastAPI + DuckDB,
-React + Vite, Garmin/Strava sync, planning, strength logging and coaching.
+Arete is a self-hosted training assistant with a private athlete per account:
+FastAPI + DuckDB, React + Vite, Garmin/Strava sync, planning, strength logging
+and coaching.
 Read [docs/architecture.md](docs/architecture.md) before changing the coaching stack.
 
 ## Architecture: give every behavior one owner
