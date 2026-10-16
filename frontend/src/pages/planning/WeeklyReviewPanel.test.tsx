@@ -104,7 +104,7 @@ it('rewrites the review on demand', async () => {
     .mockResolvedValue({ ...review, id: 5, source: 'agent', text: 'Nouveau bilan.' });
   renderPanel();
   fireEvent.click(await screen.findByRole('button', { name: /Refaire le bilan/ }));
-  await waitFor(() => expect(write).toHaveBeenCalledWith(true));
+  await waitFor(() => expect(write).toHaveBeenCalledWith(true, 4));
   expect(await screen.findByText('Nouveau bilan.')).toBeTruthy();
   expect(screen.getByText(/Le coach/)).toBeTruthy();
 });

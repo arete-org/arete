@@ -727,11 +727,12 @@ export const planApi = {
   getReview: async () =>
     recordOrNull<import("@/types").WeeklyReview>(await fetchAPI<unknown>("/plan/review")),
 
-  /** Written once per week; `refresh` writes it again. May wait for the coach (~60 s). */
-  writeReview: (refresh = false) =>
-    fetchAPI<import("@/types").WeeklyReview>(`/plan/review?refresh=${refresh}`, {
-      method: "POST",
-    }),
+  /** Written once per week; `refresh` writes again the review shown (`reviewId`). May wait for the coach (~60 s). */
+  writeReview: (refresh = false, reviewId?: number) =>
+    fetchAPI<import("@/types").WeeklyReview>(
+      `/plan/review?refresh=${refresh}${reviewId != null ? `&review_id=${reviewId}` : ""}`,
+      { method: "POST" },
+    ),
 
   /** « Ma semaine »: the current review and its week in numbers. */
   getReviewWeek: () => fetchAPI<import("@/types").ReviewWeek>("/plan/review/week"),

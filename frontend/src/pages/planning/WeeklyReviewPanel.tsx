@@ -137,8 +137,10 @@ function ReviewBody({ review, refreshing }: { review: WeeklyReview; refreshing: 
 export function WeeklyReviewPanel() {
   const queryClient = useQueryClient();
   const review = useQuery({ queryKey: qk.weeklyReview, queryFn: planApi.getReview });
+  const shownId = review.data?.id ?? null;
   const write = useMutation({
-    mutationFn: (refresh: boolean) => planApi.writeReview(refresh),
+    // « Refaire » names the review on screen: the server rewrites that week, not another.
+    mutationFn: (shown: number | null) => (shown === null ? planApi.writeReview(false) : planApi.writeReview(true, shown)),
     onSuccess: (written) => queryClient.setQueryData(qk.weeklyReview, written),
   });
 
@@ -165,7 +167,7 @@ export function WeeklyReviewPanel() {
       {review.data === null && !write.isPending && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-text-muted">Pas encore de bilan pour la semaine passée.</p>
-          <Button variant="purple" size="sm" onClick={() => write.mutate(false)}>
+          <Button variant="purple" size="sm" onClick={() => write.mutate(null)}>
             Faire le bilan
           </Button>
         </div>
@@ -177,7 +179,7 @@ export function WeeklyReviewPanel() {
             <Link to="/planning/semaine" className="inline-flex min-h-11 items-center text-sm text-neon-cyan hover:underline">
               Ouvrir Ma semaine <span aria-hidden className="ml-1">→</span>
             </Link>
-            <Button variant="ghost" size="sm" disabled={write.isPending} onClick={() => write.mutate(true)}>
+            <Button variant="ghost" size="sm" disabled={write.isPending} onClick={() => write.mutate(shownId)}>
               <RefreshCw className="size-3.5" /> Refaire le bilan
             </Button>
           </div>
