@@ -249,3 +249,29 @@ existants vérifient les huit thèmes à 390, 430, 768 et 1440 px, les flux SSE 
 les écritures Planning sur une base jetable. Les captures sont enregistrées
 sous `.context/`. L’émulation ne remplace pas une recette sur iPhone et Android
 réels, notamment pour le clavier système, les barres du navigateur et le mode installé.
+
+## Suivi et automatisations — même identité, mêmes interactions
+
+La [page Figma Suivi et automatisations](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=168-81)
+utilise les navigations bureau/mobile de la page `109:81` et les états Chiron
+compacts de la page `5:81`. Les huit écrans déclinent Suivi et Automatisations,
+bureau et mobile, Pierre et Prune. Les composants de référence restent inchangés.
+
+La boîte est une liste à séparateurs discrets, sans empilement de cartes.
+La cloche ouvre cette même boîte ; les actions de lecture et d’archivage sont
+regroupées dans le menu de chaque ligne. Répondre ou examiner une proposition
+ouvre `AgentSidePanel`, avec son mode, ses dimensions et son focus existants.
+`AutomationReview` fournit seulement le contenu : question et saisie courte,
+ou changements avant/après et actions Approuver, Modifier, Refuser.
+Aucun second dialogue de validation n’est créé. « En parler à Chiron » retrouve
+le brouillon et transmet une référence serveur, sans envoyer de message.
+
+`FollowUp.tsx` et `followUp.css` utilisent les tokens communs et `ui/Button`.
+Le formulaire de programmation remplace temporairement la liste ; les champs
+suivent le déclencheur sélectionné. La séance se choisit dans le planning,
+sans demander un identifiant technique à l’athlète. L’accueil et la boîte lisent
+les mêmes notifications et partagent leur cache de requêtes.
+
+`automations.spec.ts` vérifie les deux thèmes à 390 et 1440 px : menus communs,
+réponse, approbation, conservation du brouillon, création, focus et absence de
+débordement. Consulter ou décider n’effectue aucun appel modèle depuis le navigateur.

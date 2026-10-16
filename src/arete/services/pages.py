@@ -207,7 +207,14 @@ def _profile() -> dict[str, Any]:
     }
 
 
+def _follow_up() -> dict[str, Any]:
+    from arete.services import automations, inbox
+
+    return {"automations": automations.listing(), "inbox": inbox.listing()}
+
+
 _PAGE_FETCHERS = {
+    "follow_up": _follow_up,
     "profile": _profile,
     "dashboard": _dashboard,
     "analytics": _analytics,

@@ -2,6 +2,7 @@
 
 from arete.agent.capabilities.models import Toolkit
 from arete.agent.tools.analytics import ANALYTICS_TOOLS
+from arete.agent.tools.automations import AUTOMATION_TOOLS
 from arete.agent.tools.calendar import CALENDAR_TOOLS
 from arete.agent.tools.garmin import GARMIN_TOOLS
 from arete.agent.tools.planning import PLANNING_TOOLS
@@ -66,6 +67,19 @@ STRENGTH_INSTRUCTIONS = """Musculation réalisée :
 
 #: All registered toolkits. Registering a new one is one line here.
 CAPABILITIES: dict[str, Toolkit] = {
+    "automations": Toolkit(
+        id="automations",
+        description="Programmer des suivis ponctuels, récurrents ou après enregistrement d'une séance.",
+        tools=AUTOMATION_TOOLS,
+        read_tools=frozenset({"list_automations", "get_automation"}),
+        instructions="""Automatisations : une demande explicite active le suivi ; une initiative du coach reste proposée (explicitly_requested=false).
+Précise mission, programmation et fuseau. Une séance déclenche après son enregistrement dans Arete, parfois après sa fin réelle à cause de la synchronisation ; pas de rattrapage à l'activation.
+Utilise les identifiants existants (actual:, strength:, planned:), jamais un titre comme identifiant.
+Exécution au prochain passage après l'échéance ; retard possible proche de deux heures sur Vercel.
+Exemples à proposer seulement : débrief de sortie longue, récupération le lendemain, bilan hebdomadaire ciblé, préparation de course.
+Chaque écriture lors de la mission demandera une validation ; une question peut la suspendre 48 heures.
+Après création, indique le lien /follow-up?tab=automations et l'état réellement renvoyé.""",
+    ),
     "slack_product": Toolkit(
         id="slack_product",
         description="Coordination produit Slack",

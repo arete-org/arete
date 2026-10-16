@@ -117,7 +117,7 @@ async def refresh_personal_data(context: AgentContext) -> None:
     context.page_section = None
 
 
-async def invoke_agent(graph: Any, state: dict, *, context: AgentContext) -> dict:
+async def invoke_agent(graph: Any, state: Any, *, context: AgentContext) -> dict:
     started = context.started_at or monotonic()
     context.started_at = started
     context.deadline = context.deadline or started + MAX_RUN_SECONDS

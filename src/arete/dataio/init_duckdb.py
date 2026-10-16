@@ -6,6 +6,8 @@ from typing import Any
 import duckdb
 
 from arete.config import config
+from arete.dataio.automation_schema import DDL as AUTOMATION_DDL
+from arete.dataio.automation_schema import migrate as migrate_automations
 from arete.dataio.db import connect
 
 logger = logging.getLogger(__name__)
@@ -927,6 +929,8 @@ def _m49_daily_checkins(con) -> None:
         raise
 
 
+DDL += AUTOMATION_DDL
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -966,6 +970,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (47, _m47_garmin_freshness),
     (48, _m48_briefing_reactions),
     (49, _m49_daily_checkins),
+    (50, migrate_automations),
 ]
 
 

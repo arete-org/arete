@@ -104,6 +104,7 @@ const KINDS: { kind: NotificationKind; label: string; soon?: boolean }[] = [
   { kind: 'imports', label: 'Séances importées' },
   { kind: 'checkin', label: 'Check-in du matin' },
   { kind: 'evening', label: 'Message du soir', soon: true },
+  { kind: 'automation', label: 'Suivis et automatisations' },
   { kind: 'eve_reminder', label: 'Rappel la veille d’une séance clé', soon: true },
 ];
 

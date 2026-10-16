@@ -10,7 +10,7 @@ from arete.dataio.db import connect
 from arete.garmin.models import PlannedSession, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services import goals
-from arete.services.settings import athlete_today, today_in
+from arete.services.settings import today_in
 
 FAR = today_in(None) + timedelta(days=900)  # from the default athlete's day
 
@@ -63,9 +63,14 @@ def test_deleting_a_goal_removes_its_future_plan_only():
     assert goals.delete_goal(g.id) is False
 
 
-def test_the_routes(router_client):
+def test_the_routes(router_client, monkeypatch):
+    from arete.api import goals as api
     from arete.api.goals import router
 
+    # Collection and the HTTP request can fall on opposite sides of midnight.
+    today = FAR - timedelta(days=900)
+    monkeypatch.setattr(api, "athlete_today", lambda: today)
+    monkeypatch.setattr(goals, "athlete_today", lambda: today)
     client = router_client(router)
     created = client.post(
         "/goals",
@@ -74,7 +79,7 @@ def test_the_routes(router_client):
     assert created.status_code == 201
     body = created.json()
     assert body["days_left"] == 900 and body["priority"] == "A"
-    past = (athlete_today() - timedelta(days=1)).isoformat()
+    past = (today - timedelta(days=1)).isoformat()
     assert (
         client.post(
             "/goals", json={"name": "test-p", "race_date": past, "distance_km": 10}

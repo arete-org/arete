@@ -1,3 +1,4 @@
+import { InboxBell } from './AutomationInbox';
 import { lazy, Suspense, type MouseEvent } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { BarChart3, CalendarDays, Dumbbell, LayoutDashboard, Settings } from 'lucide-react';
@@ -71,7 +72,7 @@ export function Navigation({
                       'navigation-item flex items-center gap-2 px-3 py-2 text-sm font-sans',
                       'border border-transparent transition-colors duration-150 motion-reduce:transition-none',
                       isActive
-                        ? 'text-neon-cyan bg-neon-cyan/10 border-neon-cyan/30'
+                        ? 'text-neon-cyan bg-shadow'
                         : 'text-text-secondary hover:text-text-primary hover:bg-abyss',
                     )
                   }
@@ -83,6 +84,7 @@ export function Navigation({
             </div>
 
             <div className="flex items-center gap-3">
+              <InboxBell />
               <button
                 onClick={onToggleAgent}
                 onPointerEnter={preloadAgentMarkdown}
@@ -115,6 +117,7 @@ export function Navigation({
         </div>
       </nav>
 
+      <div className="md:hidden fixed right-4 top-3 z-40 rounded-lg bg-void"><InboxBell /></div>
       {/* Mobile bottom tab bar — hidden on desktop */}
       <nav
         aria-label="Navigation mobile"
@@ -133,7 +136,7 @@ export function Navigation({
                 cn(
                   'navigation-item relative flex flex-1 flex-col items-center justify-center gap-0.5 min-h-11 py-1 px-1 rounded-lg',
                   'transition-colors duration-150 motion-reduce:transition-none min-w-0',
-                  isActive ? 'text-neon-cyan' : 'text-text-muted active:text-text-secondary',
+                  isActive ? 'text-neon-cyan bg-shadow' : 'text-text-muted active:text-text-secondary',
                 )
               }
             >

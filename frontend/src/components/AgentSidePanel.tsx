@@ -1,3 +1,4 @@
+import { AutomationReview } from './agent/AutomationReview';
 import type { CoachDisplay } from '@/hooks/useCoachDisplay';
 import { CoachDisplayOptions } from './agent/CoachDisplayOptions';
 import { CoachMemory, MemoryReceipt } from './agent/CoachMemory';
@@ -47,6 +48,7 @@ import { CalendarActionCard } from './agent/CalendarActionCard';
 
 const PAGE_LABELS: Record<string, string> = {
   dashboard: 'Tableau de bord',
+  follow_up: 'Suivi',
   planning: 'Planning',
   analytics: 'Analyses',
   log: 'Carnet',
@@ -269,12 +271,12 @@ export function AgentSidePanel({
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="coach-title text-sm font-semibold">{rpg ? 'Chiron' : 'Coach Arete'}</h2>
-          {rpg ? <button onClick={() => setShowHistory(true)} aria-label="Changer de conversation" className="mt-0.5 flex max-w-full items-center gap-1 text-[11px] text-text-muted hover:text-text-primary"><span className="truncate">{active.title}</span><ChevronDown className="size-3 shrink-0" /></button> : <p className="mt-0.5 text-[11px] text-text-muted">{page}</p>}
+          {rpg ? <button onClick={() => { onClearReference?.(); setShowHistory(true); }} aria-label="Changer de conversation" className="mt-0.5 flex max-w-full items-center gap-1 text-[11px] text-text-muted hover:text-text-primary"><span className="truncate">{active.title}</span><ChevronDown className="size-3 shrink-0" /></button> : <p className="mt-0.5 text-[11px] text-text-muted">{page}</p>}
         </div>
-        <button className="min-h-11 rounded px-2 text-xs text-text-muted hover:text-text-primary" aria-label="Ce que Chiron sait de moi" aria-expanded={showMemory} onClick={() => { setShowMemory(value => !value); setShowHistory(false); }}>Mémoire</button>
+        <button className="min-h-11 rounded px-2 text-xs text-text-muted hover:text-text-primary" aria-label="Ce que Chiron sait de moi" aria-expanded={showMemory} onClick={() => { onClearReference?.(); setShowMemory(value => !value); setShowHistory(false); }}>Mémoire</button>
         {rpg && <button aria-label={expanded ? 'Réduire la conversation' : 'Agrandir la conversation'} onClick={() => setExpanded(!expanded)} className="ml-auto hidden md:flex size-11 items-center justify-center text-text-muted">{expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>}
         <button
-          onClick={() => { setShowHistory((v) => !v); setShowMemory(false); }}
+          onClick={() => { onClearReference?.(); setShowHistory((v) => !v); setShowMemory(false); }}
           className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-text-muted/10"
           aria-label="Historique des conversations"
           aria-expanded={showHistory}
@@ -284,8 +286,8 @@ export function AgentSidePanel({
         </button>
         </>}
         {onDisplayChange && <CoachDisplayOptions mode={display} onChange={onDisplayChange}
-          onHistory={() => { setShowHistory(value => !value); setShowMemory(false); }}
-          onMemory={() => { setShowMemory(value => !value); setShowHistory(false); }}
+          onHistory={() => { onClearReference?.(); setShowHistory(value => !value); setShowMemory(false); }}
+          onMemory={() => { onClearReference?.(); setShowMemory(value => !value); setShowHistory(false); }}
           onCreate={() => { newThread(); setShowMemory(false); }} />}
         <button
           onClick={onClose}
@@ -338,10 +340,10 @@ export function AgentSidePanel({
           </div>
         </div>
       )}
-      {reference && <div className="border-b border-text-muted/15 px-4 py-2">
-        {reference && <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné', briefing: 'Briefing sélectionné' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={onClearReference}>Retirer</button></p>}
+      {reference && (reference.kind !== 'automation_run' || reference.mode === 'discussion') && <div className="border-b border-text-muted/15 px-4 py-2">
+        {reference && <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné', briefing: 'Briefing sélectionné', automation_run: 'Exécution sélectionnée' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={onClearReference}>Retirer</button></p>}
       </div>}
-      {showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
+      {reference?.kind === 'automation_run' && reference.mode !== 'discussion' ? <AutomationReview id={reference.id} /> : showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
         <ThreadHistory
           threads={store.threads}
           activeId={active.id}
@@ -354,7 +356,7 @@ export function AgentSidePanel({
       ) : (
         <>
           {!rpg && !floating && <button
-            onClick={() => setShowHistory(true)}
+            onClick={() => { onClearReference?.(); setShowHistory(true); }}
             className="flex shrink-0 items-center gap-2 border-b border-text-muted/10 px-5 py-2.5 text-left text-xs text-text-secondary hover:bg-shadow/40"
             aria-label="Changer de conversation"
           >

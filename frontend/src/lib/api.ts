@@ -504,7 +504,7 @@ export type NotificationKind =
   | 'imports'
   | 'checkin'
   | 'evening'
-  | 'eve_reminder';
+  | 'automation' | 'eve_reminder';
 
 export interface NotificationPreferences {
   kinds: Record<NotificationKind, boolean>;

@@ -22,6 +22,8 @@ import { DashboardPage, SettingsPage } from '@/pages';
 import { loadLogPage, loadPlanningPage } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
 
+const FollowUpPage = lazy(importChunk(() => import('@/pages/FollowUp').then(m => ({ default: m.FollowUpPage }))));
+
 const PlanningPage = lazy(importChunk(loadPlanningPage));
 const LogPage = lazy(importChunk(loadLogPage));
 // recharts is most of the bundle and only the Analytics page draws charts.
@@ -88,7 +90,7 @@ function App() {
   useEffect(() => {
     const discuss = (event: Event) => {
       const reference = (event as CustomEvent<CoachReference>).detail;
-      if (!reference || !['proposal', 'followup', 'briefing'].includes(reference.kind) || !Number.isSafeInteger(reference.id)) return;
+      if (!reference || !['proposal', 'followup', 'briefing', 'automation_run'].includes(reference.kind) || (reference.kind === 'automation_run' ? typeof reference.id !== 'string' : !Number.isSafeInteger(reference.id))) return;
       setCoachReference(reference);
       setAgentOpen(true);
     };
@@ -138,6 +140,7 @@ function App() {
                   <ErrorBoundary>
                     <Routes>
                       <Route path="/" element={<DashboardPage />} />
+                      <Route path="/follow-up" element={<FollowUpPage />} />
                       <Route path="/planning" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><PlanningPage /></Suspense>} />
                       <Route
                         path="/analytics"

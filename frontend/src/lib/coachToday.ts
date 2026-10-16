@@ -2,7 +2,7 @@ import { fetchAPI } from './api';
 import type { PlanDecision } from '@/types';
 
 /** What the athlete asks the coach about: the server reads it by id, the browser sends nothing else. */
-export interface CoachReference { kind: 'proposal' | 'followup' | 'briefing'; id: number }
+export type CoachReference = { kind: 'proposal' | 'followup' | 'briefing'; id: number } | { kind: 'automation_run'; id: string; mode?: 'review' | 'discussion' };
 export interface Proposal extends PlanDecision {
   state: 'pending' | 'discussion' | 'applied' | 'dismissed' | 'stale';
   revision: number;

@@ -46,6 +46,21 @@ class ExportTable:
 
 
 TABLES: tuple[ExportTable, ...] = (
+    *(
+        ExportTable(
+            name,
+            f"SELECT * FROM app.visible_{name} WHERE true",
+            "created_at",
+            "created_at",
+        )
+        for name in (
+            "automations",
+            "automation_runs",
+            "automation_interrupts",
+            "automation_effects",
+            "notifications",
+        )
+    ),
     ExportTable(
         "actual_sessions",
         "SELECT * FROM app.visible_actual_sessions WHERE user_id = getvariable('arete_athlete_id')",

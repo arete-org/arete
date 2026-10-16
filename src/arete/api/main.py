@@ -17,6 +17,7 @@ from arete.api.analytics import router as analytics_router
 from arete.api.athlete_facts import router as athlete_facts_router
 from arete.api.auth import AuthMiddleware, auth_misconfigured
 from arete.api.auth import router as auth_router
+from arete.api.automations import router as automations_router
 from arete.api.checkins import router as checkins_router
 from arete.api.coach import router as coach_router
 from arete.api.dashboard import router as dashboard_router
@@ -205,6 +206,7 @@ def cron_checkin(authorization: str | None = Header(default=None)):
 
 
 for router in (
+    automations_router,
     checkins_router,
     coach_router,
     dashboard_router,
@@ -233,3 +235,9 @@ for router in (
     admin_router,
 ):
     app.include_router(router)
+
+
+@app.get("/cron/automations")
+def cron_automations(authorization: str | None = Header(default=None)):
+    _require_cron(authorization)
+    return scheduler.run_automations()

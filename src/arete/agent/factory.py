@@ -57,6 +57,7 @@ def build_agent(
     fallback_models: tuple[BaseChatModel, ...] = (),
     skills: AgentMiddleware[Any, Any, Any] | None = None,
     summarization: AgentMiddleware[Any, Any, Any] | None = None,
+    checkpointer=None,
 ):
     assert len(fallback_models) <= MAX_MODEL_FALLBACKS, "Too many fallback models"
     middleware = [
@@ -68,6 +69,16 @@ def build_agent(
         ),
         *execution_limits(),
     ]
+    if profile.id == "automation":
+        from arete.agent.middlewares.automation import (
+            AutomationBudgetMiddleware,
+            AutomationEffectsMiddleware,
+            hitl,
+        )
+
+        middleware.extend(
+            [AutomationBudgetMiddleware(), hitl(profile), AutomationEffectsMiddleware()]
+        )
     if profile.filesystem_tools:
         # Offload only after inner hooks classify domain errors and extract UI
         # cards from the complete result. Storage failure must not replay a tool.
@@ -85,7 +96,7 @@ def build_agent(
     middleware.append(
         ToolRetryMiddleware(
             tools=retry_tools,
-            max_retries=MAX_READ_TOOL_RETRIES,
+            max_retries=0 if profile.id == "automation" else MAX_READ_TOOL_RETRIES,
             retry_on=(
                 ConnectionError,
                 TimeoutError,
@@ -126,17 +137,25 @@ def build_agent(
     # measured separately; model fallback never encloses tool execution.
     if fallback_models:
         middleware.append(ModelFallbackMiddleware(*fallback_models))
+    if profile.id == "automation":
+        from arete.agent.middlewares.automation import AutomationRequestBudgetMiddleware
+
+        middleware.append(AutomationRequestBudgetMiddleware())
     middleware.append(ProviderAffinityMiddleware())
     middleware.append(ModelTelemetryMiddleware())
     middleware.append(ModelResponseMiddleware())
+    from arete.agent.tools.automations import ask_athlete
+
     return create_agent(
         model,
         tools=[
             *authorized_tools(profile),
+            *([ask_athlete] if profile.id == "automation" else []),
             *([respond_coach_followup] if profile.journal_tools else []),
         ],
         middleware=middleware,
         system_prompt=profile.system_prompt or SYSTEM_SKILL,
         context_schema=AgentContext,
+        checkpointer=checkpointer,
         name=profile.name,
     )

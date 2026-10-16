@@ -125,7 +125,7 @@ def withheld(settings: dict, kind: NotificationKind) -> str | None:
     return None
 
 
-def notify(
+def _send(
     title: str, body: str, url: str = "/", *, kind: NotificationKind | None
 ) -> NotifyResult:
     """Send one notification to every subscribed browser. Never raises.
@@ -198,3 +198,35 @@ def first_sentence(text: str, limit: int = 160) -> str:
     match = re.match(r"(.+?[.!?…])(\s|$)", text.strip(), re.DOTALL)
     sentence = match.group(1) if match else text.strip()
     return sentence if len(sentence) <= limit else sentence[: limit - 1].rstrip() + "…"
+
+
+def notify(
+    title: str,
+    body: str,
+    url: str = "/",
+    *,
+    kind: NotificationKind | None,
+    persist: bool = True,
+) -> NotifyResult:
+    from hashlib import sha256
+
+    from arete.services import inbox
+
+    identifier = None
+    if kind is not None and persist:
+        try:
+            key = sha256(
+                json.dumps(
+                    [kind, title, body, url, utc_now().date().isoformat()]
+                ).encode()
+            ).hexdigest()
+            identifier = inbox.record(key, kind, title, body, url)
+        except Exception:
+            logger.exception("Inbox notification could not be stored")
+    result = _send(title, body, url, kind=kind)
+    if identifier:
+        try:
+            inbox.delivered(identifier, result.to_dict())
+        except Exception:
+            logger.exception("Push receipt could not be stored")
+    return result
