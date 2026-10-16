@@ -141,7 +141,12 @@ export function WeeklyReviewPanel() {
   const write = useMutation({
     // « Refaire » names the review on screen: the server rewrites that week, not another.
     mutationFn: (shown: number | null) => (shown === null ? planApi.writeReview(false) : planApi.writeReview(true, shown)),
-    onSuccess: (written) => queryClient.setQueryData(qk.weeklyReview, written),
+    onSuccess: (written) => {
+      queryClient.setQueryData(qk.weeklyReview, written);
+      // « Ma semaine » and the dashboard entry read the same review.
+      void queryClient.invalidateQueries({ queryKey: qk.reviewWeek });
+      void queryClient.invalidateQueries({ queryKey: qk.dashboard() });
+    },
   });
 
   return (
@@ -174,7 +179,8 @@ export function WeeklyReviewPanel() {
       )}
       {review.data && (
         <>
-          <ReviewBody key={review.data.id} review={review.data} refreshing={write.isPending} />
+          {/* A rewrite keeps the id: its version resets the ticks. */}
+          <ReviewBody key={`${review.data.id}:${review.data.created_at}`} review={review.data} refreshing={write.isPending} />
           <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
             <Link to="/planning/semaine" className="inline-flex min-h-11 items-center text-sm text-neon-cyan hover:underline">
               Ouvrir Ma semaine <span aria-hidden className="ml-1">→</span>

@@ -738,10 +738,11 @@ export const planApi = {
   getReviewWeek: () => fetchAPI<import("@/types").ReviewWeek>("/plan/review/week"),
 
   /** Applies the ticked proposals, then the week's key sessions go to Garmin and the calendar. */
-  acceptReview: (reviewId: number, indices: number[]) =>
+  /** `createdAt`: the review's version as the page read it; a rewrite since answers 409. */
+  acceptReview: (reviewId: number, indices: number[], createdAt: string | null = null) =>
     fetchAPI<import("@/types").ReviewAccepted>(`/plan/review/${reviewId}/accept`, {
       method: "POST",
-      body: JSON.stringify({ indices }),
+      body: JSON.stringify({ indices, created_at: createdAt }),
     }),
 
   applyReview: (reviewId: number, indices: number[]) =>

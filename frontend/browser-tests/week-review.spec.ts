@@ -128,7 +128,7 @@ for (const { width, height, name } of [
     await expect(outcome).toContainText('Sortie longue : envoyée sur Garmin Connect');
     await expect(outcome).toContainText('Seuil : déjà sur Garmin, inchangée');
     await expect(outcome).toContainText('Calendrier : à jour.');
-    expect(accepted).toEqual([{ indices: [1] }]);
+    expect(accepted).toEqual([{ indices: [1], created_at: review.created_at }]);
     // The focus stays on the page, not lost to the body.
     await expect(page.getByRole('heading', { name: 'Semaine acceptée' })).toBeFocused();
     await noOverflow(page);

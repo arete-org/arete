@@ -91,7 +91,7 @@ it('accepts the ticked proposals only and reports each outcome from the server',
   expect(boxes.map((b) => b.checked)).toEqual([true, true]);
   fireEvent.click(boxes[0]); // keep the intervals as they are
   fireEvent.click(screen.getByRole('button', { name: 'Accepter (1)' }));
-  await waitFor(() => expect(accept).toHaveBeenCalledWith(7, [1]));
+  await waitFor(() => expect(accept).toHaveBeenCalledWith(7, [1], '2026-10-18T16:10:00'));
   const outcome = await screen.findByRole('status');
   expect(within(outcome).getByText('Aucune proposition appliquée : le planning reste tel quel.')).toBeTruthy();
   expect(within(outcome).getByText(/1 proposition ignorée/)).toBeTruthy();
@@ -178,4 +178,13 @@ it('says an answer that adds nothing sent nothing', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Accepter (2)' }));
   expect(await screen.findByText('Montre : rien de nouveau à envoyer.')).toBeTruthy();
   expect(screen.queryByText(/^Calendrier/)).toBeNull();
+});
+
+it('reads the week again when an answer is refused', async () => {
+  const read = vi.spyOn(planApi, 'getReviewWeek').mockResolvedValue(week);
+  vi.spyOn(planApi, 'acceptReview').mockRejectedValue(new Error('{"detail": "Le bilan a été refait depuis : recharge la page."}'));
+  mount();
+  fireEvent.click(await screen.findByRole('button', { name: 'Accepter (2)' }));
+  expect(await screen.findByText('Le bilan a été refait depuis : recharge la page.')).toBeTruthy();
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
 });

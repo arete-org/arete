@@ -166,7 +166,9 @@ function Proposals({ week, review }: { week: ReviewWeek; review: WeeklyReview })
   const selected = (picked ?? open).filter((i) => open.includes(i));
 
   const accept = useMutation({
-    mutationFn: (indices: number[]) => planApi.acceptReview(review.id, indices),
+    mutationFn: (indices: number[]) => planApi.acceptReview(review.id, indices, review.created_at),
+    // A refused answer (a review rewritten or answered elsewhere): read it again.
+    onError: () => void client.invalidateQueries({ queryKey: qk.reviewWeek }),
     onSuccess: async (accepted) => {
       setResult(accepted);
       setStale((prev) => [...new Set([...prev, ...accepted.stale])]);
@@ -253,7 +255,10 @@ function NoReview() {
   const client = useQueryClient();
   const write = useMutation({
     mutationFn: () => planApi.writeReview(false),
-    onSuccess: () => client.invalidateQueries({ queryKey: qk.weeklyReview }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: qk.weeklyReview });
+      void client.invalidateQueries({ queryKey: qk.dashboard() });
+    },
   });
   return (
     <Panel>
@@ -302,7 +307,11 @@ export function WeekReviewPage() {
         ) : week.data.review && week.data.recap ? (
           <>
             <Recap recap={week.data.recap} review={week.data.review} />
-            <Proposals key={week.data.review.id} week={week.data} review={week.data.review} />
+            <Proposals
+              key={`${week.data.review.id}:${week.data.review.created_at}`}
+              week={week.data}
+              review={week.data.review}
+            />
           </>
         ) : (
           <NoReview />
