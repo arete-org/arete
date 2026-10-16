@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
 
@@ -25,6 +25,7 @@ from arete.agent.runtime.budget import MAX_TOOL_CONCURRENCY
 #: dict. ``agent/context/sections.py`` is the reader; ``api/agent.py`` is the
 #: only writer.
 PANEL_CONTEXT_KEY = "panel_context"
+MESSAGE_SENT_AT_KEY = "arete_sent_at"
 
 #: Budget for one serialized panel-context payload. Over it the injection is
 #: SKIPPED, never truncated — half a JSON payload parses as a different page.
@@ -57,10 +58,10 @@ class RunStats:
     served_models: list[str] = field(default_factory=list)
 
 
-def _athlete_today() -> date:
-    from arete.services.settings import athlete_today
+def _athlete_now() -> datetime:
+    from arete.services.settings import athlete_now
 
-    return athlete_today()
+    return athlete_now()
 
 
 @dataclass
@@ -95,8 +96,9 @@ class AgentContext:
     classifier_calls: int = 0
     run_logged: bool = False
     attachment_paths: tuple[str, ...] = ()
-    # The athlete's calendar day (their timezone), fixed for the invocation.
-    current_date: date = field(default_factory=_athlete_today)
+    # Read the clock once so dates agree across midnight and tool calls keep a
+    # stable prompt prefix. Never share this timestamp through the cached graph.
+    current_datetime: datetime = field(default_factory=_athlete_now)
     deadline: float | None = field(default=None, init=False)
     started_at: float | None = field(default=None, init=False)
     stats: RunStats = field(default_factory=RunStats, init=False, repr=False)
@@ -111,6 +113,15 @@ class AgentContext:
         init=False,
         repr=False,
     )
+
+    def __post_init__(self) -> None:
+        assert self.current_datetime.utcoffset() is not None, (
+            "An aware datetime is required"
+        )
+
+    @property
+    def current_date(self) -> date:
+        return self.current_datetime.date()
 
     @property
     def panel_context(self) -> dict[str, Any] | None:

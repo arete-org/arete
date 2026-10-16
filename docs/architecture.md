@@ -178,8 +178,9 @@ both. The briefing is context, not an invented assistant message or trace receip
 Existing comments remain readable, while further discussion uses the common composer. Athletes never wait for each other's run. The
 server files the feedback's ledger entry itself (`services/memory.append_entry`,
 dated heading, never twice), so neither mission can mutate training data or
-forget to write. Every profile receives the current date: the athlete's, in
-the timezone of their settings (`services/settings.athlete_today`), which every
+forget to write. Every invocation captures one timezone-aware instant on the
+athlete's clock (`services/settings.athlete_now`); its calendar date agrees with
+`services/settings.athlete_today`, which every
 server path meaning "today" shares (plan decisions, briefing, weekly review,
 metric windows, the daily batch's marker). Chat adds new journal
 entries through `append_journal` (server-dated heading, deduplicated,
@@ -220,7 +221,7 @@ The bundle remains bounded to 32 skills of 32 KiB each; filesystem reads are bou
 to 200 lines per call and complete requests are budgeted without silent truncation.
 
 The context builder combines the harness/filesystem contribution, mission
-instructions, the current date for chat, the skill catalog and authorized toolkit instructions, a bounded journal excerpt and, for chat, the attachment manifest and open page: its
+instructions, the skill catalog and authorized toolkit instructions, a bounded journal excerpt and, for chat, the attachment manifest and open page: its
 data read by the server at the first model boundary (`context/sections.py`, through
 `services/pages.py`) and its route/URL parameters labelled as untrusted client data.
 The Log selection includes the selected strength session or the cardio detail digest.
@@ -230,7 +231,30 @@ reuse it. There is no page-context tool. A
 question about the screen therefore needs no tool call. The journal is read again
 for each model call, so writes within a turn are visible on the next call; older
 entries remain accessible through filesystem tools. Contributions do not mutate
-stored messages. A final guard counts messages, system text and tool schemas,
+stored message content. `RuntimeContextMiddleware` owns the clock: once before
+each chat run, it stamps the new human message's `additional_kwargs.arete_sent_at`
+from the invocation's athlete-local instant. It renders date, time, UTC offset
+and tomorrow's date into copies of human messages after native summarization,
+before the final budget guard. Its SYSTEM instruction is constant. If compaction
+removed the current question, its summary receives the same turn-time reference.
+The middleware has no invocation state on the cached graph.
+
+HTTP returns `sent_at`; streaming returns the same value in `X-Arete-Sent-At`
+before the first token, including when the run later fails. A header keeps older
+SSE parsers compatible. The browser saves it as `sentAt` on the originating human
+message and sends it back as `sent_at` on subsequent turns. Historical timestamps
+are timezone-aware browser data, not permissions; the current timestamp always
+comes from the server. Legacy messages stay undated. Replaying a saved offset
+keeps historical prompt bytes unchanged across midnight and timezone changes.
+An explicit retry replaces the question with a new turn and a new timestamp.
+
+This uses LangChain's [transient message overrides](https://docs.langchain.com/oss/python/langchain/context-engineering#messages)
+for rendering, without changing raw content or adding model requests. Only
+timestamp metadata persists in browser history; no server conversation store is
+introduced. Page, ledger and other existing contributions can still invalidate
+their own prefix. The supplied time is the start of the turn, not a live clock.
+Background profiles retain their date in SYSTEM through the same middleware.
+A final guard counts messages, system text and tool schemas,
 reserves 4,096 output tokens and a safety margin, and rejects requests that still
 exceed the envelope.
 

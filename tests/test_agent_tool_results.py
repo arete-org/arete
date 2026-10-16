@@ -216,7 +216,7 @@ def test_native_summarization_preserves_raw_history_and_current_objective(async_
     assert [m.content for m in result["messages"][:-1]] == [
         m.content for m in [*history, objective]
     ]
-    assert captured[-1][-1].content == objective.content
+    assert captured[-1][-1].text.startswith(objective.text + "\n\n<server_datetime>")
     assert len(captured[-1]) < len(history)
     path = next(
         path for path in result["files"] if path.startswith("/conversation_history/")

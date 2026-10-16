@@ -48,6 +48,24 @@ function stream(text: string, split = 1) {
 }
 
 describe('SSE transport', () => {
+  it('replays stored timestamps and captures the server clock before a failed stream', async () => {
+    const previous = '2026-10-15T23:59:59+02:00';
+    const current = '2026-10-16T00:00:01+02:00';
+    const history = restoreConversation(JSON.stringify([{ role: 'user', content: 'Demain ?', sentAt: previous }]));
+    const stamped = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(stream(frame({ type: 'error', detail: 'Interrompu' })), { headers: { 'X-Arete-Sent-At': current } }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(runAgentStream(history, { page: 'planning', path: '/planning', params: {} }, () => {}, new AbortController().signal, 'thread', undefined, undefined, stamped)).rejects.toThrow('Interrompu');
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages).toEqual([{ role: 'user', content: 'Demain ?', sent_at: previous }]);
+      expect(stamped).toHaveBeenCalledExactlyOnceWith(current);
+      expect(history[0].sentAt).toBe(previous);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('rejects an ambiguous saved timestamp instead of redating history', () => {
+    expect(() => restoreConversation(JSON.stringify([{ role: 'user', content: 'Question', sentAt: '2026-10-15T14:32:00' }]))).toThrow('Horodatage');
+    expect(restoreConversation(JSON.stringify([{ role: 'user', content: 'Legacy' }]))[0].sentAt).toBeUndefined();
+  });
   it('sends the stable conversation ID without UI-only history fields', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(stream(frame(done))));
     vi.stubGlobal('fetch', fetchMock);

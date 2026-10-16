@@ -205,7 +205,9 @@ def test_concurrent_profiles_keep_instructions_and_traces_isolated(
     assert factory.call_count == 4  # Three main models plus chat's summary client.
     for messages in model._seen:
         task = next(
-            m.content for m in messages if m.type == "human" and m.content in tasks
+            m.text.split("\n", 1)[0]
+            for m in messages
+            if m.type == "human" and m.text.split("\n", 1)[0] in tasks
         )
         prompt = messages[0].content
         assert TASK_INSTRUCTIONS[task] in prompt
@@ -572,13 +574,13 @@ def test_invalid_tracing_switch_is_a_configuration_error(monkeypatch):
 def test_chat_turns_share_thread_metadata_without_reusing_trace_or_date(
     monkeypatch, recorder, streaming
 ):
-    from datetime import date, timedelta
+    from datetime import UTC, datetime, timedelta
 
     turn_ids = []
     model, factory = install_model(monkeypatch, [AIMessage(content="ok")] * 3)
     for index, thread_id in enumerate(("thread-a", "thread-a", "thread-b")):
-        today = date(2026, 10, 8) + timedelta(days=index)
-        context = AgentContext(thread_id=thread_id, current_date=today)
+        now = datetime(2026, 10, 8, 12, 30, tzinfo=UTC) + timedelta(days=index)
+        context = AgentContext(thread_id=thread_id, current_datetime=now)
         turn_ids.append(context.run_id)
         if streaming:
 
@@ -588,9 +590,10 @@ def test_chat_turns_share_thread_metadata_without_reusing_trace_or_date(
             asyncio.run(consume())
         else:
             invoke(state(), context=context)
-        prompt = model._seen[-1][0].content
-        assert f"Date actuelle : {today.isoformat()}" in prompt
-        assert f"Demain : {(today + timedelta(days=1)).isoformat()}" in prompt
+        assert "<server_datetime>" not in model._seen[-1][0].text
+        prompt = next(m.text for m in reversed(model._seen[-1]) if m.type == "human")
+        assert now.isoformat(timespec="seconds") in prompt
+        assert f"Demain : {(now.date() + timedelta(days=1)).isoformat()}" in prompt
     assert factory.call_count == 2  # Main and summary clients are cached across turns.
     runs, roots = assert_trace_tree(recorder, roots=3)
     assert len({r["trace_id"] for r in roots}) == 3

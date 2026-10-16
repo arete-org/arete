@@ -285,6 +285,16 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       threadId,
       documentIds,
       () => { if (!controller.signal.aborted) patchAnswer(m => ({ ...m, streamAccepted: true })); },
+      (sentAt) => {
+        if (controller.signal.aborted) return;
+        setStore(prev => updateThread(prev, threadId, thread => ({
+          ...thread,
+          messages: thread.messages.map((message, index) =>
+            index === keep && message.role === 'user' && message.sentAt === undefined
+              ? { ...message, sentAt } : message
+          ),
+        })));
+      },
     )
       .catch((err: unknown) =>
         patchAnswer((m) =>

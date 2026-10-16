@@ -15,10 +15,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from arete.agent.runtime.context import (
     MAX_PANEL_CONTEXT_CHARS,
+    MESSAGE_SENT_AT_KEY,
     PANEL_CONTEXT_KEY,
     PANEL_PAGES,
     AgentContext,
@@ -79,6 +80,7 @@ class ChatMessageIn(BaseModel):
 
     role: str = Field(..., pattern="^(user|assistant)$")
     content: str = Field(..., min_length=1, max_length=MAX_MESSAGE_CHARS)
+    sent_at: AwareDatetime | None = None
 
 
 class ChatRequest(BaseModel):
@@ -106,16 +108,22 @@ class ChatMessageOut(BaseModel):
 
 class ChatResponse(BaseModel):
     message: ChatMessageOut
+    sent_at: str
     trace: TraceReceipt | None = None
     cards: list[dict] = Field(default_factory=list)
 
 
-def _to_langchain(role: str, content: str) -> LangchainMessage:
+def _to_langchain(
+    role: str, content: str, sent_at: str | None = None
+) -> LangchainMessage:
     from langchain_core.messages import AIMessage, HumanMessage
 
     if role == "assistant":
         return AIMessage(content=content)
-    return HumanMessage(content=content)
+    return HumanMessage(
+        content=content,
+        additional_kwargs={MESSAGE_SENT_AT_KEY: sent_at} if sent_at else {},
+    )
 
 
 def _panel_context_source(request: ChatRequest) -> dict[str, str]:
@@ -190,7 +198,6 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     )
     from arete.services.documents import DocumentError
 
-    history = [_to_langchain(m.role, m.content) for m in body.messages]
     source = _panel_context_source(body)
     from anyio import to_thread
 
@@ -199,6 +206,14 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         body.thread_id,
         account_id=clerk_account(request),
     )
+    history = [
+        _to_langchain(
+            m.role,
+            m.content,
+            m.sent_at.isoformat(timespec="seconds") if m.sent_at else None,
+        )
+        for m in body.messages
+    ]
     context.document_ids = (
         tuple(str(i) for i in body.document_ids)
         if body.document_ids is not None
@@ -237,6 +252,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 
     final = messages[-1]
     return ChatResponse(
+        sent_at=context.current_datetime.isoformat(timespec="seconds"),
         cards=[card for message in messages if (card := coach_card(message))],
         trace=chat_trace(context.run_id, context.thread_id, context.account_id),
         message=ChatMessageOut(
@@ -257,7 +273,7 @@ def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
-async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str]:
+async def _sse_stream(body: StreamRequest, context: AgentContext) -> AsyncIterator[str]:
     """Messages, tool activity and failures are separate UI events."""
     from arete.agent.runtime.execution import (
         LIMIT_MESSAGE,
@@ -271,12 +287,14 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
     from anyio import to_thread
 
     try:
-        history = [_to_langchain(m.role, m.content) for m in body.messages]
-        context = _to_agent_context(
-            _panel_context_source(body),
-            body.thread_id,
-            account_id=account_id,
-        )
+        history = [
+            _to_langchain(
+                m.role,
+                m.content,
+                m.sent_at.isoformat(timespec="seconds") if m.sent_at else None,
+            )
+            for m in body.messages
+        ]
         context.document_ids = (
             tuple(str(i) for i in body.document_ids)
             if body.document_ids is not None
@@ -320,11 +338,17 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
 @router.post("/chat/stream")
 async def chat_stream(body: StreamRequest, request: Request) -> StreamingResponse:
     """Stream a run; validate page context before sending HTTP 200."""
-    _panel_context_source(body)
+    context = _to_agent_context(
+        _panel_context_source(body), body.thread_id, account_id=clerk_account(request)
+    )
     return StreamingResponse(
-        _sse_stream(body, clerk_account(request)),
+        _sse_stream(body, context),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Arete-Sent-At": context.current_datetime.isoformat(timespec="seconds"),
+        },
     )
 
 

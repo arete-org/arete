@@ -29,6 +29,7 @@ from arete.agent.middlewares.observability import ModelTelemetryMiddleware
 from arete.agent.middlewares.policy import ProfilePolicyMiddleware
 from arete.agent.middlewares.provider_affinity import ProviderAffinityMiddleware
 from arete.agent.middlewares.responses import ModelResponseMiddleware
+from arete.agent.middlewares.runtime_context import RuntimeContextMiddleware
 from arete.agent.models.jev import JevClient
 from arete.agent.profiles.models import AgentProfile
 from arete.agent.prompts.coach import SYSTEM_SKILL
@@ -117,6 +118,7 @@ def build_agent(
     )
     if summarization is not None:
         middleware.append(summarization)
+    middleware.append(RuntimeContextMiddleware())
     middleware.append(
         ContextBudgetMiddleware(
             context_tokens=context_tokens, output_tokens=output_tokens
