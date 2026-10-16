@@ -15,8 +15,10 @@ from arete.services.adaptation import Decision
 from arete.services.renegotiation import Conflict, propose
 
 #: Far enough ahead that no other test's "today" reaches it (the athlete's
-#: today is patched to it: the server's date may differ, see conftest).
-DAY = date.today() + timedelta(days=900)
+#: today is patched to it: the server's date may differ, see conftest). A
+#: Monday: a move stays within its week, which then holds the whole window.
+_AHEAD = date.today() + timedelta(days=900)
+DAY = _AHEAD - timedelta(days=_AHEAD.weekday())
 
 
 def _day(offset: int) -> date:
@@ -53,7 +55,8 @@ def _options(reasons, reason: str) -> dict[str, renegotiation.Option]:
 def test_a_tired_tempo_becomes_a_shorter_easy_run_or_moves_to_tomorrow():
     tempo = _planned(sid=1, target_intensity="hard")
     tired = _options(propose(tempo, DAY, [tempo], set()), "tired")
-    assert list(tired) == ["lighter", "move"]
+    # Tired is never a reason to have to say it hurts: rest is offered too.
+    assert list(tired) == ["lighter", "move", "rest"]
     lighter = tired["lighter"]
     assert lighter.decision == Decision.EASE
     assert lighter.changes["session_type"] == "endurance"
@@ -126,6 +129,15 @@ def test_pain_never_offers_a_move_nor_anything_harder(session):
             assert option.changes["session_type"] == "recovery"
 
 
+def test_durations_round_half_up_to_five_minutes():
+    endurance = _planned(SessionType.ENDURANCE, sid=1, minutes=75, zone="Z2")
+    # 75 × 0.7 = 52.5: 55, not the half-to-even 50.
+    shorter = _options(propose(endurance, DAY, [endurance], set()), "no_time")[
+        "shorter"
+    ]
+    assert shorter.changes["target_duration_min"] == 55
+
+
 def test_a_short_recovery_in_pain_can_only_rest():
     recovery = _planned(SessionType.RECOVERY, sid=1, minutes=20, zone="Z1")
     assert list(_options(propose(recovery, DAY, [recovery], set()), "pain")) == ["rest"]
@@ -179,11 +191,46 @@ def test_nothing_moves_onto_or_past_a_race():
     assert renegotiation.move_day(tempo, DAY, [tempo, race], set()) is None
 
 
+def test_a_hard_session_never_moves_into_the_two_days_before_a_race():
+    tempo = _planned(sid=1)
+    easy = _planned(SessionType.ENDURANCE, sid=1, zone="Z2")
+    # Race in four days: tomorrow is three days before, still fine.
+    assert renegotiation.move_day(tempo, DAY, [tempo], {_day(4)}) == _day(1)
+    # Race in three days: tomorrow and the day after are its last two days.
+    assert renegotiation.move_day(tempo, DAY, [tempo], {_day(3)}) is None
+    assert renegotiation.move_day(easy, DAY, [easy], {_day(3)}) == _day(1)
+    # A planned race beyond the window counts the same.
+    race = _planned(SessionType.RACE, 4, sid=5)
+    assert renegotiation.move_day(tempo, _day(1), [tempo, race], set()) is None
+
+
+def test_a_move_never_crosses_into_next_week():
+    saturday, sunday = _day(5), _day(6)
+    easy = _planned(SessionType.ENDURANCE, 5, sid=1, zone="Z2")
+    assert renegotiation.move_day(easy, saturday, [easy], set()) == sunday
+    taken = _planned(SessionType.ENDURANCE, 6, sid=2)
+    assert renegotiation.move_day(easy, saturday, [easy, taken], set()) is None
+    on_sunday = _planned(SessionType.ENDURANCE, 6, sid=1, zone="Z2")
+    reasons = propose(on_sunday, sunday, [on_sunday], set())
+    assert list(_options(reasons, "no_time")) == ["shorter", "rest"]
+    (no_time,) = [r for r in reasons if r.id == "no_time"]
+    assert no_time.note and "Dernier jour de la semaine" in no_time.note
+
+
+def test_a_session_moved_once_moves_no_more():
+    tempo = _planned(sid=1)
+    reasons = propose(tempo, DAY, [tempo], set(), moved_before=True)
+    assert list(_options(reasons, "tired")) == ["lighter", "rest"]
+    assert list(_options(reasons, "no_time")) == ["shorter", "rest"]
+    (tired,) = [r for r in reasons if r.id == "tired"]
+    assert tired.note and "Déjà déplacée une fois" in tired.note
+
+
 def test_a_session_with_explicit_steps_only_moves_or_rests():
     steps = {"steps": [{"kind": "effort", "duration_kind": "seconds", "value": 600}]}
     structured = _planned(sid=1, prescription=steps)
     reasons = propose(structured, DAY, [structured], set())
-    assert list(_options(reasons, "tired")) == ["move"]
+    assert list(_options(reasons, "tired")) == ["move", "rest"]
     assert list(_options(reasons, "no_time")) == ["move"]
     assert list(_options(reasons, "pain")) == ["rest"]
 
@@ -264,7 +311,7 @@ def test_the_menu_is_read_on_demand_with_a_version(today):
 def test_a_lighter_choice_is_one_revertable_decision(today):
     with _pushing(False):
         result = _choose(today, "tired", "lighter")
-    assert result["garmin"] == "disabled"
+    assert result["garmin"] == "unchanged"
     (decision,) = _decisions()
     assert decision.state == "applied" and decision.applied_at is not None
     assert decision.decision == "ease"
@@ -306,6 +353,94 @@ def test_a_move_changes_the_day_and_its_revert_brings_it_back(today):
         plan_adaptation.revert(decision.id)
     back = GarminRepository().get_planned_session(today)
     assert back is not None and back.date == DAY
+
+
+def test_a_moved_session_is_not_offered_another_move_on_its_new_day(today, monkeypatch):
+    with _pushing(False):
+        _choose(today, "no_time", "move")
+    monkeypatch.setattr(renegotiation, "athlete_today", lambda: _day(1))
+    menu = renegotiation.options(today)
+    for reason in menu["reasons"]:
+        assert "move" not in [o["id"] for o in reason["options"]]
+
+
+def test_a_day_planned_inside_the_window_of_the_write_is_a_conflict(today, monkeypatch):
+    stale = renegotiation._read(today)
+    # Another tab planned tomorrow after this menu was read, before its write.
+    GarminRepository().create_planned_session(
+        PlannedSession(
+            date=_day(1), sport="running", session_type=SessionType.ENDURANCE
+        )
+    )
+    monkeypatch.setattr(renegotiation, "_read", lambda _id: stale)
+    with pytest.raises(Conflict, match="plus libre"):
+        renegotiation.apply(today, "tired", "move", stale.version)
+    assert _decisions() == []
+    assert GarminRepository().get_planned_session(today).date == DAY
+
+
+def test_reverting_a_move_never_undoes_a_later_edit(today):
+    with _pushing(False):
+        _choose(today, "no_time", "move")
+    moved = GarminRepository().get_planned_session(today)
+    # The athlete lengthens the moved session in Planning: 70 min now.
+    assert GarminRepository().update_planned_session_fields(
+        today, expected_revision=moved.revision, target_duration_min=70
+    )
+    (decision,) = _decisions()
+    with _pushing(False), pytest.raises(plan_adaptation.RevertRefused):
+        plan_adaptation.revert(decision.id)
+    kept = GarminRepository().get_planned_session(today)
+    assert (kept.date, kept.target_duration_min) == (_day(1), 70)
+    assert _decisions()[0].reverted_at is None
+
+
+def test_a_move_reverts_only_on_its_own_day_and_gives_back_the_day_alone(
+    today, monkeypatch
+):
+    with _pushing(False):
+        _choose(today, "no_time", "move")
+    (decision,) = _decisions()
+    monkeypatch.setattr(plan_adaptation, "athlete_today", lambda: _day(1))
+    with _pushing(False), pytest.raises(plan_adaptation.RevertRefused):
+        plan_adaptation.revert(decision.id)
+    monkeypatch.setattr(plan_adaptation, "athlete_today", lambda: DAY)
+    with _pushing(False):
+        plan_adaptation.revert(decision.id)
+    back = GarminRepository().get_planned_session(today)
+    assert back.date == DAY and back.target_duration_min == 50
+
+
+def test_a_morning_ease_on_a_structured_session_still_reverts(today):
+    from arete.services.plan_repository import PlanDecisionRepository
+
+    con = connect()
+    con.execute(
+        "UPDATE app.planned_sessions SET structure_json=? WHERE id=?",
+        ['{"blocks": []}', today],
+    )
+    con.close()
+    session = GarminRepository().get_planned_session(today)
+    decision = PlanDecisionRepository().create(
+        day=DAY,
+        planned_session_id=today,
+        decision="ease",
+        reason="Préparation basse",
+        readiness_score=40,
+        readiness_source="garmin",
+        acwr=1.0,
+        original=plan_adaptation.snapshot(session),
+        adapted={"target_duration_min": 30},
+        state="applied",
+        session_revision=session.revision,
+    )
+    GarminRepository().update_planned_session_fields(
+        today, target_duration_min=30, status=SessionStatus.MODIFIED
+    )
+    with _pushing(False):
+        plan_adaptation.revert(decision.id)
+    back = GarminRepository().get_planned_session(today)
+    assert (back.target_duration_min, back.status) == (50, SessionStatus.PENDING)
 
 
 def test_a_stale_page_or_a_second_tap_applies_nothing(today):
@@ -398,7 +533,11 @@ def test_an_open_proposal_must_be_answered_first(today):
     (decision,) = _decisions()
     assert decision.id == proposal.id and decision.decision == "rest"
     assert decision.state == "applied" and decision.reason.startswith("Douleur / gêne")
-    assert decision.readiness_score is None
+    assert decision.readiness_source == "athlete"
+    # The morning's suggestion stays readable once replaced.
+    replaced = decision.original["replaced"]
+    assert replaced["reason"] == proposal.reason and replaced["state"] == "dismissed"
+    assert replaced["readiness_score"] == 70.0
 
 
 def test_a_reverted_choice_can_be_renegotiated(today):
@@ -499,6 +638,21 @@ def test_without_a_copy_on_garmin_nothing_is_sent(today, monkeypatch):
     assert client.calls == []
 
 
+def test_without_a_copy_the_push_setting_is_no_warning(today):
+    # Most athletes keep the automatic push off: no copy, nothing to say.
+    with _pushing(False):
+        assert _choose(today, "pain", "rest")["garmin"] == "unchanged"
+
+
+def test_a_copy_left_by_the_push_off_is_reported(today, monkeypatch):
+    client = _garmin()
+    garmin_export.export(today, client=client)
+    calls = len(client.calls)
+    with _pushing(False):
+        assert _choose(today, "pain", "rest")["garmin"] == "disabled"
+    assert len(client.calls) == calls
+
+
 def test_the_http_contract(today, router_client):
     from arete.api.plan import router
 
@@ -522,10 +676,14 @@ def test_the_http_contract(today, router_client):
     with _pushing(False):
         done = http.post(f"/plan/today/sessions/{today}/renegotiate", json=body)
         assert done.status_code == 200
-        assert done.json()["garmin"] == "disabled"
+        assert done.json()["garmin"] == "unchanged"
         assert done.json()["decision"]["decision"] == "ease"
         again = http.post(f"/plan/today/sessions/{today}/renegotiate", json=body)
-    assert again.status_code == 409
+        assert again.status_code == 409
+        decision_id = done.json()["decision"]["id"]
+        reverted = http.post(f"/plan/decisions/{decision_id}/revert")
+    assert reverted.status_code == 200 and reverted.json()["garmin"] == "unchanged"
+    assert reverted.json()["reverted_at"] is not None
 
 
 def test_other_opens_the_coach_with_the_session_and_the_rules(today):

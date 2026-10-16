@@ -26,6 +26,7 @@ from arete.services.adaptation import (
 )
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.plan_repository import (
+    ATHLETE_CHOICE,
     AlreadyDecided,
     PlanDecision,
     PlanDecisionRepository,
@@ -54,7 +55,7 @@ ANSWER_SESSION_REQUESTS = 9
 ANSWER_REQUESTS = 2 * ANSWER_SESSION_REQUESTS
 
 #: The planning fields a decision may overwrite, saved before it does
-#: (``date`` only by a renegotiated move).
+#: (``date`` only by a renegotiated move, whose revert restores it alone).
 _PLAN_FIELDS = (
     "session_type",
     "target_duration_min",
@@ -64,9 +65,8 @@ _PLAN_FIELDS = (
     "status",
     "date",
 )
-#: All a decision may change on a session with explicit steps: its day or
-#: its status (a renegotiated move or rest), never its targets.
-_STRUCTURED_FIELDS = ("date", "status")
+#: All a rest changes on a session with explicit steps: its status.
+_STRUCTURED_FIELDS = ("status",)
 
 
 def snapshot(session: PlannedSession) -> dict[str, Any]:
@@ -182,6 +182,10 @@ class NothingToRevert(Exception):
     """The decision was a keep, or has been reverted already."""
 
 
+class RevertRefused(Exception):
+    """Reverting would undo something else: the athlete edits the plan instead."""
+
+
 def revert(decision_id: int) -> PlanDecision:
     """Put the planned session back as it was before the decision.
 
@@ -190,6 +194,18 @@ def revert(decision_id: int) -> PlanDecision:
     marked stale; with the automatic push on, the original replaces it in place
     (or comes back after a reverted rest), once, after the commit. Otherwise,
     or when that attempt fails, the card offers to send it again.
+    """
+    return revert_reporting(decision_id)[0]
+
+
+def revert_reporting(decision_id: int) -> tuple[PlanDecision, str]:
+    """``revert``, with what Garmin did after it (``garmin_outcome``).
+
+    The athlete's own choice (``ATHLETE_CHOICE``) is reverted only while the
+    session is as that choice wrote it (its ``session_revision``), else
+    ``RevertRefused``: an edit made since is never silently undone, and a
+    second tap reverts nothing. A move is reverted only on its own day, and
+    gives back the day alone.
     """
     decisions = PlanDecisionRepository()
     decision = decisions.get(decision_id)
@@ -201,25 +217,44 @@ def revert(decision_id: int) -> PlanDecision:
         or decision.decision == Decision.KEEP.value
     ):
         raise NothingToRevert(f"decision {decision_id}")
+    athletes = decision.readiness_source == ATHLETE_CHOICE
+    moved = decision.decision == Decision.MOVE
+    if moved and decision.date != athlete_today():
+        raise RevertRefused(
+            "Ce déplacement date d’un autre jour : modifie la séance depuis le Planning."
+        )
     session = GarminRepository().get_planned_session(decision.planned_session_id)
     fields: tuple[str, ...] = _PLAN_FIELDS
-    if session is not None and (session.prescription or session.structure_json):
-        if decision.decision not in {Decision.MOVE, Decision.REST}:
+    if moved:
+        fields = ("date",)
+    elif session is not None and session.prescription is not None:
+        if decision.decision != Decision.REST:
             raise NothingToRevert("Cette séance possède une prescription validée.")
+        fields = _STRUCTURED_FIELDS
+    elif (
+        session is not None
+        and session.structure_json
+        and decision.decision == Decision.REST
+    ):
         fields = _STRUCTURED_FIELDS
     original = {k: v for k, v in (decision.original or {}).items() if k in fields}
     if "date" in original:
         original["date"] = date.fromisoformat(str(original["date"]))
-    GarminRepository().update_planned_session_fields(
+    changed = GarminRepository().update_planned_session_fields(
         decision.planned_session_id,
+        expected_revision=decision.session_revision if athletes else None,
         **original,
         garmin_pushed_at=None,
     )
+    if athletes and not changed:
+        raise RevertRefused(
+            "La séance a changé depuis ce choix : modifie-la depuis le Planning."
+        )
     decisions.mark(decision.id, "reverted_at")
-    follow_on_garmin([decision], reverted=True)
+    garmin = garmin_outcome(follow_on_garmin([decision], reverted=True))
     reverted = decisions.get(decision.id)
     assert reverted is not None
-    return reverted
+    return reverted, garmin
 
 
 # --------------------------------------------------------------------------- #
@@ -473,17 +508,15 @@ def follow_on_garmin(
     the card's send button. A failure stays in the export state the card
     shows; nothing replays it.
 
-    What happened, as ``push_week`` reports it: ``state`` (``disabled``,
-    ``disconnected``, ``failed`` when not started, else ``done``) and each
-    session acted on with its ``outcome`` (``sent``, ``withdrawn``, ``failed``
-    or ``not_started``); a session Garmin does not hold is not listed.
+    What happened, as ``push_week`` reports it: ``state`` (``disabled``
+    when a copy needs the push that is off, ``disconnected``, ``failed`` when
+    not started, else ``done``) and each session acted on with its
+    ``outcome`` (``sent``, ``withdrawn``, ``failed`` or ``not_started``); a
+    session Garmin does not hold is not listed, and none means ``done``.
     """
     from arete.services import garmin_export
 
     try:
-        if not _pushing():
-            # The copy stays stale: the card offers to send it again.
-            return {"state": "disabled", "sessions": []}
         actions: list[tuple[int, str]] = []
         for decision in decisions:
             session_id = decision.planned_session_id
@@ -498,6 +531,9 @@ def follow_on_garmin(
                     actions.append((session_id, "export"))
         if not actions:
             return {"state": "done", "sessions": []}
+        if not _pushing():
+            # The copy stays stale: the card offers to send or withdraw it.
+            return {"state": "disabled", "sessions": []}
         if client is None:
             from arete.garmin.client import GarminClient
 
@@ -523,6 +559,20 @@ def follow_on_garmin(
             )
         outcomes.append({"planned_session_id": session_id, "outcome": outcome})
     return {"state": "done", "sessions": outcomes}
+
+
+def garmin_outcome(result: dict) -> str:
+    """One session's ``follow_on_garmin`` in one word, for the athlete.
+
+    ``sent`` or ``withdrawn`` (the copy Garmin holds), ``failed`` or
+    ``not_started`` (left in the export state the card shows, never
+    replayed), ``unchanged`` (Garmin holds no copy), ``disabled`` (a copy
+    the automatic push, off, did not touch) or ``disconnected``.
+    """
+    if result["state"] != "done":
+        return str(result["state"])
+    sessions = result["sessions"]
+    return str(sessions[0]["outcome"]) if sessions else "unchanged"
 
 
 class ProposalConflict(ValueError):

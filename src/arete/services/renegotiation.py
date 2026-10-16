@@ -12,15 +12,19 @@ Coaching defaults (the owner validates them; docs/architecture.md):
 
 - Lighter (« Je suis cuit »): a tempo, intervals or long run becomes endurance
   Z2, an endurance run recovery Z1, a recovery run a shorter recovery, each at
-  ``LIGHTER_SHARE`` of its duration (rounded to 5 min, at least
-  ``MIN_MINUTES``; ``UNTIMED_MINUTES`` without a duration).
+  ``LIGHTER_SHARE`` of its duration (rounded half up to 5 min, at least
+  ``MIN_MINUTES``; ``UNTIMED_MINUTES`` without a duration). Rest is always
+  offered too: a tired athlete need not say it hurts.
 - Shorter (« Pas le temps »): the same session at ``LIGHTER_SHARE`` of its
   duration. A tempo or intervals described in words cannot be cut by a rule
   (its steps would no longer fit), so it becomes endurance Z2 instead.
 - Moved (both): to the first day of the next ``MOVE_WINDOW_DAYS`` with nothing
-  planned, before the next race, and, for a hard session (tempo, intervals,
-  long run, race, or any session marked hard), with no hard session or race
-  the day before or after. Without such a day, rest is offered instead.
+  planned, within the same ISO week (« Ma semaine » counts stay honest), before
+  the next race, and, for a hard session (tempo, intervals, long run, race, or
+  any session marked hard), with no hard session or race the day before or
+  after and never in the ``RACE_TAPER_DAYS`` before a race. A session moves
+  once: one already moved is not offered another move. Without a day, rest is
+  offered instead.
 - Pain (« Douleur / gêne »): rest, or ``PAIN_MINUTES`` of recovery Z1; never
   moved, never harder than planned.
 - A session with explicit steps can only be moved or rested here: its steps
@@ -58,6 +62,8 @@ UNTIMED_MINUTES = 30
 PAIN_MINUTES = 20
 #: A session moves at most this many days ahead.
 MOVE_WINDOW_DAYS = 3
+#: A hard session never moves into these days before a race.
+RACE_TAPER_DAYS = 2
 #: Hard sessions, which never sit next to one another once moved.
 _HARD_TYPES = frozenset({"tempo", "intervals", "long_run", "race"})
 
@@ -137,7 +143,8 @@ def _cut(minutes: int | None) -> int | None:
     """The shorter duration, or None when the session cannot be any shorter."""
     if minutes is None:
         return UNTIMED_MINUTES
-    cut = max(MIN_MINUTES, round(minutes * LIGHTER_SHARE / 5) * 5)
+    # Half up (52.5 -> 55), not Python's half-to-even.
+    cut = max(MIN_MINUTES, int(minutes * LIGHTER_SHARE / 5 + 0.5) * 5)
     return cut if cut < minutes else None
 
 
@@ -320,16 +327,26 @@ def move_day(
 
     for offset in range(1, MOVE_WINDOW_DAYS + 1):
         day = today + timedelta(days=offset)
+        if day.isocalendar()[:2] != today.isocalendar()[:2]:
+            return None  # never into next week
         if next_race is not None and day >= next_race:
             return None  # never on the race, nor after it
         if any(s.date == day for s in others):
             continue
         if is_hard(session) and (
-            hard_on(day - timedelta(days=1)) or hard_on(day + timedelta(days=1))
+            hard_on(day - timedelta(days=1))
+            or hard_on(day + timedelta(days=1))
+            or (next_race is not None and (next_race - day).days <= RACE_TAPER_DAYS)
         ):
             continue
         return day
     return None
+
+
+def move_limit(today: date) -> date:
+    """The last day a move may reach: the window, within this week."""
+    sunday = today + timedelta(days=6 - today.weekday())
+    return min(today + timedelta(days=MOVE_WINDOW_DAYS), sunday)
 
 
 def _move(session: PlannedSession, reason: str, day: date) -> Option:
@@ -351,19 +368,30 @@ def propose(
     today: date,
     week: list[PlannedSession],
     races: set[date],
+    *,
+    moved_before: bool = False,
 ) -> tuple[Reason, ...]:
-    """Each reason's options for today's session; pure."""
-    day = move_day(session, today, week, races)
-    no_day = (
-        None
-        if day is not None
-        else f"Pas de jour libre d’ici {day_fr(today + timedelta(days=MOVE_WINDOW_DAYS))} : "
-        "allège ou repose-toi."
-    )
+    """Each reason's options for today's session; pure.
+
+    ``moved_before``: the session was already moved once, and moves no more.
+    """
+    day = None if moved_before else move_day(session, today, week, races)
+    limit = move_limit(today)
+    if day is not None:
+        no_day = None
+    elif moved_before:
+        no_day = "Déjà déplacée une fois : allège-la ou repose-toi."
+    elif limit == today:
+        no_day = "Dernier jour de la semaine : pas de report, allège ou repose-toi."
+    else:
+        no_day = f"Pas de jour libre d’ici {day_fr(limit)} : allège ou repose-toi."
     reasons = []
     for reason, change in (("tired", _lighter), ("no_time", _shorter)):
         options = [change(session)]
-        options.append(_move(session, reason, day) if day else _rest(session, reason))
+        if day:
+            options.append(_move(session, reason, day))
+        if reason == "tired" or not day:
+            options.append(_rest(session, reason))
         reasons.append(
             Reason(
                 reason,
@@ -395,6 +423,7 @@ class _Day:
     decision: PlanDecision | None
     blocked: str | None
     reasons: tuple[Reason, ...]
+    races: set[date] = field(default_factory=set)
 
     @property
     def version(self) -> str:
@@ -469,13 +498,15 @@ def _read(session_id: int) -> _Day:
             raise LookupError("Séance introuvable")
         if session.date != today:
             raise Conflict("Ce n’est plus la séance du jour : recharge la page.")
-        week = repo.list_planned_sessions(
-            start_date=today,
-            end_date=today + timedelta(days=MOVE_WINDOW_DAYS + 1),
-            status=None,
-            limit=50,
-            ascending=True,
-            connection=con,
+        week = _week(con, today)
+        moved_before = (
+            con.execute(
+                "SELECT 1 FROM app.visible_plan_decisions WHERE planned_session_id=? "
+                "AND decision='move' AND applied_at IS NOT NULL AND reverted_at IS NULL "
+                "LIMIT 1",
+                [session_id],
+            ).fetchone()
+            is not None
         )
         decision = next(
             (
@@ -499,8 +530,27 @@ def _read(session_id: int) -> _Day:
         if g.status == "active" and g.race_date > today
     }
     blocked = _blocked(session, decision, done, export)
-    reasons = () if blocked else propose(session, today, week, races)
-    return _Day(session, today, decision, blocked, reasons)
+    reasons = (
+        ()
+        if blocked
+        else propose(session, today, week, races, moved_before=moved_before)
+    )
+    return _Day(session, today, decision, blocked, reasons, races)
+
+
+def _week(con, today: date) -> list[PlannedSession]:
+    """The planned sessions a move depends on: its window, the day after it
+    and the taper days before a race just beyond it."""
+    from arete.garmin.repository import GarminRepository
+
+    return GarminRepository().list_planned_sessions(
+        start_date=today,
+        end_date=today + timedelta(days=MOVE_WINDOW_DAYS + RACE_TAPER_DAYS),
+        status=None,
+        limit=50,
+        ascending=True,
+        connection=con,
+    )
 
 
 def options(session_id: int) -> dict[str, Any]:
@@ -529,7 +579,11 @@ def apply(session_id: int, reason: str, option_id: str, version: str) -> dict[st
     from arete.dataio.db import transaction
     from arete.garmin.repository import GarminRepository
     from arete.services.plan_adaptation import snapshot
-    from arete.services.plan_repository import AlreadyDecided, PlanDecisionRepository
+    from arete.services.plan_repository import (
+        ATHLETE_CHOICE,
+        AlreadyDecided,
+        PlanDecisionRepository,
+    )
 
     day = _read(session_id)
     if version != day.version:
@@ -553,6 +607,20 @@ def apply(session_id: int, reason: str, option_id: str, version: str) -> dict[st
     original = snapshot(session)
     if option.decision == Decision.MOVE:
         original["date"] = session.date.isoformat()
+    if day.decision is not None:
+        # The morning's suggestion stays readable (briefing, coach) once replaced.
+        before = day.decision
+        original["replaced"] = {
+            "decision": before.decision,
+            "reason": before.reason,
+            "state": before.state,
+            "readiness_score": before.readiness_score,
+            "readiness_source": before.readiness_source,
+            "acwr": before.acwr,
+            "reverted": before.reverted_at is not None,
+        }
+    # The revision this choice writes: its revert refuses a session edited since.
+    written = session.revision + 1
     adapted = {
         k: (v.isoformat() if isinstance(v, date) else v)
         for k, v in option.changes.items()
@@ -561,9 +629,18 @@ def apply(session_id: int, reason: str, option_id: str, version: str) -> dict[st
     decisions = PlanDecisionRepository()
     try:
         with transaction() as con:
-            # The session first: its compare-and-set is the transaction's
-            # first read, so a write committed since the menu's is seen, and
-            # one racing it conflicts.
+            # A move's day is read again here: one planned on it since the
+            # menu was read is a conflict, not a stacked day.
+            target = option.changes.get("date")
+            if target is not None and (
+                move_day(session, day.today, _week(con, day.today), day.races) != target
+            ):
+                raise Conflict("Ce jour n’est plus libre : recharge les options.")
+            # The revision guard refuses a session changed since the menu was
+            # read; a write racing this transaction on the same row fails
+            # with DuckDB's write-write conflict (a Conflict below). The
+            # session is written before the decision: with the decision
+            # first, a revision bump committed in between was seen to pass.
             if not GarminRepository().update_planned_session_fields(
                 session.id,
                 expected_revision=session.revision,
@@ -579,12 +656,12 @@ def apply(session_id: int, reason: str, option_id: str, version: str) -> dict[st
                     decision=option.decision.value,
                     reason=option.reason,
                     readiness_score=None,
-                    readiness_source=None,
+                    readiness_source=ATHLETE_CHOICE,
                     acwr=None,
                     original=original,
                     adapted=adapted,
                     state="applied",
-                    session_revision=session.revision,
+                    session_revision=written,
                     con=con,
                 )
             else:
@@ -595,7 +672,7 @@ def apply(session_id: int, reason: str, option_id: str, version: str) -> dict[st
                     reason=option.reason,
                     original=original,
                     adapted=adapted,
-                    session_revision=session.revision,
+                    session_revision=written,
                     con=con,
                 )
                 if reapplied is None:
@@ -620,26 +697,17 @@ def apply(session_id: int, reason: str, option_id: str, version: str) -> dict[st
 
 
 def _follow(decision: PlanDecision) -> str:
-    """Garmin after the commit, in one word; never fails the written answer.
-
-    ``sent`` or ``withdrawn`` (the copy Garmin holds), ``failed`` or
-    ``not_started`` (left in the export state the card shows, never
-    replayed), ``unchanged`` (Garmin holds no copy), ``disabled`` (no
-    automatic push) or ``disconnected``.
-    """
+    """Garmin after the commit, in one word (``plan_adaptation.garmin_outcome``);
+    never fails the written answer."""
     import logging
 
-    from arete.services.plan_adaptation import follow_on_garmin
+    from arete.services.plan_adaptation import follow_on_garmin, garmin_outcome
 
     try:
-        result = follow_on_garmin([decision])
+        return garmin_outcome(follow_on_garmin([decision]))
     except Exception:  # noqa: BLE001 - the decision is committed
         logging.getLogger(__name__).warning("Garmin follow-up failed", exc_info=True)
         return "failed"
-    if result["state"] != "done":
-        return str(result["state"])
-    sessions = result["sessions"]
-    return str(sessions[0]["outcome"]) if sessions else "unchanged"
 
 
 def coach_context(session_id: int) -> dict[str, Any]:

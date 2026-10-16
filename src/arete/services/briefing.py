@@ -190,7 +190,12 @@ def briefing_facts(
                 "rest": "remplacée par du repos",
                 "move": "déplacée",
             }.get(d.decision, d.decision)
-            lines.append(f"{planned} : {verdict} — raison : {d.reason}")
+            line = f"{planned} : {verdict} — raison : {d.reason}"
+            replaced = before.get("replaced")
+            if isinstance(replaced, dict) and replaced.get("reason"):
+                # The athlete's choice replaced the morning's suggestion.
+                line += f" (proposition du matin remplacée : {replaced['reason']})"
+            lines.append(line)
         return lines
 
     def predictions() -> list[str]:

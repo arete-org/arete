@@ -20,6 +20,11 @@ _COLUMNS = (
 )
 
 
+#: ``readiness_source`` of a decision the athlete chose (« Modifier », ARE-61):
+#: no readiness made it, and the RPG's prescribed rests leave it out.
+ATHLETE_CHOICE = "athlete"
+
+
 class AlreadyDecided(Exception):
     """That session already has a decision for that day."""
 
@@ -181,14 +186,15 @@ class PlanDecisionRepository:
 
         The day keeps one row per session (the unique key): a declined or
         reverted decision, or a proposal snoozed past today, is replaced in
-        place, by compare-and-set on the revision the athlete's page read.
+        place, by compare-and-set on the revision the athlete's page read
+        (the caller keeps what it replaced in ``original["replaced"]``).
         None when that row changed meanwhile or is still open.
         """
         row = con.execute(
             f"""
             UPDATE app.plan_decisions SET
                 decision = ?, reason = ?, readiness_score = NULL,
-                readiness_source = NULL, acwr = NULL, original_json = ?,
+                readiness_source = ?, acwr = NULL, original_json = ?,
                 adapted_json = ?, applied_at = now(), reverted_at = NULL,
                 state = 'applied', revision = revision + 1,
                 session_revision = ?, readiness_measured_on = NULL,
@@ -202,6 +208,7 @@ class PlanDecisionRepository:
             [
                 decision,
                 reason,
+                ATHLETE_CHOICE,
                 json.dumps(original, ensure_ascii=False, default=str),
                 json.dumps(adapted, ensure_ascii=False) if adapted else None,
                 session_revision,

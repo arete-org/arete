@@ -41,11 +41,15 @@ def adapt_today() -> dict[str, Any]:
 
 @router.post("/decisions/{decision_id}/revert")
 def revert_decision(decision_id: int) -> dict[str, Any]:
-    """Restore the planned session as it was before the decision."""
+    """Restore the planned session as it was before the decision; ``garmin``
+    says what Garmin did after it (``plan_adaptation.garmin_outcome``)."""
     try:
-        return service.revert(decision_id).to_dict()
+        decision, garmin = service.revert_reporting(decision_id)
+        return {**decision.to_dict(), "garmin": garmin}
     except LookupError:
         raise HTTPException(status_code=404, detail="Décision introuvable") from None
+    except service.RevertRefused as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     except service.NothingToRevert:
         raise HTTPException(
             status_code=409, detail="Rien à rétablir pour cette décision"
