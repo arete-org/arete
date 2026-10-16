@@ -181,3 +181,105 @@ class TestOwedToday:
         assert not owed_today(None, None, at(4), "Europe/Paris", quiet_hours=quiet)
         assert owed_today(None, None, at(5), "Europe/Paris", quiet_hours=quiet)
         assert not owed_today(None, None, at(20), "Europe/Paris", quiet_hours=quiet)
+
+
+def test_goals_read_the_athlete_settings_once(frozen, router_client, monkeypatch):
+    from arete.api.goals import router
+    from arete.dataio.db import db_connection
+    from arete.services import goals
+
+    reads: list[int] = []
+    zone = dict(frozen)
+
+    def counted(*args, **kwargs):
+        reads.append(1)
+        return zone
+
+    try:
+        for name in ("test-tz-a", "test-tz-b", "test-tz-c"):
+            goals.create_goal(name=name, race_date=date(2026, 12, 6), distance_km=10)
+        monkeypatch.setattr(settings.repo, "get_user_settings", counted)
+        body = router_client(router).get("/goals").json()
+    finally:
+        with db_connection() as con:
+            con.execute("DELETE FROM app.goals WHERE name LIKE 'test-tz-%'")
+    mine = [g for g in body if g["name"].startswith("test-tz-")]
+    assert len(mine) == 3 and {g["days_left"] for g in mine} == {55}
+    assert len(reads) == 1
+
+
+def test_muscle_stats_end_on_the_paris_day(frozen, router_client):
+    from arete.api import strength
+
+    asked: list[tuple[date, date]] = []
+
+    def rows(start, end):
+        asked.append((start, end))
+        return []
+
+    with patch.object(strength._repo, "muscle_set_rows", rows):
+        response = router_client(strength.router).get(
+            "/strength/stats/muscles", params={"days": 7, "include_cardio": False}
+        )
+    assert response.status_code == 200
+    # Both windows in one read: the previous week starts on 29/09.
+    assert asked == [(date(2026, 9, 29), PARIS_DAY)]
+
+
+def test_garmin_activity_sync_ends_on_the_paris_day(frozen):
+    from unittest.mock import MagicMock
+
+    from arete.garmin.sync import GarminSyncClient
+
+    repo = MagicMock()
+    repo.last_garmin_import.return_value = (None, None)
+    client = GarminSyncClient(client=MagicMock(), repository=repo)
+    with (
+        patch.object(client, "refresh_threshold"),
+        patch.object(client, "get_activities", return_value=[]) as fetch,
+    ):
+        list(client.iter_sync_activities())
+    assert fetch.call_args.kwargs["end_date"] == PARIS_DAY
+    assert fetch.call_args.kwargs["start_date"] == date(2026, 9, 12)
+
+
+def test_admin_reads_window_on_the_paris_day(frozen):
+    from arete.services import admin_athlete_data, planning
+    from arete.strength.repository import StrengthRepository
+
+    planned: list[tuple[str, str]] = []
+    lifted: list[tuple[date, date]] = []
+
+    def list_planned(start, end):
+        planned.append((start, end))
+        return []
+
+    def list_sessions(self, start_date, end_date, **kwargs):
+        lifted.append((start_date, end_date))
+        return []
+
+    with (
+        patch.object(planning, "list_planned", list_planned),
+        patch.object(StrengthRepository, "list_sessions", list_sessions),
+    ):
+        admin_athlete_data._read("planning", 7, 0, "", "", "")
+        admin_athlete_data._read("strength", 7, 0, "", "", "")
+        admin_athlete_data._read("planning", 7, 0, "", "", "2026-10-01")
+    assert planned == [("2026-10-12", "2026-10-19"), ("2026-10-01", "2026-10-08")]
+    assert lifted == [(date(2026, 10, 6), PARIS_DAY)]
+
+
+@pytest.mark.parametrize(
+    ("start", "status"), [("2026-10-12", 409), ("2026-10-13", 422)]
+)
+def test_an_open_sync_period_ends_on_the_paris_day(
+    frozen, router_client, start, status
+):
+    from arete.api.garmin_sync import router
+
+    with patch("arete.garmin.token_store.session_status", return_value=(False, None)):
+        response = router_client(router).post(
+            "/garmin/sync/activities", json={"start_date": start}
+        )
+    # 409: the period passed and the missing Garmin login stopped the work.
+    assert response.status_code == status

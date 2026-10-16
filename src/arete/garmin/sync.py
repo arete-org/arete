@@ -434,11 +434,16 @@ class GarminSyncClient:
             self.refresh_threshold()
 
         if history_offset is None:
+            from arete.services.settings import athlete_today
+
+            # The athlete's day, as the health sync: an activity just after
+            # their midnight is still on the server's yesterday.
+            if end_date is None:
+                end_date = athlete_today()
             if start_date is None:
                 # A newer Strava or manual row must not skip Garmin activities.
                 last_day, _ = self.repository.last_garmin_import()
-                start_date = last_day or date.today() - timedelta(days=30)
-            end_date = end_date or date.today()
+                start_date = last_day or end_date - timedelta(days=30)
             logger.info(f"Syncing activities from {start_date} to {end_date}")
         else:
             logger.info("Syncing Garmin history at offset %s", history_offset)

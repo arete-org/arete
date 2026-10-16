@@ -9,6 +9,7 @@ from typing import Any
 import duckdb
 
 from arete.dataio.db import db_connection, transaction
+from arete.services.coaching_repository import naive_utc_now
 from arete.services.settings import athlete_today
 
 MAX_FOLLOWUP_HOURS = 48
@@ -57,9 +58,8 @@ def prepare(today: date | None = None) -> None:
         )
         # Calendar-date imports may lack a start time. Bound availability from
         # request creation, and never renew it when the athlete snoozes.
-        expires = datetime.combine(today, datetime.now().time()) + timedelta(
-            hours=MAX_FOLLOWUP_HOURS
-        )
+        # Instants are naive UTC, whatever the host's or the athlete's zone.
+        expires = naive_utc_now() + timedelta(hours=MAX_FOLLOWUP_HOURS)
         con.execute(
             "INSERT INTO app.coach_followups (session_id,decision_id,requested_on,question,expires_at) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING",
             [session_id, decision_id, today, question, expires],
@@ -82,7 +82,7 @@ def pending(today: date | None = None, con=None) -> list[dict[str, Any]]:
             return pending(today, own)
     rows = con.execute(
         f"SELECT {_COLUMNS} FROM app.visible_coach_followups WHERE state='pending' AND expires_at>? AND (snoozed_until IS NULL OR snoozed_until<=?) ORDER BY requested_on,id LIMIT 2",
-        [datetime.combine(today, datetime.now().time()), today],
+        [naive_utc_now(), today],
     ).fetchall()
     return [_record(row) for row in rows]
 
@@ -122,7 +122,7 @@ def respond(
             if (
                 old["revision"] != revision
                 or old["state"] != "pending"
-                or row[5] <= datetime.now()
+                or row[5] <= naive_utc_now()
             ):
                 raise FollowupConflict("Ce suivi a changé ou expiré. Recharge-le.")
             if action == "answer":
@@ -135,7 +135,7 @@ def respond(
                         "La séance a déjà un ressenti ou n’est plus disponible."
                     )
             changed = con.execute(
-                "UPDATE app.coach_followups SET state=?,rpe=?,notes=?,snoozed_until=?,revision=revision+1,answered_at=CASE WHEN ?='answered' THEN now() ELSE NULL END "
+                "UPDATE app.coach_followups SET state=?,rpe=?,notes=?,snoozed_until=?,revision=revision+1,answered_at=CASE WHEN ?='answered' THEN ? ELSE NULL END "
                 "WHERE athlete_id=getvariable('arete_athlete_id') AND deleted_at IS NULL AND id=? AND revision=? RETURNING "
                 + _COLUMNS,
                 [
@@ -144,6 +144,7 @@ def respond(
                     notes,
                     athlete_today() + timedelta(days=1) if action == "snooze" else None,
                     state,
+                    naive_utc_now(),
                     followup_id,
                     revision,
                 ],
@@ -156,10 +157,11 @@ def respond(
 
 
 def context_block() -> str:
+    now = naive_utc_now()
     with db_connection() as con:
         rows = con.execute(
-            f"SELECT {_COLUMNS} FROM app.visible_coach_followups WHERE (state='answered' AND answered_at>=?) OR (state='pending' AND expires_at>now()) ORDER BY requested_on DESC,id DESC LIMIT ?",
-            [datetime.now() - timedelta(days=7), MAX_CONTEXT_FOLLOWUPS],
+            f"SELECT {_COLUMNS} FROM app.visible_coach_followups WHERE (state='answered' AND answered_at>=?) OR (state='pending' AND expires_at>?) ORDER BY requested_on DESC,id DESC LIMIT ?",
+            [now - timedelta(days=7), now, MAX_CONTEXT_FOLLOWUPS],
         ).fetchall()
     if not rows:
         return ""

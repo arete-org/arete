@@ -39,20 +39,25 @@ def _found(goal: service.Goal | None) -> dict[str, Any]:
 
 @router.get("")
 def list_goals(include_past: bool = False) -> list[dict[str, Any]]:
-    return [g.to_dict() for g in service.list_goals(include_past=include_past)]
+    # The athlete's settings once, not once per goal.
+    today = athlete_today()
+    goals = service.list_goals(include_past=include_past, today=today)
+    return [g.to_dict(today) for g in goals]
 
 
 @router.get("/next")
 def next_goal() -> dict[str, Any] | None:
-    goal = service.next_goal()
-    return goal.to_dict() if goal else None
+    today = athlete_today()
+    goal = service.next_goal(today)
+    return goal.to_dict(today) if goal else None
 
 
 @router.post("", status_code=201)
 def create_goal(body: GoalCreate) -> dict[str, Any]:
-    if body.race_date < athlete_today():
+    today = athlete_today()
+    if body.race_date < today:
         raise HTTPException(status_code=422, detail="La date de course est passée")
-    return service.create_goal(**body.model_dump()).to_dict()
+    return service.create_goal(**body.model_dump()).to_dict(today)
 
 
 @router.patch("/{goal_id}")
