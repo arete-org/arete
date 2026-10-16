@@ -119,11 +119,13 @@ class ProductionWorkflowTests(unittest.TestCase):
 
 class PreviewWorkflowTests(unittest.TestCase):
     def test_service_token_logs_preserve_errors_and_reject_incomplete_responses(self):
-        for response, valid in (
-            ({"rows": [{"logs": [{"message": "migration failed"}]}]}, True),
-            ({"rows": [], "hasMoreRows": False}, True),
-            ({"rows": [], "hasMoreRows": True}, False),
-            ({"error": "not authorized"}, False),
+        for response, history_exit, stream_exit, valid in (
+            ({"rows": [{"logs": [{"message": "migration failed"}]}]}, 0, 0, True),
+            ({"rows": [], "hasMoreRows": False}, 0, 0, True),
+            ({"rows": [], "hasMoreRows": True}, 0, 0, False),
+            ({"error": "not authorized"}, 0, 0, False),
+            ({"error": "not authorized"}, 22, 0, True),
+            ({"error": "not authorized"}, 22, 28, False),
         ):
             with (
                 self.subTest(response=response),
@@ -132,9 +134,15 @@ class PreviewWorkflowTests(unittest.TestCase):
                 root = Path(directory)
                 curl = root / "curl"
                 curl.write_text(
-                    '#!/bin/sh\ncase "$*" in\n'
-                    '*api.vercel.com*) printf \'%s\\n\' \'{"id":"dpl_test","projectId":"expected","target":null}\' ;;\n'
-                    '*) printf "%s\\n" "$TEST_LOG_JSON" ;;\nesac\n'
+                    "#!/usr/bin/env python3\n"
+                    "import os, sys\nfrom pathlib import Path\n"
+                    "if any('runtime-logs?' in arg for arg in sys.argv):\n"
+                    ' print(\'{"message":"migration failed"}\')\n'
+                    " sys.exit(int(os.environ['TEST_STREAM_EXIT']))\n"
+                    "if '--output' in sys.argv:\n"
+                    " Path(sys.argv[sys.argv.index('--output') + 1]).write_text(os.environ['TEST_LOG_JSON'])\n"
+                    " sys.exit(int(os.environ['TEST_HISTORY_EXIT']))\n"
+                    'print(\'{"id":"dpl_test","projectId":"expected","target":null}\')\n'
                 )
                 curl.chmod(0o755)
                 result = subprocess.run(
@@ -147,6 +155,8 @@ class PreviewWorkflowTests(unittest.TestCase):
                         "VERCEL_ORG_ID": "test-team",
                         "VERCEL_TOKEN": "test-token",
                         "TEST_LOG_JSON": json.dumps(response),
+                        "TEST_HISTORY_EXIT": str(history_exit),
+                        "TEST_STREAM_EXIT": str(stream_exit),
                     },
                     capture_output=True,
                     text=True,
@@ -154,7 +164,13 @@ class PreviewWorkflowTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(result.returncode == 0, valid, result.stderr)
-                if valid:
+                if history_exit:
+                    self.assertIn(json.dumps(response), result.stderr)
+                    self.assertEqual(result.returncode, stream_exit)
+                    self.assertEqual(
+                        json.loads(result.stdout), {"message": "migration failed"}
+                    )
+                elif valid:
                     self.assertEqual(json.loads(result.stdout), response)
 
     def test_manual_diagnosis_resolves_only_this_projects_previews(self):
