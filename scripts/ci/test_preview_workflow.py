@@ -118,6 +118,61 @@ class ProductionWorkflowTests(unittest.TestCase):
 
 
 class PreviewWorkflowTests(unittest.TestCase):
+    def test_live_diagnosis_subscribes_before_boot_and_keeps_the_startup_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            curl = root / "curl"
+            curl.write_text(
+                textwrap.dedent("""\
+                #!/usr/bin/env python3
+                import os, sys, time
+                from pathlib import Path
+                root = Path(os.environ['TEST_ROOT'])
+                if any('runtime-logs?' in arg for arg in sys.argv):
+                    (root / 'subscribed').touch()
+                    Path(sys.argv[sys.argv.index('--dump-header') + 1]).write_text('HTTP/2 200\\r\\n\\r\\n')
+                    for _ in range(100):
+                        if (root / 'booted').exists():
+                            print('{"message":"Database initialization failed: migration error"}')
+                            sys.exit(0)
+                        time.sleep(0.01)
+                    raise AssertionError('health never invoked')
+                if any(arg.endswith('/api/health') for arg in sys.argv):
+                    assert (root / 'subscribed').exists(), 'startup log would be lost'
+                    (root / 'booted').touch()
+                    print('{"pending_migrations":[50]}')
+                    sys.exit(22)
+                print('{"id":"dpl_test","projectId":"expected","target":null}')
+                """)
+            )
+            curl.chmod(0o755)
+            summary = root / "summary"
+            result = subprocess.run(
+                ["bash", str(ROOT / "scripts/ci/preview_logs.sh")],
+                env={
+                    **os.environ,
+                    "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                    "TEST_ROOT": str(root),
+                    "URL": "https://arete-example-arete15.vercel.app",
+                    "VERCEL_PROJECT_ID": "expected",
+                    "VERCEL_ORG_ID": "test-team",
+                    "VERCEL_TOKEN": "test-token",
+                    "BYPASS": "test-bypass",
+                    "GITHUB_STEP_SUMMARY": str(summary),
+                },
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 22, result.stderr)
+            self.assertIn(
+                "Database initialization failed: migration error", result.stdout
+            )
+            self.assertEqual(
+                json.loads(summary.read_text()), {"pending_migrations": [50]}
+            )
+
     def test_service_token_logs_preserve_errors_and_reject_incomplete_responses(self):
         for response, history_exit, stream_exit, valid in (
             ({"rows": [{"logs": [{"message": "migration failed"}]}]}, 0, 0, True),
@@ -157,6 +212,7 @@ class PreviewWorkflowTests(unittest.TestCase):
                         "TEST_LOG_JSON": json.dumps(response),
                         "TEST_HISTORY_EXIT": str(history_exit),
                         "TEST_STREAM_EXIT": str(stream_exit),
+                        "BYPASS": "",
                     },
                     capture_output=True,
                     text=True,

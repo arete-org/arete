@@ -59,19 +59,12 @@ jobs:
             | jq -er --arg project "$VERCEL_PROJECT_ID" \
               'select(.projectId == $project and .target != "production") | .url | select(type == "string" and length > 0)')
           echo "url=https://$url" >> "$GITHUB_OUTPUT"
-      - name: Read the health response
-        env:
-          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          URL: ${{ steps.resolve.outputs.url }}
-        run: |
-          curl --fail-with-body -sS --connect-timeout 10 --max-time 60 \
-            -H "x-vercel-protection-bypass: $BYPASS" \
-            "$URL/api/health" | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Read runtime errors even when health is degraded
+      - name: Capture startup logs while reading health
         if: always() && !cancelled() && steps.resolve.outputs.url != ''
-        timeout-minutes: 2
+        timeout-minutes: 3
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           URL: ${{ steps.resolve.outputs.url }}
         run: bash scripts/ci/preview_logs.sh
 
