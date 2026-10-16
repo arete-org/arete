@@ -52,6 +52,80 @@ def revert_decision(decision_id: int) -> dict[str, Any]:
         ) from None
 
 
+class RenegotiationOption(BaseModel):
+    id: str
+    decision: Literal["ease", "replace_easy", "rest", "move"]
+    label: str
+    detail: str
+
+
+class RenegotiationReason(BaseModel):
+    id: Literal["tired", "no_time", "pain"]
+    label: str
+    options: list[RenegotiationOption]
+    note: str | None
+
+
+class RenegotiationMenu(BaseModel):
+    session_id: int
+    date: date_type
+    version: str = Field(
+        description="Send it back with the choice: any change since answers 409"
+    )
+    blocked: str | None = Field(description="Why nothing can be offered, in French")
+    reasons: list[RenegotiationReason]
+
+
+class RenegotiationChoice(BaseModel):
+    reason: Literal["tired", "no_time", "pain"]
+    option: str = Field(min_length=1, max_length=16)
+    version: str = Field(pattern=r"^[0-9a-f]{16}$")
+
+
+class Renegotiated(BaseModel):
+    decision: dict[str, Any]
+    date: date_type = Field(
+        description="The session's day once written (a move changes it)"
+    )
+    garmin: Literal[
+        "sent",
+        "withdrawn",
+        "failed",
+        "not_started",
+        "unchanged",
+        "disabled",
+        "disconnected",
+    ] = Field(description="Garmin after the commit; never fails the written choice")
+
+
+@router.get("/today/sessions/{session_id}/options", response_model=RenegotiationMenu)
+def renegotiation_options(session_id: int) -> dict[str, Any]:
+    """« Modifier »: the rules' options for today's session, read when the menu opens."""
+    from arete.services import renegotiation
+
+    try:
+        return renegotiation.options(session_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Séance introuvable") from None
+    except renegotiation.Conflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+
+@router.post("/today/sessions/{session_id}/renegotiate", response_model=Renegotiated)
+def renegotiate(session_id: int, body: RenegotiationChoice) -> dict[str, Any]:
+    """Apply one option: the session and the day's decision, then Garmin once."""
+    from arete.services import renegotiation
+
+    try:
+        return renegotiation.apply(session_id, body.reason, body.option, body.version)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Séance introuvable") from None
+    except renegotiation.Conflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
 class ReviewApply(BaseModel):
     indices: list[int]
     # Required: a rewrite keeps the review's id, so the same indices may name

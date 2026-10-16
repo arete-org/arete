@@ -188,6 +188,7 @@ def briefing_facts(
                 "ease": "allégée",
                 "replace_easy": "remplacée par de la récupération",
                 "rest": "remplacée par du repos",
+                "move": "déplacée",
             }.get(d.decision, d.decision)
             lines.append(f"{planned} : {verdict} — raison : {d.reason}")
         return lines
