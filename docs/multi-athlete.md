@@ -104,12 +104,13 @@ account and a second empty account before reopening access. Restore the backup
 and old application together if rollback is needed. Do not run the old application
 against a migrated database containing multiple athletes.
 
-**This change has only local validation.** No production migration is applied.
-A preview with `VERCEL_ENV=preview` and `ARETE_DB=md:arete` refuses database access
-before connecting, including initialization. Configure a separate preview database
-and token/environment first. Verify MotherDuck migration and concurrent cursor
-behavior there before production rollout. Do not label a PR `preview` until that
-configuration is ready. Production uses the repository's manual deployment workflow.
+Production has run on these migrations since 10 October 2026: the cutover above
+was performed once, and accounts outside the owner's now receive their own
+athlete. Previews use the separate database `md:arete_preview`; a preview with
+`VERCEL_ENV=preview` and `ARETE_DB=md:arete` still refuses database access before
+connecting, including initialization. Production ships through the repository's
+manual deployment workflow, after the main preview has served the same commit
+(`docs/deployment.md`).
 
 ## Daily sync
 

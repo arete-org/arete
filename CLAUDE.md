@@ -19,7 +19,7 @@ Preserve journal injection, per-turn date context and optional LangSmith tracing
 through these owners. Schemas live beside their owning contract. Avoid file moves that do not improve a
 boundary, and do not add speculative folders or catch-all shared modules.
 
-The current profiles are chat, daily briefing and session feedback. Browser threads
+The current profiles are chat, daily briefing, session feedback and weekly review. Browser threads
 remain authoritative. Background profiles cannot write training data; chat retains
 direct writes with its toolkits preloaded. Follow-up suggestions are fixed
 page-aware lists in the browser, never a model request. Preserve these behaviors
