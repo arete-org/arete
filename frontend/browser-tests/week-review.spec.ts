@@ -61,6 +61,7 @@ async function sunday(page: Page, theme = 'dark') {
       });
     }
     if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh' } });
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/plan/review/week') {
       const applied = accepted.length ? [1] : [];
       return route.fulfill({
