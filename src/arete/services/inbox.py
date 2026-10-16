@@ -1,11 +1,14 @@
 """The inbox stores delivery references; business objects remain authoritative."""
 
 import json
+import logging
 from uuid import uuid4
 
 from arete.dataio.db import db_connection, transaction
 from arete.services.automations import OWNER, public, rows
 from arete.services.settings import utc_now
+
+logger = logging.getLogger(__name__)
 
 
 def record(key, kind, title, body, url, reference=None):
@@ -40,8 +43,14 @@ def publish(key, kind, title, body, url, reference=None):
 
     identifier = record(key, kind, title, body, url, reference)
     if identifier:
-        result = notify(title, body, url, kind=kind, persist=False)
-        delivered(identifier, result.to_dict())
+        try:
+            result = notify(title, body, url, kind=kind, persist=False).to_dict()
+        except Exception as exc:
+            # The inbox item and mission already committed. Delivery is separate
+            # and is never retried implicitly after an ambiguous provider response.
+            logger.warning("Automation push failed: %s", type(exc).__name__)
+            result = {"sent": 0, "dropped": 0, "skipped_reason": "delivery_failed"}
+        delivered(identifier, result)
     return identifier
 
 

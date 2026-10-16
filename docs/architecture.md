@@ -164,12 +164,18 @@ written. A rewrite is marked `updated_after_sync`; a failed rewrite keeps the
 briefing it would have replaced. The dashboard leads with it and says when it was
 written and, after a sync rewrite, when the sync replaced it; briefing times
 are naive UTC, like the claim, since instances on other clocks share the
-database. The athlete's 👍/👎 and
-optional short word live on the briefing's row (migration 48): one per briefing,
+database. The athlete's useful/not-useful rating and
+legacy short comment live on the briefing's row (migration 48): one per briefing,
 idempotent, stored only, since no prompt reads them. `GET /tips/history` lists
-the previous seven days on demand. "Demander au coach" selects the briefing as
-the page's `coach_ref`, which the context builder resolves by id like a
-proposal; nothing is sent and the draft stays. Athletes never wait for each other's run. The
+previous days on demand. `GET /tips/briefings/{id}` reads the athlete's selected
+usable briefing without loading the agent stack. Dashboard title/actions create a
+fresh browser thread and store its `CoachReference` beside messages and drafts.
+The full briefing and shared `FeedbackRating` controls appear inside Chiron;
+opening makes no model request and leaves the previous draft/attachments intact.
+Each explicit message includes this thread's `coach_ref`, which the context
+builder resolves by id. Switching threads switches references; reload restores
+both. The briefing is context, not an invented assistant message or trace receipt.
+Existing comments remain readable, while further discussion uses the common composer. Athletes never wait for each other's run. The
 server files the feedback's ledger entry itself (`services/memory.append_entry`,
 dated heading, never twice), so neither mission can mutate training data or
 forget to write. Every profile receives the current date: the athlete's, in
@@ -235,10 +241,56 @@ native Deep Agents summarization within an invocation; the browser still sends
 the last 30 messages and keeps its complete thread locally. The model profile
 uses this configured window for the native 85% trigger and 10% retained tail.
 Raw messages remain in graph state and compacted history remains readable under
-`/conversation_history/`. There is no checkpointer: summaries and ephemeral files
+`/conversation_history/`. Browser chat has no checkpointer: summaries and ephemeral files
 are not carried into the next browser request, so long threads may summarize
 again. Durable facts and the transactional journal are long-term memory;
 `data/agent/memory` is only a legacy import source.
+
+## Scheduled automations
+
+The `automation` profile is composed in `coaching.py` with the personal training
+capabilities and `ask_athlete`, without automation management, administrator or
+Slack coordination tools. API handlers and chat tools adapt the same
+`services/automations.py` contracts. A scheduled occurrence snapshots its definition
+and revision; browser conversations remain local.
+
+`services/automation_schedule.py` owns typed schedules and their timezone rules.
+Session triggers use registration in Arete, not the activity's end time. Existing
+activity events supply canonical identity; strength links are resolved directly
+even when RPG projection is disabled. Activation excludes existing sessions.
+The dispatcher keeps only the latest overdue recurring occurrence runnable and
+records older ones as missed. Database claims and two shared worker slots prevent
+the Docker and Vercel dispatchers from owning the same run concurrently.
+
+LangChain 1.4.6's `HumanInTheLoopMiddleware(interrupt_mode="per_call")` intercepts
+each business write before execution/retry middleware. `ask_athlete` accepts a
+`respond` decision without mutating training records. Decisions are stored against
+their interruption ID after owner, revision, state, expiry and JSON-schema checks;
+only the dispatcher resumes the graph. Approved calls recheck capability policy
+and a captured business-data snapshot. This snapshot is deliberately conservative:
+unrelated changes can invalidate an approval, including another approved write
+in the same run. A stale approval fails explicitly rather than using old data.
+
+`agent/runtime/checkpoints.py` implements the public `BaseCheckpointSaver` contract;
+all checkpoint I/O lives in `dataio/automation_checkpoints.py`. Migration 50 adds
+athlete-owned definitions, runs, decisions, counters, receipts, checkpoints and
+inbox references. Runtime clients, credentials and gates stay outside checkpoints.
+Each write records a durable receipt before execution. An uncertain outcome stops
+the run without automatic replay. Abandoned leases become interrupted. Completed
+checkpoint chains expire after 30 days while product history stays available;
+export and account deletion include the new athlete-owned records.
+
+Limits survive every resume: 20 active definitions, five new runs per athlete/day,
+eight model turns, 24 model requests including fallbacks, 24 tool calls, four
+resumes, 48 hours waiting for a human, 120 seconds per segment and 240 active
+seconds total. A dispatcher starts at most two segments within 270 seconds.
+Pending work remains visible. Inbox read, archive and decision are separate
+operations; push delivery failure leaves the mission outcome and inbox intact.
+
+The UI shares inbox query state between the bell, home priorities and `/follow-up`.
+Questions and approvals use the existing Chiron panel, preserving the conversation
+draft. Semantic deduplication of free-form automation questions against legacy
+check-ins, and a dedicated activation card in chat, remain follow-up work.
 
 ## Native training operations
 
@@ -699,7 +751,7 @@ and `done` phases, including failure/cancellation via `finally`. Streaming adds
 `values`; its projection exposes only changed counters, never the rest of state.
 The existing browser thread store saves counters locally; compaction activity is
 ephemeral, scoped to its originating thread and cleared on every stream closure.
-There is still no server checkpointer. The composer hides the gauge below 85%
+Browser conversations still have no server checkpointer. The composer hides the gauge below 85%
 unless `contextGaugeAlways` is present in the URL (even with value `false`).
 No counters means no gauge. Compaction with counters is always visible. The
 percentage updates after model calls and may retain the pre-compaction count

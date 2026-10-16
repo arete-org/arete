@@ -7,6 +7,7 @@ const IPHONE =
 async function mockApi(page: Page, saved: unknown[] = []) {
   await page.route('**/api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/settings') {
       if (route.request().method() === 'PUT') {

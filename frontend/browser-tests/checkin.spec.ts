@@ -16,6 +16,7 @@ async function morning(page: Page, theme = 'dark', replanned = false) {
   await page.route('**/api/**', (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     requests.push(`${request.method()} ${path}`);
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER', theme } });
@@ -44,7 +45,7 @@ for (const { width, height } of [{ width: 375, height: 812 }, { width: 1440, hei
     await expect(card).toBeVisible();
     // Before the briefing, which it feeds.
     const ask = (await card.boundingBox())!;
-    const briefing = (await page.getByRole('heading', { name: 'BRIEFING DU JOUR' }).boundingBox())!;
+    const briefing = (await page.getByRole('heading', { name: 'Briefing du jour' }).boundingBox())!;
     expect(ask.y).toBeLessThan(briefing.y);
     await noOverflow(page);
     for (const chip of await card.getByRole('radio').all()) {
@@ -80,7 +81,7 @@ test('the push link brings back a card put off for the day, focused, and a propo
   await card.getByRole('button', { name: /Plus tard/ }).click();
   await expect(card).toBeHidden();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'BRIEFING DU JOUR' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Briefing du jour' })).toBeVisible();
   await expect(card).toBeHidden(); // remembered for the day
 
   await page.goto('/?checkin=1');

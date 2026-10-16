@@ -335,3 +335,21 @@ def test_briefing_times_mean_one_instant_across_instances(
     assert before - timedelta(seconds=1) <= written <= after + timedelta(seconds=1)
     reacted = _row(briefing)[2].replace(tzinfo=UTC)  # stored naive UTC
     assert before - timedelta(seconds=1) <= reacted <= after + timedelta(seconds=1)
+
+
+def test_thread_reads_the_selected_briefing_without_generating_one(db, client):
+    from arete.services.users import upsert_user
+
+    previous_day = athlete_today() - timedelta(days=10)
+    selected = _write(db, previous_day, "Mon briefing complet.")
+    _write(db, athlete_today(), "Un autre briefing.")
+    response = client.get(f"/tips/briefings/{selected}")
+    assert response.status_code == 200
+    assert response.json()["tip"] == "Mon briefing complet."
+    assert response.json()["date"] == previous_day.isoformat()
+    failed = _write(db, athlete_today(), "", status="failed", error="timeout")
+    other = upsert_user("reader-other", "reader@example.com", "Other", verified=True)
+    with athlete_scope(other.athlete_id):
+        private = _write(db, athlete_today(), "Private.")
+    for unavailable in (private, failed, 999_999):
+        assert client.get(f"/tips/briefings/{unavailable}").status_code == 404

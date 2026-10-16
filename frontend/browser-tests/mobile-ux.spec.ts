@@ -14,6 +14,7 @@ async function fixture(page: Page) {
   });
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'odyssey', display_name: 'Arthur' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
@@ -264,5 +265,5 @@ test('touch: the morning check-in is three taps at 375 px and then gives the pag
   expect(answers).toEqual([{ sleep: 4, legs: 1, mood: null, note: null }]);
   await page.waitForLoadState('networkidle');
   await expect(card).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'BRIEFING DU JOUR' })).toBeInViewport();
+  await expect(page.getByRole('heading', { name: 'Briefing du jour' })).toBeInViewport();
 });

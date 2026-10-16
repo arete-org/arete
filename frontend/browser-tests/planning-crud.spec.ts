@@ -76,6 +76,7 @@ test.afterAll(async () => {
 async function connect(page: Page) {
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace(/^\/api/, '');
+    if (path === '/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (
       /^\/garmin\/(planned|actual|exports)/.test(path) ||
       path === '/strength/sessions' ||

@@ -7,7 +7,7 @@ import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useCallback, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Calendar, Dumbbell, Sunrise, TrendingUp, Zap } from 'lucide-react';
+import { Calendar, Dumbbell, TrendingUp, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { CheckinCard } from '@/components/dashboard/CheckinCard';
 import { Panel, Skeleton } from '@/components/ui';
@@ -292,7 +292,7 @@ export function DashboardPage() {
     [setParams],
   );
 
-  const { tip, day: tipDay, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
+  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
     day: boardDay,
   });
@@ -351,8 +351,7 @@ export function DashboardPage() {
             {/* The coach's briefing leads (on a phone, right after the greeting); the first
                 visit of the day may wait for the coach. */}
             <Panel className="p-4">
-              <SectionHeader icon={<Sunrise className="w-4 h-4 text-neon-cyan" />} title="BRIEFING DU JOUR" />
-              <BriefingCard tip={tip} day={tipDay} writing={tipWriting} stalled={tipStalled} refresh={refreshTip} />
+              <BriefingCard tip={tip} writing={tipWriting} stalled={tipStalled} refresh={refreshTip} />
             </Panel>
 
             {/* Today's plan, right below the briefing */}

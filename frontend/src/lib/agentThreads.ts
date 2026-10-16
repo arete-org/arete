@@ -3,6 +3,7 @@ import {
   STORAGE_KEY as LEGACY_KEY,
 } from './agentConversation';
 import { isContextWindowUsage, type ChatMessage, type ContextWindowUsage } from './agentStream';
+import { isCoachReference, type CoachReference } from './coachToday';
 
 export const THREADS_KEY = 'arete.coach.threads.v1';
 export const MAX_THREADS = 30;
@@ -19,6 +20,7 @@ export interface CoachThread {
   draft: string;
   attachmentIds?: string[];
   contextWindowUsage?: ContextWindowUsage;
+  reference?: CoachReference;
 }
 export interface ThreadStore {
   version: 1;
@@ -69,8 +71,10 @@ export function addThread(
   thread = createThread()
 ): ThreadStore {
   const empty = store.threads.find(
-    (t) => !t.messages.length && !t.draft.trim() && !t.attachmentIds?.length
+    (t) => !t.reference && !t.messages.length && !t.draft.trim() && !t.attachmentIds?.length
   );
+  // A briefing owns a fresh identity; replacing a truly blank placeholder loses no work.
+  if (empty && thread.reference) return { ...store, activeId: thread.id, threads: store.threads.map(t => t.id === empty.id ? thread : t) };
   if (empty) return { ...store, activeId: empty.id };
   if (store.threads.length >= MAX_THREADS)
     throw new Error(
@@ -131,6 +135,8 @@ export function restoreThreads(
     )
       throw new Error('Conversation sauvegardée invalide.');
     ids.add(t.id);
+    if (t.reference !== undefined && !isCoachReference(t.reference))
+      throw new Error('Contexte de conversation sauvegardé invalide.');
     return {
       id: t.id,
       title: t.title,
@@ -140,6 +146,7 @@ export function restoreThreads(
       attachmentIds: Array.isArray(t.attachmentIds) && t.attachmentIds.length <= 20 && t.attachmentIds.every(id => typeof id === 'string') ? t.attachmentIds : [],
       messages: restoreConversation(JSON.stringify(t.messages)),
       contextWindowUsage: isContextWindowUsage(t.contextWindowUsage) ? t.contextWindowUsage : undefined,
+      reference: t.reference,
     };
   });
   if (!ids.has(data.activeId))

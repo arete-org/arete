@@ -12,6 +12,7 @@ for (const rpg of [false, true]) {
     const writes: { key: string; value: unknown }[] = [];
     await page.route('**/api/**', async route => {
       const path = new URL(route.request().url()).pathname;
+      if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
       if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
       if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { enabled: rpg, opted_in: rpg, available: true, version: 1 } });
       if (path.includes('/agent/feedback/')) {

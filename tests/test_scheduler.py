@@ -380,3 +380,18 @@ class TestSyncStatusEndpoint:
             body = client.get("/sync/status").json()
         assert body["scheduled_hour"] is None
         assert body["last_run"] is None
+
+
+@pytest.mark.anyio
+async def test_standalone_automation_worker_does_not_start_daily_sync():
+    with (
+        patch.object(scheduler, "run_checkin_prompts") as checkins,
+        patch.object(scheduler, "run_scheduled_batch") as daily,
+        patch.object(scheduler, "run_automations", return_value={}) as automations,
+        patch("asyncio.sleep", side_effect=StopAsyncIteration),
+        pytest.raises(StopAsyncIteration),
+    ):
+        await scheduler.run_forever(None)
+    automations.assert_called_once()
+    checkins.assert_not_called()
+    daily.assert_not_called()

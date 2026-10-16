@@ -11,8 +11,8 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
     let modelCalls = 0;
     const creations: unknown[] = [];
     const notices = [
-      { id: 'question', title: 'Après ta sortie longue', body: 'Chiron attend ton ressenti.', url: '/follow-up?run=demo' },
-      { id: 'proposal', title: 'Alléger la séance de jeudi', body: '45 min → 30 min · endurance douce', url: '/follow-up?run=proposal' },
+      { id: 'question', title: 'Après ta sortie longue', body: 'Chiron attend ton ressenti.', url: '/follow-up?run=11111111-1111-4111-8111-111111111111' },
+      { id: 'proposal', title: 'Alléger la séance de jeudi', body: '45 min → 30 min · endurance douce', url: '/follow-up?run=22222222-2222-4222-8222-222222222222' },
       { id: 'report', title: 'Ton bilan de la semaine', body: 'Bilan disponible.', url: '/follow-up?run=report' },
     ].map(item => ({ ...item, created_at: '2026-10-15T09:00:00Z', read_at: null, archived_at: null }));
     await page.route('**/api/**', route => {
@@ -26,10 +26,10 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
       if (path === '/api/notifications') return route.fulfill({ json: { items: notices, unread: 2, next_offset: null } });
       if (path === '/api/agent/chat') { modelCalls += 1; return route.fulfill({ json: {} }); }
       if (path.endsWith('/interrupts/approval')) { decisions.push(route.request().postDataJSON()); approved = true; return route.fulfill({ json: {} }); }
-      if (path === '/api/automation-runs/proposal') return route.fulfill({ json: { id: 'proposal', state: approved ? 'ready' : 'waiting', due_at: '2026-10-15T09:00:00Z', definition: { title: 'Alléger la séance de jeudi' }, effects: [], interrupts: [{ id: 'approval', revision: 1, expires_at: '2099-10-16T09:00:00Z', decision: approved ? { type: 'approve' } : null, payload: { name: 'update_planned_session', args: { session_id: 42, changes: { target_duration_min: 30 } }, before: { target_duration_min: 45 } } }] } });
+      if (path === '/api/automation-runs/22222222-2222-4222-8222-222222222222') return route.fulfill({ json: { id: '22222222-2222-4222-8222-222222222222', state: approved ? 'ready' : 'waiting', due_at: '2026-10-15T09:00:00Z', definition: { title: 'Alléger la séance de jeudi' }, effects: [], interrupts: [{ id: 'approval', revision: 1, expires_at: '2099-10-16T09:00:00Z', decision: approved ? { type: 'approve' } : null, payload: { name: 'update_planned_session', args: { session_id: 42, changes: { target_duration_min: 30 } }, before: { target_duration_min: 45 } } }] } });
       if (path === '/api/automations' && route.request().method() === 'POST') { creations.push(route.request().postDataJSON()); return route.fulfill({ json: { id: 'created' } }); }
       if (path.endsWith('/interrupts/question')) { responseAttempts += 1; if (responseAttempts === 1) return route.fulfill({ status: 503, json: { detail: 'Réponse non enregistrée. Réessaie.' } }); decisions.push(route.request().postDataJSON()); answered = true; return route.fulfill({ json: {} }); }
-      if (path === '/api/automation-runs/demo') return route.fulfill({ json: { id: 'demo', state: answered ? 'ready' : 'waiting', due_at: '2026-10-15T09:00:00Z', definition: { title: 'Après ta sortie longue', mission: 'Préparer la suite de ton entraînement.' }, result: null, error: null, effects: [], interrupts: [{ id: 'question', revision: 1, expires_at: '2099-10-16T09:00:00Z', decision: answered ? { type: 'respond' } : null, payload: { name: 'ask_athlete', args: { question: 'Comment te sens-tu après cette séance ?' } } }] } });
+      if (path === '/api/automation-runs/11111111-1111-4111-8111-111111111111') return route.fulfill({ json: { id: '11111111-1111-4111-8111-111111111111', state: answered ? 'ready' : 'waiting', due_at: '2026-10-15T09:00:00Z', definition: { title: 'Après ta sortie longue', mission: 'Préparer la suite de ton entraînement.' }, result: null, error: null, effects: [], interrupts: [{ id: 'question', revision: 1, expires_at: '2099-10-16T09:00:00Z', decision: answered ? { type: 'respond' } : null, payload: { name: 'ask_athlete', args: { question: 'Comment te sens-tu après cette séance ?' } } }] } });
       if (path === '/api/automations') return route.fulfill({ json: { items: [{ id: 'one', title: 'Bilan hebdomadaire', mission: 'Faire le point sur la charge et la récupération.', trigger: { kind: 'weekly', time: '18:00', weekdays: [6] }, timezone: 'Europe/Paris', state: 'active', revision: 1, next_due_at: '2026-10-18T16:00:00Z' }], next_offset: null } });
       return route.fulfill({ json: [] });
     });

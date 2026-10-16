@@ -289,17 +289,29 @@ def _sessions(con, record: dict, now: datetime) -> None:
     assert isinstance(trigger, AfterSession)
     _validate_session(con, spec)
     # game_events records every committed activity even when gamification is off.
-    # Its canonical identity follows Garmin/strength linking and avoids a new bus.
+    # Strength links resolve directly: the RPG projection may be disabled or
+    # intentionally keep separate historical rewards for the same activity.
     events = rows(
         con.execute(
             """
-        SELECT e.source_key,e.canonical_key,e.created_at,
-               coalesce(a.sport,'strength') AS sport, a.session_type,a.planned_session_id
+        WITH linked_events AS (
+        SELECT e.source_key,coalesce(linked.canonical_key,e.canonical_key) AS canonical_key,
+               e.created_at,coalesce(a.sport,linked_actual.sport,'strength') AS sport,
+               coalesce(a.session_type,linked_actual.session_type) AS session_type,
+               coalesce(a.planned_session_id,linked_actual.planned_session_id) AS planned_session_id
         FROM app.visible_game_events e
         LEFT JOIN app.visible_actual_sessions a ON e.source_key='actual:'||a.id
         LEFT JOIN app.visible_strength_sessions s ON e.source_key='strength:'||s.id
-        WHERE e.created_at>=? AND e.created_at<=? AND (a.id IS NOT NULL OR s.id IS NOT NULL)
-          AND NOT EXISTS (SELECT 1 FROM app.visible_automation_runs r WHERE r.automation_id=? AND (r.occurrence_key='session:'||e.canonical_key OR r.session_key=e.source_key OR EXISTS (SELECT 1 FROM app.visible_game_events prior WHERE prior.source_key=r.session_key AND prior.canonical_key=e.canonical_key)))
+        LEFT JOIN app.visible_actual_sessions linked_actual ON linked_actual.id=s.actual_session_id
+        LEFT JOIN app.visible_game_events linked ON linked.source_key='actual:'||linked_actual.id
+        WHERE a.id IS NOT NULL OR s.id IS NOT NULL
+        ), events AS (
+        SELECT *, min(created_at) OVER (PARTITION BY canonical_key) AS registered_at
+        FROM linked_events
+        )
+        SELECT e.* FROM events e
+        WHERE e.registered_at>=? AND e.created_at<=?
+          AND NOT EXISTS (SELECT 1 FROM app.visible_automation_runs r WHERE r.automation_id=? AND (r.occurrence_key='session:'||e.canonical_key OR r.session_key=e.source_key OR EXISTS (SELECT 1 FROM events prior WHERE prior.source_key=r.session_key AND prior.canonical_key=e.canonical_key)))
         ORDER BY e.created_at,e.source_key LIMIT ?
         """,
             [record["activated_at"], now, record["id"], MAX_SCAN + 1],
@@ -317,7 +329,7 @@ def _sessions(con, record: dict, now: datetime) -> None:
             f"planned:{event['planned_session_id']}",
         }:
             continue
-        due = event["created_at"] + timedelta(minutes=trigger.delay_minutes)
+        due = event["registered_at"] + timedelta(minutes=trigger.delay_minutes)
         _insert_run(
             con,
             record,

@@ -99,6 +99,7 @@ test('Garmin export is an explicit selected action and never claims watch delive
   let statuses: object[] = [];
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/garmin/planned')) return route.fulfill({ json: [session] });
     if (path.endsWith('/42/workout')) return route.fulfill({ json: { session: { ...session, exportable: true, summary: '30 min' }, export: statuses[0] ?? null } });
     if (path.endsWith('/workout-devices')) return route.fulfill({ json: [{ id: 10, name: 'fēnix 8', sports: ['running'], compatibility: 'documented' }, { id: 11, name: 'Modèle inconnu', sports: [], compatibility: 'unknown' }] });
@@ -152,6 +153,7 @@ test('OCR preview compares the original, filters uncertain passages and works on
   let downloads = 0;
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/documents')) return route.fulfill({ json: [doc] });
     if (path.endsWith('/extraction')) return route.fulfill({ json: { warnings: ['Texte reconnu automatiquement : vérifie les dates, chiffres et unités dans l’original.'], blocks: lines.map((text, i) => ({ locator: `page 1, ligne ${i+1}`, text, method: 'ocr', confidence: i === 4 ? 61 : 96 })) } });
     if (path.endsWith('/chunks/0')) { downloads++; return route.fulfill({ body: raw, contentType: 'application/octet-stream' }); }

@@ -207,6 +207,11 @@ class Config:
 
     # --- background jobs / logging -----------------------------------------
     @property
+    def automation_worker(self) -> bool:
+        """Docker polls the shared queue even when Vercel owns daily sync."""
+        return (_env("ARETE_AUTOMATION_WORKER", "false") or "").lower() == "true"
+
+    @property
     def auto_sync_hour(self) -> int | None:
         """Hour (0-23) on each athlete's clock from which the daily sync runs.
 

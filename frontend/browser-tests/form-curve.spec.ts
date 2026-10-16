@@ -34,6 +34,7 @@ async function fixture(page: Page, withGoal: boolean, requests: string[]) {
   });
   await page.route('**/api/**', (route: Route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     requests.push(path);
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' } });
@@ -56,7 +57,7 @@ test('with a race, the goal card leads and the curve projects to race day in pla
   // On a phone: the greeting, then the race, then the briefing.
   const greeting = (await page.getByRole('heading', { name: 'Bonjour, HUNTER' }).boundingBox())!;
   const race = (await card.boundingBox())!;
-  const briefing = (await page.getByRole('heading', { name: 'BRIEFING DU JOUR' }).boundingBox())!;
+  const briefing = (await page.getByRole('heading', { name: 'Briefing du jour' }).boundingBox())!;
   expect(greeting.y).toBeLessThan(race.y);
   expect(race.y).toBeLessThan(briefing.y);
 

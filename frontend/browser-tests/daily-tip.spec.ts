@@ -16,6 +16,7 @@ test('a pending briefing is written in its own request and shown by the next pol
   await page.route('**/api/**', (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (request.method() === 'POST') {
       posts.push(path);
       if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'disconnected' } });
@@ -35,10 +36,10 @@ test('a pending briefing is written in its own request and shown by the next pol
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Bonjour, HUNTER' })).toBeVisible();
-  await expect(page.getByText('Le coach écrit ton briefing…')).toBeVisible();
+  await expect(page.getByText('Chiron écrit ton briefing…')).toBeVisible();
   await expect(page.getByText('Footing facile de 40 minutes.')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText('Écrit à 7 h 12 · mis à jour après la synchro de 8 h 05')).toBeVisible();
-  await expect(page.getByText('Le coach écrit ton briefing…')).toHaveCount(0);
+  await expect(page.getByText('Chiron écrit ton briefing…')).toHaveCount(0);
   expect(posts.sort()).toEqual(['/api/garmin/sync/ensure', '/api/tips/daily']);
   // The first read was the dashboard's: only the poll read the briefing again.
   expect(reads).toEqual(['/api/tips/daily']);

@@ -16,6 +16,7 @@ async function record(page: Page) {
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (!path.endsWith('/auth/config')) requests.push(`${path}${url.search}`);
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/garmin/sync/ensure')) return route.fulfill({ json: { state: 'fresh', complete: true } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { enabled: false, opted_in: false, available: true, version: 1 } });
@@ -37,9 +38,9 @@ test('a Planning week with 10 sessions loads with a constant number of requests'
   await expect(page.getByTestId('workout-109')).toBeVisible();
   await page.waitForLoadState('networkidle');
   expect(workoutReads(requests)).toEqual([]);
-  // settings, game preference, planned, actual, strength, Garmin states, one freshness check.
+  // Settings, game preference, shared inbox, planned, actual, strength, Garmin states, one freshness check.
   expect(requests.filter(r => r === '/api/garmin/sync/ensure')).toHaveLength(1);
-  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(7);
+  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(8);
   // The collapsed review and goal projection load when opened.
   await page.getByText('Bilan et objectifs', { exact: true }).click();
   await expect.poll(() => requests.some(r => r.endsWith('/plan/review'))).toBe(true);

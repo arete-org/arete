@@ -73,6 +73,94 @@ def test_claim_revision_scope_suspend_and_abandoned():
         service.set_state(item["id"], item["revision"], "active")
 
 
+def test_concurrent_connections_claim_an_occurrence_once():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    now = datetime.now(UTC)
+    item = service.create(
+        spec({"kind": "once", "at": now - timedelta(minutes=1)}),
+        activate=True,
+        now=now - timedelta(minutes=2),
+    )
+    service.prepare(now)
+    identifier = service.runs(item["id"])["items"][0]["id"]
+    barrier = Barrier(2, timeout=5)
+
+    def claim():
+        with athlete_scope(1):
+            barrier.wait()
+            return service.claim(identifier, now)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(claim) for _ in range(2)]
+        outcomes = [future.result(timeout=10) for future in futures]
+    assert sum(outcome is not None for outcome in outcomes) == 1
+    assert service.run_detail(identifier)["state"] == "running"
+    with db_connection() as con:
+        assert (
+            con.execute(
+                "SELECT count(*) FROM app.automation_worker_slots WHERE run_id=?",
+                [identifier],
+            ).fetchone()[0]
+            == 1
+        )
+
+
+@pytest.mark.parametrize(
+    "recorded_before_activation,prepare_before_link",
+    [(False, False), (False, True), (True, False)],
+)
+def test_linked_strength_import_is_one_occurrence_without_rpg(
+    recorded_before_activation, prepare_before_link
+):
+    from arete.garmin.models import ActualSession
+    from arete.garmin.repository import GarminRepository
+    from arete.strength.models import StrengthSession
+    from arete.strength.repository import StrengthRepository
+
+    now = datetime.now(UTC)
+    day = (now - timedelta(days=10)).date()  # Late imports use registration time.
+    strength = StrengthRepository()
+    garmin = GarminRepository()
+    strength_id = strength.create_session(StrengthSession(date=day))
+    actual_id = None
+    try:
+        activated = (
+            now + timedelta(minutes=1)
+            if recorded_before_activation
+            else now - timedelta(minutes=1)
+        )
+        item = service.create(
+            spec({"kind": "session", "sport": "strength", "delay_minutes": 30}),
+            activate=True,
+            now=activated,
+        )
+        if prepare_before_link:
+            service.prepare(now + timedelta(minutes=2))
+        actual_id = garmin.create_actual_session(
+            ActualSession(date=day, sport="strength", duration_sec=1200)
+        )
+        assert strength.link_to_actual_session(strength_id, actual_id)
+        # Do not run the RPG projection: the real activity link owns identity.
+        service.prepare(now + timedelta(minutes=2))
+        service.prepare(now + timedelta(minutes=3))
+        runs = service.runs(item["id"])["items"]
+        assert len(runs) == (0 if recorded_before_activation else 1)
+        if runs:
+            due = datetime.fromisoformat(runs[0]["due_at"])
+            assert now + timedelta(minutes=29) < due < now + timedelta(minutes=31)
+    finally:
+        with db_connection() as con:
+            con.execute("DELETE FROM app.strength_sessions WHERE id=?", [strength_id])
+            if actual_id is not None:
+                con.execute("DELETE FROM app.actual_sessions WHERE id=?", [actual_id])
+            con.execute(
+                "DELETE FROM app.game_events WHERE source_key IN (?,?)",
+                [f"strength:{strength_id}", f"actual:{actual_id}"],
+            )
+
+
 def test_budgets_survive_segments_and_unknown_effect_never_replays():
     from arete.services import automation_execution as execution
 
@@ -122,6 +210,14 @@ def test_decision_validation_double_click_and_expiry(monkeypatch):
         )
     resumed = service.claim(run["id"])
     assert resumed["resumes"] == 1 and resumed["active_seconds"] == 1
+    execution.finish(
+        run["id"], seconds=1, interrupts=[{**interruption, "id": "next-question"}]
+    )
+    service.prepare(datetime.now(UTC) + timedelta(hours=49))
+    assert service.run_detail(run["id"])["state"] == "expired"
+    with pytest.raises(service.Conflict):
+        service.decide(run["id"], "next-question", 1, decision)
+    assert service.claim(run["id"]) is None
 
 
 @pytest.mark.anyio
@@ -194,3 +290,73 @@ async def test_native_per_call_interrupts_resume_after_new_saver(monkeypatch):
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.mark.anyio
+async def test_composed_mission_waits_and_resumes_with_cumulative_budgets(monkeypatch):
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    from arete import coaching
+
+    class Model(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+    model = Model(
+        messages=iter(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "feeling",
+                            "name": "ask_athlete",
+                            "args": {"question": "Comment te sens-tu ?"},
+                        }
+                    ],
+                ),
+                AIMessage(content="Ressenti reçu, aucune séance modifiée."),
+            ]
+        )
+    )
+    monkeypatch.setattr(coaching, "build_chat_model", lambda **kwargs: model)
+    monkeypatch.setattr("arete.services.inbox.publish", lambda *args: None)
+    run = started()
+    await coaching._run_automation(run)
+    waiting = service.run_detail(run["id"])
+    assert waiting["state"] == "waiting", waiting.get("error")
+    assert waiting["model_requests"] == 1 and waiting["tool_calls"] == 1
+    question = waiting["interrupts"][0]
+    service.decide(
+        run["id"],
+        question["id"],
+        question["revision"],
+        {"type": "respond", "message": "Bien récupéré."},
+    )
+    await coaching._run_automation(service.claim(run["id"]))
+    done = service.run_detail(run["id"])
+    assert done["state"] == "completed", done.get("error")
+    assert (
+        done["resumes"] == 1 and done["model_requests"] == 2 and done["tool_calls"] == 1
+    )
+    assert done["effects"] == []
+
+
+def test_failed_push_keeps_completed_mission_and_inbox(monkeypatch):
+    from arete.services import automation_execution as execution
+    from arete.services import inbox, notifications
+
+    def unavailable(*args, **kwargs):
+        raise ConnectionError("provider unavailable")
+
+    monkeypatch.setattr(notifications, "notify", unavailable)
+    run = started()
+    execution.finish(run["id"], seconds=1, result="Bilan disponible.")
+    assert service.run_detail(run["id"])["state"] == "completed"
+    notice = inbox.listing()["items"][0]
+    assert notice["push"]["skipped_reason"] == "delivery_failed"
+    assert notice["reference"]["id"] == run["id"]
+    inbox.mark(notice["id"], read=True)
+    assert inbox.listing()["items"] == []
+    assert service.run_detail(run["id"])["state"] == "completed"
