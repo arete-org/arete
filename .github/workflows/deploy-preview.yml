@@ -40,6 +40,7 @@ jobs:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
+      - uses: actions/checkout@v5
       # Resolve through Vercel before sending the bypass key to a supplied URL.
       - name: Resolve a preview belonging to this project
         id: resolve
@@ -58,10 +59,6 @@ jobs:
             | jq -er --arg project "$VERCEL_PROJECT_ID" \
               'select(.projectId == $project and .target != "production") | .url | select(type == "string" and length > 0)')
           echo "url=https://$url" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-      - run: npm install --global vercel@63.1.2
       - name: Read the health response
         env:
           BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -76,9 +73,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           URL: ${{ steps.resolve.outputs.url }}
-        run: |
-          vercel logs "$URL" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" \
-            --since 24h --limit 30 --level error --expand
+        run: bash scripts/ci/preview_logs.sh
 
   select:
     if: >-
@@ -162,9 +157,7 @@ jobs:
       - name: Show runtime errors when the health check fails
         if: failure() && steps.health.outcome == 'failure'
         timeout-minutes: 2
-        run: |
-          vercel logs "$URL" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" \
-            --since 1h --limit 30 --level error --expand
+        run: bash scripts/ci/preview_logs.sh
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           URL: ${{ steps.deploy.outputs.url }}

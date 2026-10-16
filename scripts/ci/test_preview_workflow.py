@@ -118,13 +118,52 @@ class ProductionWorkflowTests(unittest.TestCase):
 
 
 class PreviewWorkflowTests(unittest.TestCase):
+    def test_service_token_logs_preserve_errors_and_reject_incomplete_responses(self):
+        for response, valid in (
+            ({"rows": [{"logs": [{"message": "migration failed"}]}]}, True),
+            ({"rows": [], "hasMoreRows": False}, True),
+            ({"rows": [], "hasMoreRows": True}, False),
+            ({"error": "not authorized"}, False),
+        ):
+            with (
+                self.subTest(response=response),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                curl = root / "curl"
+                curl.write_text(
+                    '#!/bin/sh\ncase "$*" in\n'
+                    '*api.vercel.com*) printf \'%s\\n\' \'{"id":"dpl_test","projectId":"expected","target":null}\' ;;\n'
+                    '*) printf "%s\\n" "$TEST_LOG_JSON" ;;\nesac\n'
+                )
+                curl.chmod(0o755)
+                result = subprocess.run(
+                    ["bash", str(ROOT / "scripts/ci/preview_logs.sh")],
+                    env={
+                        **os.environ,
+                        "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                        "URL": "https://arete-example-arete15.vercel.app",
+                        "VERCEL_PROJECT_ID": "expected",
+                        "VERCEL_ORG_ID": "test-team",
+                        "VERCEL_TOKEN": "test-token",
+                        "TEST_LOG_JSON": json.dumps(response),
+                    },
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                self.assertEqual(result.returncode == 0, valid, result.stderr)
+                if valid:
+                    self.assertEqual(json.loads(result.stdout), response)
+
     def test_manual_diagnosis_resolves_only_this_projects_previews(self):
         text = (ROOT / ".github/workflows/deploy-preview.yml").read_text()
         step = text.split(
             "      - name: Resolve a preview belonging to this project\n", 1
         )[1]
         script = textwrap.dedent(
-            step.split("        run: |\n", 1)[1].split("      - uses:", 1)[0]
+            step.split("        run: |\n", 1)[1].split("      - name:", 1)[0]
         )
         for deployment, project, target, accepted in (
             ("https://arete-example-arete15.vercel.app", "expected", None, True),
