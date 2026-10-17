@@ -100,7 +100,7 @@ const KINDS: { kind: NotificationKind; label: string; soon?: boolean }[] = [
   { kind: 'briefing', label: 'Briefing du matin' },
   { kind: 'post_session', label: 'Retour du coach après une séance' },
   { kind: 'weekly_review', label: 'Bilan de la semaine (lundi)' },
-  { kind: 'adapted_session', label: 'Adaptation de la séance du jour', soon: true },
+  { kind: 'adapted_session', label: 'Séance manquée à replanifier (le soir)' },
   { kind: 'imports', label: 'Séances importées' },
   { kind: 'checkin', label: 'Check-in du matin' },
   { kind: 'evening', label: 'Message du soir', soon: true },

@@ -57,6 +57,7 @@ export interface ContextWindowUsage {
 
 export type StreamEvent =
   | ({ type: 'chart_card' } & ChartCardData)
+  | { type: "thread_title"; thread_id: string; title: string }
   | { type: 'values'; context_window_usage: ContextWindowUsage }
   | { type: 'context_compaction'; phase: 'start' | 'done' }
   | { type: 'sync_status'; state: string }
@@ -125,6 +126,7 @@ export function parseEvent(data: string): StreamEvent | null {
     return { type: 'values', context_window_usage: e.context_window_usage };
   if (e.type === 'context_compaction' && (e.phase === 'start' || e.phase === 'done'))
     return { type: 'context_compaction', phase: e.phase };
+  if (e.type === 'thread_title' && typeof e.thread_id === 'string' && typeof e.title === 'string' && e.title.length > 0 && e.title.length <= 120) return e as StreamEvent;
   if (isWorkoutUpdate(e)) return e;
   if (e.type === 'sync_status' && typeof e.state === 'string') return e as StreamEvent;
   if (e.type === 'suggestion') return null;
@@ -194,7 +196,7 @@ export function applyEvent(
   message: ChatMessage,
   event: StreamEvent
 ): ChatMessage {
-  if (event.type === 'values' || event.type === 'context_compaction') return message;
+  if (event.type === 'thread_title' || event.type === 'values' || event.type === 'context_compaction') return message;
   if (event.type === 'sync_status') return { ...message, syncStatus: event.state };
   if (event.type === 'workout_update') {
     const current = message.workouts ?? [];

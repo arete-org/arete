@@ -226,7 +226,8 @@ export function AgentSidePanel({
   useEffect(() => {
     const reveal = () => { setShowHistory(false); setShowMemory(false); followRef.current = true; setFollowing(true); };
     window.addEventListener('arete:coach-discuss', reveal);
-    return () => window.removeEventListener('arete:coach-discuss', reveal);
+    window.addEventListener('arete:conversation-open', reveal);
+    return () => { window.removeEventListener('arete:coach-discuss', reveal); window.removeEventListener('arete:conversation-open', reveal); };
   }, []);
 
   const followLatest = () => {
@@ -234,7 +235,7 @@ export function AgentSidePanel({
     setFollowing(true);
   };
   const selectThread = (id: string) => {
-    coach.select(id);
+    void coach.openArchived(id);
     setShowHistory(false);
     followLatest();
   };
@@ -308,6 +309,8 @@ export function AgentSidePanel({
           className="border-b border-warning-orange/20 bg-warning-orange/5 px-4 py-2 text-xs text-warning-orange"
         >
           {coach.storageError}
+          <button className="ml-2 min-h-11 underline" onClick={coach.retryArchive}>Réessayer</button>
+          <button className="ml-2 min-h-11 underline" onClick={() => void coach.recoverArchive()}>Conserver une copie et recharger le fil</button>
         </p>
       )}
       {coach.error && (
@@ -344,7 +347,7 @@ export function AgentSidePanel({
         </div>
       )}
       {reference && reference.kind !== 'briefing' && (reference.kind !== 'automation_run' || reference.mode === 'discussion') && <div className="border-b border-text-muted/15 px-4 py-2">
-        <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné', review: 'Bilan de la semaine sélectionné', automation_run: 'Exécution sélectionnée' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={coach.clearReference}>Retirer</button></p>
+        <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné', review: 'Bilan de la semaine sélectionné', session: 'Séance du jour sélectionnée', automation_run: 'Exécution sélectionnée' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={coach.clearReference}>Retirer</button></p>
       </div>}
       {!showMemory && !showHistory && reference?.kind === 'automation_run' && reference.mode !== 'discussion' ? <AutomationReview id={reference.id} /> : showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
         <ThreadHistory
@@ -352,6 +355,7 @@ export function AgentSidePanel({
           activeId={active.id}
           runningId={runningId}
           onSelect={selectThread}
+          onRename={coach.renameLocal}
           onCreate={newThread}
           onDelete={setDeleteId}
           onClose={() => setShowHistory(false)}

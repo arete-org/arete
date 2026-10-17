@@ -97,6 +97,7 @@ class AgentContext:
     memory_source_message: str = field(default="", init=False, repr=False)
     memory_calls: int = field(default=0, init=False)
     memory_charged_calls: int = field(default=0, init=False)
+    title_task: asyncio.Task | None = field(default=None, init=False, repr=False)
     classifier_calls: int = 0
     run_logged: bool = False
     attachment_paths: tuple[str, ...] = ()

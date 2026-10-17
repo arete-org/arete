@@ -6,12 +6,15 @@ import { isContextWindowUsage, type ChatMessage, type ContextWindowUsage } from 
 import { isCoachReference, type CoachReference } from './coachToday';
 
 export const THREADS_KEY = 'arete.coach.threads.v1';
-export const MAX_THREADS = 30;
+export const MAX_THREADS = 100;
 const MAX_STORAGE_CHARS = 4_000_000;
 const TITLE_CHARS = 64;
 export const NEW_THREAD_TITLE = 'Nouvelle conversation';
 
 export interface CoachThread {
+  titleManual?: boolean;
+  archiveRevision?: number;
+  archiveDigest?: string;
   id: string;
   title: string;
   createdAt: number;
@@ -78,7 +81,7 @@ export function addThread(
   if (empty) return { ...store, activeId: empty.id };
   if (store.threads.length >= MAX_THREADS)
     throw new Error(
-      `Limite de ${MAX_THREADS} conversations atteinte. Supprime un ancien fil pour en créer un autre.`
+      `Limite de ${MAX_THREADS} fils locaux atteinte. Attends leur sauvegarde avant de créer un autre fil.`
     );
   return { ...store, activeId: thread.id, threads: [thread, ...store.threads] };
 }
@@ -138,6 +141,9 @@ export function restoreThreads(
     if (t.reference !== undefined && !isCoachReference(t.reference))
       throw new Error('Contexte de conversation sauvegardé invalide.');
     return {
+      titleManual: t.titleManual === true,
+      archiveRevision: Number.isSafeInteger(t.archiveRevision) ? t.archiveRevision : undefined,
+      archiveDigest: typeof t.archiveDigest === "string" ? t.archiveDigest : undefined,
       id: t.id,
       title: t.title,
       draft: t.draft,

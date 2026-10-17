@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { applyEvent, consumeStream, parseEvent, runAgentStream, type ChatMessage } from './agentStream';
 import { chartPart, type ChartCardData } from './chartCards';
 import { restoreConversation } from './agentConversation';
+import { archivePayload, hasLocalCharts, restoreLocalCharts } from './conversations';
 import { addThread, createThread, emptyStore, restoreThreads, saveThreads, THREADS_KEY, updateThread } from './agentThreads';
 
 const chart: ChartCardData = {
@@ -11,6 +12,26 @@ const chart: ChartCardData = {
 };
 const empty: ChatMessage = { role: 'assistant', content: '', parts: [], pending: true };
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); });
+
+it('archives the chart summary, preserves local charts on refresh and never crosses threads', () => {
+  const thread = createThread();
+  thread.messages = [{ role: 'assistant', content: chart.summary, parts: [
+    { kind: 'tool', id: 'render', name: 'render_chart', status: 'done', args: { text: chart.html, truncated: false } },
+    chartPart(chart),
+  ] }];
+  const payload = archivePayload(thread);
+  expect(JSON.stringify(payload)).not.toContain('<svg');
+  expect(payload.messages[0].parts).toEqual([{ kind: 'text', id: chart.id, text: `${chart.title}\n\n${chart.summary}` }]);
+  const remote = { ...thread, messages: restoreConversation(JSON.stringify(payload.messages)) };
+  const restored = restoreLocalCharts(remote, thread);
+  expect(restored.messages[0].parts).toEqual([chartPart(chart)]);
+  expect(hasLocalCharts(restored)).toBe(true);
+  expect(archivePayload(restored)).toEqual(payload);
+  expect(hasLocalCharts(restoreLocalCharts(remote, createThread()))).toBe(false);
+  expect(hasLocalCharts(restoreLocalCharts(remote))).toBe(false);
+  remote.messages[0].parts = [{ kind: 'text', id: chart.id, text: 'Résumé corrigé ailleurs' }];
+  expect(hasLocalCharts(restoreLocalCharts(remote, thread))).toBe(false);
+});
 
 it('decodes a full chart across byte boundaries, once, between text parts', async () => {
   const events = [

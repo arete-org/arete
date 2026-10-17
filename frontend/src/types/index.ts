@@ -84,7 +84,8 @@ export interface PlannedSession {
 // DAILY ADAPTATION          //
 // ========================= //
 
-export type PlanDecisionKind = "keep" | "ease" | "replace_easy" | "rest";
+/** `move` comes from « Modifier » or a missed session's replanning, `drop` from the latter only. */
+export type PlanDecisionKind = "keep" | "ease" | "replace_easy" | "rest" | "move" | "drop";
 
 /** The morning rule engine's verdict on one planned session (GET /plan/today). */
 export interface PlanDecision {
@@ -95,13 +96,45 @@ export interface PlanDecision {
   /** French sentence with the figure that justifies the decision. */
   reason: string;
   readiness_score: number | null;
-  readiness_source: "garmin_training" | "garmin" | "model";
+  /** `athlete`: the athlete's own choice (« Modifier »); `missed`: the evening's
+   *  replanning of a missed session. No readiness behind either. */
+  readiness_source: "garmin_training" | "garmin" | "model" | "athlete" | "missed" | null;
   acwr: number | null;
   original: Record<string, unknown> | null;
   adapted: Record<string, unknown> | null;
   applied_at: string | null;
   reverted_at: string | null;
   created_at: string | null;
+}
+
+/** One reason of « Modifier » on today's session, with the rules' options (`GET /plan/today/sessions/{id}/options`). */
+export interface RenegotiationReason {
+  id: "tired" | "no_time" | "pain";
+  label: string;
+  options: { id: string; decision: Exclude<PlanDecisionKind, "keep">; label: string; detail: string }[];
+  /** Why an option is missing (no free day), or a caution (pain). */
+  note: string | null;
+}
+
+export interface RenegotiationMenu {
+  session_id: number;
+  date: string;
+  /** Sent back with the choice: anything changed since answers 409. */
+  version: string;
+  /** Why nothing can be offered (a proposal to answer, an adjusted session…). */
+  blocked: string | null;
+  reasons: RenegotiationReason[];
+}
+
+/** Garmin after the choice, as the server reports it; never a failed choice. */
+export type RenegotiationGarmin =
+  | "sent" | "withdrawn" | "failed" | "not_started" | "unchanged" | "disabled" | "disconnected";
+
+export interface Renegotiated {
+  decision: PlanDecision;
+  /** The session's day once written: a move changes it. */
+  date: string;
+  garmin: RenegotiationGarmin;
 }
 
 export interface PlanToday {

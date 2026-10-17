@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from arete.dataio.settings import get_user_settings
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.coaching_repository import Briefing, BriefingRepository
+from arete.services.plan_repository import MISSED_REPLAN
 from arete.services.settings import athlete_today
 
 if TYPE_CHECKING:
@@ -188,8 +189,21 @@ def briefing_facts(
                 "ease": "allégée",
                 "replace_easy": "remplacée par de la récupération",
                 "rest": "remplacée par du repos",
+                "move": "déplacée",
+                "drop": "laissée de côté (séance manquée)",
             }.get(d.decision, d.decision)
-            lines.append(f"{planned} : {verdict} — raison : {d.reason}")
+            line = f"{planned} : {verdict} — raison : {d.reason}"
+            replaced = before.get("replaced")
+            if isinstance(replaced, dict) and replaced.get("reason"):
+                # The athlete's choice replaced the system's suggestion: the
+                # morning's, or the evening's replanning of a missed session.
+                when = (
+                    "soir"
+                    if replaced.get("readiness_source") == MISSED_REPLAN
+                    else "matin"
+                )
+                line += f" (proposition du {when} remplacée : {replaced['reason']})"
+            lines.append(line)
         return lines
 
     def predictions() -> list[str]:

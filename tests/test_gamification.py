@@ -394,6 +394,27 @@ def test_a_rest_applied_since_the_last_sync_is_still_due(game_db):
     assert game.sync()["week"]["complete"] is True
 
 
+def test_a_rest_the_athlete_chose_is_not_a_prescribed_rest(game_db):
+    from arete.services.settings import UserSettingsUpdate, update_settings
+
+    update_settings(UserSettingsUpdate(weekly_training_goal=2))
+    enable()
+    evidence("one")
+    game.sync()
+    with transaction() as con:
+        con.execute(
+            "INSERT INTO app.planned_sessions (date,sport,session_type,description) VALUES (?,'running','tempo','Seuil')",
+            [athlete_today()],
+        )
+        planned = con.execute("SELECT max(id) FROM app.planned_sessions").fetchone()[0]
+        # « Modifier » › « Douleur / gêne » › « Repos »: the athlete's own choice.
+        con.execute(
+            "INSERT INTO app.plan_decisions (user_id,date,planned_session_id,decision,reason,readiness_source,applied_at) VALUES (1,?,?,'rest','Douleur / gêne : repos','athlete',CURRENT_TIMESTAMP)",
+            [athlete_today(), planned],
+        )
+    assert game.sync()["week"]["complete"] is False
+
+
 def test_concurrent_syncs_with_nothing_to_settle_never_conflict(game_db):
     enable()
     evidence("one")

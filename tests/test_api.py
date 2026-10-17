@@ -130,7 +130,12 @@ class TestCronDailySync:
             "crons"
         ]
         schedules = [cron["schedule"] for cron in crons]
-        paths = {"/api/cron/daily-sync", "/api/cron/checkin", "/api/cron/automations"}
+        paths = {
+            "/api/cron/daily-sync",
+            "/api/cron/checkin",
+            "/api/cron/automations",
+            "/api/cron/evening",
+        }
         assert {cron["path"] for cron in crons} == paths
         assert len({(c["path"], c["schedule"]) for c in crons}) == len(crons) > 1
         assert all(re.fullmatch(r"0 \d{1,2} \* \* \*", s) for s in schedules)
@@ -140,6 +145,9 @@ class TestCronDailySync:
         }
         assert sorted(hours["/api/cron/automations"]) == list(range(24))
         assert max(hours["/api/cron/checkin"]) < min(hours["/api/cron/daily-sync"])
+        # The evening's replanning: once, after the day's last sync window.
+        assert hours["/api/cron/evening"] == [18]
+        assert max(hours["/api/cron/daily-sync"]) < 18
 
 
 def test_the_backend_bundle_ships_its_dependencies():

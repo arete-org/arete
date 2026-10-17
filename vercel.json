@@ -78,6 +78,7 @@
     { "path": "/api/cron/daily-sync", "schedule": "0 13 * * *" },
     { "path": "/api/cron/daily-sync", "schedule": "0 14 * * *" },
     { "path": "/api/cron/daily-sync", "schedule": "0 15 * * *" },
-    { "path": "/api/cron/daily-sync", "schedule": "0 16 * * *" }
+    { "path": "/api/cron/daily-sync", "schedule": "0 16 * * *" },
+    { "path": "/api/cron/evening", "schedule": "0 18 * * *" }
   ]
 }

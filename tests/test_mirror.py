@@ -142,7 +142,7 @@ def test_middleware_is_inert_on_a_local_database(monkeypatch):
 
 def test_middleware_hydrates_then_flushes_on_a_remote_database(monkeypatch):
     calls: list[str] = []
-    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setenv("ARETE_DB", "md:arete_v2")
     monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))
     monkeypatch.setattr(mirror, "flush", lambda: calls.append("flush"))
     app = FastAPI()
@@ -155,7 +155,7 @@ def test_middleware_hydrates_then_flushes_on_a_remote_database(monkeypatch):
 def test_a_read_only_request_skips_the_flush(monkeypatch):
     """The dashboard's GETs paid a walk and a hash of every mirrored file each."""
     calls: list[str] = []
-    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setenv("ARETE_DB", "md:arete_v2")
     monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))
     monkeypatch.setattr(mirror, "flush", lambda: calls.append("flush"))
     app = FastAPI()
@@ -169,7 +169,7 @@ def test_a_read_only_request_skips_the_flush(monkeypatch):
 
 def _remote_app(monkeypatch, path: str, handler) -> TestClient:
     """A remote database whose mirror writes to the local store fixture."""
-    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setenv("ARETE_DB", "md:arete_v2")
     app = FastAPI()
     app.add_middleware(mirror.MirrorMiddleware)
     app.get(path)(handler)

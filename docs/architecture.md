@@ -1,7 +1,7 @@
 # Coaching stack: responsibilities and dependencies
 
 Arete gives each behavior one owner, with one coaching runtime, browser chat,
-three background missions and one shared Slack administrator graph. Browser-owned
+three background missions and one shared Slack administrator graph. Browser-composed, server-archived
 conversations, HTTP endpoints, tool names,
 DuckDB tables and ledger paths remain compatible. There are no placeholder layers
 for delegation, MCP, authentication or providers Arete does not use.
@@ -224,7 +224,7 @@ selection and the ordinary browser draft. Up to three leading `/skill-name` comm
 resolve against trusted metadata. Unknown names fail explicitly. Read bodies and
 references only as needed, reusing results already present in the invocation.
 The browser persists user/assistant history, not tool results: a later user turn
-must read a relevant skill again. No thread persistence is introduced.
+must read a relevant skill again. Archives store the rendered browser history, not tool results or graph checkpoints.
 The bundle remains bounded to 32 skills of 32 KiB each; filesystem reads are bounded
 to 200 lines per call and complete requests are budgeted without silent truncation.
 
@@ -257,9 +257,7 @@ keeps historical prompt bytes unchanged across midnight and timezone changes.
 An explicit retry replaces the question with a new turn and a new timestamp.
 
 This uses LangChain's [transient message overrides](https://docs.langchain.com/oss/python/langchain/context-engineering#messages)
-for rendering, without changing raw content or adding model requests. Only
-timestamp metadata persists in browser history; no server conversation store is
-introduced. Page, ledger and other existing contributions can still invalidate
+for rendering, without changing raw content or adding model requests. Timestamp metadata persists with the raw history in the browser and the conversation archive. Page, ledger and other existing contributions can still invalidate
 their own prefix. The supplied time is the start of the turn, not a live clock.
 Background profiles retain their date in SYSTEM through the same middleware.
 A final guard counts messages, system text and tool schemas,
@@ -270,7 +268,7 @@ exceed the envelope.
 Set it to the actual server/model limit. It is a configured constraint, not a claim
 about a dynamically routed provider. Counting is approximate. Browser chat uses
 native Deep Agents summarization within an invocation; the browser still sends
-the last 30 messages and keeps its complete thread locally. The model profile
+the last 30 messages and archives its complete thread on the server after each settled exchange. The model profile
 uses this configured window for the native 85% trigger and 10% retained tail.
 Raw messages remain in graph state and compacted history remains readable under
 `/conversation_history/`. Browser chat has no checkpointer: summaries and ephemeral files
@@ -366,6 +364,9 @@ the tool activity and standalone textual answer. Non-streaming HTTP returns
 `charts` from the invocation receipts, even if native compaction changed messages.
 The browser stores chart parts with their owning thread, never sends their HTML
 back as model history, and uses the existing explicit storage quota errors.
+Conversation archives receive chart titles and summaries as text, excluding the
+HTML and render-tool previews. Archive refreshes restore matching local chart
+cards; automatic cache eviction preserves threads containing these local artifacts.
 The chart component loads its sanitizer and embedded local fonts on demand. A
 strict [DOMPurify allowlist](https://github.com/cure53/DOMPurify) and an opaque
 [`sandbox=""` iframe](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox) isolate the document;
@@ -427,7 +428,7 @@ and [Figma proposal](https://www.figma.com/design/lnwgvzmvsutjFsuZiQ6Mzz?node-id
 These bounds are not a cumulative token/spend quota. Model fallback attempts
 share the run deadline and do not consume additional graph turns, but each counts
 in the run's model-call telemetry. Arete has no delegated children to budget. Conversation
-history stays in browser storage; Calendar's approval registry is described below.
+history is composed in the browser and archived as described below; Calendar's approval registry is described below.
 
 ## Enforcement
 
@@ -473,7 +474,7 @@ is introduced.
 
 ## Documents, direct session creation and outbound workouts
 
-Conversation messages remain browser-owned. Document originals, extracted blocks
+The browser composes conversation messages; the archive saves their settled snapshots. Document originals, extracted blocks
 and outbound Garmin operation records are durable in DuckDB/MotherDuck (migration 13).
 `services/documents.py` owns documents. API chat hydration builds an invocation-local
 StateBackend view at `/attachments/` before the first model call and rejects missing
@@ -778,6 +779,105 @@ le coach » attaches the review to the active browser thread as its
 `coach_ref` (`review:<id>`), which the context builder resolves by id: the
 browser sends the identifier only and the composer stays as it was.
 
+« Modifier » on today's session (ARE-61, `services/renegotiation.py`)
+renegotiates it in two taps, with no model request: the menu opens on
+`GET /plan/today/sessions/{id}/options` (no dashboard request is added), which
+lists each fixed reason with the options the rules compute, and a choice
+(`POST …/renegotiate`) writes it. The coaching defaults, for the owner to
+validate: « Je suis cuit » makes a tempo, intervals or long run endurance Z2,
+an endurance run recovery Z1 and a recovery run shorter, each at 70 % of its
+duration (rounded half up to 5 min, at least 20; 30 min without a duration),
+and always offers rest too; « Pas le temps » keeps the session at 70 % of its
+duration, except a tempo or intervals described in words, whose steps no rule
+shortens, which becomes endurance Z2. Both offer to move it to the first day of
+the next three with nothing planned, within the same ISO week (« Ma semaine »
+counts stay honest), before the next race (a goal or a planned race), and, for
+a hard session (tempo, intervals, long run, race or marked hard), with no hard
+session or race the day before or after and never in the two days before a
+race; a session already moved once is not offered another move, and without a
+day rest is offered instead. « Douleur / gêne » offers rest or 20 min of
+recovery Z1, never a move nor anything harder. A session with explicit steps
+can only move or rest here, a race is never renegotiated, and « Autre… »
+attaches the session to the active browser thread as its `coach_ref`
+(`session:<id>`), which the context builder resolves with the rules' options;
+the composer stays as it was.
+
+A choice is the day's plan decision for that session (`move` joins the decision
+kinds; a move keeps the session pending, so its new day's readiness still
+weighs it), written with the session in one transaction and marked as the
+athlete's (`readiness_source` `athlete`): the RPG never counts such a rest as a
+prescribed one toward the week's goal. An open proposal must be answered first
+and an applied decision reverted first; a declined or reverted one, or a
+proposal snoozed past the day, is replaced in place, keeping one row per session
+and day without a migration, and the morning's suggestion it replaced stays
+in its `original.replaced` for the briefing and the coach (an earlier choice of
+the athlete passes on the suggestion it had replaced; `readiness_source`
+doubles as the origin until a dedicated column earns a migration). The menu's `version` covers
+the session's revision, its decision and every option (a day planned since
+changes a move): any change answers 409 and writes nothing. Inside the
+transaction, a move's day is read again, and the session's revision guard
+refuses a session changed since the menu; a write racing it on the same row
+fails with DuckDB's write-write conflict, also a 409. The session is written
+before the decision (with the decision first, a revision bump committed in
+between was seen to pass). An athlete's choice stores the revision it wrote,
+and « Rétablir » refuses (409) once the session changed since, so a later edit
+is never undone; a move is reverted only on its own day and gives back its day
+alone, a rest its status alone (a copy never withdrawn is left as it is).
+Garmin follows after the commit and after a revert as for a proposal
+(`follow_on_garmin`, now returning each outcome): with the automatic push on, a
+copy Garmin holds is replaced in place (a move reschedules it) or withdrawn for
+a rest, once, never replayed. Each answer reports it apart (`sent`,
+`withdrawn`, `failed`, `not_started`, `unchanged` when Garmin holds no copy,
+`disabled` for a copy the push, off, left as it was, `disconnected`), and a
+Garmin failure never fails the written choice. The plan's calendar follows the
+plan-change flag, as for a proposal.
+
+A missed session is replanned the same evening (ARE-61 Part 2,
+`services/missed_sessions.py`), with no model request and nothing applied
+without the athlete. In their evening, outside quiet hours, a day whose planned
+sessions are still pending or modified with no training dated that day gets one
+proposal, after a Garmin refresh that only runs when such a session exists.
+Training is a strength log or an activity of 20 minutes or more that is not a
+walk or a hike (an unmatched one still counts: no false proposal; a short or
+incidental one does not). On Vercel the `/api/cron/evening` window at 18:00
+UTC dispatches it from 18:00 on the athlete's clock: Hobby fires it within the
+hour, so it lands in Paris between about 20:00 and 21:00 in summer and 19:00
+and 20:00 in winter, in London an hour earlier, in UTC+3 only when it fires
+before quiet hours, and not in the Americas. Its order rotates daily, since
+athletes the window has no time left for get nothing that day. Docker's ticks,
+which run with the daily sync (`ARETE_AUTO_SYNC_HOUR` set), start at 20:00
+local, after the after-work runs. Skipped, completed and race sessions are never missed, nor one
+adapted or renegotiated today (a declined morning proposal or a reverted choice
+leaves it missed, replaced in place and kept in `original.replaced`); a session
+moved by « Modifier » is judged on its new day; a day whose morning proposal is
+still open, or that already holds the day's replanning (answered or not, even
+written over by « Modifier », which keeps it in `original.replaced`), gets
+nothing, since the day's proposals are answered as one group and must not mix.
+An activity synced after the proposal leaves it stale on the card: applying it
+is refused, while « Non merci » still dismisses it.
+The rules are `renegotiation.move_day`'s: a hard session moves to the first
+free day of the next three, within the ISO week, before the next race and out
+of its last two days, with no hard session either side, once (the second of two
+missed hard sessions sees the first on its new day); an easy session, or one no
+day receives, is dropped (`drop`: skipped, never counted as a prescribed rest).
+Merging into another session is not offered: no rule rewrites two sessions'
+targets or steps safely. The rows (`readiness_source` `missed`, pending) are
+written in one transaction that reads the day first, so overlapping runs write
+them once (the unique key refuses the loser) and only the writer pushes
+`adapted_session`, through the athlete's preferences and quiet hours. The coach
+card answers them with the morning's machinery: « Appliquer » moves the session
+(its status kept, so the next day's readiness still weighs it) or skips it, one
+revertable decision with its reason; the answer reports Garmin's outcome
+(`respond_reporting`, the response's `garmin`) and the session's
+compare-and-set now runs before the decision's claim. The proposal expires at
+the athlete's midnight like the morning's. The week's review (ARE-60) owns the
+sessions still ahead and never offers one on its own day, while the replanning
+only proposes today's: they never offer the same session. A session one of
+them changed leaves the other's proposal stale: the review's answer compares
+the proposal's `before` fields, the replanning's the session revision. The
+review's numbers count an applied `drop` as due and missed, so letting a
+missed session go never raises the week's adherence.
+
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References
 in HTTP/SSE and browser storage contain identifiers; the server reloads the
@@ -950,3 +1050,65 @@ outbound tools or granting another participant access. Slack remains the source
 of conversation history. The new operation receipts contain outgoing bodies,
 not copies of conversations. Existing non-admin Slack and browser coaching,
 background missions, Calendar approvals and training-write policies are preserved.
+
+## Conversation archives and titles
+
+Migration 51 adds `app.coach_conversations` and its athlete-scoped view. This is
+an explicit change to the former browser-only contract. The browser still owns
+the active history, unsent drafts, selected attachments and the 30-message model
+window. No chat checkpointer or automatic injection of previous conversations is
+added. `services/conversations.py` owns snapshots, search, deletion and titles;
+`api/conversations.py` exposes them without importing the agent stack.
+
+`useConversationArchive` imports existing local threads and saves complete settled
+snapshots after one second of inactivity, one HTTP write at a time. It does not
+write on every token. Closing the tab before the archive acknowledgement retains
+the local copy; reopening retries its import. A closed browser does not guarantee
+that the current response has reached the server archive. Failed/interrupted
+answers remain visible but their text is excluded from search. Unsent drafts and
+selected attachments remain local; sent attachment IDs, briefing references,
+timestamps, workout cards and feedback receipts travel with their messages.
+
+Each snapshot is bounded to 1,000 messages and 2 MB, with 64,000 characters per
+message. Overflow fails explicitly. The local cache allows 100 unsaved/open threads;
+from 30 cached threads it evicts only inactive, draft-free threads whose exact
+payload digest has been acknowledged. The archive is paginated by 30, with a
+100,000 offset bound. Opening a thread fetches its full bounded snapshot. Opening
+or searching never calls a model. Search is literal case-insensitive text matching
+on titles and complete settled message text, not semantic/vector retrieval.
+
+Writes carry a revision and a deterministic SHA-256 write ID. Repeating an
+acknowledgement-lost write returns its existing revision; a different payload with
+the same write ID or a stale revision conflicts. Conflicts keep local work. The
+explicit recovery action backs up that snapshot in an athlete/thread-scoped local
+storage key before reading the server version, retaining the local draft and
+selected documents. Deletion clears archive content and leaves a tombstone so
+late snapshots/title tasks cannot recreate it, then deletes thread documents.
+
+Only the browser chat profile binds `search_conversations` and `read_conversation`.
+The capability catalog owns their permissions and source-handling instructions.
+Search returns five dated, explicitly abbreviated excerpts plus conversation links;
+read returns at most five complete messages and rejects results above 20,000
+characters. Historical messages never authorize new actions; current domain data
+must be read before a write. Slack and unattended missions do not gain access.
+
+`ConversationTitleMiddleware.abefore_agent` starts one invocation-local task and
+returns immediately. Composition supplies a separate client on the invocation's
+resolved route: one request, 512 output tokens, temperature 0, ten seconds, no SDK
+retry, no model fallback, existing free/paid provider price policy. Inputs above
+4,000 characters retain the provisional title without a request. An atomic DB
+claim permits at most one automatic attempt per conversation. This adds at most
+one concurrent request and one recorded model call to the first relevant chat run.
+The title never consumes or replaces the main answer stream.
+
+The task saves a validated title before emitting the custom `thread_title` event
+with `thread_id`. The projection forwards it independently of answer tokens;
+the browser patches only the originating thread. A manual rename wins over both
+an in-flight title generation and a late snapshot acknowledgement. The execution
+runtime cancels and joins unfinished title work when the graph ends, times out or
+is cancelled, so it never waits for a title before `done`. An unavailable,
+truncated or cancelled title keeps the provisional label and is not retried.
+
+`FollowUp` adds the Conversations tab and reuses `ThreadHistory` inside Chiron.
+The editable [Figma proposal](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=271-3203)
+extends the Suivi reference with Pierre/Prune desktop/mobile variants.

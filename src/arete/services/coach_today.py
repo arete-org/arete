@@ -46,12 +46,20 @@ def card(
     sessions = GarminRepository().get_planned_sessions(
         [p["planned_session_id"] for p in proposals], connection=con
     )
+    # A missed session's replanning no longer fits a day that has trained since.
+    from arete.services.missed_sessions import trained_on
+    from arete.services.plan_repository import MISSED_REPLAN
+
+    trained = any(
+        p["readiness_source"] == MISSED_REPLAN for p in proposals
+    ) and trained_on(con, day)
     for proposal in proposals:
         session = sessions.get(proposal["planned_session_id"])
         if (
             session is None
             or session.revision != proposal["session_revision"]
             or session.status.value not in {"pending", "modified"}
+            or (trained and proposal["readiness_source"] == MISSED_REPLAN)
         ):
             proposal["state"] = "stale"
     followups = coach_followup.pending(day, con)
@@ -84,7 +92,9 @@ def reference(raw: str) -> dict[str, Any]:
         from arete.services.automations import run_detail
 
         return {"kind": "automation_run", "record": run_detail(raw.split(":", 1)[1])}
-    match = re.fullmatch(r"(proposal|followup|briefing|review):([1-9][0-9]{0,9})", raw)
+    match = re.fullmatch(
+        r"(proposal|followup|briefing|review|session):([1-9][0-9]{0,9})", raw
+    )
     if not match:
         raise ValueError("Référence de suivi invalide")
     kind, ident = match[1], int(match[2])
@@ -97,6 +107,11 @@ def reference(raw: str) -> dict[str, Any]:
 
         review = get_review_by_id(ident)
         record = review.to_dict() if review else None
+    elif kind == "session":
+        # « Modifier » › « Autre… »: today's session and the rules' options.
+        from arete.services.renegotiation import coach_context
+
+        record = coach_context(ident)
     elif kind == "briefing":
         # The athlete asks about a briefing: the coach reads its text, quoted.
         briefing = BriefingRepository().get(ident)

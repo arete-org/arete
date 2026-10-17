@@ -42,24 +42,33 @@ def get_db_path() -> pathlib.Path:
     return config.db_path
 
 
+#: Created during MotherDuck's trial: their 7-day snapshot retention makes the
+#: boot's backup clone fail on the current plan, so a migration can never run
+#: there. Kept untouched as backups of their ``_v2`` copies (docs/deployment.md).
+RETIRED_DATABASES = frozenset({"arete", "arete_preview"})
+
+
 def remote_database() -> str:
-    """``md:arete`` -> ``arete``; a bare ``md:`` means MotherDuck's default."""
+    """``md:arete_v2`` -> ``arete_v2``; a bare ``md:`` means MotherDuck's default."""
     return config.db_target.removeprefix("md:") or "my_db"
 
 
-def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
-    # Production's database has changed name (md:arete, then md:arete_v2): a
-    # preview opens only a MotherDuck database named for previews.
-    if (
-        os.getenv("VERCEL_ENV") == "preview"
-        and config.is_remote_db
-        and "preview" not in remote_database()
-    ):
+def _refuse_wrong_database() -> None:
+    """A retired database anywhere; on a preview, any database not named for
+    previews (production's name has changed once already)."""
+    # The name only: a connection string's options may carry a token.
+    name = remote_database().split("?", 1)[0].lower()
+    if name in RETIRED_DATABASES:
+        raise RuntimeError(f"{name} is retired: point ARETE_DB at its _v2 copy")
+    if os.getenv("VERCEL_ENV") == "preview" and "preview" not in name:
         raise RuntimeError(
-            "Preview requires a separate ARETE_DB named for previews;"
-            f" {config.db_target} is forbidden"
+            f"Preview requires a separate ARETE_DB named for previews; {name} is forbidden"
         )
+
+
+def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
     if config.is_remote_db:
+        _refuse_wrong_database()
         con = _remote_cursor()
         configure_athlete(con)
         return con

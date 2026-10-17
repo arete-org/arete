@@ -610,6 +610,8 @@ def test_canonical_sport():
         ("hike", "hiking"),
         ("indoor_rowing", "rowing"),
         ("  Walking ", "walking"),
+        ("casual_walking", "walking"),
+        ("speed_walking", "walking"),
         ("paragliding", "other"),
         ("", "other"),
         (None, "other"),

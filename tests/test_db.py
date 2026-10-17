@@ -14,7 +14,7 @@ from arete.dataio import db
 
 @pytest.fixture
 def remote(monkeypatch):
-    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setenv("ARETE_DB", "md:arete_v2")
     db.reset_remote()
     yield
     db.reset_remote()
@@ -36,7 +36,7 @@ def opened(remote):
 
 def test_md_target_is_remote(remote):
     assert config.is_remote_db is True
-    assert db.remote_database() == "arete"
+    assert db.remote_database() == "arete_v2"
 
 
 def test_file_target_is_local(monkeypatch, tmp_path):
@@ -54,7 +54,7 @@ def test_each_remote_caller_gets_a_cursor_on_the_database(opened):
     cursor = db.connect()
     raw = opened[0].cursor.return_value
     assert cursor._con is raw  # wrapped to count the request's statements
-    raw.execute.assert_any_call("USE arete")
+    raw.execute.assert_any_call("USE arete_v2")
     raw.execute.assert_called_with("SET VARIABLE arete_athlete_id = ?", [1])
 
 
@@ -142,7 +142,7 @@ def test_an_existing_home_is_kept(tmp_path, monkeypatch):
     assert os.environ["HOME"] == str(tmp_path)
 
 
-@pytest.mark.parametrize("target", ["md:arete", "md:arete_v2", "md:"])
+@pytest.mark.parametrize("target", ["md:arete_v2", "md:"])
 def test_preview_cannot_open_production_motherduck(monkeypatch, target):
     monkeypatch.setenv("VERCEL_ENV", "preview")
     monkeypatch.setenv("ARETE_DB", target)
@@ -157,3 +157,36 @@ def test_preview_can_open_a_separate_database(monkeypatch, opened):
     monkeypatch.setenv("ARETE_DB", "md:arete_preview_v2")
     db.connect()
     opened[0].cursor.return_value.execute.assert_any_call("USE arete_preview_v2")
+
+
+def test_a_preview_name_is_matched_whatever_its_case(monkeypatch, opened):
+    monkeypatch.setenv("VERCEL_ENV", "preview")
+    monkeypatch.setenv("ARETE_DB", "md:Arete_Preview_v2")
+    db.connect()
+    assert len(opened) == 1
+
+
+@pytest.mark.parametrize("vercel", [None, "preview", "production"])
+@pytest.mark.parametrize("target", ["md:arete", "md:ARETE_PREVIEW"])
+def test_the_retired_trial_databases_are_refused_everywhere(
+    monkeypatch, vercel, target
+):
+    # A stack left on them would migrate nothing and double the automations.
+    if vercel:
+        monkeypatch.setenv("VERCEL_ENV", vercel)
+    else:
+        monkeypatch.delenv("VERCEL_ENV", raising=False)
+    monkeypatch.setenv("ARETE_DB", target)
+    with patch.object(db, "_remote_cursor") as remote_cursor:
+        with pytest.raises(RuntimeError, match="retired"):
+            db.connect()
+        remote_cursor.assert_not_called()
+
+
+def test_a_refusal_names_the_database_without_its_options(monkeypatch):
+    monkeypatch.setenv("VERCEL_ENV", "preview")
+    monkeypatch.setenv("ARETE_DB", "md:arete_v2?motherduck_token=secret")
+    with pytest.raises(RuntimeError) as refused:
+        db.connect()
+    assert "arete_v2" in str(refused.value)
+    assert "secret" not in str(refused.value)

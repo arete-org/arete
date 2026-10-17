@@ -8,6 +8,8 @@ import duckdb
 from arete.config import config
 from arete.dataio.automation_schema import DDL as AUTOMATION_DDL
 from arete.dataio.automation_schema import migrate as migrate_automations
+from arete.dataio.conversation_schema import DDL as CONVERSATION_DDL
+from arete.dataio.conversation_schema import migrate as migrate_conversations
 from arete.dataio.db import connect
 
 logger = logging.getLogger(__name__)
@@ -363,10 +365,14 @@ CREATE TABLE IF NOT EXISTS app.plan_decisions (
     user_id            INTEGER NOT NULL DEFAULT 1,
     date               DATE NOT NULL,
     planned_session_id INTEGER NOT NULL,
-    decision           VARCHAR NOT NULL,   -- 'keep', 'ease', 'replace_easy', 'rest'
+    decision           VARCHAR NOT NULL,   -- 'keep', 'ease', 'replace_easy', 'rest', 'move'
     reason             VARCHAR NOT NULL,
     readiness_score    DOUBLE,
-    readiness_source   VARCHAR,            -- 'garmin_training', 'garmin', 'model'
+    -- 'garmin_training', 'garmin', 'model', 'athlete' or 'missed': also the
+    -- origin, for a choice the athlete made with « Modifier » (ARE-61) or the
+    -- evening replanning of a missed session, both with no readiness. A
+    -- dedicated origin column would need a migration (a later one).
+    readiness_source   VARCHAR,
     acwr               DOUBLE,
     original_json      VARCHAR,
     adapted_json       VARCHAR,
@@ -939,7 +945,7 @@ def _m49_daily_checkins(con) -> None:
         raise
 
 
-DDL += AUTOMATION_DDL
+DDL += AUTOMATION_DDL + CONVERSATION_DDL
 
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
@@ -981,6 +987,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (48, _m48_briefing_reactions),
     (49, _m49_daily_checkins),
     (50, migrate_automations),
+    (51, migrate_conversations),
 ]
 
 

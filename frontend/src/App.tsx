@@ -93,8 +93,10 @@ function App() {
       if (!isCoachReference(reference)) return;
       setAgentOpen(true);
     };
+    const open = () => setAgentOpen(true);
+    window.addEventListener('arete:coach-open', open);
     window.addEventListener('arete:coach-discuss', discuss);
-    return () => window.removeEventListener('arete:coach-discuss', discuss);
+    return () => { window.removeEventListener('arete:coach-discuss', discuss); window.removeEventListener('arete:coach-open', open); };
   }, []);
   const [agentBusy, setAgentBusy] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);

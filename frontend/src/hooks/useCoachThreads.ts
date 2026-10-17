@@ -1,3 +1,5 @@
+import { conversationsApi, archivePayload, digest, hasLocalCharts, restoreLocalCharts } from '@/lib/conversations';
+import { useConversationArchive } from './useConversationArchive';
 import { useAuthState } from '@/components/auth/authState';
 import { markWorkout, measureWorkout } from '@/lib/workoutPerformance';
 import { cacheWorkout } from '@/lib/workouts';
@@ -5,7 +7,6 @@ import { canRetryMessage } from '@/lib/agentActivity';
 import { holdReloads } from '@/lib/chunkReload';
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { documentsApi } from '@/lib/documents';
 import type { MessageFeedback } from '@/lib/agentFeedback';
 import { invalidateAfterGarminRefresh, invalidateAfterSession, qk } from '@/lib/queryKeys';
 import type { PanelPageContext } from '@/lib/pageContext';
@@ -19,6 +20,7 @@ import {
   type ChatMessage,
 } from '@/lib/agentStream';
 import {
+  MAX_THREADS,
   addThread,
   createThread,
   loadThreads,
@@ -58,6 +60,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     controller: AbortController;
   } | null>(null);
   const storeRef = useRef(store);
+  const openSequence = useRef(0);
   // Native discussion events and SSE chunks can share a React batch. Apply all
   // updates to the latest store synchronously so opening a thread loses neither.
   const setStore = useCallback((update: SetStateAction<ThreadStore>) => {
@@ -65,12 +68,14 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     storeRef.current = next;
     commitStore(next);
   }, []);
+  const archive = useConversationArchive(store, setStore, !initial.error);
   const active = store.threads.find((t) => t.id === store.activeId);
   if (!active)
     throw new Error('Invariant violated: active coach thread missing.');
 
   useEffect(() => {
     const discuss = (event: Event) => {
+      openSequence.current += 1;
       const reference: unknown = (event as CustomEvent).detail;
       if (!isCoachReference(reference)) return;
       try {
@@ -115,12 +120,57 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   }, [runningId]);
 
   const select = (id: string) => {
+    openSequence.current += 1;
     setStore((prev) =>
       prev.threads.some((t) => t.id === id) ? { ...prev, activeId: id } : prev
     );
     setError('');
   };
+  const openArchived = useCallback(async (id: string) => {
+    const sequence = ++openSequence.current;
+    const local = storeRef.current.threads.find(t => t.id === id);
+    if (local) setStore(prev => ({ ...prev, activeId: id }));
+    try {
+      if (local && (!local.archiveDigest || local.messages.some(m => m.pending) || await digest(archivePayload(local)) !== local.archiveDigest)) return;
+      const remote = await conversationsApi.read(id);
+      if (sequence !== openSequence.current) return;
+      const current = storeRef.current.threads.find(t => t.id === id);
+      if (current && current !== local) return;
+      const thread = { ...restoreLocalCharts(remote, local), draft: local?.draft ?? "", attachmentIds: local?.attachmentIds ?? [] };
+      setStore(prev => {
+        if (prev.threads.length >= MAX_THREADS && !prev.threads.some(t => t.id === id)) throw new Error("Trop de fils locaux non sauvegardés. Termine leur sauvegarde avant de charger un autre fil.");
+        return { ...prev, activeId: id, threads: [thread, ...prev.threads.filter(t => t.id !== id)] };
+      });
+      setError('');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Conversation indisponible.'); }
+  }, [setStore]);
+  useEffect(() => {
+    const open = (event: Event) => { const id = (event as CustomEvent).detail; if (typeof id === 'string') void openArchived(id); };
+    const fresh = () => { openSequence.current += 1; try { setStore(prev => addThread(prev)); } catch (err) { setError(String(err)); } };
+    const deleted = (event: Event) => { const id = (event as CustomEvent).detail; if (typeof id !== 'string') return; if (runRef.current?.threadId === id) runRef.current.controller.abort(); setStore(prev => removeThread(prev, id)); };
+    const renamed = (event: Event) => { const { id, title } = (event as CustomEvent).detail; if (typeof id === 'string' && typeof title === 'string') setStore(prev => updateThread(prev, id, t => ({ ...t, title, titleManual: true }))); };
+    window.addEventListener('arete:conversation-deleted', deleted);
+    window.addEventListener('arete:conversation-renamed', renamed);
+    window.addEventListener('arete:conversation-new', fresh);
+    window.addEventListener('arete:conversation-open', open);
+    return () => { window.removeEventListener('arete:conversation-open', open); window.removeEventListener('arete:conversation-new', fresh); window.removeEventListener('arete:conversation-deleted', deleted); window.removeEventListener('arete:conversation-renamed', renamed); openSequence.current += 1; };
+  }, [openArchived, setStore]);
+
+  useEffect(() => {
+    if (store.threads.length < 30) return;
+    let cancelled = false;
+    void (async () => {
+      const removable: string[] = [];
+      for (const thread of store.threads) {
+        if (thread.id === store.activeId || thread.id === runningId || thread.draft || thread.attachmentIds?.length || !thread.archiveDigest || hasLocalCharts(thread)) continue;
+        if (await digest(archivePayload(thread)) === thread.archiveDigest) removable.push(thread.id);
+      }
+      if (!cancelled && removable.length) setStore(prev => ({ ...prev, threads: prev.threads.filter(t => !removable.includes(t.id) || t !== store.threads.find(old => old.id === t.id)) }));
+    })().catch(err => { if (!cancelled) setError(String(err)); });
+    return () => { cancelled = true; };
+  }, [store, runningId, setStore]);
   const create = () => {
+    openSequence.current += 1;
     try {
       const candidate = createThread();
       setStore((prev) => addThread(prev, candidate));
@@ -135,7 +185,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   };
   const remove = async (id: string) => {
     if (runRef.current?.threadId === id) runRef.current.controller.abort();
-    try { await documentsApi.deleteThread(id); }
+    try { await conversationsApi.remove(id); }
     catch (err) { setError(err instanceof Error ? err.message : 'Suppression des documents impossible.'); return; }
     setStore((prev) => removeThread(prev, id));
     setError('');
@@ -232,6 +282,11 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       { ...context, params: { ...context.params, ...(active.reference ? { coach_ref: `${active.reference.kind}:${active.reference.id}` } : {}) } },
       (event) => {
         if (controller.signal.aborted) return;
+        if (event.type === 'thread_title') {
+          if (event.thread_id !== threadId) throw new Error('Titre reçu pour un autre fil.');
+          setStore(prev => updateThread(prev, threadId, t => t.titleManual ? t : ({ ...t, title: event.title })));
+          return;
+        }
         if (event.type === 'values') {
           setStore(prev => updateThread(prev, threadId, thread => ({
             ...thread, contextWindowUsage: event.context_window_usage,
@@ -333,14 +388,30 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       ...t, messages: t.messages.map(m => m.trace?.trace_id === traceId ? { ...m, feedback } : m),
     }))),
     recordAction,
+    renameLocal: (id: string, title: string) => setStore(prev => updateThread(prev, id, t => ({ ...t, title, titleManual: true }))),
     clearReference: () => setStore(prev => updateThread(prev, prev.activeId, thread => ({ ...thread, reference: undefined }))),
     store,
     active,
     runningId,
     compacting: compactingId === active.id,
     error,
-    storageError,
+    storageError: archive.error || storageError,
+    retryArchive: archive.retry,
+    recoverArchive: async () => {
+      const local = storeRef.current.threads.find(t => t.id === storeRef.current.activeId)!;
+      if (runRef.current?.threadId === local.id) { setError('Arrête la réponse avant de recharger ce fil.'); return; }
+      try {
+        const remote = await conversationsApi.read(local.id);
+        if (storeRef.current.threads.find(t => t.id === local.id) !== local) { setError('Le fil a changé pendant la lecture. Réessaie.'); return; }
+        // Preserve the complete conflicting snapshot under this athlete before
+        // accepting the server version; drafts and selected files stay usable.
+        localStorage.setItem(`arete.coach.conflict.${athleteId}.${local.id}`, JSON.stringify(local));
+        setStore(prev => updateThread(prev, local.id, () => ({ ...restoreLocalCharts(remote, local), draft: local.draft, attachmentIds: local.attachmentIds })));
+        archive.retry();
+      } catch (err) { setError(err instanceof Error ? err.message : 'Lecture impossible.'); }
+    },
     select,
+    openArchived,
     create,
     remove,
     draft,

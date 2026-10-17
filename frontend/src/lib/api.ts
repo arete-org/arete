@@ -718,9 +718,21 @@ export const planApi = {
   adaptNow: () =>
     fetchAPI<import("@/types").PlanToday>("/plan/today/adapt", { method: "POST" }),
 
+  /** `garmin`: what Garmin did after it (absent from an older server). */
   revert: (decisionId: number) =>
-    fetchAPI<import("@/types").PlanDecision>(`/plan/decisions/${decisionId}/revert`, {
+    fetchAPI<import("@/types").PlanDecision & { garmin?: import("@/types").RenegotiationGarmin }>(`/plan/decisions/${decisionId}/revert`, {
       method: "POST",
+    }),
+
+  /** « Modifier »: the rules' options for today's session, read when the menu opens. */
+  renegotiationOptions: (sessionId: number, signal?: AbortSignal) =>
+    fetchAPI<import("@/types").RenegotiationMenu>(`/plan/today/sessions/${sessionId}/options`, { signal }),
+
+  /** One option; `version` is the menu's as read: a change since answers 409 and writes nothing. */
+  renegotiate: (sessionId: number, choice: { reason: string; option: string; version: string }) =>
+    fetchAPI<import("@/types").Renegotiated>(`/plan/today/sessions/${sessionId}/renegotiate`, {
+      method: "POST",
+      body: JSON.stringify(choice),
     }),
 
   /** Last week's review, or null when it was not written yet. */

@@ -56,9 +56,9 @@ def today_in(zone: str | None) -> date:
 
 # ---------- Notification preferences ----------
 #: Every push the server sends names one of these. The last two are planned
-#: (UX 2), and ``adapted_session`` has no sender since adaptations became
-#: proposals to validate: their choice is stored now so the athlete sets it once.
-#: ``checkin`` is the morning check-in's push (``checkins.prompt``).
+#: (UX 2). ``adapted_session`` is the evening's replanning of a missed session
+#: (``missed_sessions``, ARE-61); ``checkin`` is the morning check-in's push
+#: (``checkins.prompt``).
 NotificationKind = Literal[
     "briefing",
     "post_session",
