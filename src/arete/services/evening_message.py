@@ -48,8 +48,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Three sentences and a question; a model that ignores it is refused.
+#: At most three sentences, the closing question included; a model that
+#: ignores it is refused.
 MAX_EVENING_CHARS = 600
+MAX_SENTENCES = 3
+#: A claim older than this belongs to a run the platform stopped: a scheduled
+#: run is bounded well under it (``scheduler.SCHEDULE_RUN_SECONDS``).
+CLAIM_EXPIRY = timedelta(seconds=330)
 MAX_ANSWER_CHARS = 1_000
 #: A race this close, or closer, is worth a word on a rest day too.
 RACE_SOON_DAYS = 7
@@ -74,6 +79,14 @@ class EveningConflict(ValueError):
     """The answer conflicts with the stored one, or the question has passed."""
 
 
+class EveningFormatError(ValueError):
+    """The model's text is not a short message ending with one question."""
+
+
+#: ``EveningMessage.date`` shadows the type inside the class.
+Day = date
+
+
 @dataclass(frozen=True)
 class EveningMessage:
     id: int
@@ -89,8 +102,20 @@ class EveningMessage:
     answered_at: datetime | None
     journaled_at: datetime | None
 
-    def to_dict(self) -> dict[str, Any]:
-        """What the athlete and the coach read: the run's state stays inside."""
+    def answerable(self, today: Day) -> bool:
+        """Open to an answer: written, unanswered, until the day it is about."""
+        return (
+            self.status == "ok"
+            and self.answer is None
+            and today <= self.date + timedelta(days=1)
+        )
+
+    def to_dict(self, today: Day | None = None) -> dict[str, Any]:
+        """What the athlete and the coach read: the run's state stays inside.
+
+        ``answerable`` false: the browser's composer chats instead of answering.
+        ``journaled``: whether the answer reached the coach's journal yet.
+        """
         return {
             "id": self.id,
             "date": self.date.isoformat(),
@@ -101,6 +126,8 @@ class EveningMessage:
             "written_at": _utc(self.written_at),
             "answer": self.answer,
             "answered_at": _utc(self.answered_at),
+            "answerable": self.answerable(today or athlete_today()),
+            "journaled": self.journaled_at is not None,
         }
 
 
@@ -290,7 +317,7 @@ def _weather_lines(day: date) -> list[str]:
 
 def facts_text(evening: Survey) -> str:
     """Everything the evening message needs, so the model needs no tool."""
-    from arete.services.briefing import _block, load_lines, session_line
+    from arete.services.briefing import bullet_block, load_lines, session_line
 
     day = evening.day
     tomorrow = day + timedelta(days=1)
@@ -323,14 +350,14 @@ def facts_text(evening: Survey) -> str:
             "Pourquoi ce message : "
             + ", ".join(_REASONS_FR[r] for r in evening.reasons)
             + ".",
-            _block(
+            bullet_block(
                 "Séance(s) prévue(s) demain",
                 lambda: [session_line(s) for s in evening.tomorrow],
             ),
-            _block("Météo prévue demain", lambda: _weather_lines(day)),
-            _block("Charge, forme et récupération (ce matin)", readiness),
-            _block("Aujourd'hui", today),
-            *([_block("Course proche", lambda: races)] if races else []),
+            bullet_block("Météo prévue demain", lambda: _weather_lines(day)),
+            bullet_block("Charge, forme et récupération (ce matin)", readiness),
+            bullet_block("Aujourd'hui", today),
+            *([bullet_block("Course proche", lambda: races)] if races else []),
         ]
     )
 
@@ -339,12 +366,17 @@ def facts_text(evening: Survey) -> str:
 # Writing it once
 # --------------------------------------------------------------------------- #
 def closing_question(text: str) -> str:
-    """The message's one question, its last sentence; ValueError otherwise."""
+    """The message's one question, its last sentence; EveningFormatError when
+    the text is not at most ``MAX_SENTENCES`` sentences ending with that one
+    question (the question counts as one of them)."""
     if len(text) > MAX_EVENING_CHARS:
-        raise ValueError(f"Message du soir trop long ({len(text)} caractères)")
+        raise EveningFormatError(f"trop long ({len(text)} caractères)")
     if not text.endswith("?") or text.count("?") != 1:
-        raise ValueError("Le message du soir doit finir par une seule question")
-    return re.split(r"(?<=[.!…])\s+", text)[-1]
+        raise EveningFormatError("ne finit pas par une seule question")
+    sentences = re.split(r"(?<=[.!?…])\s+", text)
+    if len(sentences) > MAX_SENTENCES:
+        raise EveningFormatError(f"{len(sentences)} phrases")
+    return sentences[-1]
 
 
 def get_for_day(day: date) -> EveningMessage | None:
@@ -355,6 +387,18 @@ def get_for_day(day: date) -> EveningMessage | None:
             [day],
         ).fetchone()
     return _from_row(row) if row else None
+
+
+def settle_stopped(day: date) -> None:
+    """A claim the platform stopped mid-run (the function killed): settled as
+    failed, never replayed; a claim still within ``CLAIM_EXPIRY`` is running."""
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.coach_evening_messages SET status = 'failed', "
+            f"error = 'StoppedRun', written_at = ? WHERE {_SCOPE} AND date = ? "
+            "AND status = 'pending' AND created_at < ?",
+            [naive_utc_now(), day, naive_utc_now() - CLAIM_EXPIRY],
+        )
 
 
 def get(message_id: int) -> EveningMessage | None:
@@ -415,10 +459,13 @@ def write(produce: Callable[[str], str], evening: Survey) -> EveningMessage | No
         text = produce(facts_text(evening)).strip()
         question = closing_question(text)
     except Exception as exc:
-        logger.warning("Evening message run failed", exc_info=True)
-        return _settle(
-            claim_id, status="failed", error=f"{type(exc).__name__}: {exc}"[:500]
-        )
+        # The type only: a provider's message may quote the facts. Our own
+        # format refusal is safe and says why.
+        error = type(exc).__name__
+        if isinstance(exc, EveningFormatError):
+            error += f": {exc}"
+        logger.warning("Evening message run failed: %s", error)
+        return _settle(claim_id, status="failed", error=error)
     logger.info("Evening message written (%d chars)", len(text))
     return _settle(claim_id, status="ok", text=text, question=question)
 
@@ -455,7 +502,26 @@ def answer(message_id: int, text: str) -> dict[str, Any]:
                     "Réponse concurrente : recharge le message."
                 ) from exc
     assert message is not None
-    return {**message.to_dict(), "journal": _file(message)}
+    journal = _file(message)
+    return {
+        **message.to_dict(),
+        "journaled": journal != "failed",
+        "journal": journal,
+    }
+
+
+def read(message_id: int) -> EveningMessage | None:
+    """A written message, its answer filed in the journal if a failed filing
+    left it out (``append_entry``'s dated heading keeps it to one entry)."""
+    message = get(message_id)
+    if (
+        message is not None
+        and message.answer is not None
+        and not message.journaled_at
+        and _file(message) != "failed"
+    ):
+        message = get(message_id)
+    return message
 
 
 def _keep(message_id: int, text: str) -> EveningMessage:
@@ -517,4 +583,6 @@ def answered_lines(evening: date) -> list[str]:
     message = get_for_day(evening)
     if message is None or message.status != "ok" or message.answer is None:
         return []
+    if message.journaled_at is None:
+        _file(message)  # left out by a failed filing: the briefing files it
     return [f"Ta question : {message.question}", f"Réponse : {message.answer}"]

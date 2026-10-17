@@ -90,8 +90,9 @@ def _clock(seconds: int) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
 
 
-def _block(title: str, read: Callable[[], list[str]]) -> str:
-    """One section of the facts; a failed read says so instead of failing."""
+def bullet_block(title: str, read: Callable[[], list[str]]) -> str:
+    """One section of the facts, shared by the missions that list them; a failed
+    read says so instead of failing."""
     try:
         lines = read()
     except Exception:
@@ -278,29 +279,34 @@ def briefing_facts(
         # Last evening's question, once the athlete answered it (ARE-64).
         answered = evening_message.answered_lines(target_date - timedelta(days=1))
     except Exception:
+        # Omitted, like a missing answer: a failed read must not move the digest.
         logger.warning("Briefing facts: evening answer unavailable", exc_info=True)
-        answered = ["indisponible"]
+        answered = []
     return "\n\n".join(
         [
             f"Nous sommes {weekday} {target_date.isoformat()}.",
             f"Conseil calculé par les règles : {rule_text}",
-            _block("Charge, forme et récupération", load),
+            bullet_block("Charge, forme et récupération", load),
             # Only once answered: a day without one keeps its facts (and digest).
             *(
-                [_block("Check-in déclaré par l'athlète", lambda: declared)]
+                [bullet_block("Check-in déclaré par l'athlète", lambda: declared)]
                 if declared
                 else []
             ),
             *(
-                [_block("Ta question d'hier soir et sa réponse", lambda: answered)]
+                [
+                    bullet_block(
+                        "Ta question d'hier soir et sa réponse", lambda: answered
+                    )
+                ]
                 if answered
                 else []
             ),
-            _block("Séance(s) prévue(s) aujourd'hui", planned),
-            _block("Décision du coach pour aujourd'hui", decisions),
-            _block("Prédictions de course Garmin", predictions),
-            _block("Dernières séances réalisées", recent),
-            _block("Ton briefing d'hier", yesterday),
+            bullet_block("Séance(s) prévue(s) aujourd'hui", planned),
+            bullet_block("Décision du coach pour aujourd'hui", decisions),
+            bullet_block("Prédictions de course Garmin", predictions),
+            bullet_block("Dernières séances réalisées", recent),
+            bullet_block("Ton briefing d'hier", yesterday),
         ]
     )
 
