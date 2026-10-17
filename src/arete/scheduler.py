@@ -597,15 +597,16 @@ def _run_athlete(
     with athlete_scope(athlete_id):
         from arete.dataio import mirror
 
+        # The briefing's wait for the dashboard ends at the model deadline, a
+        # run it starts by the run deadline: this dispatch's, reset after it.
+        model_token = _model_deadline.set(started + SCHEDULE_MODEL_SECONDS)
+        run_token = _run_deadline.set(started + SCHEDULE_RUN_SECONDS)
         try:
             if config.is_remote_db:
                 mirror.hydrate()
             status = daily_sync()
             tz = zone_of(zone)
             claim_day = claimed_at.astimezone(tz).date()
-            # The briefing's wait for the dashboard ends at the model deadline.
-            _model_deadline.set(started + SCHEDULE_MODEL_SECONDS)
-            _run_deadline.set(started + SCHEDULE_RUN_SECONDS)
             for step, write in (
                 ("briefing", write_daily_briefing),
                 ("review", write_weekly_review),
@@ -644,6 +645,9 @@ def _run_athlete(
                 athlete_id,
             )
             return {"status": "failed; next attempt tomorrow"}
+        finally:
+            _run_deadline.reset(run_token)
+            _model_deadline.reset(model_token)
     return status
 
 
@@ -733,8 +737,11 @@ def write_sunday_review(started: float) -> str:
             logger.warning("Sunday Garmin refresh failed: %s", e)
         if monotonic() - started >= SCHEDULE_MODEL_SECONDS:
             return "deferred"
-        _run_deadline.set(started + SCHEDULE_RUN_SECONDS)
-        outcome = announce_review()
+        token = _run_deadline.set(started + SCHEDULE_RUN_SECONDS)
+        try:
+            outcome = announce_review()
+        finally:
+            _run_deadline.reset(token)
         if config.is_remote_db:
             mirror.flush()
     except Exception as e:  # noqa: BLE001 - background job must not die
