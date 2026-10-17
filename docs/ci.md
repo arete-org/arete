@@ -63,8 +63,17 @@ has its own temporary database, and tests in one module stay together. The 20
 slowest phases (`setup`, `call`, `teardown`) appear in logs, both in CI and with
 `make check`. Measure these before widening fixture scope: sharing a database
 fixture can make order-dependent tests pass locally and fail in isolation.
-The affected-check runner bounds each command at 15 minutes; GitHub jobs retain
-their own shorter limits.
+The affected-check runner bounds each command at 22 minutes, below the test
+jobs' 25.
+
+In CI the selected files run in three parallel `test (K/3)` jobs
+(`--shard K/3`): each file stays whole in one shard, and `scripts/ci/shard_tests.py`
+balances the shards on the per-file durations of `scripts/ci/test_durations.json`
+(a file missing from it weighs the median). The required `test` check passes only
+when every shard passed. The full suite took 14 min 46 s in one job; three
+shards bring it to about a third. When the shards' logged durations drift apart,
+refresh the table: `uv run pytest tests -n 2 --dist loadfile --junitxml=report.xml`,
+then `python3 scripts/ci/shard_tests.py report.xml`.
 
 ## Deployment review
 

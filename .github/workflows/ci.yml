@@ -85,28 +85,68 @@ jobs:
       - run: node --test scripts/openwiki/transport.test.mjs
         if: steps.select.outputs.transport == 'true'
 
-  test:
+  # The full suite took 14m49s in one job on 2026-10-17 (2 vCPU, 2 workers):
+  # three shards of whole files, balanced on scripts/ci/test_durations.json.
+  test-shard:
+    # The matrix is the only shard count: K/N comes from it.
+    name: test (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
-    # The full suite took 14m49s on 2026-10-17; 15 left no margin.
     timeout-minutes: 25
     needs: lint
     if: needs.lint.outputs.backend == 'true'
+    strategy:
+      # Every shard reports: one failure must not hide another's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: "latest"
-          enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --extra dev
-      - run: python3 scripts/bundle_ocr_data.py
-      # Two bounded workers, each with its own temporary DuckDB from conftest.
-      # Keep each file together to preserve module fixtures and test ordering.
       - uses: actions/download-artifact@v4
         with:
           name: ci-plan
           path: .context
-      - run: python3 scripts/ci/check_changed.py --plan .context/ci-plan.json --run --tests-only
+      # A narrow change selects few files: an empty shard skips the setup.
+      - name: Count this shard's files
+        id: shard
+        run: >-
+          python3 scripts/ci/check_changed.py --plan .context/ci-plan.json
+          --shard "$SHARD" --count-only >> "$GITHUB_OUTPUT"
+      - uses: astral-sh/setup-uv@v6
+        if: steps.shard.outputs.files != '0'
+        with:
+          version: "latest"
+          enable-cache: true
+      - run: uv python install 3.12
+        if: steps.shard.outputs.files != '0'
+      - run: uv sync --frozen --extra dev
+        if: steps.shard.outputs.files != '0'
+      - run: python3 scripts/bundle_ocr_data.py
+        if: steps.shard.outputs.files != '0'
+      # Two bounded workers, each with its own temporary DuckDB from conftest.
+      # Keep each file together to preserve module fixtures and test ordering.
+      - run: >-
+          python3 scripts/ci/check_changed.py --plan .context/ci-plan.json --run
+          --tests-only --shard "$SHARD"
+        if: steps.shard.outputs.files != '0'
+
+  # The required check: green only when every shard passed, skipped with them
+  # when the backend is not selected. always(), not !cancelled(): a cancelled
+  # run must fail this check, since GitHub counts a skipped required check as
+  # passed.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [lint, test-shard]
+    if: ${{ always() && needs.lint.outputs.backend == 'true' }}
+    steps:
+      - name: Every shard passed
+        env:
+          SHARDS: ${{ needs.test-shard.result }}
+        run: |
+          echo "Shards: $SHARDS"
+          [[ "$SHARDS" == success ]]
 
   typecheck:
     runs-on: ubuntu-latest
