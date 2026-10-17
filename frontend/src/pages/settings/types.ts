@@ -40,4 +40,6 @@ export const DEFAULT_SETTINGS: LocalSettings = {
     },
     quiet_hours: { start: '21:30', end: '07:00' },
   },
+  coach_evening_enabled: false,
+  coach_evening_hour: 20,
 };

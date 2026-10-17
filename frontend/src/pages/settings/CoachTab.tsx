@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BookOpen, Brain, RefreshCw, Sunrise, Wand2 } from 'lucide-react';
+import { Bell, BookOpen, Brain, Moon, RefreshCw, Sunrise, Wand2 } from 'lucide-react';
 import { Panel, Button } from '@/components/ui';
 import { IosInstallSteps } from '@/components/InstallPrompt';
 import { garminApi, notificationsApi, type NotificationKind } from '@/lib/api';
@@ -95,6 +95,51 @@ function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
   );
 }
 
+/** The hours the evening message may start from (services/settings.py). */
+const EVENING_HOURS = [18, 19, 20, 21] as const;
+
+function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
+  const enabled = settings.coach_evening_enabled;
+  return (
+    <Panel
+      title={
+        <span className="flex items-center gap-2">
+          <Moon className="size-4 text-neon-purple" /> Message du soir
+        </span>
+      }
+    >
+      <div className="space-y-3">
+        <SettingSwitch
+          checked={enabled}
+          onChange={(value) => updateSetting('coach_evening_enabled', value)}
+          hint="Désactivé par défaut. Rien n’est envoyé les soirs sans séance prévue le lendemain ni signal notable (course proche, préparation basse, séance manquée replanifiée)."
+        >
+          Le soir, Chiron t’écrit deux ou trois phrases sur ta journée de demain et te pose une
+          question. Ta réponse est notée dans son journal pour le briefing du lendemain.
+        </SettingSwitch>
+        <label className="flex flex-wrap items-center gap-2 pl-6 text-sm text-text-secondary">
+          À partir de
+          <select
+            className="min-h-11 rounded border border-text-muted/30 bg-abyss px-2 text-sm"
+            value={settings.coach_evening_hour}
+            disabled={!enabled}
+            onChange={(e) => updateSetting('coach_evening_hour', Number(e.target.value))}
+          >
+            {EVENING_HOURS.map((hour) => (
+              <option key={hour} value={hour}>{`${hour}:00`}</option>
+            ))}
+          </select>
+          <span className="text-xs text-text-muted">({settings.timezone})</span>
+        </label>
+        <p className="pl-6 text-xs text-text-muted">
+          Arrive par notification : il faut les notifications activées sur un appareil, en dehors
+          des heures calmes. Sinon, aucun message n’est écrit ce soir-là.
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
 /** What each kind sends; `soon` kinds are stored now, sent by a later release. */
 const KINDS: { kind: NotificationKind; label: string; soon?: boolean }[] = [
   { kind: 'briefing', label: 'Briefing du matin' },
@@ -103,7 +148,7 @@ const KINDS: { kind: NotificationKind; label: string; soon?: boolean }[] = [
   { kind: 'adapted_session', label: 'Séance manquée à replanifier (le soir)' },
   { kind: 'imports', label: 'Séances importées' },
   { kind: 'checkin', label: 'Check-in du matin' },
-  { kind: 'evening', label: 'Message du soir', soon: true },
+  { kind: 'evening', label: 'Message du soir (si activé ci-dessus)' },
   { kind: 'automation', label: 'Suivis et automatisations' },
   { kind: 'eve_reminder', label: 'Rappel la veille d’une séance clé', soon: true },
 ];
@@ -308,6 +353,7 @@ export function CoachTab({ settings, updateSetting }: SettingsTabProps) {
   return (
     <div className="space-y-4">
       {briefingSwitch}
+      <EveningPanel settings={settings} updateSetting={updateSetting} />
       <AdaptationPanel settings={settings} updateSetting={updateSetting} />
       <NotificationsPanel settings={settings} updateSetting={updateSetting} />
       <AthleteFactsPanel />

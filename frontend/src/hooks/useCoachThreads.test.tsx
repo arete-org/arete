@@ -530,3 +530,43 @@ it('opens a thirty-first thread without discarding any older draft', () => {
   expect(result.current.store.threads.filter(t => t.draft)).toHaveLength(30);
   expect(result.current.error).toBe('');
 });
+
+it('answers an evening question once, without a model request, then chats as usual', async () => {
+  const { coachApi } = await import('@/lib/coachToday');
+  const message = { id: 7, date: '2026-10-16', for_date: '2026-10-17', reasons: ['session'], text: 'Tempo demain. Comment sont tes jambes ?', question: 'Comment sont tes jambes ?', written_at: null, answered_at: null };
+  const answer = vi.spyOn(coachApi, 'answerEvening').mockResolvedValue({ ...message, answer: 'Lourdes.', answered_at: '2026-10-16T18:40:00+00:00', journal: 'written' });
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  act(() => result.current.draft('Brouillon gardé'));
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 7 } })));
+  const evening = result.current.active.id;
+  expect(result.current.active).toMatchObject({ title: 'Question du soir', reference: { kind: 'evening', id: 7 }, draft: '' });
+  act(() => result.current.draft('Lourdes.'));
+  await act(async () => { result.current.send(); });
+  await waitFor(() => expect(result.current.active.messages).toEqual([{ role: 'user', content: 'Lourdes.' }]));
+  expect(answer).toHaveBeenCalledExactlyOnceWith(7, 'Lourdes.');
+  expect(runs).toHaveLength(0);
+  expect(result.current.active.draft).toBe('');
+  // The next message is a normal turn, with the message as context.
+  act(() => { result.current.send('Je décale ?'); });
+  expect(runs).toHaveLength(1);
+  expect(runs[0].context.params).toEqual({ coach_ref: 'evening:7' });
+  await act(async () => { runs[0].resolve(); });
+  // Opening the push again returns to the same thread.
+  act(() => result.current.create());
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 7 } })));
+  expect(result.current.active.id).toBe(evening);
+  expect(answer).toHaveBeenCalledTimes(1);
+});
+
+it('keeps the draft and says so when the evening answer is not saved', async () => {
+  const { coachApi } = await import('@/lib/coachToday');
+  vi.spyOn(coachApi, 'answerEvening').mockRejectedValue(new Error('Une réponse est déjà enregistrée.'));
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 8 } })));
+  act(() => result.current.draft('Bien.'));
+  await act(async () => { result.current.send(); });
+  await waitFor(() => expect(result.current.error).toBe('Réponse non enregistrée : Une réponse est déjà enregistrée.'));
+  expect(result.current.active.messages).toEqual([]);
+  expect(result.current.active.draft).toBe('Bien.');
+  expect(result.current.runningId).toBeNull();
+});

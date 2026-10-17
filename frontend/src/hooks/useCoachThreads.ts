@@ -10,7 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { MessageFeedback } from '@/lib/agentFeedback';
 import { invalidateAfterGarminRefresh, invalidateAfterSession, qk } from '@/lib/queryKeys';
 import type { PanelPageContext } from '@/lib/pageContext';
-import { isCoachReference } from '@/lib/coachToday';
+import { coachApi, eveningKey, isCoachReference, type EveningMessage } from '@/lib/coachToday';
 import {
   applyEvent,
   MAX_MESSAGE_CHARS,
@@ -80,8 +80,13 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       if (!isCoachReference(reference)) return;
       try {
         const current = storeRef.current;
-        const next = reference.kind === 'briefing'
-          ? addThread(current, { ...createThread(), title: 'Briefing avec Chiron', reference })
+        // One thread per evening message: opening its push again returns to it.
+        const evening = reference.kind === 'evening'
+          ? current.threads.find(t => t.reference?.kind === 'evening' && t.reference.id === reference.id)
+          : undefined;
+        const next = evening ? { ...current, activeId: evening.id }
+          : reference.kind === 'briefing' || reference.kind === 'evening'
+          ? addThread(current, { ...createThread(), title: reference.kind === 'briefing' ? 'Briefing avec Chiron' : 'Question du soir', reference })
           : updateThread(current, current.activeId, thread => ({ ...thread, reference }));
         setStore(next);
         setError('');
@@ -200,12 +205,44 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   };
   const stop = useCallback(() => runRef.current?.controller.abort(), []);
 
+  /** The first message of an evening message's thread answers its question:
+   *  kept and filed in the journal by the server, with no model request. The
+   *  draft stays until the answer is saved. */
+  const answerEvening = (id: number, content: string) => {
+    const threadId = active.id;
+    runRef.current = { threadId, controller: new AbortController() };
+    setRunningId(threadId);
+    setError('');
+    void coachApi.answerEvening(id, content)
+      .then(saved => {
+        queryClient.setQueryData(eveningKey(id), saved);
+        setStore(prev => updateThread(prev, threadId, t => ({
+          ...t,
+          draft: t.draft.trim() === content ? '' : t.draft,
+          updatedAt: Date.now(),
+          messages: [...t.messages, { role: 'user', content }],
+        })));
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? `Réponse non enregistrée : ${err.message}` : 'Réponse non enregistrée.');
+        void queryClient.invalidateQueries({ queryKey: eveningKey(id) });
+      })
+      .finally(() => {
+        runRef.current = null;
+        setRunningId(null);
+      });
+    return true;
+  };
+
   /** ``keep`` = messages kept before the new question (a retry drops the
    *  failed or unwanted answer and asks the same question again). */
   const send = (prompt = active.draft, keep = active.messages.length) => {
     const content = prompt.trim();
     const activeRuns = runRef.current ? 1 : 0;
     if (!content || activeRuns >= MAX_ACTIVE_RUNS) return false;
+    const evening = active.reference?.kind === 'evening' ? active.reference : null;
+    if (evening && keep === 0 && !active.messages.length && !queryClient.getQueryData<EveningMessage>(eveningKey(evening.id))?.answer)
+      return answerEvening(evening.id, content);
     const retrying = keep < active.messages.length;
     const attachmentIds = selectedDocuments ? (retrying ? active.messages[keep]?.attachmentIds ?? [] : active.attachmentIds ?? []) : undefined;
     const history = requestWindow([
