@@ -11,6 +11,8 @@ test('desktop aligns the brand and content, uses the workspace and reflows besid
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
+    // This settled dashboard belongs to an athlete who already completed setup.
+    if (path === '/api/onboarding') return route.fulfill({ json: { status: 'completed', revision: 1 } });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'odyssey', display_name: 'HUNTER' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, available: true } });
     // The morning answered: the open check-in card scrolls the page until then (checkin.spec.ts).
@@ -23,6 +25,7 @@ test('desktop aligns the brand and content, uses the workspace and reflows besid
   await expect(heading).toBeVisible();
   // Settled: the form curve's lazy read has answered (no load in this fixture).
   await expect(page.getByText(/Pas encore de charge enregistrée/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Terminer ma configuration' })).toHaveCount(0);
   await page.emulateMedia({ reducedMotion: 'reduce' });
 
   for (const width of [1440, 1920]) {

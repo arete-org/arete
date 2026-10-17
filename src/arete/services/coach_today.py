@@ -88,6 +88,10 @@ def reference(raw: str) -> dict[str, Any]:
     """Only identifiers cross the browser boundary; scope is checked by services."""
     import re
 
+    if raw == "onboarding:1":
+        from arete.services.onboarding import confirmed_context
+
+        return {"kind": "onboarding", "record": confirmed_context()}
     if re.fullmatch(r"automation_run:[0-9a-f-]{36}", raw):
         from arete.services.automations import run_detail
 

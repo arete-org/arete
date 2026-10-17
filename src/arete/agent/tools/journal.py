@@ -15,14 +15,15 @@ MAX_BODY_CHARS = 2_000
 
 @typed_tool
 def append_journal(
-    file: Literal["sessions.md", "notes.md"],
+    file: Literal["sessions.md", "notes.md", "profile.md"],
     title: Annotated[str, Field(min_length=1, max_length=MAX_TITLE_CHARS)],
     body: Annotated[str, Field(min_length=1, max_length=MAX_BODY_CHARS)],
     day: str = "",
 ) -> str:
     """Ajoute une entrée datée à ton journal. `sessions.md`: une séance dont
     vous avez parlé (faits marquants, ressenti, décision). `notes.md`: une
-    observation de coach qui n'est pas un fait sur l'athlète. Le serveur écrit
+    observation de coach qui n'est pas un fait sur l'athlète. `profile.md`:
+    réponses personnelles confirmées par l’athlète. Le serveur écrit
     l'entête daté et ignore une entrée déjà présente. `day`: date ISO de la
     séance si ce n'est pas aujourd'hui, sinon vide."""
     if not title.strip() or not body.strip():
