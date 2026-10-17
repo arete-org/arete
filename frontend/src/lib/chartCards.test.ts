@@ -15,7 +15,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clea
 
 it('archives the chart summary, preserves local charts on refresh and never crosses threads', () => {
   const thread = createThread();
-  thread.messages = [{ role: 'assistant', content: chart.summary, parts: [
+  thread.messages = [{ role: 'assistant', content: chart.summary, pending: false, parts: [
     { kind: 'tool', id: 'render', name: 'render_chart', status: 'done', args: { text: chart.html, truncated: false } },
     chartPart(chart),
   ] }];
@@ -26,7 +26,7 @@ it('archives the chart summary, preserves local charts on refresh and never cros
   const restored = restoreLocalCharts(remote, thread);
   expect(restored.messages[0].parts).toEqual([chartPart(chart)]);
   expect(hasLocalCharts(restored)).toBe(true);
-  expect(archivePayload(restored)).toEqual(payload);
+  expect(archivePayload(restored)).toEqual(archivePayload(remote));
   expect(hasLocalCharts(restoreLocalCharts(remote, createThread()))).toBe(false);
   expect(hasLocalCharts(restoreLocalCharts(remote))).toBe(false);
   remote.messages[0].parts = [{ kind: 'text', id: chart.id, text: 'Résumé corrigé ailleurs' }];

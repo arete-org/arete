@@ -200,6 +200,14 @@ jobs:
         working-directory: .
       - run: npm run test:browser
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chiron-chart-previews
+          path: .context/chiron-chart-*.png
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: browser-failures

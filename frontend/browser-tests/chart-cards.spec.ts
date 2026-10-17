@@ -30,6 +30,24 @@ async function openCoach(page: Page) {
   await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
   return page.getByRole('complementary', { name: 'Coach IA' });
 }
+
+async function chartStream(page: Page, display: 'sidebar' | 'floating' = 'floating') {
+  const stream = await coachStream(page, true, display);
+  const archives = new Map<string, Record<string, unknown>>();
+  await page.route('**/api/agent/conversations**', route => {
+    const request = route.request();
+    const id = new URL(request.url()).pathname.split('/')[4];
+    if (!id) return route.fulfill({ json: { items: [], next_offset: null } });
+    if (request.method() === 'PUT') {
+      const body = request.postDataJSON();
+      const saved = { ...body, id, revision: body.revision + 1, title_state: 'generated' };
+      archives.set(id, saved);
+      return route.fulfill({ json: saved });
+    }
+    return route.fulfill({ status: archives.has(id) ? 200 : 404, json: archives.get(id) ?? {} });
+  });
+  return { ...stream, archives };
+}
 async function display(panel: Locator, name: string) {
   const mode = name === 'Chat flottant' ? 'floating' : 'sidebar';
   if (await panel.getAttribute('data-display') === mode) return;
@@ -39,7 +57,7 @@ async function display(panel: Locator, name: string) {
 }
 
 test('charts render in all themes and both chat modes, stay offline and survive reload', async ({ page }) => {
-  const stream = await coachStream(page, true, 'floating');
+  const stream = await chartStream(page);
   const frameRequests: string[] = [];
   page.on('request', request => { if (request.frame().parentFrame()) frameRequests.push(request.url()); });
   try {
@@ -87,9 +105,32 @@ test('charts render in all themes and both chat modes, stay offline and survive 
     }
     expect(frameRequests).toEqual([]);
     await expect.poll(() => page.evaluate(() => localStorage.getItem('arete.coach.threads.v1'))).toContain(line.title);
+    await expect.poll(() => stream.archives.size).toBe(1);
+    const beforeReload = [...stream.archives.values()][0];
     await page.reload();
     // Sidebar stays mounted after reload; reopen only if the restored mode is collapsed.
     if (!await panel.isVisible()) await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
+    await expect(panel.locator('iframe')).toHaveCount(2);
+    await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon reste ici.');
+    // Restoring settles transient message flags; wait for that snapshot's ack
+    // before asking the archive to replace a clean local copy.
+    await expect.poll(() => Number(stream.archives.get(String(beforeReload.id))?.revision)).toBeGreaterThan(Number(beforeReload.revision));
+    const archive = [...stream.archives.values()][0];
+    await expect.poll(() => page.evaluate(id => {
+      const store = JSON.parse(localStorage.getItem('arete.coach.threads.v1')!);
+      return store.threads.find((thread: { id: string }) => thread.id === id)?.archiveRevision;
+    }, archive.id)).toBe(archive.revision);
+    expect(JSON.stringify(archive)).not.toContain('<svg');
+    expect(JSON.stringify(archive)).toContain(line.summary);
+    // Loading the server's textual archive retains this device's full charts.
+    archive.title = 'Distances archivées';
+    const archiveRead = page.waitForResponse(response => response.request().method() === 'GET' && response.url().endsWith(`/agent/conversations/${archive.id}`));
+    await page.evaluate(id => window.dispatchEvent(new CustomEvent('arete:conversation-open', { detail: id })), archive.id);
+    await archiveRead;
+    await expect.poll(() => page.evaluate(id => {
+      const store = JSON.parse(localStorage.getItem('arete.coach.threads.v1')!);
+      return store.threads.find((thread: { id: string }) => thread.id === id)?.title;
+    }, archive.id)).toBe('Distances archivées');
     await expect(panel.locator('iframe')).toHaveCount(2);
     await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon reste ici.');
     expect(stream.requests()).toBe(1);
@@ -97,7 +138,7 @@ test('charts render in all themes and both chat modes, stay offline and survive 
 });
 
 test('late charts remain with their original thread while draft and display mode change', async ({ page }) => {
-  const stream = await coachStream(page, true, 'floating');
+  const stream = await chartStream(page);
   try {
     const panel = await openCoach(page);
     await panel.getByLabel('Message au coach').fill('Ma courbe de distance');
@@ -129,7 +170,7 @@ test('late charts remain with their original thread while draft and display mode
 });
 
 test('sandbox blocks scripts and network even if a document bypassed sanitization', async ({ page }) => {
-  const stream = await coachStream(page);
+  const stream = await chartStream(page, 'sidebar');
   let leaked = 0;
   await page.route('**/chart-exfil/**', route => { leaked++; return route.abort(); });
   try {
