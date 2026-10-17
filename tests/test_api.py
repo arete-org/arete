@@ -21,6 +21,59 @@ class TestHealth:
         assert data["database"] == "connected"
         assert data["schema_version"] == MIGRATIONS[-1][0]
         assert data["pending_migrations"] == []
+        assert data["initialization"] == {"status": "ready"}
+
+    def test_failed_boot_is_diagnosable_without_exposing_the_error(
+        self, monkeypatch, caplog
+    ):
+        from arete.api import main as api_main
+        from arete.dataio.init_duckdb import SchemaInitializationError
+
+        attempts = []
+        private_error = "SQL failed with private-value and token=secret"
+
+        def fail_schema():
+            attempts.append(True)
+            raise SchemaInitializationError("migration:50", RuntimeError(private_error))
+
+        with monkeypatch.context() as patch:
+            patch.setattr(api_main, "init_schema", fail_schema)
+            patch.setattr(api_main, "pending_migrations", lambda con: [50])
+            patch.setattr(api_main.scheduler, "start", lambda: None)
+            with TestClient(api_main.app) as client:
+                caplog.clear()  # Startup logs alone cannot diagnose a warm instance.
+                for _ in range(2):
+                    response = client.get("/health")
+                    assert response.status_code == 503
+                    assert response.json()["initialization"] == {
+                        "status": "failed",
+                        "stage": "migration:50",
+                        "error_type": "RuntimeError",
+                    }
+                    assert "private-value" not in response.text
+                    assert "secret" not in response.text
+                assert len(attempts) == 1  # Probes never replay a failed write.
+                assert private_error in caplog.text
+
+        # A fresh lifespan must not keep an earlier boot's failure in memory.
+        with TestClient(api_main.app) as client:
+            response = client.get("/health")
+            assert response.status_code == 200
+            assert response.json()["initialization"] == {"status": "ready"}
+            assert api_main.app.state.schema_initialization_error is None
+
+    def test_health_distinguishes_an_unstarted_lifespan(self):
+        from fastapi import FastAPI
+
+        from arete.api.main import health
+
+        app = FastAPI()
+        app.add_api_route("/health", health)
+        # A bare ASGI client does not run startup, even when the DB is current.
+        client = TestClient(app)
+        assert client.get("/health").json()["initialization"] == {
+            "status": "not_started"
+        }
 
     def test_health_is_degraded_while_a_migration_is_pending(
         self, client: TestClient, monkeypatch

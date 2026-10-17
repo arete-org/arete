@@ -48,7 +48,7 @@ jobs:
             "https://api.vercel.com/v13/deployments/$MAIN_PREVIEW_ALIAS?teamId=$VERCEL_ORG_ID" \
             | jq -er 'select(.readyState == "READY") | .meta.sha | select(type == "string" and length > 0)')
           python3 scripts/ci/deployment_guard.py --preview-sha "$serving" | tee -a "$GITHUB_STEP_SUMMARY"
-          curl -fsS --connect-timeout 10 --max-time 60 \
+          curl --fail-with-body -sS --connect-timeout 10 --max-time 60 \
             -H "x-vercel-protection-bypass: $BYPASS" \
             "https://$MAIN_PREVIEW_ALIAS/api/health" | tee -a "$GITHUB_STEP_SUMMARY"
         env:
@@ -73,7 +73,9 @@ jobs:
       # serving meanwhile: a migration keeps the previous release working.
       - name: Check the health of the deployment
         run: |
-          curl -fsS --retry 5 --retry-delay 10 --retry-all-errors \
+          # Preserve the JSON explaining a 503, while still failing the job.
+          curl --fail-with-body -sS --connect-timeout 10 --max-time 60 \
+            --retry 5 --retry-delay 10 --retry-all-errors --retry-max-time 300 \
             -H "x-vercel-protection-bypass: $BYPASS" \
             "$URL/api/health" | tee -a "$GITHUB_STEP_SUMMARY"
         env:
@@ -99,7 +101,8 @@ jobs:
             echo "$PRODUCTION_URL serves $serving, not $id ($URL)" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          curl -fsS --retry 5 --retry-delay 10 --retry-all-errors \
+          curl --fail-with-body -sS --connect-timeout 10 --max-time 60 \
+            --retry 5 --retry-delay 10 --retry-all-errors --retry-max-time 300 \
             "$PRODUCTION_URL/api/health" | tee -a "$GITHUB_STEP_SUMMARY"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

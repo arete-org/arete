@@ -162,7 +162,12 @@ the emoji is textual feedback, not an undocumented LangSmith UI reaction endpoin
    The deployment's first request migrates `arete_preview`; the
    workflow checks `/api/health` and moves the fixed URL only onto a healthy
    build. A failed migration leaves the URL on the previous build and the
-   workflow red.
+   workflow red. Failed health checks retain the JSON response and fetch the
+   deployment's recent runtime errors. To inspect an existing preview without
+   deploying, run **Deploy preview** manually with its Vercel URL or deployment
+   ID. This uses the repository's Vercel credentials, verifies the preview
+   belongs to this project, and reads health and runtime errors; it never moves
+   the fixed URL. A degraded health response deliberately keeps this run red.
 4. **Production.** Run **Deploy production** (Actions → Deploy production →
    Run workflow, on `main`). The fixed preview must be READY and healthy, and
    its tagged commit must be an ancestor of the requested release with no
@@ -195,6 +200,16 @@ a current database costs one `SELECT`.
   app answers with what it has), but `/api/health` answers 503 with
   `pending_migrations` until the schema is current. The deploy workflows stop
   on it; so does the uptime pinger.
+- **A pending migration is a symptom.** Health also returns `initialization`:
+  `not_started`, `ready`, or `failed` with an operation (`connect`,
+  `schema_check`, `bootstrap:<statement>`, `backup`, `migration:<version>`,
+  `record:<version>`, or `ownership`) and exception type. A backup or bootstrap
+  failure can leave version 50 pending without ever calling migration 50.
+  The response never includes exception messages or SQL. An unhealthy probe
+  re-emits the saved startup error in its request logs, where Vercel can attach
+  it to an invocation; probes do not retry initialization or migrations.
+  Retained error text is limited to 16,384 characters with an explicit
+  truncation marker. A new lifespan clears the previous failure.
 - **Numbers are identifiers.** Every missing version runs, even below the
   latest, because branches merge in any order and both environments share the
   numbering. Never renumber a migration that any database has recorded: take a
