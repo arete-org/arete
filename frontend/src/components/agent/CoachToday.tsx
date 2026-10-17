@@ -66,6 +66,8 @@ export function ProposalCard({
     onSuccess: (result, choice) => {
       onAnswered?.(answered(group, choice, result.garmin));
       invalidateAfterSession(client);
+      // Its own key too: a dashboard read stamped no later than the card's own skips seeding it.
+      void client.invalidateQueries({ queryKey: coachTodayKey });
     },
     onError: () => setUncertain(true),
   });
@@ -97,7 +99,8 @@ export function ProposalCard({
     </>}
     <p className="text-sm text-text-secondary">{proposal.reason}</p>
     <p className="text-xs text-text-muted">{missed ? 'Aucune activité enregistrée aujourd’hui' : proposal.readiness_measured_on ? `Mesure de récupération du ${proposal.readiness_measured_on}` : 'Récupération estimée par la charge'} · Rien n’a encore changé.</p>
-    <div className="flex flex-wrap gap-2">
+    {/* 44 px targets: the card is answered with a thumb. */}
+    <div className="flex flex-wrap gap-2 [&>button]:min-h-11">
       {!discussion && <Button disabled={disabled || stale} onClick={() => action.mutate('apply')}>{applyLabel}</Button>}
       <Button variant="ghost" disabled={disabled} onClick={() => action.mutate('keep')}>{missed ? 'Non merci' : 'Garder ma séance'}</Button>
       <Button variant="ghost" onClick={() => discussWithCoach({ kind: 'proposal', id: proposal.id })}>En parler</Button>
