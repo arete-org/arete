@@ -32,7 +32,7 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import duckdb
@@ -98,11 +98,15 @@ class EveningMessage:
             "reasons": list(self.reasons),
             "text": self.text,
             "question": self.question,
-            # Naive UTC, like every server instant the browser reads.
-            "written_at": self.written_at.isoformat() if self.written_at else None,
+            "written_at": _utc(self.written_at),
             "answer": self.answer,
-            "answered_at": self.answered_at.isoformat() if self.answered_at else None,
+            "answered_at": _utc(self.answered_at),
         }
+
+
+def _utc(at: datetime | None) -> str | None:
+    """Stored in naive UTC; read with its offset."""
+    return at.replace(tzinfo=UTC).isoformat() if at else None
 
 
 def _from_row(row: tuple) -> EveningMessage:
