@@ -36,13 +36,15 @@ jobs:
       frontend: ${{ steps.select.outputs.frontend }}
       preview: ${{ steps.select.outputs.preview }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           # PR: merge commit's first parent. Push: the event's entire range,
           # including multi-commit pushes; never infer it from HEAD^ alone.
           fetch-depth: 0
       - name: Test CI selection policy
         run: python3 -m unittest discover -s scripts/ci -p 'test_*.py'
+      - name: Check GitHub Actions are pinned to a commit SHA
+        run: python3 scripts/ci/check_action_pins.py
       - name: Select affected checks
         id: select
         env:
@@ -58,14 +60,14 @@ jobs:
           fi
           python3 scripts/ci/select_checks.py "${mode[@]}" \
             --plan .context/ci-plan.json --summary "$GITHUB_STEP_SUMMARY" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ci-plan
           path: .context/ci-plan.json
           include-hidden-files: true
           retention-days: 14
           overwrite: true
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         if: steps.select.outputs.backend == 'true'
         with:
           version: "latest"
@@ -78,7 +80,7 @@ jobs:
         if: steps.select.outputs.backend == 'true'
       - run: uv run ruff format --check src tests scripts/ci
         if: steps.select.outputs.backend == 'true'
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         if: steps.select.outputs.transport == 'true'
         with:
           node-version: "22.22.0"
@@ -91,8 +93,8 @@ jobs:
     needs: lint
     if: needs.lint.outputs.backend == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: "latest"
           enable-cache: true
@@ -101,7 +103,7 @@ jobs:
       - run: python3 scripts/bundle_ocr_data.py
       # Two bounded workers, each with its own temporary DuckDB from conftest.
       # Keep each file together to preserve module fixtures and test ordering.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ci-plan
           path: .context
@@ -113,14 +115,14 @@ jobs:
     needs: lint
     if: needs.lint.outputs.backend == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: "latest"
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --frozen --extra dev
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .mypy_cache
           key: mypy-${{ runner.os }}-py312-${{ hashFiles('uv.lock', 'pyproject.toml') }}-${{ github.sha }}
@@ -137,8 +139,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
@@ -158,7 +160,7 @@ jobs:
       - run: uv sync --frozen --no-dev
         working-directory: .
       - run: npm run test:browser
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
           name: browser-failures
@@ -197,8 +199,8 @@ jobs:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
       - run: npm install --global vercel@63.1.2
