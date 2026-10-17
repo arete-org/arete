@@ -202,7 +202,7 @@ a current database costs one `SELECT`.
 - **Backup first.** On a MotherDuck database, the boot clones it before the
   first pending migration (`CREATE DATABASE "<db>_bak_<UTC stamp>" FROM "<db>"`,
   a zero-copy clone, instant) and keeps the two newest clones. To roll back:
-  `CREATE OR REPLACE DATABASE arete FROM arete_bak_<stamp>` from a MotherDuck
+  `CREATE OR REPLACE DATABASE arete_v2 FROM arete_v2_bak_<stamp>` from a MotherDuck
   session, then redeploy the previous production deployment from the Vercel
   dashboard.
 - **Health tells the truth.** A failed migration does not stop the boot (the
@@ -323,6 +323,8 @@ abandoned run is never replayed automatically, and human decisions remain durabl
 ## Local stack
 
 `make dev` runs the API and Vite on a local DuckDB file. `make docker` builds
-the production-like stack from `docker-compose.yml`; point its `ARETE_DB` at a
-local file or at `md:arete_preview_v2`, never at `md:arete_v2`: a branch's boot would
-migrate the production database from a laptop.
+the production-like stack from `docker-compose.yml`, which shares production's
+`md:arete_v2`: build it from `main` only, after Deploy production. On any other
+branch, point its `ARETE_DB` at a local file or at `md:arete_preview_v2`: a
+branch's boot would migrate the production database from a laptop. The retired
+`md:arete` and `md:arete_preview` are refused everywhere.

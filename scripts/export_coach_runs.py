@@ -1,7 +1,7 @@
 """Export the agent's stored briefings into the local evaluation corpus.
 
 Usage:
-    ARETE_DB=md:arete uv run python scripts/export_coach_runs.py [--limit 30]
+    ARETE_DB=md:arete_v2 uv run python scripts/export_coach_runs.py [--limit 30]
 
 Writes ``data/agent/corpus.jsonl`` (out of git: personal training data), one
 ``{"profile", "date", "text"}`` per briefing the agent wrote successfully.
