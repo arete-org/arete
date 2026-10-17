@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 from dataclasses import replace
+from datetime import UTC, datetime
 
 import httpx2
 import pytest
@@ -22,6 +23,10 @@ from arete.agent.runtime.execution import invoke_agent, run_config, stream_agent
 from arete.dataio.init_duckdb import main as init_schema
 from arete.services.athlete_scope import athlete_scope
 from arete.services.users import upsert_user
+
+#: Contexts built on an event loop carry their clock: the default reads the
+#: athlete's settings and refuses to run there (ARE-84).
+CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -170,7 +175,7 @@ def test_concurrent_conversations_do_not_share_affinity(
             await invoke_agent(
                 agent,
                 {"messages": [HumanMessage("Lis le planning.")]},
-                context=AgentContext(thread_id=thread),
+                context=AgentContext(current_datetime=CLOCK, thread_id=thread),
             )
 
     async def concurrent():

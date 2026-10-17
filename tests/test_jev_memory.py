@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime
 from time import monotonic
 from types import SimpleNamespace
 
@@ -28,6 +29,10 @@ from arete.agent.runtime.execution import invoke_agent
 from arete.agent.runtime.fact_memory import MAX_MEMORY_DECISIONS, classify_memory
 from arete.dataio.db import db_connection
 from arete.services import athlete_facts as facts
+
+#: Contexts built on an event loop carry their clock: the default reads the
+#: athlete's settings and refuses to run there (ARE-84).
+CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 CHOICES = {"create": "New fact", "duplicate_1": "Equivalent to fact 1"}
 
@@ -357,7 +362,7 @@ def test_cancellation_is_counted_and_propagates():
             await asyncio.sleep(5)
             return httpx.Response(200, json=payload())
 
-        context = AgentContext()
+        context = AgentContext(current_datetime=CLOCK)
         context.memory_model = client(handler, timeout=10)
         task = asyncio.create_task(
             classify_memory({}, CHOICES, context=context, completed_calls=1)

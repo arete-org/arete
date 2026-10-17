@@ -2,6 +2,7 @@
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from threading import Event
 from types import SimpleNamespace
 from urllib.parse import parse_qsl
@@ -23,6 +24,10 @@ from arete.services.calendar_models import (
 from arete.services.calendar_provider import SCOPES_MISSING, ClerkProvider
 from arete.services.calendar_repository import CalendarRepository
 from arete.services.google_tokens import GoogleToken, GoogleTokenUnavailable
+
+#: Contexts built on an event loop carry their clock: the default reads the
+#: athlete's settings and refuses to run there (ARE-84).
+CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 CAL = "athlete@example.com"
 START, END = "2026-10-09T10:00:00+02:00", "2026-10-09T11:00:00+02:00"
@@ -609,7 +614,9 @@ def test_calendar_tools_stream_proposal_without_writing(calendar):
         async for part in stream_agent(
             graph,
             {"messages": [HumanMessage("Planifie ma course")]},
-            context=AgentContext(thread_id="thread", account_id="user_athlete"),
+            context=AgentContext(
+                current_datetime=CLOCK, thread_id="thread", account_id="user_athlete"
+            ),
         ):
             events.extend(projection.events(part))
         return events

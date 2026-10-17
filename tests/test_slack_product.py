@@ -952,3 +952,16 @@ def test_shared_graph_refuses_missing_preflight_and_private_channel():
     context.slack_visibility = "public"
     with pytest.raises(AssertionError, match="requires DM"):
         middleware.before_agent({}, SimpleNamespace(context=context))
+
+
+def test_the_slack_surface_shows_the_runs_instant_in_the_slack_zone():
+    from arete.agent.context.sections import surface_section
+
+    context = SimpleNamespace(
+        slack_product=SimpleNamespace(timezone="America/New_York"),
+        resolved_profile=SimpleNamespace(personal_context=False),
+        slack_visibility="public",
+        current_datetime=datetime(2026, 10, 17, 22, 30, tzinfo=UTC),
+    )
+    # The run's clock, not a second one read when the prompt is assembled.
+    assert "Heure actuelle : 2026-10-17T18:30:00-04:00." in surface_section(context)

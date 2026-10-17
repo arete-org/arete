@@ -3,6 +3,7 @@
 import asyncio
 import json
 from dataclasses import replace
+from datetime import UTC, datetime
 from unittest.mock import Mock
 
 import pytest
@@ -20,6 +21,10 @@ from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.events import enforce_tool_status
 from arete.agent.runtime.execution import invoke_agent, run_config, stream_agent
 from arete.services import garmin_export
+
+#: Contexts built on an event loop carry their clock: the default reads the
+#: athlete's settings and refuses to run there (ARE-84).
+CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 class Model(GenericFakeChatModel):
@@ -170,7 +175,7 @@ def test_reconciliation_error_keeps_card_and_emits_failed_tool_event(monkeypatch
             async for part in stream_agent(
                 graph_for("reconcile_garmin_session", {"session_id": 113}),
                 {"messages": [HumanMessage("Vérifie.")]},
-                context=AgentContext(),
+                context=AgentContext(current_datetime=CLOCK),
             )
             if part["type"] == "custom"
         ]
@@ -201,7 +206,9 @@ def test_run_deadline_cancels_retry_backoff(monkeypatch):
     async def cancel_during_backoff():
         task = asyncio.create_task(
             invoke_agent(
-                graph, {"messages": [HumanMessage("lis")]}, context=AgentContext()
+                graph,
+                {"messages": [HumanMessage("lis")]},
+                context=AgentContext(current_datetime=CLOCK),
             )
         )
         # Bound the test wait, and cancel only after the first attempt failed.

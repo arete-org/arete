@@ -2,7 +2,7 @@
 
 import copy
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +21,10 @@ from arete.services.prescriptions import (
     describe,
     prescription_from_description,
 )
+
+#: Contexts built on an event loop carry their clock: the default reads the
+#: athlete's settings and refuses to run there (ARE-84).
+CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 class Garmin:
@@ -955,7 +959,7 @@ def test_graph_streams_domain_progress_before_final_answer(planned, monkeypatch)
         async for part in stream_agent(
             graph,
             {"messages": [{"role": "user", "content": "Envoie ma séance sur Garmin"}]},
-            context=AgentContext(thread_id="test-workouts"),
+            context=AgentContext(current_datetime=CLOCK, thread_id="test-workouts"),
         ):
             events.extend(projection.events(part))
         events.append(projection.done())

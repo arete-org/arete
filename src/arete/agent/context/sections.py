@@ -124,11 +124,12 @@ def surface_section(context: AgentContext | None) -> str:
         and context.resolved_profile
         and not context.resolved_profile.personal_context
     ):
-        from datetime import datetime
         from zoneinfo import ZoneInfo
 
         service = context.slack_product
-        now = datetime.now(ZoneInfo(service.timezone))
+        # The run's one instant, shown in the Slack profile's zone: the date
+        # instruction reads the same instant, never a second clock.
+        now = context.current_datetime.astimezone(ZoneInfo(service.timezone))
         return (
             f"Surface Slack administrateur ; visibilité : {context.slack_visibility}. "
             f"Heure actuelle : {now.isoformat()}. Fuseau : {service.timezone} "

@@ -1,6 +1,7 @@
 """Archive lifecycle, tenant isolation and title work independent of streaming."""
 
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -10,6 +11,10 @@ from langchain_core.messages import AIMessage, HumanMessage
 from arete.dataio.db import db_connection
 from arete.services import conversations as store
 from arete.services.athlete_scope import athlete_scope
+
+#: Contexts built on an event loop carry their clock: the default reads the
+#: athlete's settings and refuses to run there (ARE-84).
+CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 @pytest.fixture(autouse=True)
@@ -145,7 +150,7 @@ def test_title_hook_is_nonblocking_and_cancelled_with_run(monkeypatch):
             started.set()
             await released.wait()
 
-        context = AgentContext(thread_id=str(uuid4()))
+        context = AgentContext(current_datetime=CLOCK, thread_id=str(uuid4()))
         middleware = ConversationTitleMiddleware(slow)
         runtime = SimpleNamespace(context=context, stream_writer=lambda _: None)
         await asyncio.wait_for(
@@ -175,7 +180,7 @@ def test_title_custom_event_is_correlated_and_never_answer_text():
 
     async def scenario():
         model = Model()
-        context = AgentContext(thread_id=str(uuid4()))
+        context = AgentContext(current_datetime=CLOCK, thread_id=str(uuid4()))
         events = []
         await generate_title(model, context, "Hyrox après footing", events.append)
         await generate_title(model, context, "Encore", events.append)
@@ -242,7 +247,7 @@ def test_native_graph_emits_title_custom_event_before_answer_and_closes_task(
             middleware=[ConversationTitleMiddleware(title)],
             context_schema=AgentContext,
         )
-        context = AgentContext(thread_id=str(uuid4()))
+        context = AgentContext(current_datetime=CLOCK, thread_id=str(uuid4()))
         async for part in stream_agent(
             graph, {"messages": [HumanMessage("Hyrox ?")]}, context=context
         ):

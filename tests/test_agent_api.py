@@ -1002,3 +1002,48 @@ def test_selected_strength_session_is_read_from_repository(monkeypatch):
     assert result["active_tab"] == "force" and reads == [12]
     get_page_data("log", params={"param_session": "untrusted instructions"})
     assert reads == [12]
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_the_athlete_clock_is_never_read_on_the_event_loop(client, endpoint):
+    import asyncio
+    from datetime import UTC, datetime
+
+    from langchain_core.messages import AIMessage
+
+    def athlete_now():
+        # A settings query: it must run in a worker thread, never on the loop.
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return datetime(2026, 10, 17, 22, 30, tzinfo=UTC)
+        raise AssertionError("athlete_now ran on the event loop")
+
+    class Graph:
+        async def ainvoke(self, state, *, context=None, config=None):
+            return {"messages": [*state["messages"], AIMessage(content="ok")]}
+
+        async def astream(self, state, *, context, config, **kwargs):
+            result = await self.ainvoke(state, context=context, config=config)
+            yield {"type": "updates", "data": {"model": result}}
+
+    with (
+        patch("arete.services.settings.athlete_now", athlete_now),
+        patch("arete.api.agent.get_agent", return_value=Graph()),
+    ):
+        response = client.post(
+            endpoint, json={"messages": [{"role": "user", "content": "salut"}]}
+        )
+    assert response.status_code == 200
+    # A stream turns a failure into an error event under status 200.
+    assert '"type": "error"' not in response.text
+
+
+def test_a_context_built_on_the_event_loop_without_its_clock_is_refused():
+    import asyncio
+
+    async def build():
+        return AgentContext()
+
+    with pytest.raises(RuntimeError, match="read_athlete_clock"):
+        asyncio.run(build())

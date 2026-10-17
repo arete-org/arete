@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from threading import Barrier, Lock
 from unittest.mock import AsyncMock, Mock
 
@@ -19,6 +20,10 @@ from arete.agent.profiles.catalog import get_profile
 from arete.agent.runtime import execution
 from arete.agent.runtime.context import AgentContext
 from arete.observability import tracing
+
+#: Contexts built on an event loop carry their clock: the default reads the
+#: athlete's settings and refuses to run there (ARE-84).
+CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 TASK_INSTRUCTIONS = {
     task: get_profile("feedback" if task == "session_feedback" else task).instructions
@@ -252,7 +257,12 @@ def test_native_dynamic_and_filesystem_tools_stay_in_one_trace(
     if streaming:
 
         async def consume():
-            return [part async for part in stream_run(state(), context=AgentContext())]
+            return [
+                part
+                async for part in stream_run(
+                    state(), context=AgentContext(current_datetime=CLOCK)
+                )
+            ]
 
         parts = asyncio.run(consume())
         events = [p["data"] for p in parts if p["type"] == "custom"]
@@ -337,7 +347,12 @@ def test_inference_errors_close_the_root_and_model_spans(
         if streaming:
 
             async def consume():
-                return [p async for p in stream_run(state(), context=AgentContext())]
+                return [
+                    p
+                    async for p in stream_run(
+                        state(), context=AgentContext(current_datetime=CLOCK)
+                    )
+                ]
 
             asyncio.run(consume())
         else:
@@ -428,7 +443,9 @@ def test_early_stream_close_finishes_trace_in_its_original_context(
 
     async def consume():
         before = get_tracing_context().copy()
-        async with aclosing(stream_run(state(), context=AgentContext())) as stream:
+        async with aclosing(
+            stream_run(state(), context=AgentContext(current_datetime=CLOCK))
+        ) as stream:
             async with asyncio.timeout(5):
                 async for part in stream:
                     if part["type"] == "messages":
@@ -481,7 +498,12 @@ def test_dynamic_tool_exception_is_traced_and_propagated(
         if streaming:
 
             async def consume():
-                return [p async for p in stream_run(state(), context=AgentContext())]
+                return [
+                    p
+                    async for p in stream_run(
+                        state(), context=AgentContext(current_datetime=CLOCK)
+                    )
+                ]
 
             asyncio.run(consume())
         else:
@@ -521,7 +543,8 @@ def test_task_limits_reach_both_execution_paths(monkeypatch, task, limit):
             async for p in stream_run(
                 state(),
                 context=AgentContext(
-                    profile="feedback" if task == "session_feedback" else task
+                    current_datetime=CLOCK,
+                    profile="feedback" if task == "session_feedback" else task,
                 ),
             )
         ]
@@ -558,7 +581,10 @@ def test_unattended_runs_do_not_emit_ui_tool_events(monkeypatch):
     async def consume():
         return [
             p
-            async for p in stream_run(state(), context=AgentContext(profile="feedback"))
+            async for p in stream_run(
+                state(),
+                context=AgentContext(current_datetime=CLOCK, profile="feedback"),
+            )
         ]
 
     assert not [p for p in asyncio.run(consume()) if p["type"] == "custom"]

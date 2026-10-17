@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from dataclasses import replace
+from datetime import UTC, datetime
 
 import pytest
 from langchain.agents.middleware import AgentMiddleware
@@ -20,6 +21,10 @@ from arete.agent.profiles.catalog import get_profile
 from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.execution import invoke_agent, run_config, stream_agent
 from arete.agent.runtime.streaming import StreamProjection
+
+#: Contexts built on an event loop carry their clock: the default reads the
+#: athlete's settings and refuses to run there (ARE-84).
+CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 def reasoning_only():
@@ -272,7 +277,7 @@ def test_cancellation_does_not_start_a_fallback():
                 invoke_agent(
                     graph,
                     {"messages": [HumanMessage("Vérifie.")]},
-                    context=AgentContext(),
+                    context=AgentContext(current_datetime=CLOCK),
                 )
             )
             await started.wait()

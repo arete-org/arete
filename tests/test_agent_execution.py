@@ -1,6 +1,7 @@
 """Exercise runtime bounds and mission policy through actual compiled graphs."""
 
 import asyncio
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -24,6 +25,10 @@ from arete.agent.runtime.execution import (
     run_config,
     stream_agent,
 )
+
+#: Contexts built on an event loop carry their clock: the default reads the
+#: athlete's settings and refuses to run there (ARE-84).
+CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 class Model(GenericFakeChatModel):
@@ -285,7 +290,10 @@ def test_deadline_cancels_provider_wait(monkeypatch):
 
 def test_async_tool_concurrency_is_bounded_and_contexts_are_independent():
     async def run():
-        first, second = AgentContext(), AgentContext()
+        first, second = (
+            AgentContext(current_datetime=CLOCK),
+            AgentContext(current_datetime=CLOCK),
+        )
         assert first.tool_slots is not second.tool_slots
         middleware = ToolConcurrencyMiddleware()
         active = peak = 0
@@ -351,7 +359,12 @@ def test_sync_workers_reuse_the_server_event_loop():
         graph = SimpleNamespace(ainvoke=invoke)
         for _ in range(2):
             await anyio.to_thread.run_sync(
-                partial(invoke_agent_sync, graph, {}, context=AgentContext())
+                partial(
+                    invoke_agent_sync,
+                    graph,
+                    {},
+                    context=AgentContext(current_datetime=CLOCK),
+                )
             )
         assert seen == [server_loop, server_loop]
 
