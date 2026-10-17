@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import httpx2
 import pytest
+from agent_clock import CLOCK
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest
 from langchain_core.messages import HumanMessage
@@ -170,7 +171,7 @@ def test_concurrent_conversations_do_not_share_affinity(
             await invoke_agent(
                 agent,
                 {"messages": [HumanMessage("Lis le planning.")]},
-                context=AgentContext(thread_id=thread),
+                context=AgentContext(current_datetime=CLOCK, thread_id=thread),
             )
 
     async def concurrent():

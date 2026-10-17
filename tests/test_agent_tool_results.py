@@ -6,6 +6,7 @@ from dataclasses import replace
 from unittest.mock import Mock
 
 import pytest
+from agent_clock import CLOCK
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
@@ -135,7 +136,7 @@ def test_large_error_still_emits_workout_card_and_error_status(monkeypatch):
             part
             async for part in graph.astream(
                 {"messages": [HumanMessage("Vérifie.")]},
-                context=AgentContext(),
+                context=AgentContext(current_datetime=CLOCK),
                 config={"recursion_limit": 20},
                 stream_mode=["custom", "values"],
             )

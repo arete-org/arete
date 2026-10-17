@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from agent_clock import CLOCK
 from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage
@@ -357,7 +358,7 @@ def test_cancellation_is_counted_and_propagates():
             await asyncio.sleep(5)
             return httpx.Response(200, json=payload())
 
-        context = AgentContext()
+        context = AgentContext(current_datetime=CLOCK)
         context.memory_model = client(handler, timeout=10)
         task = asyncio.create_task(
             classify_memory({}, CHOICES, context=context, completed_calls=1)

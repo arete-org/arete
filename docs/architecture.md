@@ -182,7 +182,10 @@ forget to write. Every invocation captures one timezone-aware instant on the
 athlete's clock (`services/settings.athlete_now`); its calendar date agrees with
 `services/settings.athlete_today`, which every
 server path meaning "today" shares (plan decisions, briefing, weekly review,
-metric windows, the daily batch's marker). Chat adds new journal
+metric windows, the daily batch's marker). Reading that clock is a settings
+query: async code passes it in through `read_athlete_clock` (an AnyIO worker),
+and `AgentContext`'s default refuses to run on the event loop. The Slack surface
+shows the same instant in the Slack profile's zone. Chat adds new journal
 entries through `append_journal` (server-dated heading, deduplicated,
 bounded). Its filesystem also exposes `edit_file` for targeted corrections/removal
 and `delete` for forgetting an entire current ledger (`notes.md` or `sessions.md`).

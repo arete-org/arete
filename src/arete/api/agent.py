@@ -23,6 +23,7 @@ from arete.agent.runtime.context import (
     PANEL_CONTEXT_KEY,
     PANEL_PAGES,
     AgentContext,
+    read_athlete_clock,
 )
 from arete.api.agent_feedback import TraceReceipt, chat_trace
 from arete.api.agent_feedback import router as feedback_router
@@ -154,7 +155,7 @@ def _panel_context_source(request: ChatRequest) -> dict[str, str]:
     return {PANEL_CONTEXT_KEY: raw}
 
 
-def _to_agent_context(
+async def _to_agent_context(
     source: dict[str, str],
     thread_id: UUID | None = None,
     *,
@@ -170,6 +171,7 @@ def _to_agent_context(
         source=source,
         thread_id=str(thread_id) if thread_id else None,
         account_id=account_id,
+        current_datetime=await read_athlete_clock(),
     )
 
 
@@ -204,7 +206,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     source = _panel_context_source(body)
     from anyio import to_thread
 
-    context = _to_agent_context(
+    context = await _to_agent_context(
         source,
         body.thread_id,
         account_id=clerk_account(request),
@@ -341,7 +343,7 @@ async def _sse_stream(body: StreamRequest, context: AgentContext) -> AsyncIterat
 @router.post("/chat/stream")
 async def chat_stream(body: StreamRequest, request: Request) -> StreamingResponse:
     """Stream a run; validate page context before sending HTTP 200."""
-    context = _to_agent_context(
+    context = await _to_agent_context(
         _panel_context_source(body), body.thread_id, account_id=clerk_account(request)
     )
     return StreamingResponse(

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from agent_clock import CLOCK
 from langchain_core.messages import AIMessage, HumanMessage
 
 from arete.dataio.db import db_connection
@@ -145,7 +146,7 @@ def test_title_hook_is_nonblocking_and_cancelled_with_run(monkeypatch):
             started.set()
             await released.wait()
 
-        context = AgentContext(thread_id=str(uuid4()))
+        context = AgentContext(current_datetime=CLOCK, thread_id=str(uuid4()))
         middleware = ConversationTitleMiddleware(slow)
         runtime = SimpleNamespace(context=context, stream_writer=lambda _: None)
         await asyncio.wait_for(
@@ -175,7 +176,7 @@ def test_title_custom_event_is_correlated_and_never_answer_text():
 
     async def scenario():
         model = Model()
-        context = AgentContext(thread_id=str(uuid4()))
+        context = AgentContext(current_datetime=CLOCK, thread_id=str(uuid4()))
         events = []
         await generate_title(model, context, "Hyrox après footing", events.append)
         await generate_title(model, context, "Encore", events.append)
@@ -242,7 +243,7 @@ def test_native_graph_emits_title_custom_event_before_answer_and_closes_task(
             middleware=[ConversationTitleMiddleware(title)],
             context_schema=AgentContext,
         )
-        context = AgentContext(thread_id=str(uuid4()))
+        context = AgentContext(current_datetime=CLOCK, thread_id=str(uuid4()))
         async for part in stream_agent(
             graph, {"messages": [HumanMessage("Hyrox ?")]}, context=context
         ):
