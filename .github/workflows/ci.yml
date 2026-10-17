@@ -87,7 +87,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The full suite took 14m49s on 2026-10-17; 15 left no margin.
+    timeout-minutes: 25
     needs: lint
     if: needs.lint.outputs.backend == 'true'
     steps:
