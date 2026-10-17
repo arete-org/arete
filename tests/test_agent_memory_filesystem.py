@@ -63,8 +63,12 @@ def run_tools(request):
     return run
 
 
-@pytest.mark.parametrize("name", ["notes.md", "sessions.md"])
+@pytest.mark.parametrize("name", ["notes.md", "sessions.md", "profile.md"])
 def test_correct_remove_and_delete_current_ledger(ledger, run_tools, name):
+    if name == "profile.md":
+        old = memory.read_file(name)
+        memory.replace_file(name, "keep\nobsolete\n", old.revision)
+
     def edit(old, new):
         return run_tools(
             [

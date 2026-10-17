@@ -4,7 +4,7 @@ import { useVisualViewport } from '@/hooks/useVisualViewport';
 import { useCoachDisplay } from '@/hooks/useCoachDisplay';
 import { AreteMark } from '@/components/AreteBrand';
 import { isCoachReference } from '@/lib/coachToday';
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
@@ -19,10 +19,12 @@ import { useAuthState } from '@/components/auth/authState';
 import { athletePersister, keepPersistedQueries, PERSIST_BUSTER, PERSIST_DEHYDRATE, PERSIST_MAX_AGE_MS } from '@/lib/queryPersistence';
 import { SettingsProvider } from '@/contexts';
 import { DashboardPage, SettingsPage } from '@/pages';
+import { OnboardingEntry } from '@/components/OnboardingEntry';
 import { loadLogPage, loadPlanningPage, loadWeekReviewPage } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
 
 const FollowUpPage = lazy(importChunk(() => import('@/pages/FollowUp').then(m => ({ default: m.FollowUpPage }))));
+const OnboardingPage = lazy(importChunk(() => import('@/pages/Onboarding').then(m => ({ default: m.OnboardingPage }))));
 
 const PlanningPage = lazy(importChunk(loadPlanningPage));
 const LogPage = lazy(importChunk(loadLogPage));
@@ -80,6 +82,17 @@ function RouteContent({ children }: { children: ReactNode }) {
   return <div key={pathname} className="route-content">{children}</div>;
 }
 
+function OutsideOnboarding({ children }: { children: ReactNode }) {
+  return useLocation().pathname === '/onboarding' ? null : children;
+}
+
+function RouteAwareCoach(props: ComponentProps<typeof AgentSidePanel>) {
+  // Keep the conversation owner mounted, including any in-flight work, while
+  // letting the guided setup use the whole viewport.
+  const onboarding = useLocation().pathname === '/onboarding';
+  return <AgentSidePanel {...props} open={props.open && !onboarding} />;
+}
+
 function App() {
   useVisualViewport();
   // Panel state lives above the router so the drawer survives page navigation
@@ -124,7 +137,7 @@ function App() {
           <BrowserRouter>
             <div className="app-shell bg-void">
               <RouteScroll />
-              <GarminFreshness />
+              <OutsideOnboarding><GarminFreshness />
               <Navigation
                 agentOpen={agentOpen}
                 agentBusy={agentBusy}
@@ -133,6 +146,7 @@ function App() {
                   setAgentOpen((v) => !v);
                 }}
               />
+              </OutsideOnboarding>
               {/* Reserve the tab bar and launcher so the final content remains reachable. */}
               <main
                 className={`app-main transition-[margin] duration-[220ms] motion-reduce:transition-none ${agentOpen && display.mode === 'sidebar' ? 'xl:mr-[520px]' : ''}`}
@@ -140,7 +154,8 @@ function App() {
                 <RouteContent>
                   <ErrorBoundary>
                     <Routes>
-                      <Route path="/" element={<DashboardPage />} />
+                      <Route path="/" element={<><OnboardingEntry /><DashboardPage /></>} />
+                      <Route path="/onboarding" element={<Suspense fallback={<LoadingState message="Chargement de ta configuration…" />}><OnboardingPage /></Suspense>} />
                       <Route path="/follow-up" element={<FollowUpPage />} />
                       <Route path="/planning" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><PlanningPage /></Suspense>} />
                       <Route path="/planning/semaine" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><WeekReviewPage /></Suspense>} />
@@ -193,14 +208,14 @@ function App() {
                 </RouteContent>
               </main>
 
-              {!agentOpen && <button
+              <OutsideOnboarding>{!agentOpen && <button
                 ref={launcherRef}
                 className={`coach-launcher ${display.mode === 'sidebar' ? 'md:hidden' : ''} fixed z-40 flex min-h-11 items-center gap-2 rounded-full border border-text-muted/20 bg-abyss px-4 text-sm text-text-primary shadow-lg`}
                 aria-controls="coach-panel" aria-expanded={false}
                 onClick={event => { triggerRef.current = event.currentTarget; setAgentOpen(true); }}
                 onPointerEnter={preloadAgentMarkdown} onFocus={preloadAgentMarkdown}
-              ><AreteMark size={18} />{agentBusy ? 'Chiron répond…' : 'Demander à Chiron'}</button>}
-              <AgentSidePanel
+              ><AreteMark size={18} />{agentBusy ? 'Chiron répond…' : 'Demander à Chiron'}</button>}</OutsideOnboarding>
+              <RouteAwareCoach
                 display={display.mode}
                 onDisplayChange={display.setMode}
                 displayError={display.error}
@@ -208,8 +223,7 @@ function App() {
                 onClose={closeAgent}
                 onBusyChange={setAgentBusy}
               />
-              <InstallPrompt />
-              <EnableNotifications />
+              <OutsideOnboarding><InstallPrompt /><EnableNotifications /></OutsideOnboarding>
             </div>
           </BrowserRouter>
         </SettingsProvider>

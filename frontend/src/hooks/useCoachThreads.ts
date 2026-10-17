@@ -80,8 +80,8 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       if (!isCoachReference(reference)) return;
       try {
         const current = storeRef.current;
-        const next = reference.kind === 'briefing'
-          ? addThread(current, { ...createThread(), title: 'Briefing avec Chiron', reference })
+        const next = reference.kind === 'briefing' || reference.kind === 'onboarding'
+          ? addThread(current, { ...createThread(), title: reference.kind === 'onboarding' ? 'Mon point de départ' : 'Briefing avec Chiron', reference })
           : updateThread(current, current.activeId, thread => ({ ...thread, reference }));
         setStore(next);
         setError('');
@@ -332,6 +332,10 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         // the athlete has switched threads while this run was in flight.
         if (event.type === 'tool_end' && event.status === 'done') {
           if (SESSION_WRITE_TOOLS.has(event.name)) invalidateAfterSession(queryClient);
+          if (['append_journal', 'edit_file', 'delete'].includes(event.name)) {
+            void queryClient.invalidateQueries({ queryKey: ['onboarding-context'] });
+            void queryClient.invalidateQueries({ queryKey: ['onboarding'] });
+          }
           if (FACT_WRITE_TOOLS.has(event.name))
             void queryClient.invalidateQueries({ queryKey: qk.athleteFacts });
         }

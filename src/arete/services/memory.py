@@ -24,6 +24,8 @@ from arete.services.settings import athlete_today
 MEMORY_DIR_NAME = "agent/memory"
 SESSIONS_LEDGER = "sessions.md"
 NOTES_LEDGER = "notes.md"
+PROFILE_LEDGER = "profile.md"
+MAX_PROFILE_CHARS = 8_000
 MAX_SESSIONS_LEDGER_CHARS = 40_000
 KEEP_SESSIONS_LEDGER_CHARS = 20_000
 MAX_MEMORY_FILES = 1_000
@@ -68,9 +70,9 @@ def memory_root() -> Path:
 
 def _name(name: str, *, writable: bool = False) -> str:
     name = name.removeprefix("/")
-    if not re.fullmatch(r"(?:notes|sessions(?:-\d{4}-\d{2})?)\.md", name):
+    if not re.fullmatch(r"(?:profile|notes|sessions(?:-\d{4}-\d{2})?)\.md", name):
         raise PermissionError("permission denied: unknown journal path")
-    if writable and name not in (NOTES_LEDGER, SESSIONS_LEDGER):
+    if writable and name not in (PROFILE_LEDGER, NOTES_LEDGER, SESSIONS_LEDGER):
         raise PermissionError("permission denied: archives are read-only")
     return name
 
@@ -153,6 +155,9 @@ def read_file(name: str) -> MemoryFile:
 
 
 def _write(con, old: MemoryFile, content: str, *, forgotten: bool = False) -> None:
+    # The whole profile is mandatory context; reject growth rather than clipping.
+    if old.name == PROFILE_LEDGER and len(content) > MAX_PROFILE_CHARS:
+        raise ValueError("Profil trop long : limite de 8 000 caractères.")
     if len(content.encode()) > MAX_FILE_BYTES:
         raise ValueError("Journal file exceeds its byte budget")
     if old.revision == 0:
@@ -231,7 +236,14 @@ def rotate_sessions_ledger(now: date | None = None) -> str | None:
         return _rotate(con, now or athlete_today())
 
 
-def append_entry(file: str, title: str, body: str, when: date | None = None) -> bool:
+def append_entry(
+    file: str,
+    title: str,
+    body: str,
+    when: date | None = None,
+    *,
+    expected_revision: int | None = None,
+) -> bool:
     name = _name(file, writable=True)
     day = when or athlete_today()
     title = " ".join(title.split())
@@ -239,20 +251,24 @@ def append_entry(file: str, title: str, body: str, when: date | None = None) -> 
         raise ValueError("Invalid or oversized journal entry")
     heading = (
         f"## {day.isoformat()} — {title}"
-        if name == SESSIONS_LEDGER
+        if name != NOTES_LEDGER
         else f"- {day.isoformat()} — {title} :"
     )
     entry = (
         f"{heading}\n{body.strip()}\n"
-        if name == SESSIONS_LEDGER
+        if name != NOTES_LEDGER
         else f"{heading} {' '.join(body.split())}\n"
     )
     ensure_imported()
     try:
         with ledger_lock(), transaction() as con:
             old = _read(con, name)
+            if expected_revision is not None and old.revision != expected_revision:
+                raise MemoryConflict(
+                    "Le journal a changé. Relis-le avant de le modifier."
+                )
             if any(
-                line == heading if name == SESSIONS_LEDGER else line.startswith(heading)
+                line == heading if name != NOTES_LEDGER else line.startswith(heading)
                 for line in old.content.splitlines()
             ):
                 return False
