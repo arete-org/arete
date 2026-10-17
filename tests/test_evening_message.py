@@ -621,23 +621,99 @@ def test_a_failed_evening_lookup_leaves_the_briefing_digest_alone(db, monkeypatc
     assert briefing_facts(day, "Règle.") == plain
 
 
-def test_the_message_waits_for_the_evenings_replanning(evening, monkeypatch):
-    """Vercel fires both at 18 UTC: tomorrow's plan is read after the replanning."""
+def test_the_message_replans_today_first_in_the_same_pass(evening, monkeypatch):
+    """Vercel fires both at 18 UTC and the replanning's single window may run
+    out of time: the message's pass replans today itself, then writes."""
     from time import monotonic
 
     from arete import scheduler
+    from arete.features.hr_zones import ZoneModel
     from arete.services import missed_sessions
+    from arete.services.plan_repository import MISSED_REPLAN, PlanDecisionRepository
 
+    monkeypatch.setattr(
+        "arete.dataio.settings.athlete_zone_model",
+        lambda *a, **k: ZoneModel.from_reference(lthr=170),
+    )
+    monkeypatch.setattr("arete.services.garmin_sync.ensure_fresh", MagicMock())
     _settings, produce, sent = evening
     _plan(1)
-    _plan(0)  # today's session, still pending with no training: missed
+    _plan(0, target_intensity="hard")  # today's, still pending with no training
     assert missed_sessions.candidates() is True
-    assert scheduler.write_evening_message(monotonic()) == "not yet: replanning first"
-    produce.assert_not_called()
-    assert _rows() == []
-    # Once the replanning holds the day, the next window writes the message.
-    monkeypatch.setattr(missed_sessions, "candidates", lambda *a, **k: False)
     assert scheduler.write_evening_message(monotonic()).startswith("written")
+    (decision,) = PlanDecisionRepository().list_for_day(athlete_today())
+    assert decision.readiness_source == MISSED_REPLAN
+    facts = produce.call_args.args[0]
+    assert "Séance manquée replanifiée ce soir" in facts
+    kinds = [c.kwargs["kind"] for c in sent.call_args_list]
+    assert kinds == ["adapted_session", "evening"]  # each pushed once, by its writer
+
+
+def test_on_docker_the_message_waits_for_the_replannings_hour(evening, monkeypatch):
+    from time import monotonic
+
+    from arete import scheduler
+
+    replan = MagicMock(return_value="1 proposed; push: 1 sent")
+    monkeypatch.setattr(scheduler, "replan_missed_evening", replan)
+    _settings, produce, _sent = evening
+    _plan(1)
+    _plan(0)
+    # 20:15 on the athlete's clock, Docker replans from 21:00 in this case.
+    outcome = scheduler.write_evening_message(monotonic(), replan_from_hour=21)
+    assert outcome == "not yet: replanning first"
+    replan.assert_not_called()
+    produce.assert_not_called()
+
+
+def test_a_failed_replanning_does_not_hold_the_message_back(evening, monkeypatch):
+    from time import monotonic
+
+    from arete import scheduler
+
+    replan = MagicMock(return_value="failed: ConnectionError")
+    monkeypatch.setattr(scheduler, "replan_missed_evening", replan)
+    _settings, produce, _sent = evening
+    _plan(1)
+    _plan(0)
+    assert scheduler.write_evening_message(monotonic()).startswith("written")
+    replan.assert_called_once()
+    produce.assert_called_once()
+
+
+def test_the_briefing_s_run_bound_applies_on_serverless_only(monkeypatch):
+    from arete import scheduler
+
+    monkeypatch.delenv("VERCEL", raising=False)
+    assert scheduler.scheduled_run_deadline(100.0) is None
+    monkeypatch.setenv("VERCEL", "1")
+    assert scheduler.scheduled_run_deadline(100.0) == 100.0 + 280
+
+
+def test_a_quiet_evening_never_skips_the_next_vercel_window():
+    from arete import scheduler
+
+    assert scheduler.QUIET_EVENING_SECONDS <= 25 * 60
+
+
+def test_a_concurrent_journal_write_is_retried_once(db, monkeypatch):
+    from arete.services import memory
+
+    _plan(1)
+    message = _written()
+    original = memory.append_entry
+    calls = []
+
+    def busy_once(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise memory.MemoryConflict("busy")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(memory, "append_entry", busy_once)
+    saved = evening_message.answer(message.id, "Bien.")
+    assert saved["journal"] == "written" and saved["journaled"] is True
+    assert _notes().count("Question du soir") == 1
 
 
 def test_the_run_stops_before_the_platform_kills_the_function(evening, monkeypatch):

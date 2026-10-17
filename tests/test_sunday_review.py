@@ -210,7 +210,6 @@ def test_overlapping_dispatches_pay_for_one_review(clock, coach):
     release = threading.Event()
 
     def slow(_facts, deadline=None):
-        assert deadline is not None  # the run stops before the function does
         started.set()
         assert release.wait(10)
         return "Semaine tenue."

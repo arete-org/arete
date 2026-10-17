@@ -427,6 +427,15 @@ SCHEDULE_MODEL_SECONDS = 210
 #: stops the function at 300 s (``maxDuration``), and a run it killed would
 #: leave its claim with no outcome. The run then fails, settled and not replayed.
 SCHEDULE_RUN_SECONDS = 280
+
+
+def scheduled_run_deadline(started: float) -> float | None:
+    """The briefing's and the Sunday review's run bound: only where a function
+    stops at ``maxDuration``; elsewhere (Docker) each run keeps its own
+    envelope. The evening message keeps ``SCHEDULE_RUN_SECONDS`` everywhere."""
+    return started + SCHEDULE_RUN_SECONDS if config.serverless else None
+
+
 #: Nominal length of a claim; reclaiming goes by calendar day, not by this.
 SCHEDULE_LEASE_SECONDS = 900
 #: Most athletes one dispatch reads to find those owed today (5-10 expected).
@@ -600,7 +609,7 @@ def _run_athlete(
         # The briefing's wait for the dashboard ends at the model deadline, a
         # run it starts by the run deadline: this dispatch's, reset after it.
         model_token = _model_deadline.set(started + SCHEDULE_MODEL_SECONDS)
-        run_token = _run_deadline.set(started + SCHEDULE_RUN_SECONDS)
+        run_token = _run_deadline.set(scheduled_run_deadline(started))
         try:
             if config.is_remote_db:
                 mirror.hydrate()
@@ -737,7 +746,7 @@ def write_sunday_review(started: float) -> str:
             logger.warning("Sunday Garmin refresh failed: %s", e)
         if monotonic() - started >= SCHEDULE_MODEL_SECONDS:
             return "deferred"
-        token = _run_deadline.set(started + SCHEDULE_RUN_SECONDS)
+        token = _run_deadline.set(scheduled_run_deadline(started))
         try:
             outcome = announce_review()
         finally:
@@ -933,16 +942,18 @@ def replan_missed_evening(started: float) -> str:
 #: and winter alike (21:00 when it is chosen, unless the window fires past the
 #: quiet hours' 21:30); the Americas are not reached. Docker's ticks (with the
 #: daily sync, ``ARETE_AUTO_SYNC_HOUR`` set) reach every zone, to the tick.
-#: It waits for the evening's replanning of a missed session: tomorrow's plan
-#: may receive the session it moves (at 18:00 UTC both windows fire together).
-#: An evening found with nothing to say is looked at again an hour later at
-#: the soonest (``QUIET_EVENING_SECONDS``): Docker ticks every five minutes.
-QUIET_EVENING_SECONDS = 3600
+#: Today's missed session is replanned first, by this pass if need be:
+#: tomorrow's plan may receive the session it moves (at 18:00 UTC both
+#: windows fire together, and the replanning's may run out of time).
+#: An evening found with nothing to say is looked at again 20 minutes later at
+#: the soonest (``QUIET_EVENING_SECONDS``): Docker ticks every five minutes,
+#: and the next Vercel window, an hour on, is never skipped.
+QUIET_EVENING_SECONDS = 20 * 60
 MAX_QUIET_EVENINGS = 1024
 _quiet_evenings: dict[tuple[int, date], float] = {}
 
 
-def run_evening_messages() -> dict:
+def run_evening_messages(replan_from_hour: int = EVENING_FROM_HOUR) -> dict:
     """Write tomorrow's evening message for the athletes in their evening.
 
     At most one per athlete and evening whatever the overlapping windows and
@@ -974,7 +985,7 @@ def run_evening_messages() -> dict:
             deferred = True
             break
         with athlete_scope(athlete_id):
-            outcome = write_evening_message(started)
+            outcome = write_evening_message(started, replan_from_hour)
         if outcome == "deferred":
             deferred = True
             break
@@ -985,13 +996,20 @@ def run_evening_messages() -> dict:
     return {"athletes": outcomes, "deferred": deferred}
 
 
-def write_evening_message(started: float) -> str:
+def write_evening_message(
+    started: float, replan_from_hour: int = EVENING_FROM_HOUR
+) -> str:
     """One athlete's evening message: written once, pushed by its writer.
 
-    Never raises. Reads only until the evening is claimed; the claim comes
-    before the one model request, which stops by ``SCHEDULE_RUN_SECONDS`` of
-    the dispatch, and a failure keeps it (never replayed). A claim the
-    platform stopped mid-run is settled as failed here.
+    Never raises. Today's missed session is replanned first, by this pass
+    when the replanning's own has not (``replan_missed_evening``: one
+    proposal and one push a day whoever runs it), since it may move the
+    session onto tomorrow; from ``replan_from_hour``, Docker's 20:00. A
+    replanning that fails or runs out of time does not hold the message
+    back: it is written without it. The claim comes before the one model
+    request, which stops by ``SCHEDULE_RUN_SECONDS`` of the dispatch, and a
+    failure keeps it (never replayed). A claim the platform stopped mid-run
+    is settled as failed here.
     """
     from arete.dataio.settings import get_user_settings
     from arete.services import evening_message, missed_sessions
@@ -1007,13 +1025,18 @@ def write_evening_message(started: float) -> str:
         if (reason := evening_message.unreachable(prefs)) is not None:
             return f"skipped: {reason}"
         day = local.date()
-        evening_message.settle_stopped(day)
-        if (held := evening_message.get_for_day(day)) is not None:
+        held = evening_message.get_for_day(day)
+        stopped = held is not None and held.status == "pending"
+        if stopped and evening_message.settle_stopped(day):
+            held = evening_message.get_for_day(day)
+        if held is not None:
             return f"already {held.status}"
-        # The replanning may move today's missed session onto tomorrow: it
-        # proposes first (its window, or a later one of this message's).
         if missed_sessions.candidates(day):
-            return "not yet: replanning first"
+            if local.hour < replan_from_hour:
+                return "not yet: replanning first"
+            replanned = replan_missed_evening(started)
+            if replanned.startswith("failed") or replanned == "deferred":
+                logger.info("Evening message written without its replanning")
         key = (current_athlete_id(), day)
         last = _quiet_evenings.get(key)
         if last is not None and monotonic() - last < QUIET_EVENING_SECONDS:
@@ -1067,7 +1090,7 @@ async def run_forever(hour: int | None, tick_seconds: int = TICK_SECONDS) -> Non
             except Exception:
                 logger.exception("Evening replanning failed; next tick will retry")
             try:
-                await to_thread.run_sync(run_evening_messages)
+                await to_thread.run_sync(run_evening_messages, DOCKER_EVENING_FROM_HOUR)
             except Exception:
                 logger.exception("Evening messages failed; next tick will retry")
         try:
