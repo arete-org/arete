@@ -55,10 +55,11 @@ def today_in(zone: str | None) -> date:
 
 
 # ---------- Notification preferences ----------
-#: Every push the server sends names one of these. The last two are planned
+#: Every push the server sends names one of these. ``eve_reminder`` is planned
 #: (UX 2). ``adapted_session`` is the evening's replanning of a missed session
 #: (``missed_sessions``, ARE-61); ``checkin`` is the morning check-in's push
-#: (``checkins.prompt``).
+#: (``checkins.prompt``); ``evening`` is the coach's evening message and its
+#: question (``evening_message``, ARE-64).
 NotificationKind = Literal[
     "briefing",
     "post_session",
@@ -122,6 +123,13 @@ def stored_preferences(raw: dict | None) -> NotificationPreferences:
 
 
 # ---------- User Settings ----------
+#: The hours the evening message may start from, on the athlete's clock
+#: (``scheduler.run_evening_messages``), and the default one.
+EVENING_FIRST_HOUR = 18
+EVENING_LAST_HOUR = 21
+EVENING_DEFAULT_HOUR = 20
+
+
 class UserSettingsUpdate(BaseModel):
     display_name: str = "HUNTER"
     email: str | None = None
@@ -146,6 +154,11 @@ class UserSettingsUpdate(BaseModel):
     lthr_measured_on: date | None = None
     # None keeps the stored choice: a client that predates it cannot reset it.
     notification_preferences: NotificationPreferences | None = None
+    # The coach's evening message (ARE-64): opt-in, from this local hour.
+    coach_evening_enabled: bool | None = None
+    coach_evening_hour: int | None = Field(
+        default=None, ge=EVENING_FIRST_HOUR, le=EVENING_LAST_HOUR
+    )
 
     @field_validator("timezone")
     @classmethod
@@ -181,6 +194,8 @@ class UserSettingsOut(BaseModel):
     notification_preferences: NotificationPreferences = Field(
         default_factory=lambda: NotificationPreferences().complete()
     )
+    coach_evening_enabled: bool = False
+    coach_evening_hour: int = EVENING_DEFAULT_HOUR
 
 
 def _settings_out(settings: dict) -> UserSettingsOut:
@@ -242,5 +257,7 @@ def update_settings(payload: UserSettingsUpdate):
             if payload.notification_preferences is not None
             else None
         ),
+        coach_evening_enabled=payload.coach_evening_enabled,
+        coach_evening_hour=payload.coach_evening_hour,
     )
     return _settings_out(settings)

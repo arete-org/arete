@@ -48,7 +48,13 @@ from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.execution import invoke_agent_sync
 from arete.calendar import get_calendar_service
 from arete.config import config
-from arete.services import briefing, coaching_rules, session_feedback, weekly_review
+from arete.services import (
+    briefing,
+    coaching_rules,
+    evening_message,
+    session_feedback,
+    weekly_review,
+)
 from arete.services.athlete_scope import current_athlete_id, resolve_athlete_id
 from arete.services.coaching_repository import Briefing
 from arete.services.feature_flags import get_feature_flags, glm_flash_available
@@ -309,6 +315,13 @@ def build_review_agent(athlete_id: int, *, glm_flash: bool = False):
     return _assemble("review", glm_flash=glm_flash)
 
 
+@_serialized
+@lru_cache(maxsize=MAX_CACHED_ATHLETES)
+def build_evening_agent(athlete_id: int, *, glm_flash: bool = False):
+    assert athlete_id == current_athlete_id()
+    return _assemble("evening", glm_flash=glm_flash)
+
+
 def _run_mission(graph, profile: str, message: str, max_chars: int) -> str:
     result = invoke_agent_sync(
         graph,
@@ -359,6 +372,19 @@ def run_review(facts: str) -> str:
     return _run_mission(
         build_review_agent(), "review", facts, weekly_review.MAX_REVIEW_CHARS
     )
+
+
+def run_evening(facts: str) -> str:
+    return _run_mission(
+        build_evening_agent(), "evening", facts, evening_message.MAX_EVENING_CHARS
+    )
+
+
+def write_evening_message(
+    evening: evening_message.Survey,
+) -> evening_message.EveningMessage | None:
+    """The scheduler's evening message: one request, None when already held."""
+    return evening_message.write(run_evening, evening)
 
 
 def generate_weekly_review(

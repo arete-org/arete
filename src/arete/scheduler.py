@@ -908,6 +908,102 @@ def replan_missed_evening(started: float) -> str:
         return f"failed: {e}"
 
 
+#: The coach's evening message (ARE-64), for the athletes who opted in, from
+#: the hour each chose (``coach_evening_hour``, 18:00 to 21:00, 20:00 by
+#: default) on their clock and outside quiet hours. On Vercel its own cron
+#: windows, 18:00, 19:00 and 20:00 UTC (``vercel.json``), each fired within
+#: its hour, reach Paris's 20:00 in summer and winter alike (21:00 when it is
+#: chosen, unless the window fires past the quiet hours' 21:30); the
+#: Americas are not reached. Docker's ticks reach every zone, to the tick.
+#: Independent of the replanning's window: a replanning written first is in
+#: the facts, one written later is not.
+EVENING_MESSAGE_FROM_HOUR = 18
+#: No evening message starts after this: each is one model request.
+EVENING_MESSAGE_DISPATCH_SECONDS = 210
+
+
+def run_evening_messages() -> dict:
+    """Write tomorrow's evening message for the athletes in their evening.
+
+    At most one per athlete and evening whatever the overlapping windows and
+    ticks (``evening_message.write`` claims the evening before its request),
+    pushed once by its writer. An athlete who has not opted in, whose push
+    cannot leave or whose evening has nothing to say costs a few reads and no
+    request; a parked athlete gets nothing. Independent of the daily run's
+    claim and markers. The order rotates daily, like the replanning's.
+    """
+    started = monotonic()
+    with db_connection() as con:
+        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    deferred = len(candidates) == MAX_SCANNED_ATHLETES
+    candidates.sort(key=lambda row: evening_rank(row[0], utc_now().date()))
+    outcomes: dict[str, str] = {}
+    written = 0
+    for row in candidates:
+        athlete_id, lease, zone, preferences = row[0], row[4], row[5], row[6]
+        now = utc_now().timestamp()
+        # From the earliest hour an athlete may choose; each one's in scope.
+        quiet = _quiet_hours(preferences)
+        if not evening_owed(now, zone, quiet, EVENING_MESSAGE_FROM_HOUR):
+            continue
+        if _parked(lease, now, zone):
+            continue
+        if written >= MAX_SCHEDULED_ATHLETES:
+            deferred = True
+            break
+        with athlete_scope(athlete_id):
+            outcome = write_evening_message(started)
+        if outcome == "deferred":
+            deferred = True
+            break
+        if outcome != "disabled":
+            outcomes[str(athlete_id)] = outcome
+        if outcome.startswith("written"):
+            written += 1
+    return {"athletes": outcomes, "deferred": deferred}
+
+
+def write_evening_message(started: float) -> str:
+    """One athlete's evening message: written once, pushed by its writer.
+
+    Never raises. Reads only until the evening is claimed; the claim comes
+    before the one model request, and a failure keeps it (never replayed).
+    """
+    from arete.dataio.settings import get_user_settings
+    from arete.services import evening_message
+    from arete.services.notifications import notify
+
+    try:
+        settings = get_user_settings() or {}
+        if not evening_message.enabled(settings):
+            return "disabled"
+        local = utc_now().astimezone(zone_of(settings.get("timezone")))
+        if local.hour < evening_message.start_hour(settings):
+            return "not yet"
+        if (reason := evening_message.unreachable(settings)) is not None:
+            return f"skipped: {reason}"
+        day = local.date()
+        if (held := evening_message.get_for_day(day)) is not None:
+            return f"already {held.status}"
+        evening = evening_message.survey(day)
+        if not evening.reasons:
+            return "nothing to say"
+        if monotonic() - started >= EVENING_MESSAGE_DISPATCH_SECONDS:
+            return "deferred"
+        from arete.coaching import write_evening_message as write
+
+        message = write(evening)
+    except Exception as e:  # noqa: BLE001 - background job must not die
+        logger.warning("Evening message failed: %s", e)
+        return f"failed: {e}"
+    if message is None:
+        return "already claimed"
+    if message.status != "ok":
+        return f"failed: {message.error}"
+    result = notify(*evening_message.announcement(message), kind="evening")
+    return f"written; push: {result.skipped_reason or f'{result.sent} sent'}"
+
+
 async def run_forever(hour: int | None, tick_seconds: int = TICK_SECONDS) -> None:
     from anyio import to_thread
 
@@ -934,6 +1030,10 @@ async def run_forever(hour: int | None, tick_seconds: int = TICK_SECONDS) -> Non
                 await to_thread.run_sync(run_evening_replans, DOCKER_EVENING_FROM_HOUR)
             except Exception:
                 logger.exception("Evening replanning failed; next tick will retry")
+            try:
+                await to_thread.run_sync(run_evening_messages)
+            except Exception:
+                logger.exception("Evening messages failed; next tick will retry")
         try:
             await to_thread.run_sync(run_automations)
         except Exception:

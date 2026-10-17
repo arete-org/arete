@@ -243,6 +243,13 @@ def cron_evening(authorization: str | None = Header(default=None)):
     return scheduler.run_evening_replans()
 
 
+@app.get("/cron/evening-message")
+def cron_evening_message(authorization: str | None = Header(default=None)):
+    """The coach's evening message, for the athletes who opted in."""
+    _require_cron(authorization)
+    return scheduler.run_evening_messages()
+
+
 for router in (
     automations_router,
     checkins_router,
