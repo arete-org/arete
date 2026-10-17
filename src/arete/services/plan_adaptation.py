@@ -27,6 +27,7 @@ from arete.services.adaptation import (
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.plan_repository import (
     ATHLETE_CHOICE,
+    MISSED_REPLAN,
     AlreadyDecided,
     PlanDecision,
     PlanDecisionRepository,
@@ -639,6 +640,16 @@ def respond_reporting(
         raise ProposalConflict("Cette proposition a expiré.")
     if action == "apply" and any(d.state == "discussion" for d in members):
         raise ProposalConflict("Discute des étapes de cette séance avec le coach.")
+    if action == "apply" and any(d.readiness_source == MISSED_REPLAN for d in members):
+        from arete.dataio.db import db_connection
+        from arete.services.missed_sessions import trained_on
+
+        with db_connection() as con:
+            if trained_on(con, decision.date):
+                raise ProposalConflict(
+                    "Une séance a été enregistrée aujourd’hui depuis : "
+                    "cette proposition n’a plus lieu d’être."
+                )
     try:
         with transaction() as con:
             # A proposal created since the read above joins the group: refuse.

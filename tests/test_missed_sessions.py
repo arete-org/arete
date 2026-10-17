@@ -467,3 +467,117 @@ def test_the_athletes_choice_of_kind_holds_the_push():
         },
     }
     assert withheld(settings, "adapted_session") == "type de notification désactivé"
+
+
+# --------------------------------------------------------------------------- #
+# Review fixes
+# --------------------------------------------------------------------------- #
+def test_a_declined_replanning_holds_the_day_even_written_over(evening, monkeypatch):
+    from arete.services import renegotiation
+
+    monkeypatch.setattr(renegotiation, "athlete_today", lambda: DAY)
+    (proposal,) = missed_sessions.replan()
+    plan_adaptation.respond(proposal.id, proposal.revision, "keep")  # « Non merci »
+    with _pushing(False):
+        menu = renegotiation.options(evening)
+        renegotiation.apply(evening, "tired", "lighter", menu["version"])
+        (choice,) = _today()
+        plan_adaptation.revert(choice.id)
+    # « Modifier » wrote over the row, « Rétablir » reverted it: still held.
+    assert missed_sessions.replan() == []
+    assert missed_sessions.candidates() is False
+
+
+@pytest.mark.parametrize(
+    ("sport", "minutes", "trained"),
+    [
+        ("running", 15, False),
+        ("walking", 60, False),
+        ("hiking", 90, False),
+        ("running", 25, True),
+        ("cycling", 20, True),
+    ],
+)
+def test_a_short_or_incidental_activity_does_not_train_the_day(
+    evening, sport, minutes, trained
+):
+    GarminRepository().create_actual_session(
+        ActualSession(date=DAY, sport=sport, duration_sec=minutes * 60)
+    )
+    assert missed_sessions.candidates() is not trained
+
+
+def test_an_activity_synced_after_the_proposal_makes_it_stale(evening):
+    from arete.services import coach_today
+
+    (proposal,) = missed_sessions.replan()
+    GarminRepository().create_actual_session(
+        ActualSession(date=DAY, sport="running", duration_sec=45 * 60)
+    )
+    with patch.object(coach_today, "athlete_today", lambda: DAY):
+        assert coach_today.today()["items"][0]["record"]["state"] == "stale"
+    with _pushing(False), pytest.raises(plan_adaptation.ProposalConflict):
+        plan_adaptation.respond(proposal.id, proposal.revision, "apply")
+    assert GarminRepository().get_planned_session(evening).date == DAY
+    # Declining still works.
+    assert (
+        plan_adaptation.respond(proposal.id, proposal.revision, "keep").state
+        == "dismissed"
+    )
+
+
+def test_a_dropped_session_counts_as_missed_in_the_week(evening):
+    from arete.services.coaching_rules import RuleFacts
+    from arete.services.weekly_review import week_facts
+
+    con = connect()
+    con.execute(
+        "UPDATE app.planned_sessions SET session_type='endurance', target_intensity=NULL "
+        "WHERE id=?",
+        [evening],
+    )
+    con.close()
+    (proposal,) = missed_sessions.replan()
+    with _pushing(False):
+        plan_adaptation.respond(proposal.id, proposal.revision, "apply")
+    facts = RuleFacts(
+        acwr=1.0,
+        tsb=0.0,
+        readiness_score=None,
+        fatigue_threshold=85,
+        fitness_goal="build",
+        readiness_source="model",
+        readiness_measured_on=None,
+    )
+    monday = DAY - timedelta(days=DAY.weekday())
+    with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
+        week = week_facts(monday, DAY)
+    assert (week.planned_due, week.completed, week.missed) == (1, 0, 1)
+    assert week.minutes_planned == 50
+
+
+def test_the_evening_order_rotates_every_day():
+    from arete.scheduler import evening_rank
+
+    def order(day):
+        return sorted(range(1, 9), key=lambda athlete: evening_rank(athlete, day))
+
+    orders = [order(DAY + timedelta(days=d)) for d in range(4)]
+    # A different last athlete across the days, the same order within a day.
+    assert len({o[-1] for o in orders}) > 1
+    assert order(DAY) == orders[0]
+
+
+def test_dockers_evening_starts_after_the_after_work_runs():
+    from arete.scheduler import DOCKER_EVENING_FROM_HOUR, evening_owed
+    from arete.services.settings import QuietHours
+
+    paris_1930 = datetime(2026, 10, 14, 17, 30, tzinfo=UTC).timestamp()
+    paris_2010 = datetime(2026, 10, 14, 18, 10, tzinfo=UTC).timestamp()
+    assert evening_owed(paris_1930, "Europe/Paris", QuietHours())
+    assert not evening_owed(
+        paris_1930, "Europe/Paris", QuietHours(), DOCKER_EVENING_FROM_HOUR
+    )
+    assert evening_owed(
+        paris_2010, "Europe/Paris", QuietHours(), DOCKER_EVENING_FROM_HOUR
+    )

@@ -808,18 +808,27 @@ plan-change flag, as for a proposal.
 
 A missed session is replanned the same evening (ARE-61 Part 2,
 `services/missed_sessions.py`), with no model request and nothing applied
-without the athlete. In their evening (from 18:00 on their clock, outside quiet
-hours: the `/api/cron/evening` window at 18:00 UTC, which reaches UTC+0 to
-UTC+3 with the default quiet hours, and every Docker tick), a day whose planned
-sessions are still pending or modified with no activity nor strength log dated
-that day gets one proposal, after a Garmin refresh that only runs when such a
-session exists (an unmatched activity still counts as training: no false
-proposal). Skipped, completed and race sessions are never missed, nor one
+without the athlete. In their evening, outside quiet hours, a day whose planned
+sessions are still pending or modified with no training dated that day gets one
+proposal, after a Garmin refresh that only runs when such a session exists.
+Training is a strength log or an activity of 20 minutes or more that is not a
+walk or a hike (an unmatched one still counts: no false proposal; a short or
+incidental one does not). On Vercel the `/api/cron/evening` window at 18:00
+UTC dispatches it from 18:00 on the athlete's clock: Hobby fires it within the
+hour, so it lands in Paris between about 20:00 and 21:00 in summer and 19:00
+and 20:00 in winter, in London an hour earlier, in UTC+3 only when it fires
+before quiet hours, and not in the Americas. Its order rotates daily, since
+athletes the window has no time left for get nothing that day. Docker's ticks,
+which run with the daily sync (`ARETE_AUTO_SYNC_HOUR` set), start at 20:00
+local, after the after-work runs. Skipped, completed and race sessions are never missed, nor one
 adapted or renegotiated today (a declined morning proposal or a reverted choice
 leaves it missed, replaced in place and kept in `original.replaced`); a session
 moved by « Modifier » is judged on its new day; a day whose morning proposal is
-still open, or that already holds the day's replanning (answered or not), gets
+still open, or that already holds the day's replanning (answered or not, even
+written over by « Modifier », which keeps it in `original.replaced`), gets
 nothing, since the day's proposals are answered as one group and must not mix.
+An activity synced after the proposal leaves it stale on the card, and its
+answer refused.
 The rules are `renegotiation.move_day`'s: a hard session moves to the first
 free day of the next three, within the ISO week, before the next race and out
 of its last two days, with no hard session either side, once (the second of two
@@ -837,8 +846,11 @@ revertable decision with its reason; the answer reports Garmin's outcome
 compare-and-set now runs before the decision's claim. The proposal expires at
 the athlete's midnight like the morning's. The week's review (ARE-60) owns the
 sessions still ahead and never offers one on its own day, while the replanning
-only proposes today's: they cannot double-propose a session, and a session one
-of them changed leaves the other's proposal stale by its revision.
+only proposes today's: they never offer the same session. A session one of
+them changed leaves the other's proposal stale: the review's answer compares
+the proposal's `before` fields, the replanning's the session revision. The
+review's numbers count an applied `drop` as due and missed, so letting a
+missed session go never raises the week's adherence.
 
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References

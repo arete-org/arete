@@ -46,12 +46,20 @@ def card(
     sessions = GarminRepository().get_planned_sessions(
         [p["planned_session_id"] for p in proposals], connection=con
     )
+    # A missed session's replanning no longer fits a day that has trained since.
+    from arete.services.missed_sessions import trained_on
+    from arete.services.plan_repository import MISSED_REPLAN
+
+    trained = any(
+        p["readiness_source"] == MISSED_REPLAN for p in proposals
+    ) and trained_on(con, day)
     for proposal in proposals:
         session = sessions.get(proposal["planned_session_id"])
         if (
             session is None
             or session.revision != proposal["session_revision"]
             or session.status.value not in {"pending", "modified"}
+            or (trained and proposal["readiness_source"] == MISSED_REPLAN)
         ):
             proposal["state"] = "stale"
     followups = coach_followup.pending(day, con)

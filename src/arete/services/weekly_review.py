@@ -123,9 +123,20 @@ def week_facts(week_start: date, today: date) -> WeekFacts:
     end = week_start + timedelta(days=6)
     con = connect()
     try:
-        # A session the athlete or the daily adaptation skipped was not due.
+        # A session the athlete or the daily adaptation skipped was not due;
+        # one a missed session's replanning let go (an applied ``drop``,
+        # ARE-61) was due and missed: its skip must not raise the adherence.
         planned = con.execute(
-            "SELECT COUNT(*) FILTER (WHERE status <> 'skipped'), COUNT(*) FILTER (WHERE status = 'completed'), COUNT(*) FILTER (WHERE status IN ('pending', 'modified')), COALESCE(SUM(target_duration_min) FILTER (WHERE status <> 'skipped'), 0) FROM app.visible_planned_sessions WHERE date BETWEEN ? AND ?",
+            "WITH s AS (SELECT p.status, p.target_duration_min, "
+            "(p.status = 'skipped' AND EXISTS (SELECT 1 FROM app.visible_plan_decisions d "
+            "WHERE d.planned_session_id = p.id AND d.decision = 'drop' "
+            "AND d.applied_at IS NOT NULL AND d.reverted_at IS NULL)) AS dropped "
+            "FROM app.visible_planned_sessions p WHERE p.date BETWEEN ? AND ?) "
+            "SELECT COUNT(*) FILTER (WHERE status <> 'skipped' OR dropped), "
+            "COUNT(*) FILTER (WHERE status = 'completed'), "
+            "COUNT(*) FILTER (WHERE status IN ('pending', 'modified') OR dropped), "
+            "COALESCE(SUM(target_duration_min) FILTER (WHERE status <> 'skipped' OR dropped), 0) "
+            "FROM s",
             [week_start, end],
         ).fetchone() or (0, 0, 0, 0)
         done = con.execute(

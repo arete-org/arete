@@ -795,46 +795,58 @@ def run_checkin_prompts() -> dict:
     return {"athletes": outcomes, "deferred": deferred}
 
 
-#: A missed session is replanned in the athlete's evening (ARE-61 Part 2): from
-#: ``EVENING_FROM_HOUR`` on their clock, outside quiet hours (the push would be
-#: dropped), by its own cron window at 18:00 UTC (``vercel.json``; Hobby fires
-#: it within its hour) and every Docker tick. With the default quiet hours
-#: (21:30-07:00) that window reaches UTC+0 to UTC+3: Paris at 20:00 in summer
-#: and 19:00 in winter, London at 19:00 and 18:00. Earlier zones (the
-#: Americas) are not reached on Vercel and get no replanning, nor does a day
-#: once it has ended: a missed session's proposal belongs to its own evening.
-#: Docker's five-minute ticks reach every zone.
+#: A missed session is replanned in the athlete's evening (ARE-61 Part 2),
+#: outside quiet hours (the push would be dropped). On Vercel its own cron
+#: window at 18:00 UTC (``vercel.json``) dispatches it from
+#: ``EVENING_FROM_HOUR`` on the athlete's clock; Hobby fires it anywhere within
+#: the hour, so with the default quiet hours (from 21:30) it lands in Paris
+#: between about 20:00 and 21:00 in summer and 19:00 and 20:00 in winter, in
+#: London an hour earlier, and in UTC+3 only when it fires before 18:30. Earlier
+#: zones (the Americas) are not reached on Vercel and get no replanning, nor
+#: does a day once it has ended: a proposal belongs to its own evening. Docker's
+#: five-minute ticks, which run with the daily sync (``ARETE_AUTO_SYNC_HOUR``
+#: set), start at ``DOCKER_EVENING_FROM_HOUR``, after the after-work runs.
 EVENING_FROM_HOUR = 18
+DOCKER_EVENING_FROM_HOUR = 20
 #: No replanning starts after this: each may wait on Garmin's refresh.
 EVENING_DISPATCH_SECONDS = 200
 
 
-def evening_owed(now: float, zone: str | None, quiet_hours: QuietHours | None) -> bool:
+def evening_owed(
+    now: float,
+    zone: str | None,
+    quiet_hours: QuietHours | None,
+    from_hour: int = EVENING_FROM_HOUR,
+) -> bool:
     """Whether ``now`` (epoch seconds) is in the athlete's replanning evening."""
     local = datetime.fromtimestamp(now, zone_of(zone))
-    if local.hour < EVENING_FROM_HOUR:
+    if local.hour < from_hour:
         return False
     return quiet_hours is None or not quiet_hours.covers(local.time())
 
 
-def run_evening_replans() -> dict:
+def run_evening_replans(from_hour: int = EVENING_FROM_HOUR) -> dict:
     """Replan today's missed sessions for the athletes in their evening.
 
     Each athlete's day gets one proposal and one push at most, whatever the
     overlapping windows (``missed_sessions.replan``); a day with nothing
     missed costs one read and no Garmin request, and a parked athlete gets
-    nothing. Independent of the daily run's claim and markers.
+    nothing. Independent of the daily run's claim and markers. The order
+    rotates every day: Vercel's single window may run out of time
+    (``EVENING_DISPATCH_SECONDS``, a Garmin refresh each), and those it
+    defers get nothing that day, so the same athletes must not always be last.
     """
     started = monotonic()
     with db_connection() as con:
         candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
     deferred = len(candidates) == MAX_SCANNED_ATHLETES
+    candidates.sort(key=lambda row: evening_rank(row[0], utc_now().date()))
     outcomes: dict[str, str] = {}
     replanned = 0
     for row in candidates:
         athlete_id, lease, zone, preferences = row[0], row[4], row[5], row[6]
         now = utc_now().timestamp()
-        if not evening_owed(now, zone, _quiet_hours(preferences)):
+        if not evening_owed(now, zone, _quiet_hours(preferences), from_hour):
             continue
         if _parked(lease, now, zone):
             continue
@@ -850,6 +862,15 @@ def run_evening_replans() -> dict:
         if outcome != "nothing missed":
             replanned += 1
     return {"athletes": outcomes, "deferred": deferred}
+
+
+def evening_rank(athlete_id: int, day: date) -> int:
+    """The athlete's place in the day's evening pass: a stable shuffle that
+    changes every day."""
+    from hashlib import blake2b
+
+    digest = blake2b(f"{day.isoformat()}:{athlete_id}".encode(), digest_size=8)
+    return int.from_bytes(digest.digest(), "big")
 
 
 def replan_missed_evening(started: float) -> str:
@@ -910,7 +931,7 @@ async def run_forever(hour: int | None, tick_seconds: int = TICK_SECONDS) -> Non
                     "Scheduled dispatch failed; next tick will check unclaimed work"
                 )
             try:
-                await to_thread.run_sync(run_evening_replans)
+                await to_thread.run_sync(run_evening_replans, DOCKER_EVENING_FROM_HOUR)
             except Exception:
                 logger.exception("Evening replanning failed; next tick will retry")
         try:

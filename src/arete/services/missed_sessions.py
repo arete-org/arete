@@ -11,9 +11,11 @@ its reason, and Garmin follows after the answer.
 Defaults (the owner validates them; docs/architecture.md):
 
 - Missed: dated today on the athlete's clock, pending or modified (a skipped,
-  completed or race session never is), with no activity nor strength log that
-  day (an activity that matched no plan still counts as training: no proposal
-  rather than a false one), and no decision of the day, except a morning
+  completed or race session never is), with no training that day: a strength
+  log, or an activity of at least ``TRAINING_MIN_SECONDS`` that is not a walk
+  or a hike (an activity that matched no plan still counts: no proposal rather
+  than a false one; a short or incidental one does not), and no decision of
+  the day, except a morning
   proposal the athlete declined or a choice they reverted. A session moved by
   « Modifier » is judged on its new day; one adapted or renegotiated today is
   not missed. A day whose morning proposal is still open gets nothing: the
@@ -29,8 +31,11 @@ Defaults (the owner validates them; docs/architecture.md):
   would make a harder day.
 - One proposal a day: once the day holds one of these decisions, answered or
   not, nothing more is proposed, so overlapping evening runs (Vercel's window,
-  Docker's ticks) create it once and push once. The rows are written in one
-  transaction; a concurrent run's insert of the same row fails the unique key.
+  Docker's ticks) create it once and push once. A choice written over one
+  (« Modifier » after « Non merci ») keeps it in ``original.replaced``, which
+  still holds the day. The rows are written in one transaction; a concurrent
+  run's insert of the same row fails the unique key. An activity synced after
+  the proposal leaves it stale (``coach_today.card``, ``plan_adaptation``).
 """
 
 from __future__ import annotations
@@ -53,6 +58,33 @@ from arete.services.renegotiation import (
 
 #: The key session leads (intervals > tempo > others, then the longest).
 _KEY_RANK = {"intervals": 2, "tempo": 1}
+#: An activity shorter than this, or a walk, does not make a day trained.
+TRAINING_MIN_SECONDS = 20 * 60
+
+
+def holds_the_day(decision: PlanDecision) -> bool:
+    """Whether this decision is, or replaced, the day's replanning."""
+    replaced = (decision.original or {}).get("replaced")
+    return decision.readiness_source == MISSED_REPLAN or (
+        isinstance(replaced, dict) and replaced.get("readiness_source") == MISSED_REPLAN
+    )
+
+
+def trained_on(con, day: date) -> bool:
+    """Whether the day holds training: a strength log, or an activity of
+    ``TRAINING_MIN_SECONDS`` or more that is not a walk or a hike."""
+    from arete.dataio.queries import WALKING_SPORTS, sql_in
+
+    return (
+        con.execute(
+            "SELECT 1 FROM app.visible_actual_sessions WHERE date=? AND duration_sec>=? "
+            f"AND lower(coalesce(sport,'')) NOT IN ({sql_in(WALKING_SPORTS)}) "
+            "UNION ALL SELECT 1 FROM app.visible_strength_sessions WHERE date=? "
+            "LIMIT 1",
+            [day, TRAINING_MIN_SECONDS, day],
+        ).fetchone()
+        is not None
+    )
 
 
 def _planned(session: PlannedSession) -> str:
@@ -81,8 +113,8 @@ def missed(
     """
     if trained:
         return None
-    if any(d.readiness_source == MISSED_REPLAN for d in decisions):
-        return None  # one proposal a day, answered or not
+    if any(holds_the_day(d) for d in decisions):
+        return None  # one proposal a day, answered or not, even written over
     if any(d.state in {"pending", "discussion"} for d in decisions):
         return None  # the open morning proposal comes first, never mixed
     by_session = {d.planned_session_id: d for d in decisions}
@@ -277,16 +309,7 @@ def _day(con, day: date) -> tuple[list[PlannedSession], list[PlanDecision], bool
         connection=con,
     )
     decisions = PlanDecisionRepository().list_for_day(day, con=con)
-    trained = (
-        con.execute(
-            "SELECT 1 FROM app.visible_actual_sessions WHERE date=? "
-            "UNION ALL SELECT 1 FROM app.visible_strength_sessions WHERE date=? "
-            "LIMIT 1",
-            [day, day],
-        ).fetchone()
-        is not None
-    )
-    return sessions, decisions, trained
+    return sessions, decisions, trained_on(con, day)
 
 
 def announcement(written: list[PlanDecision]) -> tuple[str, str]:
