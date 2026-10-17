@@ -73,6 +73,10 @@ _COLUMNS = (
     "answer, answered_at, journaled_at"
 )
 _SCOPE = "athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL"
+#: Naive UTC on the database's clock, shared by every instance.
+_DB_NOW = "(current_timestamp AT TIME ZONE 'UTC')"
+#: Failed filings already warned about: one warning per message and day.
+_warned: set[tuple[int, date]] = set()
 
 
 class EveningConflict(ValueError):
@@ -389,16 +393,20 @@ def get_for_day(day: date) -> EveningMessage | None:
     return _from_row(row) if row else None
 
 
-def settle_stopped(day: date) -> None:
+def settle_stopped(day: date) -> bool:
     """A claim the platform stopped mid-run (the function killed): settled as
-    failed, never replayed; a claim still within ``CLAIM_EXPIRY`` is running."""
+    failed, never replayed; a claim still within ``CLAIM_EXPIRY`` is running.
+    On the database's clock, the claim's own. Whether one was settled."""
+    expiry = int(CLAIM_EXPIRY.total_seconds())
     with db_connection() as con:
-        con.execute(
+        row = con.execute(
             "UPDATE app.coach_evening_messages SET status = 'failed', "
-            f"error = 'StoppedRun', written_at = ? WHERE {_SCOPE} AND date = ? "
-            "AND status = 'pending' AND created_at < ?",
-            [naive_utc_now(), day, naive_utc_now() - CLAIM_EXPIRY],
-        )
+            f"error = 'StoppedRun', written_at = {_DB_NOW} WHERE {_SCOPE} "
+            "AND date = ? AND status = 'pending' "
+            f"AND created_at < {_DB_NOW} - INTERVAL {expiry} SECOND RETURNING id",
+            [day],
+        ).fetchone()
+    return row is not None
 
 
 def get(message_id: int) -> EveningMessage | None:
@@ -417,9 +425,10 @@ def _claim(day: date, reasons: tuple[str, ...]) -> int | None:
     try:
         with db_connection() as con:
             row = con.execute(
+                # The database's clock: instances on other clocks compare it.
                 "INSERT INTO app.coach_evening_messages (date, reasons, created_at) "
-                "VALUES (?, ?, ?) ON CONFLICT DO NOTHING RETURNING id",
-                [day, ",".join(reasons), naive_utc_now()],
+                f"VALUES (?, ?, {_DB_NOW}) ON CONFLICT DO NOTHING RETURNING id",
+                [day, ",".join(reasons)],
             ).fetchone()
     except (duckdb.ConstraintException, duckdb.TransactionException):
         return None  # a concurrent dispatch claimed the same evening first
@@ -554,26 +563,41 @@ def _file(message: EveningMessage) -> str:
     """The answer's journal entry: ``written``, ``already`` or ``failed``."""
     if message.journaled_at is not None:
         return "already"
-    from arete.services.memory import NOTES_LEDGER, append_entry
+    from arete.services.memory import NOTES_LEDGER, MemoryConflict, append_entry
 
-    try:
+    def entry() -> bool:
         # Dated by the evening: its heading is the "never twice" guard.
-        written = append_entry(
+        return append_entry(
             NOTES_LEDGER,
             JOURNAL_TITLE,
             f"« {message.question} » Réponse de l'athlète : « {message.answer} »",
             when=message.date,
         )
+
+    try:
+        try:
+            written = entry()
+        except MemoryConflict:
+            # Another write of the journal (chat, a concurrent read filing this
+            # very entry): once more, the heading still guards the copy.
+            written = entry()
         with db_connection() as con:
             con.execute(
                 "UPDATE app.coach_evening_messages SET journaled_at = ? "
                 f"WHERE {_SCOPE} AND id = ? AND journaled_at IS NULL",
                 [naive_utc_now(), message.id],
             )
-    except Exception:
-        logger.warning(
-            "Evening answer %s not filed in the journal", message.id, exc_info=True
-        )
+    except Exception as exc:
+        key = (message.id, athlete_today())
+        if key not in _warned:
+            if len(_warned) > 1024:
+                _warned.clear()
+            _warned.add(key)
+            logger.warning(
+                "Evening answer %s not filed in the journal: %s",
+                message.id,
+                type(exc).__name__,
+            )
         return "failed"
     return "written" if written else "already"
 
