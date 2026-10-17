@@ -132,8 +132,9 @@ function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
           <span className="text-xs text-text-muted">({settings.timezone})</span>
         </label>
         <p className="pl-6 text-xs text-text-muted">
-          Arrive par notification : il faut les notifications activées sur un appareil, en dehors
-          des heures calmes. Sinon, aucun message n’est écrit ce soir-là.
+          Arrive par notification, au mieux dans l’heure qui suit : il faut les notifications
+          activées sur un appareil. Rien n’est envoyé pendant les heures calmes (21 h 30 par
+          défaut) : un horaire tardif peut tomber dedans, et aucun message n’est écrit ce soir-là.
         </p>
       </div>
     </Panel>

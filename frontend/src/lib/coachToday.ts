@@ -36,11 +36,17 @@ export interface EveningMessage {
   reasons: string[];
   text: string;
   question: string;
-  /** Naive UTC. */
+  /** ISO instants with their UTC offset. */
   written_at: string | null;
   answer: string | null;
   answered_at: string | null;
+  /** False once answered or after the day it is about: the composer then chats. */
+  answerable: boolean;
+  /** Whether the answer reached the coach's journal (a failed filing is retried on read). */
+  journaled: boolean;
 }
+/** The server's answer limit (services/evening_message.MAX_ANSWER_CHARS). */
+export const MAX_EVENING_ANSWER_CHARS = 1_000;
 /** `journal`: whether the answer reached the coach's journal now, already, or not yet. */
 export type EveningAnswer = EveningMessage & { journal: 'written' | 'already' | 'failed' };
 export const eveningKey = (id: number) => ['coachEvening', id] as const;
@@ -66,8 +72,8 @@ export const coachApi = {
   followup: (id: number) => fetchAPI<Followup>(`/coach/followups/${id}`),
   evening: (id: number) => fetchAPI<EveningMessage>(`/coach/evening/${id}`),
   /** Kept once and filed once in the journal; no model request. */
-  answerEvening: (id: number, text: string) =>
-    fetchAPI<EveningAnswer>(`/coach/evening/${id}/answer`, { method: 'POST', body: JSON.stringify({ text }) }),
+  answerEvening: (id: number, text: string, signal?: AbortSignal) =>
+    fetchAPI<EveningAnswer>(`/coach/evening/${id}/answer`, { method: 'POST', body: JSON.stringify({ text }), signal }),
   respond: (id: number, revision: number, action: 'answer' | 'skip' | 'snooze', rpe?: number, notes?: string) =>
     fetchAPI<Followup>(`/coach/followups/${id}/response`, { method: 'POST', body: JSON.stringify({ revision, action, rpe, notes }) }),
 };

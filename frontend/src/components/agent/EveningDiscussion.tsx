@@ -25,8 +25,12 @@ export function EveningDiscussion({ id }: { id: number }) {
     <p className="text-sm font-medium leading-relaxed text-text-primary">{message.question}</p>
     <p role="status" className="border-t border-text-muted/15 pt-3 text-xs text-text-muted">
       {message.answer
-        ? `Ta réponse est notée dans le journal de Chiron : « ${message.answer} ». Écris-lui si tu veux en discuter.`
-        : 'Réponds dans le champ ci-dessous : ta réponse est notée dans le journal de Chiron pour le briefing de demain, sans réponse immédiate.'}
+        ? message.journaled
+          ? `Ta réponse est notée dans le journal de Chiron : « ${message.answer} ». Écris-lui si tu veux en discuter.`
+          : `Ta réponse est enregistrée (« ${message.answer} ») mais pas encore dans le journal de Chiron : nouvel essai à la prochaine ouverture.`
+        : message.answerable
+          ? 'Réponds dans le champ ci-dessous : ta réponse est notée dans le journal de Chiron pour le briefing de demain, sans réponse immédiate.'
+          : 'Cette question est close : écris à Chiron si tu veux en parler.'}
     </p>
   </section>;
 }

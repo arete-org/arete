@@ -10,7 +10,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { MessageFeedback } from '@/lib/agentFeedback';
 import { invalidateAfterGarminRefresh, invalidateAfterSession, qk } from '@/lib/queryKeys';
 import type { PanelPageContext } from '@/lib/pageContext';
-import { coachApi, eveningKey, isCoachReference, type EveningMessage } from '@/lib/coachToday';
+import { ApiError } from '@/lib/api';
+import { coachApi, eveningKey, isCoachReference, MAX_EVENING_ANSWER_CHARS, type EveningMessage } from '@/lib/coachToday';
 import {
   applyEvent,
   MAX_MESSAGE_CHARS,
@@ -61,6 +62,8 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   } | null>(null);
   const storeRef = useRef(store);
   const openSequence = useRef(0);
+  // Evening questions the server reported closed (gone, past, answered elsewhere).
+  const closedEvenings = useRef(new Set<number>());
   // Native discussion events and SSE chunks can share a React batch. Apply all
   // updates to the latest store synchronously so opening a thread loses neither.
   const setStore = useCallback((update: SetStateAction<ThreadStore>) => {
@@ -208,23 +211,40 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   /** The first message of an evening message's thread answers its question:
    *  kept and filed in the journal by the server, with no model request. The
    *  draft stays until the answer is saved. */
+  const keepAnswer = (threadId: string, content: string) => setStore(prev => updateThread(prev, threadId, t => ({
+    ...t,
+    draft: t.draft.trim() === content ? '' : t.draft,
+    updatedAt: Date.now(),
+    messages: [...t.messages, { role: 'user', content }],
+  })));
   const answerEvening = (id: number, content: string) => {
+    if (active.attachmentIds?.length) {
+      setError('La réponse à la question du soir part sans pièce jointe : retire-les ou envoie-les ensuite.');
+      return false;
+    }
+    if (content.length > MAX_EVENING_ANSWER_CHARS) {
+      setError('Ta réponse dépasse 1 000 caractères : raccourcis-la.');
+      return false;
+    }
     const threadId = active.id;
-    runRef.current = { threadId, controller: new AbortController() };
+    const controller = new AbortController();
+    runRef.current = { threadId, controller };
     setRunningId(threadId);
     setError('');
-    void coachApi.answerEvening(id, content)
+    void coachApi.answerEvening(id, content, controller.signal)
       .then(saved => {
         queryClient.setQueryData(eveningKey(id), saved);
-        setStore(prev => updateThread(prev, threadId, t => ({
-          ...t,
-          draft: t.draft.trim() === content ? '' : t.draft,
-          updatedAt: Date.now(),
-          messages: [...t.messages, { role: 'user', content }],
-        })));
+        keepAnswer(threadId, content);
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? `Réponse non enregistrée : ${err.message}` : 'Réponse non enregistrée.');
+        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+          // Closed: the draft stays, and sending it again talks to Chiron.
+          closedEvenings.current.add(id);
+          setError('Cette question est close : renvoie ton message pour en parler avec Chiron.');
+        } else {
+          // Stopped or lost on the way: the server may have kept it.
+          setError('Réponse peut-être non enregistrée : vérifie ci-dessus.');
+        }
         void queryClient.invalidateQueries({ queryKey: eveningKey(id) });
       })
       .finally(() => {
@@ -241,8 +261,12 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     const activeRuns = runRef.current ? 1 : 0;
     if (!content || activeRuns >= MAX_ACTIVE_RUNS) return false;
     const evening = active.reference?.kind === 'evening' ? active.reference : null;
-    if (evening && keep === 0 && !active.messages.length && !queryClient.getQueryData<EveningMessage>(eveningKey(evening.id))?.answer)
-      return answerEvening(evening.id, content);
+    if (evening && keep === 0 && !active.messages.length && !closedEvenings.current.has(evening.id)) {
+      const known = queryClient.getQueryData<EveningMessage>(eveningKey(evening.id));
+      // A resend after a lost response that the server did keep: nothing to pay.
+      if (known?.answer === content) { keepAnswer(active.id, content); return true; }
+      if (!known?.answer && known?.answerable !== false) return answerEvening(evening.id, content);
+    }
     const retrying = keep < active.messages.length;
     const attachmentIds = selectedDocuments ? (retrying ? active.messages[keep]?.attachmentIds ?? [] : active.attachmentIds ?? []) : undefined;
     const history = requestWindow([
