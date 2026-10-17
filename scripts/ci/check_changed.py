@@ -55,23 +55,23 @@ def run_plan(
         if shard:
             paths = shard_files(paths, shard, Path.cwd())
             print(f"Shard {shard[0]}/{shard[1]}: {len(paths)} test files", flush=True)
-    if plan["backend"] and paths:
         # An empty shard runs nothing: pytest without paths would run them all.
-        commands.append(
-            [
-                "uv",
-                "run",
-                "pytest",
-                *paths,
-                "--tb=short",
-                "-n",
-                "2",
-                "--dist",
-                "loadfile",
-                "--max-worker-restart=0",
-                "--durations=20",
-            ]
-        )
+        if paths:
+            commands.append(
+                [
+                    "uv",
+                    "run",
+                    "pytest",
+                    *paths,
+                    "--tb=short",
+                    "-n",
+                    "2",
+                    "--dist",
+                    "loadfile",
+                    "--max-worker-restart=0",
+                    "--durations=20",
+                ]
+            )
     if not tests_only:
         if plan["transport"]:
             commands.append(["node", "--test", "scripts/openwiki/transport.test.mjs"])
@@ -94,12 +94,23 @@ def main() -> None:
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--tests-only", action="store_true")
     parser.add_argument("--shard", type=parse_shard, help="K/N: run one CI shard")
+    parser.add_argument(
+        "--count-only",
+        action="store_true",
+        help="with --plan and --shard: print `files=<n>` for GITHUB_OUTPUT",
+    )
     args = parser.parse_args()
     if args.plan:
         plan = json.loads(args.plan.read_text())
         head = git_output("rev-parse", "HEAD").decode().strip()
         if plan["head"] != head:
             raise ValueError("CI plan belongs to another commit")
+        if args.count_only:
+            if not args.shard:
+                raise ValueError("--count-only needs --shard")
+            paths = plan["pytest_paths"] if plan["backend"] else []
+            print(f"files={len(shard_files(paths, args.shard, Path.cwd()))}")
+            return
     else:
         base = git_output("merge-base", args.base, "HEAD").decode().strip()
         paths = changed_paths(base, worktree=True)

@@ -14,15 +14,14 @@ import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 DURATIONS = Path(__file__).with_name("test_durations.json")
-MAX_SHARDS = 8
 
 
 def parse_shard(value: str) -> tuple[int, int]:
     """``"2/3"`` -> ``(2, 3)``: the second of three shards, counted from 1."""
     index, _, count = value.partition("/")
     shard = (int(index), int(count))
-    if not 1 <= shard[0] <= shard[1] <= MAX_SHARDS:
-        raise ValueError(f"Shard must be K/N with 1 <= K <= N <= {MAX_SHARDS}")
+    if not 1 <= shard[0] <= shard[1]:
+        raise ValueError("Shard must be K/N with 1 <= K <= N")
     return shard
 
 
@@ -65,11 +64,11 @@ def durations_from_junit(report: Path) -> dict[str, float]:
     """Seconds per test file from a pytest ``--junitxml`` report."""
     totals: dict[str, float] = {}
     for case in ElementTree.parse(report).iter("testcase"):
+        # classname is ``tests[.dir].test_x`` or ``tests[.dir].test_x.TestClass``.
         module = case.get("classname", "").split(".")
-        # classname is ``tests.test_x`` or ``tests.test_x.TestClass``.
-        name = next((m for m in module if m.startswith("test_")), None)
-        if module[:1] == ["tests"] and name:
-            path = f"tests/{name}.py"
+        end = next((i for i, m in enumerate(module) if m.startswith("test_")), None)
+        if module[:1] == ["tests"] and end is not None:
+            path = "/".join(module[: end + 1]) + ".py"
             totals[path] = totals.get(path, 0.0) + float(case.get("time") or 0)
     return {path: round(seconds, 1) for path, seconds in sorted(totals.items())}
 

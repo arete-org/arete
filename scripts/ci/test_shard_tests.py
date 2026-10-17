@@ -1,6 +1,7 @@
 """Shards cover every selected test file once, whole, balanced and stable."""
 
 import json
+import statistics
 import tempfile
 import unittest
 from pathlib import Path
@@ -67,13 +68,13 @@ class ShardTests(unittest.TestCase):
         self.assertEqual(
             sorted(f for s in shards for f in s), expand_files(["tests/"], root)
         )
-        median = sorted(durations.values())[len(durations) // 2]
+        median = statistics.median(durations.values())
         loads = [sum(durations.get(f, median) for f in s) for s in shards]
         self.assertLess(max(loads) / min(loads), 1.25, loads)
 
     def test_shard_argument_is_validated(self):
         self.assertEqual(parse_shard("2/3"), (2, 3))
-        for bad in ("0/3", "4/3", "1/0", "1/9", "x"):
+        for bad in ("0/3", "4/3", "1/0", "x"):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 parse_shard(bad)
 
@@ -82,13 +83,18 @@ class ShardTests(unittest.TestCase):
           <testcase classname="tests.test_a" name="test_one" time="1.5"/>
           <testcase classname="tests.test_a.TestGroup" name="test_two" time="2.0"/>
           <testcase classname="tests.test_b" name="test_three" time="0.25"/>
+          <testcase classname="tests.api.test_b.TestNested" name="test_four" time="1"/>
         </testsuite></testsuites>"""
         with tempfile.NamedTemporaryFile("w", suffix=".xml") as f:
             f.write(report)
             f.flush()
             self.assertEqual(
                 durations_from_junit(Path(f.name)),
-                {"tests/test_a.py": 3.5, "tests/test_b.py": 0.2},
+                {
+                    "tests/api/test_b.py": 1.0,
+                    "tests/test_a.py": 3.5,
+                    "tests/test_b.py": 0.2,
+                },
             )
 
 
@@ -107,6 +113,27 @@ class ShardedRunTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertIn("tests/test_b.py", command)
         self.assertNotIn("tests/test_a.py", command)
+
+    def test_the_shard_count_is_printed_for_github_output(self):
+        plan = {
+            **self.PLAN,
+            "head": "abc",
+            "pytest_paths": ["tests/test_a.py", "tests/test_b.py"],
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
+            json.dump(plan, f)
+            f.flush()
+            argv = ["check_changed", "--plan", f.name, "--shard", "2/3", "--count-only"]
+            with (
+                patch("sys.argv", argv),
+                patch.object(check_changed, "git_output", return_value=b"abc\n"),
+                patch.object(
+                    check_changed, "shard_files", return_value=["tests/test_b.py"]
+                ),
+                patch("builtins.print") as printed,
+            ):
+                check_changed.main()
+        printed.assert_called_once_with("files=1")
 
     def test_an_empty_shard_never_runs_the_whole_suite(self):
         plan = {**self.PLAN, "pytest_paths": ["tests/test_a.py"]}
