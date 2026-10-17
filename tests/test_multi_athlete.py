@@ -1167,3 +1167,22 @@ def test_another_athletes_session_cannot_be_renegotiated(athletes, monkeypatch):
         session = GarminRepository().get_planned_session(session_id)
         assert session is not None and session.status == SessionStatus.PENDING
         assert renegotiation.options(session_id)["version"] == version
+
+
+def test_a_missed_session_is_replanned_in_its_athletes_scope_only(
+    athletes, monkeypatch
+):
+    from arete.services import missed_sessions
+
+    first, second = athletes
+    monkeypatch.setattr(
+        "arete.services.settings.athlete_today", lambda: date(2026, 10, 10)
+    )
+    with athlete_scope(first.athlete_id):
+        session_id = GarminRepository().create_planned_session(planned("first's"))
+    with athlete_scope(second.athlete_id):
+        assert missed_sessions.candidates() is False
+        assert missed_sessions.replan() == []
+    with athlete_scope(first.athlete_id):
+        (proposal,) = missed_sessions.replan()
+        assert proposal.planned_session_id == session_id

@@ -23,6 +23,9 @@ _COLUMNS = (
 #: ``readiness_source`` of a decision the athlete chose (« Modifier », ARE-61):
 #: no readiness made it, and the RPG's prescribed rests leave it out.
 ATHLETE_CHOICE = "athlete"
+#: ``readiness_source`` of a missed session's replanning (ARE-61 Part 2): a
+#: proposal of the evening, made from no readiness either.
+MISSED_REPLAN = "missed"
 
 
 class AlreadyDecided(Exception):
@@ -181,8 +184,13 @@ class PlanDecisionRepository:
         adapted: dict[str, Any] | None,
         session_revision: int,
         con: duckdb.DuckDBPyConnection,
+        state: str = "applied",
+        origin: str = ATHLETE_CHOICE,
     ) -> PlanDecision | None:
         """Write the athlete's choice over a closed decision of the day.
+
+        ``state="pending"`` with ``origin=MISSED_REPLAN`` writes the evening's
+        replanning proposal instead, not applied.
 
         The day keeps one row per session (the unique key): a declined or
         reverted decision, or a proposal snoozed past today, is replaced in
@@ -195,8 +203,9 @@ class PlanDecisionRepository:
             UPDATE app.plan_decisions SET
                 decision = ?, reason = ?, readiness_score = NULL,
                 readiness_source = ?, acwr = NULL, original_json = ?,
-                adapted_json = ?, applied_at = now(), reverted_at = NULL,
-                state = 'applied', revision = revision + 1,
+                adapted_json = ?,
+                applied_at = CASE WHEN ? = 'applied' THEN now() END,
+                reverted_at = NULL, state = ?, revision = revision + 1,
                 session_revision = ?, readiness_measured_on = NULL,
                 snoozed_until = NULL
             WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL
@@ -208,9 +217,11 @@ class PlanDecisionRepository:
             [
                 decision,
                 reason,
-                ATHLETE_CHOICE,
+                origin,
                 json.dumps(original, ensure_ascii=False, default=str),
                 json.dumps(adapted, ensure_ascii=False) if adapted else None,
+                state,
+                state,
                 session_revision,
                 decision_id,
                 revision,

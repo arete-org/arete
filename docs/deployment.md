@@ -305,6 +305,12 @@ sends the morning check-in push (at most one per athlete and day, none once
 answered, none in quiet hours, which hold it for the next window) and never
 starts the daily sync, so the sync's windows behave as before.
 
+`/api/cron/evening` runs at 18:00 UTC, with the same secret: it replans the
+day's missed sessions for the athletes in their evening (from 18:00 on their
+clock, outside quiet hours: UTC+0 to UTC+3 with the default quiet hours), one
+proposal and at most one push (kind `adapted_session`) per athlete and day,
+and never starts the daily sync. Docker's ticks run the same pass.
+
 ## Scheduled follow-ups
 
 `/api/cron/automations` uses the same `CRON_SECRET` bearer protection and shared

@@ -228,10 +228,10 @@ def revert_reporting(decision_id: int) -> tuple[PlanDecision, str]:
     if moved:
         fields = ("date",)
     elif session is not None and session.prescription is not None:
-        if decision.decision != Decision.REST:
+        if decision.decision not in {Decision.REST, Decision.DROP}:
             raise NothingToRevert("Cette séance possède une prescription validée.")
         fields = _STRUCTURED_FIELDS
-    elif decision.decision == Decision.REST:
+    elif decision.decision in {Decision.REST, Decision.DROP}:
         # A rest changed the status alone: restoring only it leaves an export
         # Garmin still holds as it is (not dirty), so nothing is sent again.
         fields = _STRUCTURED_FIELDS
@@ -518,7 +518,7 @@ def follow_on_garmin(
         actions: list[tuple[int, str]] = []
         for decision in decisions:
             session_id = decision.planned_session_id
-            rest = decision.decision == Decision.REST
+            rest = decision.decision in {Decision.REST, Decision.DROP}
             if garmin_export.on_garmin(session_id):
                 if reverted and rest:
                     state = garmin_export.export_state(session_id)
@@ -565,17 +565,22 @@ def follow_on_garmin(
     return {"state": "done", "sessions": outcomes}
 
 
-def garmin_outcome(result: dict) -> str:
+def garmin_outcome(result: dict, session_id: int | None = None) -> str:
     """One session's ``follow_on_garmin`` in one word, for the athlete.
 
     ``sent`` or ``withdrawn`` (the copy Garmin holds), ``failed`` or
     ``not_started`` (left in the export state the card shows, never
     replayed), ``unchanged`` (Garmin holds no copy), ``disabled`` (a copy
     the automatic push, off, did not touch) or ``disconnected``.
+    ``session_id`` picks that session's outcome among several.
     """
     if result["state"] != "done":
         return str(result["state"])
-    sessions = result["sessions"]
+    sessions = [
+        s
+        for s in result["sessions"]
+        if session_id is None or s["planned_session_id"] == session_id
+    ]
     return str(sessions[0]["outcome"]) if sessions else "unchanged"
 
 
@@ -595,6 +600,17 @@ def respond(
     not at all. ``group`` maps each other decision of the day to the revision
     the athlete saw; a group that differs from the day's is a conflict.
     """
+    return respond_reporting(decision_id, revision, action, group)[0]
+
+
+def respond_reporting(
+    decision_id: int,
+    revision: int,
+    action: str,
+    group: Mapping[int, int] | None = None,
+) -> tuple[PlanDecision, str]:
+    """``respond``, with what Garmin did for this proposal's session after an
+    applied answer (``garmin_outcome``; ``unchanged`` otherwise)."""
     import duckdb
 
     from arete.dataio import plan_changes
@@ -613,7 +629,7 @@ def respond(
         raise LookupError("Proposition introuvable")
     terminal = "applied" if action == "apply" else "dismissed"
     if action != "snooze" and all(day[i].state == terminal for i in seen):
-        return decision
+        return decision, "unchanged"
     members = [d for d in day.values() if d.state in {"pending", "discussion"}]
     if {d.id for d in members} != seen.keys() or any(
         d.revision != seen[d.id] for d in members
@@ -639,13 +655,14 @@ def respond(
         raise ProposalConflict(
             "Modification concurrente : recharge la proposition."
         ) from exc
+    garmin = "unchanged"
     if action == "apply":
         plan_changes.touch()
         # After the commit: the answer stands whatever Garmin says.
-        follow_on_garmin(members)
+        garmin = garmin_outcome(follow_on_garmin(members), decision.planned_session_id)
     result = repo.get(decision_id)
     assert result is not None
-    return result
+    return result, garmin
 
 
 def _respond_one(
@@ -655,14 +672,36 @@ def _respond_one(
         "SELECT revision,status,prescription,date FROM app.visible_planned_sessions WHERE id=?",
         [decision.planned_session_id],
     ).fetchone()
+    # A move or a drop touches no step: a session with explicit ones allows them.
+    stepless = decision.decision in {Decision.MOVE, Decision.DROP}
     if action == "apply" and (
         not session
         or session[0] != decision.session_revision
         or session[1] not in {"pending", "modified"}
-        or session[2]
+        or (session[2] and not stepless)
         or session[3] != decision.date
     ):
         raise ProposalConflict("La séance a changé : examine une nouvelle proposition.")
+    if action == "apply":
+        # The session before the claim: its revision guard then refuses a
+        # write committed since the proposal, and a racing one conflicts.
+        fields = dict(decision.adapted or {})
+        if "date" in fields:
+            fields["date"] = date.fromisoformat(str(fields["date"]))
+        if decision.decision in {Decision.REST, Decision.DROP}:
+            fields["status"] = SessionStatus.SKIPPED
+        elif decision.decision != Decision.MOVE:
+            # A move keeps the status: its new day's readiness still weighs it.
+            fields["status"] = SessionStatus.MODIFIED
+        fields["garmin_pushed_at"] = None
+        changed = GarminRepository().update_planned_session_fields(
+            decision.planned_session_id,
+            expected_revision=decision.session_revision,
+            connection=con,
+            **fields,
+        )
+        if not changed:
+            raise ProposalConflict("La séance a changé.")
     state = decision.state if action == "snooze" else terminal
     claimed = con.execute(
         "UPDATE app.plan_decisions SET state=?,revision=revision+1,snoozed_until=?,applied_at=CASE WHEN ?='applied' THEN now() ELSE applied_at END "
@@ -677,19 +716,3 @@ def _respond_one(
     ).fetchone()
     if claimed is None:
         raise ProposalConflict("Cette proposition vient de changer.")
-    if action == "apply":
-        fields = dict(decision.adapted or {})
-        fields["status"] = (
-            SessionStatus.SKIPPED
-            if decision.decision == Decision.REST
-            else SessionStatus.MODIFIED
-        )
-        fields["garmin_pushed_at"] = None
-        changed = GarminRepository().update_planned_session_fields(
-            decision.planned_session_id,
-            expected_revision=decision.session_revision,
-            connection=con,
-            **fields,
-        )
-        if not changed:
-            raise ProposalConflict("La séance a changé.")

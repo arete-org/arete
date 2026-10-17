@@ -189,6 +189,7 @@ def briefing_facts(
                 "replace_easy": "remplacée par de la récupération",
                 "rest": "remplacée par du repos",
                 "move": "déplacée",
+                "drop": "laissée de côté (séance manquée)",
             }.get(d.decision, d.decision)
             line = f"{planned} : {verdict} — raison : {d.reason}"
             replaced = before.get("replaced")

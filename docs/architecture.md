@@ -806,6 +806,40 @@ a rest, once, never replayed. Each answer reports it apart (`sent`,
 Garmin failure never fails the written choice. The plan's calendar follows the
 plan-change flag, as for a proposal.
 
+A missed session is replanned the same evening (ARE-61 Part 2,
+`services/missed_sessions.py`), with no model request and nothing applied
+without the athlete. In their evening (from 18:00 on their clock, outside quiet
+hours: the `/api/cron/evening` window at 18:00 UTC, which reaches UTC+0 to
+UTC+3 with the default quiet hours, and every Docker tick), a day whose planned
+sessions are still pending or modified with no activity nor strength log dated
+that day gets one proposal, after a Garmin refresh that only runs when such a
+session exists (an unmatched activity still counts as training: no false
+proposal). Skipped, completed and race sessions are never missed, nor one
+adapted or renegotiated today (a declined morning proposal or a reverted choice
+leaves it missed, replaced in place and kept in `original.replaced`); a session
+moved by « Modifier » is judged on its new day; a day whose morning proposal is
+still open, or that already holds the day's replanning (answered or not), gets
+nothing, since the day's proposals are answered as one group and must not mix.
+The rules are `renegotiation.move_day`'s: a hard session moves to the first
+free day of the next three, within the ISO week, before the next race and out
+of its last two days, with no hard session either side, once (the second of two
+missed hard sessions sees the first on its new day); an easy session, or one no
+day receives, is dropped (`drop`: skipped, never counted as a prescribed rest).
+Merging into another session is not offered: no rule rewrites two sessions'
+targets or steps safely. The rows (`readiness_source` `missed`, pending) are
+written in one transaction that reads the day first, so overlapping runs write
+them once (the unique key refuses the loser) and only the writer pushes
+`adapted_session`, through the athlete's preferences and quiet hours. The coach
+card answers them with the morning's machinery: « Appliquer » moves the session
+(its status kept, so the next day's readiness still weighs it) or skips it, one
+revertable decision with its reason; the answer reports Garmin's outcome
+(`respond_reporting`, the response's `garmin`) and the session's
+compare-and-set now runs before the decision's claim. The proposal expires at
+the athlete's midnight like the morning's. The week's review (ARE-60) owns the
+sessions still ahead and never offers one on its own day, while the replanning
+only proposes today's: they cannot double-propose a session, and a session one
+of them changed leaves the other's proposal stale by its revision.
+
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References
 in HTTP/SSE and browser storage contain identifiers; the server reloads the

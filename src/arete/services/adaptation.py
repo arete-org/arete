@@ -51,8 +51,11 @@ class Decision(StrEnum):
     EASE = "ease"
     REPLACE_EASY = "replace_easy"
     REST = "rest"
-    #: Only the athlete's renegotiation moves a session (``renegotiation``).
+    #: Only the athlete's renegotiation or a missed session's replanning
+    #: moves a session (``renegotiation``, ``missed_sessions``).
     MOVE = "move"
+    #: A missed session let go (``missed_sessions``): skipped, not a rest.
+    DROP = "drop"
 
 
 @dataclass(frozen=True)

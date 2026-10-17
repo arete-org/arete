@@ -236,6 +236,13 @@ def cron_checkin(authorization: str | None = Header(default=None)):
     return scheduler.run_checkin_prompts()
 
 
+@app.get("/cron/evening")
+def cron_evening(authorization: str | None = Header(default=None)):
+    """The evening's replanning of today's missed sessions (one window)."""
+    _require_cron(authorization)
+    return scheduler.run_evening_replans()
+
+
 for router in (
     automations_router,
     checkins_router,

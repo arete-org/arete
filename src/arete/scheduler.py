@@ -795,6 +795,98 @@ def run_checkin_prompts() -> dict:
     return {"athletes": outcomes, "deferred": deferred}
 
 
+#: A missed session is replanned in the athlete's evening (ARE-61 Part 2): from
+#: ``EVENING_FROM_HOUR`` on their clock, outside quiet hours (the push would be
+#: dropped), by its own cron window at 18:00 UTC (``vercel.json``; Hobby fires
+#: it within its hour) and every Docker tick. With the default quiet hours
+#: (21:30-07:00) that window reaches UTC+0 to UTC+3: Paris at 20:00 in summer
+#: and 19:00 in winter, London at 19:00 and 18:00. Earlier zones (the
+#: Americas) are not reached on Vercel and get no replanning, nor does a day
+#: once it has ended: a missed session's proposal belongs to its own evening.
+#: Docker's five-minute ticks reach every zone.
+EVENING_FROM_HOUR = 18
+#: No replanning starts after this: each may wait on Garmin's refresh.
+EVENING_DISPATCH_SECONDS = 200
+
+
+def evening_owed(now: float, zone: str | None, quiet_hours: QuietHours | None) -> bool:
+    """Whether ``now`` (epoch seconds) is in the athlete's replanning evening."""
+    local = datetime.fromtimestamp(now, zone_of(zone))
+    if local.hour < EVENING_FROM_HOUR:
+        return False
+    return quiet_hours is None or not quiet_hours.covers(local.time())
+
+
+def run_evening_replans() -> dict:
+    """Replan today's missed sessions for the athletes in their evening.
+
+    Each athlete's day gets one proposal and one push at most, whatever the
+    overlapping windows (``missed_sessions.replan``); a day with nothing
+    missed costs one read and no Garmin request, and a parked athlete gets
+    nothing. Independent of the daily run's claim and markers.
+    """
+    started = monotonic()
+    with db_connection() as con:
+        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    deferred = len(candidates) == MAX_SCANNED_ATHLETES
+    outcomes: dict[str, str] = {}
+    replanned = 0
+    for row in candidates:
+        athlete_id, lease, zone, preferences = row[0], row[4], row[5], row[6]
+        now = utc_now().timestamp()
+        if not evening_owed(now, zone, _quiet_hours(preferences)):
+            continue
+        if _parked(lease, now, zone):
+            continue
+        if replanned >= MAX_SCHEDULED_ATHLETES:
+            deferred = True
+            break
+        with athlete_scope(athlete_id):
+            outcome = replan_missed_evening(started)
+        outcomes[str(athlete_id)] = outcome
+        if outcome == "deferred":
+            deferred = True
+            break
+        if outcome != "nothing missed":
+            replanned += 1
+    return {"athletes": outcomes, "deferred": deferred}
+
+
+def replan_missed_evening(started: float) -> str:
+    """One athlete's evening: refresh Garmin when a session looks missed, then
+    write the day's replanning proposal and push it once. Never raises."""
+    from arete.dataio import mirror
+    from arete.services import missed_sessions
+    from arete.services.notifications import notify
+
+    try:
+        if not missed_sessions.candidates():
+            return "nothing missed"
+        if monotonic() - started >= EVENING_DISPATCH_SECONDS:
+            return "deferred"
+        if config.is_remote_db:
+            mirror.hydrate()
+        from arete.services.garmin_sync import ensure_fresh
+
+        try:
+            # The afternoon's activities: a session done is not missed.
+            ensure_fresh(deadline=started + EVENING_DISPATCH_SECONDS)
+        except Exception as e:  # noqa: BLE001 - the plan reads what is there
+            logger.warning("Evening Garmin refresh failed: %s", e)
+        written = missed_sessions.replan()
+        if config.is_remote_db:
+            mirror.flush()
+        if not written:
+            return "nothing missed"
+        title, body = missed_sessions.announcement(written)
+        result = notify(title, body, "/", kind="adapted_session")
+        push = result.skipped_reason or f"{result.sent} sent"
+        return f"{len(written)} proposed; push: {push}"
+    except Exception as e:  # noqa: BLE001 - background job must not die
+        logger.warning("Evening replanning failed: %s", e)
+        return f"failed: {e}"
+
+
 async def run_forever(hour: int | None, tick_seconds: int = TICK_SECONDS) -> None:
     from anyio import to_thread
 
@@ -817,6 +909,10 @@ async def run_forever(hour: int | None, tick_seconds: int = TICK_SECONDS) -> Non
                 logger.exception(
                     "Scheduled dispatch failed; next tick will check unclaimed work"
                 )
+            try:
+                await to_thread.run_sync(run_evening_replans)
+            except Exception:
+                logger.exception("Evening replanning failed; next tick will retry")
         try:
             await to_thread.run_sync(run_automations)
         except Exception:

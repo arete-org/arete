@@ -485,7 +485,6 @@ def _read(session_id: int) -> _Day:
     from arete.dataio.db import db_connection
     from arete.garmin.repository import GarminRepository
     from arete.services import garmin_export
-    from arete.services.goals import list_goals
     from arete.services.plan_repository import PlanDecisionRepository
 
     today = athlete_today()
@@ -498,16 +497,8 @@ def _read(session_id: int) -> _Day:
             raise LookupError("Séance introuvable")
         if session.date != today:
             raise Conflict("Ce n’est plus la séance du jour : recharge la page.")
-        week = _week(con, today)
-        moved_before = (
-            con.execute(
-                "SELECT 1 FROM app.visible_plan_decisions WHERE planned_session_id=? "
-                "AND decision='move' AND applied_at IS NOT NULL AND reverted_at IS NULL "
-                "LIMIT 1",
-                [session_id],
-            ).fetchone()
-            is not None
-        )
+        week = move_window(con, today)
+        moved_before = moved_once(con, session_id)
         decision = next(
             (
                 d
@@ -524,11 +515,7 @@ def _read(session_id: int) -> _Day:
             is not None
         )
     export = (garmin_export.export_state(session_id) or {}).get("state") or ""
-    races = {
-        g.race_date
-        for g in list_goals(today=today)
-        if g.status == "active" and g.race_date > today
-    }
+    races = goal_races(today)
     blocked = _blocked(session, decision, done, export)
     reasons = (
         ()
@@ -538,7 +525,31 @@ def _read(session_id: int) -> _Day:
     return _Day(session, today, decision, blocked, reasons, races)
 
 
-def _week(con, today: date) -> list[PlannedSession]:
+def moved_once(con, session_id: int) -> bool:
+    """Whether a move (applied, not reverted) already moved the session."""
+    return (
+        con.execute(
+            "SELECT 1 FROM app.visible_plan_decisions WHERE planned_session_id=? "
+            "AND decision='move' AND applied_at IS NOT NULL AND reverted_at IS NULL "
+            "LIMIT 1",
+            [session_id],
+        ).fetchone()
+        is not None
+    )
+
+
+def goal_races(today: date) -> set[date]:
+    """The active goal races still ahead."""
+    from arete.services.goals import list_goals
+
+    return {
+        g.race_date
+        for g in list_goals(today=today)
+        if g.status == "active" and g.race_date > today
+    }
+
+
+def move_window(con, today: date) -> list[PlannedSession]:
     """The planned sessions a move depends on: its window, the day after it
     and the taper days before a race just beyond it."""
     from arete.garmin.repository import GarminRepository
@@ -639,7 +650,8 @@ def apply(session_id: int, reason: str, option_id: str, version: str) -> dict[st
             # menu was read is a conflict, not a stacked day.
             target = option.changes.get("date")
             if target is not None and (
-                move_day(session, day.today, _week(con, day.today), day.races) != target
+                move_day(session, day.today, move_window(con, day.today), day.races)
+                != target
             ):
                 raise Conflict("Ce jour n’est plus libre : recharge les options.")
             # The revision guard refuses a session changed since the menu was

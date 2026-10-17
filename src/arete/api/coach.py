@@ -51,14 +51,19 @@ def prepare():
 
 @router.post("/proposals/{decision_id}/response")
 def proposal_response(decision_id: int, body: ProposalResponse):
-    return _call(
-        lambda: plan_adaptation.respond(
+    """The day's proposals answered together; ``garmin`` is what Garmin did
+    for this proposal's session after an applied answer, reported apart."""
+
+    def answer():
+        decision, garmin = plan_adaptation.respond_reporting(
             decision_id,
             body.revision,
             body.action,
             {seen.id: seen.revision for seen in body.group},
-        ).to_dict()
-    )
+        )
+        return {**decision.to_dict(), "garmin": garmin}
+
+    return _call(answer)
 
 
 @router.get("/followups/{followup_id}")
