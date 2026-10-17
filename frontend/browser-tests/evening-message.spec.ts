@@ -44,11 +44,11 @@ async function evening(page: Page, settings: Record<string, unknown> = {}) {
     if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh' } });
     if (path === '/api/notifications') return route.fulfill({ json: { items: [notice], unread: 1, next_offset: null } });
     if (path === '/api/coach/today') return route.fulfill({ json: { date: message.date, items: [], remaining: 0, briefing: null } });
-    if (path === '/api/coach/evening/7') return route.fulfill({ json: { ...message, answer, answered_at: answer ? '2026-10-16T18:22:00+00:00' : null } });
+    if (path === '/api/coach/evening/7') return route.fulfill({ json: { ...message, answer, answered_at: answer ? '2026-10-16T18:22:00+00:00' : null, answerable: !answer, journaled: Boolean(answer) } });
     if (path === '/api/coach/evening/7/answer') {
       answers.push(request.postDataJSON());
       answer = (request.postDataJSON() as { text: string }).text;
-      return route.fulfill({ json: { ...message, answer, answered_at: '2026-10-16T18:22:00+00:00', journal: 'written' } });
+      return route.fulfill({ json: { ...message, answer, answered_at: '2026-10-16T18:22:00+00:00', answerable: false, journaled: true, journal: 'written' } });
     }
     if (path === '/api/agent/memory') return route.fulfill({ json: { files: [] } });
     return route.fulfill({ json: [] });

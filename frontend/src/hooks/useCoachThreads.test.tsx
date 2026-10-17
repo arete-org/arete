@@ -533,8 +533,8 @@ it('opens a thirty-first thread without discarding any older draft', () => {
 
 it('answers an evening question once, without a model request, then chats as usual', async () => {
   const { coachApi } = await import('@/lib/coachToday');
-  const message = { id: 7, date: '2026-10-16', for_date: '2026-10-17', reasons: ['session'], text: 'Tempo demain. Comment sont tes jambes ?', question: 'Comment sont tes jambes ?', written_at: null, answered_at: null };
-  const answer = vi.spyOn(coachApi, 'answerEvening').mockResolvedValue({ ...message, answer: 'Lourdes.', answered_at: '2026-10-16T18:40:00+00:00', journal: 'written' });
+  const message = { id: 7, date: '2026-10-16', for_date: '2026-10-17', reasons: ['session'], text: 'Tempo demain. Comment sont tes jambes ?', question: 'Comment sont tes jambes ?', written_at: null, answered_at: null, answerable: true, journaled: false };
+  const answer = vi.spyOn(coachApi, 'answerEvening').mockResolvedValue({ ...message, answer: 'Lourdes.', answered_at: '2026-10-16T18:40:00+00:00', answerable: false, journaled: true, journal: 'written' });
   const { result } = renderHook(() => useCoachThreads(context), { wrapper });
   act(() => result.current.draft('Brouillon gardé'));
   act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 7 } })));
@@ -543,7 +543,7 @@ it('answers an evening question once, without a model request, then chats as usu
   act(() => result.current.draft('Lourdes.'));
   await act(async () => { result.current.send(); });
   await waitFor(() => expect(result.current.active.messages).toEqual([{ role: 'user', content: 'Lourdes.' }]));
-  expect(answer).toHaveBeenCalledExactlyOnceWith(7, 'Lourdes.');
+  expect(answer).toHaveBeenCalledExactlyOnceWith(7, 'Lourdes.', expect.any(AbortSignal));
   expect(runs).toHaveLength(0);
   expect(result.current.active.draft).toBe('');
   // The next message is a normal turn, with the message as context.
@@ -558,15 +558,70 @@ it('answers an evening question once, without a model request, then chats as usu
   expect(answer).toHaveBeenCalledTimes(1);
 });
 
-it('keeps the draft and says so when the evening answer is not saved', async () => {
+const eveningMessage = { id: 8, date: '2026-10-16', for_date: '2026-10-17', reasons: ['session'], text: 'Tempo demain. Ça va ?', question: 'Ça va ?', written_at: null, answer: null, answered_at: null, answerable: true, journaled: false };
+
+it('keeps the draft and hedges when the evening answer may be lost', async () => {
   const { coachApi } = await import('@/lib/coachToday');
-  vi.spyOn(coachApi, 'answerEvening').mockRejectedValue(new Error('Une réponse est déjà enregistrée.'));
+  vi.spyOn(coachApi, 'answerEvening').mockRejectedValue(new TypeError('Failed to fetch'));
   const { result } = renderHook(() => useCoachThreads(context), { wrapper });
   act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 8 } })));
   act(() => result.current.draft('Bien.'));
   await act(async () => { result.current.send(); });
-  await waitFor(() => expect(result.current.error).toBe('Réponse non enregistrée : Une réponse est déjà enregistrée.'));
+  await waitFor(() => expect(result.current.error).toBe('Réponse peut-être non enregistrée : vérifie ci-dessus.'));
   expect(result.current.active.messages).toEqual([]);
   expect(result.current.active.draft).toBe('Bien.');
   expect(result.current.runningId).toBeNull();
+  // The refetch shows the server kept it: resending costs nothing.
+  queryClient.setQueryData(['coachEvening', 8], { ...eveningMessage, answer: 'Bien.', answerable: false });
+  act(() => { result.current.send(); });
+  expect(result.current.active.messages).toEqual([{ role: 'user', content: 'Bien.' }]);
+  expect(runs).toHaveLength(0);
+});
+
+it('chats normally once the evening question is closed', async () => {
+  const { coachApi } = await import('@/lib/coachToday');
+  const { ApiError } = await import('@/lib/api');
+  const answer = vi.spyOn(coachApi, 'answerEvening').mockRejectedValue(new ApiError(409, '{"detail":"Cette question portait sur une journée passée."}'));
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 8 } })));
+  act(() => result.current.draft('On en parle ?'));
+  await act(async () => { result.current.send(); });
+  await waitFor(() => expect(result.current.error).toBe('Cette question est close : renvoie ton message pour en parler avec Chiron.'));
+  expect(result.current.active.draft).toBe('On en parle ?');
+  act(() => { result.current.send(); });
+  expect(runs).toHaveLength(1);
+  expect(runs[0].context.params).toEqual({ coach_ref: 'evening:8' });
+  expect(answer).toHaveBeenCalledTimes(1);
+  await act(async () => { runs[0].resolve(); });
+});
+
+it('a question the server already closed goes straight to Chiron', () => {
+  queryClient.setQueryData(['coachEvening', 8], { ...eveningMessage, answerable: false });
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 8 } })));
+  act(() => { result.current.send('Et demain ?'); });
+  expect(runs).toHaveLength(1);
+});
+
+it('refuses an over-long answer in French before any request', async () => {
+  const { coachApi } = await import('@/lib/coachToday');
+  const answer = vi.spyOn(coachApi, 'answerEvening');
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 8 } })));
+  act(() => { result.current.send('a'.repeat(1001)); });
+  expect(result.current.error).toBe('Ta réponse dépasse 1 000 caractères : raccourcis-la.');
+  expect(answer).not.toHaveBeenCalled();
+  expect(runs).toHaveLength(0);
+});
+
+it('sends the evening answer without attachments, explicitly', async () => {
+  const { coachApi } = await import('@/lib/coachToday');
+  const answer = vi.spyOn(coachApi, 'answerEvening');
+  const { result } = renderHook(() => useCoachThreads(context, true), { wrapper });
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 8 } })));
+  act(() => result.current.attachments(['doc-1']));
+  act(() => { result.current.send('Bien.'); });
+  expect(result.current.error).toBe('La réponse à la question du soir part sans pièce jointe : retire-les ou envoie-les ensuite.');
+  expect(answer).not.toHaveBeenCalled();
+  expect(runs).toHaveLength(0);
 });

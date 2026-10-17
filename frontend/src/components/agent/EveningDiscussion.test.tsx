@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { coachApi, type EveningMessage } from '@/lib/coachToday';
 import { EveningDiscussion } from './EveningDiscussion';
 
-const message: EveningMessage = { id: 7, date: '2026-10-16', for_date: '2026-10-17', reasons: ['session'], text: 'Demain, 50 min de tempo. Comment sont tes jambes ?', question: 'Comment sont tes jambes ?', written_at: '2026-10-16T18:05:00+00:00', answer: null, answered_at: null };
+const message: EveningMessage = { id: 7, date: '2026-10-16', for_date: '2026-10-17', reasons: ['session'], text: 'Demain, 50 min de tempo. Comment sont tes jambes ?', question: 'Comment sont tes jambes ?', written_at: '2026-10-16T18:05:00+00:00', answer: null, answered_at: null, answerable: true, journaled: false };
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 function mount() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -21,8 +21,19 @@ it('shows the message and its question as context, and how to answer', async () 
   expect(screen.queryByRole('textbox')).toBeNull(); // the shared composer answers
 });
 it('says where an answer went once it is kept', async () => {
-  vi.spyOn(coachApi, 'evening').mockResolvedValue({ ...message, answer: 'Lourdes.', answered_at: '2026-10-16T18:40:00+00:00' });
+  vi.spyOn(coachApi, 'evening').mockResolvedValue({ ...message, answer: 'Lourdes.', answered_at: '2026-10-16T18:40:00+00:00', answerable: false, journaled: true });
   mount();
   await screen.findByText('Comment sont tes jambes ?');
   expect(screen.getByRole('status').textContent).toContain('notée dans le journal de Chiron : « Lourdes. »');
+});
+it('is honest about an answer not filed yet and a closed question', async () => {
+  const read = vi.spyOn(coachApi, 'evening').mockResolvedValue({ ...message, answer: 'Lourdes.', answered_at: '2026-10-16T18:40:00+00:00', answerable: false, journaled: false });
+  const first = mount();
+  await screen.findByText('Comment sont tes jambes ?');
+  expect(screen.getByRole('status').textContent).toContain('pas encore dans le journal de Chiron');
+  first.unmount();
+  read.mockResolvedValue({ ...message, answerable: false });
+  mount();
+  await screen.findByText('Comment sont tes jambes ?');
+  expect(screen.getByRole('status').textContent).toBe('Cette question est close : écris à Chiron si tu veux en parler.');
 });
