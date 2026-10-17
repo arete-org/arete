@@ -85,12 +85,19 @@ jobs:
       - run: node --test scripts/openwiki/transport.test.mjs
         if: steps.select.outputs.transport == 'true'
 
-  test:
+  # The full suite took 14m49s in one job on 2026-10-17 (2 vCPU, 2 workers):
+  # three shards of whole files, balanced on scripts/ci/test_durations.json.
+  test-shard:
+    name: test (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    # The full suite took 14m49s on 2026-10-17; 15 left no margin.
     timeout-minutes: 25
     needs: lint
     if: needs.lint.outputs.backend == 'true'
+    strategy:
+      # Every shard reports: one failure must not hide another's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
@@ -106,7 +113,24 @@ jobs:
         with:
           name: ci-plan
           path: .context
-      - run: python3 scripts/ci/check_changed.py --plan .context/ci-plan.json --run --tests-only
+      - run: >-
+          python3 scripts/ci/check_changed.py --plan .context/ci-plan.json --run
+          --tests-only --shard ${{ matrix.shard }}/3
+
+  # The required check: green only when every shard passed, skipped with them
+  # when the backend is not selected.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [lint, test-shard]
+    if: ${{ !cancelled() && needs.lint.outputs.backend == 'true' }}
+    steps:
+      - name: Every shard passed
+        env:
+          SHARDS: ${{ needs.test-shard.result }}
+        run: |
+          echo "Shards: $SHARDS"
+          [[ "$SHARDS" == success ]]
 
   typecheck:
     runs-on: ubuntu-latest
