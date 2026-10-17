@@ -8,6 +8,7 @@ const DECISION_TONE: Record<PlanDecisionKind, string> = {
   replace_easy: 'text-warning-orange border-warning-orange/40',
   rest: 'text-danger-red border-danger-red/40',
   move: 'text-neon-purple border-neon-purple/40',
+  drop: 'text-text-secondary border-text-muted/40',
 };
 
 /** What the morning adaptation (or the athlete's « Modifier ») did to a planned session; struck through once reverted. */

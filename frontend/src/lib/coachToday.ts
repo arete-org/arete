@@ -44,8 +44,9 @@ export const coachTodayKey = ['coachToday'] as const;
 export const coachApi = {
   today: () => fetchAPI<CoachToday>('/coach/today'),
   prepare: () => fetchAPI<CoachToday>('/coach/prepare', { method: 'POST' }),
+  /** `garmin`: what Garmin did for this session after an applied answer (absent from an older server). */
   proposal: (id: number, revision: number, action: 'apply' | 'keep' | 'snooze', group: SeenRevision[] = []) =>
-    fetchAPI<Proposal>(`/coach/proposals/${id}/response`, { method: 'POST', body: JSON.stringify({ revision, action, group }) }),
+    fetchAPI<Proposal & { garmin?: import('@/types').RenegotiationGarmin }>(`/coach/proposals/${id}/response`, { method: 'POST', body: JSON.stringify({ revision, action, group }) }),
   followup: (id: number) => fetchAPI<Followup>(`/coach/followups/${id}`),
   respond: (id: number, revision: number, action: 'answer' | 'skip' | 'snooze', rpe?: number, notes?: string) =>
     fetchAPI<Followup>(`/coach/followups/${id}/response`, { method: 'POST', body: JSON.stringify({ revision, action, rpe, notes }) }),

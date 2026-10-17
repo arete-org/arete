@@ -84,8 +84,8 @@ export interface PlannedSession {
 // DAILY ADAPTATION          //
 // ========================= //
 
-/** `move` comes only from the athlete's « Modifier » (renegotiation). */
-export type PlanDecisionKind = "keep" | "ease" | "replace_easy" | "rest" | "move";
+/** `move` comes from « Modifier » or a missed session's replanning, `drop` from the latter only. */
+export type PlanDecisionKind = "keep" | "ease" | "replace_easy" | "rest" | "move" | "drop";
 
 /** The morning rule engine's verdict on one planned session (GET /plan/today). */
 export interface PlanDecision {
@@ -96,8 +96,9 @@ export interface PlanDecision {
   /** French sentence with the figure that justifies the decision. */
   reason: string;
   readiness_score: number | null;
-  /** `athlete`: the athlete's own choice (« Modifier »), no readiness behind it. */
-  readiness_source: "garmin_training" | "garmin" | "model" | "athlete" | null;
+  /** `athlete`: the athlete's own choice (« Modifier »); `missed`: the evening's
+   *  replanning of a missed session. No readiness behind either. */
+  readiness_source: "garmin_training" | "garmin" | "model" | "athlete" | "missed" | null;
   acwr: number | null;
   original: Record<string, unknown> | null;
   adapted: Record<string, unknown> | null;

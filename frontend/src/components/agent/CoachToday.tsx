@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { RenegotiationOutcome } from '@/components/dashboard/RenegotiationOutcome';
 import { Button, Panel } from '@/components/ui';
 import { coachApi, coachTodayKey, discussWithCoach, type Followup, type Proposal, type SeenRevision } from '@/lib/coachToday';
 import { invalidateAfterSession } from '@/lib/queryKeys';
+import { dayLabel, type DayOutcome } from '@/lib/renegotiation';
 import { readableError } from '@/lib/utils';
 
 function description(value: Record<string, unknown> | null) {
@@ -12,19 +14,59 @@ function description(value: Record<string, unknown> | null) {
   return [label[String(value.session_type)] ?? value.description ?? value.session_type, value.target_duration_min ? `${value.target_duration_min} min` : '', value.target_hr_zone].filter(Boolean).join(' · ');
 }
 
+const movedTo = (proposal: Proposal) =>
+  typeof proposal.adapted?.date === 'string' ? proposal.adapted.date : null;
+
 function outcome(proposal: Proposal) {
-  return proposal.decision === 'rest' ? 'Repos' : description({ ...proposal.original, ...proposal.adapted });
+  if (proposal.decision === 'rest') return 'Repos';
+  if (proposal.decision === 'drop') return 'Laissée de côté';
+  const to = movedTo(proposal);
+  if (proposal.decision === 'move' && to) return `Déplacée à ${dayLabel(to)}`;
+  return description({ ...proposal.original, ...proposal.adapted });
+}
+
+/** What the panel says once the card is answered, Garmin's part apart. */
+function answered(group: Proposal[], choice: 'apply' | 'keep' | 'snooze', garmin: DayOutcome['garmin'] | undefined): DayOutcome | null {
+  const missed = group.every(p => p.readiness_source === 'missed');
+  const lead = group[0];
+  if (choice === 'snooze') return null;
+  if (choice === 'keep') return { headline: missed ? 'C’est noté : rien ne change.' : 'C’est noté : ta séance reste prévue.', garmin: 'unchanged', withdraw: false };
+  const to = movedTo(lead);
+  const headline = group.length > 1
+    ? 'Proposition appliquée.'
+    : lead.decision === 'move' && to
+      ? `Séance déplacée à ${dayLabel(to)}.`
+      : lead.decision === 'drop'
+        ? 'Séance laissée de côté.'
+        : 'Proposition appliquée.';
+  return { headline, garmin: garmin ?? 'unchanged', withdraw: lead.decision === 'drop' || lead.decision === 'rest' };
 }
 
 /** One card for the day: the athlete answers for every open proposal (`members`) at once. */
-export function ProposalCard({ proposal, group, members }: { proposal: Proposal; group: Proposal[]; members: SeenRevision[] }) {
+export function ProposalCard({
+  proposal,
+  group,
+  members,
+  onAnswered,
+}: {
+  proposal: Proposal;
+  group: Proposal[];
+  members: SeenRevision[];
+  /** The answer is written: the panel reports it (the card leaves). */
+  onAnswered?: (outcome: DayOutcome | null) => void;
+}) {
   const client = useQueryClient();
   const [uncertain, setUncertain] = useState(false);
   const others = members.filter(m => m.id !== proposal.id);
+  // The evening's replanning of a missed session (ARE-61): its own words, no « Pas maintenant ».
+  const missed = group.every(p => p.readiness_source === 'missed');
   const action = useMutation({
     mutationFn: (choice: 'apply' | 'keep' | 'snooze') => coachApi.proposal(proposal.id, proposal.revision, choice, others),
     // The dashboard's refresh brings the card back (invalidateAfterSession).
-    onSuccess: () => invalidateAfterSession(client),
+    onSuccess: (result, choice) => {
+      onAnswered?.(answered(group, choice, result.garmin));
+      invalidateAfterSession(client);
+    },
     onError: () => setUncertain(true),
   });
   // A read of its own: the card's query may be waiting for the dashboard.
@@ -41,8 +83,11 @@ export function ProposalCard({ proposal, group, members }: { proposal: Proposal;
   const discussion = group.some(p => p.state === 'discussion');
   // A changed session only blocks applying; keeping or postponing writes no session.
   const disabled = action.isPending || uncertain;
+  const applyLabel = missed && group.length === 1
+    ? proposal.decision === 'move' ? 'Déplacer' : 'Laisser de côté'
+    : 'Appliquer';
   return <article className="space-y-3 rounded-xl border border-neon-cyan/25 bg-neon-cyan/5 p-4">
-    <p className="text-xs uppercase tracking-wide text-neon-cyan">{stale ? 'Proposition périmée' : 'Proposition'} · {proposal.date}</p>
+    <p className="text-xs uppercase tracking-wide text-neon-cyan">{stale ? 'Proposition périmée' : missed ? 'Séance manquée' : 'Proposition'} · {proposal.date}</p>
     {group.length > 1 ? <>
       <p className="font-semibold">{discussion ? 'Examiner les étapes ensemble' : 'Proposé pour la journée'}</p>
       <ul className="space-y-1 text-sm">{group.map(p => <li key={p.id}>{description(p.original)} → {outcome(p)}</li>)}</ul>
@@ -51,12 +96,12 @@ export function ProposalCard({ proposal, group, members }: { proposal: Proposal;
       <p className="font-semibold">{discussion ? 'Examiner les étapes ensemble' : `Proposé : ${outcome(proposal)}`}</p>
     </>}
     <p className="text-sm text-text-secondary">{proposal.reason}</p>
-    <p className="text-xs text-text-muted">{proposal.readiness_measured_on ? `Mesure de récupération du ${proposal.readiness_measured_on}` : 'Récupération estimée par la charge'} · Rien n’a encore changé.</p>
+    <p className="text-xs text-text-muted">{missed ? 'Aucune activité enregistrée aujourd’hui' : proposal.readiness_measured_on ? `Mesure de récupération du ${proposal.readiness_measured_on}` : 'Récupération estimée par la charge'} · Rien n’a encore changé.</p>
     <div className="flex flex-wrap gap-2">
-      {!discussion && <Button disabled={disabled || stale} onClick={() => action.mutate('apply')}>Appliquer</Button>}
-      <Button variant="ghost" disabled={disabled} onClick={() => action.mutate('keep')}>Garder ma séance</Button>
+      {!discussion && <Button disabled={disabled || stale} onClick={() => action.mutate('apply')}>{applyLabel}</Button>}
+      <Button variant="ghost" disabled={disabled} onClick={() => action.mutate('keep')}>{missed ? 'Non merci' : 'Garder ma séance'}</Button>
       <Button variant="ghost" onClick={() => discussWithCoach({ kind: 'proposal', id: proposal.id })}>En parler</Button>
-      <Button variant="ghost" disabled={disabled} onClick={() => action.mutate('snooze')}>Pas maintenant</Button>
+      {!missed && <Button variant="ghost" disabled={disabled} onClick={() => action.mutate('snooze')}>Pas maintenant</Button>}
     </div>
     {action.isPending && <p role="status">Enregistrement…</p>}
     {action.error && <p role="alert" className="text-sm text-danger-red">{readableError(action.error)} Le résultat doit être vérifié avant une nouvelle action.</p>}
@@ -107,11 +152,14 @@ export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { ena
   const client = useQueryClient();
   const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled, refetchOnWindowFocus: refetchOnFocus });
   const prepare = useMutation({ mutationFn: coachApi.prepare, onSuccess: data => client.setQueryData(coachTodayKey, data) });
+  // The last answer, which takes the focus as its card leaves.
+  const [outcome, setOutcome] = useState<DayOutcome | null>(null);
   return <Panel title="Avec Chiron aujourd’hui">
     <div className="space-y-3">
+      {outcome && <RenegotiationOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />}
       {query.isPending && <p role="status">Chargement du suivi…</p>}
       {(query.error || prepare.error) && <p role="alert" className="text-sm text-danger-red">{readableError(query.error ?? prepare.error)}</p>}
-      {query.data?.items.map(item => item.kind === 'proposal' ? <ProposalCard key={`p:${item.record.id}`} proposal={item.record} group={item.group} members={item.members} /> : <FollowupCard key={`f:${item.record.id}`} followup={item.record} />)}
+      {query.data?.items.map(item => item.kind === 'proposal' ? <ProposalCard key={`p:${item.record.id}`} proposal={item.record} group={item.group} members={item.members} onAnswered={setOutcome} /> : <FollowupCard key={`f:${item.record.id}`} followup={item.record} />)}
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button variant="outline" size="sm" aria-describedby="coach-prepare-hint" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>
