@@ -7,7 +7,8 @@ from pathlib import Path
 
 from select_checks import build_plan, changed_paths, git_output, render_summary
 
-CHECK_TIMEOUT_SECONDS = 900
+# Below the test job's 25-minute timeout (ci.yml), leaving room for setup.
+CHECK_TIMEOUT_SECONDS = 1320
 
 
 def run_plan(plan: dict, *, tests_only: bool = False) -> None:

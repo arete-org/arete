@@ -132,7 +132,7 @@ def indirect(resource): pass
         self.assertIn("tests/test_other.py", command)
         self.assertNotIn("tests/", command)
         self.assertEqual(command[command.index("-n") + 1], "2")
-        self.assertEqual(run.call_args.kwargs["timeout"], 900)
+        self.assertEqual(run.call_args.kwargs["timeout"], 1320)
 
     def test_empty_backend_plan_never_runs_all_tests_implicitly(self):
         with self.assertRaises(ValueError):
