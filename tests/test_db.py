@@ -142,9 +142,10 @@ def test_an_existing_home_is_kept(tmp_path, monkeypatch):
     assert os.environ["HOME"] == str(tmp_path)
 
 
-def test_preview_cannot_open_production_motherduck(monkeypatch):
+@pytest.mark.parametrize("target", ["md:arete", "md:arete_v2", "md:"])
+def test_preview_cannot_open_production_motherduck(monkeypatch, target):
     monkeypatch.setenv("VERCEL_ENV", "preview")
-    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setenv("ARETE_DB", target)
     with patch.object(db, "_remote_cursor") as remote_cursor:
         with pytest.raises(RuntimeError, match="separate ARETE_DB"):
             db.connect()
@@ -153,6 +154,6 @@ def test_preview_cannot_open_production_motherduck(monkeypatch):
 
 def test_preview_can_open_a_separate_database(monkeypatch, opened):
     monkeypatch.setenv("VERCEL_ENV", "preview")
-    monkeypatch.setenv("ARETE_DB", "md:arete_preview")
+    monkeypatch.setenv("ARETE_DB", "md:arete_preview_v2")
     db.connect()
-    opened[0].cursor.return_value.execute.assert_any_call("USE arete_preview")
+    opened[0].cursor.return_value.execute.assert_any_call("USE arete_preview_v2")

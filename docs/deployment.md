@@ -7,9 +7,9 @@ collaborator needs. The README stays about the product; this is the runbook.
 
 | Environment | URL | Database | Who deploys | Protected by |
 |---|---|---|---|---|
-| Production | https://arete-arete15.vercel.app (also `arete-two-woad`) | MotherDuck `md:arete` | **Deploy production** workflow, run by hand by anyone with write access | Clerk sign-in (`ARETE_AUTH=clerk`); the Vercel protection is off on production |
-| Preview of `main` | https://arete-main-arete15.vercel.app | MotherDuck `md:arete_preview` | **Deploy preview** workflow, after green CI on `main` when deployable inputs changed | Vercel Authentication: a Vercel login, or the bypass key |
-| PR preview | `https://arete-<hash>-arete15.vercel.app`, linked in a PR comment | `md:arete_preview` (shared with the main preview) | CI `preview` job, for a PR labelled `preview` once its checks pass | Vercel Authentication, same key |
+| Production | https://arete-arete15.vercel.app (also `arete-two-woad`) | MotherDuck `md:arete_v2` | **Deploy production** workflow, run by hand by anyone with write access | Clerk sign-in (`ARETE_AUTH=clerk`); the Vercel protection is off on production |
+| Preview of `main` | https://arete-main-arete15.vercel.app | MotherDuck `md:arete_preview_v2` | **Deploy preview** workflow, after green CI on `main` when deployable inputs changed | Vercel Authentication: a Vercel login, or the bypass key |
+| PR preview | `https://arete-<hash>-arete15.vercel.app`, linked in a PR comment | `md:arete_preview_v2` (shared with the main preview) | CI `preview` job, for a PR labelled `preview` once its checks pass | Vercel Authentication, same key |
 | Local | `make dev`, `make docker` | a DuckDB file under `data/`, or what `ARETE_DB` says | — | nothing |
 
 One Vercel project, two services (`vercel.json`): the FastAPI backend behind
@@ -26,7 +26,16 @@ preview behind.
 
 Environment variables live in the Vercel project, per environment. `ARETE_DB`
 differs between Production and Preview, and `dataio/db.py` refuses to open
-`md:arete` from a preview deployment. Names are listed in `.env.example`.
+from a preview deployment any MotherDuck database whose name lacks `preview`.
+Names are listed in `.env.example`.
+
+The `_v2` databases are physical copies (`COPY FROM DATABASE`) made on
+17 October 2026. The originals, `arete` and `arete_preview`, were created during
+MotherDuck's trial with 7-day snapshot retention, which zero-copy clones inherit
+and the current plan refuses ("7 snapshot retention days invalid for plan
+free"): the boot's backup clone failed before every migration. The copies have
+the plan's retention. MotherDuck cannot rename a database, so `ARETE_DB` names
+the copies; the originals stay untouched as backups.
 
 ## Sign-in in the browser
 
@@ -159,7 +168,7 @@ the emoji is textual feedback, not an undocumented LangSmith UI reaction endpoin
    URL only when its verified `ci-plan` includes a deployable change. README,
    documentation, tests and CI tooling alone keep the existing healthy preview.
    Application/backend changes still run the full backend suite on `main`.
-   The deployment's first request migrates `arete_preview`; the
+   The deployment's first request migrates `arete_preview_v2`; the
    workflow checks `/api/health` and moves the fixed URL only onto a healthy
    build. A failed migration leaves the URL on the previous build and the
    workflow red. Failed health checks retain the JSON response and fetch the
@@ -215,8 +224,8 @@ a current database costs one `SELECT`.
   numbering. Never renumber a migration that any database has recorded: take a
   fresh number. Anything added to the DDL also needs a migration, since a
   current database skips the DDL.
-- **Preview before production.** A migration reaches `arete_preview` with the
-  main preview and `arete` only with the next production deploy; the gate above
+- **Preview before production.** A migration reaches `arete_preview_v2` with the
+  main preview and `arete_v2` only with the next production deploy; the gate above
   enforces the order.
 - **Two instances at once.** Migrations are idempotent and a version recorded
   twice is a no-op, so two cold instances racing on the same deployment do not
@@ -315,5 +324,5 @@ abandoned run is never replayed automatically, and human decisions remain durabl
 
 `make dev` runs the API and Vite on a local DuckDB file. `make docker` builds
 the production-like stack from `docker-compose.yml`; point its `ARETE_DB` at a
-local file or at `md:arete_preview`, never at `md:arete`: a branch's boot would
+local file or at `md:arete_preview_v2`, never at `md:arete_v2`: a branch's boot would
 migrate the production database from a laptop.
