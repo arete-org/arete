@@ -20,6 +20,11 @@ _COLUMNS = (
 )
 
 
+#: ``readiness_source`` of a decision the athlete chose (« Modifier », ARE-61):
+#: no readiness made it, and the RPG's prescribed rests leave it out.
+ATHLETE_CHOICE = "athlete"
+
+
 class AlreadyDecided(Exception):
     """That session already has a decision for that day."""
 
@@ -117,18 +122,26 @@ class PlanDecisionRepository:
         state: str = "pending",
         session_revision: int | None = None,
         readiness_measured_on: Date | None = None,
+        con: duckdb.DuckDBPyConnection | None = None,
     ) -> PlanDecision:
-        """Claim the day's decision for that session; raises ``AlreadyDecided``."""
+        """Claim the day's decision for that session; raises ``AlreadyDecided``.
+
+        ``state="applied"`` stamps ``applied_at`` (the athlete's own choice,
+        written with the session). ``con`` joins the caller's transaction.
+        """
         user_id = resolve_athlete_id(user_id)
-        con = connect()
+        own = con is None
+        con = con or connect()
         try:
             row = con.execute(
                 f"""
                 INSERT INTO app.plan_decisions
                     (user_id, date, planned_session_id, decision, reason,
                      readiness_score, readiness_source, acwr, original_json,
-                     adapted_json, state, session_revision, readiness_measured_on)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     adapted_json, state, session_revision, readiness_measured_on,
+                     applied_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        CASE WHEN ? = 'applied' THEN now() END)
                 RETURNING {_COLUMNS}
                 """,
                 [
@@ -145,15 +158,65 @@ class PlanDecisionRepository:
                     state,
                     session_revision,
                     readiness_measured_on,
+                    state,
                 ],
             ).fetchone()
         except duckdb.ConstraintException as e:
             raise AlreadyDecided(f"session {planned_session_id} on {day}") from e
         finally:
-            con.close()
+            if own:
+                con.close()
         if row is None:  # pragma: no cover - RETURNING always yields the row
             raise RuntimeError("Failed to insert plan decision")
         return _from_row(row)
+
+    def reapply(
+        self,
+        decision_id: int,
+        revision: int,
+        *,
+        decision: str,
+        reason: str,
+        original: dict[str, Any],
+        adapted: dict[str, Any] | None,
+        session_revision: int,
+        con: duckdb.DuckDBPyConnection,
+    ) -> PlanDecision | None:
+        """Write the athlete's choice over a closed decision of the day.
+
+        The day keeps one row per session (the unique key): a declined or
+        reverted decision, or a proposal snoozed past today, is replaced in
+        place, by compare-and-set on the revision the athlete's page read
+        (the caller keeps what it replaced in ``original["replaced"]``).
+        None when that row changed meanwhile or is still open.
+        """
+        row = con.execute(
+            f"""
+            UPDATE app.plan_decisions SET
+                decision = ?, reason = ?, readiness_score = NULL,
+                readiness_source = ?, acwr = NULL, original_json = ?,
+                adapted_json = ?, applied_at = now(), reverted_at = NULL,
+                state = 'applied', revision = revision + 1,
+                session_revision = ?, readiness_measured_on = NULL,
+                snoozed_until = NULL
+            WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL
+              AND id = ? AND revision = ?
+              AND (state = 'dismissed' OR reverted_at IS NOT NULL
+                   OR (state IN ('pending', 'discussion') AND snoozed_until > date))
+            RETURNING {_COLUMNS}
+            """,
+            [
+                decision,
+                reason,
+                ATHLETE_CHOICE,
+                json.dumps(original, ensure_ascii=False, default=str),
+                json.dumps(adapted, ensure_ascii=False) if adapted else None,
+                session_revision,
+                decision_id,
+                revision,
+            ],
+        ).fetchone()
+        return _from_row(row) if row else None
 
     def get(self, decision_id: int) -> PlanDecision | None:
         con = connect()

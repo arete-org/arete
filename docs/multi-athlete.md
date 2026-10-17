@@ -106,9 +106,10 @@ against a migrated database containing multiple athletes.
 
 Production has run on these migrations since 10 October 2026: the cutover above
 was performed once, and accounts outside the owner's now receive their own
-athlete. Previews use the separate database `md:arete_preview`; a preview with
-`VERCEL_ENV=preview` and `ARETE_DB=md:arete` still refuses database access before
-connecting, including initialization. Production ships through the repository's
+athlete. Previews use the separate database `md:arete_preview_v2`; a preview with
+`VERCEL_ENV=preview` and an `ARETE_DB` whose name lacks `preview` (production's
+`md:arete_v2`, say) still refuses database access before connecting, including
+initialization. Production ships through the repository's
 manual deployment workflow, after the main preview has served the same commit
 (`docs/deployment.md`).
 

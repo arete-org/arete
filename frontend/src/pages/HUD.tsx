@@ -5,17 +5,22 @@ import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, Dumbbell, TrendingUp, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { CheckinCard } from '@/components/dashboard/CheckinCard';
+import { MovedSession, RenegotiationOutcome } from '@/components/dashboard/RenegotiationOutcome';
+import { RenegotiateMenu } from '@/components/dashboard/RenegotiateMenu';
+import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
 import { WeekReviewEntry } from '@/components/dashboard/WeekReviewEntry';
 import { Panel, Skeleton } from '@/components/ui';
 import { planApi, settingsApi } from '@/lib/api';
 import { fetchDashboard, type DashboardData } from '@/lib/dashboard';
 import { exportApi } from '@/lib/documents';
 import { readWorkouts, watchLine, workoutsKey, type WorkoutView } from '@/lib/workouts';
+import { renegotiationOutcome, revertOutcome, type DayOutcome, type Renegotiation } from '@/lib/renegotiation';
+import { readableError } from '@/lib/utils';
 import { useDailyTip } from '@/lib/dailyTip';
 import { formatDecimal, formatHoursMinutes, weeksAtGoalText } from '@/lib/fr';
 import { cn } from '@/lib/utils';
@@ -155,13 +160,28 @@ function TodaySession({
   row,
   decision,
   view,
+  onRenegotiated,
+  onReverted,
 }: {
   row: DayLink['planned'][number];
   decision: PlanDecision | null;
   view: WorkoutView | undefined;
+  onRenegotiated: (done: Renegotiation) => void;
+  onReverted: (outcome: DayOutcome) => void;
 }) {
   const queryClient = useQueryClient();
   const { session, realised, state } = row;
+  // Still to do and not already adjusted today (« Rétablir » first): the athlete renegotiates it.
+  const renegotiable =
+    !realised && state === 'pending' && session.session_type !== 'race' && !(decision && !decision.reverted_at && decision.decision !== 'keep');
+  // A decision read from another tab removes the open menu: the focus it held stays on the card.
+  const anchor = useRef<HTMLDivElement>(null);
+  const menuFocused = useRef(false);
+  useEffect(() => {
+    if (renegotiable || !menuFocused.current) return;
+    menuFocused.current = false;
+    if (!document.activeElement || document.activeElement === document.body) anchor.current?.focus();
+  }, [renegotiable]);
 
   const skipped = session.status === 'skipped';
   const push = useMutation({
@@ -173,8 +193,11 @@ function TodaySession({
   const revert = useMutation({
     mutationFn: (decisionId: number) => planApi.revert(decisionId),
     // The reverted session is no longer the copy sent: forget the local answer.
-    onSuccess: () => push.reset(),
-    // 409 means it was already reverted elsewhere: a refetch shows it.
+    onSuccess: (reverted) => {
+      push.reset();
+      onReverted(revertOutcome(reverted.garmin, 'Séance prévue rétablie.'));
+    },
+    // 409: reverted elsewhere, or changed since (its message says so); a refetch shows it.
     onSettled: () => invalidateAfterSession(queryClient),
   });
 
@@ -189,6 +212,13 @@ function TodaySession({
       : undefined;
 
   return (
+    <div
+      ref={anchor}
+      tabIndex={-1}
+      role="group"
+      aria-label={`Séance du jour : ${SESSION_TYPE_LABEL[session.session_type] ?? session.session_type}`}
+      className="focus:outline-none"
+    >
     <SessionCard
       planned={session}
       realised={realised}
@@ -200,7 +230,24 @@ function TodaySession({
     >
       {/* Cardio only: strength rows carry negative ids and their own RPE. */}
       {realised && realised.id > 0 && realised.rpe == null && <RpePicker sessionId={realised.id} className="mt-2" />}
+      {revert.error && (
+        <p role="alert" className="mt-1 text-[11px] font-sans text-danger-red">
+          {readableError(revert.error)}
+        </p>
+      )}
+      {renegotiable && (
+        <div
+          onFocus={() => (menuFocused.current = true)}
+          // Removal blurs with no target: the focus was still in the menu.
+          onBlur={(event) => {
+            if (event.relatedTarget) menuFocused.current = false;
+          }}
+        >
+          <RenegotiateMenu session={session} onDone={onRenegotiated} />
+        </div>
+      )}
     </SessionCard>
+    </div>
   );
 }
 
@@ -251,6 +298,16 @@ export function DashboardPage() {
   const { data: planToday } = useDashboard((d) => d.plan_today);
   const decisionFor = (sessionId: number) =>
     planToday?.decisions.find((d) => d.planned_session_id === sessionId && d.applied_at) ?? null;
+  // A session moved away today leaves its decision here, with its « Rétablir ».
+  const moved = (planToday?.decisions ?? []).filter(
+    (d) =>
+      d.decision === 'move' &&
+      d.applied_at &&
+      !d.reverted_at &&
+      !todayLink.planned.some((row) => row.session.id === d.planned_session_id),
+  );
+  // The last « Modifier » answer, shown above the day's sessions until dismissed.
+  const [outcome, setOutcome] = useState<DayOutcome | null>(null);
 
 
   const {
@@ -366,14 +423,24 @@ export function DashboardPage() {
                 <Skeleton label="Chargement de la séance du jour" />
               ) : boardFailed ? (
                 <Unavailable what="Séance du jour" retry={() => void retryBoard()} />
-              ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 ? (
+              ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 || moved.length > 0 ? (
                 <div className="space-y-2">
+                  {outcome && <RenegotiationOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />}
                   {todayLink.planned.map((row) => (
                     <TodaySession
                       key={row.session.id}
                       row={row}
                       decision={decisionFor(row.session.id)}
                       view={viewFor(row.session.id)}
+                      onRenegotiated={(done) => setOutcome(renegotiationOutcome(done))}
+                      onReverted={setOutcome}
+                    />
+                  ))}
+                  {moved.map((decision) => (
+                    <MovedSession
+                      key={decision.id}
+                      decision={decision}
+                      onReverted={(garmin) => setOutcome(revertOutcome(garmin))}
                     />
                   ))}
                   {todayLink.offPlan.map((a) => (

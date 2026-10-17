@@ -1,6 +1,6 @@
 name: Deploy preview
 
-# main ships to the Preview environment (its own database, `md:arete_preview`)
+# main ships to the Preview environment (its own database, `md:arete_preview_v2`)
 # on a fixed URL once CI is green, so merged work runs somewhere before a batch
 # goes to production. It is its own workflow so that a failed deployment never
 # shows as a failed CI run, and so that "Deploy production" can ask one thing:
@@ -131,7 +131,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           SHA: ${{ github.event.workflow_run.head_sha }}
-      # The first request migrates `arete_preview`; /health answers 503 while a
+      # The first request migrates `arete_preview_v2`; /health answers 503 while a
       # migration is pending or failed, so a broken migration stops here, on the
       # preview database: the fixed URL keeps serving the previous build and this
       # run stays red until it is fixed.

@@ -48,9 +48,16 @@ def remote_database() -> str:
 
 
 def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
-    if os.getenv("VERCEL_ENV") == "preview" and config.db_target == "md:arete":
+    # Production's database has changed name (md:arete, then md:arete_v2): a
+    # preview opens only a MotherDuck database named for previews.
+    if (
+        os.getenv("VERCEL_ENV") == "preview"
+        and config.is_remote_db
+        and "preview" not in remote_database()
+    ):
         raise RuntimeError(
-            "Preview requires a separate ARETE_DB; production md:arete is forbidden"
+            "Preview requires a separate ARETE_DB named for previews;"
+            f" {config.db_target} is forbidden"
         )
     if config.is_remote_db:
         con = _remote_cursor()

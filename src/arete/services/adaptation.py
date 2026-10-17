@@ -51,6 +51,8 @@ class Decision(StrEnum):
     EASE = "ease"
     REPLACE_EASY = "replace_easy"
     REST = "rest"
+    #: Only the athlete's renegotiation moves a session (``renegotiation``).
+    MOVE = "move"
 
 
 @dataclass(frozen=True)

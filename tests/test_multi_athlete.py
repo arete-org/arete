@@ -10,7 +10,7 @@ import pytest
 from arete.config import config
 from arete.dataio.db import connect
 from arete.dataio.init_duckdb import main as init_schema
-from arete.garmin.models import PlannedSession, SessionType
+from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services.athlete_scope import athlete_scope, current_athlete_id
 from arete.services.users import upsert_user
@@ -1143,3 +1143,27 @@ def test_concurrent_memory_decisions_only_see_their_athletes(athletes):
                 f"Private {user.athlete_id}",
                 f"New {user.athlete_id}",
             }
+
+
+def test_another_athletes_session_cannot_be_renegotiated(athletes, monkeypatch):
+    from arete.services import renegotiation
+    from arete.services.coach_today import reference
+
+    first, second = athletes
+    day = date(2026, 10, 10)
+    monkeypatch.setattr(renegotiation, "athlete_today", lambda: day)
+    with athlete_scope(first.athlete_id):
+        session_id = GarminRepository().create_planned_session(planned("first's"))
+        version = renegotiation.options(session_id)["version"]
+    with athlete_scope(second.athlete_id):
+        for read in (
+            lambda: renegotiation.options(session_id),
+            lambda: renegotiation.apply(session_id, "pain", "rest", version),
+            lambda: reference(f"session:{session_id}"),
+        ):
+            with pytest.raises(LookupError):
+                read()
+    with athlete_scope(first.athlete_id):
+        session = GarminRepository().get_planned_session(session_id)
+        assert session is not None and session.status == SessionStatus.PENDING
+        assert renegotiation.options(session_id)["version"] == version

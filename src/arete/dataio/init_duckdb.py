@@ -363,10 +363,13 @@ CREATE TABLE IF NOT EXISTS app.plan_decisions (
     user_id            INTEGER NOT NULL DEFAULT 1,
     date               DATE NOT NULL,
     planned_session_id INTEGER NOT NULL,
-    decision           VARCHAR NOT NULL,   -- 'keep', 'ease', 'replace_easy', 'rest'
+    decision           VARCHAR NOT NULL,   -- 'keep', 'ease', 'replace_easy', 'rest', 'move'
     reason             VARCHAR NOT NULL,
     readiness_score    DOUBLE,
-    readiness_source   VARCHAR,            -- 'garmin_training', 'garmin', 'model'
+    -- 'garmin_training', 'garmin', 'model', or 'athlete': also the origin,
+    -- for a choice the athlete made with « Modifier » (ARE-61) and no
+    -- readiness. A dedicated origin column would need a migration.
+    readiness_source   VARCHAR,
     acwr               DOUBLE,
     original_json      VARCHAR,
     adapted_json       VARCHAR,

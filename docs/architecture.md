@@ -755,6 +755,59 @@ le coach » attaches the review to the active browser thread as its
 `coach_ref` (`review:<id>`), which the context builder resolves by id: the
 browser sends the identifier only and the composer stays as it was.
 
+« Modifier » on today's session (ARE-61, `services/renegotiation.py`)
+renegotiates it in two taps, with no model request: the menu opens on
+`GET /plan/today/sessions/{id}/options` (no dashboard request is added), which
+lists each fixed reason with the options the rules compute, and a choice
+(`POST …/renegotiate`) writes it. The coaching defaults, for the owner to
+validate: « Je suis cuit » makes a tempo, intervals or long run endurance Z2,
+an endurance run recovery Z1 and a recovery run shorter, each at 70 % of its
+duration (rounded half up to 5 min, at least 20; 30 min without a duration),
+and always offers rest too; « Pas le temps » keeps the session at 70 % of its
+duration, except a tempo or intervals described in words, whose steps no rule
+shortens, which becomes endurance Z2. Both offer to move it to the first day of
+the next three with nothing planned, within the same ISO week (« Ma semaine »
+counts stay honest), before the next race (a goal or a planned race), and, for
+a hard session (tempo, intervals, long run, race or marked hard), with no hard
+session or race the day before or after and never in the two days before a
+race; a session already moved once is not offered another move, and without a
+day rest is offered instead. « Douleur / gêne » offers rest or 20 min of
+recovery Z1, never a move nor anything harder. A session with explicit steps
+can only move or rest here, a race is never renegotiated, and « Autre… »
+attaches the session to the active browser thread as its `coach_ref`
+(`session:<id>`), which the context builder resolves with the rules' options;
+the composer stays as it was.
+
+A choice is the day's plan decision for that session (`move` joins the decision
+kinds; a move keeps the session pending, so its new day's readiness still
+weighs it), written with the session in one transaction and marked as the
+athlete's (`readiness_source` `athlete`): the RPG never counts such a rest as a
+prescribed one toward the week's goal. An open proposal must be answered first
+and an applied decision reverted first; a declined or reverted one, or a
+proposal snoozed past the day, is replaced in place, keeping one row per session
+and day without a migration, and the morning's suggestion it replaced stays
+in its `original.replaced` for the briefing and the coach (an earlier choice of
+the athlete passes on the suggestion it had replaced; `readiness_source`
+doubles as the origin until a dedicated column earns a migration). The menu's `version` covers
+the session's revision, its decision and every option (a day planned since
+changes a move): any change answers 409 and writes nothing. Inside the
+transaction, a move's day is read again, and the session's revision guard
+refuses a session changed since the menu; a write racing it on the same row
+fails with DuckDB's write-write conflict, also a 409. The session is written
+before the decision (with the decision first, a revision bump committed in
+between was seen to pass). An athlete's choice stores the revision it wrote,
+and « Rétablir » refuses (409) once the session changed since, so a later edit
+is never undone; a move is reverted only on its own day and gives back its day
+alone, a rest its status alone (a copy never withdrawn is left as it is).
+Garmin follows after the commit and after a revert as for a proposal
+(`follow_on_garmin`, now returning each outcome): with the automatic push on, a
+copy Garmin holds is replaced in place (a move reschedules it) or withdrawn for
+a rest, once, never replayed. Each answer reports it apart (`sent`,
+`withdrawn`, `failed`, `not_started`, `unchanged` when Garmin holds no copy,
+`disabled` for a copy the push, off, left as it was, `disconnected`), and a
+Garmin failure never fails the written choice. The plan's calendar follows the
+plan-change flag, as for a proposal.
+
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References
 in HTTP/SSE and browser storage contain identifiers; the server reloads the
