@@ -142,6 +142,9 @@ async def invoke_agent(graph: Any, state: Any, *, context: AgentContext) -> dict
         error = type(exc).__name__
         raise
     finally:
+        from arete.agent.runtime.conversation_title import close_title
+
+        await close_title(context)
         context.run_logged = True
         record_run(
             profile=context.profile,
@@ -205,6 +208,9 @@ async def stream_agent(
         error = type(exc).__name__
         raise
     finally:
+        from arete.agent.runtime.conversation_title import close_title
+
+        await close_title(context)
         context.run_logged = True
         record_run(
             profile=context.profile,

@@ -225,7 +225,8 @@ export function AgentSidePanel({
   useEffect(() => {
     const reveal = () => { setShowHistory(false); setShowMemory(false); followRef.current = true; setFollowing(true); };
     window.addEventListener('arete:coach-discuss', reveal);
-    return () => window.removeEventListener('arete:coach-discuss', reveal);
+    window.addEventListener('arete:conversation-open', reveal);
+    return () => { window.removeEventListener('arete:coach-discuss', reveal); window.removeEventListener('arete:conversation-open', reveal); };
   }, []);
 
   const followLatest = () => {
@@ -233,7 +234,7 @@ export function AgentSidePanel({
     setFollowing(true);
   };
   const selectThread = (id: string) => {
-    coach.select(id);
+    void coach.openArchived(id);
     setShowHistory(false);
     followLatest();
   };
@@ -307,6 +308,8 @@ export function AgentSidePanel({
           className="border-b border-warning-orange/20 bg-warning-orange/5 px-4 py-2 text-xs text-warning-orange"
         >
           {coach.storageError}
+          <button className="ml-2 min-h-11 underline" onClick={coach.retryArchive}>Réessayer</button>
+          <button className="ml-2 min-h-11 underline" onClick={() => void coach.recoverArchive()}>Conserver une copie et recharger le fil</button>
         </p>
       )}
       {coach.error && (
@@ -351,6 +354,7 @@ export function AgentSidePanel({
           activeId={active.id}
           runningId={runningId}
           onSelect={selectThread}
+          onRename={coach.renameLocal}
           onCreate={newThread}
           onDelete={setDeleteId}
           onClose={() => setShowHistory(false)}

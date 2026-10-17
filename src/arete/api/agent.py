@@ -1,7 +1,7 @@
 """Coaching agent REST surface: POST /agent/chat.
 
-The only writer of ``panel_context``. Stateless v1: the client sends the full message
-history each call; persistence lands later if needed.
+The only writer of ``panel_context``. The client supplies each invocation's history;
+the conversation API archives settled snapshots independently of graph execution.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from arete.agent.runtime.context import (
 from arete.api.agent_feedback import TraceReceipt, chat_trace
 from arete.api.agent_feedback import router as feedback_router
 from arete.api.auth import clerk_account
+from arete.api.conversations import router as conversations_router
 from arete.services.memory import NOTES_LEDGER, SESSIONS_LEDGER, read_file
 
 if TYPE_CHECKING:
@@ -53,6 +54,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(feedback_router)
+
+router.include_router(conversations_router)
 
 
 class SystemSkillOut(BaseModel):

@@ -43,6 +43,7 @@ class StreamProjection:
                 if isinstance(data, dict)
                 and data.get("type")
                 in (
+                    "thread_title",
                     "sync_status",
                     "tool_start",
                     "tool_end",
@@ -71,7 +72,8 @@ class StreamProjection:
             chunk, meta = data
             if (
                 meta.get("langgraph_node") != "model"
-                or meta.get("lc_source") == "summarization"
+                or meta.get("lc_source") in {"summarization", "conversation_title"}
+                or "conversation_title" in meta.get("tags", [])
             ):
                 return []
             text = chunk.text

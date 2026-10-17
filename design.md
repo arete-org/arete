@@ -313,3 +313,14 @@ Garde-fous : tests de restauration et d’isolation dans `agentThreads.test.ts` 
 avis partagés dans `BriefingDiscussion.test.tsx`, parcours clavier et captures
 mobile/bureau Pierre/Prune dans `briefing.spec.ts`. Toute évolution de ce parcours
 met à jour ces contrats et conserve la référence de marque `5:81` et le chat `70:201`.
+
+## Conversations sauvegardées
+
+La [proposition éditable](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=271-3203)
+ajoute « Conversations » à Suivi et Automatisations. `ThreadHistory` partage la
+recherche explicite, la liste à séparateurs, le renommage et la pagination entre
+cette page et le panneau Chiron. Les huit thèmes utilisent les tokens existants.
+Ouvrir un résultat reprend le fil sans appel modèle ni remplissage du brouillon.
+La saisie reste celle de `AgentSidePanel` ; les réponses en cours et les brouillons
+restent dans leur fil d’origine. Une erreur de sauvegarde est visible et conserve
+la copie locale. La limite de 30 devient une taille de page, pas une rétention.

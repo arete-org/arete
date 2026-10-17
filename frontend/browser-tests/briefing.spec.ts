@@ -22,6 +22,8 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
     await page.route('**/api/**', async route => {
       const request = route.request();
       const path = new URL(request.url()).pathname;
+      if (path === '/api/agent/conversations') return route.fulfill({ json: { items: [], next_offset: null } });
+      if (path.startsWith('/api/agent/conversations/') && request.method() === 'PUT') { const body = request.postDataJSON(); return route.fulfill({ json: { revision: body.revision + 1, title: body.title } }); }
       if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
       requests.push(`${request.method()} ${path}`);
       if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
