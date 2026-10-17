@@ -137,6 +137,14 @@ Only typed retrieval is integrated; relationship traversal and agent-written SQL
 remain in the opt-in synthetic benchmark.
 Calendar is added only by server configuration. No discovery/load tool or loaded
 state exists: every current profile either has its tools immediately or has none.
+Browser chat also binds the read-only `visualization` capability. `render_chart`
+validates static HTML/SVG through `services/charts.py`; its JSON contract is shared
+with the browser. It retains at most four immutable, 16 KiB chart receipts in the
+invocation context, outside compactable conversation state. A native ToolMessage
+contains a short model-visible receipt and the complete artifact. No database or
+network operation is involved. Slack's compiled and derived coaching profiles,
+automations and background missions do not expose this capability. The
+`chart-rendering` system skill supplies the authoring format through `read_file`.
 The native ToolNode validates arguments, injects ToolRuntime and executes tools.
 Capability middleware checks server policy again, counts attempts, invalidates page
 context after writes and emits progress; it never invokes a tool itself.
@@ -350,6 +358,24 @@ Only catalog-declared workout actions emit these cards: planning lists and sessi
 inspection remain model data, never interactive cards. The capability middleware
 enforces this for returned results and progress callbacks. Cards consume these events
 before `done`, independently of truncated tool previews.
+Chart artifacts use a separate, versioned `chart_card` event correlated by run and
+tool call. SSE sends it only when `supports_chart_cards=true`; older clients keep
+the tool activity and standalone textual answer. Non-streaming HTTP returns
+`charts` from the invocation receipts, even if native compaction changed messages.
+The browser stores chart parts with their owning thread, never sends their HTML
+back as model history, and uses the existing explicit storage quota errors.
+Conversation archives receive chart titles and summaries as text, excluding the
+HTML and render-tool previews. Archive refreshes restore matching local chart
+cards; automatic cache eviction preserves threads containing these local artifacts.
+The chart component loads its sanitizer and embedded local fonts on demand. A
+strict [DOMPurify allowlist](https://github.com/cure53/DOMPurify) and an opaque
+[`sandbox=""` iframe](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox) isolate the document;
+its CSP permits only trusted inline styles and data fonts, with no scripts or
+network resources. Theme tokens are injected by the host, never model-authored CSS.
+Invalid documents show their summary and a visible error instead of a partial chart.
+The native skill-read → chart → answer path is tested with the compiled factory and
+simulated responses: `Agent run: calls=3 tools=2`, including one skill read and no
+auxiliary model. Existing model, tool and time budgets remain unchanged.
 Optional LangSmith tracing remains invocation-scoped, including stream
 cancellation cleanup, native tool spans and browser thread IDs. Run metadata
 names the scoped athlete (`athlete_id`), so model requests can be counted per

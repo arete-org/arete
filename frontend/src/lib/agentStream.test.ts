@@ -81,6 +81,7 @@ describe('SSE transport', () => {
         messages: [{ role: 'user', content: 'Demain ?' }],
         panel_context: { page: 'planning', path: '/planning' },
         thread_id: 'dfe771b8-661a-46af-9cee-dce80e6bc304',
+        supports_chart_cards: true,
       });
     } finally {
       vi.unstubAllGlobals();

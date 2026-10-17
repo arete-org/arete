@@ -22,6 +22,7 @@
     "@tesseract.js-data/eng": "^1.0.0",
     "@tesseract.js-data/fra": "^1.0.0",
     "clsx": "^2.1.1",
+    "dompurify": "3.4.17",
     "lucide-react": "^0.555.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

@@ -4,6 +4,7 @@ from arete.agent.capabilities.models import Toolkit
 from arete.agent.tools.analytics import ANALYTICS_TOOLS
 from arete.agent.tools.automations import AUTOMATION_TOOLS
 from arete.agent.tools.calendar import CALENDAR_TOOLS
+from arete.agent.tools.charts import render_chart
 from arete.agent.tools.conversations import CONVERSATION_TOOLS
 from arete.agent.tools.garmin import GARMIN_TOOLS
 from arete.agent.tools.planning import PLANNING_TOOLS
@@ -68,6 +69,13 @@ STRENGTH_INSTRUCTIONS = """Musculation réalisée :
 
 #: All registered toolkits. Registering a new one is one line here.
 CAPABILITIES: dict[str, Toolkit] = {
+    "visualization": Toolkit(
+        id="visualization",
+        description="Afficher des graphiques statiques dans le chat navigateur.",
+        tools=[render_chart],
+        read_tools=frozenset({"render_chart"}),
+        instructions="Graphiques : consulte la skill chart-rendering avant render_chart. Accompagne chaque carte d’une interprétation textuelle autonome dans ta réponse finale.",
+    ),
     "conversations": Toolkit(
         id="conversations",
         description="Retrouver les échanges passés de cet athlète.",

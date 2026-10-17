@@ -32,6 +32,11 @@ class SelectionTests(unittest.TestCase):
         cases = {
             "src/arete/api/agent.py": {"backend", "preview"},
             "src/arete/agent/prompts/instructions.md": {"backend", "preview"},
+            "src/arete/services/chart_contract.json": {
+                "backend",
+                "frontend",
+                "preview",
+            },
             "tests/data/dictations.jsonl": {"backend"},
             "frontend/src/App.tsx": {"frontend", "preview"},
             "frontend/package-lock.json": {"frontend", "preview"},

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "max_title_chars": 120,
+  "max_summary_chars": 600,
+  "max_html_bytes": 16384,
+  "max_elements": 512,
+  "max_depth": 16,
+  "max_cards": 4,
+  "height_min": 160,
+  "height_max": 480,
+  "height_default": 280,
+  "html_tags": ["div", "span", "p", "strong", "em", "ul", "ol", "li", "br", "figure", "figcaption", "table", "thead", "tbody", "tr", "th", "td"],
+  "svg_tags": ["svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "title", "desc"],
+  "attributes": ["class", "role", "aria-label", "viewBox", "preserveAspectRatio", "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "width", "height", "dx", "dy", "d", "points", "transform", "text-anchor", "dominant-baseline", "fill", "stroke", "stroke-width", "stroke-dasharray", "opacity", "fill-opacity", "stroke-opacity"],
+  "classes": ["chart-grid", "chart-axis", "chart-label", "chart-title", "chart-muted", "chart-legend", "chart-swatch", "chart-line", "chart-area", "series-blue", "series-green", "series-yellow", "series-orange", "series-red", "series-grey", "series-cyan", "series-gold", "series-purple"]
+}

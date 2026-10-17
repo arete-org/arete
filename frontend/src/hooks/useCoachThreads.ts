@@ -1,4 +1,4 @@
-import { conversationsApi, archivePayload, digest } from '@/lib/conversations';
+import { conversationsApi, archivePayload, digest, hasLocalCharts, restoreLocalCharts } from '@/lib/conversations';
 import { useConversationArchive } from './useConversationArchive';
 import { useAuthState } from '@/components/auth/authState';
 import { markWorkout, measureWorkout } from '@/lib/workoutPerformance';
@@ -136,7 +136,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       if (sequence !== openSequence.current) return;
       const current = storeRef.current.threads.find(t => t.id === id);
       if (current && current !== local) return;
-      const thread = { ...remote, draft: local?.draft ?? "", attachmentIds: local?.attachmentIds ?? [] };
+      const thread = { ...restoreLocalCharts(remote, local), draft: local?.draft ?? "", attachmentIds: local?.attachmentIds ?? [] };
       setStore(prev => {
         if (prev.threads.length >= MAX_THREADS && !prev.threads.some(t => t.id === id)) throw new Error("Trop de fils locaux non sauvegardés. Termine leur sauvegarde avant de charger un autre fil.");
         return { ...prev, activeId: id, threads: [thread, ...prev.threads.filter(t => t.id !== id)] };
@@ -162,7 +162,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     void (async () => {
       const removable: string[] = [];
       for (const thread of store.threads) {
-        if (thread.id === store.activeId || thread.id === runningId || thread.draft || thread.attachmentIds?.length || !thread.archiveDigest) continue;
+        if (thread.id === store.activeId || thread.id === runningId || thread.draft || thread.attachmentIds?.length || !thread.archiveDigest || hasLocalCharts(thread)) continue;
         if (await digest(archivePayload(thread)) === thread.archiveDigest) removable.push(thread.id);
       }
       if (!cancelled && removable.length) setStore(prev => ({ ...prev, threads: prev.threads.filter(t => !removable.includes(t.id) || t !== store.threads.find(old => old.id === t.id)) }));
@@ -406,7 +406,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         // Preserve the complete conflicting snapshot under this athlete before
         // accepting the server version; drafts and selected files stay usable.
         localStorage.setItem(`arete.coach.conflict.${athleteId}.${local.id}`, JSON.stringify(local));
-        setStore(prev => updateThread(prev, local.id, () => ({ ...remote, draft: local.draft, attachmentIds: local.attachmentIds })));
+        setStore(prev => updateThread(prev, local.id, () => ({ ...restoreLocalCharts(remote, local), draft: local.draft, attachmentIds: local.attachmentIds })));
         archive.retry();
       } catch (err) { setError(err instanceof Error ? err.message : 'Lecture impossible.'); }
     },

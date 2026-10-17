@@ -3,12 +3,39 @@ import { restoreConversation } from './agentConversation';
 import { isCoachReference } from './coachToday';
 import { isContextWindowUsage } from './agentStream';
 import type { CoachThread } from './agentThreads';
+import type { ChartCardPart } from './chartCards';
+
+const chartSummary = (chart: ChartCardPart) => `${chart.title}\n\n${chart.summary}`;
+
+export function hasLocalCharts(thread: CoachThread): boolean {
+  return thread.messages.some(message => message.parts?.some(part => part.kind === 'chart_card'));
+}
+
+/** An archive refresh must not replace a device's chart with its text receipt. */
+export function restoreLocalCharts(remote: CoachThread, local?: CoachThread): CoachThread {
+  const charts = new Map(local?.messages.flatMap(message =>
+    message.parts?.flatMap(part => part.kind === 'chart_card' ? [[part.id, part] as const] : []) ?? []));
+  if (!charts.size || local?.id !== remote.id) return remote;
+  return { ...remote, messages: remote.messages.map(message => ({
+    ...message, parts: message.parts?.map(part => {
+      const chart = charts.get(part.id);
+      return chart && part.kind === 'text' && part.text === chartSummary(chart) ? chart : part;
+    }),
+  })) };
+}
 
 export interface ConversationSummary { id: string; title: string; updated_at: string; revision: number; excerpt: string; excerpt_truncated: boolean; url: string }
 export interface ConversationPage { items: ConversationSummary[]; next_offset: number | null }
 export function archivePayload(thread: CoachThread) {
   // Unsent work belongs to this device. Only actual exchanges enter retrieval.
-  return { messages: thread.messages, reference: thread.reference ?? null, context_window_usage: thread.contextWindowUsage ?? null, created_at: thread.createdAt, updated_at: thread.updatedAt };
+  // Chart HTML and its native argument previews stay local; archives retain
+  // the standalone description, including on devices without the chart.
+  const messages = thread.messages.map(message => message.parts ? {
+    ...message,
+    parts: message.parts.filter(part => !(part.kind === 'tool' && part.name === 'render_chart'))
+      .map(part => part.kind === 'chart_card' ? { kind: 'text' as const, id: part.id, text: chartSummary(part) } : part),
+  } : message);
+  return { messages, reference: thread.reference ?? null, context_window_usage: thread.contextWindowUsage ?? null, created_at: thread.createdAt, updated_at: thread.updatedAt };
 }
 export async function digest(value: unknown): Promise<string> {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)));

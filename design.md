@@ -138,6 +138,21 @@ Les contrôles Playwright de `chiron.spec.ts` utilisent un flux SSE local contr�
 vérifier la croissance, le plafond, le défilement manuel et le changement de mode en cours
 de réponse, puis le retour au choix sauvegardé après rechargement.
 
+## Chiron — cartes de graphiques
+
+Les graphiques de Chiron prolongent la référence compacte `62:143` : carte opaque
+`Panel`, bordure neutre, rayon partagé de 16 px, titre et données en Inter. Le SVG
+est statique et responsive ; le titre et le résumé restent des éléments React
+accessibles. Les couleurs et les classes de séries viennent de `chartTheme.ts` et
+suivent les huit thèmes, y compris après réception ou rechargement d’une carte.
+L’iframe isolée reçoit les polices Inter locales embarquées et les tokens du thème.
+Le modèle ne choisit ni CSS, ni police, ni couleur littérale. Une carte invalide
+conserve son résumé et signale l’échec. Les cartes suivent le fil et son ordre de
+réception dans les modes flottant et latéral ; aucun téléchargement n’est proposé.
+
+`chart-cards.spec.ts` vérifie courbes et barres à 390 et 1440 px, les huit thèmes,
+le rechargement, le changement de fil pendant une réponse et l’isolation du rendu.
+
 ## Chiron — jauge de contexte
 
 La [planche de la jauge et de la compaction](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=151-575)

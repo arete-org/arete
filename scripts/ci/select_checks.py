@@ -23,6 +23,9 @@ def select_checks(paths: list[str]) -> set[str]:
             continue
         if path.startswith("src/"):
             selected.update(("backend", "preview"))
+            # The browser imports this service-owned contract at build time.
+            if path == "src/arete/services/chart_contract.json":
+                selected.add("frontend")
         elif path.startswith("tests/"):
             selected.add("backend")
         elif path.startswith("frontend/"):
