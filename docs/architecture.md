@@ -769,6 +769,13 @@ are read only when needed.
 
 ## Personal memory
 
+Onboarding confirms athlete-declared answers into `/memories/profile.md` through
+the existing transactional ledger and CompositeBackend. The central journal
+contribution includes this bounded profile whole; tools can correct or forget it.
+Drafts remain local to the athlete's browser, while the confirmed Markdown is
+server-side. No facts are duplicated and no model or plan runs on opening Chiron.
+See [onboarding](onboarding.md) for the flow, limits and verification contract.
+
 Migration 20 versions athlete facts and distinguishes explicit declarations,
 coach hypotheses and legacy evidence. Active, currently valid facts are mandatory
 context; missing reads and oversized contexts fail explicitly. Settings and the

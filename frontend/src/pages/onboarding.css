@@ -1,0 +1,73 @@
+.onboarding-shell { position: fixed; inset-inline: 0; top: var(--visible-top, 0px); height: var(--visible-height, 100dvh); z-index: 45; display: flex; flex-direction: column; background: var(--color-void); color: var(--color-text-primary); }
+.onboarding-header { max-width: 1280px; width: 100%; margin: 0 auto; padding: 24px 48px; display: flex; align-items: center; justify-content: space-between; }
+.onboarding-scroll { overflow-y: auto; min-height: 0; flex: 1; overscroll-behavior: contain; }
+.onboarding-layout { width: min(1120px, calc(100% - 64px)); margin: 30px auto 40px; display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 64px; align-items: start; }
+.onboarding-intro { padding-block: 20px; }
+.onboarding-eyebrow { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .13em; color: var(--color-neon-cyan); }
+.onboarding-steps { display: flex; gap: 6px; margin: 16px 0 32px; }
+.onboarding-steps li { flex: 1; }
+.onboarding-steps li > span:first-child { display: block; height: 3px; background: color-mix(in srgb, var(--color-text-muted) 22%, transparent); border-radius: 3px; }
+.onboarding-steps .is-current { background: var(--color-neon-cyan) !important; }
+.onboarding-intro h1 { font: 600 clamp(36px, 4vw, 54px)/1.04 var(--font-display); margin-bottom: 20px; outline: none; }
+.onboarding-intro > p:not(.onboarding-eyebrow) { font-size: 15px; line-height: 1.7; color: var(--color-text-secondary); }
+.onboarding-note { margin-top: 64px; padding-left: 16px; border-left: 2px solid var(--color-neon-cyan); }
+.onboarding-note > span { font: 600 24px var(--font-display); }
+.onboarding-note p { margin-top: 6px; font-size: 13px; line-height: 1.6; color: var(--color-text-muted); }
+.onboarding-panel { padding: 28px; display: grid; gap: 24px; min-width: 0; }
+.onboarding-panel h2, .onboarding-panel legend { font-size: 16px; font-weight: 500; margin-bottom: 12px; }
+.onboarding-panel fieldset { min-width: 0; }
+.onboarding-panel small, .onboarding-help { font-size: 12px; font-weight: 400; color: var(--color-text-muted); line-height: 1.6; }
+.onboarding-field { display: grid; gap: 8px; font-size: 13px; }
+.onboarding-field input, .onboarding-field textarea { font-size: 16px; min-height: 48px; border-radius: var(--radius-control); }
+.onboarding-field textarea { resize: vertical; }
+.onboarding-goals, .onboarding-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.onboarding-goals button, .onboarding-options button, .onboarding-days button { border: 1px solid color-mix(in srgb, var(--color-text-muted) 28%, transparent); border-radius: var(--radius-control); background: var(--color-void); text-align: left; }
+.onboarding-goals button { display: flex; flex-direction: column; gap: 10px; padding: 18px; min-height: 156px; }
+.onboarding-choice-icon { display: flex; width: 100%; justify-content: space-between; color: var(--color-neon-cyan); }
+.onboarding-goals strong { font-size: 15px; font-weight: 500; }
+.onboarding-goals button > span:last-child { font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; }
+.onboarding-shell button[aria-pressed=true] { border-color: var(--color-neon-cyan); background: var(--color-selection); }
+.onboarding-options button { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; font-size: 14px; }
+.onboarding-days { display: flex; flex-wrap: wrap; gap: 8px; }
+.onboarding-days button { padding: 10px 12px; font-size: 12px; }
+.onboarding-race { display: grid; gap: 16px; padding-top: 4px; }
+.onboarding-garmin > svg { color: var(--color-neon-cyan); margin-bottom: 20px; }
+.onboarding-garmin h2 { font: 600 32px/1.1 var(--font-display); }
+.onboarding-garmin p, .onboarding-garmin li { font-size: 14px; line-height: 1.7; color: var(--color-text-secondary); }
+.onboarding-garmin ul { margin-top: 24px; display: grid; gap: 12px; }
+.onboarding-garmin li::before { content: '✓'; color: var(--color-neon-cyan); margin-right: 12px; }
+.onboarding-data-status { border-block: 1px solid color-mix(in srgb, var(--color-text-muted) 20%, transparent); padding: 18px 0; font-size: 13px; line-height: 1.6; }
+.onboarding-data-status p { color: var(--color-text-secondary); margin-top: 4px; }
+.onboarding-summary > div { padding: 12px 0 20px; border-bottom: 1px solid color-mix(in srgb, var(--color-text-muted) 20%, transparent); }
+.onboarding-summary dt { font-size: 12px; color: var(--color-text-muted); display: flex; align-items: center; justify-content: space-between; }
+.onboarding-summary dt button { padding-inline: 12px; color: var(--color-neon-cyan); }
+.onboarding-summary dd { font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.onboarding-footer { padding: 16px 32px max(16px, env(safe-area-inset-bottom)); border-top: 1px solid color-mix(in srgb, var(--color-text-muted) 15%, transparent); }
+.onboarding-footer > div { max-width: 1120px; margin: auto; display: grid; grid-template-columns: 360px minmax(0, 1fr); align-items: center; column-gap: 64px; row-gap: 4px; }
+.onboarding-footer > div > :first-child { justify-self: start; }
+.onboarding-footer > div > button[type=submit] { grid-column: 2; }
+.onboarding-footer > div > button:last-child:not([type=submit]) { grid-column: 2; }
+.onboarding-footer p { font-size: 11px; color: var(--color-text-muted); text-align: right; max-width: 1120px; margin: 8px auto 0; }
+.onboarding-shell button { min-height: 44px; }
+.onboarding-error { color: var(--color-danger-red); font-size: 13px; line-height: 1.6; }
+.onboarding-entry { max-width: 1280px; margin: 12px auto; padding-inline: 24px; }
+.onboarding-entry a { display: inline-flex; align-items: center; min-height: 44px; gap: 12px; font-size: 13px; color: var(--color-neon-cyan); }
+.onboarding-finished { max-width: 640px; margin: 60px auto; padding: 32px; display: grid; gap: 24px; }
+@media (max-width: 800px) {
+  .onboarding-header { padding: 14px 20px; }
+  .onboarding-layout { width: calc(100% - 32px); margin: 8px auto 24px; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .onboarding-intro { padding: 0 4px; }
+  .onboarding-intro h1 { font-size: 36px; margin-bottom: 12px; }
+  .onboarding-intro > p:not(.onboarding-eyebrow) { font-size: 14px; }
+  .onboarding-steps { margin: 12px 0 20px; }
+  .onboarding-note { display: none; }
+  .onboarding-panel { padding: 18px; gap: 22px; }
+  .onboarding-goals { gap: 10px; }
+  .onboarding-goals button { padding: 14px; min-height: 152px; }
+  .onboarding-goals strong { font-size: 14px; }
+  .onboarding-goals button > span:last-child { font-size: 12px; }
+  .onboarding-footer { padding: 12px 16px max(12px, env(safe-area-inset-bottom)); }
+  .onboarding-footer > div { grid-template-columns: auto minmax(0, 1fr); gap: 4px; }
+  .onboarding-footer > div > button:last-child:not([type=submit]) { grid-column: 1 / -1; width: 100%; }
+  .onboarding-footer p { display: none; }
+}

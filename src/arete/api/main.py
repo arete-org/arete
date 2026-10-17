@@ -33,6 +33,7 @@ from arete.api.google_calendar import PlanSyncMiddleware
 from arete.api.google_calendar import router as google_calendar_router
 from arete.api.metrics import router as metrics_router
 from arete.api.notifications import router as notifications_router
+from arete.api.onboarding import router as onboarding_router
 from arete.api.plan import router as plan_router
 from arete.api.settings import router as settings_router
 from arete.api.slack import router as slack_router
@@ -237,6 +238,7 @@ def cron_checkin(authorization: str | None = Header(default=None)):
 
 
 for router in (
+    onboarding_router,
     automations_router,
     checkins_router,
     coach_router,

@@ -4,6 +4,7 @@ import { CoachDisplayOptions } from './agent/CoachDisplayOptions';
 import { CoachMemory, MemoryReceipt } from './agent/CoachMemory';
 import { CoachReferenceCard } from './agent/CoachReferenceCard';
 import { BriefingDiscussion } from './agent/BriefingDiscussion';
+import { OnboardingContext } from './agent/OnboardingContext';
 import { MessageFeedback } from './agent/MessageFeedback';
 import { SkillInput } from './agent/SkillInput';
 import { ContextWindowGauge } from './agent/ContextWindowGauge';
@@ -342,7 +343,7 @@ export function AgentSidePanel({
           </div>
         </div>
       )}
-      {reference && reference.kind !== 'briefing' && (reference.kind !== 'automation_run' || reference.mode === 'discussion') && <div className="border-b border-text-muted/15 px-4 py-2">
+      {reference && reference.kind !== 'briefing' && reference.kind !== 'onboarding' && (reference.kind !== 'automation_run' || reference.mode === 'discussion') && <div className="border-b border-text-muted/15 px-4 py-2">
         <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné', review: 'Bilan de la semaine sélectionné', automation_run: 'Exécution sélectionnée' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={coach.clearReference}>Retirer</button></p>
       </div>}
       {!showMemory && !showHistory && reference?.kind === 'automation_run' && reference.mode !== 'discussion' ? <AutomationReview id={reference.id} /> : showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
@@ -402,6 +403,7 @@ export function AgentSidePanel({
             className="coach-thread min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6"
           >
             {reference?.kind === 'briefing' && <BriefingDiscussion key={reference.id} id={reference.id} />}
+            {reference?.kind === 'onboarding' && <OnboardingContext key={active.id} />}
             {!messages.length && reference?.kind !== 'briefing' && (
               <div className="coach-empty mx-auto mt-10 max-w-sm">
                 {!floating && <AreteMark size={48} />}
@@ -411,7 +413,7 @@ export function AgentSidePanel({
                   consulte les données utiles.
                 </p>}
                 <div className="mt-6 space-y-2">
-                  {starters(panelContext.page).slice(0, floating ? 2 : 3).map((prompt) => (
+                  {(reference?.kind === 'onboarding' ? ['Comment avancer vers mon objectif ?', 'Aide-moi à trouver un rythme réaliste'] : starters(panelContext.page).slice(0, floating ? 2 : 3)).map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => send(prompt)}
