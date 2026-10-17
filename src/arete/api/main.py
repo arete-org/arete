@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import duckdb
-from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from arete import scheduler
@@ -41,8 +41,8 @@ from arete.api.strength import router as strength_router
 from arete.api.year_review import router as year_review_router
 from arete.config import config
 from arete.dataio.db import db_connection
+from arete.dataio.init_duckdb import SchemaInitializationError, pending_migrations
 from arete.dataio.init_duckdb import main as init_schema
-from arete.dataio.init_duckdb import pending_migrations
 from arete.dataio.mirror import MirrorMiddleware
 from arete.dataio.ownership import OwnershipError
 from arete.observability.http import (
@@ -56,6 +56,7 @@ from arete.observability.http import (
 from arete.services.documents import DocumentError
 
 logger = logging.getLogger(__name__)
+MAX_STARTUP_ERROR_CHARS = 16_384
 
 
 def configure_logging() -> None:
@@ -71,6 +72,8 @@ def configure_logging() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
+    _app.state.schema_initialization = {"status": "not_started"}
+    _app.state.schema_initialization_error = None
     if config.langsmith_tracing:
         # LangSmith loads only when tracing is on; this rejects a missing key.
         from arete.observability.tracing import get_tracing_client
@@ -78,8 +81,26 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         get_tracing_client()
     try:
         init_schema()
+        _app.state.schema_initialization = {"status": "ready"}
         logger.info("Database schema initialized")
     except Exception as e:
+        _app.state.schema_initialization = {
+            "status": "failed",
+            "stage": e.stage if isinstance(e, SchemaInitializationError) else "unknown",
+            "error_type": (
+                e.error_type
+                if isinstance(e, SchemaInitializationError)
+                else type(e).__name__
+            ),
+        }
+        # Startup has no Vercel request context. Retain text, not traceback
+        # frames, so a failed health probe can log the cause in its own context.
+        error_text = str(e)
+        if len(error_text) > MAX_STARTUP_ERROR_CHARS:
+            error_text = (
+                error_text[:MAX_STARTUP_ERROR_CHARS] + " [startup error truncated]"
+            )
+        _app.state.schema_initialization_error = error_text
         logger.warning("Database init failed (non-fatal): %s", e)
     problem = auth_misconfigured()
     if problem:
@@ -131,7 +152,7 @@ async def document_error(_request, exc: DocumentError):
 
 
 @app.get("/health")
-def health(response: Response):
+def health(response: Response, request: Request):
     """Health check endpoint with database status.
 
     Reads a real table rather than ``SELECT 1``, which DuckDB answers locally:
@@ -156,11 +177,21 @@ def health(response: Response):
     healthy = db_status == "connected" and not pending
     if not healthy:
         response.status_code = 503
+        startup_error = getattr(request.app.state, "schema_initialization_error", None)
+        if startup_error is not None:
+            logger.error(
+                "Database startup failure behind unhealthy probe: %s", startup_error
+            )
     return {
         "status": "ok" if healthy else "degraded",
         "database": db_status,
         "schema_version": schema_version,
         "pending_migrations": pending,
+        # Never return the exception message: SQL errors may contain data or
+        # credentials. These fields are application-owned operation identifiers.
+        "initialization": getattr(
+            request.app.state, "schema_initialization", {"status": "not_started"}
+        ),
     }
 
 

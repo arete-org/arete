@@ -12,6 +12,16 @@ from arete.dataio.db import connect
 
 logger = logging.getLogger(__name__)
 
+
+class SchemaInitializationError(RuntimeError):
+    """Keep the failing operation without exposing SQL in public health checks."""
+
+    def __init__(self, stage: str, cause: Exception) -> None:
+        self.stage = stage
+        self.error_type = type(cause).__name__
+        super().__init__(f"{stage}: {cause}")
+
+
 DDL = """
 CREATE SCHEMA IF NOT EXISTS app;
 
@@ -1036,23 +1046,30 @@ def _run_migrations(con) -> None:
     """Apply every missing migration, in list order, and record it."""
     applied = _applied(con)
     pending = [v for v, _ in MIGRATIONS if v not in applied]
-    if pending and config.is_remote_db:
-        _backup_remote(con)
-    for version, migrate in MIGRATIONS:
-        if version in applied:
-            continue
-        migrate(con)
-        # Two cold instances can race on the same version: each migration is
-        # idempotent, and the second record must not fail the boot.
-        con.execute(
-            "INSERT INTO app.schema_version (version) VALUES (?) ON CONFLICT DO NOTHING",
-            [version],
-        )
-        logger.info("Schema migration %d applied", version)
-    if 36 in applied and pending:
-        # A late historical migration can recreate a relation. Reapply the
-        # idempotent ownership projection so it cannot reintroduce shared data.
-        _m36_private_relations(con)
+    stage = "backup"
+    try:
+        if pending and config.is_remote_db:
+            _backup_remote(con)
+        for version, migrate in MIGRATIONS:
+            if version in applied:
+                continue
+            stage = f"migration:{version}"
+            migrate(con)
+            # Two cold instances can race on the same version: each migration is
+            # idempotent, and the second record must not fail the boot.
+            stage = f"record:{version}"
+            con.execute(
+                "INSERT INTO app.schema_version (version) VALUES (?) ON CONFLICT DO NOTHING",
+                [version],
+            )
+            logger.info("Schema migration %d applied", version)
+        if 36 in applied and pending:
+            # A late historical migration can recreate a relation. Reapply the
+            # idempotent ownership projection so it cannot reintroduce shared data.
+            stage = "ownership"
+            _m36_private_relations(con)
+    except Exception as e:
+        raise SchemaInitializationError(stage, e) from e
 
 
 def _is_current(con) -> bool:
@@ -1063,28 +1080,36 @@ def _is_current(con) -> bool:
 def main():
     """Initialize the DuckDB database with the required schema."""
     con = None
+    stage = "connect"
     try:
         con = connect(False)
+        stage = "schema_check"
         if _is_current(con):
             logger.info("Database schema is current (%d migrations)", len(MIGRATIONS))
             return
         # Bootstrap writes belong to the original athlete, even before any
         # HTTP identity exists. This private connection is closed after migration.
+        stage = "bootstrap_identity"
         con.execute("SET VARIABLE arete_athlete_id = 1")
-        for stmt in DDL.strip().split(";"):
+        for index, stmt in enumerate(DDL.strip().split(";"), start=1):
             s = stmt.strip()
             if s:
+                stage = f"bootstrap:{index}"
                 con.execute(s + ";")
 
+        stage = "migration_check"
         _run_migrations(con)
 
+        stage = "schema_summary"
         tables = con.execute(
             "SELECT table_name FROM information_schema.tables WHERE table_schema='app'"
         ).fetchall()
         logger.info(f"Tables created: {tables}")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
-        raise
+        if isinstance(e, SchemaInitializationError):
+            raise
+        raise SchemaInitializationError(stage, e) from e
     finally:
         if con:
             con.close()

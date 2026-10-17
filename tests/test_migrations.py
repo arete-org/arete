@@ -66,6 +66,48 @@ def test_a_current_database_skips_the_ddl(tmp_path, monkeypatch):
     init_duckdb.main()  # would raise if the DDL ran
 
 
+@pytest.mark.parametrize("failure_stage", ["bootstrap", "backup", "migration"])
+def test_failed_upgrade_preserves_its_stage_and_does_not_record_success(
+    tmp_path, monkeypatch, failure_stage
+):
+    path = tmp_path / "failed-upgrade.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    version = init_duckdb.MIGRATIONS[-1][0]
+    with migration_connection(str(path)) as con:
+        con.execute("DELETE FROM app.schema_version WHERE version = ?", [version])
+
+    def fail(con):
+        # A real SQL error, with its original exception retained for debugging.
+        con.execute("SELECT * FROM missing_upgrade_relation")
+
+    if failure_stage == "bootstrap":
+        monkeypatch.setattr(
+            init_duckdb, "DDL", "SELECT * FROM missing_upgrade_relation"
+        )
+        expected_stage = "bootstrap:1"
+    elif failure_stage == "backup":
+        monkeypatch.setattr(
+            type(init_duckdb.config), "is_remote_db", property(lambda s: True)
+        )
+        monkeypatch.setattr(
+            init_duckdb, "connect", lambda ro: migration_connection(str(path))
+        )
+        monkeypatch.setattr(init_duckdb, "_backup_remote", fail)
+        expected_stage = "backup"
+    else:
+        monkeypatch.setattr(init_duckdb, "MIGRATIONS", [(version, fail)])
+        expected_stage = f"migration:{version}"
+
+    with pytest.raises(init_duckdb.SchemaInitializationError) as exc:
+        init_duckdb.main()
+    assert exc.value.stage == expected_stage
+    assert exc.value.error_type == "CatalogException"
+    assert isinstance(exc.value.__cause__, duckdb.CatalogException)
+    with migration_connection(str(path)) as con:
+        assert version in init_duckdb.pending_migrations(con)
+
+
 def test_pending_migrations_lists_the_missing_versions(tmp_path, monkeypatch):
     path = tmp_path / "pending.duckdb"
     monkeypatch.setenv("ARETE_DB", str(path))
