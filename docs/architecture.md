@@ -899,17 +899,22 @@ windows and ticks pay once and only the writer pushes (kind `evening`,
 row and is never replayed. The run stops by 280 s of its dispatch
 (`SCHEDULE_RUN_SECONDS`, fallbacks included), before Vercel stops the function
 at 300 s, and settles as failed; a claim the platform killed anyway is settled
-as failed by the next pass. The daily briefing and the Sunday review share
-that bound. Vercel dispatches the message from its own cron path,
-`/api/cron/evening-message`, at 18:00, 19:00 and 20:00 UTC (each fired within
-its hour, so delivery is best-effort within the hour and a late choice may
-fall into quiet hours, as the setting says): Paris gets 20:00 in summer and
-winter alike, the Americas nothing. Docker's ticks reach every zone, but only
-with the daily sync configured (`ARETE_AUTO_SYNC_HOUR`). The message waits
-while today's missed session would still be replanned (`missed_sessions.candidates`):
-the replanning may move it onto tomorrow, and at 18:00 UTC both windows fire
-together, so a later window or tick writes the message after it. An evening
-found with nothing to say is surveyed again an hour later at the soonest.
+as failed by the next pass (stopped claims are judged on the database's
+clock). On Vercel (`VERCEL=1`) the daily briefing and the Sunday review share
+that bound; Docker, with no function limit, keeps their own envelope. Vercel
+dispatches the message from its own cron path, `/api/cron/evening-message`, at
+18:00, 19:00 and 20:00 UTC (each fired within its hour, so the message arrives
+in the evening, best effort, possibly later than the chosen hour, and never
+in quiet hours, as the setting says): Paris gets 20:00 in summer and winter
+alike, the Americas nothing. Docker's ticks reach every zone, but only with
+the daily sync configured (`ARETE_AUTO_SYNC_HOUR`). Today's missed session is
+replanned first, since the replanning may move it onto tomorrow: when
+`missed_sessions.candidates` still holds, the message's pass runs the
+athlete's replanning itself (`scheduler.replan_missed_evening`, one proposal
+and one push a day whoever runs it; from 20:00 on Docker, its usual hour) and
+writes the message in the same pass. A replanning that fails or runs out of
+time does not hold the message back. An evening found with nothing to say is
+surveyed again 20 minutes later at the soonest, so no Vercel window is skipped.
 The push and its inbox item open `/follow-up?evening=<id>`: Chiron selects the
 message's own thread (a new one the first time) whose `coach_ref` is
 `evening:<id>`, shows the message as a reference card and leaves the composer
