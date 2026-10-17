@@ -5,6 +5,7 @@ from dataclasses import replace
 from arete.agent.profiles.models import AgentProfile, ProfileId
 from arete.agent.prompts.briefing import BRIEFING_PROMPT
 from arete.agent.prompts.coach import CHAT_INSTRUCTIONS
+from arete.agent.prompts.evening import EVENING_PROMPT
 from arete.agent.prompts.product import SLACK_SYSTEM
 from arete.agent.prompts.session_feedback import FEEDBACK_PROMPT
 from arete.agent.prompts.weekly_review import REVIEW_PROMPT
@@ -74,6 +75,7 @@ Signale les données absentes, erreurs et actions non effectuées.""",
     "briefing": AgentProfile("briefing", "arete_briefing", BRIEFING_PROMPT, ()),
     "feedback": AgentProfile("feedback", "arete_session_feedback", FEEDBACK_PROMPT, ()),
     "review": AgentProfile("review", "arete_weekly_review", REVIEW_PROMPT, ()),
+    "evening": AgentProfile("evening", "arete_evening_message", EVENING_PROMPT, ()),
 }
 
 
