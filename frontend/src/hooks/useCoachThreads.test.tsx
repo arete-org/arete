@@ -582,6 +582,7 @@ it('chats normally once the evening question is closed', async () => {
   const { coachApi } = await import('@/lib/coachToday');
   const { ApiError } = await import('@/lib/api');
   const answer = vi.spyOn(coachApi, 'answerEvening').mockRejectedValue(new ApiError(409, '{"detail":"Cette question portait sur une journée passée."}'));
+  vi.spyOn(coachApi, 'evening').mockResolvedValue({ ...eveningMessage, answerable: false });
   const { result } = renderHook(() => useCoachThreads(context), { wrapper });
   act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 8 } })));
   act(() => result.current.draft('On en parle ?'));
@@ -623,5 +624,21 @@ it('sends the evening answer without attachments, explicitly', async () => {
   act(() => { result.current.send('Bien.'); });
   expect(result.current.error).toBe('La réponse à la question du soir part sans pièce jointe : retire-les ou envoie-les ensuite.');
   expect(answer).not.toHaveBeenCalled();
+  expect(runs).toHaveLength(0);
+});
+
+it('a passing conflict leaves the evening question open', async () => {
+  const { coachApi } = await import('@/lib/coachToday');
+  const { ApiError } = await import('@/lib/api');
+  const answer = vi.spyOn(coachApi, 'answerEvening').mockRejectedValue(new ApiError(409, '{"detail":"Réponse concurrente : recharge le message."}'));
+  vi.spyOn(coachApi, 'evening').mockResolvedValue(eveningMessage);
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 8 } })));
+  act(() => result.current.draft('Bien.'));
+  await act(async () => { result.current.send(); });
+  await waitFor(() => expect(result.current.error).toBe('Réponse non enregistrée : réessaie.'));
+  await waitFor(() => expect(result.current.runningId).toBeNull());
+  await act(async () => { result.current.send(); });
+  expect(answer).toHaveBeenCalledTimes(2);
   expect(runs).toHaveLength(0);
 });

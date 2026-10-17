@@ -237,15 +237,27 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         queryClient.setQueryData(eveningKey(id), saved);
         keepAnswer(threadId, content);
       })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+      .catch(async (err: unknown) => {
+        const close = () => {
           // Closed: the draft stays, and sending it again talks to Chiron.
           closedEvenings.current.add(id);
           setError('Cette question est close : renvoie ton message pour en parler avec Chiron.');
-        } else {
-          // Stopped or lost on the way: the server may have kept it.
-          setError('Réponse peut-être non enregistrée : vérifie ci-dessus.');
+        };
+        if (err instanceof ApiError && err.status === 404) {
+          close();
+          return;
         }
+        if (err instanceof ApiError && err.status === 409) {
+          // A conflict may be passing (a concurrent answer): the server says.
+          const fresh = await coachApi.evening(id).catch(() => null);
+          if (fresh) queryClient.setQueryData(eveningKey(id), fresh);
+          if (fresh?.answer === content) keepAnswer(threadId, content);
+          else if (!fresh?.answerable) close();
+          else setError('Réponse non enregistrée : réessaie.');
+          return;
+        }
+        // Stopped or lost on the way: the server may have kept it.
+        setError('Réponse peut-être non enregistrée : vérifie ci-dessus.');
         void queryClient.invalidateQueries({ queryKey: eveningKey(id) });
       })
       .finally(() => {

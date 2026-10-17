@@ -114,8 +114,8 @@ function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
           onChange={(value) => updateSetting('coach_evening_enabled', value)}
           hint="Désactivé par défaut. Rien n’est envoyé les soirs sans séance prévue le lendemain ni signal notable (course proche, préparation basse, séance manquée replanifiée)."
         >
-          Le soir, Chiron t’écrit deux ou trois phrases sur ta journée de demain et te pose une
-          question. Ta réponse est notée dans son journal pour le briefing du lendemain.
+          Le soir, Chiron t’écrit sur ta journée de demain, en trois phrases au plus, question
+          comprise. Ta réponse est notée dans son journal pour le briefing du lendemain.
         </SettingSwitch>
         <label className="flex flex-wrap items-center gap-2 pl-6 text-sm text-text-secondary">
           À partir de
@@ -132,9 +132,9 @@ function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
           <span className="text-xs text-text-muted">({settings.timezone})</span>
         </label>
         <p className="pl-6 text-xs text-text-muted">
-          Arrive par notification, au mieux dans l’heure qui suit : il faut les notifications
-          activées sur un appareil. Rien n’est envoyé pendant les heures calmes (21 h 30 par
-          défaut) : un horaire tardif peut tomber dedans, et aucun message n’est écrit ce soir-là.
+          Arrive par notification dans la soirée, au mieux : parfois plus tard que l’heure
+          choisie. Il faut les notifications activées sur un appareil, et rien n’est envoyé
+          pendant les heures calmes (21 h 30 par défaut) : ces soirs-là, pas de message.
         </p>
       </div>
     </Panel>
