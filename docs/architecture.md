@@ -827,8 +827,8 @@ moved by « Modifier » is judged on its new day; a day whose morning proposal i
 still open, or that already holds the day's replanning (answered or not, even
 written over by « Modifier », which keeps it in `original.replaced`), gets
 nothing, since the day's proposals are answered as one group and must not mix.
-An activity synced after the proposal leaves it stale on the card, and its
-answer refused.
+An activity synced after the proposal leaves it stale on the card: applying it
+is refused, while « Non merci » still dismisses it.
 The rules are `renegotiation.move_day`'s: a hard session moves to the first
 free day of the next three, within the ISO week, before the next race and out
 of its last two days, with no hard session either side, once (the second of two

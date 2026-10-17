@@ -488,6 +488,29 @@ def test_a_declined_replanning_holds_the_day_even_written_over(evening, monkeypa
     assert missed_sessions.candidates() is False
 
 
+def test_a_replaced_evening_replanning_is_named_the_evenings(evening, monkeypatch):
+    from arete.services import renegotiation
+    from arete.services.briefing import briefing_facts
+    from arete.services.coaching_rules import RuleFacts
+
+    monkeypatch.setattr(renegotiation, "athlete_today", lambda: DAY)
+    (proposal,) = missed_sessions.replan()
+    plan_adaptation.respond(proposal.id, proposal.revision, "keep")  # « Non merci »
+    with _pushing(False):
+        menu = renegotiation.options(evening)
+        renegotiation.apply(evening, "pain", "rest", menu["version"])
+    facts = RuleFacts(
+        acwr=1.0,
+        tsb=0.0,
+        readiness_score=None,
+        fatigue_threshold=85,
+        fitness_goal="build",
+    )
+    text = briefing_facts(DAY, "rules", facts)
+    (line,) = [line for line in text.splitlines() if "remplacée :" in line]
+    assert "proposition du soir remplacée" in line and proposal.reason in line
+
+
 @pytest.mark.parametrize(
     ("sport", "minutes", "trained"),
     [

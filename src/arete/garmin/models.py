@@ -110,6 +110,9 @@ SPORT_ALIASES: dict[str, str] = {
     "training": "strength",
     # Walking / hiking
     "walk": "walking",
+    "casual_walking": "walking",
+    "speed_walking": "walking",
+    "indoor_walking": "walking",
     "hike": "hiking",
     # Rowing
     "indoor_rowing": "rowing",
