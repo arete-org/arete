@@ -5,6 +5,7 @@ import { CoachMemory, MemoryReceipt } from './agent/CoachMemory';
 import { CoachReferenceCard } from './agent/CoachReferenceCard';
 import { BriefingDiscussion } from './agent/BriefingDiscussion';
 import { OnboardingContext } from './agent/OnboardingContext';
+import { EveningDiscussion } from './agent/EveningDiscussion';
 import { MessageFeedback } from './agent/MessageFeedback';
 import { SkillInput } from './agent/SkillInput';
 import { ContextWindowGauge } from './agent/ContextWindowGauge';
@@ -250,7 +251,7 @@ export function AgentSidePanel({
   };
 
   if (!open) return null;
-  const page = reference?.kind === 'briefing' ? 'Briefing' : PAGE_LABELS[panelContext.page] ?? panelContext.page;
+  const page = reference?.kind === 'briefing' ? 'Briefing' : reference?.kind === 'evening' ? 'Message du soir' : PAGE_LABELS[panelContext.page] ?? panelContext.page;
   return (
     <aside
       onDragEnter={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
@@ -347,7 +348,7 @@ export function AgentSidePanel({
           </div>
         </div>
       )}
-      {reference && reference.kind !== 'briefing' && reference.kind !== 'onboarding' && (reference.kind !== 'automation_run' || reference.mode === 'discussion') && <div className="border-b border-text-muted/15 px-4 py-2">
+      {reference && reference.kind !== 'briefing' && reference.kind !== 'onboarding' && reference.kind !== 'evening' && (reference.kind !== 'automation_run' || reference.mode === 'discussion') && <div className="border-b border-text-muted/15 px-4 py-2">
         <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné', review: 'Bilan de la semaine sélectionné', session: 'Séance du jour sélectionnée', automation_run: 'Exécution sélectionnée' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={coach.clearReference}>Retirer</button></p>
       </div>}
       {!showMemory && !showHistory && reference?.kind === 'automation_run' && reference.mode !== 'discussion' ? <AutomationReview id={reference.id} /> : showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
@@ -409,7 +410,8 @@ export function AgentSidePanel({
           >
             {reference?.kind === 'briefing' && <BriefingDiscussion key={reference.id} id={reference.id} />}
             {reference?.kind === 'onboarding' && <OnboardingContext key={active.id} />}
-            {!messages.length && reference?.kind !== 'briefing' && (
+            {reference?.kind === 'evening' && <EveningDiscussion key={reference.id} id={reference.id} />}
+            {!messages.length && reference?.kind !== 'briefing' && reference?.kind !== 'evening' && (
               <div className="coach-empty mx-auto mt-10 max-w-sm">
                 {!floating && <AreteMark size={48} />}
                 <h3 className="text-lg font-semibold">On prépare la suite ?</h3>

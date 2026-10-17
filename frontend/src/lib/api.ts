@@ -493,6 +493,10 @@ export interface UserSettings {
   lthr_measured_on: string | null;
   /** Which pushes arrive (every kind spelled out) and the local quiet hours. */
   notification_preferences: NotificationPreferences;
+  /** The coach's evening message about tomorrow (off by default). */
+  coach_evening_enabled: boolean;
+  /** From this hour (18 to 21) on the athlete's clock. */
+  coach_evening_hour: number;
 }
 
 /** Mirrors services/settings.NotificationKind; `soon` kinds in CoachTab are not sent yet. */

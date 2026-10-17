@@ -102,6 +102,15 @@ export function FollowUpPage() {
   const run = params.get('run');
   // Selecting the same link again must reopen a previously hidden Chiron panel.
   useEffect(() => { if (run) discussWithCoach({ kind: 'automation_run', id: run }); }, [run, location.key]);
+  // The evening message's push and inbox item open Chiron on it (ARE-64).
+  // After the commit: on a cold start from the push, the panel's listeners are
+  // registered by effects that run after this page's.
+  const evening = Number(params.get('evening'));
+  useEffect(() => {
+    if (!Number.isSafeInteger(evening) || evening <= 0) return;
+    const timer = window.setTimeout(() => discussWithCoach({ kind: 'evening', id: evening }));
+    return () => window.clearTimeout(timer);
+  }, [evening, location.key]);
   const coaching = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled: tab === 'inbox' && filter === 'todo' });
   return <div className="suivi-page">
     <header className="suivi-header"><h1 className="page-title">Suivi</h1><p>Les prochains échanges avec Chiron.</p></header>
