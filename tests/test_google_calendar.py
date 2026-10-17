@@ -2,13 +2,13 @@
 
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
 from threading import Event
 from types import SimpleNamespace
 from urllib.parse import parse_qsl
 
 import httpx
 import pytest
+from agent_clock import CLOCK
 from pydantic import ValidationError
 
 from arete.dataio.db import db_connection
@@ -24,10 +24,6 @@ from arete.services.calendar_models import (
 from arete.services.calendar_provider import SCOPES_MISSING, ClerkProvider
 from arete.services.calendar_repository import CalendarRepository
 from arete.services.google_tokens import GoogleToken, GoogleTokenUnavailable
-
-#: Contexts built on an event loop carry their clock: the default reads the
-#: athlete's settings and refuses to run there (ARE-84).
-CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 CAL = "athlete@example.com"
 START, END = "2026-10-09T10:00:00+02:00", "2026-10-09T11:00:00+02:00"

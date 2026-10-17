@@ -3,10 +3,10 @@
 import asyncio
 import json
 from dataclasses import replace
-from datetime import UTC, datetime
 from unittest.mock import Mock
 
 import pytest
+from agent_clock import CLOCK
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
@@ -14,10 +14,6 @@ from arete.agent.factory import build_agent
 from arete.agent.profiles.catalog import get_profile
 from arete.agent.runtime.context import AgentContext
 from arete.coaching import build_agent_filesystem
-
-#: Contexts built on an event loop carry their clock: the default reads the
-#: athlete's settings and refuses to run there (ARE-84).
-CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 class Model(GenericFakeChatModel):

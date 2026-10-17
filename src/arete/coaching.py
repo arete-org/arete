@@ -588,17 +588,18 @@ async def _run_automation(run: dict) -> None:
 
     started = monotonic()
     identifier = run["id"]
-    context = AgentContext(
-        profile="automation",
-        thread_id=identifier,
-        current_datetime=await read_athlete_clock(),
-    )
-    context.tool_slots = asyncio.Semaphore(1)
-    context.deadline = started + min(
-        SEGMENT_SECONDS, MAX_ACTIVE_SECONDS - run["active_seconds"]
-    )
     result, interrupts, error = None, [], None
     try:
+        # Inside the try: a failed settings read still finishes the run.
+        context = AgentContext(
+            profile="automation",
+            thread_id=identifier,
+            current_datetime=await read_athlete_clock(),
+        )
+        context.tool_slots = asyncio.Semaphore(1)
+        context.deadline = started + min(
+            SEGMENT_SECONDS, MAX_ACTIVE_SECONDS - run["active_seconds"]
+        )
         # Persist only the non-secret route identity; credentials and clients
         # are resolved at composition and never serialized in graph state.
         from arete.dataio.db import db_connection

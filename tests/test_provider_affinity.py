@@ -4,10 +4,10 @@ import asyncio
 import hashlib
 import json
 from dataclasses import replace
-from datetime import UTC, datetime
 
 import httpx2
 import pytest
+from agent_clock import CLOCK
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest
 from langchain_core.messages import HumanMessage
@@ -23,10 +23,6 @@ from arete.agent.runtime.execution import invoke_agent, run_config, stream_agent
 from arete.dataio.init_duckdb import main as init_schema
 from arete.services.athlete_scope import athlete_scope
 from arete.services.users import upsert_user
-
-#: Contexts built on an event loop carry their clock: the default reads the
-#: athlete's settings and refuses to run there (ARE-84).
-CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 @pytest.fixture

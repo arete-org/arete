@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
 from threading import Barrier, Lock
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from agent_clock import CLOCK
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_core.outputs import ChatGenerationChunk
@@ -20,10 +20,6 @@ from arete.agent.profiles.catalog import get_profile
 from arete.agent.runtime import execution
 from arete.agent.runtime.context import AgentContext
 from arete.observability import tracing
-
-#: Contexts built on an event loop carry their clock: the default reads the
-#: athlete's settings and refuses to run there (ARE-84).
-CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 TASK_INSTRUCTIONS = {
     task: get_profile("feedback" if task == "session_feedback" else task).instructions

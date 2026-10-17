@@ -3,12 +3,12 @@
 import asyncio
 import json
 import logging
-from datetime import UTC, datetime
 from time import monotonic
 from types import SimpleNamespace
 
 import httpx
 import pytest
+from agent_clock import CLOCK
 from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage
@@ -29,10 +29,6 @@ from arete.agent.runtime.execution import invoke_agent
 from arete.agent.runtime.fact_memory import MAX_MEMORY_DECISIONS, classify_memory
 from arete.dataio.db import db_connection
 from arete.services import athlete_facts as facts
-
-#: Contexts built on an event loop carry their clock: the default reads the
-#: athlete's settings and refuses to run there (ARE-84).
-CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 CHOICES = {"create": "New fact", "duplicate_1": "Equivalent to fact 1"}
 

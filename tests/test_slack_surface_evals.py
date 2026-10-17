@@ -8,6 +8,7 @@ from pathlib import Path
 from time import monotonic
 
 import pytest
+from agent_clock import CLOCK
 
 CASES = (
     (["Que peux-tu faire ?"], "product", False),
@@ -70,7 +71,9 @@ def test_live_surface_accuracy(tmp_path, monkeypatch, record_property):
         model = JevService(api_key=route.api_key, model=JEV_MODEL, timeout=JEV_TIMEOUT)
         results = []
         for index, (texts, expected, private) in enumerate(CASES):
-            context = AgentContext(thread_id=f"synthetic:{index}")
+            context = AgentContext(
+                thread_id=f"synthetic:{index}", current_datetime=CLOCK
+            )
             started = monotonic()
             try:
                 decision = await detect_surface(

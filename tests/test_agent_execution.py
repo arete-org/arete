@@ -1,11 +1,11 @@
 """Exercise runtime bounds and mission policy through actual compiled graphs."""
 
 import asyncio
-from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from agent_clock import CLOCK
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
@@ -25,10 +25,6 @@ from arete.agent.runtime.execution import (
     run_config,
     stream_agent,
 )
-
-#: Contexts built on an event loop carry their clock: the default reads the
-#: athlete's settings and refuses to run there (ARE-84).
-CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 class Model(GenericFakeChatModel):

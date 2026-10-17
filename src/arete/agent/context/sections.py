@@ -127,8 +127,8 @@ def surface_section(context: AgentContext | None) -> str:
         from zoneinfo import ZoneInfo
 
         service = context.slack_product
-        # The run's one instant, shown in the Slack profile's zone: the date
-        # instruction reads the same instant, never a second clock.
+        # The run's one instant, never a second clock, shown in the Slack
+        # profile's zone; the date instruction shows it in the settings' zone.
         now = context.current_datetime.astimezone(ZoneInfo(service.timezone))
         return (
             f"Surface Slack administrateur ; visibilité : {context.slack_visibility}. "

@@ -2,10 +2,11 @@
 
 import copy
 import json
-from datetime import UTC, date, datetime
+from datetime import date
 from unittest.mock import patch
 
 import pytest
+from agent_clock import CLOCK
 
 from arete.dataio.db import db_connection
 from arete.dataio.init_duckdb import main
@@ -21,10 +22,6 @@ from arete.services.prescriptions import (
     describe,
     prescription_from_description,
 )
-
-#: Contexts built on an event loop carry their clock: the default reads the
-#: athlete's settings and refuses to run there (ARE-84).
-CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 class Garmin:

@@ -1,20 +1,16 @@
 """Archive lifecycle, tenant isolation and title work independent of streaming."""
 
 import asyncio
-from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from agent_clock import CLOCK
 from langchain_core.messages import AIMessage, HumanMessage
 
 from arete.dataio.db import db_connection
 from arete.services import conversations as store
 from arete.services.athlete_scope import athlete_scope
-
-#: Contexts built on an event loop carry their clock: the default reads the
-#: athlete's settings and refuses to run there (ARE-84).
-CLOCK = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
 @pytest.fixture(autouse=True)
