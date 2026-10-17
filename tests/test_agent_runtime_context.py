@@ -145,7 +145,9 @@ def test_compacted_request_keeps_clock_and_raw_summary():
     assert "server_datetime" not in summary.text
 
 
-@pytest.mark.parametrize("profile", ["briefing", "feedback", "review", "slack"])
+@pytest.mark.parametrize(
+    "profile", ["briefing", "feedback", "review", "evening", "slack"]
+)
 def test_background_profiles_keep_their_server_date(profile):
     original = request([HumanMessage("Facts")], profile=profile)
     built = RuntimeContextMiddleware().wrap_model_call(original, lambda r: r)
