@@ -886,8 +886,9 @@ on the athlete's clock, outside quiet hours. The `evening` profile binds no
 tool: the server computes tomorrow's sessions, the forecast (one Open-Meteo
 request at the athlete's last start place and hour), the morning's load, form,
 readiness and check-in, today's training and replanning and a race within
-seven days, and the model answers in one request: at most three sentences and
-one closing question, refused otherwise. An evening with no session tomorrow
+seven days, and the model answers in one request: at most three sentences,
+the last being its only question, refused otherwise (only the error's type is
+stored, never provider text). An evening with no session tomorrow
 and no notable signal (that race, a readiness under the rest band or a low
 check-in, today's replanning of a missed session), or whose push could not
 leave (notifications or the `evening` kind off, no Web Push keys, no device),
@@ -895,21 +896,34 @@ makes no request and writes nothing. Exactly once: `app.coach_evening_messages`
 (one row per athlete and evening) is claimed before the request, so overlapping
 windows and ticks pay once and only the writer pushes (kind `evening`,
 « Chiron, pour demain » with the question); a failed or stopped run keeps its
-row and is never replayed. Vercel dispatches it from its own cron path,
+row and is never replayed. The run stops by 280 s of its dispatch
+(`SCHEDULE_RUN_SECONDS`, fallbacks included), before Vercel stops the function
+at 300 s, and settles as failed; a claim the platform killed anyway is settled
+as failed by the next pass. The daily briefing and the Sunday review share
+that bound. Vercel dispatches the message from its own cron path,
 `/api/cron/evening-message`, at 18:00, 19:00 and 20:00 UTC (each fired within
-its hour): Paris gets 20:00 in summer and winter alike, the Americas nothing;
-Docker's ticks reach every zone. The replanning's single window is unchanged,
-so a replanning written after the message is not in its facts.
+its hour, so delivery is best-effort within the hour and a late choice may
+fall into quiet hours, as the setting says): Paris gets 20:00 in summer and
+winter alike, the Americas nothing. Docker's ticks reach every zone, but only
+with the daily sync configured (`ARETE_AUTO_SYNC_HOUR`). The message waits
+while today's missed session would still be replanned (`missed_sessions.candidates`):
+the replanning may move it onto tomorrow, and at 18:00 UTC both windows fire
+together, so a later window or tick writes the message after it. An evening
+found with nothing to say is surveyed again an hour later at the soonest.
 The push and its inbox item open `/follow-up?evening=<id>`: Chiron selects the
 message's own thread (a new one the first time) whose `coach_ref` is
 `evening:<id>`, shows the message as a reference card and leaves the composer
-as it was. That thread's first message answers the question with no model
-request: `POST /coach/evening/{id}/answer` keeps it once on the row and files
-it once in `notes.md` through `memory.append_entry` (its dated heading is the
-guard; a failed filing is reported apart and filed by the same answer sent
-again), and the next briefing's facts quote the question and the answer. Later
-messages in the thread are ordinary chat turns. The export includes written
-messages and answers. Budget: one model request per opted-in athlete and
+as it was. While the message is `answerable` (unanswered, until the end of
+the day it is about), that thread's first message answers the question with
+no model request: `POST /coach/evening/{id}/answer` keeps it once on the row
+and files it once in `notes.md` through `memory.append_entry` (its dated
+heading is the guard). A failed filing is reported apart (`journaled` false,
+said on the card) and retried when the message is read and by the next
+briefing's facts, which quote the question and the answer. A closed question
+(answered, past, gone) makes the composer chat as usual; so do later messages
+in the thread. The export includes written messages and answers. Deleting a
+conversation does not remove what the journal kept from it; the delete
+dialog says so. Budget: one model request per opted-in athlete and
 evening with something to say, none otherwise; see the PR for the estimate.
 
 `services/coach_followup.py` owns one question per day and per session, its
