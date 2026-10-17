@@ -9,7 +9,21 @@ from typing import Any, Literal, TypedDict
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
+from arete.services.charts import ChartCard
+
 MAX_TOOL_PREVIEW_CHARS = 2_000
+
+
+def chart_card(result: Any) -> dict | None:
+    """Project only a successful native chart artifact, never a tool preview."""
+    if (
+        not isinstance(result, ToolMessage)
+        or result.name != "render_chart"
+        or result.status == "error"
+    ):
+        return None
+    card = ChartCard.model_validate(result.artifact)
+    return {"type": "chart_card", **card.model_dump()}
 
 
 def enforce_tool_status(result: Any) -> Any:

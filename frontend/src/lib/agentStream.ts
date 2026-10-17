@@ -1,5 +1,6 @@
 import { isWorkoutUpdate, type WorkoutUpdate } from './workouts';
 import { authFetch } from './auth';
+import { CHART_CONTRACT, chartPart, isChartCard, type ChartCardData, type ChartCardPart } from './chartCards';
 import { isTraceReceipt, type TraceReceipt, type MessageFeedback } from './agentFeedback';
 import { readableError } from './utils';
 import type { PanelPageContext } from './pageContext';
@@ -30,7 +31,7 @@ export interface CalendarActionPart {
   id: string;
 }
 export interface CoachCardPart { kind: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
-export type ChatPart = ToolPart | TextPart | CalendarActionPart | CoachCardPart;
+export type ChatPart = ToolPart | TextPart | CalendarActionPart | CoachCardPart | ChartCardPart;
 export interface ChatMessage {
   /** Server-stamped local ISO time, replayed unchanged with this human message. */
   sentAt?: string;
@@ -55,6 +56,7 @@ export interface ContextWindowUsage {
 }
 
 export type StreamEvent =
+  | ({ type: 'chart_card' } & ChartCardData)
   | { type: 'values'; context_window_usage: ContextWindowUsage }
   | { type: 'context_compaction'; phase: 'start' | 'done' }
   | { type: 'sync_status'; state: string }
@@ -126,6 +128,7 @@ export function parseEvent(data: string): StreamEvent | null {
   if (isWorkoutUpdate(e)) return e;
   if (e.type === 'sync_status' && typeof e.state === 'string') return e as StreamEvent;
   if (e.type === 'suggestion') return null;
+  if (e.type === 'chart_card' && isChartCard(e)) return { ...e, type: 'chart_card' };
   if (e.type === 'coach_card' && (e.ref_kind === 'fact' || e.ref_kind === 'followup') && Number.isSafeInteger(e.ref_id) && Number(e.ref_id) > 0 && e.id === `${e.ref_kind}:${e.ref_id}`) return e as StreamEvent;
 
   const identified = typeof e.id === 'string' && e.id.length > 0;
@@ -204,6 +207,18 @@ export function applyEvent(
   if (event.type === 'done')
     return settleMessage({ ...message, content: event.message.content, trace: event.trace });
   const parts = [...(message.parts ?? [])];
+  if (event.type === 'chart_card') {
+    const existing = parts.find(part => part.kind === 'chart_card' && part.id === event.id);
+    const card = chartPart(event);
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(card)) throw new Error('Un graphique reçu a changé de contenu.');
+      return message;
+    }
+    if (parts.filter(part => part.kind === 'chart_card').length >= CHART_CONTRACT.max_cards)
+      throw new Error('Maximum quatre graphiques par réponse.');
+    parts.push(card);
+    return { ...message, parts };
+  }
   if (event.type === 'coach_card') {
     if (!parts.some(p => p.kind === 'coach_card' && p.id === event.id)) parts.push({ kind: 'coach_card', id: event.id, ref_kind: event.ref_kind, ref_id: event.ref_id });
     return { ...message, parts };
@@ -334,6 +349,7 @@ export async function runAgentStream(
     body: JSON.stringify({
       messages: history.map(({ role, content, sentAt }) => ({ role, content, ...(sentAt ? { sent_at: sentAt } : {}) })),
       thread_id: threadId,
+      supports_chart_cards: true,
       ...(documentIds !== undefined ? { document_ids: documentIds } : {}),
       panel_context,
     }),

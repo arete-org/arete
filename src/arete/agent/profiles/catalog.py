@@ -13,7 +13,7 @@ CHAT_PROFILE = AgentProfile(
     "chat",
     "arete_coach",
     CHAT_INSTRUCTIONS,
-    ("analytics", "planning", "strength", "garmin", "automations"),
+    ("analytics", "planning", "strength", "garmin", "automations", "visualization"),
     # Native binding avoids discovery round trips. Permissions are still
     # checked independently at execution, including cached graphs.
     training_writes=True,
@@ -46,7 +46,15 @@ Signale les données absentes, erreurs et actions non effectuées.""",
         instructions="",
         # Compilation includes every possible tool. Invocation policy narrows
         # this envelope before context reads, model binding and execution.
-        capabilities=(*CHAT_PROFILE.capabilities, "slack_product", "admin_data"),
+        capabilities=(
+            *(
+                capability
+                for capability in CHAT_PROFILE.capabilities
+                if capability != "visualization"
+            ),
+            "slack_product",
+            "admin_data",
+        ),
         system_prompt=SLACK_SYSTEM,
         personal_context=False,
         external_write_tools=frozenset(

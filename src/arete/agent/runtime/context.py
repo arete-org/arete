@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from threading import Lock
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
 
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from arete.agent.profiles.models import AgentProfile
     from arete.agent.runtime.surface import SurfaceDecision
     from arete.services.calendar import CalendarService
+    from arete.services.charts import ChartCard
     from arete.services.slack_product import SlackProduct
 
 from arete.agent.runtime.budget import MAX_TOOL_CONCURRENCY
@@ -109,6 +111,11 @@ class AgentContext:
     garmin_freshness: dict | None = field(default=None, init=False, repr=False)
     # Paths only: skill bodies enter messages through read_file results.
     requested_skills: tuple[str, ...] = field(default=(), init=False)
+    # Presentation receipts are invocation-local, never conversation state.
+    chart_cards: dict[str, ChartCard] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    chart_lock: Any = field(default_factory=Lock, init=False, repr=False)
     # Async ToolNode uses gather(), ignoring RunnableConfig concurrency.
     tool_slots: asyncio.Semaphore = field(
         default_factory=lambda: asyncio.Semaphore(MAX_TOOL_CONCURRENCY),

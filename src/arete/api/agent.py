@@ -111,6 +111,7 @@ class ChatResponse(BaseModel):
     sent_at: str
     trace: TraceReceipt | None = None
     cards: list[dict] = Field(default_factory=list)
+    charts: list[dict] = Field(default_factory=list)
 
 
 def _to_langchain(
@@ -254,6 +255,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     return ChatResponse(
         sent_at=context.current_datetime.isoformat(timespec="seconds"),
         cards=[card for message in messages if (card := coach_card(message))],
+        charts=[card.model_dump() for card in context.chart_cards.values()],
         trace=chat_trace(context.run_id, context.thread_id, context.account_id),
         message=ChatMessageOut(
             role="assistant",
@@ -265,8 +267,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 class StreamRequest(ChatRequest):
     """Body of POST /agent/chat/stream — same contract, SSE response."""
 
-    # Cached clients reject unknown SSE events; only spend a model call when
-    # the caller can consume the optional draft.
+    supports_chart_cards: bool = Field(default=False, strict=True)
 
 
 def _sse(event: dict) -> str:
@@ -283,7 +284,7 @@ async def _sse_stream(body: StreamRequest, context: AgentContext) -> AsyncIterat
     )
     from arete.agent.runtime.streaming import MAX_STREAM_EVENTS, StreamProjection
 
-    projection = StreamProjection()
+    projection = StreamProjection(supports_chart_cards=body.supports_chart_cards)
     from anyio import to_thread
 
     try:

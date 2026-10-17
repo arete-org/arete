@@ -2,6 +2,7 @@ import type { ChatMessage, ToolPart } from './agentStream';
 
 /** Presentation only: permissions and execution remain server-owned. */
 const TOOL_LABELS: Record<string, [running: string, done: string]> = {
+  render_chart: ['Préparation du graphique', 'Graphique préparé'],
   read_file: ['Lecture d’un fichier', 'Fichier consulté'],
   ls: ['Recherche dans tes notes', 'Recherche terminée'],
   glob: ['Recherche dans tes notes', 'Recherche terminée'],

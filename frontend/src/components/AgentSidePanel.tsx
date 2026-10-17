@@ -45,6 +45,7 @@ import { CoachActivity, CoachPresence } from './agent/CoachActivity';
 import { canRetryMessage, isThinking } from '@/lib/agentActivity';
 import { DocumentAttachments, type AttachmentsHandle } from './agent/DocumentAttachments';
 import { CalendarActionCard } from './agent/CalendarActionCard';
+import { ChartCard } from './agent/ChartCard';
 
 const PAGE_LABELS: Record<string, string> = {
   dashboard: 'Tableau de bord',
@@ -84,7 +85,7 @@ const MessageSurfaces = memo(function MessageSurfaces({
   for (const part of parts) {
     if (part.kind === 'text') {
       if (part.text.trim()) groups.push(part);
-    } else if (part.kind === 'calendar_action' || (part.kind === 'coach_card' && part.ref_kind !== 'fact')) groups.push(part);
+    } else if (part.kind === 'chart_card' || part.kind === 'calendar_action' || (part.kind === 'coach_card' && part.ref_kind !== 'fact')) groups.push(part);
     else if (!chiron && part === tools[0]) groups.push(tools);
   }
   return (
@@ -95,7 +96,7 @@ const MessageSurfaces = memo(function MessageSurfaces({
         ) : part.kind === 'text' ? (
           chiron ? <div key={`text-${part.id}`} className="coach-answer-part"><AgentMarkdown text={part.text} /></div>
             : <AgentMarkdown key={`text-${part.id}`} text={part.text} />
-        ) : part.kind === 'coach_card' ? <CoachReferenceCard key={part.id} reference={part} /> : part.kind === 'calendar_action' ? (
+        ) : part.kind === 'chart_card' ? <ChartCard key={part.id} chart={part} /> : part.kind === 'coach_card' ? <CoachReferenceCard key={part.id} reference={part} /> : part.kind === 'calendar_action' ? (
           <CalendarActionCard key={`calendar-${part.id}`} id={part.id} />
         ) : null
       )}
