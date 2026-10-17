@@ -84,7 +84,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     problem = auth_misconfigured()
     if problem:
         # Fail closed, loudly: every request will answer 503 until fixed.
-        logger.error("ARETE_AUTH=clerk but %s", problem)
+        logger.error("Refusing requests, auth misconfigured: %s", problem)
     task = scheduler.start()
     try:
         yield

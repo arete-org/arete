@@ -28,8 +28,25 @@ router = APIRouter(prefix="/strava", tags=["strava"])
 _PROCESS_SECRET = secrets.token_hex(32)
 
 
-def _state_secret() -> str:
-    return config.clerk_secret_key or config.cron_secret or _PROCESS_SECRET
+def _state_secret() -> str | None:
+    """The callback can land on another instance, so this must not vary per
+    process in production: None (never _PROCESS_SECRET there) tells the
+    caller to refuse rather than sign with a secret every instance would
+    predictably share as empty."""
+    secret = config.clerk_secret_key or config.cron_secret
+    if config.is_production:
+        return secret or None
+    return secret or _PROCESS_SECRET
+
+
+def _require_state_secret() -> str:
+    secret = _state_secret()
+    if not secret:
+        raise HTTPException(
+            status_code=503,
+            detail="Connexion Strava indisponible : configuration serveur incomplète.",
+        )
+    return secret
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +196,9 @@ def authorize():
         ) from None
     return {
         "url": client.get_authorize_url(
-            state=oauth_state.issue(_state_secret(), athlete_id=resolve_athlete_id())
+            state=oauth_state.issue(
+                _require_state_secret(), athlete_id=resolve_athlete_id()
+            )
         )
     }
 
@@ -191,7 +210,7 @@ def callback(code: str, state: str = "", scope: str = ""):
     The state issued by ``/authorize`` is what proves this round trip started
     here: the callback itself carries no session of ours.
     """
-    athlete_id = oauth_state.athlete_for_state(_state_secret(), state)
+    athlete_id = oauth_state.athlete_for_state(_require_state_secret(), state)
     if athlete_id is None:
         raise HTTPException(
             status_code=400,

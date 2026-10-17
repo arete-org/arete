@@ -71,6 +71,15 @@ def test_open_by_default(client, monkeypatch):
     assert (me["athlete_id"], me["is_owner"], me["email"]) == (1, True, "")
 
 
+def test_the_guard_is_off_outside_production(client, monkeypatch):
+    # Only VERCEL_ENV=production requires Clerk and a cron secret.
+    monkeypatch.setenv("VERCEL_ENV", "preview")
+    monkeypatch.delenv("ARETE_AUTH", raising=False)
+    monkeypatch.delenv("CRON_SECRET", raising=False)
+    assert client.get("/settings").status_code == 200
+    assert client.get("/health").status_code == 200
+
+
 def test_enforced_mode_requires_a_credential(client, enforced):
     refused = client.get("/settings")
     assert refused.status_code == 401
@@ -123,7 +132,38 @@ def test_misconfiguration_fails_closed(client, monkeypatch):
     monkeypatch.setenv("ARETE_AUTH", "clerk")
     monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)
     assert client.get("/settings").status_code == 503
+    # No VERCEL_ENV: /health keeps probing the database, not the auth guard.
     assert client.get("/health").status_code == 200
+
+
+def test_production_without_clerk_fails_closed_including_health(client, monkeypatch):
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.delenv("ARETE_AUTH", raising=False)
+    monkeypatch.setenv("CRON_SECRET", "cron-secret")
+    refused = client.get("/settings")
+    assert refused.status_code == 503
+    assert client.get("/health").status_code == 503
+    # Still reachable: the OAuth callback and the sign-in bootstrap keep
+    # their own checks and must stay up for the fix to be deployable.
+    assert client.get("/strava/callback").status_code != 503
+    assert client.get("/auth/config").status_code != 503
+
+
+def test_production_without_cron_secret_fails_closed(client, monkeypatch):
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.setenv("ARETE_AUTH", "clerk")
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test_fake")
+    monkeypatch.setenv("CLERK_PUBLISHABLE_KEY", "pk_test_fake")
+    monkeypatch.delenv("CRON_SECRET", raising=False)
+    assert client.get("/settings").status_code == 503
+    assert client.get("/health").status_code == 503
+
+
+def test_correctly_configured_production_is_unaffected(client, enforced, monkeypatch):
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.setenv("CRON_SECRET", "cron-secret")
+    assert client.get("/health").status_code == 200
+    assert client.get("/settings", headers=_bearer("owner-token")).status_code == 200
 
 
 def _rsa_key() -> tuple[Any, str]:

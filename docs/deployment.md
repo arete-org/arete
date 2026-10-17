@@ -7,10 +7,15 @@ collaborator needs. The README stays about the product; this is the runbook.
 
 | Environment | URL | Database | Who deploys | Protected by |
 |---|---|---|---|---|
-| Production | https://arete-arete15.vercel.app (also `arete-two-woad`) | MotherDuck `md:arete` | **Deploy production** workflow, run by hand by anyone with write access | Clerk sign-in (`ARETE_AUTH=clerk`); the Vercel protection is off on production |
+| Production | https://arete-arete15.vercel.app (also `arete-two-woad`) | MotherDuck `md:arete` | **Deploy production** workflow, run by hand by anyone with write access | Clerk sign-in (`ARETE_AUTH=clerk`), required; the Vercel protection is off on production |
 | Preview of `main` | https://arete-main-arete15.vercel.app | MotherDuck `md:arete_preview` | **Deploy preview** workflow, after green CI on `main` when deployable inputs changed | Vercel Authentication: a Vercel login, or the bypass key |
 | PR preview | `https://arete-<hash>-arete15.vercel.app`, linked in a PR comment | `md:arete_preview` (shared with the main preview) | CI `preview` job, for a PR labelled `preview` once its checks pass | Vercel Authentication, same key |
 | Local | `make dev`, `make docker` | a DuckDB file under `data/`, or what `ARETE_DB` says | — | nothing |
+
+`ARETE_AUTH=clerk` (with its Clerk keys) and `CRON_SECRET` must both be set on the
+production environment: the boot guard answers 503 on every route, `/api/health`
+included, until they are (`src/arete/api/auth.py`'s `auth_misconfigured`). Neither is
+required outside production.
 
 One Vercel project, two services (`vercel.json`): the FastAPI backend behind
 `/api/*` and the Vite frontend. Vercel's Git integration deploys nothing
@@ -268,8 +273,9 @@ behind Vercel Authentication.
 
 Vercel Cron calls `/api/cron/daily-sync` in ten daily windows, 07:00 to 16:00
 UTC (`vercel.json`): Hobby runs each cron once a day, within its hour, and only
-on the production deployment. The endpoint answers 401 unless the environment
-has `CRON_SECRET`, which Vercel sends as a bearer token. Each dispatch syncs the
+on the production deployment. `CRON_SECRET` is required on production (the boot
+guard above refuses every route until it is set); Vercel sends it as a bearer
+token, and the endpoint answers 401 without it. Each dispatch syncs the
 athletes still owed today within the function's 300 seconds, none before 07:00
 on their own clock nor during their quiet hours; the rules, and how to park or
 force an athlete, are in `docs/multi-athlete.md`. On Sunday the 16:00 UTC
