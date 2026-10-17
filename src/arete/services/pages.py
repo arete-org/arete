@@ -79,6 +79,8 @@ def _dashboard() -> dict[str, Any]:
                 "decision": d.decision,
                 "reason": d.reason,
                 "reverted": d.reverted_at is not None,
+                # The morning's suggestion an athlete's choice replaced.
+                "replaced": (d.original or {}).get("replaced"),
             }
             for d in PlanDecisionRepository().list_for_day(today)
         ],

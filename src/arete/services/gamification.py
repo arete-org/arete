@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from arete.config import config
 from arete.dataio.db import db_connection, transaction
 from arete.dataio.game_events import KEPT_AT_LINK
+from arete.services.plan_repository import ATHLETE_CHOICE
 
 MAX_EVENTS = 100
 MAX_WEEK_ACTIVITIES = 1000
@@ -227,10 +228,13 @@ def _week(con, week: date, today: date) -> tuple[dict, list[list]]:
         (cause, 0, 0, "Séance rapprochée") for (cause,) in old if cause not in live
     ]
     # A prescribed rest counts once per planned session and only after its day.
+    # A rest the athlete chose (« Modifier ») is not prescribed: it never fills
+    # the week's goal.
     rest = con.execute(
-        """SELECT count(DISTINCT d.planned_session_id) FROM app.visible_plan_decisions d
+        f"""SELECT count(DISTINCT d.planned_session_id) FROM app.visible_plan_decisions d
         WHERE d.date>=? AND d.date<? AND d.date<=? AND d.decision='rest'
         AND d.applied_at IS NOT NULL AND d.reverted_at IS NULL
+        AND d.readiness_source IS DISTINCT FROM '{ATHLETE_CHOICE}'
         AND EXISTS (SELECT 1 FROM app.visible_game_periods p WHERE d.applied_at>=p.started_at AND (p.ended_at IS NULL OR d.applied_at<p.ended_at))
         AND NOT EXISTS (SELECT 1 FROM app.visible_actual_sessions a WHERE a.planned_session_id=d.planned_session_id)
         """,
