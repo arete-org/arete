@@ -58,6 +58,7 @@ def build_agent(
     fallback_models: tuple[BaseChatModel, ...] = (),
     skills: AgentMiddleware[Any, Any, Any] | None = None,
     summarization: AgentMiddleware[Any, Any, Any] | None = None,
+    title_generator=None,
     checkpointer=None,
 ):
     assert len(fallback_models) <= MAX_MODEL_FALLBACKS, "Too many fallback models"
@@ -70,6 +71,12 @@ def build_agent(
         ),
         *execution_limits(),
     ]
+    if profile.id == "chat" and title_generator is not None:
+        from arete.agent.middlewares.conversation_title import (
+            ConversationTitleMiddleware,
+        )
+
+        middleware.append(ConversationTitleMiddleware(title_generator))
     if profile.id == "automation":
         from arete.agent.middlewares.automation import (
             AutomationBudgetMiddleware,

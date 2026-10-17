@@ -1,7 +1,7 @@
 # Coaching stack: responsibilities and dependencies
 
 Arete gives each behavior one owner, with one coaching runtime, browser chat,
-three background missions and one shared Slack administrator graph. Browser-owned
+three background missions and one shared Slack administrator graph. Browser-composed, server-archived
 conversations, HTTP endpoints, tool names,
 DuckDB tables and ledger paths remain compatible. There are no placeholder layers
 for delegation, MCP, authentication or providers Arete does not use.
@@ -216,7 +216,7 @@ selection and the ordinary browser draft. Up to three leading `/skill-name` comm
 resolve against trusted metadata. Unknown names fail explicitly. Read bodies and
 references only as needed, reusing results already present in the invocation.
 The browser persists user/assistant history, not tool results: a later user turn
-must read a relevant skill again. No thread persistence is introduced.
+must read a relevant skill again. Archives store the rendered browser history, not tool results or graph checkpoints.
 The bundle remains bounded to 32 skills of 32 KiB each; filesystem reads are bounded
 to 200 lines per call and complete requests are budgeted without silent truncation.
 
@@ -249,9 +249,7 @@ keeps historical prompt bytes unchanged across midnight and timezone changes.
 An explicit retry replaces the question with a new turn and a new timestamp.
 
 This uses LangChain's [transient message overrides](https://docs.langchain.com/oss/python/langchain/context-engineering#messages)
-for rendering, without changing raw content or adding model requests. Only
-timestamp metadata persists in browser history; no server conversation store is
-introduced. Page, ledger and other existing contributions can still invalidate
+for rendering, without changing raw content or adding model requests. Timestamp metadata persists with the raw history in the browser and the conversation archive. Page, ledger and other existing contributions can still invalidate
 their own prefix. The supplied time is the start of the turn, not a live clock.
 Background profiles retain their date in SYSTEM through the same middleware.
 A final guard counts messages, system text and tool schemas,
@@ -262,7 +260,7 @@ exceed the envelope.
 Set it to the actual server/model limit. It is a configured constraint, not a claim
 about a dynamically routed provider. Counting is approximate. Browser chat uses
 native Deep Agents summarization within an invocation; the browser still sends
-the last 30 messages and keeps its complete thread locally. The model profile
+the last 30 messages and archives its complete thread on the server after each settled exchange. The model profile
 uses this configured window for the native 85% trigger and 10% retained tail.
 Raw messages remain in graph state and compacted history remains readable under
 `/conversation_history/`. Browser chat has no checkpointer: summaries and ephemeral files
@@ -404,7 +402,7 @@ and [Figma proposal](https://www.figma.com/design/lnwgvzmvsutjFsuZiQ6Mzz?node-id
 These bounds are not a cumulative token/spend quota. Model fallback attempts
 share the run deadline and do not consume additional graph turns, but each counts
 in the run's model-call telemetry. Arete has no delegated children to budget. Conversation
-history stays in browser storage; Calendar's approval registry is described below.
+history is composed in the browser and archived as described below; Calendar's approval registry is described below.
 
 ## Enforcement
 
@@ -450,7 +448,7 @@ is introduced.
 
 ## Documents, direct session creation and outbound workouts
 
-Conversation messages remain browser-owned. Document originals, extracted blocks
+The browser composes conversation messages; the archive saves their settled snapshots. Document originals, extracted blocks
 and outbound Garmin operation records are durable in DuckDB/MotherDuck (migration 13).
 `services/documents.py` owns documents. API chat hydration builds an invocation-local
 StateBackend view at `/attachments/` before the first model call and rejects missing
@@ -980,3 +978,65 @@ outbound tools or granting another participant access. Slack remains the source
 of conversation history. The new operation receipts contain outgoing bodies,
 not copies of conversations. Existing non-admin Slack and browser coaching,
 background missions, Calendar approvals and training-write policies are preserved.
+
+## Conversation archives and titles
+
+Migration 51 adds `app.coach_conversations` and its athlete-scoped view. This is
+an explicit change to the former browser-only contract. The browser still owns
+the active history, unsent drafts, selected attachments and the 30-message model
+window. No chat checkpointer or automatic injection of previous conversations is
+added. `services/conversations.py` owns snapshots, search, deletion and titles;
+`api/conversations.py` exposes them without importing the agent stack.
+
+`useConversationArchive` imports existing local threads and saves complete settled
+snapshots after one second of inactivity, one HTTP write at a time. It does not
+write on every token. Closing the tab before the archive acknowledgement retains
+the local copy; reopening retries its import. A closed browser does not guarantee
+that the current response has reached the server archive. Failed/interrupted
+answers remain visible but their text is excluded from search. Unsent drafts and
+selected attachments remain local; sent attachment IDs, briefing references,
+timestamps, workout cards and feedback receipts travel with their messages.
+
+Each snapshot is bounded to 1,000 messages and 2 MB, with 64,000 characters per
+message. Overflow fails explicitly. The local cache allows 100 unsaved/open threads;
+from 30 cached threads it evicts only inactive, draft-free threads whose exact
+payload digest has been acknowledged. The archive is paginated by 30, with a
+100,000 offset bound. Opening a thread fetches its full bounded snapshot. Opening
+or searching never calls a model. Search is literal case-insensitive text matching
+on titles and complete settled message text, not semantic/vector retrieval.
+
+Writes carry a revision and a deterministic SHA-256 write ID. Repeating an
+acknowledgement-lost write returns its existing revision; a different payload with
+the same write ID or a stale revision conflicts. Conflicts keep local work. The
+explicit recovery action backs up that snapshot in an athlete/thread-scoped local
+storage key before reading the server version, retaining the local draft and
+selected documents. Deletion clears archive content and leaves a tombstone so
+late snapshots/title tasks cannot recreate it, then deletes thread documents.
+
+Only the browser chat profile binds `search_conversations` and `read_conversation`.
+The capability catalog owns their permissions and source-handling instructions.
+Search returns five dated, explicitly abbreviated excerpts plus conversation links;
+read returns at most five complete messages and rejects results above 20,000
+characters. Historical messages never authorize new actions; current domain data
+must be read before a write. Slack and unattended missions do not gain access.
+
+`ConversationTitleMiddleware.abefore_agent` starts one invocation-local task and
+returns immediately. Composition supplies a separate client on the invocation's
+resolved route: one request, 512 output tokens, temperature 0, ten seconds, no SDK
+retry, no model fallback, existing free/paid provider price policy. Inputs above
+4,000 characters retain the provisional title without a request. An atomic DB
+claim permits at most one automatic attempt per conversation. This adds at most
+one concurrent request and one recorded model call to the first relevant chat run.
+The title never consumes or replaces the main answer stream.
+
+The task saves a validated title before emitting the custom `thread_title` event
+with `thread_id`. The projection forwards it independently of answer tokens;
+the browser patches only the originating thread. A manual rename wins over both
+an in-flight title generation and a late snapshot acknowledgement. The execution
+runtime cancels and joins unfinished title work when the graph ends, times out or
+is cancelled, so it never waits for a title before `done`. An unavailable,
+truncated or cancelled title keeps the provisional label and is not retried.
+
+`FollowUp` adds the Conversations tab and reuses `ThreadHistory` inside Chiron.
+The editable [Figma proposal](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=271-3203)
+extends the Suivi reference with Pierre/Prune desktop/mobile variants.

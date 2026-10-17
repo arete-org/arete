@@ -1,3 +1,6 @@
+import { ThreadHistory } from '@/components/agent/ThreadHistory';
+import { conversationsApi, openConversation } from '@/lib/conversations';
+import { conversationsKey } from '@/hooks/useConversationArchive';
 import { Button } from '@/components/ui';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
@@ -80,10 +83,19 @@ function AutomationList() {
   </div>;
 }
 
+function ConversationArchive() {
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const client = useQueryClient();
+  const remove = useMutation({ mutationFn: conversationsApi.remove, onSuccess: (_data, id) => { window.dispatchEvent(new CustomEvent("arete:conversation-deleted", { detail: id })); setDeleting(null); void client.invalidateQueries({ queryKey: conversationsKey }); } });
+  return <>{deleting && <div role="alert" className="ui-inset p-4"><p>Supprimer cette conversation et ses documents ? Elle ne sera plus accessible au coach.</p><Button onClick={() => remove.mutate(deleting)} disabled={remove.isPending}>Supprimer</Button><Button variant="ghost" onClick={() => setDeleting(null)}>Annuler</Button><ErrorText error={remove.error} /></div>}<ThreadHistory threads={[]} activeId="" runningId={null} onSelect={openConversation} onCreate={() => { window.dispatchEvent(new Event("arete:conversation-new")); window.dispatchEvent(new Event("arete:coach-open")); }} onDelete={setDeleting} /></>;
+}
+
 export function FollowUpPage() {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'automations' ? 'automations' : 'inbox';
+  const tab = params.get('tab') === 'conversations' ? 'conversations' : params.get('tab') === 'automations' ? 'automations' : 'inbox';
+  const thread = params.get('thread');
+  useEffect(() => { if (thread && tab === 'conversations') openConversation(thread); }, [thread, tab, location.key]);
   const [filter, setFilter] = useState('todo');
   const [offset, setOffset] = useState(0);
   const query = useQuery({ queryKey: [...inboxKey, filter, offset], queryFn: () => automationApi.inbox(filter, offset), enabled: tab === 'inbox' });
@@ -93,8 +105,8 @@ export function FollowUpPage() {
   const coaching = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled: tab === 'inbox' && filter === 'todo' });
   return <div className="suivi-page">
     <header className="suivi-header"><h1 className="page-title">Suivi</h1><p>Les prochains échanges avec Chiron.</p></header>
-    <nav className="suivi-tabs" aria-label="Suivi et automatisations"><Button variant="ghost" aria-current={tab === 'inbox' ? 'page' : undefined} onClick={() => setParams({})}>Suivi{query.data?.unread ? ` · ${query.data.unread}` : ''}</Button><Button variant="ghost" aria-current={tab === 'automations' ? 'page' : undefined} onClick={() => setParams({ tab: 'automations' })}>Automatisations</Button></nav>
-    <div className="suivi-grid"><div className="suivi-stack">{tab === 'automations' ? <AutomationList /> : <>
+    <nav className="suivi-tabs" aria-label="Suivi et automatisations"><Button variant="ghost" aria-current={tab === 'inbox' ? 'page' : undefined} onClick={() => setParams({})}>Suivi{query.data?.unread ? ` · ${query.data.unread}` : ''}</Button><Button variant="ghost" aria-current={tab === 'automations' ? 'page' : undefined} onClick={() => setParams({ tab: 'automations' })}>Automatisations</Button><Button variant="ghost" aria-current={tab === "conversations" ? "page" : undefined} onClick={() => setParams({ tab: "conversations" })}>Conversations</Button></nav>
+    <div className="suivi-grid"><div className="suivi-stack">{tab === 'conversations' ? <ConversationArchive /> : tab === 'automations' ? <AutomationList /> : <>
       <div className="suivi-actions" aria-label="Filtres">{[['todo', 'À traiter'], ['all', 'Tout'], ['archives', 'Archives']].map(([value, label]) => <Button variant="ghost" key={value} aria-pressed={filter === value} onClick={() => { setFilter(value); setOffset(0); }}>{label}</Button>)}</div>
       {filter === 'todo' && coaching.data?.items.map(item => <article className="suivi-row" key={`${item.kind}-${item.record.id}`}><div className="flex-1"><h2>{item.kind === 'followup' ? item.record.question : 'Une proposition pour ton entraînement'}</h2><p className="suivi-note">Chiron attend ton retour</p></div><Button variant="ghost" onClick={() => discussWithCoach({ kind: item.kind, id: item.record.id })}>En parler ↗</Button></article>)}
       {query.isPending && <p role="status">Chargement du suivi…</p>}<ErrorText error={query.error} />

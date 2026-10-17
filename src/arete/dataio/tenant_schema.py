@@ -32,6 +32,7 @@ LEGACY_OWNERS = frozenset(
 )
 
 PRIVATE_TABLES = (
+    "coach_conversations",
     *AUTOMATION_TABLES,
     *sorted(LEGACY_OWNERS),
     "exercises",
@@ -102,12 +103,14 @@ def migrate(con: duckdb.DuckDBPyConnection) -> None:
     """Rebuild atomically: DuckDB cannot add NOT NULL after updating indexed rows."""
     from arete.dataio.automation_schema import DDL as automation_ddl
     from arete.dataio.coaching_schema import DDL as coaching_ddl
+    from arete.dataio.conversation_schema import DDL as conversation_ddl
     from arete.dataio.mirror import DDL as files_ddl
     from arete.garmin.auth_state import DDL as challenges_ddl
 
     con.execute("BEGIN TRANSACTION")
     try:
         con.execute(automation_ddl)
+        con.execute(conversation_ddl)
         con.execute(coaching_ddl)
         con.execute(files_ddl)
         con.execute(challenges_ddl)

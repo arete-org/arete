@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import aclosing
 from dataclasses import replace
 from datetime import date
-from functools import lru_cache, wraps
+from functools import lru_cache, partial, wraps
 from pathlib import Path
 from threading import Lock
 from typing import Any, Literal
@@ -154,9 +154,31 @@ def _assemble(
         if skills_backend is not None
         else None
     )
+    from arete.agent.runtime.conversation_title import (
+        TITLE_MAX_TOKENS,
+        TITLE_TIMEOUT_SECONDS,
+        generate_title,
+    )
+
+    title_generator = (
+        partial(
+            generate_title,
+            build_chat_model(
+                route=replace(route, fallbacks=()),
+                max_tokens=TITLE_MAX_TOKENS,
+                temperature=0,
+                timeout=TITLE_TIMEOUT_SECONDS,
+                max_retries=0,
+                openrouter_reasoning=False,
+            ),
+        )
+        if profile_id == "chat"
+        else None
+    )
     graph = build_agent(
         profile,
         checkpointer=checkpointer,
+        title_generator=title_generator,
         model=model,
         context_tokens=route.context_tokens,
         output_tokens=AGENT_MAX_TOKENS,

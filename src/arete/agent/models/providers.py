@@ -1,5 +1,7 @@
 """Translate a resolved model route into the OpenAI-compatible adapter."""
 
+import hashlib
+import json
 from urllib.parse import urlsplit
 
 from langchain_openai import ChatOpenAI
@@ -58,3 +60,12 @@ def build_chat_model(
         stream_chunk_timeout=min(timeout, AGENT_STREAM_CHUNK_TIMEOUT_SEC),
         extra_body=extra_body or None,
     )
+
+
+def provider_session_id(athlete_id: int, profile: str, identity: str) -> str:
+    """Namespace untrusted thread IDs without mutating cached provider clients."""
+    value = json.dumps(
+        ["arete-provider-affinity-v1", athlete_id, profile, identity],
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()

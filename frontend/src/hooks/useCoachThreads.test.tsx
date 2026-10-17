@@ -5,7 +5,7 @@ import { qk } from '@/lib/queryKeys';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ChatMessage, StreamEvent } from '@/lib/agentStream';
-import { THREADS_KEY } from '@/lib/agentThreads';
+import { THREADS_KEY, MAX_THREADS } from '@/lib/agentThreads';
 import { useCoachThreads } from './useCoachThreads';
 
 const runs = vi.hoisted(
@@ -35,6 +35,10 @@ vi.mock('@/lib/agentStream', async (importOriginal) => ({
         );
       })
   ),
+}));
+vi.mock('@/lib/conversations', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/conversations')>()),
+  conversationsApi: { remove: vi.fn().mockResolvedValue({ deleted: true }), save: vi.fn(async t => ({ revision: (t.archiveRevision ?? 0) + 1, title: t.title })), list: vi.fn().mockResolvedValue({ items: [], next_offset: null }), read: vi.fn() },
 }));
 vi.mock('@/lib/documents', () => ({ documentsApi: { deleteThread: vi.fn().mockResolvedValue({ deleted: true }) } }));
 const context = { page: 'dashboard', path: '/', params: {} };
@@ -492,13 +496,37 @@ it('opens each briefing in a fresh thread, keeps drafts and binds context only t
 });
 
 it('reports a full thread store without overwriting a draft or starting a request', () => {
-  const threads = Array.from({ length: 30 }, (_, i) => ({ id: `thread-${i}`, title: 'Keep', createdAt: i, updatedAt: i, messages: [], draft: `draft-${i}` }));
+  const threads = Array.from({ length: MAX_THREADS }, (_, i) => ({ id: `thread-${i}`, title: 'Keep', createdAt: i, updatedAt: i, messages: [], draft: `draft-${i}` }));
   localStorage.setItem(THREADS_KEY, JSON.stringify({ version: 1, activeId: threads[0].id, threads }));
   const { result } = renderHook(() => useCoachThreads(context), { wrapper });
   act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'briefing', id: 41 } })));
-  expect(result.current.error).toContain('Limite de 30');
+  expect(result.current.error).toContain(`Limite de ${MAX_THREADS}`);
   expect(result.current.active.draft).toBe('draft-0');
   expect(result.current.active.reference).toBeUndefined();
-  expect(result.current.store.threads).toHaveLength(30);
+  expect(result.current.store.threads).toHaveLength(MAX_THREADS);
   expect(runs).toHaveLength(0);
+});
+
+it('routes a late title to its original thread and preserves a manual rename', async () => {
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  act(() => { result.current.send('Hyrox après footing'); });
+  const origin = result.current.active.id;
+  act(() => result.current.create());
+  act(() => runs[0].emit({ type: 'thread_title', thread_id: origin, title: 'Footing et Hyrox' }));
+  expect(result.current.active.title).toBe('Nouvelle conversation');
+  expect(result.current.store.threads.find(t => t.id === origin)?.title).toBe('Footing et Hyrox');
+  act(() => result.current.renameLocal(origin, 'Mon entraînement'));
+  act(() => runs[0].emit({ type: 'thread_title', thread_id: origin, title: 'Titre retardé' }));
+  expect(result.current.store.threads.find(t => t.id === origin)?.title).toBe('Mon entraînement');
+  await act(async () => runs[0].resolve());
+});
+
+it('opens a thirty-first thread without discarding any older draft', () => {
+  const threads = Array.from({ length: 30 }, (_, i) => ({ id: `thread-${i}`, title: 'Keep', createdAt: i, updatedAt: i, messages: [], draft: `draft-${i}` }));
+  localStorage.setItem(THREADS_KEY, JSON.stringify({ version: 1, activeId: threads[0].id, threads }));
+  const { result } = renderHook(() => useCoachThreads(context), { wrapper });
+  act(() => result.current.create());
+  expect(result.current.store.threads).toHaveLength(31);
+  expect(result.current.store.threads.filter(t => t.draft)).toHaveLength(30);
+  expect(result.current.error).toBe('');
 });
