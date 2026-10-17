@@ -17,6 +17,7 @@ from arete.services.feature_flags import FeatureFlags, set_feature_flags
         coaching.build_briefing_agent,
         coaching.build_feedback_agent,
         coaching.build_review_agent,
+        coaching.build_evening_agent,
     ],
 )
 def test_cached_route_changes_on_next_invocation_and_reverts(monkeypatch, factory):

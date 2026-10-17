@@ -135,6 +135,7 @@ class TestCronDailySync:
             "/api/cron/checkin",
             "/api/cron/automations",
             "/api/cron/evening",
+            "/api/cron/evening-message",
         }
         assert {cron["path"] for cron in crons} == paths
         assert len({(c["path"], c["schedule"]) for c in crons}) == len(crons) > 1
@@ -148,6 +149,8 @@ class TestCronDailySync:
         # The evening's replanning: once, after the day's last sync window.
         assert hours["/api/cron/evening"] == [18]
         assert max(hours["/api/cron/daily-sync"]) < 18
+        # The evening message (ARE-64): its own windows, the replanning's kept.
+        assert sorted(hours["/api/cron/evening-message"]) == [18, 19, 20]
 
 
 def test_the_backend_bundle_ships_its_dependencies():
