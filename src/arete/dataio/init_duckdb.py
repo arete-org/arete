@@ -368,9 +368,10 @@ CREATE TABLE IF NOT EXISTS app.plan_decisions (
     decision           VARCHAR NOT NULL,   -- 'keep', 'ease', 'replace_easy', 'rest', 'move'
     reason             VARCHAR NOT NULL,
     readiness_score    DOUBLE,
-    -- 'garmin_training', 'garmin', 'model', or 'athlete': also the origin,
-    -- for a choice the athlete made with « Modifier » (ARE-61) and no
-    -- readiness. A dedicated origin column would need a migration.
+    -- 'garmin_training', 'garmin', 'model', 'athlete' or 'missed': also the
+    -- origin, for a choice the athlete made with « Modifier » (ARE-61) or the
+    -- evening replanning of a missed session, both with no readiness. A
+    -- dedicated origin column would need a migration (a later one).
     readiness_source   VARCHAR,
     acwr               DOUBLE,
     original_json      VARCHAR,

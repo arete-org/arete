@@ -90,6 +90,7 @@ export const DECISION_LABEL: Record<string, string> = {
   replace_easy: 'Remplacée',
   rest: 'Repos',
   move: 'Déplacée',
+  drop: 'Laissée de côté',
 };
 
 /** "08:05" in the browser's time zone, from an ISO timestamp. */

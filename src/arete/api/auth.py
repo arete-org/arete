@@ -56,6 +56,7 @@ PUBLIC_PATHS = frozenset(
         "/strava/callback",
         "/cron/daily-sync",
         "/cron/checkin",
+        "/cron/evening",
         "/cron/automations",
         "/slack/events",
         "/openapi.json",
