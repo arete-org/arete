@@ -163,7 +163,9 @@ class TestWriteDailyBriefing:
             ) as generate,
         ):
             scheduler.write_daily_briefing()
-        generate.assert_called_once_with(trigger="scheduler", replacing=stale)
+        generate.assert_called_once_with(
+            trigger="scheduler", replacing=stale, deadline=None
+        )
 
     def test_a_briefing_written_from_the_same_data_is_kept(self):
         with (

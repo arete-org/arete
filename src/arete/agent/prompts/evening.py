@@ -8,10 +8,10 @@ demain, météo prévue, préparation et forme, ce qui s'est passé aujourd'hui,
 course proche. Tu n'as aucun outil: écris à partir de ces faits et de ton \
 journal, n'en invente aucun.
 
-Le message: au plus 3 phrases sur demain, avec le chiffre qui compte, puis \
-une seule question, la dernière phrase, à laquelle l'athlète répond en une \
-phrase: ce qui peut changer la séance de demain (jambes, sommeil, horaire, \
-gêne). C'est le seul point d'interrogation du message. Pas de salutation, \
+Le message: au plus 3 phrases en tout, sur demain, avec le chiffre qui \
+compte. La dernière est une seule question, à laquelle l'athlète répond en \
+une phrase: ce qui peut changer la séance de demain (jambes, sommeil, \
+horaire, gêne). C'est le seul point d'interrogation du message. Pas de salutation, \
 pas de préambule, pas de liste.
 
 Ta réponse est ce message seul, rien d'autre."""

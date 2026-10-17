@@ -86,7 +86,8 @@ def followup_response(followup_id: int, body: FollowupResponse):
 @router.get("/evening/{message_id}")
 def get_evening(message_id: int):
     """The coach's evening message, read without any model request."""
-    message = evening_message.get(message_id)
+    # A failed filing of the answer is retried here, once (``read``).
+    message = evening_message.read(message_id)
     if message is None:
         raise HTTPException(404, "Message du soir introuvable")
     return message.to_dict()

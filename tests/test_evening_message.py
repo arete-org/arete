@@ -165,6 +165,8 @@ def test_overlapping_dispatches_pay_for_one_message(db):
         RuntimeError("provider down"),
         "Demain, tempo. Bonne séance.",  # no question
         "Prêt ? Comment sont tes jambes ?",  # two questions
+        # Four sentences: three at most, the question included.
+        "Demain, tempo. Il fera frais. Ta forme suit. Comment sont tes jambes ?",
     ],
 )
 def test_a_failed_run_keeps_the_evening_and_is_never_replayed(db, answer):
@@ -204,6 +206,7 @@ def evening(db, monkeypatch):
         "arete.dataio.settings.get_user_settings", lambda *a, **k: settings
     )
     monkeypatch.setattr(evening_message, "unreachable", lambda _settings: None)
+    settings["real_run_evening"] = coaching.run_evening
     produce = MagicMock(return_value=MESSAGE)
     monkeypatch.setattr(coaching, "run_evening", produce)
     sent = MagicMock(return_value=NotifyResult(1, 0))
@@ -291,7 +294,8 @@ def test_the_pass_skips_athletes_outside_their_evening(db, monkeypatch):
         return datetime.combine(day, time(hour, minute), tzinfo=paris).timestamp()
 
     quiet = QuietHours()
-    start = scheduler.EVENING_MESSAGE_FROM_HOUR
+    from arete.services.settings import EVENING_FIRST_HOUR as start
+
     assert not scheduler.evening_owed(at(17, 59), "Europe/Paris", quiet, start)
     assert scheduler.evening_owed(at(20, 5), "Europe/Paris", quiet, start)
     assert not scheduler.evening_owed(at(21, 45), "Europe/Paris", quiet, start)
@@ -538,3 +542,214 @@ def test_one_evening_costs_one_model_request_and_no_tool(db, monkeypatch, caplog
     assert result["messages"][-1].text == MESSAGE
     (line,) = [r.getMessage() for r in caplog.records if "Agent run:" in r.getMessage()]
     assert "profile=evening calls=1 tools=0" in line
+
+
+# --------------------------------------------------------------------------- #
+# Review fixes
+# --------------------------------------------------------------------------- #
+@pytest.fixture(autouse=True)
+def _fresh_throttle():
+    from arete import scheduler
+
+    scheduler._quiet_evenings.clear()
+    yield
+    scheduler._quiet_evenings.clear()
+
+
+def test_a_closed_question_says_so_and_takes_no_answer(db):
+    _plan(1)
+    message = _written()
+    assert message.to_dict()["answerable"] is True
+    con = connect()
+    con.execute(
+        "UPDATE app.coach_evening_messages SET date = ? WHERE id = ?",
+        [athlete_today() - timedelta(days=2), message.id],
+    )
+    con.close()
+    # Tapped days later from the inbox: closed, so the composer chats.
+    assert evening_message.get(message.id).to_dict()["answerable"] is False
+
+
+def test_an_answered_question_is_no_longer_answerable(db):
+    _plan(1)
+    message = _written()
+    saved = evening_message.answer(message.id, "Bien.")
+    assert saved["answerable"] is False and saved["journaled"] is True
+
+
+def test_a_failed_filing_is_filed_on_the_next_read_once(db, monkeypatch, router_client):
+    from arete.api.coach import router
+    from arete.services import memory
+
+    _plan(1)
+    message = _written()
+    original = memory.append_entry
+    monkeypatch.setattr(
+        memory, "append_entry", MagicMock(side_effect=memory.MemoryConflict("busy"))
+    )
+    saved = evening_message.answer(message.id, "Bien.")
+    assert saved["journal"] == "failed" and saved["journaled"] is False
+    monkeypatch.setattr(memory, "append_entry", original)
+    read = router_client(router).get(f"/coach/evening/{message.id}").json()
+    assert read["journaled"] is True
+    router_client(router).get(f"/coach/evening/{message.id}")
+    assert _notes().count("Question du soir") == 1
+
+
+def test_the_next_briefing_files_an_answer_left_unfiled(db, monkeypatch):
+    from arete.services import memory
+    from arete.services.briefing import briefing_facts
+
+    _plan(1)
+    message = _written()
+    original = memory.append_entry
+    monkeypatch.setattr(memory, "append_entry", MagicMock(side_effect=OSError("x")))
+    evening_message.answer(message.id, "Bien.")
+    monkeypatch.setattr(memory, "append_entry", original)
+    briefing_facts(athlete_today() + timedelta(days=1), "Règle.")
+    assert _notes().count("Question du soir") == 1
+
+
+def test_a_failed_evening_lookup_leaves_the_briefing_digest_alone(db, monkeypatch):
+    from arete.services.briefing import briefing_facts
+
+    day = athlete_today() + timedelta(days=1)
+    plain = briefing_facts(day, "Règle.")
+    monkeypatch.setattr(
+        evening_message, "answered_lines", MagicMock(side_effect=OSError("down"))
+    )
+    assert briefing_facts(day, "Règle.") == plain
+
+
+def test_the_message_waits_for_the_evenings_replanning(evening, monkeypatch):
+    """Vercel fires both at 18 UTC: tomorrow's plan is read after the replanning."""
+    from time import monotonic
+
+    from arete import scheduler
+    from arete.services import missed_sessions
+
+    _settings, produce, sent = evening
+    _plan(1)
+    _plan(0)  # today's session, still pending with no training: missed
+    assert missed_sessions.candidates() is True
+    assert scheduler.write_evening_message(monotonic()) == "not yet: replanning first"
+    produce.assert_not_called()
+    assert _rows() == []
+    # Once the replanning holds the day, the next window writes the message.
+    monkeypatch.setattr(missed_sessions, "candidates", lambda *a, **k: False)
+    assert scheduler.write_evening_message(monotonic()).startswith("written")
+
+
+def test_the_run_stops_before_the_platform_kills_the_function(evening, monkeypatch):
+    from time import monotonic
+
+    from arete import coaching, scheduler
+
+    seen = []
+
+    def invoke(graph, state, *, context):
+        seen.append(context.deadline)
+        raise TimeoutError
+
+    _plan(1)
+    started = monotonic()
+    monkeypatch.setattr(coaching, "run_evening", evening[0]["real_run_evening"])
+    monkeypatch.setattr(coaching, "invoke_agent_sync", invoke)
+    monkeypatch.setattr(coaching, "build_evening_agent", lambda: object())
+    outcome = scheduler.write_evening_message(started)
+    assert outcome == "failed: TimeoutError"
+    (deadline,) = seen
+    assert deadline == pytest.approx(started + scheduler.SCHEDULE_RUN_SECONDS, abs=1)
+
+
+def test_a_claim_left_by_a_killed_function_is_settled_failed(evening):
+    from time import monotonic
+
+    from arete import scheduler
+
+    _settings, produce, _sent = evening
+    _plan(1)
+    con = connect()
+    con.execute(
+        "INSERT INTO app.coach_evening_messages (date, created_at) VALUES (?, ?)",
+        [athlete_today(), datetime(2000, 1, 1)],
+    )
+    con.close()
+    assert scheduler.write_evening_message(monotonic()) == "already failed"
+    produce.assert_not_called()
+    assert _rows()[0][0] == "failed"
+    assert evening_message.get_for_day(athlete_today()).error == "StoppedRun"
+
+
+def test_a_running_claim_is_left_alone(evening):
+    from time import monotonic
+
+    from arete import scheduler
+    from arete.services.coaching_repository import naive_utc_now
+
+    _settings, _produce, _sent = evening
+    _plan(1)
+    con = connect()
+    con.execute(
+        "INSERT INTO app.coach_evening_messages (date, created_at) VALUES (?, ?)",
+        [athlete_today(), naive_utc_now()],
+    )
+    con.close()
+    assert scheduler.write_evening_message(monotonic()) == "already pending"
+
+
+def test_an_evening_with_nothing_to_say_is_surveyed_once_an_hour(evening, monkeypatch):
+    from time import monotonic
+
+    from arete import scheduler
+
+    survey = MagicMock(wraps=evening_message.survey)
+    monkeypatch.setattr(evening_message, "survey", survey)
+    assert scheduler.write_evening_message(monotonic()) == "nothing to say"
+    assert scheduler.write_evening_message(monotonic()) == "nothing to say"
+    assert survey.call_count == 1
+
+
+def test_a_provider_error_is_stored_by_its_type_only(db):
+    _plan(1)
+
+    def produce(_facts):
+        raise RuntimeError("provider echoed: Nous sommes vendredi, ton journal…")
+
+    failed = _written(produce)
+    assert failed.error == "RuntimeError"
+    # Our own format refusal is safe to keep, with its reason.
+    bad = evening_message.write(lambda _f: "Bonne séance.", evening_message.survey())
+    assert bad is None  # the evening is already held by the failed run
+
+
+@pytest.mark.parametrize("mission", ["run_briefing", "run_review", "run_evening"])
+def test_scheduled_missions_stop_by_the_dispatch_deadline(monkeypatch, mission):
+    """The daily briefing and the week's review share the evening's bound."""
+    from arete import coaching
+
+    seen = []
+
+    def invoke(graph, state, *, context):
+        seen.append(context.deadline)
+        return {"messages": []}
+
+    monkeypatch.setattr(coaching, "invoke_agent_sync", invoke)
+    for factory in (
+        "build_briefing_agent",
+        "build_review_agent",
+        "build_evening_agent",
+    ):
+        monkeypatch.setattr(coaching, factory, lambda: object())
+    with pytest.raises(RuntimeError, match="no messages"):
+        getattr(coaching, mission)("Faits.", deadline=123.0)
+    with pytest.raises(RuntimeError, match="no messages"):
+        getattr(coaching, mission)("Faits.")
+    assert seen == [123.0, None]
+
+
+def test_the_prompt_counts_the_question_in_its_three_sentences():
+    from arete.agent.prompts.evening import EVENING_PROMPT
+
+    assert "au plus 3 phrases en tout" in EVENING_PROMPT
+    assert evening_message.MAX_SENTENCES == 3
