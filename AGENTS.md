@@ -128,14 +128,14 @@ do not add tests that merely repeat an implementation. Live model evaluations in
 - A PR body fills every section of `.github/pull_request_template.md`, in order,
   including when an agent passes `--body` or `--body-file` to `gh pr create`, which
   skips GitHub's prefill.
-- The real data lives in the MotherDuck database `arete`, shared by Vercel and the
-  Docker stack (`ARETE_DB=md:arete`). Read it through the HTTP API rather than
+- The real data lives in the MotherDuck database `arete_v2`, shared by Vercel and the
+  Docker stack (`ARETE_DB=md:arete_v2`). Read it through the HTTP API rather than
   scripts. A local DuckDB file (`make dev`, tests) allows one writer: a script that
   opens it while a backend runs makes the API answer 500.
 - Deployment is described in `docs/deployment.md`. In short: a PR labelled
   `preview` gets a preview from CI when deployable inputs change; green CI on
   `main` with deployable changes deploys to https://arete-main-arete15.vercel.app (database
-  `md:arete_preview`); production ships in batches through the manual **Deploy
+  `md:arete_preview_v2`); production ships in batches through the manual **Deploy
   production** workflow, which requires a healthy ancestor preview with no
   deployable input changed since (documentation-only merges are allowed).
   The boot clones a MotherDuck database before migrating it, and

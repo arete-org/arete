@@ -12,7 +12,7 @@ services:
     environment:
       # Same MotherDuck database as the Vercel deployment: one source of truth.
       # The daily sync runs there (Vercel Cron), so none is scheduled here.
-      - ARETE_DB=md:arete
+      - ARETE_DB=md:arete_v2
       # Atomically share automation claims with the Vercel cron windows.
       - ARETE_AUTOMATION_WORKER=true
       # Files beside the database stay on the host and are mirrored into it.
