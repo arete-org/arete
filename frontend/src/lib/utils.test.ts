@@ -37,5 +37,8 @@ describe('readableError', () => {
     expect(readableError(new Error('API Error 404: {"detail":"Not Found"}'))).toBe('Élément introuvable : il a peut-être été supprimé.');
     expect(readableError(new Error('API Error 404: {"detail":"Bilan introuvable"}'))).toBe('Bilan introuvable');
     expect(readableError(new Error('API Error 422: {"detail":[{"loc":["body","timezone"],"msg":"Value error, Fuseau horaire inconnu.","type":"value_error"}]}'))).toBe('Fuseau horaire inconnu.');
+    // Each validation message is judged alone: the English one is dropped.
+    expect(readableError(new Error('API Error 422: {"detail":[{"msg":"Field required"},{"msg":"Value error, Fuseau horaire inconnu."}]}'))).toBe('Fuseau horaire inconnu.');
+    expect(readableError(new Error('API Error 422: {"detail":[{"msg":"Field required"}]}'))).toBe('Demande refusée par le serveur : vérifie les champs.');
   });
 });

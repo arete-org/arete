@@ -87,10 +87,12 @@ const UNEXPECTED = 'Une erreur inattendue est survenue : réessaie.';
 function detailText(detail: unknown): string | null {
   if (typeof detail === 'string') return detail;
   if (!Array.isArray(detail)) return null;
+  // Each message on its own: an English one next to a French one is dropped, not mixed in.
   const messages = detail
     .map((item) => (item && typeof item === 'object' ? (item as { msg?: unknown }).msg : null))
     .filter((msg): msg is string => typeof msg === 'string')
-    .map((msg) => msg.replace(/^Value error, /, ''));
+    .map((msg) => msg.replace(/^Value error, /, ''))
+    .filter(looksFrench);
   return messages.join(' ') || null;
 }
 
@@ -102,8 +104,14 @@ function detailText(detail: unknown): string | null {
  * through; anything else becomes a generic sentence. The raw error stays in
  * the console for debugging.
  */
+const logged = new WeakSet<object>();
+
 export function readableError(error: unknown): string {
-  console.debug('[readableError]', error);
+  // Once per error: render paths call this on every render.
+  if (error && typeof error === 'object' && !logged.has(error)) {
+    logged.add(error);
+    console.debug('[readableError]', error);
+  }
   if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
     return error.name === 'TimeoutError' ? 'Le serveur met trop de temps à répondre : réessaie.' : 'Demande annulée.';
   }
