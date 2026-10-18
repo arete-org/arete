@@ -276,10 +276,19 @@ def test_a_failed_scheduled_run_is_not_pushed_nor_replayed(evening):
 
 
 def test_an_unreachable_athlete_spends_no_request(db):
-    settings = {"timezone": "Europe/Paris", "coach_evening_enabled": True}
+    # No quiet hours: the default 21:30-07:00 would answer « heures calmes »
+    # whenever the suite runs at night.
+    settings = {
+        "timezone": "Europe/Paris",
+        "coach_evening_enabled": True,
+        "notification_preferences": {"quiet_hours": None},
+    }
     # No Web Push keys in tests: the push could not leave.
     assert evening_message.unreachable(settings) == "clés Web Push absentes du serveur"
-    settings["notification_preferences"] = {"kinds": {"evening": False}}
+    settings["notification_preferences"] = {
+        "kinds": {"evening": False},
+        "quiet_hours": None,
+    }
     assert evening_message.unreachable(settings) == "type de notification désactivé"
 
 
