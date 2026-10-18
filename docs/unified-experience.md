@@ -116,6 +116,10 @@ changes all sessions and records the outcome. Stale/foreign/expired inputs or a
 late failure commit nothing. Retrying the same explicit operation after a lost
 acknowledgement returns its saved receipt; a different operation conflicts.
 
+A routine approval and its preview share one attention subject. While the native
+approval is waiting, its existing review owns the single priority; applying,
+dismissing, expiring or invalidating the preview removes that priority too.
+
 The browser and native routine approval share `PlanChangeReview`. Preview tools
 are classified as proposals, never as read-only operations; they retain budgets
 and effect receipts. A routine's single native HITL approval covers the whole

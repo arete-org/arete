@@ -325,6 +325,63 @@ def running():
     return identifier
 
 
+@pytest.mark.parametrize("outcome", ["applied", "stale", "expired", "dismissed"])
+def test_grouped_native_approval_owns_one_priority_until_preview_is_closed(
+    athlete, monkeypatch, outcome
+):
+    import json
+
+    ids = sessions()
+    preview = planning.preview_plan_changes(proposal(ids))
+    assert attention.projection()["primary_ref"] == f"plan_change_set:{preview['id']}"
+    run = running()
+    with db_connection() as con:
+        con.execute("UPDATE app.automation_runs SET state='waiting' WHERE id=?", [run])
+        con.execute(
+            "INSERT INTO app.automation_interrupts (run_id,id,tool_call_id,payload_json,schema_json,created_at,expires_at) VALUES (?,'one','apply-group',?,'{}',?,?)",
+            [
+                run,
+                json.dumps(
+                    {
+                        "name": "apply_plan_changes",
+                        "args": {"preview_id": preview["id"]},
+                    }
+                ),
+                NOW,
+                NOW + timedelta(hours=72),
+            ],
+        )
+    items = attention.projection()["items"]
+    assert len(items) == 1
+    assert items[0]["source_ref"] == f"automation_run:{run}"
+    assert items[0]["subject_key"] == f"plan_change_set:{preview['id']}"
+    assert items[0]["expires_at"] == preview["expires_at"]
+    if outcome == "applied":
+        planning.apply_plan_changes(preview["id"], 1, preview["id"])
+    elif outcome == "stale":
+        GarminRepository().update_planned_session_fields(ids[0], description="Changed")
+    elif outcome == "expired":
+        monkeypatch.setattr(attention, "utc_now", lambda: NOW + timedelta(days=3))
+    else:
+        planning.dismiss_plan_changes(preview["id"], 1)
+    assert attention.projection()["items"] == []
+    # Native HITL can hold malformed model arguments before tool validation.
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.automation_interrupts SET payload_json=? WHERE run_id=?",
+            [
+                json.dumps(
+                    {
+                        "name": "apply_plan_changes",
+                        "args": {"preview_id": "invalid" * 100},
+                    }
+                ),
+                run,
+            ],
+        )
+    assert attention.projection()["items"] == []
+
+
 def test_typed_rpe_question_reuses_one_answer_owner_and_returns_recorded_effort(
     athlete, monkeypatch
 ):

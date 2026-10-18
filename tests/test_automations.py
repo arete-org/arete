@@ -484,6 +484,14 @@ async def test_grouped_preview_needs_no_approval_but_application_waits_once(
     assert len(waiting["interrupts"]) == 1
     interrupt = waiting["interrupts"][0]
     assert interrupt["payload"]["name"] == "apply_plan_changes"
+    from arete.services.coaching_attention import projection
+
+    subject = f"plan_change_set:{interrupt['payload']['args']['preview_id']}"
+    priorities = [
+        item for item in projection()["items"] if item["subject_key"] == subject
+    ]
+    assert len(priorities) == 1
+    assert priorities[0]["source_ref"] == f"automation_run:{run['id']}"
     assert all(repo.get_planned_session(identifier).revision == 1 for identifier in ids)
     service.decide(
         run["id"], interrupt["id"], interrupt["revision"], {"type": "approve"}

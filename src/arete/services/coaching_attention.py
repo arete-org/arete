@@ -7,7 +7,7 @@ DuckDB transactions, not worker locks, arbitrate overlapping scheduler workers.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import Literal
@@ -101,7 +101,10 @@ def candidates(con, settings: dict, now: datetime) -> list[AttentionCandidate]:
             AND NOT EXISTS (SELECT 1 FROM json_each(p.items_json,'$.items') j LEFT JOIN app.visible_planned_sessions s ON s.id=CAST(json_extract(j.value,'$.session_id') AS INTEGER)
               WHERE s.id IS NULL OR s.revision<>CAST(json_extract(j.value,'$.revision') AS INTEGER) OR s.status NOT IN ('pending','modified') OR s.date<b.day)
           UNION ALL
-          SELECT 'automation_run:'||w.id,coalesce(c.subject_key,'automation_run:'||w.id),
+          SELECT 'automation_run:'||w.id,
+            CASE WHEN json_extract_string(payload_json,'$.name')='apply_plan_changes'
+              THEN 'plan_change_set:'||coalesce(try_cast(json_extract_string(payload_json,'$.args.preview_id') AS UUID)::VARCHAR,'')
+              ELSE coalesce(c.subject_key,'automation_run:'||w.id) END,
             CASE WHEN json_extract_string(payload_json,'$.name')='ask_athlete' THEN 'question' ELSE 'approval' END,
             CASE WHEN c.subject_key LIKE '%:availability' THEN 'availability' WHEN c.subject_key LIKE '%:missing_context' THEN 'missing_context' ELSE NULL END,w.revision::VARCHAR,w.created_at,w.expires_at,coalesce(json_extract_string(definition_json,'$.title'),'Suivi de Chiron'),'/follow-up?run='||w.id
           FROM waiting w LEFT JOIN app.visible_coach_attention_claims c ON c.source_ref='automation_run:'||w.id AND c.question_call_id=w.tool_call_id
@@ -128,6 +131,35 @@ def candidates(con, settings: dict, now: datetime) -> list[AttentionCandidate]:
             "Plus de 100 suivis actifs. Ferme des suivis avant de continuer."
         )
     selected = [AttentionCandidate(*row) for row in found]
+    # A native approval and its immutable preview are the same decision. Keep
+    # the routine's approval entry point only while the preview remains valid.
+    change_sets = {
+        item.subject_key: item
+        for item in selected
+        if item.source_ref.startswith("plan_change_set:")
+    }
+    reviewed = {
+        item.subject_key
+        for item in selected
+        if item.source_ref.startswith("automation_run:")
+        and item.subject_key in change_sets
+    }
+    coordinated = []
+    for item in selected:
+        if (
+            item.source_ref.startswith("plan_change_set:")
+            and item.subject_key in reviewed
+        ):
+            continue
+        if item.source_ref.startswith(
+            "automation_run:"
+        ) and item.subject_key.startswith("plan_change_set:"):
+            preview = change_sets.get(item.subject_key)
+            if preview is None:
+                continue
+            item = replace(item, expires_at=min(item.expires_at, preview.expires_at))
+        coordinated.append(item)
+    selected = coordinated
     proposal_ids = [
         int(item.source_ref.split(":")[1])
         for item in selected
