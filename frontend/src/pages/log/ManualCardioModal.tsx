@@ -5,6 +5,7 @@ import { Button, Field, Input, Modal, ModalHeader, Select, Textarea } from '@/co
 import { garminApi } from '@/lib/api';
 import { toLocalISODate } from '@/lib/dates';
 import { invalidateAfterSession } from '@/lib/queryKeys';
+import { readableError } from '@/lib/utils';
 
 const SPORTS = [
   { value: 'running', label: 'Course' },
@@ -157,7 +158,7 @@ export function ManualCardioModal({
 
         {createMutation.isError && (
           <p className="text-xs font-sans text-danger-red">
-            Enregistrement impossible : {createMutation.error?.message}
+            Enregistrement impossible : {readableError(createMutation.error)}
           </p>
         )}
 

@@ -2,6 +2,7 @@ import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { Panel } from '@/components/ui';
 import type { SyncProgress } from '@/lib/garminSync';
 import type { SyncResult } from '@/types';
+import { readableError } from '@/lib/utils';
 
 const LABELS: Record<SyncProgress['stage'], string> = {
   preparing: 'Préparation de la synchronisation',
@@ -52,7 +53,7 @@ export function GarminSyncProgress({ progress, isPending, result, error }: {
       {!isPending && result && <p className="text-xs text-text-secondary">
         {result.activities_synced} importées · {result.activities_merged} fusionnées · {result.activities_skipped} déjà présentes
       </p>}
-      {error && <p role="alert" className="text-xs text-danger-red">{error.message}</p>}
+      {error && <p role="alert" className="text-xs text-danger-red">{readableError(error)}</p>}
       {!isPending && result && result.errors.length > 0 && <details className="text-xs text-danger-red">
         <summary className="cursor-pointer">{result.errors.length} erreur(s) à consulter</summary>
         <ul className="mt-2 space-y-1 break-words">{result.errors.map((message, index) => <li key={index}>{message}</li>)}</ul>

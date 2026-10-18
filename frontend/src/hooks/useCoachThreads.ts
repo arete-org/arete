@@ -31,6 +31,7 @@ import {
   updateThread,
   type ThreadStore,
 } from '@/lib/agentThreads';
+import { readableError } from '@/lib/utils';
 
 // One model run for the whole coach. Switching threads can never fan out requests.
 const MAX_ACTIVE_RUNS = 1;
@@ -155,7 +156,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   }, [setStore]);
   useEffect(() => {
     const open = (event: Event) => { const id = (event as CustomEvent).detail; if (typeof id === 'string') void openArchived(id); };
-    const fresh = () => { openSequence.current += 1; try { setStore(prev => addThread(prev)); } catch (err) { setError(String(err)); } };
+    const fresh = () => { openSequence.current += 1; try { setStore(prev => addThread(prev)); } catch (err) { setError(readableError(err)); } };
     const deleted = (event: Event) => { const id = (event as CustomEvent).detail; if (typeof id !== 'string') return; if (runRef.current?.threadId === id) runRef.current.controller.abort(); setStore(prev => removeThread(prev, id)); };
     const renamed = (event: Event) => { const { id, title } = (event as CustomEvent).detail; if (typeof id === 'string' && typeof title === 'string') setStore(prev => updateThread(prev, id, t => ({ ...t, title, titleManual: true }))); };
     window.addEventListener('arete:conversation-deleted', deleted);
@@ -175,7 +176,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         if (await digest(archivePayload(thread)) === thread.archiveDigest) removable.push(thread.id);
       }
       if (!cancelled && removable.length) setStore(prev => ({ ...prev, threads: prev.threads.filter(t => !removable.includes(t.id) || t !== store.threads.find(old => old.id === t.id)) }));
-    })().catch(err => { if (!cancelled) setError(String(err)); });
+    })().catch(err => { if (!cancelled) setError(readableError(err)); });
     return () => { cancelled = true; };
   }, [store, runningId, setStore]);
   const create = () => {

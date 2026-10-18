@@ -10,6 +10,7 @@ import { useGarminSync } from './useGarminSync';
 import { GarminSyncProgress } from './GarminSyncProgress';
 import { toLocalISODate } from '@/lib/dates';
 import { invalidateWithDashboard } from '@/lib/queryKeys';
+import { readableError } from '@/lib/utils';
 
 type Alert = { type: 'success' | 'error' | 'info'; message: string };
 
@@ -60,7 +61,7 @@ export function SystemTab() {
     onError: (error) => {
       // Garmin may have refused the session: the status then asks to reconnect.
       invalidateWithDashboard(queryClient, ['syncStatus']);
-      setAlert({ type: 'error', message: `LECTURE DU SEUIL IMPOSSIBLE : ${error}` });
+      setAlert({ type: 'error', message: `LECTURE DU SEUIL IMPOSSIBLE : ${readableError(error)}` });
     },
   });
 
@@ -77,7 +78,7 @@ export function SystemTab() {
       });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
     },
-    onError: (error) => setAlert({ type: 'error', message: `RECALCUL IMPOSSIBLE : ${error}` }),
+    onError: (error) => setAlert({ type: 'error', message: `RECALCUL IMPOSSIBLE : ${readableError(error)}` }),
   });
 
   const syncMutation = useGarminSync();
@@ -97,7 +98,7 @@ export function SystemTab() {
     },
     onError: (error) => {
       invalidateWithDashboard(queryClient, ['syncStatus']);
-      setAlert({ type: 'error', message: `SYNCHRO SANTÉ IMPOSSIBLE : ${error}` });
+      setAlert({ type: 'error', message: `SYNCHRO SANTÉ IMPOSSIBLE : ${readableError(error)}` });
     },
   });
 

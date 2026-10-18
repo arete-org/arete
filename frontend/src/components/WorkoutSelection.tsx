@@ -5,6 +5,7 @@ import { exportApi } from '@/lib/documents';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
 import { type WorkoutSession, type WorkoutView, workoutApi, workoutKey, workoutsKey, mergeWorkout, readWorkouts } from '@/lib/workouts';
 import { WorkoutCard } from './WorkoutCard';
+import { readableError } from '@/lib/utils';
 
 const CARD_STALE_MS = 60_000;
 const POLL_MS = 1000;
@@ -55,7 +56,7 @@ export function WorkoutSelection({ sessions, children, onResult, locked = false,
   const render = (id: number) => {
     const props: ComponentProps<typeof WorkoutCard> = {
       sessionId: id, initial: latest.find(v => v.session.id === id), compact: !!children,
-      readError: read.error?.message ?? read.data?.errors[id],
+      readError: (read.error ? readableError(read.error) : read.data?.errors[id]),
       selected: selected.has(id), locked,
       onResult: text => { setCompleted(text); onResult?.(text); },
       onSelect: (session, checked) => {
@@ -87,7 +88,7 @@ export function WorkoutSelection({ sessions, children, onResult, locked = false,
         <option value="">Choisir une montre compatible</option>{devices.data?.map(d => <option key={d.id} value={d.id} disabled={!effective.every(s => d.sports.includes(s.sport))}>{d.name}{!d.sports.length ? ' · compatibilité inconnue' : ''}</option>)}
       </select><p className="mt-1 text-xs text-text-muted">La réception se vérifie sur la montre après synchronisation.</p></>}
       {selectionBlocked && !actions.busy && <p className="mt-2 text-xs text-warning-orange">Une séance a changé ou nécessite une vérification Garmin. Vérifie son état, puis sélectionne-la à nouveau.</p>}
-      {devices.error && watch && <p role="alert" className="mt-2 text-xs text-danger-red">{devices.error.message} Tu peux envoyer vers Connect sans montre.</p>}
+      {devices.error && watch && <p role="alert" className="mt-2 text-xs text-danger-red">{readableError(devices.error)} Tu peux envoyer vers Connect sans montre.</p>}
       {actions.error ? <p role="alert" className="mt-2 text-xs text-danger-red">{actions.error}</p> : completed && <p role="status" className="mt-2 text-xs text-text-secondary">{completed}</p>}
     </div>}
     {!effective.length && completed && <div role="status" className="my-3 flex items-start gap-3 rounded-xl border border-text-muted/15 bg-shadow/30 p-3 text-xs text-text-secondary">

@@ -21,6 +21,7 @@ import {
   sportLabel,
 } from './sessionForm';
 import { GarminState } from './WeekBoard';
+import { readableError } from '@/lib/utils';
 
 export function SessionDetail({
   session,
@@ -111,7 +112,7 @@ export function SessionDetail({
           ? 'Séance supprimée du planning et retrait Garmin confirmé.'
           : 'Séance supprimée du planning. Le retrait Garmin reste à vérifier.';
       } catch (error) {
-        return `Séance supprimée du planning. Retrait Garmin à terminer : ${error instanceof Error ? error.message : String(error)}`;
+        return `Séance supprimée du planning. Retrait Garmin à terminer : ${readableError(error)}`;
       }
     },
     onSuccess: (result) => {
@@ -175,7 +176,7 @@ export function SessionDetail({
           )}
           {query.error && (
             <div role="alert" className="text-sm text-danger-red">
-              <p>{query.error.message}</p>
+              <p>{readableError(query.error)}</p>
               <Button onClick={() => void query.refetch()}>Réessayer la lecture</Button>
             </div>
           )}

@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject, type TextareaHTMLAttributes } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { documentRequest } from '@/lib/documents';
-import { cn } from '@/lib/utils';
+import { cn, readableError } from '@/lib/utils';
 
 interface SystemSkill { name: string; display_name?: string; description: string; path: string }
 const MAX_SYSTEM_SKILLS = 32;
@@ -85,7 +85,7 @@ export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect
       <p className="border-b border-text-muted/15 px-3 py-2 text-xs text-text-muted">Méthodes de Chiron · Entrée pour sélectionner · Échap pour fermer</p>
       {catalog.isPending ? <p role="status" className="px-3 py-3 text-sm text-text-muted">Chargement des méthodes…</p>
         : catalog.isError ? <div role="alert" className="px-3 py-3 text-sm">
-          <p>{catalog.error.message}</p>
+          <p>{readableError(catalog.error)}</p>
           <button type="button" onClick={() => void catalog.refetch()} className="mt-2 text-neon-cyan">Réessayer</button>
         </div>
           : <ul id={listId} role="listbox" aria-label="Méthodes disponibles" className="max-h-60 overflow-y-auto p-1">

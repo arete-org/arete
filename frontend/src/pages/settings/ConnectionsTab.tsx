@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Check, LogOut, Target, Watch } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, readableError } from '@/lib/utils';
 import { garminApi, stravaApi } from '@/lib/api';
 import { Button } from '@/components/ui';
 import { invalidateAfterSession, invalidateWithDashboard } from '@/lib/queryKeys';
@@ -33,7 +33,7 @@ export function ConnectionsTab() {
       garminSync.reset();
       invalidateWithDashboard(queryClient, ['syncStatus']);
     },
-    onError: (error: Error) => setGarminResult(error.message),
+    onError: (error: Error) => setGarminResult(readableError(error)),
   });
 
   const { data: stravaStatus, isError: stravaError } = useQuery({

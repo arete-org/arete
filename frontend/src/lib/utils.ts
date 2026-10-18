@@ -50,17 +50,44 @@ export function formatPace(secondsPerKm: number, separator = ":"): string {
   return `${Math.floor(total / 60)}${separator}${(total % 60).toString().padStart(2, "0")}`;
 }
 
-/** 'API Error 422: {"detail":"Enregistrement vide"}' -> 'Enregistrement vide' */
+/** What an HTTP status means for the athlete, when the server gave no French detail. */
+function statusText(status: number): string {
+  if (status === 401 || status === 403) return 'Accès refusé : reconnecte-toi puis réessaie.';
+  if (status === 404) return 'Élément introuvable : il a peut-être été supprimé.';
+  if (status === 409) return 'Les données ont changé entre-temps : recharge puis réessaie.';
+  if (status === 413) return 'Fichier trop volumineux.';
+  if (status === 422 || status === 400) return 'Demande refusée par le serveur : vérifie les champs.';
+  if (status === 429) return 'Trop de demandes : réessaie dans un instant.';
+  if (status >= 500) return 'Le serveur ne répond pas correctement : réessaie dans un instant.';
+  return `Erreur du serveur (code ${status}).`;
+}
+
+/** The browser's own wording for a request that never reached the server. */
+const NETWORK = /failed to fetch|load failed|networkerror|network request failed|err_internet_disconnected/i;
+
+/**
+ * French text for any failure, never the raw technical message: the server's
+ * `detail` when it gave one ('API Error 422: {"detail":"Enregistrement vide"}'
+ * -> 'Enregistrement vide'), else a sentence for its status, the network or a
+ * timeout. Messages the app writes itself (plain `Error`s) pass through.
+ */
 export function readableError(error: unknown): string {
+  if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+    return error.name === 'TimeoutError' ? 'Le serveur met trop de temps à répondre : réessaie.' : 'Demande annulée.';
+  }
   const raw = error instanceof Error ? error.message : String(error);
+  if (error instanceof TypeError && NETWORK.test(raw)) return 'Connexion impossible : vérifie ton réseau puis réessaie.';
   const match = raw.match(/\{.*\}/s);
   if (match) {
     try {
-      const body = JSON.parse(match[0]) as { detail?: string };
-      if (body.detail) return body.detail;
+      const body = JSON.parse(match[0]) as { detail?: unknown };
+      if (typeof body.detail === 'string' && body.detail) return body.detail;
     } catch {
-      // fall through to the raw message
+      // fall through to the status
     }
   }
+  const status = raw.match(/^API Error (\d{3})/);
+  if (status) return statusText(Number(status[1]));
+  if (!raw.trim()) return 'Une erreur inattendue est survenue.';
   return raw;
 }

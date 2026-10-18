@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { gameApi, useGamePreference } from '@/lib/gamification';
 import { Button } from '@/components/ui';
+import { readableError } from '@/lib/utils';
 
 export function GamificationTab() {
   const preference = useGamePreference();
@@ -56,7 +57,7 @@ export function GamificationTab() {
       )}
       {save.error && (
         <p role="alert" className="text-danger-red text-sm">
-          {save.error.message}{' '}
+          {readableError(save.error)}{' '}
           <button className="underline" onClick={() => preference.refetch()}>
             Actualiser
           </button>

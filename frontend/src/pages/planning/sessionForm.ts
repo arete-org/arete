@@ -3,6 +3,7 @@ import { ApiError, type PlannedSessionCreate } from '@/lib/api';
 import type { Prescription } from '@/lib/documents';
 import { SKIPPED_LAST_RECOVERY, stepAmount } from '@/lib/workouts';
 import type { PlannedSession } from '@/types';
+import { readableError } from '@/lib/utils';
 
 export const STATE_LABELS: Record<PlannedState, string> = {
   done: 'Réalisée',
@@ -164,5 +165,5 @@ export function planningError(error: Error | null): string {
         ? 'Vérifie les champs et les étapes de la séance.'
         : 'La demande n’a pas abouti. Vérifie le planning avant de réessayer.')
     );
-  return error.message;
+  return readableError(error);
 }

@@ -3,6 +3,7 @@ import { useIsMutating, useMutation, useMutationState, useQueryClient } from '@t
 import { exportApi, type Prescription } from '@/lib/documents';
 import { invalidateAfterSession } from '@/lib/queryKeys';
 import { cacheWorkout, exportLabel, workoutApi, workoutKey, type WorkoutSession, type WorkoutView } from '@/lib/workouts';
+import { readableError } from '@/lib/utils';
 
 type Action = { kind: 'export'; sessions: WorkoutSession[]; deviceId: number | null }
   | { kind: 'verify' | 'remove'; session: WorkoutSession }
@@ -57,5 +58,5 @@ export function useWorkoutActions(onResult?: (text: string) => void) {
     try { await mutation.mutateAsync(action); return true; }
     catch { return false; } // The mutation exposes the error inline and records it in the originating thread.
   };
-  return { run, pendingIds, pendingLabels, busy, error: mutation.error?.message, reset: mutation.reset };
+  return { run, pendingIds, pendingLabels, busy, error: mutation.error ? readableError(mutation.error) : undefined, reset: mutation.reset };
 }

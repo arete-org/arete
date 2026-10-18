@@ -33,7 +33,8 @@ export class ErrorBoundary extends Component<Props, State> {
             Erreur d'affichage
           </div>
           <p className="text-text-muted text-sm text-center max-w-md">
-            {this.state.error?.message ?? 'Cette section n’a pas pu s’afficher.'}
+            {/* The cause stays in the console: a render error's text is technical. */}
+            Cette section n’a pas pu s’afficher.
           </p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}

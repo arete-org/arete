@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { documentRequest } from '@/lib/documents';
 import { Modal, ModalHeader } from '@/components/ui';
+import { readableError } from '@/lib/utils';
 
 interface Activity {
   id: number;
@@ -24,7 +25,7 @@ export function RecordSource({ id, close }: { id: number; close: () => void }) {
       {activity.isPending && <p role="status">Chargement…</p>}
       {activity.error && (
         <p role="alert" className="text-danger-red">
-          {activity.error.message}
+          {readableError(activity.error)}
         </p>
       )}
       {a && (
