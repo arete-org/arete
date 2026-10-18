@@ -25,9 +25,20 @@ export function reportRequest(reached: boolean): void {
   changed();
 }
 
-/** A request the page cancelled (or that timed out by its own signal) says nothing about the network. */
-export function isCancellation(error: unknown): boolean {
-  return error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError');
+/** A phone waking up fails its first requests while the radio comes back: not an outage. */
+const RESUME_GRACE_MS = 3_000;
+let visibleSince = 0;
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') visibleSince = Date.now();
+  });
+}
+
+/** A request that never got an answer counts unless the page was hidden or just resumed. */
+export function reportUnreached(): void {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  if (Date.now() - visibleSince < RESUME_GRACE_MS) return;
+  reportRequest(false);
 }
 
 export function subscribeConnectivity(listener: () => void): () => void {

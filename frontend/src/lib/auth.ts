@@ -1,4 +1,5 @@
-import { isCancellation, reportRequest } from './connectivity';
+import { reportRequest, reportUnreached } from './connectivity';
+import { isNetworkError } from './utils';
 import { claimPushDevice } from './pushSession';
 import { clearPersistedQueries } from './queryPersistence';
 /**
@@ -56,8 +57,8 @@ export async function authFetch(input: string, init: RequestInit = {}): Promise<
   try {
     response = await fetch(input, { ...init, headers });
   } catch (error) {
-    // Only a request that never got an answer tells the banner the server is out of reach.
-    if (!isCancellation(error)) reportRequest(false);
+    // Only a network failure (not a cancellation or a timeout) says the server is out of reach.
+    if (isNetworkError(error)) reportUnreached();
     throw error;
   }
   reportRequest(true);

@@ -584,6 +584,8 @@ html:has([aria-modal='true']) { overflow: hidden; }
 .app-notices { position: fixed; z-index: 60; top: calc(var(--safe-top) + 8px); left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
 .app-notices:empty { display: none; }
 .app-notice { pointer-events: auto; }
+/* On a phone the open coach takes the top of the screen: its header stays reachable. */
+@media (max-width: 767px) { body:has(.coach-panel) .app-notices { display: none; } }
 /* Desktop: under the 56 px navigation bar, never over its links. */
 @media (min-width: 768px) { .app-notices { top: calc(var(--safe-top) + 64px); left: 50%; right: auto; width: min(32rem, calc(100% - 24px)); transform: translateX(-50%); } }
 .install-invitation { bottom: calc(var(--mobile-nav-space) + var(--launcher-space)); max-height: calc(var(--visible-height, 100dvh) - var(--safe-top) - var(--mobile-nav-space) - var(--launcher-space) - 24px); overflow-y: auto; }
