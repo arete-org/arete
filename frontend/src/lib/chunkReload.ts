@@ -7,6 +7,8 @@
  * took over, loads the new build. A second failure soon after is a real error
  * and stays visible instead of looping.
  */
+import { activate, pendingWorker } from './serviceWorker';
+
 const KEY = 'arete.chunk-reload';
 const LOOP_WINDOW_MS = 30_000;
 const WORKER_WAIT_MS = 10_000;
@@ -33,17 +35,17 @@ function claimReload(): boolean {
 async function newWorker(): Promise<void> {
   const registration = await navigator.serviceWorker?.getRegistration().catch(() => undefined);
   if (!registration) return;
-  await registration.update().catch(() => {});
-  if (!registration.installing && !registration.waiting) return;
-  await new Promise((resolve) => {
-    navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true });
-    setTimeout(resolve, WORKER_WAIT_MS);
-  });
+  // A new version waits for a signal (src/sw.ts): this reload gives it.
+  const worker = await pendingWorker(registration);
+  if (worker) await activate(worker, WORKER_WAIT_MS);
 }
 
 /** Starts at most one reload; false when the error must surface instead. */
 export function recoverFromStaleBuild(): boolean {
   if (reloading) return true;
+  // Offline, a missing chunk is the network, not a new build: reloading would
+  // leave the app for the browser's offline page (the banner says why instead).
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
   if (held || !claimReload()) return false;
   reloading = true;
   void newWorker().finally(() => window.location.reload());

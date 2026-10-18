@@ -1,3 +1,4 @@
+import { isCancellation, reportRequest } from './connectivity';
 import { claimPushDevice } from './pushSession';
 import { clearPersistedQueries } from './queryPersistence';
 /**
@@ -51,7 +52,15 @@ export function reportUnauthorized(): void {
 export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   for (const [name, value] of Object.entries(await authHeaders())) headers.set(name, value);
-  const response = await fetch(input, { ...init, headers });
+  let response: Response;
+  try {
+    response = await fetch(input, { ...init, headers });
+  } catch (error) {
+    // Only a request that never got an answer tells the banner the server is out of reach.
+    if (!isCancellation(error)) reportRequest(false);
+    throw error;
+  }
+  reportRequest(true);
   if (response.status === 401) reportUnauthorized();
   return response;
 }

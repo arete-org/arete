@@ -1,3 +1,4 @@
+import { AppNotices } from '@/components/AppNotices';
 import { GarminFreshness } from '@/components/GarminFreshness';
 import { RouteScroll } from '@/components/RouteScroll';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
@@ -24,6 +25,7 @@ import { loadLogPage, loadPlanningPage, loadWeekReviewPage } from '@/pages/route
 import { importChunk } from '@/lib/chunkReload';
 
 const FollowUpPage = lazy(importChunk(() => import('@/pages/FollowUp').then(m => ({ default: m.FollowUpPage }))));
+const NotFoundPage = lazy(importChunk(() => import('@/pages/NotFound').then(m => ({ default: m.NotFoundPage }))));
 const OnboardingPage = lazy(importChunk(() => import('@/pages/Onboarding').then(m => ({ default: m.OnboardingPage }))));
 
 const PlanningPage = lazy(importChunk(loadPlanningPage));
@@ -137,6 +139,7 @@ function App() {
           <BrowserRouter>
             <div className="app-shell bg-void">
               <RouteScroll />
+              <AppNotices />
               <OutsideOnboarding><GarminFreshness />
               <Navigation
                 agentOpen={agentOpen}
@@ -203,6 +206,7 @@ function App() {
                         path="/neural-link"
                         element={<Navigate to="/" replace />}
                       />
+                      <Route path="*" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><NotFoundPage /></Suspense>} />
                     </Routes>
                   </ErrorBoundary>
                 </RouteContent>

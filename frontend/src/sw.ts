@@ -7,8 +7,25 @@ import { CacheFirst, NetworkOnly } from 'workbox-strategies';
 
 declare let self: ServiceWorkerGlobalScope;
 
-// Same behaviour as the former generated worker (registerType: 'autoUpdate').
-self.skipWaiting();
+// A new version waits until the page lets it take over (« Recharger », or the
+// stale-chunk recovery): open tabs keep the build they started with meanwhile
+// (src/lib/serviceWorker.ts). The very first install has nothing to wait for.
+self.addEventListener('message', (event) => {
+  if ((event.data as { type?: unknown } | null)?.type === 'SKIP_WAITING') void self.skipWaiting();
+});
+// Workers from before announced versions swapped at once, and their pages cannot
+// show the notice: replace such a worker the old way, once. The marker cache says
+// a worker that waits already ran here.
+const WAITS_MARKER = 'arete-sw-waits';
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.has(WAITS_MARKER).then(async (waits) => {
+      if (waits) return;
+      await caches.open(WAITS_MARKER);
+      await self.skipWaiting();
+    })
+  );
+});
 clientsClaim();
 
 precacheAndRoute(self.__WB_MANIFEST);

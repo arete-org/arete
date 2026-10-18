@@ -41,3 +41,10 @@ it('never reloads without storage for its loop guard, nor during a coach run', a
   await expect(importChunk(stale)()).rejects.toThrow();
   expect(reload).not.toHaveBeenCalled();
 });
+
+it('never reloads offline: the missing chunk is the network, not a new build', async () => {
+  vi.stubGlobal('navigator', { onLine: false });
+  const { importChunk } = await load();
+  await expect(importChunk(stale)()).rejects.toThrow('Failed to fetch');
+  expect(reload).not.toHaveBeenCalled();
+});
