@@ -3,13 +3,15 @@
 A trusted read like the scheduler's dispatch: each indicator is one SQL over
 the base ``app.*`` tables, counted inside the database, and only counts leave
 it, never an athlete id or a row. The SQL repeats what the live projections
-hide: soft-deleted rows and deactivated athletes do not count.
-``tests/test_athlete_sql_contract.py`` allows here only SQL that is part of
-``TRUSTED_READS``.
+hide: soft-deleted rows and deactivated athletes do not count. Every read of
+a private table is one of the ``TRUSTED_READS`` fragments, which
+``tests/test_athlete_sql_contract.py`` allows by exact match.
 
-Weeks are ISO weeks (Monday to Sunday). The current week is partial. Stored
-times are compared as they are: naive UTC on Vercel, where every writer runs
-in UTC; a Docker host writes some columns in its own zone (hours, at most).
+Weeks are ISO weeks (Monday to Sunday). The current week is partial. A ratio's
+numerator only counts athletes of its denominator: those created before the
+week's end. Stored times are compared as they are: naive UTC on Vercel, where
+every writer runs in UTC; a Docker host writes some columns in its own zone
+(hours, at most).
 """
 
 from __future__ import annotations
@@ -18,19 +20,38 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from arete.dataio.db import db_connection
+from arete.services.settings import utc_now
+from arete.services.users import OWNER_ATHLETE_ID
 
 MAX_WEEKS = 52
-#: The owner's athlete predates sign-ups: its creation date is a migration's.
-OWNER_ATHLETE_ID = 1
 
-#: Weeks asked for (Monday to the next Monday, as timestamps) and the live
-#: athletes. Parameters: the first Monday, the Monday after the last week.
+#: Weeks asked for (Monday to the next Monday, as timestamps), the live
+#: athletes and how many of them existed by each week's end. Parameters: the
+#: first Monday, the Monday after the last week.
 _WEEKS = (
     "weeks AS (SELECT CAST(t.w AS DATE) AS week_start, t.w AS starts, "
     "t.w + INTERVAL 7 DAY AS ends "
     "FROM range(CAST(? AS TIMESTAMP), CAST(? AS TIMESTAMP), INTERVAL 7 DAY) AS t(w)), "
-    "live AS (SELECT id, created_at FROM app.athletes WHERE deleted_at IS NULL)"
+    "live AS (SELECT id, created_at FROM app.athletes WHERE deleted_at IS NULL), "
+    "accounts AS (SELECT w.week_start, count(l.id) AS n FROM weeks w "
+    "LEFT JOIN live l ON l.created_at < w.ends GROUP BY w.week_start)"
 )
+#: Athletes that signed up. Migrations 35 and 36 created an athlete for every
+#: owner that already existed (the owner's athlete 1 included) before they
+#: were recorded: those creation times are the migration's, not a sign-up's.
+_SIGNUPS = (
+    "signups AS (SELECT l.id, l.created_at FROM live l "
+    f"WHERE l.id <> {OWNER_ATHLETE_ID} AND l.created_at > ("
+    "SELECT max(applied_at) FROM app.schema_version WHERE version IN (35, 36)))"
+)
+#: Each live login refreshes ``last_seen_at`` (hourly); an athlete may have several.
+_SEEN = (
+    "seen AS (SELECT athlete_id, max(last_seen_at) AS last_seen FROM app.users "
+    "WHERE athlete_id IS NOT NULL AND deleted_at IS NULL GROUP BY athlete_id)"
+)
+
+# The private reads, each a whole constant (the contract test matches them).
+
 #: What an athlete does, when: a check-in answered, a briefing reacted to, a
 #: strength log, a weekly review accepted, an evening question answered, a
 #: conversation with the coach, a device subscribed to pushes.
@@ -51,12 +72,43 @@ _ACTIONS = (
     "UNION ALL SELECT athlete_id, created_at FROM app.push_subscriptions "
     "WHERE deleted_at IS NULL AND created_at IS NOT NULL)"
 )
-#: Each login refreshes ``last_seen_at`` (hourly); an athlete may have several.
-_SEEN = (
-    "seen AS (SELECT athlete_id, max(last_seen_at) AS last_seen FROM app.users "
-    "WHERE athlete_id IS NOT NULL GROUP BY athlete_id)"
+#: Subscriptions are deleted when a device leaves: a past week counts the
+#: devices still subscribed today that were subscribed by its end.
+_SUBSCRIPTIONS = (
+    "subscriptions AS (SELECT athlete_id, created_at FROM app.push_subscriptions "
+    "WHERE deleted_at IS NULL)"
 )
-_ACCOUNTS = "(SELECT count(*) FROM live l WHERE l.created_at < w.ends)"
+#: Strength activities imported from the watch (Garmin, Strava, a file), and
+#: whether a live strength log was completed and linked to them.
+_IMPORTED = (
+    "imported AS (SELECT a.user_id AS athlete_id, a.date, "
+    "EXISTS (SELECT 1 FROM app.strength_sessions s "
+    "WHERE s.deleted_at IS NULL AND s.user_id = a.user_id "
+    "AND s.actual_session_id = a.id) AS done "
+    "FROM app.actual_sessions a "
+    "WHERE a.deleted_at IS NULL AND a.sport = 'strength' AND a.source <> 'manual')"
+)
+#: Days whose check-in push was sent (``prompted_at``), and whether answered.
+#: A check-in answered before its push is neither.
+_PROMPTED = (
+    "prompted AS (SELECT athlete_id, date, answered_at IS NOT NULL AS done "
+    "FROM app.daily_checkins WHERE deleted_at IS NULL AND prompted_at IS NOT NULL)"
+)
+#: Days with a written briefing, and whether it got a reaction. No column
+#: records a plain read: a reaction is the read the database knows.
+_BRIEFED = (
+    "briefed AS (SELECT user_id AS athlete_id, date, "
+    "bool_or(reaction IS NOT NULL) AS done FROM app.coach_briefings "
+    "WHERE deleted_at IS NULL AND status = 'ok' GROUP BY user_id, date)"
+)
+#: Reviews written for a week (offered on its Sunday), and whether accepted:
+#: « Accepter » answers the review even when it applies no proposal.
+_REVIEWED = (
+    "reviewed AS (SELECT user_id AS athlete_id, week_start AS date, "
+    "applied_at IS NOT NULL AS done FROM app.weekly_reviews "
+    "WHERE deleted_at IS NULL AND source <> 'pending')"
+)
+TRUSTED_READS = (_ACTIONS, _SUBSCRIPTIONS, _IMPORTED, _PROMPTED, _BRIEFED, _REVIEWED)
 
 # Every query returns (week_start, numerator, denominator[, value]) per week.
 
@@ -65,78 +117,52 @@ _ACCOUNTS = "(SELECT count(*) FROM live l WHERE l.created_at < w.ends)"
 ACTIVE = (
     f"WITH {_WEEKS}, {_ACTIONS}, {_SEEN}, "
     "activity AS (SELECT athlete_id, happened_at FROM actions "
-    "UNION ALL SELECT athlete_id, last_seen FROM seen) "
-    "SELECT w.week_start, "
-    "(SELECT count(DISTINCT x.athlete_id) FROM activity x JOIN live l ON l.id = x.athlete_id "
-    "WHERE x.happened_at >= w.starts AND x.happened_at < w.ends), "
-    f"{_ACCOUNTS} FROM weeks w ORDER BY w.week_start"
+    "WHERE happened_at >= (SELECT min(starts) FROM weeks) "
+    "UNION ALL SELECT athlete_id, last_seen FROM seen "
+    "WHERE last_seen >= (SELECT min(starts) FROM weeks)), "
+    "counted AS (SELECT w.week_start, count(DISTINCT l.id) AS n FROM weeks w "
+    "LEFT JOIN activity x ON x.happened_at >= w.starts AND x.happened_at < w.ends "
+    "LEFT JOIN live l ON l.id = x.athlete_id AND l.created_at < w.ends "
+    "GROUP BY w.week_start) "
+    "SELECT c.week_start, c.n, a.n FROM counted c JOIN accounts a USING (week_start) "
+    "ORDER BY c.week_start"
 )
-#: Subscriptions are deleted when a device leaves: a past week counts the
-#: devices still subscribed today that were subscribed by its end.
 PUSH = (
-    f"WITH {_WEEKS} SELECT w.week_start, "
-    "(SELECT count(DISTINCT p.athlete_id) FROM app.push_subscriptions p "
-    "JOIN live l ON l.id = p.athlete_id "
-    "WHERE p.deleted_at IS NULL AND p.created_at < w.ends), "
-    f"{_ACCOUNTS} FROM weeks w ORDER BY w.week_start"
+    f"WITH {_WEEKS}, {_SUBSCRIPTIONS}, "
+    "counted AS (SELECT w.week_start, count(DISTINCT l.id) AS n FROM weeks w "
+    "LEFT JOIN subscriptions p ON p.created_at < w.ends "
+    "LEFT JOIN live l ON l.id = p.athlete_id AND l.created_at < w.ends "
+    "GROUP BY w.week_start) "
+    "SELECT c.week_start, c.n, a.n FROM counted c JOIN accounts a USING (week_start) "
+    "ORDER BY c.week_start"
 )
-#: Strength activities imported from the watch (Garmin, Strava, a file) in
-#: the week, and those whose strength log was completed and linked to them.
-STRENGTH = (
-    f"WITH {_WEEKS}, imported AS ("
-    "SELECT a.date, EXISTS (SELECT 1 FROM app.strength_sessions s "
-    "WHERE s.deleted_at IS NULL AND s.user_id = a.user_id "
-    "AND s.actual_session_id = a.id) AS logged "
-    "FROM app.actual_sessions a JOIN live l ON l.id = a.user_id "
-    "WHERE a.deleted_at IS NULL AND a.sport = 'strength' AND a.source <> 'manual') "
-    "SELECT w.week_start, count(i.date) FILTER (WHERE i.logged), count(i.date) "
-    "FROM weeks w LEFT JOIN imported i "
-    "ON i.date >= w.week_start AND i.date < w.week_start + 7 "
-    "GROUP BY w.week_start ORDER BY w.week_start"
-)
-#: Days whose check-in push was sent (``prompted_at``), and those answered.
-#: A check-in answered before its push is neither.
-CHECKINS = (
-    f"WITH {_WEEKS}, sent AS ("
-    "SELECT c.date, c.answered_at IS NOT NULL AS answered FROM app.daily_checkins c "
-    "JOIN live l ON l.id = c.athlete_id "
-    "WHERE c.deleted_at IS NULL AND c.prompted_at IS NOT NULL) "
-    "SELECT w.week_start, count(s.date) FILTER (WHERE s.answered), count(s.date) "
-    "FROM weeks w LEFT JOIN sent s "
-    "ON s.date >= w.week_start AND s.date < w.week_start + 7 "
-    "GROUP BY w.week_start ORDER BY w.week_start"
-)
-#: Days with a written briefing, and those whose briefing got a reaction. No
-#: column records a plain read: a reaction is the read the database knows.
-BRIEFINGS = (
-    f"WITH {_WEEKS}, days AS ("
-    "SELECT b.date, bool_or(b.reaction IS NOT NULL) AS reacted "
-    "FROM app.coach_briefings b JOIN live l ON l.id = b.user_id "
-    "WHERE b.deleted_at IS NULL AND b.status = 'ok' GROUP BY b.user_id, b.date) "
-    "SELECT w.week_start, count(d.date) FILTER (WHERE d.reacted), count(d.date) "
-    "FROM weeks w LEFT JOIN days d "
-    "ON d.date >= w.week_start AND d.date < w.week_start + 7 "
-    "GROUP BY w.week_start ORDER BY w.week_start"
-)
-#: Reviews written for the week (offered on its Sunday), and those accepted:
-#: « Accepter » answers the review even when it applies no proposal.
-REVIEWS = (
-    f"WITH {_WEEKS}, written AS ("
-    "SELECT r.week_start, r.applied_at IS NOT NULL AS accepted "
-    "FROM app.weekly_reviews r JOIN live l ON l.id = r.user_id "
-    "WHERE r.deleted_at IS NULL AND r.source <> 'pending') "
-    "SELECT w.week_start, count(r.week_start) FILTER (WHERE r.accepted), "
-    "count(r.week_start) FROM weeks w LEFT JOIN written r "
-    "ON r.week_start = w.week_start "
-    "GROUP BY w.week_start ORDER BY w.week_start"
-)
-#: Accounts created in the week, those with an action since, and the median
-#: hours from creation to the first one (a clock skew counts as 0).
+
+
+def _per_day(rows: str, name: str) -> str:
+    """Rows (athlete_id, date, done) of live athletes, done ones over all, per week."""
+    return (
+        f"WITH {_WEEKS}, {rows}, "
+        f"days AS (SELECT r.date, r.done FROM {name} r JOIN live l ON l.id = r.athlete_id) "
+        "SELECT w.week_start, count(d.date) FILTER (WHERE d.done), count(d.date) "
+        "FROM weeks w LEFT JOIN days d "
+        "ON d.date >= w.week_start AND d.date < w.week_start + 7 "
+        "GROUP BY w.week_start ORDER BY w.week_start"
+    )
+
+
+STRENGTH = _per_day(_IMPORTED, "imported")
+CHECKINS = _per_day(_PROMPTED, "prompted")
+BRIEFINGS = _per_day(_BRIEFED, "briefed")
+#: A review's date is the Monday of the week it reviews.
+REVIEWS = _per_day(_REVIEWED, "reviewed")
+#: Sign-ups of the week, those with an action since, and the median hours to
+#: the first one (an action stamped before the sign-up, a clock skew, is 0).
 FIRST_ACTION = (
-    f"WITH {_WEEKS}, {_ACTIONS}, firsts AS ("
-    "SELECT l.id, l.created_at, min(x.happened_at) AS first_at FROM live l "
-    "LEFT JOIN actions x ON x.athlete_id = l.id "
-    f"WHERE l.id <> {OWNER_ATHLETE_ID} GROUP BY l.id, l.created_at) "
+    f"WITH {_WEEKS}, {_SIGNUPS}, {_ACTIONS}, firsts AS ("
+    "SELECT s.id, s.created_at, min(x.happened_at) AS first_at FROM signups s "
+    "LEFT JOIN actions x ON x.athlete_id = s.id "
+    "WHERE s.created_at >= (SELECT min(starts) FROM weeks) "
+    "GROUP BY s.id, s.created_at) "
     "SELECT w.week_start, count(f.first_at), count(f.id), "
     "median(CASE WHEN f.first_at IS NOT NULL "
     "THEN greatest(epoch(f.first_at) - epoch(f.created_at), 0) / 3600.0 END) "
@@ -144,16 +170,17 @@ FIRST_ACTION = (
     "ON f.created_at >= w.starts AND f.created_at < w.ends "
     "GROUP BY w.week_start ORDER BY w.week_start"
 )
-#: Accounts created in the week at least 30 days ago, and those seen again
-#: 30 days or more after their creation. Parameter: now.
+#: Sign-ups of the week at least 30 days ago, and those seen again 30 days or
+#: more after signing up. Parameter: now.
 RETENTION = (
-    f"WITH {_WEEKS}, {_SEEN} "
+    f"WITH {_WEEKS}, {_SIGNUPS}, {_SEEN} "
     "SELECT w.week_start, "
-    "count(l.id) FILTER (WHERE s.last_seen >= l.created_at + INTERVAL 30 DAY), count(l.id) "
-    f"FROM weeks w LEFT JOIN live l ON l.id <> {OWNER_ATHLETE_ID} "
-    "AND l.created_at >= w.starts AND l.created_at < w.ends "
-    "AND l.created_at + INTERVAL 30 DAY <= CAST(? AS TIMESTAMP) "
-    "LEFT JOIN seen s ON s.athlete_id = l.id "
+    "count(s.id) FILTER (WHERE v.last_seen >= s.created_at + INTERVAL 30 DAY), "
+    "count(s.id) "
+    "FROM weeks w LEFT JOIN signups s "
+    "ON s.created_at >= w.starts AND s.created_at < w.ends "
+    "AND s.created_at + INTERVAL 30 DAY <= CAST(? AS TIMESTAMP) "
+    "LEFT JOIN seen v ON v.athlete_id = s.id "
     "GROUP BY w.week_start ORDER BY w.week_start"
 )
 
@@ -169,7 +196,6 @@ QUERIES = {
     "first_action_hours": FIRST_ACTION,
     "retention_30d": RETENTION,
 }
-TRUSTED_READS = tuple(QUERIES.values())
 
 
 @dataclass(frozen=True)
@@ -187,10 +213,9 @@ class WeekKpis:
 
 
 def weekly(weeks: int, *, now: datetime | None = None) -> list[WeekKpis]:
-    """The last ``weeks`` ISO weeks, the current one first."""
+    """The last ``weeks`` ISO weeks, the current one first; ``now`` is naive UTC."""
     assert 1 <= weeks <= MAX_WEEKS, f"weeks out of range: {weeks}"
-    # Naive and local, like the account times the queries compare it with.
-    now = now or datetime.now()
+    now = now or utc_now().replace(tzinfo=None)
     monday = now.date() - timedelta(days=now.weekday())
     bounds = [monday - timedelta(weeks=weeks - 1), monday + timedelta(weeks=1)]
     cells: dict[str, dict[date, Cell]] = {}

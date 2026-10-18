@@ -35,12 +35,13 @@ export function weekLabel(week: KpiWeek): string {
   return WEEK.format(new Date(year, month - 1, day));
 }
 
+/** French spreadsheets: fields split by « ; », decimals written with a comma. */
 function csvField(value: string | number | null): string {
-  const text = value === null ? '' : String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  const text = value === null ? '' : typeof value === 'number' ? String(value).replace('.', ',') : value;
+  return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-/** Every week and indicator as the table shows them, with raw values for a spreadsheet. */
+/** Every week and indicator as the table shows them, with raw values for a French spreadsheet. */
 export function kpisCsv(weeks: KpiWeek[]): string {
   const header = ['Semaine (lundi)', 'En cours'];
   for (const key of KPI_KEYS) {
@@ -55,7 +56,7 @@ export function kpisCsv(weeks: KpiWeek[]): string {
     }
     return row;
   });
-  return [header, ...rows].map((row) => row.map(csvField).join(',')).join('\n') + '\n';
+  return [header, ...rows].map((row) => row.map(csvField).join(';')).join('\n') + '\n';
 }
 
 export function downloadKpisCsv(weeks: KpiWeek[]): void {

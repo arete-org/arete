@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { adminApi, KPI_KEYS, type KpiCell, type KpiKey, type KpiWeek } from '@/lib/api';
-import { kpisCsv } from '@/lib/productKpis';
 import { ProductKpisPanel } from './ProductKpisPanel';
 
 /** Text as read, French narrow spaces included. */
@@ -30,6 +29,7 @@ const WEEKS: KpiWeek[] = [
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function mount() {
@@ -78,8 +78,19 @@ it('shows each week against each indicator, the current one first and on its own
 
 it('exports the table as CSV, raw values beside their counts', async () => {
   vi.spyOn(adminApi, 'kpis').mockResolvedValue(WEEKS);
-  const createObjectURL = vi.fn(() => 'blob:kpis');
-  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }));
+  // jsdom has no object URLs: a subclass stands in, and unstubAllGlobals puts URL back.
+  const exported: Blob[] = [];
+  const createObjectURL = vi.fn((blob: Blob) => {
+    exported.push(blob);
+    return 'blob:kpis';
+  });
+  vi.stubGlobal(
+    'URL',
+    class extends URL {
+      static createObjectURL = createObjectURL;
+      static revokeObjectURL = vi.fn();
+    }
+  );
   let downloaded = '';
   const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
     downloaded = this.download;
@@ -92,7 +103,13 @@ it('exports the table as CSV, raw values beside their counts', async () => {
   expect(click).toHaveBeenCalledOnce();
   expect(createObjectURL).toHaveBeenCalledOnce();
   expect(downloaded).toBe('arete-indicateurs-2026-10-12.csv');
-  const [header, current, previous] = kpisCsv(WEEKS).trimEnd().split('\n').map((line) => line.split(','));
+  // The byte-order mark lets French Excel read the accents as UTF-8.
+  const bytes = new Uint8Array(await exported[0].arrayBuffer());
+  expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  const [header, current, previous] = (await exported[0].text())
+    .trimEnd()
+    .split('\n')
+    .map((line) => line.split(';'));
   expect(header.slice(0, 5)).toEqual([
     'Semaine (lundi)',
     'En cours',
@@ -101,7 +118,9 @@ it('exports the table as CSV, raw values beside their counts', async () => {
     'Comptes actifs - dénominateur',
   ]);
   expect(header).toHaveLength(2 + 3 * KPI_KEYS.length);
-  expect(current.slice(0, 5)).toEqual(['2026-10-12', 'oui', '0.25', '1', '4']);
+  // Decimals with a comma, as French Excel reads them.
+  expect(current.slice(0, 5)).toEqual(['2026-10-12', 'oui', '0,25', '1', '4']);
+  expect(current[2 + 3 * KPI_KEYS.indexOf('first_action_hours')]).toBe('15,5');
   // An indicator with nothing counted leaves its value empty.
   expect(previous.slice(5, 8)).toEqual(['', '0', '0']);
 });
