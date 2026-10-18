@@ -54,7 +54,6 @@ dev = [
     "pytest>=9.0.3",
     "pytest-xdist>=3.8,<4",
     "ruff>=0.14.7,<0.15",
-    "sqlglot>=28,<31",
 ]
 mcp = [
     "mcp>=2.3",
@@ -98,6 +97,3 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
-markers = [
-    "eval: hits a real model over the network; skipped unless ARETE_EVAL=1",
-]

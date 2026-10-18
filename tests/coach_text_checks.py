@@ -1,7 +1,7 @@
 """What a briefing or a session feedback must look like, checked without a model.
 
-Shared by the live evals (fresh answers) and the corpus test (answers kept from
-real runs). Each check returns the list of what is wrong, empty when fine.
+Used by deterministic regression tests. Each check returns the list of what is
+wrong, empty when fine.
 """
 
 from __future__ import annotations
