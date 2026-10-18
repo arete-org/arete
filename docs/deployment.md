@@ -192,6 +192,14 @@ the emoji is textual feedback, not an undocumented LangSmith UI reaction endpoin
 Production deploys in batches, by hand, so that several merges can be tried on
 the preview together. There is no reviewer gate: the preview is the gate.
 
+**Do not roll back across ARE-133** (the service worker that waits for the page
+before taking over, `frontend/src/sw.ts`). Its `arete-sw-waits` marker cache
+stays in browsers after a rollback: the next forward deploy would then wait
+behind the older worker, whose pages can neither show « Nouvelle version
+disponible » nor hand over on load. If a rollback is unavoidable, rename the
+marker (`WAITS_MARKER`) in the next forward deploy so it replaces that worker
+at once, as the first deploy of ARE-133 did.
+
 ## Migrations
 
 The schema lives in `src/arete/dataio/init_duckdb.py`: the DDL for a fresh
