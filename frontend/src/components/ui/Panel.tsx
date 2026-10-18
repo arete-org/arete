@@ -16,8 +16,9 @@ interface PanelProps {
 }
 
 /**
- * Titled card. `glass` replaces `<div className="glass-panel p-3 sm:p-4">` + h3,
- * `inset` replaces `<div className="p-4 bg-abyss/50 rounded border border-text-muted/20">` + h3.
+ * Titled card. `glass` replaces `<div className="glass-panel p-3 sm:p-4">` + h2,
+ * `inset` replaces `<div className="p-4 bg-abyss/50 rounded border border-text-muted/20">` + h2.
+ * The title is an h2: panels sit right under the page's h1.
  */
 export function Panel({
   title,
@@ -41,7 +42,7 @@ export function Panel({
       style={delay ? { animationDelay: `${delay}s`, ...style } : style}
     >
       {title && (
-        <h3
+        <h2
           className={cn(
             'font-sans font-medium',
             variant === 'glass' ? 'text-[15px] mb-4' : 'text-xs mb-3',
@@ -49,7 +50,7 @@ export function Panel({
           )}
         >
           {title}
-        </h3>
+        </h2>
       )}
       {children}
     </div>

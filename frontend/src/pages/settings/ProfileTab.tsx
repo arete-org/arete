@@ -1,10 +1,14 @@
+import { useMemo } from 'react';
 import { Field, Input, Panel, Select } from '@/components/ui';
+import { timezoneGroups } from '@/lib/timezones';
 import { useAuthState } from '@/components/auth/authState';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import type { SettingsTabProps } from './types';
 
 export function ProfileTab({ settings, updateSetting }: SettingsTabProps) {
   const auth = useAuthState();
+  // Some 400 zones, with their current offset: computed once per stored zone.
+  const zones = useMemo(() => timezoneGroups(settings.timezone), [settings.timezone]);
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-sans text-text-primary mb-4">PROFIL</h2>
@@ -28,10 +32,11 @@ export function ProfileTab({ settings, updateSetting }: SettingsTabProps) {
 
         <Field label="Fuseau horaire">
           <Select value={settings.timezone} onChange={(e) => updateSetting('timezone', e.target.value)}>
-            <option value="Europe/Paris">Europe/Paris (CET)</option>
-            <option value="Europe/London">Europe/London (GMT)</option>
-            <option value="America/New_York">America/New_York (EST)</option>
-            <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+            {zones.map((group) => (
+              <optgroup key={group.region} label={group.region}>
+                {group.zones.map((zone) => <option key={zone.value} value={zone.value}>{zone.label}</option>)}
+              </optgroup>
+            ))}
           </Select>
         </Field>
       </div>

@@ -125,7 +125,7 @@ export function ModalHeader({ title, icon, tone = 'text-neon-cyan', onClose, cla
     <div className={cn('modal-header flex items-center justify-between gap-2 mb-6', className)}>
       <div className={cn('flex items-center gap-2', tone)}>
         {icon}
-        <h3 className="text-lg font-sans">{title}</h3>
+        <h2 className="text-lg font-sans">{title}</h2>
       </div>
       {onClose && (
         <button
