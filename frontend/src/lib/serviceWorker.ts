@@ -8,6 +8,8 @@
 const SKIP_WAITING = { type: 'SKIP_WAITING' } as const;
 /** A long-open installed app checks again when brought back, at most hourly. */
 const CHECK_EVERY_MS = 60 * 60_000;
+/** Only the page's first look is "at load": a later watcher (a remounted notice) is mid-session. */
+let firstCheck = true;
 
 function installed(worker: ServiceWorker): Promise<ServiceWorker | null> {
   return new Promise((resolve) => {
@@ -49,7 +51,9 @@ export function watchForUpdate(onWaiting: (worker: ServiceWorker, atLoad: boolea
   void container.ready.then((ready) => {
     if (stopped) return;
     registration = ready;
-    if (ready.waiting) report(ready.waiting, true);
+    const atLoad = firstCheck;
+    firstCheck = false;
+    if (ready.waiting) report(ready.waiting, atLoad);
     else if (ready.installing) found();
     ready.addEventListener('updatefound', found);
     document.addEventListener('visibilitychange', visible);

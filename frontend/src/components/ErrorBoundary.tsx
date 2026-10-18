@@ -1,4 +1,5 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
+import { isChunkError, reloadPage } from '@/lib/chunkReload';
 
 interface Props {
   children: ReactNode;
@@ -22,7 +23,26 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[ErrorBoundary] Caught error:', error, info.componentStack);
+    // A part of the app that could not load offline comes back with the network,
+    // but only while this error still shows: never a reload over another screen.
+    if (isChunkError(error) && navigator.onLine === false) window.addEventListener('online', this.reload, { once: true });
   }
+
+  componentDidUpdate(_: Props, previous: State) {
+    if (previous.hasError && !this.state.hasError) window.removeEventListener('online', this.reload);
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('online', this.reload);
+  }
+
+  private reload = () => reloadPage();
+
+  /** A missing chunk stays missing until the page loads again; any other error may render this time. */
+  private retry = () => {
+    if (isChunkError(this.state.error)) this.reload();
+    else this.setState({ hasError: false, error: null });
+  };
 
   render() {
     if (this.state.hasError) {
@@ -37,7 +57,8 @@ export class ErrorBoundary extends Component<Props, State> {
             Cette section n’a pas pu s’afficher.
           </p>
           <button
-            onClick={() => this.setState({ hasError: false, error: null })}
+            type="button"
+            onClick={this.retry}
             className="px-4 py-2 text-xs font-sans bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 rounded hover:bg-neon-cyan/20 transition-colors"
           >
             Réessayer

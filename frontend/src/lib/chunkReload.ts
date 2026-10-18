@@ -14,7 +14,6 @@ const LOOP_WINDOW_MS = 30_000;
 const WORKER_WAIT_MS = 10_000;
 let reloading = false;
 let held = false;
-let reloadWhenOnline = false;
 const holdListeners = new Set<() => void>();
 
 /** A streaming coach run must not be cut by an automatic reload (useCoachThreads). */
@@ -80,15 +79,9 @@ export function takeWaitingAtLoad(worker: ServiceWorker): boolean {
 export function recoverFromStaleBuild(): boolean {
   if (reloading) return true;
   // Offline, a missing chunk is the network, not a new build: reloading would
-  // leave the app for the browser's offline page (the banner says why instead).
-  // Back online, one reload brings the missing part back.
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    if (!reloadWhenOnline) {
-      reloadWhenOnline = true;
-      window.addEventListener('online', () => { reloadWhenOnline = false; recoverFromStaleBuild(); }, { once: true });
-    }
-    return false;
-  }
+  // leave the app for the browser's offline page (the banner says why instead;
+  // the error boundary still showing it reloads once back online).
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
   if (held || !claimReload()) return false;
   reloadAfter(newWorker());
   return true;
@@ -102,6 +95,16 @@ export function importChunk<T>(load: () => Promise<T>): () => Promise<T> {
       if (recoverFromStaleBuild()) return new Promise<T>(() => {});
       throw error;
     });
+}
+
+/** Load the page again (its own function, so tests can watch it). */
+export function reloadPage(): void {
+  window.location.reload();
+}
+
+/** A lazy part of the app that could not be fetched (Chrome, Firefox and Safari wordings). */
+export function isChunkError(error: unknown): boolean {
+  return error instanceof Error && /dynamically imported module|importing a module script failed|error loading dynamically imported module/i.test(error.message);
 }
 
 /** Vite reports every failed dynamic import of the build (chunks loaded outside `importChunk` too). */

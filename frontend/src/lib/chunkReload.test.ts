@@ -49,19 +49,6 @@ it('never reloads offline: the missing chunk is the network, not a new build', a
   expect(reload).not.toHaveBeenCalled();
 });
 
-it('reloads once back online after a chunk failed offline', async () => {
-  const listeners: Record<string, () => void> = {};
-  vi.stubGlobal('window', { location: { reload }, addEventListener: (type: string, listener: () => void) => { listeners[type] = listener; } });
-  const online = { onLine: false };
-  vi.stubGlobal('navigator', online);
-  const { importChunk } = await load();
-  await expect(importChunk(stale)()).rejects.toThrow();
-  expect(reload).not.toHaveBeenCalled();
-  online.onLine = true;
-  listeners.online();
-  await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-});
-
 it('never waits more than its bound for a worker that does not finish installing', async () => {
   vi.useFakeTimers();
   try {
