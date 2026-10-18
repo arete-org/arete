@@ -21,7 +21,7 @@ def _session(source: ActivitySource, start: datetime, **kw) -> ActualSession:
 
 
 class TestMergeRules:
-    def test_strava_extras_fill_gaps_and_best_efforts(self):
+    def test_strava_extras_only_link_the_copy(self):
         garmin = _session(
             ActivitySource.GARMIN_CONNECT,
             datetime(2026, 6, 1, 8),
@@ -37,12 +37,9 @@ class TestMergeRules:
             best_efforts_json="[...]",
             hr_zones_json='{"z1": 1}',
         )
-        fields = strava_extras(garmin, strava)
-        assert fields["strava_activity_id"] == "s1"
-        assert fields["suffer_score"] == 80
-        assert fields["best_efforts_json"] == "[...]"
-        assert "name" not in fields  # Garmin name wins
-        assert "hr_zones_json" not in fields  # Garmin zones win
+        # Strava's data may not reach the coach: the copy is linked, never
+        # merged into the Garmin row (ARE-126).
+        assert strava_extras(garmin, strava) == {"strava_activity_id": "s1"}
 
     def test_garmin_takeover_changes_provenance(self):
         garmin = _session(

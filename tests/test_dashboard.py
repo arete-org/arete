@@ -102,7 +102,11 @@ def test_every_slice_equals_its_former_endpoint(history, client):
 
 
 def test_the_fixture_day_keeps_its_numbers(history, client):
-    """Golden values, read from origin/main's endpoints on the same fixture."""
+    """Golden values, read from origin/main's endpoints on the same fixture.
+
+    Since ARE-126 the fixture's Strava rows (and their suffer scores) load
+    nothing: the load series reach the coach, and Strava data may not.
+    """
     board = client.get("/dashboard").json()
     fitness, stats, workload = (
         board["fitness"],
@@ -111,24 +115,24 @@ def test_the_fixture_day_keeps_its_numbers(history, client):
     )
 
     assert {k: fitness[k] for k in ("ctl", "atl", "tsb", "ramp_rate", "form_zone")} == {
-        "ctl": 70.5,
-        "atl": 86.8,
-        "tsb": -16.3,
-        "ramp_rate": 3.1,
+        "ctl": 63.6,
+        "atl": 86.5,
+        "tsb": -22.8,
+        "ramp_rate": 4.4,
         "form_zone": "tired",
     }
-    assert fitness["days_analyzed"] == 32
+    assert fitness["days_analyzed"] == 26
     assert (fitness["readiness_score"], fitness["readiness_source"]) == (54.0, "garmin")
     assert (stats["xp"]["current"], stats["xp"]["max"]) == (390.4, 250.0)
-    assert (stats["level"], stats["weeks_at_goal"]) == (22, 98)
-    assert (stats["recent_weeks_at_goal"], stats["recent_weeks"]) == (12, 12)
-    assert (stats["mp"]["current"], stats["hp"]["current"]) == (22.8, 54.0)
+    assert (stats["level"], stats["weeks_at_goal"]) == (3, 85)
+    assert (stats["recent_weeks_at_goal"], stats["recent_weeks"]) == (10, 12)
+    assert (stats["mp"]["current"], stats["hp"]["current"]) == (12.0, 54.0)
     assert (workload["acwr"], workload["acwr_ewma"], workload["acwr_zone"]) == (
-        1.219,
-        1.343,
+        1.263,
+        1.357,
         "optimal",
     )
-    assert workload["days_analyzed"] == 21
+    assert workload["days_analyzed"] == 20
 
 
 def test_garmin_connection_follows_the_stored_tokens(history, client):

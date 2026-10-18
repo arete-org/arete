@@ -15,6 +15,7 @@ from datetime import date, timedelta
 from arete.dataio.db import connect, db_connection
 from arete.dataio.queries import (
     FOOT_SPORTS,
+    MODEL_EXCLUDED_SOURCES,
     RUNNING_SPORTS,
     SPORT_GROUPS,
     OverviewRow,
@@ -309,13 +310,6 @@ def update_session(session_id: int, fields: Mapping[str, int | str | None]):
         return {"success": True}
     finally:
         con.close()
-
-
-#: Sources whose rows never reach a language model. Strava's API agreement
-#: forbids using its data in AI applications (inference included, per its
-#: 2026 API policy): sessions imported from Strava stay out of the coach's
-#: inputs. Sessions Garmin took over (source garmin_connect) are Garmin's.
-MODEL_EXCLUDED_SOURCES: tuple[str, ...] = ("strava",)
 
 
 def list_sessions(limit: int = 20, offset: int = 0, *, for_model: bool = False):

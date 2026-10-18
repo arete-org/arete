@@ -1,8 +1,8 @@
-"""Merging a Strava copy of a workout into the Garmin session (Garmin wins).
+"""Linking a Strava copy of a workout to the Garmin session (Garmin wins).
 
-Garmin (FIT + Connect) is the primary source. Strava adds what Garmin does not
-export: best efforts, metric splits, suffer score, workout type, description,
-and a name when the Garmin one is missing.
+Strava's API agreement (1 June 2026) forbids its data in the development or
+operation of an AI application, and every Garmin row can reach the coach: no
+Strava value is copied onto a Garmin row, only the link (ARE-126).
 """
 
 from __future__ import annotations
@@ -11,46 +11,31 @@ from typing import Any
 
 from arete.garmin.models import ActualSession
 
-# Strava fields copied only when the Garmin row has nothing there.
-_FILL_IF_MISSING = (
-    "name",
-    "notes",
-    "workout_type",
-    "device_name",
+#: Fields only Strava fills: cleared when Garmin takes a Strava row over.
+STRAVA_ONLY_FIELDS = (
     "suffer_score",
+    "best_efforts_json",
+    "splits_json",
     "avg_watts",
     "weighted_avg_watts",
-    "laps_json",
-    "splits_json",
-    "hr_zones_json",
-    "calories",
-    "avg_pace_sec_km",
-    "moving_time_sec",
+    "workout_type",
 )
-# Strava-only data: always taken from Strava.
-_ALWAYS_FROM_STRAVA = ("best_efforts_json",)
 
 
 def strava_extras(existing: ActualSession, strava: ActualSession) -> dict[str, Any]:
-    """Columns to update on ``existing`` with values from the Strava copy."""
-    fields: dict[str, Any] = {"strava_activity_id": strava.garmin_activity_id}
-    for col in _FILL_IF_MISSING:
-        if getattr(existing, col) in (None, "") and getattr(strava, col) not in (
-            None,
-            "",
-        ):
-            fields[col] = getattr(strava, col)
-    for col in _ALWAYS_FROM_STRAVA:
-        if getattr(strava, col) is not None:
-            fields[col] = getattr(strava, col)
-    return fields
+    """Columns to update on ``existing`` for its Strava copy: the link only."""
+    return {"strava_activity_id": strava.garmin_activity_id}
 
 
 def garmin_takeover(garmin: ActualSession) -> dict[str, Any]:
-    """Columns to write on a Strava-created row when the Garmin copy arrives."""
+    """Columns to write on a Strava-created row when the Garmin copy arrives.
+
+    The row becomes a Garmin row the coach reads: Strava-only values go.
+    """
     fields: dict[str, Any] = {
         "source": garmin.source.value,
         "garmin_activity_id": garmin.garmin_activity_id,
+        **dict.fromkeys(STRAVA_ONLY_FIELDS),
     }
     for col in (
         "session_type",

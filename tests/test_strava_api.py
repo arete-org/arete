@@ -249,8 +249,8 @@ class TestStravaMergeIntoGarmin:
         assert body["merged"] == 2 and body["imported"] == 0
         assert repo.create_actual_session.call_count == 0
         kwargs = repo.update_actual_session_fields.call_args_list[0].kwargs
-        assert kwargs["strava_activity_id"] == "1001"
-        assert kwargs["name"] == "Morning Run"  # Garmin row had no name
+        # Linked only: no Strava value lands on the Garmin row (ARE-126).
+        assert kwargs == {"strava_activity_id": "1001"}
 
 
 def test_callback_lands_on_the_connections_tab(router_client):

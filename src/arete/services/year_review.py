@@ -31,16 +31,18 @@ FIRST_YEAR = 2000
 #: Strength sessions recorded with a Garmin activity are that activity: counted
 #: once, as in ``queries.LOAD_ROWS``. Unlike the load series, a strength session
 #: without a duration still counts as a session here (it carries no load).
+#: Strava rows count: the year review is the athlete's own page and never
+#: reaches the coach, unlike the load series (ARE-126).
 _SESSIONS_SQL = f"""
     SELECT id, date, sport, name, COALESCE(duration_sec, 0), distance_m, ascent_m,
            {TSS_EXPR}
     FROM (
-      SELECT id, user_id, date, sport, name, duration_sec, rpe, suffer_score,
+      SELECT id, user_id, date, sport, name, duration_sec, rpe,
              avg_hr, distance_m, ascent_m
       FROM app.visible_actual_sessions
       UNION ALL
       SELECT -id, user_id, date, 'strength', name, duration_min * 60,
-             CAST(ROUND(overall_rpe) AS INTEGER), NULL, NULL, NULL, NULL
+             CAST(ROUND(overall_rpe) AS INTEGER), NULL, NULL, NULL
       FROM app.visible_strength_sessions
       WHERE actual_session_id IS NULL
     ) AS sessions

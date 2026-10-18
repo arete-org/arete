@@ -616,7 +616,12 @@ Migration 31 keeps each FIT activity's per-second streams in
 fill the streams. `services/activity_detail.py` reads one session for
 `GET /analytics/sessions/{id}/detail` (the `/log/sessions/:id` page) and, as a
 compact digest without any stream, for the chat's read-only
-`get_activity_detail`; Strava rows never reach the model. Analytics come from
+`get_activity_detail`; Strava rows never reach the model. Strava's API agreement
+(1 June 2026) forbids its data in an AI application, so no Strava number reaches
+it either: the load series (`dataio/queries.LOAD_ROWS`, the TSS estimate) leave
+Strava rows and the suffer score out, a Strava copy only links to its Garmin
+session (`strava/merge.py`), and migration 62 cleared the Strava values the old
+merge had copied onto Garmin rows. Analytics come from
 `garmin/time_series.py`: decoupling, pace fade, cadence variability, power and
 the work intervals of a structured workout (FIT lap intensity).
 
