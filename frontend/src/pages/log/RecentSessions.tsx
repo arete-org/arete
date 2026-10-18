@@ -30,7 +30,7 @@ export function RecentSessions() {
   const { data: drafts } = useQuery(strengthDraftsQuery);
   const linked = new Set([
     ...(strength ?? []).map((l) => l.garmin_activity_id),
-    ...(drafts ?? []).map((d) => d.actual_session_id),
+    ...(drafts?.items ?? []).map((d) => d.actual_session_id),
   ]);
   const openDraft = useOpenDraft();
 

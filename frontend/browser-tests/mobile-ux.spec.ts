@@ -299,7 +299,7 @@ test('touch: a Garmin strength session gets its loads from the Journal in four i
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh' } });
     if (path === '/api/coach/today') return route.fulfill({ json: { items: [], remaining: 0, briefing: null } });
-    if (path === '/api/strength/drafts') return route.fulfill({ json: completed ? [] : [draft] });
+    if (path === '/api/strength/drafts') return route.fulfill({ json: completed ? { items: [], total: 0 } : { items: [draft], total: 1 } });
     if (path === '/api/strength/sessions/parse') return route.fulfill({ json: parsed });
     if (path === '/api/tips/post-session') return route.fulfill({ json: { feedback: 'Belle séance.', highlights: [], source: 'rules' } });
     completions.push(route.request().postDataJSON());

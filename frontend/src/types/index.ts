@@ -270,8 +270,14 @@ export interface StrengthDraft {
   /** 'import' (Garmin sync) or 'journal' (opened by the athlete). */
   origin: string;
   exercises: StrengthDraftExercise[];
-  /** The notation the completion screen opens with: one line per exercise. */
+  /** The completion screen's text: one line per catalog exercise (free-text ones are left out). */
   notation: string;
+}
+
+/** The Journal's newest drafts and how many there are in all. */
+export interface StrengthDraftList {
+  items: StrengthDraft[];
+  total: number;
 }
 
 /** The Muscu log a completed draft became. */
@@ -413,6 +419,8 @@ export interface ParsedExercise {
   exercise_matched: boolean;
   sets: ParsedSet[];
   notes: string | null;
+  /** Catalog candidates; the first is the exercise a matched name was read as. */
+  suggestions?: { exercise_id: string; name: string; score: number }[];
   /** What the history suggested for this session (preview only). */
   progression?: StrengthSuggestion | null;
 }
@@ -652,6 +660,8 @@ export interface ActivityWeather {
 }
 
 export interface ActivityDetail {
+  /** A strength activity's linked Muscu log (null without one, or for another sport). */
+  strength_log_id?: number | null;
   session: {
     id: number;
     date: string;

@@ -10,7 +10,7 @@ import { chartRows, formatElapsed, intensityLabel, isFootSport } from '@/lib/act
 import { CHART, COLORS, HR_ZONE_COLORS } from '@/lib/chartTheme';
 import { parseLocalDate } from '@/lib/dates';
 import { sportLabel } from '@/lib/fr';
-import { qk, strengthSessionsQuery } from '@/lib/queryKeys';
+import { qk } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import { cn, formatDurationCompact, formatPace, readableError } from '@/lib/utils';
 import type {
@@ -129,7 +129,9 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
         <Stat label="Calories" value={session.calories ? `${session.calories} kcal` : '—'} />
       </div>
 
-      {session.sport === 'strength' && <LinkedStrengthLog activityId={session.id} />}
+      {session.sport === 'strength' && (
+        <LinkedStrengthLog activityId={session.id} logId={detail.strength_log_id ?? null} source={session.source} />
+      )}
 
       {detail.feedback && (
         <Panel
@@ -203,22 +205,26 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
   );
 }
 
-/** The exercises of the Muscu log recorded with this strength activity, if one is linked. */
-function LinkedStrengthLog({ activityId }: { activityId: number }) {
-  const logs = useQuery(strengthSessionsQuery);
-  const logId = logs.data?.find((log) => log.garmin_activity_id === activityId)?.id;
+/**
+ * The exercises of the Muscu log recorded with this strength activity, or the
+ * offer to add them: the server says which log is linked (`strength_log_id`).
+ */
+function LinkedStrengthLog({ activityId, logId, source }: { activityId: number; logId: number | null; source: string }) {
   const log = useQuery({
     queryKey: qk.strengthSession(logId ?? -1),
     queryFn: () => strengthApi.getSession(logId!),
-    enabled: logId !== undefined,
+    enabled: logId !== null,
   });
   const openDraft = useOpenDraft();
   const exercises = log.data?.exercises ?? [];
-  if (logs.isSuccess && logId === undefined) {
+  if (logId === null) {
+    const watch = source === 'garmin_connect' || source === 'fit_file';
     return (
-      <Panel title="CHARGES">
+      <Panel title="Charges">
         <p className="text-sm font-sans text-text-secondary mb-3">
-          Ta montre a compté les séries, pas les kilos. Ajoute-les pour suivre tes records et ta progression.
+          {watch
+            ? 'Ta montre ne transmet pas tes charges. Ajoute-les pour suivre tes records et ta progression.'
+            : 'Ajoute tes exercices et tes charges pour suivre tes records et ta progression.'}
         </p>
         <Button variant="gold" strong className="min-h-11" loading={openDraft.isPending} onClick={() => openDraft.mutate(activityId)}>
           <Dumbbell className="w-4 h-4" aria-hidden />
@@ -230,7 +236,7 @@ function LinkedStrengthLog({ activityId }: { activityId: number }) {
       </Panel>
     );
   }
-  if (logId === undefined || exercises.length === 0) return null;
+  if (exercises.length === 0) return null;
   return (
     <Panel title="Exercices">
       <StrengthExercises exercises={exercises} />

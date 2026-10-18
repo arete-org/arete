@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dumbbell } from 'lucide-react';
 import { Button, Panel } from '@/components/ui';
@@ -9,7 +10,7 @@ import type { StrengthDraft } from '@/types';
 
 const MAX_NAMES = 3;
 
-/** What Garmin recognised, in a line: « Développé couché · Squat · +2 ». */
+/** What the watch recognised, in a line: « Développé couché · Squat · +2 ». */
 function draftSummary(draft: StrengthDraft): string {
   const names = draft.exercises.map((e) => e.name);
   if (names.length === 0) return 'Exercices à saisir';
@@ -17,26 +18,53 @@ function draftSummary(draft: StrengthDraft): string {
   return names.length > MAX_NAMES ? `${shown} · +${names.length - MAX_NAMES}` : shown;
 }
 
-/** Garmin strength sessions awaiting their loads, first thing in the Journal. */
-export function StrengthDrafts({ drafts, onComplete }: { drafts: StrengthDraft[]; onComplete: (id: number) => void }) {
+interface StrengthDraftsProps {
+  drafts: StrengthDraft[];
+  /** How many wait in all; the list shows the newest page. */
+  total: number;
+  onComplete: (id: number) => void;
+  /** True while a draft's screen is open: focus moves only once it closes. */
+  paused: boolean;
+}
+
+/** Strength sessions awaiting their loads, first thing in the Journal. */
+export function StrengthDrafts({ drafts, total, onComplete, paused }: StrengthDraftsProps) {
   const queryClient = useQueryClient();
-  const dismiss = useMutation({
-    mutationFn: (id: number) => strengthApi.dismissDraft(id),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: qk.strengthDrafts }),
-  });
+  const section = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLSpanElement>(null);
+  // The row acted on: once it leaves the list, focus goes to the next one or the heading.
+  const acted = useRef<{ id: number; index: number } | null>(null);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: qk.strengthDrafts });
+  const dismiss = useMutation({ mutationFn: (id: number) => strengthApi.dismissDraft(id), onSettled: refresh });
+  const dismissAll = useMutation({ mutationFn: () => strengthApi.dismissAllDrafts(), onSettled: refresh });
+
+  useEffect(() => {
+    const row = acted.current;
+    // Still listed: not saved yet (the modal gave its button back) or the list not refreshed yet.
+    if (paused || row === null || drafts.some((d) => d.id === row.id)) return;
+    acted.current = null;
+    const next = section.current?.querySelectorAll<HTMLButtonElement>('[data-draft-action]')[row.index];
+    (next ?? heading.current)?.focus();
+  }, [drafts, paused]);
+
   if (drafts.length === 0) return null;
+  const error = dismiss.error ?? dismissAll.error;
   return (
-    <section aria-labelledby="drafts-title" className="mb-4 sm:mb-6">
+    <section ref={section} aria-labelledby="drafts-title" className="mb-4 sm:mb-6">
       <Panel
-        title={<span id="drafts-title">À COMPLÉTER ({drafts.length})</span>}
+        title={
+          <span ref={heading} id="drafts-title" tabIndex={-1} className="outline-none">
+            À COMPLÉTER ({total})
+          </span>
+        }
         titleTone="text-neon-gold"
         animate={false}
       >
         <p className="text-xs font-sans text-text-muted -mt-2 mb-3">
-          Ta montre a compté les séries, pas les kilos. Ajoute-les pour suivre tes records et ta progression.
+          Arete ne reçoit pas tes charges. Ajoute-les pour suivre tes records et ta progression.
         </p>
         <ul className="space-y-2">
-          {drafts.map((draft) => {
+          {drafts.map((draft, index) => {
             const day = parseLocalDate(draft.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
             return (
               <li
@@ -58,11 +86,24 @@ export function StrengthDrafts({ drafts, onComplete }: { drafts: StrengthDraft[]
                     className="min-h-11"
                     aria-label={`Ignorer la séance du ${day}`}
                     loading={dismiss.isPending && dismiss.variables === draft.id}
-                    onClick={() => dismiss.mutate(draft.id)}
+                    onClick={() => {
+                      acted.current = { id: draft.id, index };
+                      dismiss.mutate(draft.id);
+                    }}
                   >
                     Ignorer
                   </Button>
-                  <Button variant="gold" strong size="sm" className="min-h-11" onClick={() => onComplete(draft.id)}>
+                  <Button
+                    variant="gold"
+                    strong
+                    size="sm"
+                    className="min-h-11"
+                    data-draft-action
+                    onClick={() => {
+                      acted.current = { id: draft.id, index };
+                      onComplete(draft.id);
+                    }}
+                  >
                     Ajoute tes charges
                   </Button>
                 </div>
@@ -70,9 +111,21 @@ export function StrengthDrafts({ drafts, onComplete }: { drafts: StrengthDraft[]
             );
           })}
         </ul>
-        {dismiss.isError && (
+        {total > drafts.length && (
+          <p className="mt-2 text-xs font-sans text-text-muted">
+            Les {drafts.length} plus récentes sur {total}.
+          </p>
+        )}
+        {total > 1 && (
+          <div className="mt-2 flex justify-end">
+            <Button variant="ghost" size="sm" className="min-h-11" loading={dismissAll.isPending} onClick={() => dismissAll.mutate()}>
+              Tout ignorer
+            </Button>
+          </div>
+        )}
+        {error && (
           <p role="alert" className="mt-2 text-xs font-sans text-danger-red">
-            {readableError(dismiss.error)}
+            {readableError(error)}
           </p>
         )}
       </Panel>

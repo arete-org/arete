@@ -81,6 +81,8 @@ export function LogSessionModal({ open, onClose, draft = null }: LogSessionModal
       }
     },
   });
+  // Names the catalog table does not know: listed, never pre-filled as notation.
+  const freeExercises = draft?.exercises.filter((e) => !e.exercise_id) ?? [];
   const save = () => (draft ? completeMutation.mutate() : parseMutation.mutate({ save: true }));
   const saving = draft ? completeMutation.isPending : parseMutation.isPending;
 
@@ -120,13 +122,21 @@ export function LogSessionModal({ open, onClose, draft = null }: LogSessionModal
       {step === 'input' && (
         <div className="space-y-4">
           {draft ? (
-            <p className="text-sm text-text-muted font-sans">
-              Séance Garmin du{' '}
-              {parseLocalDate(draft.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
-              {draft.exercises.length > 0
-                ? ` : ta montre a reconnu ${draft.exercises.length} exercice(s). Ajoute la charge au bout de chaque ligne («\u00a03x10@80\u00a0»), ou dicte-la.`
-                : '. Saisis ou dicte tes exercices avec leurs charges («\u00a0Squat 5x5@100\u00a0»).'}
-            </p>
+            <div className="space-y-2 text-sm text-text-muted font-sans">
+              <p>
+                Séance du{' '}
+                {parseLocalDate(draft.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                {draft.notation
+                  ? '. Ajoute la charge au bout de chaque ligne («\u00a03x10@80\u00a0»), ou dicte-la.'
+                  : '. Saisis ou dicte tes exercices avec leurs charges («\u00a0Squat 5x5@100\u00a0»).'}
+              </p>
+              {freeExercises.length > 0 && (
+                <p className="text-xs">
+                  Aussi vu par ta montre, à écrire avec tes mots :{' '}
+                  {freeExercises.map((e) => (e.sets ? `${e.name} (${e.sets} séries)` : e.name)).join(' · ')}
+                </p>
+              )}
+            </div>
           ) : (
             <p className="text-sm text-text-muted font-sans">
               Dicte ta séance ou colle-la ci-dessous. Les exercices, séries et charges sont
@@ -251,7 +261,13 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-sans text-sm text-text-primary">{ex.name}</span>
                     {ex.exercise_matched ? (
-                      <span className="text-[10px] font-sans text-success-green">✓ RECONNU</span>
+                      <span className="text-[10px] font-sans text-success-green text-right">
+                        ✓ RECONNU
+                        {/* Say which catalog exercise a typed name was read as. */}
+                        {ex.suggestions?.[0] && ex.suggestions[0].name.toLowerCase() !== ex.name.toLowerCase()
+                          ? ` : ${ex.suggestions[0].name}`
+                          : ''}
+                      </span>
                     ) : (
                       <span className="text-[10px] font-sans text-warning-orange">⚠ INCONNU</span>
                     )}

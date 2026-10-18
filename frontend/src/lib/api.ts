@@ -319,7 +319,7 @@ export const strengthApi = {
     }),
 
   /** Garmin strength activities awaiting their loads, newest first. */
-  getDrafts: () => fetchAPI<import("@/types").StrengthDraft[]>("/strength/drafts"),
+  getDrafts: () => fetchAPI<import("@/types").StrengthDraftList>("/strength/drafts"),
 
   /** « Ajoute tes charges » on a strength activity: its draft, opened once. */
   openDraft: (actualSessionId: number) =>
@@ -337,6 +337,10 @@ export const strengthApi = {
 
   dismissDraft: (draftId: number) =>
     fetchAPI<{ message: string }>(`/strength/drafts/${draftId}`, { method: "DELETE" }),
+
+  /** « Tout ignorer »: every listed draft, bounded server-side. */
+  dismissAllDrafts: () =>
+    fetchAPI<{ dismissed: number }>("/strength/drafts/dismiss-all", { method: "POST" }),
 
   getExercises: () =>
     fetchAPI<import("@/types").LibraryExercise[]>("/strength/exercises"),

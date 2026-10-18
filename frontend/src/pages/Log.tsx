@@ -46,7 +46,7 @@ export function LogPage() {
 
   const { data: settings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
   const draftsQuery = useQuery(strengthDraftsQuery);
-  const drafts = draftsQuery.data ?? [];
+  const drafts = draftsQuery.data?.items ?? [];
   // Kept once found: completing it drops it from the list, not from its own screen.
   const listedDraft = drafts.find((d) => String(d.id) === draftParam) ?? null;
   const [keptDraft, setKeptDraft] = useState<StrengthDraft | null>(null);
@@ -103,7 +103,9 @@ export function LogPage() {
           ))}
         </div>
 
-        {activeTab === 'force' && <StrengthDrafts drafts={drafts} onComplete={setDraftId} />}
+        {activeTab === 'force' && (
+          <StrengthDrafts drafts={drafts} total={draftsQuery.data?.total ?? 0} onComplete={setDraftId} paused={openDraft !== null} />
+        )}
 
         {activeTab === 'force' && (
           <div className="analysis-grid">
