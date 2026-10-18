@@ -24,6 +24,7 @@ import duckdb
 
 from arete.config import config
 from arete.dataio.db import db_connection, write_idempotent
+from arete.services import consent
 from arete.services.athlete_scope import athlete_scope, current_athlete_id
 from arete.services.settings import (
     QuietHours,
@@ -446,17 +447,29 @@ DEFAULT_SYNC_HOUR = 7
 #: clock, so no session's TimeZone enters them, and ``epoch`` reads a naive
 #: TIMESTAMP as UTC. The trusted scheduler reads every athlete's zone and quiet
 #: hours from the base table in the same query. Least recent activity first: a
-#: lease a failed run took today counts as today's.
+#: lease a failed run took today counts as today's. An athlete without current
+#: consent (``services/consent.py``, with sign-in on) is not a candidate: every
+#: job reading this list (daily sync and briefing, Sunday review, check-in,
+#: evening replanning and message) pauses for them, their data untouched. The
+#: predicate is the consent service's own, so the two cannot drift.
 _CANDIDATES = (
     "SELECT a.id, a.last_sync_at, a.sync_lease_until, "
     "epoch(a.last_sync_at), epoch(a.sync_lease_until), "
     "s.timezone, s.notification_preferences "
     "FROM app.athletes a LEFT JOIN app.user_settings s "
     "ON s.user_id = a.id AND s.deleted_at IS NULL "
-    "WHERE a.deleted_at IS NULL "
-    "ORDER BY greatest(a.last_sync_at, a.sync_lease_until) NULLS FIRST, a.id "
+    "WHERE a.deleted_at IS NULL AND "
+    + consent.processing_sql("a.id")[0]
+    + " ORDER BY greatest(a.last_sync_at, a.sync_lease_until) NULLS FIRST, a.id "
     "LIMIT ?"
 )
+
+
+def _candidates() -> list[tuple]:
+    """The live athletes whose data may be processed, least recent first."""
+    _, params = consent.processing_sql("a.id")
+    with db_connection() as con:
+        return con.execute(_CANDIDATES, [*params, MAX_SCANNED_ATHLETES]).fetchall()
 
 
 def owed_today(
@@ -532,8 +545,7 @@ def run_scheduled_batch() -> dict:
     sync_hour = config.auto_sync_hour
     if sync_hour is None:
         sync_hour = DEFAULT_SYNC_HOUR
-    with db_connection() as con:
-        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    candidates = _candidates()
     # Athletes past the bound are left for a later window.
     deferred = len(candidates) == MAX_SCANNED_ATHLETES
     if deferred:
@@ -704,8 +716,7 @@ def run_sunday_reviews(started: float) -> dict:
     for the next daily run. A parked athlete gets none. Independent of the
     daily run's claim and markers.
     """
-    with db_connection() as con:
-        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    candidates = _candidates()
     deferred = len(candidates) == MAX_SCANNED_ATHLETES
     outcomes: dict[str, str] = {}
     written = 0
@@ -813,8 +824,7 @@ def run_checkin_prompts() -> dict:
     from arete.services import checkins
 
     started = monotonic()
-    with db_connection() as con:
-        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    candidates = _candidates()
     deferred = len(candidates) == MAX_SCANNED_ATHLETES
     outcomes: dict[str, str] = {}
     for row in candidates:
@@ -874,8 +884,7 @@ def run_evening_replans(from_hour: int = EVENING_FROM_HOUR) -> dict:
     defers get nothing that day, so the same athletes must not always be last.
     """
     started = monotonic()
-    with db_connection() as con:
-        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    candidates = _candidates()
     deferred = len(candidates) == MAX_SCANNED_ATHLETES
     candidates.sort(key=lambda row: evening_rank(row[0], utc_now().date()))
     outcomes: dict[str, str] = {}
@@ -983,8 +992,7 @@ def run_evening_messages(replan_from_hour: int = EVENING_FROM_HOUR) -> dict:
     from arete.services.settings import EVENING_FIRST_HOUR
 
     started = monotonic()
-    with db_connection() as con:
-        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    candidates = _candidates()
     deferred = len(candidates) == MAX_SCANNED_ATHLETES
     candidates.sort(key=lambda row: evening_rank(row[0], utc_now().date()))
     outcomes: dict[str, str] = {}

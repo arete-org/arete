@@ -20,7 +20,7 @@ import duckdb
 from anyio import to_thread
 
 from arete.dataio.db import transaction
-from arete.services import slack_athletes
+from arete.services import consent, slack_athletes
 from arete.services.athlete_scope import current_athlete_id
 
 if TYPE_CHECKING:
@@ -49,6 +49,11 @@ BUSY_MESSAGE = (
 UNLINKED_MESSAGE = (
     "Aucun compte Arete n’est associé à l’adresse e-mail de ton profil Slack. "
     "Connecte-toi à Arete avec cette adresse, puis réessaie."
+)
+UNCONSENTED_MESSAGE = (
+    "Avant que le coach puisse te répondre, accepte les conditions d’utilisation, "
+    "la politique de confidentialité et le traitement de tes données de santé "
+    "dans l’application Arete."
 )
 PRIVATE_NOTE = (
     "<@{user}> je t’ai répondu en message privé. Pour recevoir les réponses ici, "
@@ -604,6 +609,17 @@ async def resolve(message: SlackMessage, *, client: SlackClient) -> int | None:
         if email
         else None
     )
+    if athlete_id is not None and not await to_thread.run_sync(
+        consent.allows_processing, athlete_id
+    ):
+        # Nothing of the athlete's reaches the coach before their consent, and
+        # whether they gave it is theirs alone: a channel never hears it.
+        if message.in_channel:
+            channel = await client.open_dm(message.user)
+            await client.post(channel, None, UNCONSENTED_MESSAGE)
+        else:
+            await client.reply(message, UNCONSENTED_MESSAGE)
+        return None
     if athlete_id is not None and email:
         from arete.services.slack_identity import link
 

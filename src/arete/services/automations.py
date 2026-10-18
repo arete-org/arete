@@ -344,6 +344,47 @@ def _sessions(con, record: dict, now: datetime) -> None:
         )
 
 
+def skip_due(reason: str, now: datetime | None = None) -> int:
+    """Record as missed, with ``reason``, what comes due while it may not run.
+
+    For an athlete without consent: each scheduled occurrence that comes due
+    is recorded missed and the schedule moves past now, and runs already due
+    are closed missed, so nothing piles up and nothing fires late once the
+    athlete consents again. Pure bookkeeping on the automation tables: no
+    session or health data is read. Returns how many runs were closed.
+    """
+    now = now or utc_now()
+    with transaction() as con:
+        closed = con.execute(
+            f"UPDATE app.automation_runs SET state='missed',error=?,finished_at=?,revision=revision+1 WHERE {OWNER} AND state IN ('queued','ready') AND due_at<=? RETURNING id",
+            [reason, now, now],
+        ).fetchall()
+        due = rows(
+            con.execute(
+                "SELECT * FROM app.visible_automations WHERE state='active' AND next_due_at<=? ORDER BY next_due_at,id LIMIT ?",
+                [now, MAX_ACTIVE_AUTOMATIONS],
+            )
+        )
+        for record in due:
+            spec = definition(record)
+            at: datetime | None = record["next_due_at"]
+            # Bounded per pass; a longer backlog continues at the next one.
+            for _ in range(MAX_SCHEDULE_DAYS):
+                if at is None or at > now:
+                    break
+                _insert_run(con, record, at, at.isoformat(), now, state="missed")
+                con.execute(
+                    f"UPDATE app.automation_runs SET error=? WHERE {OWNER} AND automation_id=? AND occurrence_key=? AND state='missed'",
+                    [reason, record["id"], at.isoformat()],
+                )
+                at = next_due(spec, at)
+            con.execute(
+                f"UPDATE app.automations SET next_due_at=? WHERE {OWNER} AND id=? AND revision=?",
+                [at, record["id"], record["revision"]],
+            )
+    return len(closed)
+
+
 def prepare(now: datetime | None = None) -> dict:
     now = now or utc_now()
     with transaction() as con:

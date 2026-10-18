@@ -1,7 +1,7 @@
 import { lazy, Suspense, useLayoutEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Check, Database, Dumbbell, Palette, Save, Target, Terminal, User, Users, Watch, X } from 'lucide-react';
+import { Check, Database, Dumbbell, Info, Palette, Save, Target, Terminal, User, Users, Watch, X } from 'lucide-react';
 import { AreteMark } from '@/components/AreteBrand';
 import { cn, readableError } from '@/lib/utils';
 import { ErrorState, LoadingState } from '@/components';
@@ -24,6 +24,7 @@ const AppearanceTab = lazy(importChunk(() => import('./settings/AppearanceTab').
 const DataTab = lazy(importChunk(() => import('./settings/DataTab').then((m) => ({ default: m.DataTab }))));
 const SystemTab = lazy(importChunk(() => import('./settings/SystemTab').then((m) => ({ default: m.SystemTab }))));
 const AdminTab = lazy(importChunk(() => import('./settings/AdminTab').then((m) => ({ default: m.AdminTab }))));
+const AboutTab = lazy(importChunk(() => import('./settings/AboutTab').then((m) => ({ default: m.AboutTab }))));
 
 const TABS = [
   { id: 'profile', label: 'PROFIL', icon: User },
@@ -35,6 +36,7 @@ const TABS = [
   { id: 'appearance', label: 'APPARENCE', icon: Palette },
   { id: 'data', label: 'DONNÉES', icon: Database },
   { id: 'system', label: 'SYSTÈME', icon: Terminal },
+  { id: 'about', label: 'À PROPOS', icon: Info },
 ] as const;
 /** Listed for the owner and admins only. */
 const ADMIN_TAB = { id: 'admin', label: 'ADMINISTRATION', icon: Users } as const;
@@ -212,6 +214,7 @@ export function SettingsPage() {
               {activeTab === 'appearance' && <AppearanceTab {...tabProps} />}
               {activeTab === 'data' && <DataTab />}
               {activeTab === 'system' && <SystemTab />}
+              {activeTab === 'about' && <AboutTab />}
               {activeTab === 'admin' && <AdminTab />}
             </Suspense>
           </div>

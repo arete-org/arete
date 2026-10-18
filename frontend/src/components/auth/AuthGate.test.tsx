@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { fetchAPI } from '@/lib/api';
 import { authHeaders, setTokenGetter } from '@/lib/auth';
 import { AuthGate } from './AuthGate';
 import { useAuthState } from './authState';
@@ -34,6 +35,26 @@ vi.mock('@clerk/react', () => {
 });
 vi.mock('@clerk/localizations/fr-FR', () => ({ frFR: {} }));
 
+const persistence = vi.hoisted(() => ({ clear: vi.fn(async () => {}) }));
+vi.mock('@/lib/queryPersistence', async (original) => ({
+  ...(await original<typeof import('@/lib/queryPersistence')>()),
+  clearPersistedQueries: persistence.clear,
+}));
+
+interface Consent {
+  required: boolean;
+  current: boolean;
+  terms_version: string;
+  privacy_version: string;
+  latest: {
+    terms_version: string;
+    privacy_version: string;
+    health_data: boolean;
+    consented_at: string;
+    withdrawn_at: string | null;
+  } | null;
+}
+
 interface Me {
   email: string;
   name: string | null;
@@ -41,7 +62,28 @@ interface Me {
   is_owner: boolean;
   role: 'athlete' | 'admin';
   is_admin: boolean;
+  consent: Consent;
 }
+
+const VERSION = '2026-10-draft-1';
+const NOT_ASKED: Consent = {
+  required: true,
+  current: false,
+  terms_version: VERSION,
+  privacy_version: VERSION,
+  latest: null,
+};
+const GIVEN: Consent = {
+  ...NOT_ASKED,
+  current: true,
+  latest: {
+    terms_version: VERSION,
+    privacy_version: VERSION,
+    health_data: true,
+    consented_at: '2026-10-18T08:30:00Z',
+    withdrawn_at: null,
+  },
+};
 
 /** The server turning the account away, with its reason. */
 interface Refusal {
@@ -49,13 +91,20 @@ interface Refusal {
   detail: string;
 }
 
-/** Answers the two gate endpoints and records every request. */
+/** Answers the gate endpoints (and a consent) and records every request. */
 function server(config: unknown, me?: Me | Refusal) {
-  const requests: { url: string; headers: Headers }[] = [];
+  const requests: { url: string; headers: Headers; body?: unknown }[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
-      requests.push({ url, headers: new Headers(init?.headers) });
+      requests.push({
+        url,
+        headers: new Headers(init?.headers),
+        body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+      });
+      if (url === '/api/auth/consent') {
+        return new Response(JSON.stringify(GIVEN), { status: 200 });
+      }
       if (url === '/api/auth/config') {
         if (config instanceof Error) throw config;
         return new Response(JSON.stringify(config), { status: 200 });
@@ -148,6 +197,7 @@ it('shows the waiting page with the email while no athlete is attached', async (
     is_owner: false,
     role: 'athlete',
     is_admin: false,
+    consent: NOT_ASKED,
   });
   mount();
   expect(await screen.findByText(/aucun athlète ne lui est encore associé/)).toBeTruthy();
@@ -167,10 +217,76 @@ it('renders the app once an athlete is attached', async () => {
     is_owner: true,
     role: 'athlete',
     is_admin: true,
+    consent: GIVEN,
   });
   mount();
   expect(await screen.findByText('Tableau de bord')).toBeTruthy();
   expect(await authHeaders()).toEqual({ Authorization: 'Bearer jeton' });
+});
+
+const FRESH: Me = {
+  email: 'ana@exemple.fr',
+  name: 'Ana',
+  athlete_id: 2,
+  is_owner: false,
+  role: 'athlete',
+  is_admin: false,
+  consent: NOT_ASKED,
+};
+
+it('blocks a fresh account behind the texts and two unticked boxes until it consents', async () => {
+  clerk.signedIn = true;
+  const requests = server(enabled, FRESH);
+  mount();
+  expect(await screen.findByText(/rien n’est synchronisé, analysé ni envoyé au coach/)).toBeTruthy();
+  // An existing athlete meets this screen after the migration: their data stays, and leaves.
+  expect(screen.getByText(/Les données déjà enregistrées sont conservées/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: /Exporter mes données/ })).toBeTruthy();
+  expect(screen.queryByText('Tableau de bord')).toBeNull();
+  expect(screen.getByRole('button', { name: "Lire : Conditions d'utilisation" })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Lire : Politique de confidentialité' })).toBeTruthy();
+  const [terms, health] = screen.getAllByRole('checkbox') as HTMLInputElement[];
+  expect([terms.checked, health.checked]).toEqual([false, false]);
+  expect(health.closest('label')?.textContent).toMatch(/article 9 du RGPD/);
+  const accept = screen.getByRole('button', { name: /ACCEPTER ET CONTINUER/ }) as HTMLButtonElement;
+  expect(accept.disabled).toBe(true);
+  fireEvent.click(terms);
+  expect(accept.disabled).toBe(true); // the health data box is a separate, explicit choice
+  fireEvent.click(health);
+  expect(accept.disabled).toBe(false);
+
+  fireEvent.click(accept);
+  expect(await screen.findByText('Tableau de bord')).toBeTruthy();
+  const consent = requests.find((r) => r.url === '/api/auth/consent');
+  expect(consent?.body).toEqual({
+    terms_version: VERSION,
+    privacy_version: VERSION,
+    terms_accepted: true,
+    health_data: true,
+  });
+  expect(consent?.headers.get('Authorization')).toBe('Bearer jeton');
+});
+
+it('tells a withdrawn athlete their data is kept, and offers the export and the way back', async () => {
+  clerk.signedIn = true;
+  server(enabled, {
+    ...FRESH,
+    consent: { ...GIVEN, current: false, latest: { ...GIVEN.latest!, withdrawn_at: '2026-10-18T09:00:00Z' } },
+  });
+  mount();
+  expect(await screen.findByText(/Tu as retiré ton consentement le 18 octobre 2026/)).toBeTruthy();
+  expect(screen.getByText(/Tes données sont conservées/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: /Exporter mes données/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeTruthy();
+  expect(screen.queryByText('Tableau de bord')).toBeNull();
+});
+
+it('asks again when the texts have a new version', async () => {
+  clerk.signedIn = true;
+  server(enabled, { ...FRESH, consent: { ...GIVEN, current: false, terms_version: '2027-01' } });
+  mount();
+  expect(await screen.findByText(/ont changé/)).toBeTruthy();
+  expect(screen.queryByText('Tableau de bord')).toBeNull();
 });
 
 it('shows the refusal reason with a sign-out when the account is deactivated', async () => {
@@ -230,4 +346,88 @@ it('ends a refused session as before when the server expects the same instance',
   await waitFor(() => expect(clerk.signOut).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(reload).toHaveBeenCalled());
   expect(screen.queryByText('AUTHENTIFICATION MAL CONFIGURÉE')).toBeNull();
+});
+
+const WITHDRAWN: Consent = {
+  ...GIVEN,
+  current: false,
+  latest: { ...GIVEN.latest!, withdrawn_at: '2026-10-18T09:00:00Z' },
+};
+
+/** The signed-in app, answering `/api/settings` as told; the probe loads it or withdraws. */
+function signedInApp(answers: { consent: () => Consent; settings: () => Response }) {
+  clerk.signedIn = true;
+  const asked: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      asked.push(url);
+      if (url === '/api/auth/config') return new Response(JSON.stringify(enabled), { status: 200 });
+      if (url === '/api/auth/me') {
+        return new Response(JSON.stringify({ ...FRESH, consent: answers.consent() }), { status: 200 });
+      }
+      if (url === '/api/settings') return answers.settings();
+      throw new Error(`unexpected request: ${url}`);
+    })
+  );
+  const ended = vi.fn();
+  function Probe() {
+    const { setConsent } = useAuthState();
+    return (
+      <>
+        <button type="button" onClick={() => void fetchAPI('/settings').catch(() => {})}>
+          Charger
+        </button>
+        <button type="button" onClick={() => setConsent(WITHDRAWN)}>
+          Retirer
+        </button>
+      </>
+    );
+  }
+  render(
+    <AuthGate onSessionEnd={ended}>
+      <Probe />
+    </AuthGate>
+  );
+  return { asked, ended };
+}
+
+it('goes back to the consent screen when a request is refused for missing consent mid-session', async () => {
+  let consent = GIVEN;
+  let marked = false;
+  const { asked, ended } = signedInApp({
+    consent: () => consent,
+    settings: () =>
+      new Response(JSON.stringify({ detail: 'Accepte…' }), {
+        status: 403,
+        headers: marked ? { 'X-Arete-Consent': 'required' } : {},
+      }),
+  });
+  const load = await screen.findByRole('button', { name: 'Charger' });
+  const sessionStart = ended.mock.calls.length;
+
+  // Any other 403 (an admin route, say) leaves the account alone.
+  fireEvent.click(load);
+  await waitFor(() => expect(asked.filter((u) => u === '/api/settings')).toHaveLength(1));
+  expect(asked.filter((u) => u === '/api/auth/me')).toHaveLength(1);
+
+  // A new text version was published meanwhile: the marked 403 asks the account again.
+  consent = { ...GIVEN, current: false, terms_version: '2027-01' };
+  marked = true;
+  fireEvent.click(load);
+  expect(await screen.findByText(/ont changé/)).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Charger' })).toBeNull();
+  expect(asked.filter((u) => u === '/api/auth/me')).toHaveLength(2);
+  // Nothing of the athlete's stays cached once the app is gone.
+  await waitFor(() => expect(persistence.clear).toHaveBeenCalled());
+  expect(ended.mock.calls.length).toBeGreaterThan(sessionStart);
+});
+
+it('drops the in-memory and persisted caches when the athlete withdraws', async () => {
+  persistence.clear.mockClear();
+  const { ended } = signedInApp({ consent: () => GIVEN, settings: () => new Response('{}') });
+  fireEvent.click(await screen.findByRole('button', { name: 'Retirer' }));
+  expect(await screen.findByText(/Tu as retiré ton consentement/)).toBeTruthy();
+  await waitFor(() => expect(persistence.clear).toHaveBeenCalledTimes(1));
+  expect(ended).toHaveBeenCalledTimes(2); // the session's start, then the withdrawal
 });

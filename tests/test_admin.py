@@ -56,7 +56,7 @@ def _clean_users():
 
 
 @pytest.fixture
-def athletes(client, monkeypatch) -> dict[str, int]:
+def athletes(client, monkeypatch, consented) -> dict[str, int]:
     """Clerk mode with fake tokens: three accounts, ADMIN named by the owner.
 
     Returns each token's athlete id.

@@ -38,6 +38,16 @@ The serialization adapter follows SDK 0.3.17's private MFA fields, so SDK upgrad
 must exercise portal, iOS and widget continuations. This preserves cookies and
 TLS impersonation across workers without storing a password or using pickle.
 
+## Consent before any data flows
+
+With sign-in on, an athlete reaches nothing but their account, the consent
+routes and their data export until they accept the current terms, privacy
+policy and, explicitly, the processing of their health data (Settings → À
+propos to withdraw). Every per-athlete job skips an athlete without current
+consent, the owner included: after migration 63 the owner's scheduled jobs
+simply pause until the owner consents on their next visit. A withdrawal keeps
+the data. See [the architecture](architecture.md#consent-to-health-data-processing).
+
 ## Ownership contract
 
 - Authentication, signed OAuth state and the scheduler establish a trusted

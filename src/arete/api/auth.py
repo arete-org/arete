@@ -11,6 +11,10 @@ Administration routes need an administrator (the owner is one by right);
 naming administrators needs the owner. A resolved account is reused for
 ``ACCOUNT_TTL_SECONDS`` (30 s): a deactivation or role change applies at once
 on the instance that made it and within that bound on every other instance.
+Until its athlete consents to the current terms, privacy policy and health
+data processing (``services/consent.py``), an account reaches only its own
+account, the consent routes and its data export: every other route answers
+403, so nothing is imported, stored or sent to a model before consent.
 
 Pure ASGI middleware, like the mirror's: the coach streams, and a
 ``BaseHTTPMiddleware`` would sit between the stream and the client. The Clerk
@@ -35,11 +39,12 @@ from typing import Any
 import anyio
 import duckdb
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 
 from arete.config import config
+from arete.services import consent as consent_service
 from arete.services import users as user_service
 from arete.services.athlete_scope import athlete_scope
 from arete.services.users import API_KEY_USER, OWNER_ATHLETE_ID, AppUser
@@ -66,6 +71,18 @@ PUBLIC_PATHS = frozenset(
 PUBLIC_PREFIXES = ("/docs", "/redoc")
 #: Where a signed-in account goes before it has an athlete.
 ACCOUNT_PATHS = frozenset({"/auth/me"})
+#: Reachable before consent, or after its withdrawal: the account and the
+#: consent routes (``/auth/...``), and the athlete's export, since the right of
+#: access survives a withdrawal. Everything else processes the athlete's data.
+CONSENT_EXEMPT_PREFIXES = ("/auth/", "/export/")
+#: Marks a 403 for missing consent, whatever its French detail says: the
+#: browser then asks ``/auth/me`` again and shows the consent screen.
+CONSENT_HEADER = "X-Arete-Consent"
+#: The API key acts for the athlete, not as the person: it neither gives nor
+#: withdraws a consent.
+API_KEY_CONSENT_DETAIL = (
+    "Le consentement se donne et se retire dans l'application, connecté à ton compte."
+)
 
 NO_ATHLETE_DETAIL = (
     "Aucun athlète n'est associé à ce compte. Demande l'accès au propriétaire "
@@ -151,6 +168,12 @@ def is_deletion_path(path: str) -> bool:
     if path.startswith("/api/"):
         path = path[4:]
     return path == DELETION_PATH
+
+
+def is_consent_exempt(path: str) -> bool:
+    if path.startswith("/api/"):
+        path = path[4:]
+    return path.startswith(CONSENT_EXEMPT_PREFIXES)
 
 
 # ---------------------------------------------------------------- Clerk --
@@ -281,7 +304,45 @@ def forget_accounts() -> None:
     global _accounts_generation
     with _accounts_lock:
         _accounts.clear()
+        _consented.clear()
         _accounts_generation += 1
+
+
+#: Athletes seen with current consent, and when. Only consent is cached: an
+#: athlete without it is read again on each request, so a consent given here
+#: or on another instance opens the app at once, with nothing to invalidate. A
+#: withdrawal applies at once on the instance that recorded it
+#: (``forget_consent``) and within ``ACCOUNT_TTL_SECONDS`` elsewhere, like a
+#: deactivation.
+_consented: OrderedDict[int, float] = OrderedDict()
+
+
+def forget_consent(athlete_id: int) -> None:
+    """Drop one athlete's cached consent, after its withdrawal here; a read
+    already under way cannot store its now stale answer afterwards."""
+    global _accounts_generation
+    with _accounts_lock:
+        _consented.pop(athlete_id, None)
+        _accounts_generation += 1
+
+
+def has_consent(athlete_id: int) -> bool:
+    """Whether the athlete's data may be processed: cached when it may."""
+    now = _clock()
+    with _accounts_lock:
+        seen = _consented.get(athlete_id)
+        if seen is not None and now - seen < ACCOUNT_TTL_SECONDS:
+            return True
+        generation = _accounts_generation
+    if not consent_service.is_current(athlete_id):
+        return False
+    with _accounts_lock:
+        if generation == _accounts_generation:
+            _consented[athlete_id] = now
+            _consented.move_to_end(athlete_id)
+            while len(_consented) > ACCOUNT_CACHE_SIZE:
+                _consented.popitem(last=False)
+    return True
 
 
 def _resolve_account(subject: str) -> tuple[AppUser, bool]:
@@ -399,6 +460,24 @@ class AuthMiddleware:
             response = JSONResponse({"detail": NO_ATHLETE_DETAIL}, status_code=403)
             await response(scope, receive, send)
             return
+        if user.athlete_id is not None and not is_consent_exempt(path):
+            try:
+                consented = await anyio.to_thread.run_sync(has_consent, user.athlete_id)
+            except Exception:  # noqa: BLE001 - database down: refuse, never pass
+                logger.warning("Consent check failed unexpectedly", exc_info=True)
+                response = JSONResponse(
+                    {"detail": "Service d'identité indisponible."}, status_code=503
+                )
+                await response(scope, receive, send)
+                return
+            if not consented:
+                response = JSONResponse(
+                    {"detail": consent_service.CONSENT_REQUIRED_DETAIL},
+                    status_code=403,
+                    headers={CONSENT_HEADER: "required"},
+                )
+                await response(scope, receive, send)
+                return
         scope.setdefault("state", {})["user"] = user
         if user.athlete_id is None:
             await self.app(scope, receive, send)
@@ -462,8 +541,64 @@ def auth_config() -> dict[str, Any]:
 
 @router.get("/me")
 def me(request: Request) -> dict[str, Any]:
-    """The signed-in account; reachable before an athlete is attached."""
-    return current_user(request).to_dict()
+    """The signed-in account; reachable before an athlete is attached.
+
+    ``consent`` says whether the athlete must still accept the current texts
+    (their versions included) and when they last consented or withdrew.
+    """
+    user = current_user(request)
+    return {**user.to_dict(), "consent": consent_service.state(user.athlete_id)}
+
+
+class ConsentIn(BaseModel):
+    """The two boxes the athlete ticked, and the texts' versions they read."""
+
+    terms_version: str = Field(max_length=64)
+    privacy_version: str = Field(max_length=64)
+    terms_accepted: bool
+    health_data: bool
+
+
+def _consenting(request: Request) -> tuple[AppUser, int]:
+    """The person acting on their athlete's consent: a login, never the API key."""
+    user = current_user(request)
+    if user.athlete_id is None:
+        raise HTTPException(status_code=403, detail=NO_ATHLETE_DETAIL)
+    if user.clerk_user_id == API_KEY_USER.clerk_user_id:
+        raise HTTPException(status_code=403, detail=API_KEY_CONSENT_DETAIL)
+    return user, user.athlete_id
+
+
+@router.post("/consent")
+def give_consent(body: ConsentIn, request: Request) -> dict[str, Any]:
+    """Record the athlete's consent, given by the signed-in person.
+
+    Nothing to invalidate: only consent is cached, never its absence.
+    """
+    user, athlete_id = _consenting(request)
+    try:
+        consent_service.give(
+            athlete_id,
+            user.id or None,
+            terms_version=body.terms_version,
+            privacy_version=body.privacy_version,
+            terms_accepted=body.terms_accepted,
+            health_data=body.health_data,
+        )
+    except consent_service.ConsentError as e:
+        raise HTTPException(status_code=e.status, detail=str(e)) from None
+    return consent_service.state(athlete_id)
+
+
+@router.post("/consent/withdraw")
+def withdraw_consent(request: Request) -> dict[str, Any]:
+    """Withdraw the athlete's consent: their data stays, every processing stops
+    (syncs, briefings, evening message, automations, the coach) until they
+    consent again. The login that withdrew is recorded."""
+    user, athlete_id = _consenting(request)
+    consent_service.withdraw(athlete_id, user.id or None)
+    forget_consent(athlete_id)
+    return consent_service.state(athlete_id)
 
 
 #: What the athlete types to confirm; checked here, not only in the browser.

@@ -24,9 +24,10 @@ def _trusted(relative: str, sql: str) -> bool:
     # Bootstrap owner lookup before a scope exists.
     if relative == "services/users.py":
         return sql == "SELECT email FROM app.user_settings WHERE user_id = 1"
-    # Trusted dispatch: every athlete's zone and quiet hours.
+    # Trusted dispatch: every athlete's zone and quiet hours. The statement
+    # joins its literal parts to the consent predicate.
     if relative == "scheduler.py":
-        return sql == _CANDIDATES
+        return sql in _CANDIDATES
     # Administrators' indicators: counts, never a row.
     if relative == "services/product_kpis.py":
         return sql in TRUSTED_READS

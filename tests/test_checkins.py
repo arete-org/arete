@@ -95,7 +95,9 @@ def test_the_list_is_bounded_to_the_window(db, client):
         assert client.get(f"/checkins?days={days}").status_code == 422
 
 
-def test_an_athlete_never_reads_another_s_check_in(db, client, monkeypatch):
+def test_an_athlete_never_reads_another_s_check_in(
+    db, client, monkeypatch, give_consent
+):
     from arete.api import auth
     from arete.services.users import upsert_user
 
@@ -103,6 +105,8 @@ def test_an_athlete_never_reads_another_s_check_in(db, client, monkeypatch):
     monkeypatch.setenv("ARETE_OWNER_EMAIL", "first@example.com")
     first = upsert_user("first", "first@example.com", "First", verified=True)
     second = upsert_user("second", "second@example.com", "Second", verified=True)
+    assert first.athlete_id is not None and second.athlete_id is not None
+    give_consent(first.athlete_id, second.athlete_id)
     monkeypatch.setenv("ARETE_AUTH", "clerk")
     monkeypatch.setenv("CLERK_SECRET_KEY", "test")
     monkeypatch.setenv("CLERK_PUBLISHABLE_KEY", "test")

@@ -708,6 +708,39 @@ naming an administrator behind `require_owner` (both in `api/auth.py`); the
 scheduler owns releasing a sync lease. Services never import `arete.api.auth`. `services/google_tokens.py` reads the signed-in user's Google
 token from Clerk for Calendar.
 
+### Consent to health data processing
+
+`services/consent.py` owns consent to the terms, the privacy policy and the
+processing of health data (GDPR art. 9). It belongs to the athlete, whose data
+and jobs it governs, and records the login that gave it, in the append-only
+`app.athlete_consents` (migration 63): each acceptance adds a row with both
+text versions, a withdrawal stamps the rows in force. It is current when a row
+in force carries `TERMS_VERSION` and `PRIVACY_VERSION`; bumping either asks
+everyone again. Required only with sign-in on; nobody is grandfathered.
+
+Three places enforce it, never the routes one by one, all with one predicate
+(`_IN_FORCE`: any row in force for the current texts counts, so a rollback to
+older texts finds their consent again). The authentication middleware answers
+403 with a French detail and the `X-Arete-Consent: required` header to every
+route but `/auth/*` and `/export/*` (the right of access survives a
+withdrawal) until the athlete has current consent; it caches only a positive
+answer, for `ACCOUNT_TTL_SECONDS`, so a consent needs no invalidation and a
+withdrawal pops that athlete's entry here and applies within that bound on
+the other instances. The browser's `authFetch` turns that header into a fresh
+`/auth/me`, so the consent screen returns mid-session. The scheduler's
+candidate query (daily sync, briefing, Sunday review, check-in, evening
+replanning and message) skips an athlete without it, untouched; the automation
+dispatch records what comes due meanwhile as missed, with the reason, and moves
+the schedule past now, so nothing fires late after a new consent. The paths
+that bypass the middleware check it themselves: the Slack resolution (no coach
+run; the French reply goes to a DM when asked in a channel), the
+administrator's Slack reads and the Strava OAuth callback. The API key neither
+gives nor withdraws consent; a withdrawal records the login that made it. The
+browser shows the texts (`frontend/src/legal/*.md`, their versions in their
+header), two unticked boxes and the export in place of the app until consent
+(`ConsentScreen`), drops its query caches as a sign-out does while consent is
+missing, and Settings → À propos shows the state and withdraws it.
+
 The browser keeps an allowlist of query answers (dashboard, settings, goals and
 the session windows containing today) in IndexedDB for 24 hours so a repeat visit
 paints them while they revalidate (`frontend/src/lib/queryPersistence.ts`). Each
