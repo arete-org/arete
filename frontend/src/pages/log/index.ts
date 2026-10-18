@@ -8,3 +8,4 @@ export { ManualCardioModal } from './ManualCardioModal';
 export { ExerciseProgress } from './ExerciseProgress';
 export { StrengthDrafts } from './StrengthDrafts';
 export { useOpenDraft } from './useOpenDraft';
+export { SameDayLogWarning } from './SameDayLogWarning';

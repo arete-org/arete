@@ -216,9 +216,15 @@ def complete_draft(
 
 
 def dismiss_draft(draft_id: int, repo: StrengthRepository | None = None) -> None:
-    """Leave a draft without loads. Raises ``DraftNotFound`` or ``DraftSettled``."""
+    """Leave a draft without loads.
+
+    Raises ``DraftNotFound``, ``DraftSettled``, or ``DraftBusy`` when a
+    concurrent write interrupted it and the draft is still pending.
+    """
     repo = repo or StrengthRepository()
     if not repo.dismiss_draft(draft_id):
+        if repo.pending_drafts(draft_id):
+            raise DraftBusy(draft_id)
         if repo.draft_exists(draft_id):
             raise DraftSettled(draft_id)
         raise DraftNotFound(draft_id)

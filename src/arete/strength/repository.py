@@ -1197,8 +1197,12 @@ class StrengthRepository:
             conn.close()
         return int(row[0]) if row else 0
 
-    def dismiss_pending_drafts(self, limit: int = 500) -> int:
-        """Dismiss the listed drafts, at most ``limit`` per call; how many."""
+    def dismiss_pending_drafts(self, limit: int = 500) -> int | None:
+        """Dismiss the listed drafts, at most ``limit`` per call; how many.
+
+        None when a concurrent write (a completion) interrupted it: nothing
+        was dismissed.
+        """
         where, params = _pending_drafts_where(None)
         conn = self._get_connection()
         try:
@@ -1208,6 +1212,8 @@ class StrengthRepository:
                 f" AND id IN (SELECT d.id {where} LIMIT ?) RETURNING id",
                 [datetime.now(), *params, limit],
             ).fetchall()
+        except duckdb.TransactionException:
+            return None
         finally:
             conn.close()
         return len(rows)
@@ -1288,6 +1294,19 @@ class StrengthRepository:
             conn.close()
         return int(row[0]) if row and row[0] is not None else None
 
+    def unlinked_log_on(self, day: date) -> int | None:
+        """A live Muscu log of ``day`` linked to no activity, if any."""
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT min(id) FROM app.visible_strength_sessions"
+                " WHERE date = ? AND actual_session_id IS NULL",
+                [day],
+            ).fetchone()
+        finally:
+            conn.close()
+        return int(row[0]) if row and row[0] is not None else None
+
     def draft_exists(self, draft_id: int) -> bool:
         """Whether this athlete has a draft with this id, whatever its status."""
         conn = self._get_connection()
@@ -1300,7 +1319,8 @@ class StrengthRepository:
         return row is not None
 
     def dismiss_draft(self, draft_id: int) -> bool:
-        """Leave a pending draft without loads; False when it is not pending."""
+        """Leave a pending draft without loads; False when it is not pending,
+        or when a concurrent write (a completion) interrupted it."""
         unlinked = _UNLINKED_ACTIVITY.format(
             activity="app.strength_drafts.actual_session_id"
         )
@@ -1312,6 +1332,8 @@ class StrengthRepository:
                 f" AND {unlinked} RETURNING id",
                 [datetime.now(), draft_id],
             ).fetchone()
+        except duckdb.TransactionException:
+            return False
         finally:
             conn.close()
         return row is not None

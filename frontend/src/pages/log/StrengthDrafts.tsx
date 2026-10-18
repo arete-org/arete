@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dumbbell } from 'lucide-react';
 import { Button, Panel } from '@/components/ui';
@@ -37,6 +37,7 @@ export function StrengthDrafts({ drafts, total, onComplete, paused }: StrengthDr
   const refresh = () => queryClient.invalidateQueries({ queryKey: qk.strengthDrafts });
   const dismiss = useMutation({ mutationFn: (id: number) => strengthApi.dismissDraft(id), onSettled: refresh });
   const dismissAll = useMutation({ mutationFn: () => strengthApi.dismissAllDrafts(), onSettled: refresh });
+  const [confirmAll, setConfirmAll] = useState(false);
 
   useEffect(() => {
     const row = acted.current;
@@ -116,11 +117,32 @@ export function StrengthDrafts({ drafts, total, onComplete, paused }: StrengthDr
             Les {drafts.length} plus récentes sur {total}.
           </p>
         )}
-        {total > 1 && (
+        {total > 1 && !confirmAll && (
           <div className="mt-2 flex justify-end">
-            <Button variant="ghost" size="sm" className="min-h-11" loading={dismissAll.isPending} onClick={() => dismissAll.mutate()}>
+            <Button variant="ghost" size="sm" className="min-h-11" onClick={() => setConfirmAll(true)}>
               Tout ignorer
             </Button>
+          </div>
+        )}
+        {total > 1 && confirmAll && (
+          <div role="group" aria-labelledby="drafts-confirm" className="mt-2 p-3 rounded border border-text-muted/20 space-y-2">
+            <p id="drafts-confirm" className="text-sm font-sans text-text-secondary">
+              Ignorer les {total} séances à compléter ? Tu pourras en rouvrir une depuis la séance.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" className="min-h-11" onClick={() => setConfirmAll(false)}>
+                Annuler
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                className="min-h-11"
+                loading={dismissAll.isPending}
+                onClick={() => dismissAll.mutate(undefined, { onSettled: () => setConfirmAll(false) })}
+              >
+                Ignorer les {total}
+              </Button>
+            </div>
           </div>
         )}
         {error && (

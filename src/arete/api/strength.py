@@ -760,6 +760,7 @@ class ExerciseSuggestion(BaseModel):
     exercise_id: str
     name: str
     score: int
+    name_fr: str | None = None
 
 
 class ParsedExerciseResponse(BaseModel):
@@ -958,7 +959,10 @@ def parse_workout_text_endpoint(request: WorkoutParseRequest):
                     match_score=ex.match_score,
                     suggestions=[
                         ExerciseSuggestion(
-                            exercise_id=sg.exercise_id, name=sg.name, score=sg.score
+                            exercise_id=sg.exercise_id,
+                            name=sg.name,
+                            score=sg.score,
+                            name_fr=sg.name_fr or None,
                         )
                         for sg in ex.suggestions
                     ],
@@ -1069,6 +1073,7 @@ class DraftCompleteResponse(BaseModel):
     dropped: list[str] = []
 
 
+_DRAFT_BUSY = "Interrompu par une autre écriture sur cette séance : réessaie."
 #: The Journal shows this many drafts; the total says how many more wait.
 DRAFT_PAGE = 20
 _DRAFT_GONE = "Cette séance n'est plus à compléter : elle a déjà ses charges."
@@ -1100,7 +1105,10 @@ def list_drafts():
 @router.post("/drafts/dismiss-all")
 def dismiss_all_drafts():
     """« Tout ignorer »: leave every listed draft without loads (500 per call)."""
-    return {"dismissed": _repo.dismiss_pending_drafts()}
+    dismissed = _repo.dismiss_pending_drafts()
+    if dismissed is None:
+        raise HTTPException(status_code=503, detail=_DRAFT_BUSY)
+    return {"dismissed": dismissed}
 
 
 @router.post("/drafts", response_model=StrengthDraftResponse)
@@ -1137,7 +1145,7 @@ def complete_draft(draft_id: int, body: DraftCompleteRequest):
     except DraftBusy as exc:
         raise HTTPException(
             status_code=503,
-            detail="Enregistrement interrompu par une autre écriture : réessaie.",
+            detail=_DRAFT_BUSY,
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=NO_EXERCISE) from exc
@@ -1157,7 +1165,7 @@ def complete_draft(draft_id: int, body: DraftCompleteRequest):
 @router.delete("/drafts/{draft_id}")
 def dismiss_draft(draft_id: int):
     """Leave a Garmin strength session without its loads."""
-    from arete.strength.drafts import DraftNotFound, DraftSettled
+    from arete.strength.drafts import DraftBusy, DraftNotFound, DraftSettled
     from arete.strength.drafts import dismiss_draft as dismiss
 
     try:
@@ -1166,4 +1174,6 @@ def dismiss_draft(draft_id: int):
         raise HTTPException(status_code=404, detail="Séance introuvable") from exc
     except DraftSettled as exc:
         raise HTTPException(status_code=409, detail=_DRAFT_GONE) from exc
+    except DraftBusy as exc:
+        raise HTTPException(status_code=503, detail=_DRAFT_BUSY) from exc
     return {"message": "Séance laissée sans charges"}

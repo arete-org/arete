@@ -92,14 +92,13 @@ GARMIN_EXERCISES: dict[str, str] = {
 
 #: A category alone, when Garmin gave no finer name: only where the catalog's
 #: exercise is what that category means without qualifier.
+#: Not ``PULL_UP`` (lat pulldowns, chin-ups), ``CALF_RAISE`` or ``LEG_CURL``
+#: (seated, Nordic): their variants would set false records.
 GARMIN_CATEGORIES: dict[str, str] = {
     "PLANK": "plank",
     "CRUNCH": "crunches",
-    "LEG_CURL": "leg_curl",
-    "CALF_RAISE": "calf_raises",
     "LUNGE": "lunges",
     "PUSH_UP": "push_ups",
-    "PULL_UP": "pull_ups",
 }
 
 

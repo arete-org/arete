@@ -9,6 +9,7 @@ import { analyticsApi } from '@/lib/api';
 import { qk, strengthDraftsQuery, strengthSessionsQuery } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import type { CardioSession } from '@/types';
+import { SameDayLogWarning } from './SameDayLogWarning';
 import { useOpenDraft } from './useOpenDraft';
 
 const SOURCE_BADGE: Record<string, string> = {
@@ -33,6 +34,10 @@ export function RecentSessions() {
     ...(drafts?.items ?? []).map((d) => d.actual_session_id),
   ]);
   const openDraft = useOpenDraft();
+  // A day's Muscu log linked to no activity is probably that strength session.
+  const unlinkedLogByDay = new Map(
+    (strength ?? []).filter((l) => !l.garmin_activity_id).map((l) => [l.date, l.id] as const)
+  );
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRpe, setEditRpe] = useState<number | null>(null);
@@ -186,6 +191,11 @@ export function RecentSessions() {
                 </div>
               )}
 
+              {!editing && s.sport === 'strength' && unlinkedLogByDay.has(s.date) && (
+                <div className="mt-2">
+                  <SameDayLogWarning logId={unlinkedLogByDay.get(s.date)!} />
+                </div>
+              )}
               {!editing && s.sport === 'strength' && (
                 <Button
                   variant="gold"

@@ -110,6 +110,12 @@ def test_garmin_names_go_through_the_table_and_open_as_notation():
         # A known category with an unlisted finer name is not its category.
         ("PLANK", "45_DEGREE_PLANK", None),
         ("BENCH_PRESS", None, None),
+        # Categories too broad alone: pulldowns and chin-ups, seated or Nordic variants.
+        ("PULL_UP", None, None),
+        ("CALF_RAISE", None, None),
+        ("LEG_CURL", None, None),
+        ("PULL_UP", "PULL_UP", "pull_ups"),
+        ("PLANK", None, "plank"),
     ],
 )
 def test_wrong_near_matches_stay_free_text(category, sub, expected):
@@ -564,3 +570,62 @@ def test_a_completed_draft_counts_once_in_the_game(game_db, projected_first):
         state = game.sync()
         debits = [r for r in state["history"] if r["xp"] < 0 or r["shards"] < 0]
         assert (state["sessions"], state["shards"], debits) == (1, 10, [])
+
+
+def test_the_preview_names_the_catalog_exercise_in_french(client):
+    response = client.post(
+        "/strength/sessions/parse",
+        json={"text": "bench press 3x10@80", "date": "2026-10-01"},
+    )
+    assert response.status_code == 200, response.text
+    [exercise] = response.json()["exercises"]
+    match = exercise["suggestions"][0]
+    assert (match["exercise_id"], match["name_fr"]) == (
+        "bench_press",
+        "Développé couché",
+    )
+
+
+def test_a_dismissal_racing_a_completion_asks_to_retry(con, client, monkeypatch):
+    import duckdb
+
+    today = athlete_today()
+    activity = _activity(con, today)
+    draft_id = open_garmin_draft(activity, today, [])
+    repo = StrengthRepository()
+    opened = repo._get_connection
+
+    class Conflicting:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def execute(self, sql, *args):
+            if sql.startswith("UPDATE app.strength_drafts SET status = 'dismissed'"):
+                raise duckdb.TransactionException("Conflict on tuple deletion!")
+            return self._inner.execute(sql, *args)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    monkeypatch.setattr("arete.api.strength._repo", repo)
+    monkeypatch.setattr(repo, "_get_connection", lambda: Conflicting(opened()))
+    single = client.delete(f"/strength/drafts/{draft_id}")
+    everything = client.post("/strength/drafts/dismiss-all")
+    monkeypatch.undo()
+    assert (single.status_code, everything.status_code) == (503, 503)
+    assert single.json()["detail"].endswith("réessaie.")
+    assert _drafts(con, activity)[0][1] == "pending"
+
+
+def test_the_session_page_points_to_the_days_unlinked_log(con, client):
+    today = athlete_today()
+    activity = _activity(con, today)
+    url = f"/analytics/sessions/{activity}/detail"
+    assert client.get(url).json()["strength_unlinked_log_id"] is None
+    typed = con.execute(
+        "INSERT INTO app.strength_sessions (user_id, date, name)"
+        " VALUES (1, ?, 'draft-test typed') RETURNING id",
+        [today],
+    ).fetchone()[0]
+    body = client.get(url).json()
+    assert (body["strength_log_id"], body["strength_unlinked_log_id"]) == (None, typed)

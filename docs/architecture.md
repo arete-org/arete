@@ -404,8 +404,10 @@ A draft is not a session: only the Journal reads it, so until it is completed
 the Garmin activity alone counts (load, gamification, week facts, missed-session
 check, by that activity's own rules) and the muscle map and weekly volume have
 no sets from it. The Journal lists 20 drafts with their total and a bounded
-« Tout ignorer »; it leaves out a day that already has an unlinked log, which is
-probably that session. There is no automatic expiry. Completing a draft parses
+« Tout ignorer » (confirmed with its total); it leaves out a day that already has
+an unlinked log, which is probably that session, and the cardio row and session
+page say so beside « Ajoute tes charges » (`strength_unlinked_log_id`), linking
+to that log, without hiding a genuine second session. There is no automatic expiry. Completing a draft parses
 the notation with the grammar (no model) and saves the log linked to the
 activity in one transaction, with its game evidence under the settled-rewards
 rule of an automatic link; records follow as on any save. The draft row is

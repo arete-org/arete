@@ -4,13 +4,20 @@ import { AlertCircle, AlertTriangle, Check, Loader2, Sparkles } from 'lucide-rea
 import { cn, readableError } from '@/lib/utils';
 import { Button, Field, Input, Modal, ModalHeader, Textarea } from '@/components/ui';
 import { ApiError, strengthApi, tipsApi } from '@/lib/api';
-import type { ParsedWorkout, StrengthDraft, WorkoutTranscription } from '@/types';
+import type { ParsedExercise, ParsedWorkout, StrengthDraft, WorkoutTranscription } from '@/types';
 import { parseLocalDate, toLocalISODate } from '@/lib/dates';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { VoiceDictation, type VoiceDictationHandle } from './VoiceDictation';
 import { RecordsCelebration, SuggestionNote } from './progression';
 
 const today = () => toLocalISODate();
+
+/** The catalog exercise a typed name was read as, in French; null when it is the typed name. */
+function readAs(ex: ParsedExercise): string | null {
+  const match = ex.suggestions?.find((s) => s.exercise_id === ex.exercise_id);
+  const name = match?.name_fr || match?.name;
+  return name && name.toLowerCase() !== ex.name.toLowerCase() ? name : null;
+}
 
 interface LogSessionModalProps {
   open: boolean;
@@ -263,10 +270,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
                     {ex.exercise_matched ? (
                       <span className="text-[10px] font-sans text-success-green text-right">
                         ✓ RECONNU
-                        {/* Say which catalog exercise a typed name was read as. */}
-                        {ex.suggestions?.[0] && ex.suggestions[0].name.toLowerCase() !== ex.name.toLowerCase()
-                          ? ` : ${ex.suggestions[0].name}`
-                          : ''}
+                        {readAs(ex) ? ` : ${readAs(ex)}` : ''}
                       </span>
                     ) : (
                       <span className="text-[10px] font-sans text-warning-orange">⚠ INCONNU</span>

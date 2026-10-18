@@ -23,6 +23,7 @@ import type {
   ActivityWeather,
 } from '@/types';
 import { StrengthExercises } from './log/StrengthExercises';
+import { SameDayLogWarning } from './log/SameDayLogWarning';
 import { useOpenDraft } from './log/useOpenDraft';
 import { RouteTrace } from './session/RouteTrace';
 import { StreamChart } from './session/StreamChart';
@@ -130,7 +131,12 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
       </div>
 
       {session.sport === 'strength' && (
-        <LinkedStrengthLog activityId={session.id} logId={detail.strength_log_id ?? null} source={session.source} />
+        <LinkedStrengthLog
+          activityId={session.id}
+          logId={detail.strength_log_id ?? null}
+          unlinkedLogId={detail.strength_unlinked_log_id ?? null}
+          source={session.source}
+        />
       )}
 
       {detail.feedback && (
@@ -209,7 +215,17 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
  * The exercises of the Muscu log recorded with this strength activity, or the
  * offer to add them: the server says which log is linked (`strength_log_id`).
  */
-function LinkedStrengthLog({ activityId, logId, source }: { activityId: number; logId: number | null; source: string }) {
+function LinkedStrengthLog({
+  activityId,
+  logId,
+  unlinkedLogId,
+  source,
+}: {
+  activityId: number;
+  logId: number | null;
+  unlinkedLogId: number | null;
+  source: string;
+}) {
   const log = useQuery({
     queryKey: qk.strengthSession(logId ?? -1),
     queryFn: () => strengthApi.getSession(logId!),
@@ -226,6 +242,11 @@ function LinkedStrengthLog({ activityId, logId, source }: { activityId: number; 
             ? 'Ta montre ne transmet pas tes charges. Ajoute-les pour suivre tes records et ta progression.'
             : 'Ajoute tes exercices et tes charges pour suivre tes records et ta progression.'}
         </p>
+        {unlinkedLogId !== null && (
+          <div className="mb-3">
+            <SameDayLogWarning logId={unlinkedLogId} />
+          </div>
+        )}
         <Button variant="gold" strong className="min-h-11" loading={openDraft.isPending} onClick={() => openDraft.mutate(activityId)}>
           <Dumbbell className="w-4 h-4" aria-hidden />
           Ajoute tes charges

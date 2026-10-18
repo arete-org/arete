@@ -288,10 +288,25 @@ def get_activity_detail(
         "feedback": feedback.to_dict() if feedback else None,
         "terrain": get_terrain(session_id),
         "weather": get_weather(session_id),
-        # A strength activity's Muscu log: the page offers to add the loads without one.
-        "strength_log_id": StrengthRepository().log_for_activity(session_id)
-        if session.sport == "strength"
-        else None,
+        **_strength_links(session),
+    }
+
+
+def _strength_links(session: ActualSession) -> dict[str, int | None]:
+    """A strength activity's Muscu log, or the day's unlinked one to link instead.
+
+    Without a linked log the page offers to add the loads; a log of that day
+    linked to no activity is probably this session, so the page says so.
+    """
+    if session.sport != "strength" or session.id is None:
+        return {"strength_log_id": None, "strength_unlinked_log_id": None}
+    repo = StrengthRepository()
+    linked = repo.log_for_activity(session.id)
+    return {
+        "strength_log_id": linked,
+        "strength_unlinked_log_id": None
+        if linked
+        else repo.unlinked_log_on(session.date),
     }
 
 

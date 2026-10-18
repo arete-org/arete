@@ -420,7 +420,7 @@ export interface ParsedExercise {
   sets: ParsedSet[];
   notes: string | null;
   /** Catalog candidates; the first is the exercise a matched name was read as. */
-  suggestions?: { exercise_id: string; name: string; score: number }[];
+  suggestions?: { exercise_id: string; name: string; name_fr?: string | null; score: number }[];
   /** What the history suggested for this session (preview only). */
   progression?: StrengthSuggestion | null;
 }
@@ -662,6 +662,8 @@ export interface ActivityWeather {
 export interface ActivityDetail {
   /** A strength activity's linked Muscu log (null without one, or for another sport). */
   strength_log_id?: number | null;
+  /** Without a linked log: a Muscu log of that day linked to no activity, probably this session. */
+  strength_unlinked_log_id?: number | null;
   session: {
     id: number;
     date: string;

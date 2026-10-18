@@ -209,3 +209,15 @@ it('offers to add the loads of a strength activity without a linked log', async 
   expect(screen.queryByText('Exercices')).toBeNull();
   expect(strengthApi.getSession).not.toHaveBeenCalled();
 });
+
+it('points to the day\'s unlinked Muscu log rather than inviting a second one', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail, strength_log_id: null, strength_unlinked_log_id: 5,
+    session: { ...session, id: 303, sport: 'strength', name: 'Strength' },
+  });
+  renderAt('/log/sessions/303');
+  expect(await screen.findByText(/Tu as déjà saisi une séance de muscu ce jour-là/)).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Ouvrir la séance saisie' }).getAttribute('href')).toBe('/log?session=5');
+  // A genuine second session can still get its loads.
+  expect(screen.getByRole('button', { name: 'Ajoute tes charges' })).toBeTruthy();
+});
