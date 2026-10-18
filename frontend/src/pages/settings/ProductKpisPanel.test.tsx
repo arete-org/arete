@@ -74,6 +74,10 @@ it('shows each week against each indicator, the current one first and on its own
   expect(within(screen.getByRole('list', { name: 'Semaines' })).getAllByRole('listitem')).toHaveLength(2);
   // No athlete is named: only the server's counts are shown.
   expect(screen.queryByText(/@/)).toBeNull();
+  // The cohorts count sign-ups: every account the migration took over is left out, not the owner's alone.
+  expect(
+    screen.getByText(/ne comptent que les inscriptions : les comptes repris lors du passage au multi-athlètes/)
+  ).toBeTruthy();
 });
 
 it('exports the table as CSV, raw values beside their counts', async () => {

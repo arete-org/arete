@@ -8,6 +8,8 @@ athlete also holds data, which no indicator counts.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import date, datetime
 
@@ -15,7 +17,8 @@ import pytest
 
 from arete.dataio.db import connect
 from arete.dataio.init_duckdb import main as init_schema
-from arete.services import product_kpis
+from arete.services import notifications, product_kpis
+from arete.services.athlete_scope import athlete_scope
 
 NOW = datetime(2026, 10, 14, 12, 0)  # a Wednesday, naive UTC
 THIS_WEEK, LAST_WEEK = date(2026, 10, 12), date(2026, 10, 5)
@@ -89,12 +92,12 @@ ACTIVITIES = [  # id, athlete, day, source, logged (None: no log, False: deleted
     (104, CYD, "2026-10-09", "strava", False),
     (105, GONE, "2026-10-06", "garmin_connect", True),
 ]
-RATIOS = set(product_kpis.QUERIES) - {"first_action_hours"}
+RATIOS = {key for key, _, _ in product_kpis.QUERIES} - {"first_action_hours"}
 
 
 @pytest.fixture
-def kpis(tmp_path, monkeypatch) -> dict[date, dict[str, tuple]]:
-    """The fixture's last eight weeks, as (numerator, denominator, value)."""
+def populated(tmp_path, monkeypatch) -> None:
+    """A database of its own holding the athletes above."""
     monkeypatch.setenv("ARETE_DB", str(tmp_path / "kpis.duckdb"))
     monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path / "files"))
     init_schema()
@@ -141,6 +144,13 @@ def kpis(tmp_path, monkeypatch) -> dict[date, dict[str, tuple]]:
             "VALUES (?, ?, 'Bilan.', ?, '[]', ?)",
             REVIEWS,
         )
+        # OLD's thread, started the day after the migration, last continued
+        # on 8 September.
+        con.execute(
+            "INSERT INTO app.coach_conversations (id, athlete_id, title, created_at, updated_at) "
+            "VALUES ('t1', ?, 'Fil', ?, ?)",
+            [OLD, ts("2026-08-27", 8), ts("2026-09-08", 10)],
+        )
         for activity, athlete, day, source, logged in ACTIVITIES:
             con.execute(
                 "INSERT INTO app.actual_sessions (id, user_id, date, sport, duration_sec, source) "
@@ -162,6 +172,10 @@ def kpis(tmp_path, monkeypatch) -> dict[date, dict[str, tuple]]:
                 )
     finally:
         con.close()
+
+
+def _read() -> dict[date, dict[str, tuple]]:
+    """The last eight weeks, as (numerator, denominator, value)."""
     weeks = product_kpis.weekly(8, now=NOW)
     assert [w.week_start for w in weeks][:2] == [THIS_WEEK, LAST_WEEK]
     assert weeks[-1].week_start == MIGRATION_WEEK
@@ -170,6 +184,11 @@ def kpis(tmp_path, monkeypatch) -> dict[date, dict[str, tuple]]:
         w.week_start: {k: tuple(asdict(c).values()) for k, c in w.indicators.items()}
         for w in weeks
     }
+
+
+@pytest.fixture
+def kpis(populated) -> dict[date, dict[str, tuple]]:
+    return _read()
 
 
 def test_engagement_ratios_count_live_athletes_only(kpis):
@@ -224,6 +243,69 @@ def test_a_quiet_week_still_counts_its_accounts_and_subscribers(kpis):
     assert week.pop("active_accounts") == (0, 4, 0.0)
     assert week.pop("push_subscribers") == (1, 4, 0.25)
     assert set(week.values()) == {(0, 0, None)}
+
+
+def test_a_conversation_counts_at_its_latest_exchange(kpis):
+    # OLD only continued its thread that week.
+    assert kpis[date(2026, 9, 7)]["active_accounts"] == (1, 4, 0.25)
+
+
+def test_the_owner_is_no_sign_up_whatever_its_creation_time(populated):
+    """A restored or hand-made athlete 1 may be dated after the migrations."""
+    con = connect()
+    con.execute(
+        "UPDATE app.athletes SET created_at = ? WHERE id = ?",
+        [ts("2026-09-01", 12), OWNER],
+    )
+    con.close()
+    # Counted, its check-in of 24 August would be a first action after 0 h.
+    assert _read()[COHORT_WEEK]["first_action_hours"] == (2, 2, 15.0)
+
+
+def test_subscribing_a_device_again_keeps_past_weeks(populated):
+    with athlete_scope(BEN):
+        notifications.subscribe("https://push/0", "k2", "a2")
+    con = connect()
+    stored = con.execute(
+        "SELECT p256dh, created_at FROM app.push_subscriptions WHERE endpoint = ?",
+        ["https://push/0"],
+    ).fetchone()
+    con.close()
+    assert stored == ("k2", ts("2026-09-03", 8))
+    week = _read()[COHORT_WEEK]
+    assert week["push_subscribers"] == (1, 4, 0.25)
+    assert week["first_action_hours"] == (2, 2, 15.0)
+
+
+def test_the_indicators_read_one_snapshot(populated, monkeypatch):
+    """A sign-up committed while the indicators are read waits for the next read."""
+    opened = product_kpis.transaction
+
+    @contextmanager
+    def racing() -> Iterator[object]:
+        with opened() as con:
+
+            class Racing:
+                def execute(self, sql: str, params: list) -> object:
+                    result = con.execute(sql, params)
+                    if sql is product_kpis.ACTIVE:
+                        other = connect()
+                        other.execute(
+                            "INSERT INTO app.athletes (id, created_at) VALUES (8, ?)",
+                            [ts("2026-10-13", 11)],
+                        )
+                        other.close()
+                    return result
+
+            yield Racing()
+
+    monkeypatch.setattr(product_kpis, "transaction", racing)
+    week = _read()[THIS_WEEK]
+    assert week["active_accounts"] == (2, 6, 0.3333)
+    assert week["first_action_hours"] == (1, 1, 0.0)
+    # The next read sees the new sign-up.
+    monkeypatch.setattr(product_kpis, "transaction", opened)
+    assert _read()[THIS_WEEK]["first_action_hours"] == (1, 2, 0.0)
 
 
 def test_the_current_week_is_read_in_utc(monkeypatch, tmp_path):

@@ -52,7 +52,8 @@ export function ProductKpisPanel() {
       </div>
       <p className="text-xs text-text-muted">
         Par semaine ISO, du lundi au dimanche, sur les athlètes actifs. Seuls des totaux sont lus : aucune donnée
-        personnelle. La rétention et le délai avant la 1re action excluent le compte du propriétaire.
+        personnelle. La rétention et le délai avant la 1re action ne comptent que les inscriptions : les comptes
+        repris lors du passage au multi-athlètes, dont celui du propriétaire, en sont exclus.
       </p>
 
       {kpis.isPending ? (

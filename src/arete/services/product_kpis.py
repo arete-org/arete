@@ -9,9 +9,14 @@ a private table is one of the ``TRUSTED_READS`` fragments, which
 
 Weeks are ISO weeks (Monday to Sunday). The current week is partial. A ratio's
 numerator only counts athletes of its denominator: those created before the
-week's end. Stored times are compared as they are: naive UTC on Vercel, where
-every writer runs in UTC; a Docker host writes some columns in its own zone
-(hours, at most).
+week's end. The eight queries read one snapshot.
+
+Known limits. Stored times are compared as they are: naive UTC on Vercel,
+where every writer runs in UTC, but a Docker host writes some columns in its
+own zone, so instances on different clocks shift week edges and the sign-up
+cutoff (``_SIGNUPS``) by the zone offset. The per-day indicators (strength,
+check-ins, briefings, reviews) group by the athlete's local ``date``, while
+active accounts, push subscribers and the cohorts group UTC timestamps.
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from arete.dataio.db import db_connection
+from arete.dataio.db import transaction
 from arete.services.settings import utc_now
 from arete.services.users import OWNER_ATHLETE_ID
 
@@ -54,7 +59,8 @@ _SEEN = (
 
 #: What an athlete does, when: a check-in answered, a briefing reacted to, a
 #: strength log, a weekly review accepted, an evening question answered, a
-#: conversation with the coach, a device subscribed to pushes.
+#: conversation with the coach started or continued (a thread keeps its
+#: start and its latest exchange, not each one), a device subscribed to pushes.
 _ACTIONS = (
     "actions AS ("
     "SELECT athlete_id, answered_at AS happened_at FROM app.daily_checkins "
@@ -69,6 +75,8 @@ _ACTIONS = (
     "WHERE deleted_at IS NULL AND answered_at IS NOT NULL "
     "UNION ALL SELECT athlete_id, CAST(created_at AS TIMESTAMP) FROM app.coach_conversations "
     "WHERE deleted_at IS NULL "
+    "UNION ALL SELECT athlete_id, CAST(updated_at AS TIMESTAMP) FROM app.coach_conversations "
+    "WHERE deleted_at IS NULL "
     "UNION ALL SELECT athlete_id, created_at FROM app.push_subscriptions "
     "WHERE deleted_at IS NULL AND created_at IS NOT NULL)"
 )
@@ -79,7 +87,7 @@ _SUBSCRIPTIONS = (
     "WHERE deleted_at IS NULL)"
 )
 #: Strength activities imported from the watch (Garmin, Strava, a file), and
-#: whether a live strength log was completed and linked to them.
+#: whether a live strength log is linked to them.
 _IMPORTED = (
     "imported AS (SELECT a.user_id AS athlete_id, a.date, "
     "EXISTS (SELECT 1 FROM app.strength_sessions s "
@@ -184,18 +192,19 @@ RETENTION = (
     "GROUP BY w.week_start ORDER BY w.week_start"
 )
 
-#: Indicator → its query, in display order. ``first_action_hours`` is a
-#: median in hours; every other value is numerator / denominator.
-QUERIES = {
-    "active_accounts": ACTIVE,
-    "push_subscribers": PUSH,
-    "strength_logged": STRENGTH,
-    "checkins_answered": CHECKINS,
-    "briefings_reacted": BRIEFINGS,
-    "weekly_reviews_accepted": REVIEWS,
-    "first_action_hours": FIRST_ACTION,
-    "retention_30d": RETENTION,
-}
+#: (indicator, query, whether it takes ``now`` after the week bounds), in
+#: display order. ``first_action_hours`` is a median in hours; every other
+#: value is numerator / denominator.
+QUERIES = (
+    ("active_accounts", ACTIVE, False),
+    ("push_subscribers", PUSH, False),
+    ("strength_logged", STRENGTH, False),
+    ("checkins_answered", CHECKINS, False),
+    ("briefings_reacted", BRIEFINGS, False),
+    ("weekly_reviews_accepted", REVIEWS, False),
+    ("first_action_hours", FIRST_ACTION, False),
+    ("retention_30d", RETENTION, True),
+)
 
 
 @dataclass(frozen=True)
@@ -219,10 +228,10 @@ def weekly(weeks: int, *, now: datetime | None = None) -> list[WeekKpis]:
     monday = now.date() - timedelta(days=now.weekday())
     bounds = [monday - timedelta(weeks=weeks - 1), monday + timedelta(weeks=1)]
     cells: dict[str, dict[date, Cell]] = {}
-    with db_connection() as con:
-        for key, sql in QUERIES.items():
-            params = [*bounds, now] if sql is RETENTION else bounds
-            rows = con.execute(sql, params).fetchall()
+    # One transaction: every indicator reads the same snapshot.
+    with transaction() as con:
+        for key, sql, needs_now in QUERIES:
+            rows = con.execute(sql, [*bounds, now] if needs_now else bounds).fetchall()
             cells[key] = {row[0]: _cell(row) for row in rows}
     return [
         WeekKpis(

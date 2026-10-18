@@ -96,9 +96,11 @@ only: athletes created after migrations 35 and 36 were recorded, which created t
 pre-existing ones (athlete 1 included) at migration time. The CSV uses `;` and
 decimal commas for French spreadsheets. `last_seen_at` keeps only the latest visit, so a past week's
 active accounts are the athletes with a recorded action in it (check-in answered,
-briefing reaction, strength log, review accepted, evening answer, conversation,
-push subscription) or whose last visit falls in it. Deleted push subscriptions
-leave no trace, and no column records a briefing read without a reaction.
+briefing reaction, strength log, review accepted, evening answer, a thread started
+or last continued, push subscription) or whose last visit falls in it. A device
+subscribing again keeps its first subscription date; deleted push subscriptions
+leave no trace, and no column records a briefing read without a reaction. The
+eight queries read one snapshot.
 
 A change applies at the account's next request on the instance that made it.
 Each instance reuses a resolved account (the login and whether its athlete is
