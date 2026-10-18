@@ -5,6 +5,7 @@ import { EmptyState, LoadingState } from '@/components';
 import { Modal, ModalHeader, RPE_TEXT, rpeTone } from '@/components/ui';
 import { strengthApi } from '@/lib/api';
 import { parseLocalDate } from '@/lib/dates';
+import { invalidateAfterSession } from '@/lib/queryKeys';
 import { StrengthExercises } from './StrengthExercises';
 
 interface SessionDetailModalProps {
@@ -33,6 +34,8 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['strengthSession', sessionId] });
       queryClient.invalidateQueries({ queryKey: ['garminCandidates', sessionId] });
+      // A link settles the activity's draft, its same-day warning and the game.
+      invalidateAfterSession(queryClient);
     },
   });
 
