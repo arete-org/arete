@@ -287,6 +287,8 @@ class TestGarminSyncClient:
         repo.get_potential_matches.return_value = []
         strava_twin = ActualSession(id=9, source="strava", planned_session_id=3)
         repo.find_overlapping_session.side_effect = [None, strava_twin]
+        # The linked plan is gone: the takeover keeps the link, scores nothing.
+        repo.get_planned_session.return_value = None
         repo.create_actual_session.return_value = 42
         raw = [
             {

@@ -227,6 +227,25 @@ def zones_from_laps(laps_json: str | None, zones: ZoneModel) -> str | None:
     return json.dumps(zones.seconds_in_zones(samples))
 
 
+def rescore(
+    repo: GarminRepository,
+    actual_id: int,
+    session: ActualSession,
+    planned_id: int,
+    zones: ZoneModel | None = None,
+) -> None:
+    """Score a session against the plan it is already linked to, on its own
+    values: a Garmin takeover keeps the link but not Strava's adherence."""
+    planned = repo.get_planned_session(planned_id)
+    if planned is None:
+        return
+    match = SessionMatcher(zones=zones or athlete_zone_model()).find_match(
+        session, [planned]
+    )
+    if match.planned_session is not None:
+        repo.update_actual_session_match(actual_id, planned_id, match.adherence_score)
+
+
 def auto_match(
     repo: GarminRepository,
     actual_id: int,
@@ -630,10 +649,19 @@ class GarminSyncClient:
                         actual_id = twin.id
                         result.activities_merged += 1
                         result.session_ids.append(actual_id)
-                        if twin.planned_session_id is None and auto_match(
-                            self.repository, twin.id, session, self.zones
-                        ):
-                            result.activities_matched += 1
+                        if twin.planned_session_id is None:
+                            if auto_match(
+                                self.repository, twin.id, session, self.zones
+                            ):
+                                result.activities_matched += 1
+                        else:
+                            rescore(
+                                self.repository,
+                                twin.id,
+                                session,
+                                twin.planned_session_id,
+                                self.zones,
+                            )
                     else:
                         actual_id = self.repository.create_actual_session(session)
                         result.activities_synced += 1

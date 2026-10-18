@@ -170,7 +170,6 @@ def daily_sync() -> dict[str, str]:
 
     # Garmin sessions are announced with their feedback, once; a failed
     # feedback run leaves them to the import count.
-    # The coach's feedback announces the imported sessions; without it, a count.
     unannounced = 0 if feedback is not None else imported
     if (announced := announce_sync(feedback or [], unannounced)) is not None:
         status["notification"] = announced

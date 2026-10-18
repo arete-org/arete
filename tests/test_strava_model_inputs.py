@@ -101,7 +101,7 @@ def test_a_garmin_takeover_clears_the_strava_only_values():
     assert all(fields[column] is None for column in DERIVED_FROM_STRAVA)
     assert fields["name"] == "Course à pied"
     # Every column a takeover writes is one the repository lets it write.
-    assert set(fields) - {"source"} <= GarminRepository.ENRICHMENT_COLUMNS
+    assert set(fields) <= GarminRepository.ENRICHMENT_COLUMNS
 
 
 def test_the_migration_clears_strava_values_on_linked_garmin_rows(athlete):
@@ -163,3 +163,63 @@ def test_a_strength_log_linked_to_a_strava_row_still_loads(athlete, client):
     finally:
         con.close()
     assert client.get("/dashboard").json()["fitness"]["atl"] > before
+
+
+def test_a_takeover_linked_to_a_plan_is_rescored_on_garmin_values(athlete):
+    from arete.garmin.models import PlannedSession, SessionType
+    from arete.garmin.sync import rescore
+
+    repo = GarminRepository()
+    planned = repo.create_planned_session(
+        PlannedSession(
+            date=athlete,
+            sport="running",
+            session_type=SessionType.ENDURANCE,
+            target_duration_min=50,
+        )
+    )
+    con = connect()
+    try:
+        actual = con.execute(
+            "INSERT INTO app.actual_sessions (date, sport, duration_sec, source,"
+            " planned_session_id, adherence_score) VALUES (?, 'running', 3000,"
+            " 'garmin_connect', ?, NULL) RETURNING id",
+            [athlete, planned],
+        ).fetchone()[0]
+    finally:
+        con.close()
+    garmin = ActualSession(
+        date=athlete,
+        sport="running",
+        source=ActivitySource.GARMIN_CONNECT,
+        duration_sec=3000,
+    )
+    rescore(repo, actual, garmin, planned)
+    row = repo.get_actual_session(actual)
+    assert row.planned_session_id == planned
+    assert row.adherence_score is not None
+
+
+def test_banister_and_weekly_facts_leave_strava_rows_out(athlete):
+    from arete.features.banister import get_running_sessions
+    from arete.services import weekly_review
+
+    start = athlete - timedelta(days=6)
+    con = connect()
+    try:
+        before = get_running_sessions(con, start, athlete)
+    finally:
+        con.close()
+    facts_before = weekly_review.week_facts(start, athlete)
+    con = connect()
+    try:
+        con.execute(
+            "INSERT INTO app.actual_sessions (date, sport, duration_sec, avg_hr,"
+            " avg_speed_mps, source) VALUES (?, 'running', 5400, 165, 3.2, 'strava')",
+            [athlete - timedelta(days=1)],
+        )
+        after = get_running_sessions(con, start, athlete)
+    finally:
+        con.close()
+    assert after == before
+    assert weekly_review.week_facts(start, athlete) == facts_before
