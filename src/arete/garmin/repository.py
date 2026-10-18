@@ -615,6 +615,9 @@ class GarminRepository:
             "device_name",
             "avg_watts",
             "weighted_avg_watts",
+            # cleared when Garmin takes a legacy Strava row over
+            "adherence_score",
+            "intensity_deviation",
             "strava_activity_id",
             # provenance and measurements (when Garmin takes a Strava row over)
             "source",

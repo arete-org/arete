@@ -296,6 +296,10 @@ STRAVA_ONLY_FIELDS = (
     "notes",
 )
 
+#: Computed from the row's measures when it was matched to its plan: Strava's
+#: on a legacy row, so cleared on a takeover rather than read by the coach.
+DERIVED_FROM_STRAVA = ("adherence_score", "intensity_deviation")
+
 #: What a Garmin import measures: on a takeover, its value replaces Strava's,
 #: an empty one included.
 GARMIN_MEASURED_FIELDS = (
@@ -335,13 +339,16 @@ def garmin_takeover(garmin: ActualSession) -> dict[str, Any]:
     Strava was retired as a data source (its API agreement forbids its data in
     an AI application, ARE-126), but the rows it created stay. The row becomes
     a Garmin row the coach reads, so Garmin's values win: every measured one
-    replaces Strava's and the Strava-only ones go. The athlete's own fields
-    (plan link, RPE) stay.
+    replaces Strava's and the Strava-only ones go, ``notes`` included (Strava
+    put its description there; a note the athlete added cannot be told apart
+    and goes too). The plan link and the RPE stay; the adherence computed from
+    Strava's values is cleared.
     """
     return {
         "source": garmin.source.value,
         **{column: getattr(garmin, column) for column in GARMIN_MEASURED_FIELDS},
         **dict.fromkeys(STRAVA_ONLY_FIELDS),
+        **dict.fromkeys(DERIVED_FROM_STRAVA),
     }
 
 

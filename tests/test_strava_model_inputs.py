@@ -17,7 +17,12 @@ import pytest
 from arete.dataio.db import connect
 from arete.dataio.init_duckdb import main as init_schema
 from arete.garmin.models import ActivitySource, ActualSession
-from arete.garmin.sync import STRAVA_ONLY_FIELDS, garmin_takeover
+from arete.garmin.repository import GarminRepository
+from arete.garmin.sync import (
+    DERIVED_FROM_STRAVA,
+    STRAVA_ONLY_FIELDS,
+    garmin_takeover,
+)
 from arete.services.settings import athlete_today
 
 
@@ -92,7 +97,11 @@ def test_a_garmin_takeover_clears_the_strava_only_values():
     fields = garmin_takeover(garmin)
     assert fields["source"] == ActivitySource.GARMIN_CONNECT.value
     assert all(fields[column] is None for column in STRAVA_ONLY_FIELDS)
+    # The adherence was computed from Strava's measures: it goes too.
+    assert all(fields[column] is None for column in DERIVED_FROM_STRAVA)
     assert fields["name"] == "Course à pied"
+    # Every column a takeover writes is one the repository lets it write.
+    assert set(fields) - {"source"} <= GarminRepository.ENRICHMENT_COLUMNS
 
 
 def test_the_migration_clears_strava_values_on_linked_garmin_rows(athlete):
@@ -112,8 +121,13 @@ def test_the_migration_clears_strava_values_on_linked_garmin_rows(athlete):
             "UPDATE app.actual_sessions SET avg_watts = 230"
             " WHERE id = (SELECT max(id) FROM app.actual_sessions)"
         )
+        con.execute(
+            "INSERT INTO app.strava_tokens (athlete_id, access_token, refresh_token,"
+            " expires_at) VALUES (42, 'at', 'rt', 2000000000)"
+        )
         _m62_strava_values_off_garmin_rows(con)
         _m62_strava_values_off_garmin_rows(con)  # idempotent
+        tokens = con.execute("SELECT count(*) FROM app.strava_tokens").fetchone()
         linked = con.execute(
             "SELECT suffer_score, best_efforts_json, splits_json, avg_watts,"
             " weighted_avg_watts, workout_type, laps_json, device_name, notes,"
@@ -127,6 +141,7 @@ def test_the_migration_clears_strava_values_on_linked_garmin_rows(athlete):
     finally:
         con.close()
     assert linked == (None,) * 9 + ("9", 10000)
+    assert tokens == (0,)  # Strava is retired: its stored credentials go
     assert unlinked == (230,)
 
 

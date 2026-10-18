@@ -91,7 +91,7 @@ def is_due(hour: int, now: datetime, last_run: date | None) -> bool:
 def daily_sync() -> dict[str, str]:
     """Run every configured sync once. Returns a short status per source."""
     status: dict[str, str] = {}
-    imported = 0  # new sessions from any source, for the notification
+    imported = 0  # new Garmin sessions, for the notification
     synced_ids: list[int] = []  # Garmin's, for the coach's feedback
     feedback: list[dict] | None = None  # stored by this run; None = not run
 
@@ -170,7 +170,8 @@ def daily_sync() -> dict[str, str]:
 
     # Garmin sessions are announced with their feedback, once; a failed
     # feedback run leaves them to the import count.
-    unannounced = imported - (len(synced_ids) if feedback is not None else 0)
+    # The coach's feedback announces the imported sessions; without it, a count.
+    unannounced = 0 if feedback is not None else imported
     if (announced := announce_sync(feedback or [], unannounced)) is not None:
         status["notification"] = announced
     logger.info("Daily sync: %s", status)

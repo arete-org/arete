@@ -1096,6 +1096,9 @@ def _m62_strava_values_off_garmin_rows(con) -> None:
         f"UPDATE app.actual_sessions SET {cleared} "
         "WHERE strava_activity_id IS NOT NULL AND source IS DISTINCT FROM 'strava'"
     )
+    # Strava is retired: no route reads or revokes its tokens any more, so
+    # stored credentials go (production holds none).
+    con.execute("DELETE FROM app.strava_tokens")
 
 
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
