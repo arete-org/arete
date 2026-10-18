@@ -115,7 +115,6 @@ export function LogPage() {
               <Panel title="Séances récentes" delay={0.3}>
                 <div className="space-y-3">
                   {sessionsQuery.isPending && <Skeleton label="Chargement des séances récentes" lines={3} />}
-                  {sessions.length > 0 && <PushOffer moment="session" />}
                   {sessions.slice(0, 5).map((session) => (
                     <SessionRow
                       key={session.id}
@@ -124,6 +123,8 @@ export function LogPage() {
                       onDelete={() => setToDelete(session.id)}
                     />
                   ))}
+                  {/* Under the five rows: the session that just arrived comes first. */}
+                  {sessions.length > 0 && <PushOffer moment="session" />}
                   {sessionsQuery.isSuccess && sessions.length === 0 && (
                     <EmptyState message="AUCUNE SÉANCE" action="Saisis ta première séance de muscu" />
                   )}
