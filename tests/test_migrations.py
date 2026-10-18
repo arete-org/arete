@@ -651,3 +651,49 @@ def test_shared_schema_preserves_legacy_owners_children_and_next_identity(
         )
         con.close()
     assert upsert_user("new-identity", "new@example.com").athlete_id > 42
+
+
+def test_m54_creates_the_strength_drafts_once_and_atomically(tmp_path, monkeypatch):
+    from arete.dataio import tenant_schema
+
+    path = tmp_path / "drafts.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+
+    def to_schema_53() -> None:
+        with migration_connection(str(path)) as con:
+            con.execute("DROP VIEW app.visible_strength_drafts")
+            con.execute("DROP TABLE app.strength_drafts")
+            con.execute("DROP SEQUENCE app.strength_drafts_seq")
+            con.execute("DELETE FROM app.schema_version WHERE version = 54")
+
+    to_schema_53()
+    with migration_connection(str(path)) as con:
+        assert init_duckdb.pending_migrations(con) == [54]
+        # The previous release (up to 53) finds the database current.
+        with monkeypatch.context() as previous:
+            previous.setattr(init_duckdb, "MIGRATIONS", init_duckdb.MIGRATIONS[:-1])
+            assert init_duckdb.pending_migrations(con) == []
+
+        def broken_view(*_args):
+            raise RuntimeError("view refresh failed")
+
+        with monkeypatch.context() as broken:
+            broken.setattr(tenant_schema, "_view", broken_view)
+            with pytest.raises(RuntimeError):
+                init_duckdb._m54_strength_drafts(con)
+        # Rolled back together: never a table without its private view.
+        assert con.execute(
+            "SELECT count(*) FROM information_schema.tables"
+            " WHERE table_schema = 'app' AND table_name = 'strength_drafts'"
+        ).fetchone() == (0,)
+
+    init_duckdb.main()
+    init_duckdb.main()  # recorded once, then skipped
+    with migration_connection(str(path), read_only=True) as con:
+        assert con.execute(
+            "SELECT count(*) FROM app.visible_strength_drafts"
+        ).fetchone() == (0,)
+        assert con.execute(
+            "SELECT count(*) FROM app.schema_version WHERE version = 54"
+        ).fetchone() == (1,)

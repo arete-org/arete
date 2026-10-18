@@ -33,7 +33,9 @@ from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import ActivityStreams, from_time_series
 from arete.garmin.threshold import refresh_threshold
 from arete.strava.merge import garmin_takeover
+from arete.strength.drafts import open_garmin_draft
 from arete.strength.logging_service import link_garmin_strength
+from arete.strength.models import GarminExerciseSummary
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +103,8 @@ class GarminActivity:
     moving_duration_sec: int | None = None
     #: False when Garmin sent no start time and the sync time stands in for it.
     start_time_known: bool = True
+    #: What a strength activity's watch recognised: exercises, sets, reps.
+    exercise_summaries: list[GarminExerciseSummary] = field(default_factory=list)
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> GarminActivity:
@@ -139,6 +143,7 @@ class GarminActivity:
             if data.get("movingDuration")
             else None,
             start_time_known="startTimeLocal" in data,
+            exercise_summaries=exercise_summaries(data.get("summarizedExerciseSets")),
         )
 
     def to_actual_session(self) -> ActualSession:
@@ -170,6 +175,33 @@ class GarminActivity:
     def _map_activity_type(self) -> str:
         """Map Garmin activity type to Arete sport type."""
         return canonical_sport(self.activity_type)
+
+
+#: Garmin lists one summary per exercise category; more is not a real session.
+MAX_EXERCISE_SUMMARIES = 30
+
+
+def exercise_summaries(raw: Any) -> list[GarminExerciseSummary]:
+    """``summarizedExerciseSets`` of an activity, malformed entries left out."""
+
+    def count(value: Any) -> int | None:
+        number = isinstance(value, int | float) and not isinstance(value, bool)
+        return int(value) if number and value > 0 else None
+
+    summaries: list[GarminExerciseSummary] = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("category"), str):
+            continue
+        sub = item.get("subCategory")
+        summaries.append(
+            GarminExerciseSummary(
+                category=item["category"],
+                sub_category=sub if isinstance(sub, str) else None,
+                sets=count(item.get("sets")),
+                reps=count(item.get("reps")),
+            )
+        )
+    return summaries[:MAX_EXERCISE_SUMMARIES]
 
 
 FOOT_SPORTS_FOR_PACE = {"running", "walking", "hiking"}
@@ -544,6 +576,11 @@ class GarminSyncClient:
                     # guessed from the sync time could pair the wrong one.
                     if session.sport == "strength" and activity.start_time_known:
                         link_garmin_strength([session.date])
+                    # Still without its log: a session awaiting its loads.
+                    if session.sport == "strength":
+                        open_garmin_draft(
+                            actual_id, session.date, activity.exercise_summaries
+                        )
                     if streams is not None and not self._save_streams(
                         actual_id, streams
                     ):

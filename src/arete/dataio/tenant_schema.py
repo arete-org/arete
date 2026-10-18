@@ -68,6 +68,7 @@ PRIVATE_TABLES = (
     "coach_followups",
     "daily_checkins",
     "coach_evening_messages",
+    "strength_drafts",
 )
 # Natural keys must be unique within an athlete, not across the deployment.
 SCOPED_KEYS = {
@@ -94,6 +95,7 @@ PARENTS = {
     "athlete_fact_revisions": ("fact_id", "athlete_facts", "id"),
     "garmin_exports": ("session_id", "planned_sessions", "id"),
     "calendar_actions": ("connection_key", "calendar_connections", "connection_key"),
+    "strength_drafts": ("actual_session_id", "actual_sessions", "id"),
 }
 
 

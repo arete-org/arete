@@ -1005,3 +1005,133 @@ def _preview_suggestions(parsed) -> dict[str, dict]:
     except Exception as exc:  # noqa: BLE001 - the parse is still worth showing
         logger.warning("Strength suggestions unavailable: %s", exc)
         return {}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Drafts: Garmin strength activities awaiting their loads
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class DraftExerciseResponse(BaseModel):
+    """An exercise Garmin recognised; ``exercise_id`` is set when the catalog did too."""
+
+    name: str
+    exercise_id: str | None
+    sets: int | None
+    reps: int | None
+
+
+class StrengthDraftResponse(BaseModel):
+    """A Garmin strength activity awaiting its loads, and the text it opens with."""
+
+    id: int
+    actual_session_id: int
+    date: date_type
+    name: str | None
+    duration_min: int | None
+    origin: str
+    exercises: list[DraftExerciseResponse]
+    notation: str
+
+
+class DraftOpenRequest(BaseModel):
+    actual_session_id: int
+
+
+class DraftCompleteRequest(BaseModel):
+    text: str = Field(..., min_length=3, max_length=5000)
+
+
+class DraftCompleteResponse(BaseModel):
+    """The log the loads became; its records, and what was left out."""
+
+    session_id: int
+    message: str
+    records: list[SessionRecordResponse] = []
+    unparsed_lines: list[str] = []
+    dropped: list[str] = []
+
+
+_DRAFT_GONE = "Cette séance n'est plus à compléter : elle a déjà ses charges."
+
+
+def _draft_response(draft) -> StrengthDraftResponse:
+    from arete.strength.drafts import draft_notation
+
+    return StrengthDraftResponse(
+        id=draft.id,
+        actual_session_id=draft.actual_session_id,
+        date=draft.date,
+        name=draft.activity_name,
+        duration_min=round(draft.duration_sec / 60) if draft.duration_sec else None,
+        origin=draft.origin,
+        exercises=[DraftExerciseResponse(**e.as_dict()) for e in draft.exercises],
+        notation=draft_notation(draft.exercises),
+    )
+
+
+@router.get("/drafts", response_model=list[StrengthDraftResponse])
+def list_drafts():
+    """Garmin strength sessions awaiting their loads, newest first."""
+    return [_draft_response(d) for d in _repo.pending_drafts()]
+
+
+@router.post("/drafts", response_model=StrengthDraftResponse)
+def open_draft(body: DraftOpenRequest):
+    """« Ajoute tes charges » on a strength activity: its draft, opened once."""
+    from arete.strength.drafts import open_journal_draft
+
+    draft = open_journal_draft(body.actual_session_id, _repo)
+    if draft is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Pas de charges à ajouter : ce n'est pas une séance de force "
+            "sans log, ou elle est introuvable.",
+        )
+    return _draft_response(draft)
+
+
+@router.post("/drafts/{draft_id}/complete", response_model=DraftCompleteResponse)
+def complete_draft(draft_id: int, body: DraftCompleteRequest):
+    """Save the loads: the draft becomes the activity's Muscu log, once.
+
+    409 when the draft was completed elsewhere (another tab, a log saved for
+    that day): nothing is written, never a second session.
+    """
+    from arete.strength.drafts import DraftNotFound, DraftSettled
+    from arete.strength.drafts import complete_draft as complete
+
+    try:
+        outcome = complete(draft_id, body.text, _repo)
+    except DraftNotFound as exc:
+        raise HTTPException(status_code=404, detail="Séance introuvable") from exc
+    except DraftSettled as exc:
+        raise HTTPException(status_code=409, detail=_DRAFT_GONE) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if outcome.session_id is None:
+        raise HTTPException(status_code=422, detail=outcome.message)
+    return DraftCompleteResponse(
+        session_id=outcome.session_id,
+        message=outcome.message,
+        records=[
+            SessionRecordResponse.model_validate(r.as_dict()) for r in outcome.records
+        ],
+        unparsed_lines=outcome.unparsed_lines,
+        dropped=[d.name for d in outcome.dropped],
+    )
+
+
+@router.delete("/drafts/{draft_id}")
+def dismiss_draft(draft_id: int):
+    """Leave a Garmin strength session without its loads."""
+    from arete.strength.drafts import DraftNotFound, DraftSettled
+    from arete.strength.drafts import dismiss_draft as dismiss
+
+    try:
+        dismiss(draft_id, _repo)
+    except DraftNotFound as exc:
+        raise HTTPException(status_code=404, detail="Séance introuvable") from exc
+    except DraftSettled as exc:
+        raise HTTPException(status_code=409, detail=_DRAFT_GONE) from exc
+    return {"message": "Séance laissée sans charges"}
