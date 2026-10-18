@@ -19,7 +19,6 @@ GUARDS = {
     "tests/test_athlete_sql_contract.py",
     "tests/test_agent_context_budget.py",
     "tests/test_arete_mcp.py",
-    "tests/test_memory_eval_corpus.py",
 }
 SHARED = ("src/arete/dataio/",)
 SHARED_FILES = {"src/arete/config.py", "src/arete/api/main.py"}

@@ -106,7 +106,7 @@ remain consistent while the next invocation sees the toggle. For local validatio
 run `make dev`, enable **Coach GLM Flash (payant)** in Administration, then ask
 “Liste mes séances prévues cette semaine, sans rien modifier.” Verify GLM in the
 trace, disable the switch, and repeat to verify the configured model returns.
-Use a database copy for live evaluations that can write training data.
+Use a database copy when manually testing coaching writes.
 
 `ProviderAffinityMiddleware` adds OpenRouter's top-level `session_id` inside
 each model attempt, including fallbacks, without mutating cached clients. It is
@@ -133,8 +133,7 @@ Chat binds analytics, planning, strength and Garmin tools natively at graph cons
 Analytics includes the bounded, read-only `query_training` adapter over the
 [typed training catalog](typed-training-retrieval.md): explicit dates, filters,
 aggregates and evidence IDs, with daily and session grains kept separate.
-Only typed retrieval is integrated; relationship traversal and agent-written SQL
-remain in the opt-in synthetic benchmark.
+Training queries use the typed catalog and do not accept agent-written SQL.
 Calendar is added only by server configuration. No discovery/load tool or loaded
 state exists: every current profile either has its tools immediately or has none.
 Browser chat also binds the read-only `visualization` capability. `render_chart`
@@ -440,7 +439,7 @@ imports, and validates profile/capability consistency. Graph tests cover policy
 checks, load-before-execute, concurrent invocation isolation, call/deadline limits,
 context schema accounting and completion events. Service/API tests cover domain
 behavior and wire compatibility. Trace regression tests cover cancellation, parent spans, metadata and export
-failures. Live model evaluations remain opt-in.
+failures.
 
 ## Slack transport
 
@@ -577,8 +576,7 @@ answer and contributes dated freshness limitations through the central context
 builder without another model request. Chat's explicit sync tool uses the same
 coordinator and returns exact imported IDs. Neither path writes daily feedback.
 See [Garmin freshness and recovery](garmin-freshness.md) for the API, bounds and
-operator recovery procedure. The [retrieval experiment](session-retrieval-evaluation.md)
-remains offline/opt-in and adds no production retrieval tool.
+operator recovery procedure.
 
 ## Optional athlete RPG
 
@@ -965,8 +963,8 @@ through the central context builder. Document blocks remain accessible through
 filesystem tools rather than being injected again as retrieved system context. Reads run in
 workers, with a fresh corpus at each model boundary and no extra model request.
 Optional traversal follows only authoritative source links and remains disabled
-pending behavior evaluations. See [personal memory](personal-memory.md) for
-contracts, bounds, migration compatibility and the synthetic evaluation harness.
+in production. See [personal memory](personal-memory.md) for contracts, bounds
+and migration compatibility.
 
 `FactMemoryMiddleware` (`agent/middlewares/fact_memory.py`) binds the durable-fact
 tools and adapts runtime provenance and budget hooks. `JournalMiddleware`

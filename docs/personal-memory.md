@@ -121,17 +121,9 @@ All fact text in that shortlist is sent to TypeSafe via OpenRouter. Probability
 thresholds do not prove semantic equivalence; full recall and temporal behavior
 remain governed by the typed fact store and context builder.
 
-Eight opt-in French smoke cases exercise the actual endpoint using synthetic
-facts, without reading or writing personal data:
-
-```sh
-ARETE_EVAL=1 uv run pytest tests/test_memory_jev_evals.py
-```
-
 Normal tests mock HTTP and cover complete payloads, thresholds, malformed replies,
 timeouts, cancellation, shared budgets, provenance, concurrency and the
-remember/use/correct/expire/forget lifecycle. The smoke cases are not a production
-quality or calibration benchmark.
+remember/use/correct/expire/forget lifecycle.
 
 ## Retrieval
 
@@ -165,9 +157,8 @@ Graph traversal follows explicit references: fact → previous revision,
 actual → planned session, strength → actual session, prescription → authorized
 source block, and journal → typed session reference. Server feedback now records
 `actual:N` or `strength:N`. Dates/names alone never establish an edge.
-**Graph expansion is disabled in production.** `SearchLimits(graph=True)` is
-available for evaluation; enablement requires behavior-level evidence, not just
-better source recall.
+**Graph expansion is disabled in production.** Enablement requires behavior-level
+evidence, not just better source recall.
 
 The context builder runs synchronous reads in an AnyIO worker. Each model
 boundary rebuilds a disposable corpus, including after memory writes; there is
@@ -180,48 +171,10 @@ journal. Chat retrieval adds zero model calls. `Agent run:` logs include
 `memory_searches`, `memory_ms` and the last contribution's `memory_tokens`.
 Detailed search logs contain counts/timing, not source text.
 
-## Evaluation
+## Verification
 
-`tests/data/personal_memory_cases.jsonl` has 60 synthetic French cases, with a
-fixed 40/20 development/validation split and human-readable behavior rubrics.
 Source isolation, concurrency, expiry, deletion, schema migration, runtime
 integration and failures have separate service/API/browser tests.
-
-Run the offline selection comparison without accessing athlete data:
-
-```sh
-uv run python scripts/eval_personal_memory.py --split development
-uv run python scripts/eval_personal_memory.py --split validation
-```
-
-It compares the frozen selection baseline (30 facts/five recent entries), BM25
-and BM25 plus graph expansion on the same synthetic evidence. The baseline is a
-selection ablation, not a replay of the complete former agent. Some cases
-intentionally put evidence outside the recent excerpt. Source recall on these
-fixtures is not an estimate of production answer quality.
-
-Opt-in answer generation uses one pinned configured-provider model across all
-three variants, no tools, no fallback, no retries, temperature 0, 4,096 output
-tokens, a 16,384-token envelope and a 60-second timeout. It never opens a database:
-
-```sh
-ARETE_EVAL=1 uv run python scripts/eval_personal_memory.py \
-  --live --model EXACT_MODEL_ID --split development --limit 5
-```
-
-The hard maximum is 180 model calls; the example makes 15. Outputs include usage,
-served model, latency and a rubric for human review. Preference compliance,
-temporal errors and unsupported claims remain **unknown** until rated. Offline
-retrieval success must not populate these metrics. `--ratings` accepts a JSON
-list with `id`, `variant`, and boolean `preference_followed`, `temporal_error`,
-`unsupported_claim` fields.
-
-Local measurement on a synthetic DuckDB corpus (20 warm reads): 1,000 passages
-had warm p95 around 19 ms; 10,000 around 113 ms. First reads were around 43 ms and
-112 ms respectively (the latter reused imported libraries). These numbers exclude
-MotherDuck networking and serverless startup. The deployment target remains
-p95 below 500 ms, to be verified in that environment. Graph remains off until
-live answers demonstrate relational gains without constraint regressions.
 
 Migration is additive and runs through normal initialization; no production data
 or deployment is touched by the offline tests. Run `make check` before shipping.

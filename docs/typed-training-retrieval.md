@@ -67,7 +67,5 @@ Example: running distance by week in September:
 }
 ```
 
-The [frozen experiment](session-retrieval-evaluation.md) motivated typed access.
 The production adapter has real-schema isolation, source, date, missing-value,
-join-grain and bound tests. Its interface differs from the synthetic candidate;
-the pilot's 16/20 score is not a measured production accuracy guarantee.
+join-grain and bound tests in `tests/test_training_query.py`.

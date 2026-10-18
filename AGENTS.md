@@ -112,8 +112,7 @@ responsibility a testable owner. Do not create empty architectural scaffolding.
 Run `make check` before declaring implementation complete. It runs lint, formatting
 checks, mypy, backend/frontend tests and the frontend build. Mock external I/O in
 normal tests. Add behavior tests for changed boundaries, failures and concurrency;
-do not add tests that merely repeat an implementation. Live model evaluations in
-`tests/test_agent_evals.py` are opt-in and must use a database copy.
+do not add tests that merely repeat an implementation.
 
 ## Data, workflow and conventions
 

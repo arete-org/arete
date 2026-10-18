@@ -278,12 +278,4 @@ new operations. After authorized deployment, use test accounts to verify immedia
 mentions, scheduling/cancellation, private redirection, role revocation and a
 non-admin coaching request. Never run these sends against real recipients in CI.
 
-Normal tests mock models and Slack. An optional ten-request synthetic routing
-quality evaluation sends no Slack messages and binds no tools:
-
-```sh
-ARETE_SURFACE_EVAL=1 ARETE_EVAL_DB=/path/to/copy.duckdb uv run pytest tests/test_slack_surface_evals.py -s
-```
-
-It reports decisions, accuracy failures, latency and request counts; the default
-run skips it. It uses the configured free OpenRouter route, with no fallback.
+Normal tests mock models and Slack.
