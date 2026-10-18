@@ -31,6 +31,8 @@ export const BRIEFING_READ_KEY = 'arete.push-offer.briefing-read';
 /** For this browsing session: one offer was put off, so no other one asks again. */
 const OFFERS_QUIET_KEY = 'arete.push-offer.quiet';
 
+const quietListeners = new Set<() => void>();
+
 export function pushOffersQuiet(): boolean {
   try {
     return sessionStorage.getItem(OFFERS_QUIET_KEY) !== null;
@@ -39,12 +41,19 @@ export function pushOffersQuiet(): boolean {
   }
 }
 
+/** Offers already on screen (and the first-launch modal) hide at once. */
+export function onPushOffersQuiet(listener: () => void): () => void {
+  quietListeners.add(listener);
+  return () => quietListeners.delete(listener);
+}
+
 export function quietPushOffers(): void {
   try {
     sessionStorage.setItem(OFFERS_QUIET_KEY, '1');
   } catch {
-    // Not remembered: at worst the other moment asks once in this session.
+    // Not remembered: at worst the other moment asks once more in this session.
   }
+  quietListeners.forEach((listener) => listener());
 }
 
 let deferred: BeforeInstallPromptEvent | null = null;

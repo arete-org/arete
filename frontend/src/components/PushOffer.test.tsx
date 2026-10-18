@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { notificationsApi, settingsApi, type UserSettings } from '@/lib/api';
-import { pushOfferKey } from '@/lib/install';
+import { pushOfferKey, pushOffersQuiet } from '@/lib/install';
 import { currentState, subscribeDevice, type PushState } from '@/lib/push';
 import { qk } from '@/lib/queryKeys';
 import { DEFAULT_SETTINGS } from '@/pages/settings/types';
@@ -103,6 +103,26 @@ it('stores nothing when the browser prompt is closed without a choice', async ()
   fireEvent.click(await screen.findByRole('button', { name: 'Activer les notifications' }));
   await waitFor(() => expect(screen.queryByRole('region', { name: SESSION })).toBeNull());
   expect(localStorage.getItem(pushOfferKey('session'))).toBeNull();
+  // Not asked again in this session, by either moment.
+  expect(pushOffersQuiet()).toBe(true);
+});
+
+it('hides an offer already on screen as soon as another one is put off', async () => {
+  vi.mocked(currentState).mockResolvedValue('unsubscribed');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <PushOffer moment="session" />
+      <PushOffer moment="briefing" />
+    </QueryClientProvider>,
+  );
+  const briefing = await screen.findByRole('region', { name: 'Reçois ton briefing chaque matin' });
+  const session = screen.getByRole('region', { name: SESSION });
+  fireEvent.click(within(session).getByRole('button', { name: 'Plus tard' }));
+  expect(briefing.isConnected).toBe(false);
+  expect(screen.queryByRole('region', { name: SESSION })).toBeNull();
+  // Only the answered moment is remembered on the device.
+  expect(localStorage.getItem(pushOfferKey('briefing'))).toBeNull();
 });
 
 it('quiets the other moment for the session once one is put off', async () => {

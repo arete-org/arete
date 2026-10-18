@@ -1,10 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { IosInstallSteps } from '@/components/InstallPrompt';
 import { notificationsApi, settingsApi, type NotificationKind, type UserSettings } from '@/lib/api';
-import { pushOfferKey, pushOffersQuiet, quietPushOffers, readFlag, writeFlag, type PushMoment } from '@/lib/install';
+import { onPushOffersQuiet, pushOfferKey, pushOffersQuiet, quietPushOffers, readFlag, writeFlag, type PushMoment } from '@/lib/install';
 import { currentState, subscribeDevice } from '@/lib/push';
 import { qk } from '@/lib/queryKeys';
 
@@ -81,7 +81,9 @@ export function PushOffer({ moment }: { moment: PushMoment }) {
   const [error, setError] = useState<string | null>(null);
   const root = useRef<HTMLElement>(null);
   const done = useRef<HTMLParagraphElement>(null);
-  const open = answer === 'open';
+  // Another offer or the first-launch modal answered meanwhile: this one steps back too.
+  const quiet = useSyncExternalStore(onPushOffersQuiet, pushOffersQuiet, () => false);
+  const open = answer === 'open' && !quiet;
   const { data: state } = useQuery({ queryKey: qk.pushState, queryFn: currentState, staleTime: Infinity, enabled: open });
   const { data: vapid } = useQuery({
     queryKey: qk.vapidKey,
@@ -121,8 +123,10 @@ export function PushOffer({ moment }: { moment: PushMoment }) {
       queryClient.setQueryData(qk.pushState, next);
       if (next !== 'subscribed') {
         // Only the browser's explicit refusal is an answer; a prompt closed
-        // without choosing, or a worker gone meanwhile, may ask again later.
+        // without choosing, or a worker gone meanwhile, may ask again later,
+        // but not in this session.
         if (next === 'denied') writeFlag(pushOfferKey(moment), 'declined');
+        if (next === 'unsubscribed') quietPushOffers();
         if (root.current) focusNear(root.current);
         setAnswer('closed');
         return;
