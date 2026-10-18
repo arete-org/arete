@@ -149,10 +149,31 @@ def in_force_sql(athlete: str) -> tuple[str, list]:
     )
 
 
+def in_force_since_sql(athlete: str) -> tuple[str, list]:
+    """A SQL expression: when the consent in force for the athlete was given
+    (naive UTC), NULL without one. What it allows starts there: an activity
+    registered before it never triggers a job afterwards."""
+    return (
+        "(SELECT max(c.consented_at) FROM app.athlete_consents c "
+        f"WHERE c.athlete_id = {athlete} AND {_IN_FORCE})",
+        _in_force_params(),
+    )
+
+
 def processing_sql(athlete: str) -> tuple[str, list]:
     """A SQL predicate: the athlete's data may be processed by a job."""
     sql, params = in_force_sql(athlete)
     return f"(NOT ? OR {sql})", [required(), *params]
+
+
+def processing_of(athlete_id: int) -> tuple[str, list]:
+    """``processing_sql`` for one known athlete, bound: for a statement that
+    must not act once consent is withdrawn (the scheduler's claim)."""
+    return (
+        "(NOT ? OR EXISTS (SELECT 1 FROM app.athlete_consents c "
+        f"WHERE c.athlete_id = ? AND {_IN_FORCE}))",
+        [required(), athlete_id, *_in_force_params()],
+    )
 
 
 def give(
@@ -199,19 +220,15 @@ def give(
     return Consent(*row)
 
 
-def withdraw(athlete_id: int, user_id: int | None) -> Consent | None:
+def withdraw(athlete_id: int, user_id: int | None) -> None:
     """Withdraw every consent in force, recording the login that did; the
-    data stays, its processing stops.
-
-    Returns the latest consent, now withdrawn; None if none was ever given.
-    """
+    data stays, its processing stops."""
     with db_connection() as con:
         con.execute(
             "UPDATE app.athlete_consents SET withdrawn_at = ?, withdrawn_by = ? "
             "WHERE athlete_id = ? AND withdrawn_at IS NULL",
             [_now(), user_id, athlete_id],
         )
-    return latest(athlete_id)
 
 
 def state(athlete_id: int | None) -> dict:

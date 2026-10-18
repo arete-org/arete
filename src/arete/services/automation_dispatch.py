@@ -1,6 +1,7 @@
 """One bounded dispatcher for Docker and Vercel; agent invocation is injected."""
 
 import logging
+from datetime import UTC
 from time import monotonic
 
 import duckdb
@@ -27,15 +28,17 @@ def dispatch(execute) -> dict:
     started = monotonic()
     outcomes: list[str] = []
     allowed, params = consent.processing_sql("a.id")
+    since, since_params = consent.in_force_since_sql("a.id")
+    required = consent.required()
     with db_connection() as con:
         # Scheduler authority enumerates ids only; every read afterwards is scoped.
         owners = con.execute(
-            f"SELECT a.id, {allowed} FROM app.athletes a WHERE a.deleted_at IS NULL "
-            "ORDER BY a.id LIMIT ?",
-            [*params, MAX_SCAN],
+            f"SELECT a.id, {allowed}, {since} FROM app.athletes a "
+            "WHERE a.deleted_at IS NULL ORDER BY a.id LIMIT ?",
+            [*params, *since_params, MAX_SCAN],
         ).fetchall()
     deferred = len(owners) == MAX_SCAN
-    for athlete, consented in owners:
+    for athlete, consented, consented_at in owners:
         if (
             len(outcomes) >= MAX_DISPATCH_RUNS
             or monotonic() - started > MAX_DISPATCH_SECONDS - SEGMENT_SECONDS
@@ -44,16 +47,24 @@ def dispatch(execute) -> dict:
             break
         if not consented:
             # Nothing runs without consent, and nothing waits to fire late
-            # either: what comes due meanwhile is recorded missed.
+            # either: what comes due meanwhile is recorded missed (a read
+            # only, when nothing is due).
             with athlete_scope(athlete):
                 try:
                     automations.skip_due(NO_CONSENT_REASON)
                 except duckdb.TransactionException:
                     deferred = True
             continue
+        # Sessions registered before the consent in force (while it was
+        # missing) never trigger a session automation late.
+        sessions_since = (
+            consented_at.replace(tzinfo=UTC)
+            if required and consented_at is not None
+            else None
+        )
         with athlete_scope(athlete):
             try:
-                automations.prepare()
+                automations.prepare(sessions_since=sessions_since)
             except duckdb.TransactionException:
                 # A competing preparation won. No mission was started here.
                 deferred = True
@@ -69,6 +80,10 @@ def dispatch(execute) -> dict:
                     or monotonic() - started > MAX_DISPATCH_SECONDS - SEGMENT_SECONDS
                 ):
                     deferred = True
+                    break
+                # Read again before each mission: a withdrawal during this
+                # dispatch stops the athlete's next run.
+                if not consent.allows_processing(athlete):
                     break
                 run = automations.claim(identifier)
                 if run is not None:

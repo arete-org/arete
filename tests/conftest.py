@@ -114,8 +114,10 @@ def consented(monkeypatch) -> None:
     """Every athlete has consented: for sign-in tests about something else,
     whose accounts appear at their first request. The gate itself is tested
     in ``test_consent.py``."""
+    from arete.api import auth
     from arete.services import consent
 
+    monkeypatch.setattr(auth, "consent_in_force", lambda *args: True)
     monkeypatch.setattr(consent, "is_current", lambda athlete_id: True)
 
 

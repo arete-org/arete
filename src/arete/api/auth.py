@@ -260,6 +260,12 @@ def _delete_clerk_user(clerk_user_id: str) -> bool:
 
 def resolve_user(authorization: str | None) -> AppUser:
     """The account behind a bearer credential; raises ``AuthError``."""
+    return resolve_request(authorization)[0]
+
+
+def resolve_request(authorization: str | None) -> tuple[AppUser, bool | None]:
+    """The account behind a bearer credential, and its athlete's consent when
+    it was read with the account (None: read it, never from a cache)."""
     if not authorization or not authorization.lower().startswith("bearer "):
         raise AuthError(401, "Connexion requise.")
     token = authorization[7:].strip()
@@ -269,17 +275,26 @@ def resolve_user(authorization: str | None) -> AppUser:
     if key and hmac.compare_digest(token, key):
         if not user_service.athlete_is_active(OWNER_ATHLETE_ID):
             raise AuthError(403, "Cet athlète a été désactivé.")
-        return API_KEY_USER
+        return API_KEY_USER, None
     claims = _verify_session_token(token)
     subject = claims.get("sub")
     if not isinstance(subject, str) or not subject:
         raise AuthError(401, "Session invalide ou expirée.")
-    user, athlete_active = _resolve_account(subject)
+    user, athlete_active, consented = _resolve_account(subject)
     if user.deleted_at is not None or (
         user.athlete_id is not None and not athlete_active
     ):
         raise AuthError(403, "Ce compte a été désactivé.")
-    return user
+    return user, consented
+
+
+def consent_in_force(athlete_id: int, fresh: bool | None = None) -> bool:
+    """Whether the athlete's current consent is in force, as of this request.
+
+    Never cached (GDPR art. 7(3): a withdrawal takes effect at once, on every
+    instance): read with the account when that was read, else on its own.
+    """
+    return fresh if fresh is not None else consent_service.is_current(athlete_id)
 
 
 # ------------------------------------------------------- account cache --
@@ -304,58 +319,23 @@ def forget_accounts() -> None:
     global _accounts_generation
     with _accounts_lock:
         _accounts.clear()
-        _consented.clear()
         _accounts_generation += 1
 
 
-#: Athletes seen with current consent, and when. Only consent is cached: an
-#: athlete without it is read again on each request, so a consent given here
-#: or on another instance opens the app at once, with nothing to invalidate. A
-#: withdrawal applies at once on the instance that recorded it
-#: (``forget_consent``) and within ``ACCOUNT_TTL_SECONDS`` elsewhere, like a
-#: deactivation.
-_consented: OrderedDict[int, float] = OrderedDict()
+def _resolve_account(subject: str) -> tuple[AppUser, bool, bool | None]:
+    """(login, athlete is live, consent in force) for a verified subject:
+    cached, or one query.
 
-
-def forget_consent(athlete_id: int) -> None:
-    """Drop one athlete's cached consent, after its withdrawal here; a read
-    already under way cannot store its now stale answer afterwards."""
-    global _accounts_generation
-    with _accounts_lock:
-        _consented.pop(athlete_id, None)
-        _accounts_generation += 1
-
-
-def has_consent(athlete_id: int) -> bool:
-    """Whether the athlete's data may be processed: cached when it may."""
-    now = _clock()
-    with _accounts_lock:
-        seen = _consented.get(athlete_id)
-        if seen is not None and now - seen < ACCOUNT_TTL_SECONDS:
-            return True
-        generation = _accounts_generation
-    if not consent_service.is_current(athlete_id):
-        return False
-    with _accounts_lock:
-        if generation == _accounts_generation:
-            _consented[athlete_id] = now
-            _consented.move_to_end(athlete_id)
-            while len(_consented) > ACCOUNT_CACHE_SIZE:
-                _consented.popitem(last=False)
-    return True
-
-
-def _resolve_account(subject: str) -> tuple[AppUser, bool]:
-    """(login, athlete is live) for a verified subject: cached, or one query.
-
-    A new or stale profile is refreshed from Clerk first, then read back.
+    Consent comes with the query, never from the cache: None when the account
+    was cached, for the caller to read it fresh. A new or stale profile is
+    refreshed from Clerk first, then read back.
     """
     now = _clock()
     with _accounts_lock:
         entry = _accounts.get(subject)
         if entry is not None and now - entry[0] < ACCOUNT_TTL_SECONDS:
             _accounts.move_to_end(subject)
-            return entry[1], entry[2]
+            return entry[1], entry[2], None
         generation = _accounts_generation
     account = user_service.get_account(subject)
     if account is None or _profile_is_stale(account[0]):
@@ -365,7 +345,7 @@ def _resolve_account(subject: str) -> tuple[AppUser, bool]:
     with _accounts_lock:
         if generation == _accounts_generation:
             # Timed from before the read: the TTL bounds the data's age.
-            _accounts[subject] = (now, *account)
+            _accounts[subject] = (now, account[0], account[1])
             _accounts.move_to_end(subject)
             while len(_accounts) > ACCOUNT_CACHE_SIZE:
                 _accounts.popitem(last=False)
@@ -437,7 +417,9 @@ class AuthMiddleware:
             # Token verification may fetch Clerk's keys (without CLERK_JWT_KEY),
             # and the account read is a database round trip: both leave the
             # event loop free.
-            user = await anyio.to_thread.run_sync(resolve_user, authorization)
+            user, fresh_consent = await anyio.to_thread.run_sync(
+                resolve_request, authorization
+            )
         except AuthError as e:
             if isinstance(e, DeletedLogin) and is_deletion_path(path):
                 # No user and no athlete scope: only the Clerk deletion is left.
@@ -462,7 +444,9 @@ class AuthMiddleware:
             return
         if user.athlete_id is not None and not is_consent_exempt(path):
             try:
-                consented = await anyio.to_thread.run_sync(has_consent, user.athlete_id)
+                consented = await anyio.to_thread.run_sync(
+                    consent_in_force, user.athlete_id, fresh_consent
+                )
             except Exception:  # noqa: BLE001 - database down: refuse, never pass
                 logger.warning("Consent check failed unexpectedly", exc_info=True)
                 response = JSONResponse(
@@ -597,7 +581,6 @@ def withdraw_consent(request: Request) -> dict[str, Any]:
     consent again. The login that withdrew is recorded."""
     user, athlete_id = _consenting(request)
     consent_service.withdraw(athlete_id, user.id or None)
-    forget_consent(athlete_id)
     return consent_service.state(athlete_id)
 
 

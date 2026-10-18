@@ -182,6 +182,28 @@ def reserve(message: SlackMessage) -> Literal["running", "duplicate", "busy"]:
         return status
 
 
+def record_refusal(message: SlackMessage) -> bool:
+    """Record an event answered with a refusal; False for a redelivery.
+
+    The same ledger as ``reserve``, without the athlete's run reservation:
+    nothing runs, and a later redelivery of the event is a duplicate there too.
+    """
+    with transaction() as con:
+        if con.execute(
+            "SELECT 1 FROM app.slack_deliveries WHERE event_key = ?", [message.key]
+        ).fetchone():
+            return False
+        count = con.execute("SELECT count(*) FROM app.slack_deliveries").fetchone()
+        assert count is not None
+        if count[0] >= MAX_DELIVERY_RECORDS:
+            raise SlackError("Slack delivery ledger is full; operator review required")
+        con.execute(
+            "INSERT INTO app.slack_deliveries (event_key, status, thread_id) VALUES (?, 'refused', ?)",
+            [message.key, message.thread_id],
+        )
+    return True
+
+
 def set_delivery_thread(message: SlackMessage, destination: SlackMessage) -> None:
     """Record the actual reply destination before any provisional text can land."""
     with transaction() as con:
@@ -613,7 +635,10 @@ async def resolve(message: SlackMessage, *, client: SlackClient) -> int | None:
         consent.allows_processing, athlete_id
     ):
         # Nothing of the athlete's reaches the coach before their consent, and
-        # whether they gave it is theirs alone: a channel never hears it.
+        # whether they gave it is theirs alone: a channel never hears it. Once
+        # per event: Slack's redeliveries are recorded duplicates.
+        if not await to_thread.run_sync(record_refusal, message):
+            return None
         if message.in_channel:
             channel = await client.open_dm(message.user)
             await client.post(channel, None, UNCONSENTED_MESSAGE)

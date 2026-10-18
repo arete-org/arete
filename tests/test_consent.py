@@ -179,25 +179,25 @@ def test_the_withdrawal_records_the_login_that_withdrew(accounts, client):
     assert withdrawn == [(first.id, True)]
 
 
-def test_consent_changes_touch_only_that_athlete_s_cached_answer(
+def test_a_withdrawal_on_another_instance_blocks_the_next_request_at_once(
     accounts, client, give_consent
 ):
+    """Consent is never cached (GDPR art. 7(3)); the accounts still are."""
     first, second = accounts
-    give_consent(second.athlete_id)
-    assert client.get("/settings", headers=bearer(second)).status_code == 200
-    accounts_before = dict(auth._accounts)
-    assert second.athlete_id in auth._consented
-    # Giving consent invalidates nothing: only consent is ever cached.
-    client.post("/auth/consent", json=ACCEPT, headers=bearer(first))
-    assert second.athlete_id in auth._consented
-    assert set(accounts_before) <= set(auth._accounts)
+    give_consent(first.athlete_id, second.athlete_id)
     assert client.get("/settings", headers=bearer(first)).status_code == 200
-    # A withdrawal pops that athlete's entry only.
-    client.post("/auth/consent/withdraw", headers=bearer(first))
-    assert first.athlete_id not in auth._consented
-    assert second.athlete_id in auth._consented
-    assert set(accounts_before) <= set(auth._accounts)
+    assert client.get("/settings", headers=bearer(second)).status_code == 200
+    cached = set(auth._accounts)
+    assert {first.clerk_user_id, second.clerk_user_id} <= cached
+    consent.withdraw(first.athlete_id, None)  # recorded elsewhere: no cache touched
     assert client.get("/settings", headers=bearer(first)).status_code == 403
+    assert client.get("/settings", headers=bearer(second)).status_code == 200
+    # Consent changes through the API invalidate nothing either.
+    client.post("/auth/consent", json=ACCEPT, headers=bearer(first))
+    client.post("/auth/consent/withdraw", headers=bearer(second))
+    assert cached <= set(auth._accounts)
+    assert client.get("/settings", headers=bearer(first)).status_code == 200
+    assert client.get("/settings", headers=bearer(second)).status_code == 403
 
 
 def test_every_reader_agrees_after_a_rollback_to_older_texts(
@@ -323,7 +323,7 @@ def test_a_withdrawn_athlete_is_skipped_by_every_job(
 
     prepared: list[int] = []
     monkeypatch.setattr(
-        automations, "prepare", lambda: prepared.append(current_athlete_id())
+        automations, "prepare", lambda **_: prepared.append(current_athlete_id())
     )
     automation_dispatch.dispatch(lambda run: None)
     assert prepared == [second.athlete_id]
@@ -385,6 +385,156 @@ def test_automations_due_without_consent_are_missed_never_run_late(
     assert executed == []
 
 
+def _automation(trigger: dict, *, activated: datetime) -> dict:
+    from arete.services import automations
+    from arete.services.automation_schedule import AutomationInput
+
+    return automations.create(
+        AutomationInput(
+            title="Suivi",
+            mission="Examiner la récupération",
+            timezone="Europe/Paris",
+            trigger=trigger,
+        ),
+        activate=True,
+        now=activated,
+    )
+
+
+def test_a_session_registered_without_consent_never_triggers_a_late_run(
+    accounts, give_consent
+):
+    from arete.garmin.models import ActualSession
+    from arete.garmin.repository import GarminRepository
+    from arete.services import automation_dispatch, automations
+
+    first, _ = accounts
+    now = datetime.now(UTC)
+    with athlete_scope(first.athlete_id):
+        item = _automation(
+            {"kind": "session", "sport": "running", "delay_minutes": 0},
+            activated=now - timedelta(days=2),
+        )
+    give_consent(first.athlete_id)
+    consent.withdraw(first.athlete_id, None)
+    with athlete_scope(first.athlete_id):
+        # Synced just before the withdrawal reached it, or imported meanwhile.
+        GarminRepository().create_actual_session(
+            ActualSession(date=now.date(), sport="running", duration_sec=1800)
+        )
+    give_consent(first.athlete_id)
+    executed: list = []
+    automation_dispatch.dispatch(executed.append)
+    with athlete_scope(first.athlete_id):
+        assert automations.runs(item["id"])["items"] == []
+    assert executed == []
+    # A session registered after the new consent triggers as before.
+    with athlete_scope(first.athlete_id):
+        GarminRepository().create_actual_session(
+            ActualSession(date=now.date(), sport="running", duration_sec=2400)
+        )
+    automation_dispatch.dispatch(executed.append)
+    assert len(executed) == 1
+
+
+def test_an_invalid_automation_of_an_athlete_without_consent_is_paused(
+    accounts, give_consent
+):
+    """A stored trigger that no longer validates pauses that automation; the
+    dispatch goes on for everyone else."""
+    from arete.dataio.db import db_connection
+    from arete.services import automation_dispatch
+
+    first, second = accounts
+    now = datetime.now(UTC)
+    with athlete_scope(first.athlete_id):
+        broken = _automation(
+            {"kind": "daily", "time": "08:00"}, activated=now - timedelta(days=2)
+        )
+        with db_connection() as con:
+            con.execute(
+                "UPDATE app.automations SET trigger_json = ? WHERE id = ?",
+                ['{"kind": "hourly"}', broken["id"]],
+            )
+    give_consent(second.athlete_id)
+    with athlete_scope(second.athlete_id):
+        healthy = _automation(
+            {"kind": "once", "at": (now - timedelta(minutes=1)).isoformat()},
+            activated=now - timedelta(minutes=2),
+        )
+    executed: list = []
+    automation_dispatch.dispatch(lambda run: executed.append(run["automation_id"]))
+    assert executed == [healthy["id"]]
+    with athlete_scope(first.athlete_id), db_connection() as con:
+        state = con.execute(
+            "SELECT state FROM app.visible_automations WHERE id = ?", [broken["id"]]
+        ).fetchone()
+    assert state == ("paused",)
+
+
+def test_an_athlete_without_consent_and_nothing_due_costs_no_write(
+    accounts, monkeypatch
+):
+    from arete.services import automation_dispatch, automations
+
+    def no_write():
+        raise AssertionError("a write transaction for an athlete with nothing due")
+
+    monkeypatch.setattr(automations, "transaction", no_write)
+    assert automation_dispatch.dispatch(lambda run: None)["runs"] == []
+
+
+def test_a_withdrawal_during_a_dispatch_stops_that_athlete_s_work(
+    accounts, monkeypatch, frozen, give_consent
+):
+    """Consent is read again before each athlete's claim, model request and
+    automation run, not only when the candidates are listed."""
+    from arete import scheduler
+    from arete.services import automation_dispatch, automations
+
+    first, second = accounts
+    give_consent(first.athlete_id, second.athlete_id)
+    listed = scheduler._candidates()
+    consent.withdraw(second.athlete_id, None)  # after the listing
+    synced: list[int] = []
+    briefed: list[int] = []
+
+    def sync():
+        synced.append(current_athlete_id())
+        consent.withdraw(first.athlete_id, None)  # during the sync
+        return {"sync": "ok"}
+
+    monkeypatch.setattr(scheduler, "_candidates", lambda: listed)
+    monkeypatch.setattr(scheduler, "daily_sync", sync)
+    monkeypatch.setattr(
+        scheduler, "write_daily_briefing", lambda: briefed.append(1) or "rules"
+    )
+    monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
+    result = scheduler.run_scheduled_batch()["athletes"]
+    assert synced == [first.athlete_id]  # the second was never claimed
+    assert result[str(first.athlete_id)]["briefing"] == "skipped: consent withdrawn"
+    assert briefed == []
+
+    # An automation run due, then a withdrawal while the dispatch prepares.
+    give_consent(first.athlete_id)
+    now = datetime.now(UTC)
+    with athlete_scope(first.athlete_id):
+        _automation(
+            {"kind": "once", "at": (now - timedelta(minutes=1)).isoformat()},
+            activated=now - timedelta(minutes=2),
+        )
+    prepare = automations.prepare
+
+    def withdrawn_meanwhile(**kwargs):
+        prepare(**kwargs)
+        consent.withdraw(first.athlete_id, None)
+
+    monkeypatch.setattr(automations, "prepare", withdrawn_meanwhile)
+    executed: list = []
+    automation_dispatch.dispatch(executed.append)
+    assert executed == []
+
+
 def test_the_scheduler_filters_with_the_consent_rule():
     """Its query is one literal (the SQL contract test reads it): same predicate."""
     from arete import scheduler
@@ -426,14 +576,24 @@ def test_slack_never_runs_the_coach_for_an_athlete_without_consent(
     # In a channel, whether someone consented is said to them alone, in a DM.
     client.reset_mock()
     client.open_dm.return_value = "DPRIVATE"
-    in_channel = replace(message, channel="CPUBLIC", in_channel=True, mentioned=True)
+    in_channel = replace(
+        message, event_id="Ev1b", channel="CPUBLIC", in_channel=True, mentioned=True
+    )
     assert asyncio.run(slack.resolve(in_channel, client=client)) is None
     client.reply.assert_not_awaited()
     client.open_dm.assert_awaited_once_with("U123")
     client.post.assert_awaited_once_with("DPRIVATE", None, slack.UNCONSENTED_MESSAGE)
 
+    # Slack redelivers an event it thinks unanswered: the notice goes out once.
+    client.reset_mock()
+    redelivered = replace(message, event_id="Ev2")
+    for _ in range(4):
+        assert asyncio.run(slack.resolve(redelivered, client=client)) is None
+    client.reply.assert_awaited_once_with(redelivered, slack.UNCONSENTED_MESSAGE)
+
     give_consent(first.athlete_id)
-    assert asyncio.run(slack.resolve(message, client=client)) == first.athlete_id
+    fresh = replace(message, event_id="Ev3")
+    assert asyncio.run(slack.resolve(fresh, client=client)) == first.athlete_id
 
 
 def test_an_administrator_cannot_read_an_athlete_without_consent(

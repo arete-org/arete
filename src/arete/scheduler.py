@@ -451,18 +451,26 @@ DEFAULT_SYNC_HOUR = 7
 #: consent (``services/consent.py``, with sign-in on) is not a candidate: every
 #: job reading this list (daily sync and briefing, Sunday review, check-in,
 #: evening replanning and message) pauses for them, their data untouched. The
-#: predicate is the consent service's own, so the two cannot drift.
-_CANDIDATES = (
+#: predicate is the consent service's own, so the two cannot drift. Consent is
+#: checked again when each athlete's work starts (``_claim``, ``_consented``):
+#: a withdrawal during a dispatch stops that athlete's remaining work.
+_CANDIDATES_FROM = (
     "SELECT a.id, a.last_sync_at, a.sync_lease_until, "
     "epoch(a.last_sync_at), epoch(a.sync_lease_until), "
     "s.timezone, s.notification_preferences "
     "FROM app.athletes a LEFT JOIN app.user_settings s "
     "ON s.user_id = a.id AND s.deleted_at IS NULL "
     "WHERE a.deleted_at IS NULL AND "
-    + consent.processing_sql("a.id")[0]
-    + " ORDER BY greatest(a.last_sync_at, a.sync_lease_until) NULLS FIRST, a.id "
-    "LIMIT ?"
 )
+_CANDIDATES_ORDER = (
+    " ORDER BY greatest(a.last_sync_at, a.sync_lease_until) NULLS FIRST, a.id LIMIT ?"
+)
+_CANDIDATES = _CANDIDATES_FROM + consent.processing_sql("a.id")[0] + _CANDIDATES_ORDER
+
+
+def _consented(athlete_id: int) -> bool:
+    """Consent read again right before an athlete's work or model request."""
+    return consent.allows_processing(athlete_id)
 
 
 def _candidates() -> list[tuple]:
@@ -596,17 +604,21 @@ def _claim(
     """Take the athlete's lease, unless another dispatch took it first.
 
     Compare-and-set on the markers this dispatch read as owed: a concurrent
-    dispatch that claimed or finished the athlete has changed one of them.
+    dispatch that claimed or finished the athlete has changed one of them. A
+    consent withdrawn since the candidates were read leaves the athlete
+    unclaimed, in the same statement.
     """
     until = _lease_until(claimed_at)
+    consented, params = consent.processing_of(athlete_id)
     try:
         with db_connection() as con:
             row = con.execute(
                 "UPDATE app.athletes SET sync_lease_until=? "
                 "WHERE id=? AND deleted_at IS NULL "
                 "AND last_sync_at IS NOT DISTINCT FROM ? "
-                "AND sync_lease_until IS NOT DISTINCT FROM ? RETURNING id",
-                [_naive_utc(until), athlete_id, last_sync, lease],
+                f"AND sync_lease_until IS NOT DISTINCT FROM ? AND {consented} "
+                "RETURNING id",
+                [_naive_utc(until), athlete_id, last_sync, lease, *params],
             ).fetchone()
     except duckdb.TransactionException:
         logger.info("Athlete %s claimed by a concurrent dispatch", athlete_id)
@@ -647,6 +659,9 @@ def _run_athlete(
                         step,
                     )
                     status[step] = "skipped: day ended"
+                elif not _consented(athlete_id):
+                    # Withdrawn during the sync: no model request after it.
+                    status[step] = "skipped: consent withdrawn"
                 else:
                     status[step] = write()
             # Self-hosted status marker (``/sync/status``): server clock on purpose.
@@ -730,6 +745,8 @@ def run_sunday_reviews(started: float) -> dict:
         if written >= MAX_SCHEDULED_ATHLETES:
             deferred = True
             break
+        if not _consented(athlete_id):
+            continue
         with athlete_scope(athlete_id):
             outcome = write_sunday_review(started)
         outcomes[str(athlete_id)] = outcome
@@ -768,6 +785,9 @@ def write_sunday_review(started: float) -> str:
             logger.warning("Sunday Garmin refresh failed: %s", e)
         if monotonic() - started >= SCHEDULE_MODEL_SECONDS:
             return "deferred"
+        if not _consented(current_athlete_id()):
+            # Withdrawn during the Garmin refresh: no model request after it.
+            return "skipped: consent withdrawn"
         token = _run_deadline.set(scheduled_run_deadline(started))
         try:
             outcome = announce_review()
@@ -837,6 +857,8 @@ def run_checkin_prompts() -> dict:
         if monotonic() - started >= CHECKIN_DISPATCH_SECONDS:
             deferred = True
             break
+        if not _consented(athlete_id):
+            continue
         with athlete_scope(athlete_id):
             outcomes[str(athlete_id)] = checkins.prompt()
     return {"athletes": outcomes, "deferred": deferred}
@@ -899,6 +921,8 @@ def run_evening_replans(from_hour: int = EVENING_FROM_HOUR) -> dict:
         if replanned >= MAX_SCHEDULED_ATHLETES:
             deferred = True
             break
+        if not _consented(athlete_id):
+            continue
         with athlete_scope(athlete_id):
             outcome = replan_missed_evening(started)
         outcomes[str(athlete_id)] = outcome
@@ -1009,6 +1033,8 @@ def run_evening_messages(replan_from_hour: int = EVENING_FROM_HOUR) -> dict:
         if written >= MAX_SCHEDULED_ATHLETES:
             deferred = True
             break
+        if not _consented(athlete_id):
+            continue
         with athlete_scope(athlete_id):
             outcome = write_evening_message(started, replan_from_hour)
         if outcome == "deferred":
@@ -1095,6 +1121,9 @@ def write_evening_message(
             return "nothing to say"
         if monotonic() - started >= SCHEDULE_MODEL_SECONDS:
             return "deferred"
+        if not _consented(current_athlete_id()):
+            # Withdrawn during the replanning: no model request after it.
+            return "skipped: consent withdrawn"
         from arete.coaching import write_evening_message as write
 
         message = write(evening, deadline=started + SCHEDULE_RUN_SECONDS)

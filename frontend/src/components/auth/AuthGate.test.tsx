@@ -65,7 +65,10 @@ interface Me {
   consent: Consent;
 }
 
+/** The version this build's texts carry in their header. */
 const VERSION = '2026-10-draft-1';
+const TEXTS_CHANGED =
+  "Les textes ont changé depuis l'ouverture de la page : recharge-la pour lire la nouvelle version.";
 const NOT_ASKED: Consent = {
   required: true,
   current: false,
@@ -103,6 +106,12 @@ function server(config: unknown, me?: Me | Refusal) {
         body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
       });
       if (url === '/api/auth/consent') {
+        // As the server does: only the versions it publishes are accepted.
+        const published = me && !('detail' in me) ? me.consent : NOT_ASKED;
+        const answer = JSON.parse(String(init?.body)) as { terms_version: string; privacy_version: string };
+        if (answer.terms_version !== published.terms_version || answer.privacy_version !== published.privacy_version) {
+          return new Response(JSON.stringify({ detail: TEXTS_CHANGED }), { status: 409 });
+        }
         return new Response(JSON.stringify(GIVEN), { status: 200 });
       }
       if (url === '/api/auth/config') {
@@ -287,6 +296,21 @@ it('asks again when the texts have a new version', async () => {
   mount();
   expect(await screen.findByText(/ont changé/)).toBeTruthy();
   expect(screen.queryByText('Tableau de bord')).toBeNull();
+});
+
+it('accepts the versions of the texts shown, so a page older than the server is refused', async () => {
+  clerk.signedIn = true;
+  // The server publishes a version this build does not carry yet.
+  const requests = server(enabled, { ...FRESH, consent: { ...NOT_ASKED, terms_version: '2027-01' } });
+  mount();
+  const [terms, health] = (await screen.findAllByRole('checkbox')) as HTMLInputElement[];
+  fireEvent.click(terms);
+  fireEvent.click(health);
+  fireEvent.click(screen.getByRole('button', { name: /ACCEPTER ET CONTINUER/ }));
+  expect(await screen.findByText(TEXTS_CHANGED)).toBeTruthy();
+  expect(screen.queryByText('Tableau de bord')).toBeNull();
+  const consent = requests.find((r) => r.url === '/api/auth/consent');
+  expect(consent?.body).toMatchObject({ terms_version: VERSION, privacy_version: VERSION });
 });
 
 it('shows the refusal reason with a sign-out when the account is deactivated', async () => {

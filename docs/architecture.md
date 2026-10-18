@@ -722,24 +722,30 @@ Three places enforce it, never the routes one by one, all with one predicate
 (`_IN_FORCE`: any row in force for the current texts counts, so a rollback to
 older texts finds their consent again). The authentication middleware answers
 403 with a French detail and the `X-Arete-Consent: required` header to every
-route but `/auth/*` and `/export/*` (the right of access survives a
-withdrawal) until the athlete has current consent; it caches only a positive
-answer, for `ACCOUNT_TTL_SECONDS`, so a consent needs no invalidation and a
-withdrawal pops that athlete's entry here and applies within that bound on
-the other instances. The browser's `authFetch` turns that header into a fresh
-`/auth/me`, so the consent screen returns mid-session. The scheduler's
-candidate query (daily sync, briefing, Sunday review, check-in, evening
-replanning and message) skips an athlete without it, untouched; the automation
-dispatch records what comes due meanwhile as missed, with the reason, and moves
-the schedule past now, so nothing fires late after a new consent. The paths
-that bypass the middleware check it themselves: the Slack resolution (no coach
-run; the French reply goes to a DM when asked in a channel), the
-administrator's Slack reads and the Strava OAuth callback. The API key neither
-gives nor withdraws consent; a withdrawal records the login that made it. The
-browser shows the texts (`frontend/src/legal/*.md`, their versions in their
-header), two unticked boxes and the export in place of the app until consent
-(`ConsentScreen`), drops its query caches as a sign-out does while consent is
-missing, and Settings → À propos shows the state and withdraws it.
+route but `/auth/*` (the account deletion included) and `/export/*` (the right
+of access survives a withdrawal) until the athlete has current consent.
+Consent is never cached (GDPR art. 7(3)): it is read with the account when the
+account is read, on its own when the account comes from the cache, so a
+withdrawal recorded anywhere refuses the next request everywhere. The
+browser's `authFetch` turns that header into a fresh `/auth/me`, so the
+consent screen returns mid-session. The scheduler's candidate query (daily
+sync, briefing, Sunday review, check-in, evening replanning and message) skips
+an athlete without it, untouched, and consent is read again when each
+athlete's work starts (the claim's own statement) and before each model
+request. The automation dispatch records what comes due meanwhile as missed,
+with the reason, and moves the schedule past now (a read only when nothing is
+due); a session automation only answers activities registered after the
+consent in force; and consent is read again before each run, so nothing fires
+late after a new consent. The paths that bypass the middleware check it
+themselves: the Slack resolution (no coach run; the French reply, once per
+event, goes to a DM when asked in a channel), the administrator's Slack reads
+and the Strava OAuth callback. The API key neither gives nor withdraws
+consent; a withdrawal records the login that made it. The browser shows the
+texts (`frontend/src/legal/*.md`, their versions in their header, which a
+consent sends: a page older than the server is refused), two unticked boxes
+and the export in place of the app until consent (`ConsentScreen`), drops its
+query caches as a sign-out does while consent is missing, and Settings → À
+propos shows the state and withdraws it.
 
 The browser keeps an allowlist of query answers (dashboard, settings, goals and
 the session windows containing today) in IndexedDB for 24 hours so a repeat visit

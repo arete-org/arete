@@ -42,13 +42,18 @@ export function ConsentScreen({ consent, email, onConsent, signOut }: ConsentScr
   const accept = () => {
     setPending(true);
     setError(null);
-    authApi
-      .giveConsent({
-        terms_version: consent.terms_version,
-        privacy_version: consent.privacy_version,
-        terms_accepted: terms,
-        health_data: health,
-      })
+    // The versions of the texts shown (this build's), never the server's: a page
+    // older than the server is refused (409) rather than recorded as accepting
+    // texts the athlete never read. Loaded with the texts, not with the gate.
+    import('@/legal/versions')
+      .then(({ LEGAL_VERSIONS }) =>
+        authApi.giveConsent({
+          terms_version: LEGAL_VERSIONS.terms,
+          privacy_version: LEGAL_VERSIONS.privacy,
+          terms_accepted: terms,
+          health_data: health,
+        })
+      )
       .then(onConsent, (e: unknown) => {
         setPending(false);
         setError(errorMessage(e, 'Enregistrement impossible, réessaie dans un instant.'));
