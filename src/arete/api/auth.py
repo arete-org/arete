@@ -34,7 +34,8 @@ from typing import Any
 
 import anyio
 import duckdb
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 
@@ -71,6 +72,7 @@ NO_ATHLETE_DETAIL = (
     "Aucun athlète n'est associé à ce compte. Demande l'accès au propriétaire "
     "de cette instance."
 )
+DELETED_DETAIL = "Ce compte a été supprimé."
 
 
 class AuthError(Exception):
@@ -180,6 +182,35 @@ def _fetch_clerk_profile(clerk_user_id: str) -> tuple[str, str | None, bool]:
     return str(email), name, verified
 
 
+#: Clerk answers in well under a second; a hung call must not hold a request.
+CLERK_DELETE_TIMEOUT_MS = 10_000
+
+
+def _delete_clerk_user(clerk_user_id: str) -> bool:
+    """Delete a Clerk user with a single request; False when it failed.
+
+    The SDK would retry a 5XX with backoff for up to an hour: one request,
+    and the caller reports the failure. A user Clerk no longer has is gone.
+    """
+    from clerk_backend_api import Clerk
+    from clerk_backend_api.models import ClerkBaseError
+
+    try:
+        with Clerk(
+            bearer_auth=config.clerk_secret_key, timeout_ms=CLERK_DELETE_TIMEOUT_MS
+        ) as clerk:
+            clerk.users.delete(user_id=clerk_user_id, retries=None)
+    except ClerkBaseError as e:
+        if e.status_code == 404:
+            return True
+        logger.error("Clerk refused to delete user %s: %s", clerk_user_id, e)
+        return False
+    except Exception:  # noqa: BLE001 - network or SDK: reported, never retried
+        logger.exception("Could not delete Clerk user %s", clerk_user_id)
+        return False
+    return True
+
+
 def resolve_user(authorization: str | None) -> AppUser:
     """The account behind a bearer credential; raises ``AuthError``."""
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -277,6 +308,10 @@ def _refresh_profile(subject: str) -> AppUser:
         user = user_service.get_user(subject)
         if user is not None and not _profile_is_stale(user):
             return user
+        if user is None and user_service.was_deleted(subject):
+            # A session token outlives its erased account by up to a minute,
+            # and a login whose Clerk deletion failed outlives it for good.
+            raise AuthError(403, DELETED_DETAIL)
         email, name, verified = _fetch_clerk_profile(subject)
         try:
             return user_service.upsert_user(subject, email, name, verified=verified)
@@ -401,3 +436,50 @@ def auth_config() -> dict[str, Any]:
 def me(request: Request) -> dict[str, Any]:
     """The signed-in account; reachable before an athlete is attached."""
     return current_user(request).to_dict()
+
+
+#: What the athlete types to confirm; checked here, not only in the browser.
+DELETE_CONFIRMATION = "SUPPRIMER"
+
+
+class AccountDeletion(BaseModel):
+    confirmation: str
+
+
+@router.post("/me/delete", status_code=204)
+def delete_me(body: AccountDeletion, request: Request) -> Response:
+    """Erase the signed-in athlete, then delete its Clerk logins.
+
+    Data first: a failure while erasing leaves the session open, and asking
+    again finishes the job. Then each Clerk user, with one request each: a
+    failure answers 502 once the data is gone. The erasure log refuses that
+    login a new athlete, and the operator deletes it from Clerk's dashboard.
+    """
+    if body.confirmation != DELETE_CONFIRMATION:
+        raise HTTPException(
+            status_code=422, detail=f"Tape {DELETE_CONFIRMATION} pour confirmer."
+        )
+    user = current_user(request)
+    if not clerk_account(request) or user.athlete_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Seul un compte connecté peut se supprimer lui-même.",
+        )
+    from arete.services.account_deletion import erase_current_athlete
+
+    try:
+        logins = erase_current_athlete()
+    except user_service.AccountError as e:
+        raise HTTPException(status_code=e.status, detail=str(e)) from None
+    forget_accounts()
+    failed = [login for login in logins if not _delete_clerk_user(login)]
+    if failed:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Tes données sont effacées, mais ton identifiant de connexion n'a "
+                "pas pu être supprimé. Il ne donne plus accès à Arete ; signale-le "
+                "à l'administrateur de l'instance, qui le supprimera."
+            ),
+        )
+    return Response(status_code=204)

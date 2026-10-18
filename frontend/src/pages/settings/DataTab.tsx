@@ -5,8 +5,16 @@ import { CalendarRange, Download } from 'lucide-react';
 import { SystemAlert } from '@/components';
 import { Button, Field, Input, Panel } from '@/components/ui';
 import { ApiError } from '@/lib/api';
-import { downloadExport, EXPORT_TABLES, type ExportFormat, type ExportTableId } from '@/lib/dataExport';
+import {
+  DEFAULT_EXPORT_TABLES,
+  downloadExport,
+  EXPORT_TABLES,
+  NOT_EXPORTED,
+  type ExportFormat,
+  type ExportTableId,
+} from '@/lib/dataExport';
 import { cn } from '@/lib/utils';
+import { AccountDeletionPanel } from './AccountDeletionPanel';
 
 const FORMATS: { id: ExportFormat; label: string; hint: string }[] = [
   { id: 'zip', label: 'ZIP (CSV)', hint: 'Un fichier CSV par table, lisible dans un tableur.' },
@@ -18,12 +26,12 @@ function errorMessage(error: unknown): string {
   return 'Export impossible, réessaie dans un instant.';
 }
 
-/** Settings → Données: download the athlete's own data. */
+/** Settings → Données: download the athlete's own data, then possibly erase the account. */
 export function DataTab() {
   const [format, setFormat] = useState<ExportFormat>('zip');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
-  const [tables, setTables] = useState<ExportTableId[]>(EXPORT_TABLES.map((t) => t.id));
+  const [tables, setTables] = useState<ExportTableId[]>(DEFAULT_EXPORT_TABLES);
 
   const exportMutation = useMutation({
     mutationFn: () => downloadExport({ format, start, end, tables }),
@@ -42,8 +50,8 @@ export function DataTab() {
       <Panel variant="inset" title="EXPORTER MES DONNÉES">
         <div className="space-y-4">
           <p className="text-xs text-text-muted font-sans">
-            Séances, santé, force, objectifs, bilans et journal du coach. Les identifiants et jetons de connexion
-            (Garmin, Strava, notifications) ne sont jamais exportés.
+            Séances, santé, force, objectifs, bilans, échanges avec le coach, réglages et jeu. Les courbes détaillées
+            et les conversations sauvegardées, volumineuses, se cochent à part.
           </p>
 
           <div className="flex flex-wrap gap-2" role="group" aria-label="Format">
@@ -97,6 +105,15 @@ export function DataTab() {
             </div>
           </fieldset>
 
+          <div>
+            <p className="text-xs font-sans text-text-muted uppercase mb-1">Jamais exporté</p>
+            <ul className="list-disc pl-4 space-y-0.5 text-xs text-text-muted font-sans">
+              {NOT_EXPORTED.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+
           {exportMutation.isError && (
             <SystemAlert type="error" message={errorMessage(exportMutation.error)} onDismiss={() => exportMutation.reset()} />
           )}
@@ -125,6 +142,8 @@ export function DataTab() {
           </Link>
         </div>
       </Panel>
+
+      <AccountDeletionPanel />
     </div>
   );
 }

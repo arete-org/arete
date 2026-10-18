@@ -430,6 +430,10 @@ export const authApi = {
   },
 
   me: () => fetchAPI<AuthMe>("/auth/me"),
+
+  /** Erases the signed-in athlete for good; the server checks the typed confirmation. */
+  deleteMe: (confirmation: string) =>
+    fetchAPI<void>("/auth/me/delete", { method: "POST", body: JSON.stringify({ confirmation }) }),
 };
 
 // ========================= //

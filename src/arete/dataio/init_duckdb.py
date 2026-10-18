@@ -584,6 +584,13 @@ CREATE TABLE IF NOT EXISTS app.slack_athletes (
     public_replies BOOLEAN NOT NULL DEFAULT FALSE,  -- off: channel answers go to DM
     run_event_key  VARCHAR                          -- the Slack event being answered
 );
+
+-- One row per erased login (ARE-128): the day and a one-way hash of its Clerk
+-- account id, nothing else. It also refuses that login a fresh athlete.
+CREATE TABLE IF NOT EXISTS app.account_deletions (
+    account_hash VARCHAR PRIMARY KEY,               -- sha256 of the Clerk user id
+    deleted_on   DATE NOT NULL
+);
 """
 
 
@@ -1050,6 +1057,12 @@ def _m54_strength_drafts(con) -> None:
         raise
 
 
+def _m61_account_deletions(con) -> None:
+    """The erasure log (ARE-128): a new global table, no athlete data in it."""
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.account_deletions (")
+    con.execute(DDL[start : DDL.index(");", start) + 2])
+
+
 DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
 
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
@@ -1096,6 +1109,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (52, _m52_evening_messages),
     (53, _m53_coaching_coordination),
     (54, _m54_strength_drafts),
+    (61, _m61_account_deletions),
 ]
 
 

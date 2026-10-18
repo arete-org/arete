@@ -82,8 +82,10 @@ def _zip(content: bytes) -> dict[str, str]:
 
 def test_zip_has_one_csv_per_table_and_the_journal(stored):
     files = _zip(data_export.build("zip").content)
-    tables = {t.name for t in data_export.TABLES}
+    tables = {t.name for t in data_export.TABLES} - data_export.OPT_IN
     assert {f"{t}.csv" for t in tables} <= set(files)
+    # Streams weigh too much for a whole history: only on request.
+    assert "activity_streams.csv" not in files
     assert files[f"journal/{ARCHIVE}"].startswith("## 2001-01-10")
     sessions = list(csv.DictReader(io.StringIO(files["actual_sessions.csv"])))
     names = {row["name"] for row in sessions}
@@ -130,6 +132,61 @@ def test_the_range_filters_dated_tables_only(stored):
     assert any(g["name"] == "test-export goal" for g in body["tables"]["goals"])
     assert ARCHIVE in body["journal"]
     assert body["start"] == "2001-01-01"
+
+
+def test_a_session_s_feedback_and_streams_leave_dated_by_their_session(stored):
+    con = connect()
+    (session_id,) = con.execute(
+        "SELECT id FROM app.actual_sessions WHERE name = 'test-export Garmin'"
+    ).fetchone()
+    con.execute(
+        "INSERT INTO app.session_feedback (actual_session_id, text, source, trigger) "
+        "VALUES (?, 'test-export bien géré', 'agent', 'sync')",
+        [session_id],
+    )
+    con.execute(
+        "INSERT INTO app.activity_streams (actual_session_id, sample_count, t_sec) "
+        "VALUES (?, 2, [0, 1])",
+        [session_id],
+    )
+    con.close()
+    try:
+        january = {"start": date(2001, 1, 1), "end": date(2001, 1, 31)}
+        body = json.loads(data_export.build("json", **january).content)
+        [feedback] = body["tables"]["session_feedback"]
+        assert (feedback["date"], feedback["text"]) == (
+            "2001-01-10",
+            "test-export bien géré",
+        )
+        assert "activity_streams" not in body["tables"]
+        asked = json.loads(
+            data_export.build("json", names=["activity_streams"], **january).content
+        )
+        [stream] = asked["tables"]["activity_streams"]
+        assert stream["actual_session_id"] == session_id
+        later = data_export.build(
+            "json", start=date(2001, 2, 1), names=["session_feedback"]
+        ).content
+        assert json.loads(later)["tables"]["session_feedback"] == []
+    finally:
+        con = connect()
+        for table in ("session_feedback", "activity_streams"):
+            con.execute(
+                f"DELETE FROM app.{table} WHERE actual_session_id = ?", [session_id]
+            )
+        con.close()
+
+
+def test_the_settings_page_offers_exactly_what_the_server_exports():
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1] / "frontend/src/lib/dataExport.ts"
+    ).read_text(encoding="utf-8")
+    listed = re.findall(r"\{ id: '(\w+)', label: '[^']*'(, optIn: true)? \}", source)
+    names = [name for name, _ in listed]
+    assert sorted(names) == sorted(data_export.EXPORT_NAMES)
+    assert {name for name, opt_in in listed if opt_in} == data_export.OPT_IN
 
 
 def test_api_downloads_selected_tables_as_an_attachment(stored, router_client):

@@ -7,6 +7,7 @@ reactivate or unblock one. Every other account is an athlete.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -94,6 +95,24 @@ def _from_row(row: tuple) -> AppUser:
     return AppUser(*row)
 
 
+def account_hash(clerk_user_id: str) -> str:
+    """The erasure log's only identifier: Clerk ids are random, not guessable."""
+    return hashlib.sha256(clerk_user_id.encode()).hexdigest()
+
+
+def was_deleted(clerk_user_id: str) -> bool:
+    """Whether this login erased its account: it gets no fresh athlete."""
+    con = connect()
+    try:
+        row = con.execute(
+            "SELECT 1 FROM app.account_deletions WHERE account_hash=?",
+            [account_hash(clerk_user_id)],
+        ).fetchone()
+    finally:
+        con.close()
+    return row is not None
+
+
 def get_user(clerk_user_id: str) -> AppUser | None:
     con = connect()
     try:
@@ -159,7 +178,13 @@ def upsert_user(
                 )
                 legacy_owner = False
             athlete_id = OWNER_ATHLETE_ID
-            if not legacy_owner:
+            if legacy_owner:
+                # An owner who erased their account comes back to an empty athlete 1.
+                con.execute(
+                    "INSERT INTO app.athletes(id) VALUES(?) ON CONFLICT DO NOTHING",
+                    [OWNER_ATHLETE_ID],
+                )
+            else:
                 created = con.execute(
                     "INSERT INTO app.athletes(id) VALUES(nextval('app.athletes_seq')) RETURNING id"
                 ).fetchone()

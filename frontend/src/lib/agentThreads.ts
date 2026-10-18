@@ -164,6 +164,14 @@ function storageKey(athleteId: number): string {
   return athleteId === 1 ? THREADS_KEY : `${THREADS_KEY}.athlete.${athleteId}`;
 }
 
+/** Drops the athlete's conversations kept in this browser (its account was erased). */
+export function forgetThreads(athleteId: number): void {
+  localStorage.removeItem(storageKey(athleteId));
+  if (athleteId === 1) localStorage.removeItem(LEGACY_KEY);
+  const conflicts = `arete.coach.conflict.${athleteId}.`;
+  for (const key of Object.keys(localStorage)) if (key.startsWith(conflicts)) localStorage.removeItem(key);
+}
+
 export function loadThreads(athleteId = 1): LoadedThreads {
   try {
     return {

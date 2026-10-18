@@ -1,12 +1,16 @@
 """The athlete's own data, downloaded as one JSON document or a ZIP of CSV files.
 
-Only an allowlist of tables leaves the database: sessions done and planned,
-daily health metrics, strength sessions and their sets, goals, athlete facts,
-morning check-ins, evening messages and their answers, weekly reviews, plus
-the coach's journal files. Credentials never do: Strava
-tokens, push subscriptions, accounts, calendar actions and ``app.files`` (which
-holds the Garmin session tokens) are not read at all. Strava rows are included:
-this is the athlete's own download, not model input.
+Only an allowlist of tables leaves the database: sessions done and planned
+with their feedback, terrain, weather and (on request) streams, daily health
+metrics, strength sessions, sets and exercises, goals, athlete facts and their
+revisions, morning check-ins, evening messages, briefings, plan decisions,
+follow-ups, weekly reviews, settings, the game, documents' names, (on
+request) saved conversations and the coach's journal files. Credentials never do: Strava tokens, push
+subscriptions, accounts, calendar connections and actions and ``app.files``
+(which holds the Garmin session tokens) are not read at all. Neither are
+documents' contents (they stay in their chat) nor technical state: imports,
+automation checkpoints, Garmin exports and sync leases. Strava rows are
+included: this is the athlete's own download, not model input.
 
 The body is built in memory and refused past ``EXPORT_LIMIT_BYTES``, under the
 4.5 MB a Vercel function may answer: the caller narrows the date range or the
@@ -143,10 +147,98 @@ TABLES: tuple[ExportTable, ...] = (
         "week_start",
         "week_start",
     ),
+    # What a session's page shows beside it, dated by its session.
+    *(
+        ExportTable(
+            name,
+            f"SELECT s.date, t.* FROM app.visible_{name} t "
+            "JOIN app.visible_actual_sessions s ON s.id = t.actual_session_id WHERE true",
+            "s.date",
+            "s.date, t.actual_session_id",
+        )
+        for name in (
+            "session_feedback",
+            "activity_terrain",
+            "activity_weather",
+            "activity_streams",
+        )
+    ),
+    ExportTable(
+        "coach_briefings",
+        "SELECT * FROM app.visible_coach_briefings WHERE status <> 'pending'",
+        "date",
+        "date, id",
+    ),
+    ExportTable(
+        "plan_decisions",
+        "SELECT * FROM app.visible_plan_decisions WHERE true",
+        "date",
+        "date, id",
+    ),
+    ExportTable(
+        "coach_followups",
+        "SELECT * FROM app.visible_coach_followups WHERE true",
+        "requested_on",
+        "requested_on, id",
+    ),
+    ExportTable(
+        "settings",
+        "SELECT * FROM app.visible_user_settings WHERE true",
+        None,
+        "user_id",
+    ),
+    ExportTable(
+        "exercises",
+        "SELECT * FROM app.visible_exercises WHERE true",
+        None,
+        "name, id",
+    ),
+    ExportTable(
+        "athlete_fact_revisions",
+        "SELECT * FROM app.visible_athlete_fact_revisions WHERE true",
+        None,
+        "fact_id, revision",
+    ),
+    ExportTable(
+        "banister_coefficients",
+        "SELECT * FROM app.visible_banister_coefficients WHERE true",
+        None,
+        "fitted_at",
+    ),
+    # Saved conversations, as the history page reopens them.
+    ExportTable(
+        "conversations",
+        "SELECT id, title, payload, created_at, updated_at "
+        "FROM app.visible_coach_conversations WHERE true",
+        "created_at",
+        "created_at, id",
+    ),
+    # Attached documents' names and states; their content stays in the chat.
+    ExportTable(
+        "documents",
+        "SELECT id, thread_id, name, size, sha256, status, created_at "
+        "FROM app.visible_coach_documents WHERE true",
+        None,
+        "created_at, id",
+    ),
+    *(
+        ExportTable(name, f"SELECT * FROM app.visible_{name} WHERE true", None, order)
+        for name, order in (
+            ("game_profile", "id"),
+            ("game_periods", "started_at"),
+            ("game_weeks", "week_start"),
+            ("game_events", "activity_date, source_key"),
+            ("game_ledger", "created_at, id"),
+            ("game_owned", "skin"),
+        )
+    ),
 )
 
 #: Every name a caller may select, in download order.
 EXPORT_NAMES: tuple[str, ...] = (*(t.name for t in TABLES), JOURNAL)
+#: Selected only on request: one session's samples, or one saved conversation,
+#: weigh up to megabytes, so a whole history would not fit in one response.
+OPT_IN: frozenset[str] = frozenset({"activity_streams", "conversations"})
 
 
 class ExportTooLarge(Exception):
@@ -174,7 +266,7 @@ class ExportFile:
 
 def _selected(names: Sequence[str] | None) -> list[str]:
     if not names:
-        return list(EXPORT_NAMES)
+        return [n for n in EXPORT_NAMES if n not in OPT_IN]
     unknown = sorted(set(names) - set(EXPORT_NAMES))
     if unknown:
         raise ValueError(f"Tables inconnues : {', '.join(unknown)}")
