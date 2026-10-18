@@ -173,3 +173,25 @@ it('keeps an unsaved edit when another tab saves, and adopts the fields left alo
   expect(update.mock.calls[0][0].display_name).toBe('Nouveau nom');
   expect(update.mock.calls[0][0].notifications_enabled).toBe(false);
 });
+
+it('keeps quiet hours edited here and a kind another tab turned on, both in the save', async () => {
+  const prefs = DEFAULT_SETTINGS.notification_preferences;
+  const before = { ...saved, notifications_enabled: false, notification_preferences: { ...prefs, kinds: { ...prefs.kinds, post_session: false } } };
+  client.setQueryData(['settings'], before);
+  vi.mocked(settingsApi.get).mockResolvedValue(before);
+  const update = vi.spyOn(settingsApi, 'update').mockImplementation(async (body) => ({ ...body, user_id: 1 }));
+  mount('/settings?tab=coach');
+  fireEvent.change(await screen.findByLabelText('Début des heures calmes'), { target: { value: '22:15' } });
+  // Another tab accepted the post-session offer: master switch and kind on, broadcast.
+  vi.mocked(settingsApi.get).mockResolvedValue({ ...before, notifications_enabled: true, notification_preferences: { ...prefs, kinds: { ...prefs.kinds, post_session: true } } });
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['settings'] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  fireEvent.click(screen.getByRole('button', { name: /ENREGISTRER/ }));
+  await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+  const body = update.mock.calls[0][0];
+  expect(body.notification_preferences.quiet_hours?.start).toBe('22:15');
+  expect(body.notification_preferences.kinds.post_session).toBe(true);
+  expect(body.notifications_enabled).toBe(true);
+});
