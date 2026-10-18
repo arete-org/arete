@@ -385,6 +385,26 @@ date, Garmin link and game event stay, and records are recomputed.
 A skill describes how to interpret documents; planning owns creation; Garmin owns
 export. Google Calendar still requires approval through its existing HTTP/UI cards.
 
+A Garmin strength activity no Muscu log completes becomes a draft awaiting its
+loads (`strength/drafts.py`, migration 53's `app.strength_drafts`, one per
+activity). The sync opens it from Garmin's `summarizedExerciseSets`, already in
+the activity list (no extra request): names go through the exercise catalog,
+unrecognised ones stay as free text, counts become `3x10` notation; the watch
+never records kilos. Only activities of the last seven days get one on import,
+so a first full-history import does not flood the Journal; an older unlinked
+activity gets its draft when the athlete taps « Ajoute tes charges » (Journal's
+cardio list or the session page), without Garmin's names. A draft is not a
+session: only the Journal reads it, so until it is completed the Garmin activity
+alone counts (load, gamification, week facts, missed-session check, by that
+activity's own rules) and the muscle map and weekly volume have no sets from it.
+Completing it parses the notation with the grammar (no model) and saves the log
+linked to the activity in one transaction, with its game evidence under the
+settled-rewards rule of an automatic link; records follow as on any save. The
+draft row is claimed by delete-and-rewrite, since DuckDB reports a concurrent
+delete of a row as a conflict but not a concurrent update of a keyed table: a
+stale tab gets 409, never a second log. Dismissing hides a draft; asking again
+reopens it.
+
 ## Completion, transport and observability
 
 Empty conversations use fixed, page-aware starters (`frontend/src/lib/coachPrompts.ts`).

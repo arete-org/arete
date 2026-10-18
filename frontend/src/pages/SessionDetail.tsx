@@ -1,10 +1,10 @@
 import { createElement, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft, Dumbbell, Sparkles } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
 import { RpePicker } from '@/components/RpePicker';
-import { Modal, ModalHeader, Panel, RpeBadge } from '@/components/ui';
+import { Button, Modal, ModalHeader, Panel, RpeBadge } from '@/components/ui';
 import { analyticsApi, strengthApi } from '@/lib/api';
 import { chartRows, formatElapsed, intensityLabel, isFootSport } from '@/lib/activity';
 import { CHART, COLORS, HR_ZONE_COLORS } from '@/lib/chartTheme';
@@ -12,7 +12,7 @@ import { parseLocalDate } from '@/lib/dates';
 import { sportLabel } from '@/lib/fr';
 import { qk, strengthSessionsQuery } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
-import { cn, formatDurationCompact, formatPace } from '@/lib/utils';
+import { cn, formatDurationCompact, formatPace, readableError } from '@/lib/utils';
 import type {
   ActivityDetail,
   ActivityIntervals,
@@ -23,6 +23,7 @@ import type {
   ActivityWeather,
 } from '@/types';
 import { StrengthExercises } from './log/StrengthExercises';
+import { useOpenDraft } from './log/useOpenDraft';
 import { RouteTrace } from './session/RouteTrace';
 import { StreamChart } from './session/StreamChart';
 
@@ -211,7 +212,24 @@ function LinkedStrengthLog({ activityId }: { activityId: number }) {
     queryFn: () => strengthApi.getSession(logId!),
     enabled: logId !== undefined,
   });
+  const openDraft = useOpenDraft();
   const exercises = log.data?.exercises ?? [];
+  if (logs.isSuccess && logId === undefined) {
+    return (
+      <Panel title="CHARGES">
+        <p className="text-sm font-sans text-text-secondary mb-3">
+          Ta montre a compté les séries, pas les kilos. Ajoute-les pour suivre tes records et ta progression.
+        </p>
+        <Button variant="gold" strong className="min-h-11" loading={openDraft.isPending} onClick={() => openDraft.mutate(activityId)}>
+          <Dumbbell className="w-4 h-4" aria-hidden />
+          Ajoute tes charges
+        </Button>
+        {openDraft.isError && (
+          <p role="alert" className="mt-2 text-xs font-sans text-danger-red">{readableError(openDraft.error)}</p>
+        )}
+      </Panel>
+    );
+  }
   if (logId === undefined || exercises.length === 0) return null;
   return (
     <Panel title="Exercices">

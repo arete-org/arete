@@ -25,6 +25,8 @@ export const qk = {
 
   strengthSessions: ['strengthSessions'] as const,
   strengthSession: (id: number) => ['strengthSession', id] as const,
+  /** Garmin strength activities awaiting their loads. */
+  strengthDrafts: ['strengthDrafts'] as const,
   muscleStats: (days?: number) =>
     days ? (['muscleStats', days] as const) : (['muscleStats'] as const),
   garminCandidates: (sessionId: number) => ['garminCandidates', sessionId] as const,
@@ -89,6 +91,11 @@ export const strengthSessionsQuery = {
   queryFn: () => strengthApi.getSessions(200),
 };
 
+export const strengthDraftsQuery = {
+  queryKey: qk.strengthDrafts,
+  queryFn: () => strengthApi.getDrafts(),
+};
+
 /** `keys` and the dashboard, whose one answer also carries their data (Garmin state, health, goals). */
 export function invalidateWithDashboard(queryClient: QueryClient, ...keys: QueryKey[]): void {
   for (const key of [...keys, qk.dashboard()]) queryClient.invalidateQueries({ queryKey: key });
@@ -104,6 +111,7 @@ function invalidateSessionQueries(queryClient: QueryClient): void {
     qk.actual(),
     qk.matchSummary(),
     qk.strengthSessions,
+    qk.strengthDrafts,
     qk.muscleStats(),
     qk.exercises,
     qk.strengthProgress(),

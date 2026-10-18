@@ -251,6 +251,38 @@ export interface StrengthSession {
   garmin_activity_id?: number | null;
 }
 
+/** An exercise Garmin recognised in a strength activity; `exercise_id` when the catalog did too. */
+export interface StrengthDraftExercise {
+  name: string;
+  exercise_id: string | null;
+  sets: number | null;
+  reps: number | null;
+}
+
+/** A Garmin strength activity awaiting its loads: not a session until completed. */
+export interface StrengthDraft {
+  id: number;
+  /** actual_sessions.id of the Garmin activity it completes. */
+  actual_session_id: number;
+  date: string;
+  name: string | null;
+  duration_min: number | null;
+  /** 'import' (Garmin sync) or 'journal' (opened by the athlete). */
+  origin: string;
+  exercises: StrengthDraftExercise[];
+  /** The notation the completion screen opens with: one line per exercise. */
+  notation: string;
+}
+
+/** The Muscu log a completed draft became. */
+export interface DraftCompletion {
+  session_id: number;
+  message: string;
+  records: SessionRecord[];
+  unparsed_lines: string[];
+  dropped: string[];
+}
+
 export interface MuscleStat {
   muscle: string;
   /** French label, e.g. "Grands dorsaux". */

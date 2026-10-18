@@ -268,3 +268,73 @@ test('touch: the morning check-in is three taps at 375 px and then gives the pag
   await expect(card).toBeHidden();
   await expect(page.getByRole('heading', { name: 'Briefing du jour' })).toBeInViewport();
 });
+
+test('touch: a Garmin strength session gets its loads from the Journal in four interactions at 375 px', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-15T19:00:00'));
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fixture(page);
+  const draft = {
+    id: 7, actual_session_id: 41, date: '2026-10-15', name: 'Musculation', duration_min: 52, origin: 'import',
+    exercises: [
+      { name: 'Développé couché', exercise_id: 'bench_press', sets: 3, reps: 10 },
+      { name: 'Squat', exercise_id: 'back_squat', sets: 5, reps: 5 },
+    ],
+    notation: 'Développé couché 3x10\nSquat 5x5',
+  };
+  let completed = false;
+  const completions: unknown[] = [];
+  const parsed = {
+    success: true, date: draft.date, name: null, duration_min: null, overall_rpe: null, notes: null,
+    session_id: null, message: null, unparsed_lines: [], records: [],
+    exercises: [
+      { name: 'Développé couché', exercise_id: 'bench_press', exercise_matched: true, notes: null, match_score: 100, suggestions: [],
+        sets: [1, 2, 3].map((n) => ({ set_number: n, reps: 10, weight_kg: 80, is_warmup: false, is_failure: false })) },
+      { name: 'Squat', exercise_id: 'back_squat', exercise_matched: true, notes: null, match_score: 100, suggestions: [],
+        sets: [1, 2, 3, 4, 5].map((n) => ({ set_number: n, reps: 5, weight_kg: 100, is_warmup: false, is_failure: false })) },
+    ],
+  };
+  // Registered after the fixture's catch-all, so they answer first.
+  const answered = new Set(['/api/garmin/sync/ensure', '/api/coach/today', '/api/strength/drafts', '/api/strength/drafts/7/complete', '/api/strength/sessions/parse', '/api/tips/post-session']);
+  await page.route((url) => answered.has(url.pathname), (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh' } });
+    if (path === '/api/coach/today') return route.fulfill({ json: { items: [], remaining: 0, briefing: null } });
+    if (path === '/api/strength/drafts') return route.fulfill({ json: completed ? [] : [draft] });
+    if (path === '/api/strength/sessions/parse') return route.fulfill({ json: parsed });
+    if (path === '/api/tips/post-session') return route.fulfill({ json: { feedback: 'Belle séance.', highlights: [], source: 'rules' } });
+    completions.push(route.request().postDataJSON());
+    completed = true;
+    return route.fulfill({
+      json: {
+        session_id: 90, message: 'Séance complétée : 2 exercice(s)', unparsed_lines: [], dropped: [],
+        records: [{ exercise_id: 3, exercise: 'Développé couché', kind: 'weight', value: 80, previous: 75, weight_kg: 80, reps: 10, date: draft.date }],
+      },
+    });
+  });
+  await page.goto('/log');
+  const drafts = page.getByRole('region', { name: 'À COMPLÉTER (1)' });
+  await expect(drafts).toBeVisible();
+  await expect(drafts.getByText('Développé couché · Squat')).toBeVisible();
+  await noOverflow(page);
+  await page.screenshot({ path: '../.context/are-132/journal-draft-mobile.png', animations: 'disabled' });
+
+  await drafts.getByRole('button', { name: 'Ajoute tes charges' }).tap(); // 1
+  const dialog = page.getByRole('dialog');
+  const text = dialog.getByRole('textbox', { name: 'Séance en texte libre' });
+  await expect(text).toHaveValue(draft.notation);
+  await expect(dialog.getByLabel('Date')).toHaveCount(0);
+  await noOverflow(page);
+  await page.screenshot({ path: '../.context/are-132/completion-mobile.png', animations: 'disabled' });
+  await text.fill('Développé couché 3x10@80\nSquat 5x5@100'); // 2
+  await dialog.getByRole('button', { name: 'ANALYSER' }).tap(); // 3
+  await dialog.getByRole('button', { name: 'ENREGISTRER' }).tap(); // 4
+
+  await expect(dialog.getByText('SÉANCE ENREGISTRÉE')).toBeVisible();
+  await expect(dialog.getByRole('region', { name: 'Nouveaux records' })).toBeVisible();
+  expect(completions).toEqual([{ text: 'Développé couché 3x10@80\nSquat 5x5@100' }]);
+  await page.screenshot({ path: '../.context/are-132/completed-mobile.png', animations: 'disabled' });
+  // The completed draft leaves the list; its screen stays until closed.
+  await expect(drafts).toBeHidden();
+  await dialog.getByRole('button', { name: 'FERMER', exact: true }).tap();
+  await expect(page).toHaveURL(/\/log$/);
+});
