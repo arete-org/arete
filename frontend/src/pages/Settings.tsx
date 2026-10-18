@@ -43,6 +43,16 @@ type Tab = (typeof TABS)[number] | typeof ADMIN_TAB;
 type TabId = Tab['id'];
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+/** The server's values, except where the form differs from the copy it was filled from. */
+function keepEdits(form: LocalSettings, previous: UserSettings, server: LocalSettings): LocalSettings {
+  const merged = { ...server } as Record<string, unknown>;
+  const was = previous as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(form)) {
+    if (JSON.stringify(value) !== JSON.stringify(was[key])) merged[key] = value;
+  }
+  return merged as unknown as LocalSettings;
+}
+
 const isTabId = (tabs: readonly Tab[], value: string | null): value is TabId =>
   tabs.some((tab) => tab.id === value);
 
@@ -63,12 +73,14 @@ export function SettingsPage() {
 
   const [settings, setSettings] = useState<LocalSettings>(DEFAULT_SETTINGS);
 
-  // Adopt fetched settings into local form state whenever the server copy changes
+  // Adopt fetched settings into local form state whenever the server copy changes,
+  // field by field: a value edited here and not saved yet stays as typed (another
+  // tab's save, broadcast on `arete-preferences`, must not wipe it).
   const [syncedFrom, setSyncedFrom] = useState<UserSettings | null>(null);
   if (savedSettings && savedSettings !== syncedFrom) {
     setSyncedFrom(savedSettings);
     const { user_id, ...rest } = savedSettings;
-    setSettings(rest);
+    setSettings(syncedFrom ? keepEdits(settings, syncedFrom, rest) : rest);
   }
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');

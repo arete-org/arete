@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AUTH_DISABLED, AuthStateContext, type AuthState } from '@/components/auth/authState';
@@ -154,4 +154,22 @@ it.each(['pierre', 'prune'] as const)('saves %s through the settings API and res
   view.unmount();
   initializeTheme();
   expect(document.documentElement.dataset.theme).toBe(theme);
+});
+
+it('keeps an unsaved edit when another tab saves, and adopts the fields left alone', async () => {
+  const update = vi.spyOn(settingsApi, 'update').mockImplementation(async (body) => ({ ...body, user_id: 1 }));
+  mount('/settings');
+  const name = await screen.findByDisplayValue(saved.display_name);
+  fireEvent.change(name, { target: { value: 'Nouveau nom' } });
+  // Another tab saved the notifications (PushOffer) and broadcast a refresh.
+  vi.mocked(settingsApi.get).mockResolvedValue({ ...saved, notifications_enabled: false });
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['settings'] });
+    await new Promise((resolve) => setTimeout(resolve, 0)); // React Query notifies on the next tick
+  });
+  expect((screen.getByDisplayValue('Nouveau nom') as HTMLInputElement).value).toBe('Nouveau nom');
+  fireEvent.click(screen.getByRole('button', { name: /ENREGISTRER/ }));
+  await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+  expect(update.mock.calls[0][0].display_name).toBe('Nouveau nom');
+  expect(update.mock.calls[0][0].notifications_enabled).toBe(false);
 });
