@@ -265,6 +265,14 @@ Planning ne possède aucune variante de navigation propre à sa page.
   appareil, absente si l’appareil est abonné ; sur iPhone hors app installée,
   elle mène d’abord au guide d’installation. Les zones musculaires peuvent
   être consultées au toucher, sans nécessiter un survol.
+- Les annonces de l’application (`AppNotices`) restent en haut, sous la barre de
+  navigation sur bureau : connexion perdue ou serveur injoignable, puis « Nouvelle
+  version disponible » avec « Recharger ». Surfaces `.glass-panel`, contrôles
+  `ui/Button`, croix de 44 px nommée ; une annonce masquée revient à la panne suivante.
+  Une adresse inconnue affiche « Page introuvable » et un lien vers l’accueil.
+- Un statut ne repose jamais sur la seule couleur : récupération, VFC et stress
+  ont un mot à côté de leur valeur. Les titres de panneaux sont des `h2` sous le
+  `h1` de la page ; chaque bouton à icône seule porte un `aria-label`.
 
 Validation : `mobile-ux.spec.ts` utilise Chromium et WebKit en mode tactile à
 320, 390 et 430 px, avec zones de sécurité et clavier simulés. Les scénarios
