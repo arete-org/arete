@@ -334,7 +334,13 @@ def write_daily_briefing() -> str:
     logger.info("Daily briefing: %s", briefing.source)
     from arete.services.notifications import first_sentence, notify
 
-    notify("Briefing du coach", first_sentence(briefing.text), "/", kind="briefing")
+    notify(
+        "Briefing du coach",
+        first_sentence(briefing.text),
+        "/",
+        kind="briefing",
+        reference={"kind": "briefing", "id": briefing.id},
+    )
     return briefing.source
 
 
@@ -409,7 +415,11 @@ def announce_review(today: date | None = None, *, fallback: bool = False) -> str
     from arete.services.notifications import first_sentence, notify
 
     result = notify(
-        REVIEW_TITLE, first_sentence(review.text), REVIEW_URL, kind="weekly_review"
+        REVIEW_TITLE,
+        first_sentence(review.text),
+        REVIEW_URL,
+        kind="weekly_review",
+        reference={"kind": "review", "id": review.id},
     )
     return f"{written}; {result.skipped_reason or f'{result.sent} sent'}"
 
@@ -926,7 +936,13 @@ def replan_missed_evening(started: float) -> str:
         if not written:
             return "nothing missed"
         title, body = missed_sessions.announcement(written)
-        result = notify(title, body, "/", kind="adapted_session")
+        result = notify(
+            title,
+            body,
+            "/",
+            kind="adapted_session",
+            reference={"kind": "proposal", "id": written[0].id},
+        )
         push = result.skipped_reason or f"{result.sent} sent"
         return f"{len(written)} proposed; push: {push}"
     except Exception as e:  # noqa: BLE001 - background job must not die
@@ -1022,8 +1038,29 @@ def write_evening_message(
         local = utc_now().astimezone(zone_of(prefs.get("timezone")))
         if local.hour < evening_message.start_hour(prefs):
             return "not yet"
-        if (reason := evening_message.unreachable(prefs)) is not None:
+        from arete.services import coaching_attention
+
+        coordinated = coaching_attention.enabled(prefs)
+        if (
+            not coordinated
+            and (reason := evening_message.unreachable(prefs)) is not None
+        ):
             return f"skipped: {reason}"
+        # Reuse the requested RPE and its existing answer owner; no second model
+        # request or free-text answer channel for the same training question.
+        followup = coaching_attention.pending_effort() if coordinated else None
+        if followup is not None:
+            result = notify(
+                "Chiron attend ton ressenti",
+                followup.title,
+                followup.url,
+                kind="post_session",
+                reference={
+                    "kind": "followup",
+                    "id": int(followup.source_ref.split(":")[1]),
+                },
+            )
+            return f"existing followup; push: {result.skipped_reason or f'{result.sent} sent'}"
         day = local.date()
         held = evening_message.get_for_day(day)
         stopped = held is not None and held.status == "pending"
@@ -1059,7 +1096,11 @@ def write_evening_message(
         return "already claimed"
     if message.status != "ok":
         return f"failed: {message.error}"
-    result = notify(*evening_message.announcement(message), kind="evening")
+    result = notify(
+        *evening_message.announcement(message),
+        kind="evening",
+        reference={"kind": "evening", "id": message.id},
+    )
     return f"written; push: {result.skipped_reason or f'{result.sent} sent'}"
 
 

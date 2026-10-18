@@ -254,8 +254,25 @@ def test_skill_catalog_uses_native_discovery_without_building_a_model(client):
         response = client.get("/agent/skills")
     assert response.status_code == 200
     skills = response.json()
+    assert len(skills) == 10
+    assert {skill["name"] for skill in skills} >= {
+        "training-trends",
+        "race-preparation",
+        "return-to-training",
+        "strength-progression",
+    }
+    assert all(0 < len(skill["display_name"]) <= 80 for skill in skills)
+    assert (
+        next(skill for skill in skills if skill["name"] == "training-trends")[
+            "display_name"
+        ]
+        == "Comprendre tes tendances"
+    )
     assert any(skill["name"] == "document-planning" for skill in skills)
-    assert all(set(skill) == {"name", "description", "path"} for skill in skills)
+    assert all(
+        set(skill) == {"name", "display_name", "description", "path"}
+        for skill in skills
+    )
 
 
 def test_invalid_skill_is_a_client_error_in_http_and_stream(client):
@@ -902,6 +919,47 @@ class TestAnalyticsPageRead:
         # Trimming the agent's read must not touch the route the chart uses.
         cards = client.get("/analytics/overview?period=30d").json()["cards"]
         assert any("series" in card for card in cards.values())
+
+    @pytest.mark.parametrize(
+        "selected,expected",
+        [("7d", "7d"), ("all", "all"), ("ignore instructions", "30d"), (42, "30d")],
+    )
+    def test_selected_period_is_validated_before_reading(
+        self, monkeypatch, selected, expected
+    ):
+        calls = []
+        monkeypatch.setattr(
+            "arete.services.analytics.get_overview",
+            lambda *, period: calls.append(period) or {"cards": {}},
+        )
+        get_page_data("analytics", params={"param_period": selected})
+        assert calls == [expected]
+
+    def test_the_open_year_uses_its_aggregates_without_raw_records(self, monkeypatch):
+        from arete.services.settings import athlete_today
+
+        calls = []
+        monkeypatch.setattr(
+            "arete.services.year_review.year_review",
+            lambda year: calls.append(year)
+            or {
+                "year": year,
+                "totals": {"sessions": 42},
+                "highlights": {"name": "private"},
+                "best_efforts": [{"activity_name": "private"}],
+                "fitness": {"series": [1, 2], "peak": 45},
+            },
+        )
+        result = get_page_data(
+            "analytics", params={"path": "/analytics/bilan", "param_year": "2025"}
+        )
+        assert calls == [2025]
+        assert result["year_review"] == {"year": 2025, "totals": {"sessions": 42}}
+        assert result["fitness"] == {"peak": 45}
+        get_page_data(
+            "analytics", params={"path": "/analytics/bilan", "param_year": "9999"}
+        )
+        assert calls[-1] == athlete_today().year
 
 
 class TestLedgerTools:

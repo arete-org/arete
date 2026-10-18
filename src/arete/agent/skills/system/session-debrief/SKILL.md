@@ -1,5 +1,7 @@
 ---
 name: session-debrief
+metadata:
+  display_name: Faire le bilan d’une séance
 description: Débriefer une séance réalisée selon son sport et son ressenti, sans confondre mesure et interprétation.
 ---
 

@@ -1,5 +1,7 @@
 ---
 name: coaching-follow-up
+metadata:
+  display_name: Suivre un conseil
 description: Revenir sur un conseil ou une adaptation et utiliser le ressenti déclaré pour les prochains conseils.
 ---
 

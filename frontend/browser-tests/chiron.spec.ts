@@ -196,7 +196,7 @@ test('the existing opt-out keeps its composer and uses the shared coach presence
   const stream = await fixture(page, false);
   try {
     const panel = await openCoach(page);
-    await expect(panel.getByRole('heading', { name: 'Coach Arete', exact: true })).toBeVisible();
+    await expect(panel.getByRole('heading', { name: 'Chiron', exact: true })).toBeVisible();
     await panel.getByLabel('Message au coach').fill('Ma forme ?');
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await expect(panel.locator('.activity-presence')).toBeVisible();
@@ -364,7 +364,7 @@ async function chooseDisplay(panel: ReturnType<Page['getByRole']>, label: string
   await panel.getByRole('button', { name: 'Options du coach' }).click();
   // The selected radio closes its popover, so assert the resulting panel mode.
   await panel.getByRole('radio', { name: label, exact: true }).click();
-  await expect(panel).toHaveAttribute('data-display', label === 'Chat flottant' ? 'floating' : 'sidebar');
+  await expect(panel).toHaveAttribute('data-display', label === 'Chat flottant' ? 'floating' : label === 'Conversation élargie' ? 'expanded' : 'sidebar');
 }
 
 test('floating chat grows with SSE, caps its height and respects reading older messages', async ({ page }) => {
@@ -422,7 +422,7 @@ test('display opt-in and opt-out preserve a live stream, input node, draft and f
     await expect.poll(() => stream.requests()).toBe(1);
     await input.fill('Garde mon dimanche libre.');
     const node = await input.elementHandle();
-    for (const label of ['Chat flottant', 'Panneau latéral classique', 'Chat flottant']) {
+    for (const label of ['Chat flottant', 'Conversation élargie', 'Panneau latéral classique', 'Chat flottant']) {
       await chooseDisplay(panel, label);
       await expect(input).toHaveValue('Garde mon dimanche libre.');
       expect(await node!.evaluate(el => el === document.querySelector('[aria-label="Message au coach"]'))).toBe(true);

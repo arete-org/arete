@@ -208,6 +208,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unified-experience-previews
+          path: |
+            .context/arete-*.png
+            .context/planning-a-*.png
+            .context/briefing-*.png
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: browser-failures

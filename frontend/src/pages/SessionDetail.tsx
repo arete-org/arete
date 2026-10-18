@@ -1,10 +1,10 @@
-import { createElement, type ReactNode } from 'react';
+import { createElement, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
 import { RpePicker } from '@/components/RpePicker';
-import { Panel, RpeBadge } from '@/components/ui';
+import { Modal, ModalHeader, Panel, RpeBadge } from '@/components/ui';
 import { analyticsApi, strengthApi } from '@/lib/api';
 import { chartRows, formatElapsed, intensityLabel, isFootSport } from '@/lib/activity';
 import { CHART, COLORS, HR_ZONE_COLORS } from '@/lib/chartTheme';
@@ -54,13 +54,13 @@ export function SessionDetailPage() {
 
   return (
     <div className="page-shell bg-void">
-      <div className="page-content space-y-4 sm:space-y-6">
+      <div className="page-content analytics-page">
         <Link
           to="/log?tab=cardio"
-          className="inline-flex items-center gap-1 text-xs font-sans text-text-muted hover:text-neon-cyan"
+          className="inline-flex min-h-11 items-center gap-1 text-sm font-sans text-text-muted hover:text-neon-cyan"
         >
           <ArrowLeft className="w-4 h-4" />
-          JOURNAL
+          Journal
         </Link>
         {sessionId === null ? (
           <EmptyState message="SÉANCE INTROUVABLE" />
@@ -99,6 +99,7 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
       <header className="flex items-start gap-3 animate-fade-down">
         {icon}
         <div className="min-w-0 flex-1">
+          <p className="page-eyebrow">Ta séance en détail</p>
           <h1 className="page-title break-words">
             {session.name || sportLabel(session.sport)}
           </h1>
@@ -134,7 +135,7 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
           title={
             <span className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
-              {detail.feedback.source === 'agent' ? 'LE COACH' : 'CALCULÉ À PARTIR DE LA SÉANCE'}
+              {detail.feedback.source === 'agent' ? 'Le regard de Chiron' : 'Calculé à partir de la séance'}
             </span>
           }
           titleTone="text-neon-cyan"
@@ -144,13 +145,13 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
       )}
 
       {session.notes && (
-        <Panel title="NOTES">
+        <Panel title="Notes">
           <p className="text-sm font-sans text-text-secondary whitespace-pre-line">{session.notes}</p>
         </Panel>
       )}
 
       {rows.length > 0 ? (
-        <Panel title="AU FIL DE LA SÉANCE">
+        <Panel title="Au fil de la séance">
           <div className="space-y-4">
             <StreamChart rows={rows} dataKey="hr" label="Fréquence cardiaque (bpm)" color={CHART.red} format={(v) => `${Math.round(v)}`} />
             <StreamChart
@@ -174,26 +175,25 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
       )}
 
       {(detail.metrics || detail.intervals) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="analysis-grid">
           {detail.metrics && <Analysis metrics={detail.metrics} foot={foot} />}
           {detail.intervals && <Intervals intervals={detail.intervals} foot={foot} />}
         </div>
       )}
 
       {(climbs || gap || detail.weather) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="analysis-grid">
           {detail.terrain && (climbs || gap) && <Terrain terrain={detail.terrain} />}
           {detail.weather && <Weather weather={detail.weather} />}
         </div>
       )}
 
-      {detail.laps.length > 0 && <LapsTable laps={detail.laps} foot={foot} />}
-      {detail.splits.length > 0 && <SplitsTable splits={detail.splits} />}
+      {(detail.laps.length > 0 || detail.splits.length > 0) && <SessionBreakdown laps={detail.laps} splits={detail.splits} foot={foot} />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+      <div className="analysis-grid">
         {detail.zones && <Zones zones={detail.zones} />}
         {detail.route && (
-          <Panel title="TRACÉ">
+          <Panel title="Tracé">
             <RouteTrace route={detail.route} />
           </Panel>
         )}
@@ -214,7 +214,7 @@ function LinkedStrengthLog({ activityId }: { activityId: number }) {
   const exercises = log.data?.exercises ?? [];
   if (logId === undefined || exercises.length === 0) return null;
   return (
-    <Panel title="EXERCICES">
+    <Panel title="Exercices">
       <StrengthExercises exercises={exercises} />
       <Link
         to={`/log?session=${logId}`}
@@ -228,9 +228,9 @@ function LinkedStrengthLog({ activityId }: { activityId: number }) {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="p-2 sm:p-3 bg-abyss rounded border border-text-muted/20 min-w-0">
-      <div className="text-[10px] sm:text-xs font-sans text-text-muted uppercase truncate">{label}</div>
-      <div className="text-base sm:text-lg font-sans text-text-primary mt-0.5 truncate">{value}</div>
+    <div className="analysis-card min-w-0">
+      <div className="text-xs text-text-muted">{label}</div>
+      <div className="text-xl sm:text-2xl font-semibold text-text-primary mt-2 tabular-nums break-words">{value}</div>
       {sub && <div className="text-[11px] sm:text-xs font-sans text-neon-gold truncate">{sub}</div>}
     </div>
   );
@@ -250,12 +250,12 @@ function Row({ label, value, hint }: { label: string; value: ReactNode; hint?: s
 
 function Analysis({ metrics, foot }: { metrics: ActivityMetrics; foot: boolean }) {
   return (
-    <Panel title="ANALYSE">
+    <Panel title="Analyse">
       {metrics.decoupling_pct !== undefined && (
         <Row
           label="Découplage cardiaque"
           value={pct(metrics.decoupling_pct)}
-          hint="Efficacité (vitesse par battement) perdue en 2e moitié. Au-delà de 5 %, l'endurance a cédé."
+          hint="Évolution de la vitesse par battement en seconde moitié. À interpréter avec le terrain, la chaleur et la durée."
         />
       )}
       {metrics.hr_drift_pct !== undefined && (
@@ -295,7 +295,7 @@ function Analysis({ metrics, foot }: { metrics: ActivityMetrics; foot: boolean }
 function Terrain({ terrain }: { terrain: ActivityTerrain }) {
   const effort = terrain.grade_factor !== null ? Math.round((terrain.grade_factor - 1) * 100) : null;
   return (
-    <Panel title="PENTE ET MONTÉE">
+    <Panel title="Pente et montée">
       {terrain.gap_sec_km !== null && (
         <Row
           label="Allure ajustée à la pente (GAP)"
@@ -317,7 +317,7 @@ function Weather({ weather }: { weather: ActivityWeather }) {
   const temp = weather.temperature_c;
   const altitude = weather.start_altitude_m;
   return (
-    <Panel title="MÉTÉO AU DÉPART">
+    <Panel title="Météo au départ">
       {temp !== null && (
         <Row
           label="Température"
@@ -341,7 +341,7 @@ function Weather({ weather }: { weather: ActivityWeather }) {
 
 function Intervals({ intervals, foot }: { intervals: ActivityIntervals; foot: boolean }) {
   return (
-    <Panel title="FRACTIONNÉ DÉTECTÉ">
+    <Panel title="Fractionné détecté">
       <p className="text-sm font-sans text-text-secondary mb-3">
         {intervals.count} × {formatElapsed(intervals.work_avg_sec)}
         {intervals.rest_avg_sec ? ` · récup ${formatElapsed(intervals.rest_avg_sec)}` : ''}
@@ -381,10 +381,23 @@ function Intervals({ intervals, foot }: { intervals: ActivityIntervals; foot: bo
   );
 }
 
+function SessionBreakdown({ laps, splits, foot }: { laps: ActivityLap[]; splits: ActivitySplit[]; foot: boolean }) {
+  const [tab, setTab] = useState<'laps' | 'splits'>(laps.length ? 'laps' : 'splits');
+  return <section className="space-y-4" aria-label="Détail des tours et kilomètres">
+    <div className="flex gap-2" role="group" aria-label="Découpage de la séance">
+      {laps.length > 0 && <button type="button" className="analysis-tab" aria-pressed={tab === 'laps'} onClick={() => setTab('laps')}>Tours · {laps.length}</button>}
+      {splits.length > 0 && <button type="button" className="analysis-tab" aria-pressed={tab === 'splits'} onClick={() => setTab('splits')}>Kilomètres · {splits.length}</button>}
+    </div>
+    {tab === 'laps' ? <LapsTable laps={laps} foot={foot} /> : <SplitsTable splits={splits} />}
+  </section>;
+}
+
 function LapsTable({ laps, foot }: { laps: ActivityLap[]; foot: boolean }) {
+  const [selected, setSelected] = useState<ActivityLap | null>(null);
   const hasIntensity = laps.some((lap) => lap.intensity !== null);
   return (
-    <Panel title={`TOURS (${laps.length})`}>
+    <>
+    <Panel title={`Tours (${laps.length})`}>
       <div className="overflow-x-auto">
         <table className="w-full text-xs font-sans whitespace-nowrap">
           <thead className="text-text-muted">
@@ -402,7 +415,7 @@ function LapsTable({ laps, foot }: { laps: ActivityLap[]; foot: boolean }) {
           <tbody className="text-text-primary">
             {laps.map((lap) => (
               <tr key={lap.n} className="border-t border-text-muted/10">
-                <td className="py-1 pr-3">{lap.n}</td>
+                <td className="py-1 pr-3"><button type="button" className="min-h-11 min-w-11 text-neon-cyan underline" aria-label={`Détail du tour ${lap.n}`} onClick={() => setSelected(lap)}>{lap.n}</button></td>
                 {hasIntensity && <td className="py-1 pr-3 text-text-secondary">{intensityLabel(lap.intensity)}</td>}
                 <td className="py-1 pr-3">{formatElapsed(lap.duration_sec)}</td>
                 <td className="py-1 pr-3">{km(lap.distance_m)}</td>
@@ -418,12 +431,24 @@ function LapsTable({ laps, foot }: { laps: ActivityLap[]; foot: boolean }) {
         </table>
       </div>
     </Panel>
+    <Modal open={selected !== null} onClose={() => setSelected(null)} className="max-w-md p-6">
+      <ModalHeader title={`Tour ${selected?.n ?? ''}`} onClose={() => setSelected(null)} />
+      {selected && <div className="mt-4">
+        {selected.intensity !== null && <Row label="Type" value={intensityLabel(selected.intensity)} />}
+        <Row label="Durée" value={formatElapsed(selected.duration_sec)} />
+        <Row label="Distance" value={km(selected.distance_m)} />
+        <Row label={foot ? 'Allure' : 'Vitesse'} value={foot ? pace(selected.pace_sec_km) : selected.speed_mps ? `${(selected.speed_mps * 3.6).toFixed(1)} km/h` : '—'} />
+        <Row label="FC moyenne / maximale" value={`${selected.avg_hr ?? '—'} / ${selected.max_hr ?? '—'} bpm`} />
+        <Row label="Cadence" value={selected.cadence == null ? '—' : `${selected.cadence} ${foot ? 'pas/min' : 'tr/min'}`} />
+      </div>}
+    </Modal>
+    </>
   );
 }
 
 function SplitsTable({ splits }: { splits: ActivitySplit[] }) {
   return (
-    <Panel title="KILOMÈTRES">
+    <Panel title="Kilomètres">
       <div className="overflow-x-auto">
         <table className="w-full text-xs font-sans whitespace-nowrap">
           <thead className="text-text-muted">
@@ -456,7 +481,7 @@ function Zones({ zones }: { zones: NonNullable<ActivityDetail['zones']> }) {
   const values = [zones.z1, zones.z2, zones.z3, zones.z4, zones.z5];
   const total = values.reduce((a, b) => a + b, 0) || 1;
   return (
-    <Panel title="ZONES CARDIAQUES">
+    <Panel title="Zones cardiaques">
       <div className="flex h-3 rounded overflow-hidden gap-0.5 mb-3" aria-hidden>
         {values.map((sec, i) =>
           sec > 0 ? (

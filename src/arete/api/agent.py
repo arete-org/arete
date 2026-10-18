@@ -61,6 +61,7 @@ router.include_router(conversations_router)
 
 class SystemSkillOut(BaseModel):
     name: str
+    display_name: str = Field(min_length=1, max_length=80)
     description: str
     path: str
 

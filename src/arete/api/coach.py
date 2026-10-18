@@ -1,11 +1,18 @@
 """Coaching cards: authoritative reads and revision-checked athlete responses."""
 
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from arete.services import coach_followup, coach_today, evening_message, plan_adaptation
+from arete.services import (
+    coach_followup,
+    coach_today,
+    evening_message,
+    plan_adaptation,
+    planning,
+)
 
 router = APIRouter(prefix="/coach", tags=["coach"])
 
@@ -33,6 +40,35 @@ class EveningAnswer(BaseModel):
     text: str = Field(min_length=1, max_length=evening_message.MAX_ANSWER_CHARS)
 
 
+class ChangeSetResponse(BaseModel):
+    revision: int = Field(ge=1)
+    operation_id: UUID
+
+
+@router.post("/plan-changes")
+def preview_changes(body: planning.PlanChangeSet):
+    return _call(lambda: planning.preview_plan_changes(body))
+
+
+@router.get("/plan-changes/{identifier}")
+def read_changes(identifier: UUID):
+    return _call(lambda: planning.get_plan_changes(str(identifier)))
+
+
+@router.post("/plan-changes/{identifier}/apply")
+def apply_changes(identifier: UUID, body: ChangeSetResponse):
+    return _call(
+        lambda: planning.apply_plan_changes(
+            str(identifier), body.revision, str(body.operation_id)
+        )
+    )
+
+
+@router.post("/plan-changes/{identifier}/dismiss")
+def dismiss_changes(identifier: UUID, body: ChangeSetResponse):
+    return _call(lambda: planning.dismiss_plan_changes(str(identifier), body.revision))
+
+
 def _call(operation):
     try:
         return operation()
@@ -45,6 +81,13 @@ def _call(operation):
 @router.get("/today")
 def today():
     return coach_today.today()
+
+
+@router.get("/attention")
+def attention():
+    from arete.services import coaching_attention
+
+    return _call(coaching_attention.projection)
 
 
 @router.post("/prepare")

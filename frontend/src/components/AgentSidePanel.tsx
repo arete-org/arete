@@ -2,7 +2,7 @@ import { AutomationReview } from './agent/AutomationReview';
 import type { CoachDisplay } from '@/hooks/useCoachDisplay';
 import { CoachDisplayOptions } from './agent/CoachDisplayOptions';
 import { CoachMemory, MemoryReceipt } from './agent/CoachMemory';
-import { CoachReferenceCard } from './agent/CoachReferenceCard';
+import { CoachReferenceCard, FollowupReference, ProposalReference } from './agent/CoachReferenceCard';
 import { BriefingDiscussion } from './agent/BriefingDiscussion';
 import { OnboardingContext } from './agent/OnboardingContext';
 import { EveningDiscussion } from './agent/EveningDiscussion';
@@ -140,7 +140,7 @@ export function AgentSidePanel({
   const [showMemory, setShowMemory] = useState(false);
   const { data: preference } = useGamePreference();
   const rpg = preference?.enabled === true;
-  const [expanded, setExpanded] = useState(false);
+  const expanded = display === 'expanded';
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const coach = useCoachThreads(panelContext, true);
@@ -260,8 +260,9 @@ export function AgentSidePanel({
       onDrop={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); dragDepth.current = 0; setDragging(false); if (!busy) attachmentsRef.current?.upload(Array.from(event.dataTransfer.files)); }}
       id="coach-panel"
       data-display={display}
+      data-context={reference?.kind === 'briefing' || reference?.kind === 'onboarding' || reference?.kind === 'evening' || reference?.kind === 'followup' || reference?.kind === 'proposal' ? 'attached' : 'page'}
       data-view={showMemory || showHistory ? 'auxiliary' : 'conversation'}
-      className={cn("coach-panel fixed right-0 z-40 flex w-full flex-col border-l border-text-muted/20 shadow-2xl", rpg ? 'bg-void' : 'bg-abyss', !floating && rpg && expanded ? "max-w-none md:px-[max(24px,calc((100vw-800px)/2))]" : "max-w-[520px]")}
+      className={cn("coach-panel fixed right-0 z-40 flex w-full flex-col border-l border-text-muted/20 shadow-2xl", rpg ? 'bg-void' : 'bg-abyss', expanded ? "max-w-none" : "max-w-[520px]")}
       role="complementary"
       aria-label="Coach IA"
     >
@@ -276,11 +277,11 @@ export function AgentSidePanel({
           <AreteMark size={36} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="coach-title text-sm font-semibold">{rpg ? 'Chiron' : 'Coach Arete'}</h2>
+          <h2 className="coach-title text-sm font-semibold">Chiron</h2>
           {rpg ? <button onClick={() => setShowHistory(true)} aria-label="Changer de conversation" className="mt-0.5 flex max-w-full items-center gap-1 text-[11px] text-text-muted hover:text-text-primary"><span className="truncate">{active.title}</span><ChevronDown className="size-3 shrink-0" /></button> : <p className="mt-0.5 text-[11px] text-text-muted">{page}</p>}
         </div>
         <button className="min-h-11 rounded px-2 text-xs text-text-muted hover:text-text-primary" aria-label="Ce que Chiron sait de moi" aria-expanded={showMemory} onClick={() => { setShowMemory(value => !value); setShowHistory(false); }}>Mémoire</button>
-        {rpg && <button aria-label={expanded ? 'Réduire la conversation' : 'Agrandir la conversation'} onClick={() => setExpanded(!expanded)} className="ml-auto hidden md:flex size-11 items-center justify-center text-text-muted">{expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>}
+        {onDisplayChange && <button aria-label={expanded ? 'Réduire la conversation' : 'Agrandir la conversation'} onClick={() => onDisplayChange(expanded ? 'sidebar' : 'expanded')} className="ml-auto hidden md:flex size-11 items-center justify-center text-text-muted">{expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>}
         <button
           onClick={() => { setShowHistory((v) => !v); setShowMemory(false); }}
           className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-text-muted/10"
@@ -408,9 +409,14 @@ export function AgentSidePanel({
             }}
             className="coach-thread min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6"
           >
-            {reference?.kind === 'briefing' && <BriefingDiscussion key={reference.id} id={reference.id} />}
-            {reference?.kind === 'onboarding' && <OnboardingContext key={active.id} />}
-            {reference?.kind === 'evening' && <EveningDiscussion key={reference.id} id={reference.id} />}
+            <div className="coach-reference-context">
+              {reference?.kind === 'followup' && <FollowupReference key={reference.id} id={reference.id} />}
+              {reference?.kind === 'proposal' && <ProposalReference key={reference.id} id={reference.id} />}
+              {reference?.kind === 'briefing' && <BriefingDiscussion key={reference.id} id={reference.id} />}
+              {reference?.kind === 'onboarding' && <OnboardingContext key={active.id} />}
+              {reference?.kind === 'evening' && <EveningDiscussion key={reference.id} id={reference.id} />}
+            </div>
+            <div className="coach-messages min-w-0">
             {!messages.length && reference?.kind !== 'briefing' && reference?.kind !== 'evening' && (
               <div className="coach-empty mx-auto mt-10 max-w-sm">
                 {!floating && <AreteMark size={48} />}
@@ -481,6 +487,7 @@ export function AgentSidePanel({
                   )}
                 </article>
               ))}
+            </div>
             </div>
           </div>
           {!following && (

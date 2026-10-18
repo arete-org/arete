@@ -44,7 +44,15 @@ def publish(key, kind, title, body, url, reference=None):
     identifier = record(key, kind, title, body, url, reference)
     if identifier:
         try:
-            result = notify(title, body, url, kind=kind, persist=False).to_dict()
+            result = notify(
+                title,
+                body,
+                url,
+                kind=kind,
+                persist=False,
+                event_key=key,
+                reference=reference,
+            ).to_dict()
         except Exception as exc:
             # The inbox item and mission already committed. Delivery is separate
             # and is never retried implicitly after an ambiguous provider response.

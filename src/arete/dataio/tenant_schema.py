@@ -12,6 +12,7 @@ import re
 import duckdb
 
 from arete.dataio.automation_schema import TABLES as AUTOMATION_TABLES
+from arete.dataio.coaching_coordination_schema import TABLES as COORDINATION_TABLES
 
 ATHLETE_SQL = "getvariable('arete_athlete_id')"
 LEGACY_OWNERS = frozenset(
@@ -34,6 +35,7 @@ LEGACY_OWNERS = frozenset(
 PRIVATE_TABLES = (
     "coach_conversations",
     *AUTOMATION_TABLES,
+    *COORDINATION_TABLES,
     *sorted(LEGACY_OWNERS),
     "exercises",
     "session_exercises",
@@ -103,6 +105,7 @@ def owner_column(table: str) -> str:
 def migrate(con: duckdb.DuckDBPyConnection) -> None:
     """Rebuild atomically: DuckDB cannot add NOT NULL after updating indexed rows."""
     from arete.dataio.automation_schema import DDL as automation_ddl
+    from arete.dataio.coaching_coordination_schema import DDL as coordination_ddl
     from arete.dataio.coaching_schema import DDL as coaching_ddl
     from arete.dataio.conversation_schema import DDL as conversation_ddl
     from arete.dataio.mirror import DDL as files_ddl
@@ -113,6 +116,7 @@ def migrate(con: duckdb.DuckDBPyConnection) -> None:
         con.execute(automation_ddl)
         con.execute(conversation_ddl)
         con.execute(coaching_ddl)
+        con.execute(coordination_ddl)
         con.execute(files_ddl)
         con.execute(challenges_ddl)
         for table in PRIVATE_TABLES:

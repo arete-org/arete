@@ -1,5 +1,7 @@
 ---
 name: training-adjustment
+metadata:
+  display_name: Adapter ton entraînement
 description: Préparer un ajustement du planning à partir du réalisé, des contraintes et de mesures datées.
 ---
 

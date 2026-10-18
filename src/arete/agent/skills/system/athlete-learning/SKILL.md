@@ -1,5 +1,7 @@
 ---
 name: athlete-learning
+metadata:
+  display_name: Mieux te connaître
 description: Retenir une préférence ou contrainte, distinguer une hypothèse, corriger ou oublier un souvenir.
 ---
 

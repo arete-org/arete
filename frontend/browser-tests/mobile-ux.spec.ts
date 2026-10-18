@@ -56,11 +56,12 @@ for (const width of [320, 390, 430]) {
     await noOverflow(page);
     await page.locator('svg[aria-label="Silhouette Face"] g').filter({ has: page.locator('title', { hasText: 'Pectoraux' }) }).locator('path').first().tap();
     await heading.tap();
-    await expect(page.getByText('Pectoraux', { exact: true })).toBeVisible();
+    await expect(page.locator('[aria-live="polite"]').getByText('Pectoraux', { exact: true })).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const content = (await page.locator('.page-shell').boundingBox())!;
     const bubble = (await page.getByRole('button', { name: 'Demander à Chiron' }).boundingBox())!;
-    expect(content.y + content.height).toBeLessThanOrEqual(bubble.y);
+    // WebKit rounds scroll offsets to device pixels; allow one CSS pixel at the boundary.
+    expect(content.y + content.height).toBeLessThanOrEqual(bubble.y + 1);
     await page.evaluate(() => window.scrollTo(0, 350));
     await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(100);
     const position = await page.evaluate(() => scrollY);
@@ -90,7 +91,7 @@ for (const width of [320, 390, 430]) {
     await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(position, 0);
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `../.context/mobile-journal-${width}-${info.project.name}.png` });
-    await page.getByRole('button', { name: 'CARDIO', exact: true }).tap();
+    await page.getByRole('button', { name: 'Cardio', exact: true }).tap();
     await entry.tap();
     await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Fermer' }).tap();

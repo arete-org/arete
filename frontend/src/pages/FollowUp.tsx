@@ -5,6 +5,8 @@ import { Button } from '@/components/ui';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CoachingAttention } from '@/components/agent/CoachingAttention';
+import { useCoachingAttention } from '@/hooks/useCoachingAttention';
 import { NoticeActions } from '@/components/AutomationInbox';
 import { automationApi, automationsKey, inboxKey, scheduleLabel, stateLabel, type Automation, type Definition, type Trigger } from '@/lib/automations';
 import { coachApi, coachTodayKey, discussWithCoach } from '@/lib/coachToday';
@@ -70,8 +72,8 @@ function AutomationList() {
   const action = useMutation({ mutationFn: async ({ item, kind }: { item: Automation; kind: 'active' | 'paused' | 'delete' }) => { if (kind === 'delete') await automationApi.remove(item); else await automationApi.state(item, kind); }, onSuccess: () => client.invalidateQueries({ queryKey: automationsKey }) });
   if (form) return <AutomationForm key={form.item?.id ?? form.definition.title} initial={form.definition} item={form.item} close={() => setForm(null)} />;
   return <div className="suivi-stack">
-    <Button strong className="suivi-primary justify-self-start" onClick={() => setForm({ definition: { title: '', mission: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, trigger: { kind: 'daily', time: '08:00', weekdays: [] } } })}>Créer une automatisation</Button>
-    {query.isPending && <p role="status">Chargement des automatisations…</p>}<ErrorText error={query.error ?? action.error} />
+    <Button strong className="suivi-primary justify-self-start" onClick={() => setForm({ definition: { title: '', mission: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, trigger: { kind: 'daily', time: '08:00', weekdays: [] } } })}>Créer une routine</Button>
+    {query.isPending && <p role="status">Chargement des routines…</p>}<ErrorText error={query.error ?? action.error} />
     {query.data?.items.map(item => <article className="suivi-row" key={item.id}>
       <div className="min-w-0 flex-1"><h2>{item.title}</h2><p className="suivi-note">{scheduleLabel(item.trigger)} · {item.timezone}</p><p className="suivi-note">{stateLabel[item.state]}{item.next_due_at ? ` · ${new Date(item.next_due_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}` : ''}</p></div>
       {item.state === 'proposed' && <Button size="sm" strong disabled={action.isPending} onClick={() => action.mutate({ item, kind: 'active' })}>Activer</Button>}
@@ -111,15 +113,26 @@ export function FollowUpPage() {
     const timer = window.setTimeout(() => discussWithCoach({ kind: 'evening', id: evening }));
     return () => window.clearTimeout(timer);
   }, [evening, location.key]);
+  const selectedProposal = Number(params.get('proposal'));
+  const selectedFollowup = Number(params.get('followup'));
+  useEffect(() => {
+    const kind = selectedProposal > 0 ? 'proposal' : 'followup';
+    const id = selectedProposal > 0 ? selectedProposal : selectedFollowup;
+    if (!Number.isSafeInteger(id) || id <= 0) return;
+    const timer = window.setTimeout(() => discussWithCoach({ kind, id }));
+    return () => window.clearTimeout(timer);
+  }, [selectedProposal, selectedFollowup, location.key]);
+  const attention = useCoachingAttention(tab === 'inbox' && filter === 'todo');
   const coaching = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled: tab === 'inbox' && filter === 'todo' });
   return <div className="suivi-page">
     <header className="suivi-header"><h1 className="page-title">Suivi</h1><p>Les prochains échanges avec Chiron.</p></header>
-    <nav className="suivi-tabs" aria-label="Suivi et automatisations"><Button variant="ghost" aria-current={tab === 'inbox' ? 'page' : undefined} onClick={() => setParams({})}>Suivi{query.data?.unread ? ` · ${query.data.unread}` : ''}</Button><Button variant="ghost" aria-current={tab === 'automations' ? 'page' : undefined} onClick={() => setParams({ tab: 'automations' })}>Automatisations</Button><Button variant="ghost" aria-current={tab === "conversations" ? "page" : undefined} onClick={() => setParams({ tab: "conversations" })}>Conversations</Button></nav>
+    <nav className="suivi-tabs" aria-label="Suivi et routines"><Button variant="ghost" aria-current={tab === 'inbox' ? 'page' : undefined} onClick={() => setParams({})}>Suivi{query.data?.unread ? ` · ${query.data.unread}` : ''}</Button><Button variant="ghost" aria-current={tab === 'automations' ? 'page' : undefined} onClick={() => setParams({ tab: 'automations' })}>Routines</Button><Button variant="ghost" aria-current={tab === "conversations" ? "page" : undefined} onClick={() => setParams({ tab: "conversations" })}>Conversations</Button></nav>
     <div className="suivi-grid"><div className="suivi-stack">{tab === 'conversations' ? <ConversationArchive /> : tab === 'automations' ? <AutomationList /> : <>
       <div className="suivi-actions" aria-label="Filtres">{[['todo', 'À traiter'], ['all', 'Tout'], ['archives', 'Archives']].map(([value, label]) => <Button variant="ghost" key={value} aria-pressed={filter === value} onClick={() => { setFilter(value); setOffset(0); }}>{label}</Button>)}</div>
-      {filter === 'todo' && coaching.data?.items.map(item => <article className="suivi-row" key={`${item.kind}-${item.record.id}`}><div className="flex-1"><h2>{item.kind === 'followup' ? item.record.question : 'Une proposition pour ton entraînement'}</h2><p className="suivi-note">Chiron attend ton retour</p></div><Button variant="ghost" onClick={() => discussWithCoach({ kind: item.kind, id: item.record.id })}>En parler ↗</Button></article>)}
+      {filter === 'todo' && <CoachingAttention compact />}
+      {filter === 'todo' && !attention.data?.enabled && coaching.data?.items.map(item => <article className="suivi-row" key={`${item.kind}-${item.record.id}`}><div className="flex-1"><h2>{item.kind === 'followup' ? item.record.question : 'Une proposition pour ton entraînement'}</h2><p className="suivi-note">Chiron attend ton retour</p></div><Button variant="ghost" onClick={() => discussWithCoach({ kind: item.kind, id: item.record.id })}>En parler ↗</Button></article>)}
       {query.isPending && <p role="status">Chargement du suivi…</p>}<ErrorText error={query.error} />
-      {query.data?.items.length === 0 && (filter !== 'todo' || coaching.data?.items.length === 0) && <div className="suivi-empty"><h2>{filter === 'archives' ? 'Aucune archive' : 'Le suivi est à jour'}</h2><p>Les prochaines questions et notifications apparaîtront ici.</p></div>}
+      {query.data?.items.length === 0 && (filter !== 'todo' || (!attention.data?.enabled && coaching.data?.items.length === 0)) && <div className="suivi-empty"><h2>{filter === 'archives' ? 'Aucune archive' : 'Le suivi est à jour'}</h2><p>Les prochaines questions et notifications apparaîtront ici.</p></div>}
       <div className="suivi-list">{query.data?.items.map(item => <article className="suivi-row" key={item.id}><Link className="suivi-plain suivi-row-main" to={item.url}><div className="min-w-0 flex-1"><h2>{item.title}</h2><p className="suivi-note line-clamp-2">{item.body}</p><p className="suivi-note">{new Date(item.created_at).toLocaleDateString('fr-FR')}{!item.read_at ? ' · non lu' : ''}</p></div><span aria-hidden="true">↗</span></Link><NoticeActions id={item.id} read={Boolean(item.read_at)} archived={Boolean(item.archived_at)} /></article>)}</div>
       <Pager offset={offset} next={query.data?.next_offset} change={setOffset} />
     </>}</div></div>

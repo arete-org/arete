@@ -146,7 +146,11 @@ class TestWriteDailyBriefing:
         ):
             scheduler.write_daily_briefing()
         notify.assert_called_once_with(
-            "Briefing du coach", "Footing 45'.", "/", kind="briefing"
+            "Briefing du coach",
+            "Footing 45'.",
+            "/",
+            kind="briefing",
+            reference={"kind": "briefing", "id": fresh.id},
         )
 
     def test_a_briefing_written_from_other_facts_is_rewritten(self):

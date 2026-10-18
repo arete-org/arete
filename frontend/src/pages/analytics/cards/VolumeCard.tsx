@@ -45,8 +45,9 @@ export function VolumeCard({
             orientation="right"
             stroke={CHART.axis}
             tick={{ fontSize: 11, fill: CHART.axis }}
-            unit=" h"
-            width={44}
+            tickFormatter={(value: number) => value.toLocaleString('fr-FR')}
+            unit=" h"
+            width={52}
           />
           <ChartTooltip
             labelFormatter={bucketLabel(bucket)}
@@ -55,9 +56,9 @@ export function VolumeCard({
               name,
             ]}
           />
-          <Bar yAxisId="km" dataKey="run_km" name="Course" stackId="km" fill={COLORS.neonCyan} radius={[0, 0, 0, 0]} />
-          <Bar yAxisId="km" dataKey="other_km" name="Autres sports" stackId="km" fill={CHART.purple} radius={[2, 2, 0, 0]} />
-          <Line yAxisId="h" type="monotone" dataKey="hours" name="Temps" stroke={COLORS.neonGold} strokeWidth={2} dot={false} />
+          <Bar isAnimationActive={false} yAxisId="km" dataKey="run_km" name="Course" stackId="km" fill={COLORS.neonCyan} radius={[0, 0, 0, 0]} />
+          <Bar isAnimationActive={false} yAxisId="km" dataKey="other_km" name="Autres sports" stackId="km" fill={CHART.purple} radius={[2, 2, 0, 0]} />
+          <Line isAnimationActive={false} yAxisId="h" type="monotone" dataKey="hours" name="Temps" stroke={COLORS.neonGold} strokeWidth={2} dot={false} />
         </ComposedChart>
       </ResponsiveContainer>
     </StatCard>

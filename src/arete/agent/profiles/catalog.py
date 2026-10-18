@@ -42,7 +42,7 @@ PROFILES: dict[ProfileId, AgentProfile] = {
         fact_memory_tools=False,
         page_context=False,
         instructions="""Exécute uniquement la mission planifiée avec les données actuelles.
-Toute écriture attend une validation humaine. Ne contourne jamais une validation refusée.
+Toute modification de l’entraînement ou du journal attend une validation humaine. Ne contourne jamais une validation refusée.
 Une réponse à ask_athlete fournit une information, jamais une permission implicite d'écrire.
 Pose seulement les questions indispensables. Réutilise un suivi de ressenti existant :
 si une question sur la même séance est déjà en attente, indique son lien sans la répéter.

@@ -10,6 +10,7 @@ class FeatureFlags(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     glm_flash: StrictBool = False
+    coaching_attention: StrictBool = False
 
 
 def glm_flash_available() -> bool:
@@ -21,10 +22,12 @@ def get_feature_flags() -> FeatureFlags:
     # without a restart, while an in-flight run keeps its original route.
     con = connect()
     try:
-        row = con.execute(
-            "SELECT enabled FROM app.feature_flags WHERE name = 'glm_flash'"
-        ).fetchone()
-        return FeatureFlags(glm_flash=row[0] if row else False)
+        rows = dict(
+            con.execute(
+                "SELECT name,enabled FROM app.feature_flags WHERE name IN ('glm_flash','coaching_attention')"
+            ).fetchall()
+        )
+        return FeatureFlags(**rows)
     finally:
         con.close()
 
@@ -34,11 +37,12 @@ def set_feature_flags(flags: FeatureFlags) -> FeatureFlags:
         raise ValueError("Configure OpenRouter et sa clé API avant d'activer GLM.")
     con = connect()
     try:
-        con.execute(
-            """INSERT INTO app.feature_flags (name, enabled) VALUES ('glm_flash', ?)
-               ON CONFLICT (name) DO UPDATE SET enabled = excluded.enabled""",
-            [flags.glm_flash],
-        )
+        # Older clients update only GLM; they must not reset the independent rollout.
+        for name in sorted(flags.model_fields_set or type(flags).model_fields):
+            con.execute(
+                "INSERT INTO app.feature_flags (name,enabled) VALUES (?,?) ON CONFLICT (name) DO UPDATE SET enabled=excluded.enabled",
+                [name, getattr(flags, name)],
+            )
     finally:
         con.close()
-    return flags
+    return get_feature_flags()

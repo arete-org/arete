@@ -438,7 +438,9 @@ def test_the_push_goes_once_and_only_when_a_proposal_is_written(evening, monkeyp
     assert second == "nothing missed"
     assert sent.call_count == 1
     title, body, url = sent.call_args.args
-    assert sent.call_args.kwargs == {"kind": "adapted_session"}
+    assert sent.call_args.kwargs["kind"] == "adapted_session"
+    assert sent.call_args.kwargs["reference"]["kind"] == "proposal"
+    assert sent.call_args.kwargs["reference"]["id"] > 0
     assert title == "Séance manquée ?" and "déplacer à" in body and url == "/"
     # The second run found the day handled with one read: no Garmin request.
     assert refresh.call_count == 1

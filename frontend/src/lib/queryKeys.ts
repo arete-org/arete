@@ -115,6 +115,9 @@ function invalidateSessionQueries(queryClient: QueryClient): void {
     qk.fitness,
     qk.workload,
     qk.planToday,
+    ['coaching-attention'],
+    ['coachToday'],
+    ['plan-change-set'],
     qk.goalProjection(),
     qk.formCurve(),
   ]) {

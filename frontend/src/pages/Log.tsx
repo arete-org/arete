@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Dumbbell, Heart, Sparkles } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { EmptyState, ErrorState, MuscleMap } from '@/components';
 import { Button, Modal, ModalHeader, Panel, Skeleton } from '@/components/ui';
 import { settingsApi, strengthApi } from '@/lib/api';
@@ -16,8 +15,8 @@ type Tab = 'force' | 'cardio';
 const MUSCLE_WINDOW_DAYS = 7;
 
 const TABS: { id: Tab; label: string; icon: typeof Dumbbell }[] = [
-  { id: 'force', label: 'FORCE', icon: Dumbbell },
-  { id: 'cardio', label: 'CARDIO', icon: Heart },
+  { id: 'force', label: 'Force', icon: Dumbbell },
+  { id: 'cardio', label: 'Cardio', icon: Heart },
 ];
 
 export function LogPage() {
@@ -67,8 +66,8 @@ export function LogPage() {
 
   return (
     <div className="page-shell bg-void">
-      <div className="page-content">
-        <h1 className="page-title mb-3">Journal</h1>
+      <div className="page-content analytics-page">
+        <header><p className="page-eyebrow">Chaque séance compte</p><h1 className="page-title">Journal</h1><p className="mt-2 text-sm text-text-muted">Tes séances, tes progrès et ton équilibre musculaire.</p></header>
         <div className="journal-actions">
           <Button variant="gold" strong onClick={() => setShowNewSession(true)}>
             <Sparkles className="w-4 h-4" />
@@ -77,18 +76,14 @@ export function LogPage() {
         </div>
 
         <PlayerSummary />
-        <div className="flex gap-1 mb-6">
+        <div className="flex gap-1" role="group" aria-label="Type de séances">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-t text-sm font-sans transition-all',
-                activeTab === tab.id
-                  ? 'bg-neon-gold/10 text-neon-gold border-b-2 border-neon-gold'
-                  : 'text-text-muted hover:text-text-secondary'
-              )}
+              aria-pressed={activeTab === tab.id}
+              className="analysis-tab flex items-center gap-2"
             >
               <tab.icon className="w-4 h-4" />
               {tab.label}
@@ -97,9 +92,9 @@ export function LogPage() {
         </div>
 
         {activeTab === 'force' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
-            <div className="space-y-4 sm:space-y-8">
-              <Panel title={`ZONES TRAVAILLÉES (${MUSCLE_WINDOW_DAYS} DERNIERS JOURS)`}>
+          <div className="analysis-grid">
+            <div className="space-y-6">
+              <Panel title={`Zones travaillées · ${MUSCLE_WINDOW_DAYS} derniers jours`}>
                 {muscleQuery.isPending ? (
                   <Skeleton label="Chargement des zones travaillées" lines={4} />
                 ) : muscleQuery.isError ? (
@@ -115,8 +110,8 @@ export function LogPage() {
               )}
             </div>
 
-            <div className="space-y-4 sm:space-y-8">
-              <Panel title="SÉANCES RÉCENTES" delay={0.3}>
+            <div className="space-y-6">
+              <Panel title="Séances récentes" delay={0.3}>
                 <div className="space-y-3">
                   {sessionsQuery.isPending && <Skeleton label="Chargement des séances récentes" lines={3} />}
                   {sessions.slice(0, 5).map((session) => (

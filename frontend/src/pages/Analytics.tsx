@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { Period } from '@/types';
 import { analyticsApi } from '@/lib/api';
 import { CHART, COLORS } from '@/lib/chartTheme';
+import { Button } from '@/components/ui';
+import { PERIODS } from './analytics/types';
 import {
   CadenceCard,
   DescentCard,
@@ -51,11 +53,19 @@ function useActiveSection(): string {
 }
 
 export function AnalyticsPage() {
-  const [period, setPeriod] = useState<Period>('30d');
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const selected = params.get('period');
+  const period: Period = PERIODS.find(value => value === selected) ?? '30d';
+  const setPeriod = (value: Period) => setParams(current => {
+    const next = new URLSearchParams(current);
+    next.set('period', value);
+    return next;
+  });
   const active = useActiveSection();
   const banner = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['analytics', 'overview', period],
     queryFn: () => analyticsApi.getOverview(period),
     staleTime: 60 * 1000,
@@ -72,40 +82,45 @@ export function AnalyticsPage() {
     if (!el) return;
     const b = banner.current;
     const offset = b ? parseFloat(getComputedStyle(b).top) + b.offsetHeight + 8 : 0;
-    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset, behavior: 'smooth' });
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
   };
 
   return (
-    <div className="page-shell space-y-6">
+    <div className="page-shell analytics-page">
       {/* Stays under the app's tab bar (57 px, desktop only) while the page scrolls */}
       <div
         ref={banner}
-        className="sticky top-0 md:top-[57px] z-20 -mx-4 px-4 pt-3 space-y-3 bg-void/90 backdrop-blur border-b border-text-muted/10"
+        className="analytics-banner"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-start justify-between gap-4">
           <div>
+            <p className="page-eyebrow">Arete / Analyses</p>
             <h1 className="page-title">Analyses</h1>
             {data && (
               <p className="text-xs text-text-muted font-sans mt-1">
-                Du {new Date(`${data.start}T00:00:00`).toLocaleDateString('fr-FR')} au{' '}
-                {new Date(`${data.end}T00:00:00`).toLocaleDateString('fr-FR')}
-                {data.prev_start && ` · comparé ${previousLabel}`}
+                {new Date(`${data.start}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} –{' '}
+                {new Date(`${data.end}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <PeriodSelector period={period} onChange={setPeriod} />
             <Link
               to="/analytics/bilan"
-              className="px-3 py-1 text-xs font-sans uppercase tracking-wider rounded border border-neon-gold/30 text-neon-gold hover:bg-neon-gold/10"
+              className="ui-button analytics-year-link"
             >
               Bilan annuel
             </Link>
-          </div>
         </div>
-
+        <PeriodSelector period={period} onChange={setPeriod} />
+        {data?.prev_start && data.prev_end && <p className="text-xs text-text-muted">
+          Comparé au {new Date(`${data.prev_start}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} –{' '}
+          {new Date(`${data.prev_end}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+        </p>}
         <SectionNav active={active} onJump={jump} />
       </div>
+      {isError && <div role="alert" className="ui-inset p-4 flex flex-wrap items-center gap-3">
+        <p>Les analyses n’ont pas pu être chargées.</p>
+        <Button onClick={() => void refetch()}>Réessayer</Button>
+      </div>}
 
       <Section def={SECTIONS[0]}>
         <VolumeCard card={cards?.volume} {...state} />
@@ -120,7 +135,7 @@ export function AnalyticsPage() {
       <Section def={SECTIONS[2]}>
         <EfficiencyCard card={cards?.decoupling} {...state} />
         <PaceCard card={cards?.pace} {...state} />
-        <RecordsCard />
+        <RecordsCard onOpen={id => navigate(`/log/sessions/${id}`)} />
       </Section>
 
       <Section def={SECTIONS[3]}>
@@ -152,7 +167,8 @@ export function AnalyticsPage() {
           question="Assez de sommeil pour encaisser ?"
           card={cards?.sleep}
           color={COLORS.infoBlue}
-          unit=""
+          unit="h"
+          seconds
           {...state}
         />
         <RecoveryCard

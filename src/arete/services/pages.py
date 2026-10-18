@@ -87,7 +87,7 @@ def _dashboard() -> dict[str, Any]:
     }
 
 
-def _analytics() -> dict[str, Any]:
+def _analytics(params: dict[str, Any] | None = None) -> dict[str, Any]:
     """The Analytics page as the coach needs it: what each card says.
 
     Every card carried a 30-point daily series for its chart, and the series
@@ -96,9 +96,42 @@ def _analytics() -> dict[str, Any]:
     previous period and the card's own French insight; a trend over a chosen
     window is what the analytics toolkit is for.
     """
+    from arete.features.periods import DEFAULT_PERIOD, PERIOD_DAYS
     from arete.services.analytics import get_overview
 
-    overview = get_overview(period="30d")
+    if (params or {}).get("path") == "/analytics/bilan":
+        from arete.services.settings import athlete_today
+        from arete.services.year_review import FIRST_YEAR, year_review
+
+        current = athlete_today().year
+        raw = (params or {}).get("param_year")
+        year = (
+            int(raw)
+            if isinstance(raw, str)
+            and re.fullmatch(r"[0-9]{4}", raw)
+            and FIRST_YEAR <= int(raw) <= current
+            else current
+        )
+        data = year_review(year)
+        # Aggregates match the open year. Session names and Strava best efforts
+        # stay on the browser page, just as on the ordinary Analytics page.
+        return {
+            "year_review": {
+                key: value
+                for key, value in data.items()
+                if key not in {"highlights", "best_efforts", "fitness"}
+            },
+            "fitness": {
+                key: value for key, value in data["fitness"].items() if key != "series"
+            },
+        }
+    selected = (params or {}).get("param_period")
+    period = (
+        selected
+        if isinstance(selected, str) and selected in PERIOD_DAYS
+        else DEFAULT_PERIOD
+    )
+    overview = get_overview(period=period)
     cards = {
         name: {k: v for k, v in card.items() if k != "series"}
         for name, card in overview.get("cards", {}).items()
@@ -219,7 +252,6 @@ _PAGE_FETCHERS = {
     "follow_up": _follow_up,
     "profile": _profile,
     "dashboard": _dashboard,
-    "analytics": _analytics,
     "planning": _planning,
     "log": _log,
     "settings": _settings,
@@ -254,7 +286,7 @@ def _log_selection(params: dict[str, Any]) -> dict[str, Any]:
 def get_page_data(page: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
     from arete.services.gamification import preference
 
-    result = _PAGE_FETCHERS[page]()
+    result = _analytics(params) if page == "analytics" else _PAGE_FETCHERS[page]()
     if page == "log":
         result.update(_log_selection(params or {}))
     if preference()["enabled"]:

@@ -113,7 +113,18 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
         {renderView('back')}
       </div>
 
-      <div className="min-h-[3.25rem] text-center">
+      <label className="text-xs text-text-muted">
+        Zone musculaire
+        <select
+          className="ui-input mt-2 min-h-11 w-full"
+          value={selected ?? touched ?? ''}
+          onChange={event => { const muscle = event.target.value; setTouched(muscle || null); if (muscle) onSelect?.(muscle); }}
+        >
+          <option value="">Choisir une zone</option>
+          {muscles.map(muscle => <option key={muscle.muscle} value={muscle.muscle}>{muscle.label}</option>)}
+        </select>
+      </label>
+      <div className="min-h-[3.25rem] text-center" aria-live="polite">
         {detail ? (
           <div className="animate-fade-up">
             <p className="text-sm font-sans text-text-primary uppercase tracking-wider">{detail.label}</p>

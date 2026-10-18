@@ -4,12 +4,14 @@ import { ArrowUp } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { automationApi, inboxKey, stateLabel, type Interrupt } from '@/lib/automations';
 import { discussWithCoach } from '@/lib/coachToday';
+import { PlanChangeReview } from './PlanChangeReview';
 import { readableError } from '@/lib/utils';
 
 const labels: Record<string, string> = {
   date_str: 'Date', date: 'Date', session_id: 'Séance', session_ids: 'Séances', session_type: 'Type', sport: 'Sport',
   target_duration_min: 'Durée (min)', target_distance_km: 'Distance (km)', target_intensity: 'Intensité', target_hr_zone: 'Zone',
   description: 'Description', changes: 'Modification', text: 'Séance', notes: 'Note', rpe: 'Ressenti', revision: 'Révision',
+  apply_plan_changes: 'Ajuster le planning ensemble', preview_plan_changes: 'Préparer un ajustement',
   create_planned_session: 'Ajouter une séance', update_planned_session: 'Ajuster la séance', delete_planned_session: 'Supprimer la séance',
   save_workout: 'Enregistrer la séance', update_workout: 'Corriger la séance', append_journal: 'Compléter le journal',
   export_garmin_sessions: 'Envoyer vers Garmin', sync_garmin_activities: 'Importer depuis Garmin',
@@ -36,6 +38,8 @@ function Decision({ runId, item }: { runId: string; item: Interrupt }) {
   const client = useQueryClient();
   const action = useMutation({ mutationFn: (decision: Record<string, unknown>) => automationApi.decide(runId, item, decision), retry: false, onSuccess: async () => { await client.invalidateQueries({ queryKey: ['automation-run', runId] }); await client.invalidateQueries({ queryKey: inboxKey }); } });
   const question = item.payload.name === 'ask_athlete';
+  const grouped = item.payload.name === 'apply_plan_changes';
+  const [groupReady, setGroupReady] = useState(false);
   const [expired, setExpired] = useState(() => Date.parse(item.expires_at) <= Date.now());
   useEffect(() => {
     const timer = window.setTimeout(() => setExpired(true), Math.max(0, Math.min(2_147_483_647, Date.parse(item.expires_at) - Date.now() + 1)));
@@ -45,14 +49,15 @@ function Decision({ runId, item }: { runId: string; item: Interrupt }) {
   const changes = typeof args.changes === 'object' && args.changes !== null ? args.changes as Record<string, unknown> : args;
   return <section className="space-y-3" aria-label={question ? 'Question du suivi' : 'Proposition du suivi'}>
     <p className="text-sm leading-relaxed">{question ? String(item.payload.args.question) : label(item.payload.name)}</p>
-    {!question && <dl className="space-y-1 text-sm">{Object.entries(changes).filter(([key]) => key !== 'revision').map(([key, value]) => <div key={key} className="flex flex-wrap gap-x-2"><dt className="text-text-secondary">{label(key)}</dt><dd>{item.payload.before?.[key] != null && <><span className="text-text-muted">{valueText(item.payload.before[key])}</span> → </>}{valueText(value)}</dd></div>)}</dl>}
+    {grouped && <PlanChangeReview id={String(item.payload.args.preview_id)} readOnly onReady={setGroupReady} />}
+    {!question && !grouped && <dl className="space-y-1 text-sm">{Object.entries(changes).filter(([key]) => key !== 'revision').map(([key, value]) => <div key={key} className="flex flex-wrap gap-x-2"><dt className="text-text-secondary">{label(key)}</dt><dd>{item.payload.before?.[key] != null && <><span className="text-text-muted">{valueText(item.payload.before[key])}</span> → </>}{valueText(value)}</dd></div>)}</dl>}
     {expired ? <p className="text-xs text-text-muted">Cette demande a expiré.</p> : <>
       {question ? <form className="coach-composer flex items-end gap-2 rounded-[var(--radius-control)] border border-border bg-void p-2 focus-within:border-neon-cyan" onSubmit={e => { e.preventDefault(); action.mutate({ type: 'respond', message: answer }); }}>
         <textarea aria-label="Ta réponse" placeholder="Ta réponse…" rows={1} maxLength={4000} value={answer} onChange={e => setAnswer(e.target.value)} className="coach-composer-input min-h-8 max-h-36 min-w-0 flex-1 resize-none bg-transparent px-1 py-1 text-sm outline-none" />
         <button type="submit" aria-label="Envoyer la réponse" disabled={action.isPending || !answer.trim()} className="flex size-11 shrink-0 items-center justify-center rounded-full bg-shadow text-text-primary disabled:opacity-40"><ArrowUp size={18} /></button>
       </form> : <>
         {editing && <div className="space-y-3">{fields(args, value => setArgs(value as Record<string, unknown>))}</div>}
-        <div className="flex flex-wrap items-center gap-2"><Button strong size="sm" loading={action.isPending} onClick={() => action.mutate(editing ? { type: 'edit', edited_action: { name: item.payload.name, args } } : { type: 'approve' })}>Approuver</Button><Button variant="ghost" size="sm" disabled={action.isPending} onClick={() => setEditing(!editing)}>{editing ? 'Annuler' : 'Modifier'}</Button><Button variant="ghost" size="sm" disabled={action.isPending} onClick={() => action.mutate({ type: 'reject', message: 'Refusé par l’athlète' })}>Refuser</Button></div>
+        <div className="flex flex-wrap items-center gap-2"><Button strong size="sm" disabled={grouped && !groupReady} loading={action.isPending} onClick={() => action.mutate(editing ? { type: 'edit', edited_action: { name: item.payload.name, args } } : { type: 'approve' })}>Approuver</Button>{!grouped && <Button variant="ghost" size="sm" disabled={action.isPending} onClick={() => setEditing(!editing)}>{editing ? 'Annuler' : 'Modifier'}</Button>}<Button variant="ghost" size="sm" disabled={action.isPending} onClick={() => action.mutate({ type: 'reject', message: 'Refusé par l’athlète' })}>Refuser</Button></div>
       </>}
     </>}
     {action.error && <p role="alert" className="text-xs text-danger-red">{readableError(action.error)}</p>}
