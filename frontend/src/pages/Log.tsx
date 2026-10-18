@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Dumbbell, Heart, Sparkles } from 'lucide-react';
 import { EmptyState, ErrorState, MuscleMap } from '@/components';
+import { PushOffer } from '@/components/PushOffer';
 import { Button, Modal, ModalHeader, Panel, Skeleton } from '@/components/ui';
 import { settingsApi, strengthApi } from '@/lib/api';
 import { CardioTab, ExerciseProgress, LogSessionModal, SessionDetailModal, SessionRow, WeeklyVolumeTracker } from './log/index';
@@ -114,6 +115,7 @@ export function LogPage() {
               <Panel title="Séances récentes" delay={0.3}>
                 <div className="space-y-3">
                   {sessionsQuery.isPending && <Skeleton label="Chargement des séances récentes" lines={3} />}
+                  {sessions.length > 0 && <PushOffer moment="session" />}
                   {sessions.slice(0, 5).map((session) => (
                     <SessionRow
                       key={session.id}

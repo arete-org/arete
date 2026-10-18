@@ -9,6 +9,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, Dumbbell, TrendingUp, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { CheckinCard } from '@/components/dashboard/CheckinCard';
+import { PushOffer } from '@/components/PushOffer';
 import { MovedSession, RenegotiationOutcome } from '@/components/dashboard/RenegotiationOutcome';
 import { RenegotiateMenu } from '@/components/dashboard/RenegotiateMenu';
 import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
@@ -445,6 +446,10 @@ export function DashboardPage() {
                   {todayLink.offPlan.map((a) => (
                     <OffPlanRow key={a.id} session={a} />
                   ))}
+                  {/* A session just arrived: the moment the coach's feedback by push makes sense. */}
+                  {(todayLink.offPlan.length > 0 || todayLink.planned.some((row) => row.realised)) && (
+                    <PushOffer moment="session" />
+                  )}
                   <div className="flex justify-end items-center gap-4 pt-1 text-xs font-sans">
                     <Link to="/planning" className="text-neon-cyan hover:underline">
                       Semaine <span aria-hidden>→</span>

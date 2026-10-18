@@ -258,7 +258,12 @@ Planning ne possède aucune variante de navigation propre à sa page.
   suivants sont conservés. Le lanceur mobile reste présent en mode latéral.
   Ouvrir, fermer ou déplacer le chat ne crée aucun appel modèle.
 - Les invitations d’installation restent au-dessus du lanceur et s’effacent
-  temporairement devant un dialogue ou le coach. Les zones musculaires peuvent
+  temporairement devant un dialogue ou le coach. Les notifications sont aussi proposées
+  dans la page, aux deux moments où elles servent (`PushOffer`) : sous une séance
+  arrivée (tableau de bord, Journal) et sous le briefing une fois lu. Chaque
+  invitation est une surface `.ui-inset` avec `ui/Button`, une seule fois par
+  appareil, absente si l’appareil est abonné ; sur iPhone hors app installée,
+  elle mène d’abord au guide d’installation. Les zones musculaires peuvent
   être consultées au toucher, sans nécessiter un survol.
 
 Validation : `mobile-ux.spec.ts` utilise Chromium et WebKit en mode tactile à
