@@ -232,6 +232,8 @@ CREATE TABLE IF NOT EXISTS app.user_settings (
     threshold_pace_sec_km   INTEGER,                   -- pace held at threshold, seconds per km
     lthr_measured_on        DATE,                      -- when Garmin measured that threshold
     notification_preferences VARCHAR,                  -- JSON kinds + quiet hours, NULL = all on, 21:30-07:00
+    coach_evening_enabled   BOOLEAN DEFAULT FALSE,     -- the coach's evening message (ARE-64), opt-in
+    coach_evening_hour      INTEGER DEFAULT 20,        -- from this hour on the athlete's clock
     updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -350,6 +352,30 @@ CREATE TABLE IF NOT EXISTS app.daily_checkins (
     prompted_at TIMESTAMP,                   -- the day's push, sent at most once
     deleted_at  TIMESTAMP,
     PRIMARY KEY (athlete_id, date)
+);
+
+-- The evening message (ARE-64): at most one per athlete and evening, written
+-- by the coach about tomorrow and ending with one question. The row is
+-- claimed ('pending') before the model request, so overlapping dispatches pay
+-- for one, and a failed or stopped run keeps it: never replayed. The answer
+-- is kept once, as is its journal entry. Times are naive UTC.
+CREATE SEQUENCE IF NOT EXISTS app.coach_evening_messages_seq START 1;
+CREATE TABLE IF NOT EXISTS app.coach_evening_messages (
+    id           INTEGER PRIMARY KEY DEFAULT nextval('app.coach_evening_messages_seq'),
+    athlete_id   INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    date         DATE NOT NULL,              -- the evening, on the athlete's clock
+    status       VARCHAR NOT NULL DEFAULT 'pending',  -- 'pending', 'ok', 'failed'
+    reasons      VARCHAR NOT NULL DEFAULT '',  -- why tonight: session, race, readiness, replanned
+    text         VARCHAR,                    -- the message, its question included
+    question     VARCHAR,                    -- the closing question alone
+    error        VARCHAR,                    -- why the run failed, when it did
+    created_at   TIMESTAMP NOT NULL,         -- the claim
+    written_at   TIMESTAMP,
+    answer       VARCHAR,                    -- the athlete's answer, once
+    answered_at  TIMESTAMP,
+    journaled_at TIMESTAMP,                  -- its journal entry, filed once
+    deleted_at   TIMESTAMP,
+    UNIQUE (athlete_id, date)
 );
 
 -- ============================================================
@@ -945,6 +971,38 @@ def _m49_daily_checkins(con) -> None:
         raise
 
 
+def _m52_evening_messages(con) -> None:
+    """The evening message (ARE-64): a new table, its view and two settings.
+
+    One transaction, rolled back together (see migrations 48 and 49): the
+    previous release reads neither the table nor the columns, and a booting
+    one never sees ``user_settings`` changed without its refreshed view. The
+    settings default to off and 20:00, so nobody receives it before opting in.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE SEQUENCE IF NOT EXISTS app.coach_evening_messages_seq")
+    table = DDL.index("CREATE TABLE IF NOT EXISTS app.coach_evening_messages")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for statement in DDL[start : DDL.index(");", table) + 2].split(";"):
+            if statement.strip():
+                con.execute(statement)
+        _view(con, "coach_evening_messages")
+        for column in (
+            "coach_evening_enabled BOOLEAN DEFAULT FALSE",
+            "coach_evening_hour INTEGER DEFAULT 20",
+        ):
+            con.execute(
+                f"ALTER TABLE app.user_settings ADD COLUMN IF NOT EXISTS {column}"
+            )
+        _view(con, "user_settings")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
 DDL += AUTOMATION_DDL + CONVERSATION_DDL
 
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
@@ -988,6 +1046,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (49, _m49_daily_checkins),
     (50, migrate_automations),
     (51, migrate_conversations),
+    (52, _m52_evening_messages),
 ]
 
 

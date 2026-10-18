@@ -38,7 +38,7 @@ def call(name, args, identifier="call"):
     )
 
 
-@pytest.mark.parametrize("profile", ["briefing", "feedback"])
+@pytest.mark.parametrize("profile", ["briefing", "feedback", "evening"])
 @pytest.mark.parametrize("async_mode", [False, True])
 def test_background_cannot_load_or_execute_training_writes(
     profile, async_mode, monkeypatch
@@ -75,7 +75,7 @@ def test_background_cannot_load_or_execute_training_writes(
     assert all(m.status == "error" for m in result["messages"] if m.type == "tool")
 
 
-@pytest.mark.parametrize("profile", ["briefing", "feedback"])
+@pytest.mark.parametrize("profile", ["briefing", "feedback", "evening"])
 def test_missions_bind_no_tool(profile):
     """Facts in, text out: one model request, nothing to call."""
     seen = []

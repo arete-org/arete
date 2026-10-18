@@ -34,6 +34,12 @@ class Config:
         """Calendar rides on Clerk: the signed-in Google account holds the grant."""
         return self.auth_provider == "clerk" and bool(self.clerk_secret_key)
 
+    @property
+    def serverless(self) -> bool:
+        """On Vercel Functions (its system variable ``VERCEL=1``): a function
+        stops at ``maxDuration``, so scheduled model runs stop before it."""
+        return _env("VERCEL", "") == "1"
+
     # --- storage -----------------------------------------------------------
     @property
     def db_target(self) -> str:

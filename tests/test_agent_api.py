@@ -504,7 +504,9 @@ class TestBuildChatModel:
         assert models["fallback_models"] == ()
         assert "models" not in self._payload(models["model"])["extra_body"]
 
-    @pytest.mark.parametrize("profile", ["chat", "briefing", "feedback", "review"])
+    @pytest.mark.parametrize(
+        "profile", ["chat", "briefing", "feedback", "review", "evening"]
+    )
     def test_glm_flag_overrides_pinned_route_with_bounded_paid_requests(
         self, monkeypatch, profile
     ):

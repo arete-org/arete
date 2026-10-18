@@ -87,7 +87,7 @@ function ConversationArchive() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const client = useQueryClient();
   const remove = useMutation({ mutationFn: conversationsApi.remove, onSuccess: (_data, id) => { window.dispatchEvent(new CustomEvent("arete:conversation-deleted", { detail: id })); setDeleting(null); void client.invalidateQueries({ queryKey: conversationsKey }); } });
-  return <>{deleting && <div role="alert" className="ui-inset p-4"><p>Supprimer cette conversation et ses documents ? Elle ne sera plus accessible au coach.</p><Button onClick={() => remove.mutate(deleting)} disabled={remove.isPending}>Supprimer</Button><Button variant="ghost" onClick={() => setDeleting(null)}>Annuler</Button><ErrorText error={remove.error} /></div>}<ThreadHistory threads={[]} activeId="" runningId={null} onSelect={openConversation} onCreate={() => { window.dispatchEvent(new Event("arete:conversation-new")); window.dispatchEvent(new Event("arete:coach-open")); }} onDelete={setDeleting} /></>;
+  return <>{deleting && <div role="alert" className="ui-inset p-4"><p>Supprimer cette conversation et ses documents ? Le coach ne pourra plus la relire ; ce qu’il a noté dans son journal (dont tes réponses aux questions du soir) y reste : consultable dans Réglages › Coach, Chiron peut l’oublier si tu le lui demandes.</p><Button onClick={() => remove.mutate(deleting)} disabled={remove.isPending}>Supprimer</Button><Button variant="ghost" onClick={() => setDeleting(null)}>Annuler</Button><ErrorText error={remove.error} /></div>}<ThreadHistory threads={[]} activeId="" runningId={null} onSelect={openConversation} onCreate={() => { window.dispatchEvent(new Event("arete:conversation-new")); window.dispatchEvent(new Event("arete:coach-open")); }} onDelete={setDeleting} /></>;
 }
 
 export function FollowUpPage() {
@@ -102,6 +102,15 @@ export function FollowUpPage() {
   const run = params.get('run');
   // Selecting the same link again must reopen a previously hidden Chiron panel.
   useEffect(() => { if (run) discussWithCoach({ kind: 'automation_run', id: run }); }, [run, location.key]);
+  // The evening message's push and inbox item open Chiron on it (ARE-64).
+  // After the commit: on a cold start from the push, the panel's listeners are
+  // registered by effects that run after this page's.
+  const evening = Number(params.get('evening'));
+  useEffect(() => {
+    if (!Number.isSafeInteger(evening) || evening <= 0) return;
+    const timer = window.setTimeout(() => discussWithCoach({ kind: 'evening', id: evening }));
+    return () => window.clearTimeout(timer);
+  }, [evening, location.key]);
   const coaching = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled: tab === 'inbox' && filter === 'todo' });
   return <div className="suivi-page">
     <header className="suivi-header"><h1 className="page-title">Suivi</h1><p>Les prochains échanges avec Chiron.</p></header>

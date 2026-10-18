@@ -282,6 +282,8 @@ BRIEFING_WAIT_SECONDS = 60
 BRIEFING_POLL_SECONDS = 5
 #: When the running dispatch stops starting model calls; unset outside one.
 _model_deadline: ContextVar[float | None] = ContextVar("model_deadline", default=None)
+#: When a model run the dispatch started must have stopped (``SCHEDULE_RUN_SECONDS``).
+_run_deadline: ContextVar[float | None] = ContextVar("run_deadline", default=None)
 
 
 def write_daily_briefing() -> str:
@@ -315,7 +317,9 @@ def write_daily_briefing() -> str:
                 existing.trigger == "scheduler" or not facts_changed(existing)
             ):
                 return existing.source
-            briefing = get_or_create_briefing(trigger="scheduler", replacing=existing)
+            briefing = get_or_create_briefing(
+                trigger="scheduler", replacing=existing, deadline=_run_deadline.get()
+            )
             if briefing is not None:
                 break
             # The dashboard's request is writing it: compare once it is stored.
@@ -393,7 +397,7 @@ def announce_review(today: date | None = None, *, fallback: bool = False) -> str
             return "empty week: nothing to review"
         from arete.coaching import write_scheduled_review
 
-        review = write_scheduled_review()
+        review = write_scheduled_review(deadline=_run_deadline.get())
         if review is None:  # claimed by another run meanwhile
             return _held(week) or "in progress"
     except Exception as e:  # noqa: BLE001 - background job must not die
@@ -419,6 +423,19 @@ SCHEDULE_DISPATCH_SECONDS = 120
 #: No briefing or review starts after this. The dashboard writes the day's
 #: briefing on demand, and the week's review is one click away in Planning.
 SCHEDULE_MODEL_SECONDS = 210
+#: A model run a dispatch started stops by then, fallbacks included: Vercel
+#: stops the function at 300 s (``maxDuration``), and a run it killed would
+#: leave its claim with no outcome. The run then fails, settled and not replayed.
+SCHEDULE_RUN_SECONDS = 280
+
+
+def scheduled_run_deadline(started: float) -> float | None:
+    """The briefing's and the Sunday review's run bound: only where a function
+    stops at ``maxDuration``; elsewhere (Docker) each run keeps its own
+    envelope. The evening message keeps ``SCHEDULE_RUN_SECONDS`` everywhere."""
+    return started + SCHEDULE_RUN_SECONDS if config.serverless else None
+
+
 #: Nominal length of a claim; reclaiming goes by calendar day, not by this.
 SCHEDULE_LEASE_SECONDS = 900
 #: Most athletes one dispatch reads to find those owed today (5-10 expected).
@@ -589,14 +606,16 @@ def _run_athlete(
     with athlete_scope(athlete_id):
         from arete.dataio import mirror
 
+        # The briefing's wait for the dashboard ends at the model deadline, a
+        # run it starts by the run deadline: this dispatch's, reset after it.
+        model_token = _model_deadline.set(started + SCHEDULE_MODEL_SECONDS)
+        run_token = _run_deadline.set(scheduled_run_deadline(started))
         try:
             if config.is_remote_db:
                 mirror.hydrate()
             status = daily_sync()
             tz = zone_of(zone)
             claim_day = claimed_at.astimezone(tz).date()
-            # The briefing's wait for the dashboard ends at the model deadline.
-            _model_deadline.set(started + SCHEDULE_MODEL_SECONDS)
             for step, write in (
                 ("briefing", write_daily_briefing),
                 ("review", write_weekly_review),
@@ -635,6 +654,9 @@ def _run_athlete(
                 athlete_id,
             )
             return {"status": "failed; next attempt tomorrow"}
+        finally:
+            _run_deadline.reset(run_token)
+            _model_deadline.reset(model_token)
     return status
 
 
@@ -724,7 +746,11 @@ def write_sunday_review(started: float) -> str:
             logger.warning("Sunday Garmin refresh failed: %s", e)
         if monotonic() - started >= SCHEDULE_MODEL_SECONDS:
             return "deferred"
-        outcome = announce_review()
+        token = _run_deadline.set(scheduled_run_deadline(started))
+        try:
+            outcome = announce_review()
+        finally:
+            _run_deadline.reset(token)
         if config.is_remote_db:
             mirror.flush()
     except Exception as e:  # noqa: BLE001 - background job must not die
@@ -908,6 +934,135 @@ def replan_missed_evening(started: float) -> str:
         return f"failed: {e}"
 
 
+#: The coach's evening message (ARE-64), for the athletes who opted in, from
+#: the hour each chose (``coach_evening_hour``, ``EVENING_FIRST_HOUR`` to
+#: ``EVENING_LAST_HOUR``, 20:00 by default) on their clock and outside quiet
+#: hours. On Vercel its own cron windows, 18:00, 19:00 and 20:00 UTC
+#: (``vercel.json``), each fired within its hour, reach Paris's 20:00 in summer
+#: and winter alike (21:00 when it is chosen, unless the window fires past the
+#: quiet hours' 21:30); the Americas are not reached. Docker's ticks (with the
+#: daily sync, ``ARETE_AUTO_SYNC_HOUR`` set) reach every zone, to the tick.
+#: Today's missed session is replanned first, by this pass if need be:
+#: tomorrow's plan may receive the session it moves (at 18:00 UTC both
+#: windows fire together, and the replanning's may run out of time).
+#: An evening found with nothing to say is looked at again 20 minutes later at
+#: the soonest (``QUIET_EVENING_SECONDS``): Docker ticks every five minutes,
+#: and the next Vercel window, an hour on, is never skipped.
+QUIET_EVENING_SECONDS = 20 * 60
+MAX_QUIET_EVENINGS = 1024
+_quiet_evenings: dict[tuple[int, date], float] = {}
+
+
+def run_evening_messages(replan_from_hour: int = EVENING_FROM_HOUR) -> dict:
+    """Write tomorrow's evening message for the athletes in their evening.
+
+    At most one per athlete and evening whatever the overlapping windows and
+    ticks (``evening_message.write`` claims the evening before its request),
+    pushed once by its writer. An athlete who has not opted in, whose push
+    cannot leave or whose evening has nothing to say costs a few reads and no
+    request; a parked athlete gets nothing. Independent of the daily run's
+    claim and markers. The order rotates daily, like the replanning's.
+    """
+    from arete.services.settings import EVENING_FIRST_HOUR
+
+    started = monotonic()
+    with db_connection() as con:
+        candidates = con.execute(_CANDIDATES, [MAX_SCANNED_ATHLETES]).fetchall()
+    deferred = len(candidates) == MAX_SCANNED_ATHLETES
+    candidates.sort(key=lambda row: evening_rank(row[0], utc_now().date()))
+    outcomes: dict[str, str] = {}
+    written = 0
+    for row in candidates:
+        athlete_id, lease, zone, preferences = row[0], row[4], row[5], row[6]
+        now = utc_now().timestamp()
+        # From the earliest hour an athlete may choose; each one's in scope.
+        quiet = _quiet_hours(preferences)
+        if not evening_owed(now, zone, quiet, EVENING_FIRST_HOUR):
+            continue
+        if _parked(lease, now, zone):
+            continue
+        if written >= MAX_SCHEDULED_ATHLETES:
+            deferred = True
+            break
+        with athlete_scope(athlete_id):
+            outcome = write_evening_message(started, replan_from_hour)
+        if outcome == "deferred":
+            deferred = True
+            break
+        if outcome != "disabled":
+            outcomes[str(athlete_id)] = outcome
+        if outcome.startswith("written"):
+            written += 1
+    return {"athletes": outcomes, "deferred": deferred}
+
+
+def write_evening_message(
+    started: float, replan_from_hour: int = EVENING_FROM_HOUR
+) -> str:
+    """One athlete's evening message: written once, pushed by its writer.
+
+    Never raises. Today's missed session is replanned first, by this pass
+    when the replanning's own has not (``replan_missed_evening``: one
+    proposal and one push a day whoever runs it), since it may move the
+    session onto tomorrow; from ``replan_from_hour``, Docker's 20:00. A
+    replanning that fails or runs out of time does not hold the message
+    back: it is written without it. The claim comes before the one model
+    request, which stops by ``SCHEDULE_RUN_SECONDS`` of the dispatch, and a
+    failure keeps it (never replayed). A claim the platform stopped mid-run
+    is settled as failed here.
+    """
+    from arete.dataio.settings import get_user_settings
+    from arete.services import evening_message, missed_sessions
+    from arete.services.notifications import notify
+
+    try:
+        prefs = get_user_settings() or {}
+        if not evening_message.enabled(prefs):
+            return "disabled"
+        local = utc_now().astimezone(zone_of(prefs.get("timezone")))
+        if local.hour < evening_message.start_hour(prefs):
+            return "not yet"
+        if (reason := evening_message.unreachable(prefs)) is not None:
+            return f"skipped: {reason}"
+        day = local.date()
+        held = evening_message.get_for_day(day)
+        stopped = held is not None and held.status == "pending"
+        if stopped and evening_message.settle_stopped(day):
+            held = evening_message.get_for_day(day)
+        if held is not None:
+            return f"already {held.status}"
+        if missed_sessions.candidates(day):
+            if local.hour < replan_from_hour:
+                return "not yet: replanning first"
+            replanned = replan_missed_evening(started)
+            if replanned.startswith("failed") or replanned == "deferred":
+                logger.info("Evening message written without its replanning")
+        key = (current_athlete_id(), day)
+        last = _quiet_evenings.get(key)
+        if last is not None and monotonic() - last < QUIET_EVENING_SECONDS:
+            return "nothing to say"
+        evening = evening_message.survey(day)
+        if not evening.reasons:
+            if len(_quiet_evenings) >= MAX_QUIET_EVENINGS:
+                _quiet_evenings.clear()
+            _quiet_evenings[key] = monotonic()
+            return "nothing to say"
+        if monotonic() - started >= SCHEDULE_MODEL_SECONDS:
+            return "deferred"
+        from arete.coaching import write_evening_message as write
+
+        message = write(evening, deadline=started + SCHEDULE_RUN_SECONDS)
+    except Exception as e:  # noqa: BLE001 - background job must not die
+        logger.warning("Evening message failed: %s", type(e).__name__)
+        return f"failed: {type(e).__name__}"
+    if message is None:
+        return "already claimed"
+    if message.status != "ok":
+        return f"failed: {message.error}"
+    result = notify(*evening_message.announcement(message), kind="evening")
+    return f"written; push: {result.skipped_reason or f'{result.sent} sent'}"
+
+
 async def run_forever(hour: int | None, tick_seconds: int = TICK_SECONDS) -> None:
     from anyio import to_thread
 
@@ -934,6 +1089,10 @@ async def run_forever(hour: int | None, tick_seconds: int = TICK_SECONDS) -> Non
                 await to_thread.run_sync(run_evening_replans, DOCKER_EVENING_FROM_HOUR)
             except Exception:
                 logger.exception("Evening replanning failed; next tick will retry")
+            try:
+                await to_thread.run_sync(run_evening_messages, DOCKER_EVENING_FROM_HOUR)
+            except Exception:
+                logger.exception("Evening messages failed; next tick will retry")
         try:
             await to_thread.run_sync(run_automations)
         except Exception:

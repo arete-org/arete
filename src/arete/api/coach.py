@@ -5,7 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from arete.services import coach_followup, coach_today, plan_adaptation
+from arete.services import coach_followup, coach_today, evening_message, plan_adaptation
 
 router = APIRouter(prefix="/coach", tags=["coach"])
 
@@ -27,6 +27,10 @@ class FollowupResponse(BaseModel):
     action: Literal["answer", "skip", "snooze"]
     rpe: int | None = Field(default=None, ge=1, le=10, strict=True)
     notes: str | None = Field(default=None, max_length=coach_followup.MAX_NOTE_CHARS)
+
+
+class EveningAnswer(BaseModel):
+    text: str = Field(min_length=1, max_length=evening_message.MAX_ANSWER_CHARS)
 
 
 def _call(operation):
@@ -77,3 +81,20 @@ def get_followup(followup_id: int):
 @router.post("/followups/{followup_id}/response")
 def followup_response(followup_id: int, body: FollowupResponse):
     return _call(lambda: coach_followup.respond(followup_id, **body.model_dump()))
+
+
+@router.get("/evening/{message_id}")
+def get_evening(message_id: int):
+    """The coach's evening message, read without any model request."""
+    # A failed filing of the answer is retried here, once (``read``).
+    message = evening_message.read(message_id)
+    if message is None:
+        raise HTTPException(404, "Message du soir introuvable")
+    return message.to_dict()
+
+
+@router.post("/evening/{message_id}/answer")
+def answer_evening(message_id: int, body: EveningAnswer):
+    """The athlete's answer, kept once and filed once in the journal; no model
+    request. ``journal`` reports the filing apart from the saved answer."""
+    return _call(lambda: evening_message.answer(message_id, body.text))

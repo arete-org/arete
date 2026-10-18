@@ -1,7 +1,7 @@
 # Coaching stack: responsibilities and dependencies
 
 Arete gives each behavior one owner, with one coaching runtime, browser chat,
-three background missions and one shared Slack administrator graph. Browser-composed, server-archived
+four background missions and one shared Slack administrator graph. Browser-composed, server-archived
 conversations, HTTP endpoints, tool names,
 DuckDB tables and ledger paths remain compatible. There are no placeholder layers
 for delegation, MCP, authentication or providers Arete does not use.
@@ -18,7 +18,7 @@ arete/
 │   ├── tools/               Model schemas and domain-service adapters
 │   ├── middlewares/         Framework interception/completion hooks
 │   ├── backends/            Deep Agents memory filesystem adapter and permissions
-│   ├── profiles/            Declarative chat, briefing, feedback and review configurations
+│   ├── profiles/            Declarative chat, briefing, feedback, review and evening configurations
 │   └── prompts/             Versioned general/mission instructions
 ├── services/                Metrics, analytics, planning, settings, pages, coaching, memory
 ├── observability/           Provider usage, model-boundary and HTTP request timing
@@ -880,6 +880,59 @@ them changed leaves the other's proposal stale: the review's answer compares
 the proposal's `before` fields, the replanning's the session revision. The
 review's numbers count an applied `drop` as due and missed, so letting a
 missed session go never raises the week's adherence.
+
+The coach's evening message (ARE-64, `services/evening_message.py`) is
+opt-in: Réglages › Coach turns it on (off by default, migration 52 adds
+`coach_evening_enabled` and `coach_evening_hour`, which an older client cannot
+reset) and picks the hour it may start from, 18:00 to 21:00 (20:00 by default)
+on the athlete's clock, outside quiet hours. The `evening` profile binds no
+tool: the server computes tomorrow's sessions, the forecast (one Open-Meteo
+request at the athlete's last start place and hour), the morning's load, form,
+readiness and check-in, today's training and replanning and a race within
+seven days, and the model answers in one request: at most three sentences,
+the last being its only question, refused otherwise (only the error's type is
+stored, never provider text). An evening with no session tomorrow
+and no notable signal (that race, a readiness under the rest band or a low
+check-in, today's replanning of a missed session), or whose push could not
+leave (notifications or the `evening` kind off, no Web Push keys, no device),
+makes no request and writes nothing. Exactly once: `app.coach_evening_messages`
+(one row per athlete and evening) is claimed before the request, so overlapping
+windows and ticks pay once and only the writer pushes (kind `evening`,
+« Chiron, pour demain » with the question); a failed or stopped run keeps its
+row and is never replayed. The run stops by 280 s of its dispatch
+(`SCHEDULE_RUN_SECONDS`, fallbacks included), before Vercel stops the function
+at 300 s, and settles as failed; a claim the platform killed anyway is settled
+as failed by the next pass (stopped claims are judged on the database's
+clock). On Vercel (`VERCEL=1`) the daily briefing and the Sunday review share
+that bound; Docker, with no function limit, keeps their own envelope. Vercel
+dispatches the message from its own cron path, `/api/cron/evening-message`, at
+18:00, 19:00 and 20:00 UTC (each fired within its hour, so the message arrives
+in the evening, best effort, possibly later than the chosen hour, and never
+in quiet hours, as the setting says): Paris gets 20:00 in summer and winter
+alike, the Americas nothing. Docker's ticks reach every zone, but only with
+the daily sync configured (`ARETE_AUTO_SYNC_HOUR`). Today's missed session is
+replanned first, since the replanning may move it onto tomorrow: when
+`missed_sessions.candidates` still holds, the message's pass runs the
+athlete's replanning itself (`scheduler.replan_missed_evening`, one proposal
+and one push a day whoever runs it; from 20:00 on Docker, its usual hour) and
+writes the message in the same pass. A replanning that fails or runs out of
+time does not hold the message back. An evening found with nothing to say is
+surveyed again 20 minutes later at the soonest, so no Vercel window is skipped.
+The push and its inbox item open `/follow-up?evening=<id>`: Chiron selects the
+message's own thread (a new one the first time) whose `coach_ref` is
+`evening:<id>`, shows the message as a reference card and leaves the composer
+as it was. While the message is `answerable` (unanswered, until the end of
+the day it is about), that thread's first message answers the question with
+no model request: `POST /coach/evening/{id}/answer` keeps it once on the row
+and files it once in `notes.md` through `memory.append_entry` (its dated
+heading is the guard). A failed filing is reported apart (`journaled` false,
+said on the card) and retried when the message is read and by the next
+briefing's facts, which quote the question and the answer. A closed question
+(answered, past, gone) makes the composer chat as usual; so do later messages
+in the thread. The export includes written messages and answers. Deleting a
+conversation does not remove what the journal kept from it; the delete
+dialog says so. Budget: one model request per opted-in athlete and
+evening with something to say, none otherwise; see the PR for the estimate.
 
 `services/coach_followup.py` owns one question per day and per session, its
 48-hour expiry, snooze/skip state and revision-checked RPE response. References

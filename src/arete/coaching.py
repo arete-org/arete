@@ -48,7 +48,13 @@ from arete.agent.runtime.context import AgentContext, read_athlete_clock
 from arete.agent.runtime.execution import invoke_agent_sync
 from arete.calendar import get_calendar_service
 from arete.config import config
-from arete.services import briefing, coaching_rules, session_feedback, weekly_review
+from arete.services import (
+    briefing,
+    coaching_rules,
+    evening_message,
+    session_feedback,
+    weekly_review,
+)
 from arete.services.athlete_scope import current_athlete_id, resolve_athlete_id
 from arete.services.coaching_repository import Briefing
 from arete.services.feature_flags import get_feature_flags, glm_flash_available
@@ -313,11 +319,23 @@ def build_review_agent(athlete_id: int, *, glm_flash: bool = False):
     return _assemble("review", glm_flash=glm_flash)
 
 
-def _run_mission(graph, profile: str, message: str, max_chars: int) -> str:
+@_serialized
+@lru_cache(maxsize=MAX_CACHED_ATHLETES)
+def build_evening_agent(athlete_id: int, *, glm_flash: bool = False):
+    assert athlete_id == current_athlete_id()
+    return _assemble("evening", glm_flash=glm_flash)
+
+
+def _run_mission(
+    graph, profile: str, message: str, max_chars: int, deadline: float | None = None
+) -> str:
+    """One tool-free request. ``deadline`` (monotonic) bounds the whole run,
+    fallbacks included, so a scheduled dispatch settles a failure before the
+    platform stops its function; None keeps the run's own envelope."""
+    context = AgentContext(profile=profile)  # type: ignore[arg-type]
+    context.deadline = deadline
     result = invoke_agent_sync(
-        graph,
-        {"messages": [{"role": "user", "content": message}]},
-        context=AgentContext(profile=profile),  # type: ignore[arg-type]
+        graph, {"messages": [{"role": "user", "content": message}]}, context=context
     )
     messages = result.get("messages", [])
     if not messages:
@@ -332,9 +350,20 @@ def _run_mission(graph, profile: str, message: str, max_chars: int) -> str:
     return text
 
 
-def run_briefing(facts: str) -> str:
+def _bounded(run: Callable[..., str], deadline: float | None) -> Callable[[str], str]:
+    """``run`` stopping by ``deadline``; ``run`` itself without one."""
+    if deadline is None:
+        return run
+    return partial(run, deadline=deadline)
+
+
+def run_briefing(facts: str, deadline: float | None = None) -> str:
     return _run_mission(
-        build_briefing_agent(), "briefing", facts, briefing.MAX_BRIEFING_CHARS
+        build_briefing_agent(),
+        "briefing",
+        facts,
+        briefing.MAX_BRIEFING_CHARS,
+        deadline,
     )
 
 
@@ -359,10 +388,27 @@ def write_sync_feedback(session_ids: list[int]) -> dict[str, Any]:
     return coaching_rules.sync_feedback(session_ids, produce=run_feedback_batch)
 
 
-def run_review(facts: str) -> str:
+def run_review(facts: str, deadline: float | None = None) -> str:
     return _run_mission(
-        build_review_agent(), "review", facts, weekly_review.MAX_REVIEW_CHARS
+        build_review_agent(), "review", facts, weekly_review.MAX_REVIEW_CHARS, deadline
     )
+
+
+def run_evening(facts: str, deadline: float | None = None) -> str:
+    return _run_mission(
+        build_evening_agent(),
+        "evening",
+        facts,
+        evening_message.MAX_EVENING_CHARS,
+        deadline,
+    )
+
+
+def write_evening_message(
+    evening: evening_message.Survey, *, deadline: float | None = None
+) -> evening_message.EveningMessage | None:
+    """The scheduler's evening message: one request, None when already held."""
+    return evening_message.write(_bounded(run_evening, deadline), evening)
 
 
 def generate_weekly_review(
@@ -373,9 +419,11 @@ def generate_weekly_review(
     )
 
 
-def write_scheduled_review() -> weekly_review.Review | None:
+def write_scheduled_review(
+    *, deadline: float | None = None
+) -> weekly_review.Review | None:
     """The scheduler's review: written once per week, None when it exists."""
-    return weekly_review.write_review(run_review, scheduled=True)
+    return weekly_review.write_review(_bounded(run_review, deadline), scheduled=True)
 
 
 def generate_briefing(
@@ -393,10 +441,11 @@ def get_or_create_briefing(
     target_date: date | None = None,
     user_id: int | None = None,
     replacing: Briefing | None = None,
+    deadline: float | None = None,
 ) -> Briefing | None:
     user_id = resolve_athlete_id(user_id)
     return briefing.get_or_create_briefing(
-        produce=run_briefing,
+        produce=_bounded(run_briefing, deadline),
         trigger=trigger,
         target_date=target_date,
         user_id=user_id,

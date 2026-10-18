@@ -74,9 +74,11 @@ test('notification kinds and quiet hours are saved with the settings', async ({ 
   await mockApi(page, saved);
   await page.goto('/settings?tab=coach');
   await page.getByRole('checkbox', { name: 'Séances importées' }).uncheck();
-  // The check-in push ships (ARE-59); the evening message is still to come.
+  // The check-in push (ARE-59) and the evening message (ARE-64) ship; the
+  // reminder before a key session is still to come.
   await expect(page.getByRole('checkbox', { name: /Check-in du matin/ })).toBeEnabled();
-  await expect(page.getByRole('checkbox', { name: /Message du soir/ })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: /Message du soir \(si activé/ })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: /Rappel la veille/ })).toBeDisabled();
   await page.getByLabel('Début des heures calmes').fill('22:00');
   await page.getByRole('button', { name: 'ENREGISTRER' }).click();
   await expect.poll(() => saved.length).toBe(1);

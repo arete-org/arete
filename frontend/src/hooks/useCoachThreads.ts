@@ -10,7 +10,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { MessageFeedback } from '@/lib/agentFeedback';
 import { invalidateAfterGarminRefresh, invalidateAfterSession, qk } from '@/lib/queryKeys';
 import type { PanelPageContext } from '@/lib/pageContext';
-import { isCoachReference } from '@/lib/coachToday';
+import { ApiError } from '@/lib/api';
+import { coachApi, eveningKey, isCoachReference, MAX_EVENING_ANSWER_CHARS, type EveningMessage } from '@/lib/coachToday';
 import {
   applyEvent,
   MAX_MESSAGE_CHARS,
@@ -61,6 +62,8 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   } | null>(null);
   const storeRef = useRef(store);
   const openSequence = useRef(0);
+  // Evening questions the server reported closed (gone, past, answered elsewhere).
+  const closedEvenings = useRef(new Set<number>());
   // Native discussion events and SSE chunks can share a React batch. Apply all
   // updates to the latest store synchronously so opening a thread loses neither.
   const setStore = useCallback((update: SetStateAction<ThreadStore>) => {
@@ -80,8 +83,14 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       if (!isCoachReference(reference)) return;
       try {
         const current = storeRef.current;
-        const next = reference.kind === 'briefing' || reference.kind === 'onboarding'
-          ? addThread(current, { ...createThread(), title: reference.kind === 'onboarding' ? 'Mon point de départ' : 'Briefing avec Chiron', reference })
+        // One thread per evening message: opening its push again returns to it.
+        const evening = reference.kind === 'evening'
+          ? current.threads.find(t => t.reference?.kind === 'evening' && t.reference.id === reference.id)
+          : undefined;
+        const titles = { briefing: 'Briefing avec Chiron', onboarding: 'Mon point de départ', evening: 'Question du soir' } as const;
+        const next = evening ? { ...current, activeId: evening.id }
+          : reference.kind === 'briefing' || reference.kind === 'onboarding' || reference.kind === 'evening'
+          ? addThread(current, { ...createThread(), title: titles[reference.kind], reference })
           : updateThread(current, current.activeId, thread => ({ ...thread, reference }));
         setStore(next);
         setError('');
@@ -200,12 +209,77 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
   };
   const stop = useCallback(() => runRef.current?.controller.abort(), []);
 
+  /** The first message of an evening message's thread answers its question:
+   *  kept and filed in the journal by the server, with no model request. The
+   *  draft stays until the answer is saved. */
+  const keepAnswer = (threadId: string, content: string) => setStore(prev => updateThread(prev, threadId, t => ({
+    ...t,
+    draft: t.draft.trim() === content ? '' : t.draft,
+    updatedAt: Date.now(),
+    messages: [...t.messages, { role: 'user', content }],
+  })));
+  const answerEvening = (id: number, content: string) => {
+    if (active.attachmentIds?.length) {
+      setError('La réponse à la question du soir part sans pièce jointe : retire-les ou envoie-les ensuite.');
+      return false;
+    }
+    if (content.length > MAX_EVENING_ANSWER_CHARS) {
+      setError('Ta réponse dépasse 1 000 caractères : raccourcis-la.');
+      return false;
+    }
+    const threadId = active.id;
+    const controller = new AbortController();
+    runRef.current = { threadId, controller };
+    setRunningId(threadId);
+    setError('');
+    void coachApi.answerEvening(id, content, controller.signal)
+      .then(saved => {
+        queryClient.setQueryData(eveningKey(id), saved);
+        keepAnswer(threadId, content);
+      })
+      .catch(async (err: unknown) => {
+        const close = () => {
+          // Closed: the draft stays, and sending it again talks to Chiron.
+          closedEvenings.current.add(id);
+          setError('Cette question est close : renvoie ton message pour en parler avec Chiron.');
+        };
+        if (err instanceof ApiError && err.status === 404) {
+          close();
+          return;
+        }
+        if (err instanceof ApiError && err.status === 409) {
+          // A conflict may be passing (a concurrent answer): the server says.
+          const fresh = await coachApi.evening(id).catch(() => null);
+          if (fresh) queryClient.setQueryData(eveningKey(id), fresh);
+          if (fresh?.answer === content) keepAnswer(threadId, content);
+          else if (!fresh?.answerable) close();
+          else setError('Réponse non enregistrée : réessaie.');
+          return;
+        }
+        // Stopped or lost on the way: the server may have kept it.
+        setError('Réponse peut-être non enregistrée : vérifie ci-dessus.');
+        void queryClient.invalidateQueries({ queryKey: eveningKey(id) });
+      })
+      .finally(() => {
+        runRef.current = null;
+        setRunningId(null);
+      });
+    return true;
+  };
+
   /** ``keep`` = messages kept before the new question (a retry drops the
    *  failed or unwanted answer and asks the same question again). */
   const send = (prompt = active.draft, keep = active.messages.length) => {
     const content = prompt.trim();
     const activeRuns = runRef.current ? 1 : 0;
     if (!content || activeRuns >= MAX_ACTIVE_RUNS) return false;
+    const evening = active.reference?.kind === 'evening' ? active.reference : null;
+    if (evening && keep === 0 && !active.messages.length && !closedEvenings.current.has(evening.id)) {
+      const known = queryClient.getQueryData<EveningMessage>(eveningKey(evening.id));
+      // A resend after a lost response that the server did keep: nothing to pay.
+      if (known?.answer === content) { keepAnswer(active.id, content); return true; }
+      if (!known?.answer && known?.answerable !== false) return answerEvening(evening.id, content);
+    }
     const retrying = keep < active.messages.length;
     const attachmentIds = selectedDocuments ? (retrying ? active.messages[keep]?.attachmentIds ?? [] : active.attachmentIds ?? []) : undefined;
     const history = requestWindow([

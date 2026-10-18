@@ -330,7 +330,7 @@ def test_coaching_waits_for_refresh_and_background_missions_do_not_sync(monkeypa
     )
     assert context.stats.model_calls == 0
     asyncio.run(refresh_personal_data(context))
-    for profile in ("briefing", "feedback", "review"):
+    for profile in ("briefing", "feedback", "review", "evening"):
         asyncio.run(refresh_personal_data(AgentContext(profile=profile)))
     assert len(calls) == 1
     assert calls[0]["deadline"] == context.deadline - 120
