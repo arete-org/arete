@@ -42,7 +42,7 @@ export function ProfileTab({ settings, updateSetting }: SettingsTabProps) {
       </div>
 
       {auth.enabled && (
-        <Panel variant="inset" title="Compte">
+        <Panel level={3} variant="inset" title="Compte">
           <div className="space-y-3">
             <p className="text-sm font-sans text-text-secondary">
               Connecté en tant que <span className="text-text-primary">{auth.email}</span>

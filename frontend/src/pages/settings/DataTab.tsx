@@ -39,7 +39,7 @@ export function DataTab() {
     <div className="space-y-6">
       <h2 className="text-lg font-sans text-text-primary">DONNÉES</h2>
 
-      <Panel variant="inset" title="EXPORTER MES DONNÉES">
+      <Panel level={3} variant="inset" title="EXPORTER MES DONNÉES">
         <div className="space-y-4">
           <p className="text-xs text-text-muted font-sans">
             Séances, santé, force, objectifs, bilans et journal du coach. Les identifiants et jetons de connexion
@@ -112,7 +112,7 @@ export function DataTab() {
         </div>
       </Panel>
 
-      <Panel variant="inset" title="BILAN ANNUEL">
+      <Panel level={3} variant="inset" title="BILAN ANNUEL">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p className="text-xs text-text-muted font-sans">
             L’année en chiffres : volume, sports, records, régularité, forme et force.

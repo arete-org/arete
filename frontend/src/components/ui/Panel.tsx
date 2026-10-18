@@ -13,6 +13,8 @@ interface PanelProps {
   delay?: number;
   animate?: boolean;
   style?: CSSProperties;
+  /** Heading level of the title: 2 under the page's h1, 3 inside a section that has its own h2. */
+  level?: 2 | 3;
 }
 
 /**
@@ -29,7 +31,9 @@ export function Panel({
   delay = 0,
   animate = variant === 'glass',
   style,
+  level = 2,
 }: PanelProps) {
+  const Heading = level === 3 ? 'h3' : 'h2';
   return (
     <div
       className={cn(
@@ -42,7 +46,7 @@ export function Panel({
       style={delay ? { animationDelay: `${delay}s`, ...style } : style}
     >
       {title && (
-        <h2
+        <Heading
           className={cn(
             'font-sans font-medium',
             variant === 'glass' ? 'text-[15px] mb-4' : 'text-xs mb-3',
@@ -50,7 +54,7 @@ export function Panel({
           )}
         >
           {title}
-        </h2>
+        </Heading>
       )}
       {children}
     </div>

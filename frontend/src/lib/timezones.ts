@@ -7,6 +7,13 @@ const OTHERS = 'Autres';
 /** A browser without `Intl.supportedValuesOf` still offers the former choices. */
 const FALLBACK = ['Europe/Paris', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'UTC'];
 
+/** Old names some browsers still list (ICU), shown once under today's name. */
+const RENAMED: Record<string, string> = {
+  'Asia/Calcutta': 'Asia/Kolkata', 'Asia/Saigon': 'Asia/Ho_Chi_Minh', 'Asia/Katmandu': 'Asia/Kathmandu',
+  'Asia/Rangoon': 'Asia/Yangon', 'Europe/Kiev': 'Europe/Kyiv', 'America/Godthab': 'America/Nuuk',
+  'Atlantic/Faeroe': 'Atlantic/Faroe', 'Africa/Asmera': 'Africa/Asmara', 'America/Buenos_Aires': 'America/Argentina/Buenos_Aires',
+};
+
 export interface TimezoneGroup { region: string; zones: { value: string; label: string }[] }
 
 function offset(zone: string, at: Date): string {
@@ -28,7 +35,8 @@ export function timezoneGroups(current: string, at = new Date()): TimezoneGroup[
     zones = FALLBACK;
   }
   if (!zones.length) zones = FALLBACK;
-  const all = new Set(zones);
+  const all = new Set(zones.map((zone) => RENAMED[zone] ?? zone));
+  // A stored old name stays selectable as it is: the server knows both.
   if (current) all.add(current);
   const groups = new Map<string, TimezoneGroup>();
   for (const zone of all) {
