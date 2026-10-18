@@ -221,7 +221,6 @@ class TestDailySync:
             patch("arete.garmin.readiness.update_readiness_range"),
             patch("arete.services.plan_adaptation.adapt_today", return_value=[]),
             patch("arete.services.plan_adaptation.push_today", return_value="0"),
-            patch("arete.api.strava._get_strava_tokens", return_value=None),
             patch(
                 "arete.services.coaching_repository.SessionFeedbackRepository.pending_garmin",
                 return_value=([], 0),

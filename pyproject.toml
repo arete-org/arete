@@ -1,7 +1,7 @@
 [project]
 name = "arete"
 version = "0.1.0"
-description = "Training assistant: Garmin/Strava analytics, strength log and LLM coaching tips"
+description = "Training assistant: Garmin analytics, strength log and LLM coaching tips"
 readme = "README.md"
 license = "LicenseRef-Proprietary"
 license-files = ["LICENSE"]

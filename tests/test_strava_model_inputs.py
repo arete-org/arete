@@ -17,8 +17,8 @@ import pytest
 from arete.dataio.db import connect
 from arete.dataio.init_duckdb import main as init_schema
 from arete.garmin.models import ActivitySource, ActualSession
+from arete.garmin.sync import STRAVA_ONLY_FIELDS, garmin_takeover
 from arete.services.settings import athlete_today
-from arete.strava.merge import STRAVA_ONLY_FIELDS, garmin_takeover, strava_extras
 
 
 @pytest.fixture
@@ -79,26 +79,6 @@ def test_strava_values_change_no_number_the_coach_reads(athlete, client):
     finally:
         con.close()
     assert _model_numbers(client, athlete) == before
-
-
-def test_linking_a_strava_copy_copies_no_value():
-    garmin = ActualSession(
-        date=date(2026, 10, 1), sport="running", source=ActivitySource.GARMIN_CONNECT
-    )
-    strava = ActualSession(
-        date=date(2026, 10, 1),
-        sport="running",
-        source=ActivitySource.STRAVA,
-        garmin_activity_id="strava-42",
-        name="Sortie Strava",
-        notes="Description Strava",
-        suffer_score=120,
-        avg_watts=250,
-        best_efforts_json="[]",
-        splits_json="[]",
-        calories=700,
-    )
-    assert strava_extras(garmin, strava) == {"strava_activity_id": "strava-42"}
 
 
 def test_a_garmin_takeover_clears_the_strava_only_values():

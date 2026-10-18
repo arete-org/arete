@@ -291,22 +291,6 @@ def test_email_refresh_preserves_athlete_identity(athletes):
     assert updated.email_verified_at is not None
 
 
-def test_oauth_state_binds_the_callback_to_its_athlete():
-    from arete.services import oauth_state
-
-    secret = "test-only-secret"
-    state = oauth_state.issue(secret, athlete_id=42)
-    assert oauth_state.athlete_for_state(secret, state) == 42
-    assert oauth_state.athlete_for_state(secret, state.replace("42~", "1~")) is None
-    assert oauth_state.athlete_for_state(secret, oauth_state.issue(secret)) is None
-    assert (
-        oauth_state.athlete_for_state(
-            secret, oauth_state.issue(secret, now=0, athlete_id=42)
-        )
-        is None
-    )
-
-
 def test_mirror_keeps_identical_paths_private(athletes):
     from arete.dataio import mirror
 

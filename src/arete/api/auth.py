@@ -54,7 +54,6 @@ PUBLIC_PATHS = frozenset(
     {
         "/health",
         "/auth/config",
-        "/strava/callback",
         "/cron/daily-sync",
         "/cron/checkin",
         "/cron/evening",

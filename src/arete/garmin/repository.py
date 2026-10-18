@@ -616,11 +616,26 @@ class GarminRepository:
             "avg_watts",
             "weighted_avg_watts",
             "strava_activity_id",
-            # provenance (when a Strava row is taken over by Garmin)
+            # provenance and measurements (when Garmin takes a Strava row over)
             "source",
             "source_file",
             "session_type",
             "garmin_activity_id",
+            "date",
+            "sport",
+            "start_time",
+            "duration_sec",
+            "distance_m",
+            "avg_hr",
+            "max_hr",
+            "avg_speed_mps",
+            "max_speed_mps",
+            "ascent_m",
+            "start_lat",
+            "start_lon",
+            "avg_vertical_oscillation",
+            "avg_ground_contact_time",
+            "avg_stride_length",
         }
     )
 
@@ -633,7 +648,7 @@ class GarminRepository:
         """Session that is the same workout: starts within ``tolerance_sec``.
 
         Without a start time, falls back to same day and duration within
-        max(tolerance, 5 %). Used to merge Garmin and Strava copies.
+        max(tolerance, 5 %). Used to find a legacy Strava row Garmin takes over.
         """
         if start_time is None:
             return None
@@ -679,21 +694,6 @@ class GarminRepository:
             )
         finally:
             conn.close()
-
-    def known_strava_ids(self) -> set[str]:
-        """Strava activity IDs already imported (own rows or merged into Garmin rows)."""
-        conn = self._get_connection()
-        try:
-            rows = conn.execute(
-                """
-                SELECT garmin_activity_id FROM visible_actual_sessions WHERE source = 'strava'
-                UNION
-                SELECT strava_activity_id FROM visible_actual_sessions WHERE strava_activity_id IS NOT NULL
-                """
-            ).fetchall()
-        finally:
-            conn.close()
-        return {str(r[0]) for r in rows if r[0] is not None}
 
     def update_actual_session_fields(self, session_id: int, **fields: Any) -> None:
         """Update enrichment columns of an actual session (whitelisted)."""

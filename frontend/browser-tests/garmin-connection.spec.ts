@@ -28,10 +28,12 @@ test('connect Garmin with MFA, sync and disconnect from Connections', async ({ p
       return route.fulfill({ json: { success: true } });
     }
     if (path.includes('/settings')) return route.fulfill({ json: { theme: 'odyssey' } });
-    if (path.endsWith('/strava/status')) return route.fulfill({ json: { connected: false } });
     return route.fulfill({ json: [] });
   });
   await page.goto('/settings?tab=connections');
+  await expect(page.getByRole('heading', { name: 'SERVICES CONNECTÉS' })).toBeVisible();
+  // Strava is retired: its API agreement forbids its data in an AI application.
+  await expect(page.getByText('Strava', { exact: false })).toHaveCount(0);
   await page.getByRole('button', { name: 'CONNECTER GARMIN' }).click();
   await page.getByLabel('[EMAIL]', { exact: true }).fill('athlete@garmin.test');
   await page.getByLabel('[MOT DE PASSE]', { exact: true }).fill('test-only-password');

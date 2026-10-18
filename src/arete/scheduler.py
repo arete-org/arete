@@ -1,4 +1,4 @@
-"""Daily background sync (Garmin activities + health, Strava) inside the API.
+"""Daily background sync (Garmin activities + health) inside the API.
 
 Enabled by ``ARETE_AUTO_SYNC_HOUR`` (an hour on each athlete's clock). No extra
 dependency: an asyncio task wakes up every few minutes and runs the blocking
@@ -137,18 +137,6 @@ def daily_sync() -> dict[str, str]:
 
         status["garmin_push"] = push_today(garmin)
 
-    from arete.api.strava import SyncRequest, _get_strava_tokens, sync
-
-    if _get_strava_tokens():
-        try:
-            result = sync(SyncRequest(days=7))
-            imported += int(result["imported"])
-            status["strava"] = f"{result['imported']} imported"
-        except Exception as e:  # noqa: BLE001
-            status["strava"] = f"failed: {e}"
-    else:
-        status["strava"] = "not connected"
-
     # After the imports and the rest decisions: the dashboard then reads the
     # settled progression without a projection request of its own.
     if (game := settle_game()) is not None:
@@ -180,8 +168,8 @@ def daily_sync() -> dict[str, str]:
     if feedback_ids:
         status["feedback"], feedback = write_sync_feedback(feedback_ids)
 
-    # Garmin sessions are announced with their feedback, once; the rest (Strava,
-    # or a failed feedback run) by the import count.
+    # Garmin sessions are announced with their feedback, once; a failed
+    # feedback run leaves them to the import count.
     unannounced = imported - (len(synced_ids) if feedback is not None else 0)
     if (announced := announce_sync(feedback or [], unannounced)) is not None:
         status["notification"] = announced
@@ -1156,7 +1144,7 @@ def release_sync_lease(athlete_id: int) -> bool:
     """Let the next dispatch claim an athlete whose run failed or was stopped.
 
     For an administrator who has checked what that run already did outside
-    (Garmin, Strava, the calendar): the day's sync starts again from the top.
+    (Garmin, the calendar): the day's sync starts again from the top.
     A lease still within its nominal length belongs to a run in progress and
     stays, so two runs never overlap. False when nothing was released.
     """

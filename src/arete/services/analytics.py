@@ -1,4 +1,4 @@
-"""Analytics API: one overview per period, plus personal records.
+"""Analytics API: one overview per period, and session reads and edits.
 
 ``/analytics/overview`` answers four questions in one round-trip — how much did
 I train, how hard, how efficiently, how well did I recover — so the page can
@@ -17,9 +17,7 @@ from arete.dataio.queries import (
     FOOT_SPORTS,
     MODEL_EXCLUDED_SOURCES,
     RUNNING_SPORTS,
-    SPORT_GROUPS,
     OverviewRow,
-    best_effort_rows,
     daily_metrics_range,
     drift_rows,
     earliest_session_date,
@@ -46,11 +44,11 @@ from arete.services.settings import athlete_today
 logger = logging.getLogger(__name__)
 
 
-#: Best-effort buckets, ascending by distance. These are the names the source
-#: (Garmin/Strava) writes into ``best_efforts_json`` — matching is
+#: Best-effort buckets, ascending by distance. These are the names Strava
+#: wrote into ``best_efforts_json`` (the year review reads them) — matching is
 #: case-insensitive because it is not consistent about it ("1K" and "5K" but
 #: "1 mile", "50k"), and comparing spellings dropped every K distance from the
-#: Records card.
+#: records.
 EFFORT_NAMES = (
     "400m",
     "1/2 mile",
@@ -246,15 +244,6 @@ def get_overview(period: str = "30d"):
             **recovery,
         },
     }
-
-
-def get_records(sport: str = "running"):
-    """All-time best efforts for the usual distances."""
-    sports = SPORT_GROUPS.get(sport, RUNNING_SPORTS)
-    with db_connection() as con:
-        rows = best_effort_rows(con, sports)
-    bests = best_efforts(rows)
-    return {"records": [bests[n] for n in EFFORT_NAMES if n in bests]}
 
 
 def best_efforts(rows: Sequence[tuple]) -> dict[str, dict]:

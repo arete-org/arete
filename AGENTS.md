@@ -1,7 +1,7 @@
 # Arete — coding-session instructions
 
 Arete is a self-hosted training assistant with a private athlete per account:
-FastAPI + DuckDB, React + Vite, Garmin/Strava sync, planning, strength logging
+FastAPI + DuckDB, React + Vite, Garmin sync and FIT import, planning, strength logging
 and coaching.
 Read [docs/architecture.md](docs/architecture.md) before changing the coaching stack.
 
@@ -36,7 +36,7 @@ Read [docs/architecture.md](docs/architecture.md) before changing the coaching s
   versioned general/mission instructions. A client-supplied profile or page payload
   cannot grant permissions.
 - `services/` owns shared domain operations and their contracts. It may use the
-  existing `features/`, `dataio/`, `garmin/`, `strava/` and `strength/` modules. It
+  existing `features/`, `dataio/`, `garmin/` and `strength/` modules. It
   must not import FastAPI, LangChain, LangGraph, Deep Agents or agent composition.
   `services/jev.py` owns reusable Jev decision requests, validation and provider I/O;
   surface-specific questions and decision policy remain in the agent layer.

@@ -79,7 +79,7 @@ athlete's private data:
   the owner deactivates an administrator's athlete.
 - **Libérer la synchro**: clears a lease kept by a failed or stopped daily run, so
   the next window runs the day again. Check first what that run already did at
-  Garmin, Strava or the calendar. A lease within its 15 minutes belongs to a run
+  Garmin or the calendar. A lease within its 15 minutes belongs to a run
   in progress and is not released.
 - **Nommer admin / Retirer admin**: the owner only, never on its own logins.
 
@@ -191,7 +191,7 @@ manual deployment workflow, after the main preview has served the same commit
 ## Daily sync
 
 Each athlete is synced once a day: Garmin activities and health, plan
-adaptation, Strava, the calendar and the session feedback, then the briefing
+adaptation, the calendar and the session feedback, then the briefing
 and, any day but Sunday, the week's review when Sunday evening's was missed
 (the last window, 16:00 UTC, writes it on Sunday: `docs/architecture.md`). Vercel's Hobby plan runs a cron at most once
 a day, so `vercel.json` lists ten daily windows on the same path, from 07:00 to

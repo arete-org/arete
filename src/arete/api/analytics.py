@@ -19,11 +19,6 @@ def get_overview(period: str = Query("30d")):
     return service.get_overview(period)
 
 
-@router.get("/records")
-def get_records(sport: str = Query("running")):
-    return service.get_records(sport)
-
-
 @router.post("/terrain/backfill")
 def backfill_terrain(limit: int = Query(50, ge=1, le=50)):
     """GAP and climbing speeds of sessions whose streams predate them.

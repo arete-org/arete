@@ -33,8 +33,8 @@ clientsClaim();
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
-// SPA navigation falls back to the app shell. API calls and the Strava OAuth
-// callback must reach the server, never the cached shell.
+// SPA navigation falls back to the app shell. API calls must reach the
+// server, never the cached shell.
 registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/api\//] }));
 
 // Only the shell is precached. Lazy chunks, fonts and images have content-hashed

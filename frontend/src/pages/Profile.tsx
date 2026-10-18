@@ -14,9 +14,7 @@ import {
   type Player,
   type Skin,
 } from '@/lib/gamification';
-import { RecordSource } from './RecordSource';
 import { StrengthRecords } from './profileRecords';
-import { RecordsCard } from './analytics/cards/RecordsCard';
 import { RecentSessions } from './log/RecentSessions';
 import { readableError } from '@/lib/utils';
 
@@ -69,7 +67,6 @@ function ActiveProfile() {
     queryKey: ['settings'],
     queryFn: settingsApi.get,
   });
-  const [recordSource, setRecordSource] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   if (player.isPending)
     return (
@@ -289,19 +286,14 @@ function ActiveProfile() {
       )}
       {tab === 'records' && (
         <>
-          <RecordsCard onOpen={setRecordSource} />
           <p className="text-xs text-text-muted">
-            Records mesurés, sans multiplicateur d’XP. La fréquence cardiaque
-            absente reste non mesurée.
+            Records mesurés, sans multiplicateur d’XP.
           </p>
           <StrengthRecords />
         </>
       )}
       {tab === 'history' && <ActivityHistory />}
       {tab === 'collection' && <Collection player={p} refresh={refresh} />}
-      {recordSource !== null && (
-        <RecordSource id={recordSource} close={() => setRecordSource(null)} />
-      )}
       {editing && (
         <CharacterEditor
           player={p}

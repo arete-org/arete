@@ -25,7 +25,7 @@ arete/
 └── api/                     HTTP contracts and SSE projection
 ```
 
-Existing `garmin/`, `strava/`, `strength/`, `features/` and `dataio/` remain domain
+Existing `garmin/`, `strength/`, `features/` and `dataio/` remain domain
 modules: moving them would not improve a dependency boundary. The services layer
 reuses them. Business code imports neither the HTTP routes nor agent frameworks.
 
@@ -619,9 +619,14 @@ compact digest without any stream, for the chat's read-only
 `get_activity_detail`; Strava rows never reach the model. Strava's API agreement
 (1 June 2026) forbids its data in an AI application, so no Strava number reaches
 it either: the load series (`dataio/queries.LOAD_ROWS`, the TSS estimate) leave
-Strava rows and the suffer score out, a Strava copy only links to its Garmin
-session (`strava/merge.py`), and migration 62 cleared the Strava values the old
-merge had copied onto Garmin rows. Analytics come from
+Strava rows and the suffer score out, and migration 62 cleared the Strava values
+an old merge had copied onto Garmin rows. Strava was then retired as a data
+source (October 2026): no connection, sync or OAuth route remains, and
+`tests/test_architecture.py` keeps any module from importing one again. The rows
+it created stay readable and marked Strava on the athlete's pages; Garmin
+importing the same workout takes such a row over with its own values and clears
+the Strava-only ones (`garmin/sync.garmin_takeover`). Garmin sync and FIT
+upload are the activity sources. Analytics come from
 `garmin/time_series.py`: decoupling, pace fade, cadence variability, power and
 the work intervals of a structured workout (FIT lap intensity).
 
@@ -679,8 +684,7 @@ address) and the roles: the owner administers by right and names
 administrators. `api/admin.py` exposes the accounts behind `require_admin`, and
 naming an administrator behind `require_owner` (both in `api/auth.py`); the
 scheduler owns releasing a sync lease. Services never import `arete.api.auth`. `services/google_tokens.py` reads the signed-in user's Google
-token from Clerk for Calendar, and
-`services/oauth_state.py` signs the Strava OAuth state the callback demands.
+token from Clerk for Calendar.
 
 The browser keeps an allowlist of query answers (dashboard, settings, goals and
 the session windows containing today) in IndexedDB for 24 hours so a repeat visit

@@ -65,7 +65,7 @@ la typographie, pas une refonte de la disposition de la page Réglages.
 | Carte, panneau, dialogue | Surface opaque, bordure neutre, rayon 16 px ; pas de halo ni de grossissement au survol | `.glass-panel`, `.rpg-surface`, `--radius-panel` |
 | Surface imbriquée | Fond de page, bordure neutre, rayon 9 px | `.ui-inset` |
 | Contrôle, bouton, onglet | Rayon 9 px, Inter ; états désactivés conservés | `--radius-control`, composants `ui/` |
-| Action principale | Fond plein selon sa sémantique ; texte contrasté, y compris violet et Strava | `.ui-button[data-strong]`, tokens `--color-on-*` |
+| Action principale | Fond plein selon sa sémantique ; texte contrasté, y compris violet | `.ui-button[data-strong]`, tokens `--color-on-*` |
 | Action secondaire | Fond légèrement teinté, texte sémantique | `Button` existant |
 | Navigation active | Fond de sélection, état courant accessible | `--color-selection`, `aria-current` |
 | Focus clavier | Contour de 2 px, décalé de 3 px, couleur d’accent | `:focus-visible` |

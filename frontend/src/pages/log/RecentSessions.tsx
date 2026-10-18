@@ -75,7 +75,7 @@ export function RecentSessions() {
   if (sessions.length === 0) {
     return (
       <Panel animate={false}>
-        <EmptyState message="AUCUNE SÉANCE CARDIO" action="Importe un fichier FIT, saisis-la sans montre ou synchronise Strava" />
+        <EmptyState message="AUCUNE SÉANCE CARDIO" action="Importe un fichier FIT, saisis-la sans montre ou synchronise Garmin" />
       </Panel>
     );
   }

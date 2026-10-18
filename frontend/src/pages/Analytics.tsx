@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { Period } from '@/types';
 import { analyticsApi } from '@/lib/api';
 import { CHART, COLORS } from '@/lib/chartTheme';
@@ -15,7 +15,6 @@ import {
   PaceCard,
   PeriodSelector,
   PREVIOUS_LABEL,
-  RecordsCard,
   RecoveryCard,
   SECTIONS,
   Section,
@@ -54,7 +53,6 @@ function useActiveSection(): string {
 
 export function AnalyticsPage() {
   const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
   const selected = params.get('period');
   const period: Period = PERIODS.find(value => value === selected) ?? '30d';
   const setPeriod = (value: Period) => setParams(current => {
@@ -135,7 +133,6 @@ export function AnalyticsPage() {
       <Section def={SECTIONS[2]}>
         <EfficiencyCard card={cards?.decoupling} {...state} />
         <PaceCard card={cards?.pace} {...state} />
-        <RecordsCard onOpen={id => navigate(`/log/sessions/${id}`)} />
       </Section>
 
       <Section def={SECTIONS[3]}>

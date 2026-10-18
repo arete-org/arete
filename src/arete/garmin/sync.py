@@ -32,7 +32,6 @@ from arete.garmin.models import (
 from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import ActivityStreams, from_time_series
 from arete.garmin.threshold import refresh_threshold
-from arete.strava.merge import garmin_takeover
 from arete.strength.drafts import open_garmin_draft
 from arete.strength.logging_service import link_garmin_strength
 from arete.strength.models import GarminExerciseSummary
@@ -282,6 +281,68 @@ def complete_planned(repo: GarminRepository, day: date, sport: str) -> int | Non
             repo.update_planned_session_status(planned.id, SessionStatus.COMPLETED)
             return planned.id
     return None
+
+
+#: Values only Strava filled on the rows it created (its description in
+#: ``notes``): cleared when Garmin takes such a row over.
+STRAVA_ONLY_FIELDS = (
+    "suffer_score",
+    "best_efforts_json",
+    "splits_json",
+    "avg_watts",
+    "weighted_avg_watts",
+    "workout_type",
+    "device_name",
+    "notes",
+)
+
+#: What a Garmin import measures: on a takeover, its value replaces Strava's,
+#: an empty one included.
+GARMIN_MEASURED_FIELDS = (
+    "date",
+    "sport",
+    "session_type",
+    "start_time",
+    "duration_sec",
+    "moving_time_sec",
+    "distance_m",
+    "calories",
+    "avg_hr",
+    "max_hr",
+    "hr_zones_json",
+    "avg_pace_sec_km",
+    "avg_speed_mps",
+    "max_speed_mps",
+    "ascent_m",
+    "descent_m",
+    "start_lat",
+    "start_lon",
+    "avg_cadence",
+    "max_cadence",
+    "avg_vertical_oscillation",
+    "avg_ground_contact_time",
+    "avg_stride_length",
+    "laps_json",
+    "name",
+    "source_file",
+    "garmin_activity_id",
+)
+
+
+def garmin_takeover(garmin: ActualSession) -> dict[str, Any]:
+    """Columns to write on a legacy Strava row when Garmin imports that workout.
+
+    Strava was retired as a data source (its API agreement forbids its data in
+    an AI application, ARE-126), but the rows it created stay. The row becomes
+    a Garmin row the coach reads, so Garmin's values win: every measured one
+    replaces Strava's and the Strava-only ones go. The athlete's own fields
+    (plan link, RPE) stay.
+    """
+    return {
+        "source": garmin.source.value,
+        **{column: getattr(garmin, column) for column in GARMIN_MEASURED_FIELDS},
+        **dict.fromkeys(STRAVA_ONLY_FIELDS),
+    }
 
 
 class GarminSyncClient:
@@ -547,7 +608,7 @@ class GarminSyncClient:
                     yield SyncProgress("saving", index, total, activity.activity_name)
                     if checkpoint is not None:
                         checkpoint()
-                    # Same workout already imported from Strava? Garmin takes it over.
+                    # Same workout on a legacy Strava row? Garmin takes it over.
                     twin = self.repository.find_overlapping_session(
                         session.start_time, session.duration_sec
                     )
