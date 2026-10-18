@@ -63,7 +63,27 @@ class RunStats:
 def _athlete_now() -> datetime:
     from arete.services.settings import athlete_now
 
-    return athlete_now()
+    # A settings read (a database round trip on MotherDuck): never on the loop.
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return athlete_now()
+    raise RuntimeError(
+        "AgentContext built on the event loop: pass "
+        "current_datetime=await read_athlete_clock()"
+    )
+
+
+async def read_athlete_clock() -> datetime:
+    """The athlete's now for a context built in async code.
+
+    It reads the athlete's settings (a database round trip on MotherDuck), so
+    it runs in an AnyIO worker: the default factory below would block the event
+    loop. Sync callers (workers, tests) keep the default.
+    """
+    from anyio import to_thread
+
+    return await to_thread.run_sync(_athlete_now)
 
 
 @dataclass

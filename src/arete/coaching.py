@@ -44,7 +44,7 @@ from arete.agent.models.registry import (
 from arete.agent.models.routing import resolve_route
 from arete.agent.profiles.catalog import get_profile
 from arete.agent.runtime.budget import MAX_GRAPH_STEPS
-from arete.agent.runtime.context import AgentContext
+from arete.agent.runtime.context import AgentContext, read_athlete_clock
 from arete.agent.runtime.execution import invoke_agent_sync
 from arete.calendar import get_calendar_service
 from arete.config import config
@@ -259,7 +259,11 @@ async def run_slack_coach(
     from arete.agent.runtime.execution import stream_agent
     from arete.agent.runtime.streaming import MAX_STREAM_EVENTS, StreamProjection
 
-    context = context or AgentContext(thread_id=thread_id, slack_visibility=visibility)
+    context = context or AgentContext(
+        thread_id=thread_id,
+        slack_visibility=visibility,
+        current_datetime=await read_athlete_clock(),
+    )
     context.slack_visibility = visibility
     projection = StreamProjection()
     answer = ""
@@ -480,8 +484,17 @@ async def prepare_slack_agent(messages, message, client):
         raise HistoryError("Ce fil privé exige son administrateur Arete actif.")
     if actor is None or not actor.is_admin:
         return SlackPreparation(run_slack_coach)
+    try:
+        now = await read_athlete_clock()
+    except Exception as exc:
+        raise HistoryError(
+            "Classement Slack indisponible ; aucune action exécutée. " + str(exc)
+        ) from exc
     context = AgentContext(
-        profile="slack", thread_id=message.thread_id, account_id=actor.clerk_user_id
+        profile="slack",
+        thread_id=message.thread_id,
+        account_id=actor.clerk_user_id,
+        current_datetime=now,
     )
     context.started_at = monotonic()
     context.deadline = context.started_at + MAX_JOB_SECONDS
@@ -575,13 +588,18 @@ async def _run_automation(run: dict) -> None:
 
     started = monotonic()
     identifier = run["id"]
-    context = AgentContext(profile="automation", thread_id=identifier)
-    context.tool_slots = asyncio.Semaphore(1)
-    context.deadline = started + min(
-        SEGMENT_SECONDS, MAX_ACTIVE_SECONDS - run["active_seconds"]
-    )
     result, interrupts, error = None, [], None
     try:
+        # Inside the try: a failed settings read still finishes the run.
+        context = AgentContext(
+            profile="automation",
+            thread_id=identifier,
+            current_datetime=await read_athlete_clock(),
+        )
+        context.tool_slots = asyncio.Semaphore(1)
+        context.deadline = started + min(
+            SEGMENT_SECONDS, MAX_ACTIVE_SECONDS - run["active_seconds"]
+        )
         # Persist only the non-secret route identity; credentials and clients
         # are resolved at composition and never serialized in graph state.
         from arete.dataio.db import db_connection

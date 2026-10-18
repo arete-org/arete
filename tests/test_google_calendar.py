@@ -8,6 +8,7 @@ from urllib.parse import parse_qsl
 
 import httpx
 import pytest
+from agent_clock import CLOCK
 from pydantic import ValidationError
 
 from arete.dataio.db import db_connection
@@ -609,7 +610,9 @@ def test_calendar_tools_stream_proposal_without_writing(calendar):
         async for part in stream_agent(
             graph,
             {"messages": [HumanMessage("Planifie ma course")]},
-            context=AgentContext(thread_id="thread", account_id="user_athlete"),
+            context=AgentContext(
+                current_datetime=CLOCK, thread_id="thread", account_id="user_athlete"
+            ),
         ):
             events.extend(projection.events(part))
         return events

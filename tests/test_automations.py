@@ -351,6 +351,21 @@ async def test_composed_mission_waits_and_resumes_with_cumulative_budgets(monkey
     assert done["effects"] == []
 
 
+@pytest.mark.anyio
+async def test_a_failed_clock_read_still_finishes_the_run(monkeypatch):
+    from arete import coaching
+
+    async def unreadable():
+        raise ConnectionError("settings unavailable")
+
+    monkeypatch.setattr(coaching, "read_athlete_clock", unreadable)
+    run = started()
+    await coaching._run_automation(run)
+    failed = service.run_detail(run["id"])
+    assert failed["state"] != "running"
+    assert "settings unavailable" in (failed.get("error") or "")
+
+
 def test_failed_push_keeps_completed_mission_and_inbox(monkeypatch):
     from arete.services import automation_execution as execution
     from arete.services import inbox, notifications

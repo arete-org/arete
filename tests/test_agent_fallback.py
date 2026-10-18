@@ -5,6 +5,7 @@ import logging
 from dataclasses import replace
 
 import pytest
+from agent_clock import CLOCK
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
@@ -272,7 +273,7 @@ def test_cancellation_does_not_start_a_fallback():
                 invoke_agent(
                     graph,
                     {"messages": [HumanMessage("Vérifie.")]},
-                    context=AgentContext(),
+                    context=AgentContext(current_datetime=CLOCK),
                 )
             )
             await started.wait()

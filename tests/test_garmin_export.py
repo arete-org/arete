@@ -6,6 +6,7 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
+from agent_clock import CLOCK
 
 from arete.dataio.db import db_connection
 from arete.dataio.init_duckdb import main
@@ -955,7 +956,7 @@ def test_graph_streams_domain_progress_before_final_answer(planned, monkeypatch)
         async for part in stream_agent(
             graph,
             {"messages": [{"role": "user", "content": "Envoie ma séance sur Garmin"}]},
-            context=AgentContext(thread_id="test-workouts"),
+            context=AgentContext(current_datetime=CLOCK, thread_id="test-workouts"),
         ):
             events.extend(projection.events(part))
         events.append(projection.done())
