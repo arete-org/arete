@@ -56,7 +56,7 @@ export const NOT_EXPORTED = [
   'Identifiants et jetons de connexion (Garmin, Strava, Google Agenda, notifications)',
   'Contenu des documents joints (il reste dans leur conversation)',
   'Fils du coach non sauvegardés : ils restent dans ce navigateur',
-  'États techniques : synchronisations, imports, automatisations, envois vers Garmin',
+  'États techniques : synchronisations, imports, points de reprise des automatisations, envois vers Garmin',
 ] as const;
 
 export type ExportFormat = 'zip' | 'json';

@@ -82,13 +82,22 @@ export async function endSession(
   let cleaned = false;
   const cleanup = async () => {
     cleaned = true;
-    setTokenGetter(null);
-    reset?.();
-    await clearSignedOutCaches();
-    await claimPushDevice(null);
-    window.location.reload();
+    await endSessionLocally(reset);
   };
   await signOut(cleanup);
   // Clerk skips the callback when it holds no session: still leave a clean page.
   if (!cleaned) await cleanup();
+}
+
+/**
+ * The browser's half of a sign-out, without Clerk: forget the token, `reset`,
+ * the cached and persisted answers and the push channel, then reload. For an
+ * erased account whose Clerk session is already revoked, so `signOut` fails.
+ */
+export async function endSessionLocally(reset?: () => void): Promise<void> {
+  setTokenGetter(null);
+  reset?.();
+  await clearSignedOutCaches();
+  await claimPushDevice(null);
+  window.location.reload();
 }

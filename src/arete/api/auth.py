@@ -76,10 +76,25 @@ DELETED_DETAIL = "Ce compte a été supprimé."
 
 
 class AuthError(Exception):
-    def __init__(self, status: int, detail: str) -> None:
+    def __init__(self, status: int, detail: str, code: str | None = None) -> None:
         super().__init__(detail)
         self.status = status
         self.detail = detail
+        #: Machine-readable reason, beside the French detail.
+        self.code = code
+
+
+#: The answer's ``code`` for a login whose account was erased.
+ACCOUNT_DELETED = "account_deleted"
+
+
+class DeletedLogin(AuthError):
+    """A verified login whose account was erased: refused, but on the
+    deletion route, which finishes the job (``delete_me``)."""
+
+    def __init__(self, subject: str) -> None:
+        super().__init__(403, DELETED_DETAIL, ACCOUNT_DELETED)
+        self.subject = subject
 
 
 def auth_enabled() -> bool:
@@ -127,6 +142,16 @@ def is_account_path(path: str) -> bool:
     if path.startswith("/api/"):
         path = path[4:]
     return path in ACCOUNT_PATHS
+
+
+#: The one route an erased login still reaches, to finish its own deletion.
+DELETION_PATH = "/auth/me/delete"
+
+
+def is_deletion_path(path: str) -> bool:
+    if path.startswith("/api/"):
+        path = path[4:]
+    return path == DELETION_PATH
 
 
 # ---------------------------------------------------------------- Clerk --
@@ -311,7 +336,7 @@ def _refresh_profile(subject: str) -> AppUser:
         if user is None and user_service.was_deleted(subject):
             # A session token outlives its erased account by up to a minute,
             # and a login whose Clerk deletion failed outlives it for good.
-            raise AuthError(403, DELETED_DETAIL)
+            raise DeletedLogin(subject)
         email, name, verified = _fetch_clerk_profile(subject)
         try:
             return user_service.upsert_user(subject, email, name, verified=verified)
@@ -354,10 +379,14 @@ class AuthMiddleware:
             # event loop free.
             user = await anyio.to_thread.run_sync(resolve_user, authorization)
         except AuthError as e:
+            if isinstance(e, DeletedLogin) and is_deletion_path(path):
+                # No user and no athlete scope: only the Clerk deletion is left.
+                scope.setdefault("state", {})["deleted_login"] = e.subject
+                await self.app(scope, receive, send)
+                return
             headers = {"WWW-Authenticate": "Bearer"} if e.status == 401 else None
-            response = JSONResponse(
-                {"detail": e.detail}, status_code=e.status, headers=headers
-            )
+            body = {"detail": e.detail} | ({"code": e.code} if e.code else {})
+            response = JSONResponse(body, status_code=e.status, headers=headers)
             await response(scope, receive, send)
             return
         except Exception:  # noqa: BLE001 - identity provider or database down
@@ -446,7 +475,7 @@ class AccountDeletion(BaseModel):
     confirmation: str
 
 
-@router.post("/me/delete", status_code=204)
+@router.post(DELETION_PATH.removeprefix("/auth"), status_code=204)
 def delete_me(body: AccountDeletion, request: Request) -> Response:
     """Erase the signed-in athlete, then delete its Clerk logins.
 
@@ -454,11 +483,19 @@ def delete_me(body: AccountDeletion, request: Request) -> Response:
     again finishes the job. Then each Clerk user, with one request each: a
     failure answers 502 once the data is gone. The erasure log refuses that
     login a new athlete, and the operator deletes it from Clerk's dashboard.
+
+    A commit whose answer was lost may have happened: the retry then comes
+    from a login the log records, which the middleware lets reach this route
+    only, and it finishes with that login's Clerk deletion.
     """
     if body.confirmation != DELETE_CONFIRMATION:
         raise HTTPException(
             status_code=422, detail=f"Tape {DELETE_CONFIRMATION} pour confirmer."
         )
+    deleted = getattr(request.state, "deleted_login", None)
+    if isinstance(deleted, str):
+        logger.info("Finishing the Clerk deletion of an erased login")
+        return _finish_with_clerk([deleted])
     user = current_user(request)
     if not clerk_account(request) or user.athlete_id is None:
         raise HTTPException(
@@ -472,13 +509,26 @@ def delete_me(body: AccountDeletion, request: Request) -> Response:
     except user_service.AccountError as e:
         raise HTTPException(status_code=e.status, detail=str(e)) from None
     except duckdb.Error:
-        # One transaction: it rolled back, the account is whole and signed in.
+        # Rolled back, the account whole and signed in; or a commit whose answer
+        # was lost, which the retry finishes as an erased login.
         logger.exception("Account erasure failed")
+        forget_accounts()
         raise HTTPException(
             status_code=503,
-            detail="La suppression n'a pas abouti, ton compte reste ouvert : réessaie.",
+            detail=(
+                "La suppression n'a pas pu être confirmée : réessaie, elle "
+                "reprendra où elle s'est arrêtée."
+            ),
         ) from None
     forget_accounts()
+    # Another instance may still hold this login's account from before a lost
+    # commit: the erasure then finds no login left, yet the caller's goes.
+    caller = clerk_account(request)
+    return _finish_with_clerk([*logins, *([caller] if caller not in logins else [])])
+
+
+def _finish_with_clerk(logins: list[str]) -> Response:
+    """Delete each Clerk login once; 502 when one remains, the data being gone."""
     failed = [login for login in logins if not _delete_clerk_user(login)]
     if failed:
         raise HTTPException(

@@ -5,7 +5,8 @@ import { SystemAlert } from '@/components';
 import { useAuthState } from '@/components/auth/authState';
 import { Button, Field, Input, Panel } from '@/components/ui';
 import { forgetThreads } from '@/lib/agentThreads';
-import { ApiError, authApi } from '@/lib/api';
+import { ACCOUNT_DELETED, ApiError, authApi } from '@/lib/api';
+import { endSessionLocally } from '@/lib/auth';
 import { clearDraft } from '@/lib/onboarding';
 
 /** What the athlete types; the server checks the same word (api/auth.py). */
@@ -28,8 +29,13 @@ export function AccountDeletionPanel() {
     null
   );
 
+  // Clerk may already have revoked the deleted user's session, failing its
+  // sign-out: end the session in this browser anyway.
   const leave = () => {
-    auth.signOut().catch(() => setErased((current) => current && { ...current, signOutFailed: true }));
+    auth
+      .signOut()
+      .catch(() => endSessionLocally())
+      .catch(() => setErased((current) => current && { ...current, signOutFailed: true }));
   };
   const erasedHere = (notice: string, tone: 'success' | 'warning') => {
     // This browser's copies go too; the coach panel stops saving them (agentThreads).
@@ -47,7 +53,13 @@ export function AccountDeletionPanel() {
       leave();
     },
     onError: (error) => {
-      if (error instanceof ApiError && error.status === LOGIN_LEFT) erasedHere(errorMessage(error), 'warning');
+      if (!(error instanceof ApiError)) return;
+      if (error.status === LOGIN_LEFT) erasedHere(errorMessage(error), 'warning');
+      // An earlier attempt erased the account (its answer was lost): done here too.
+      if (error.code === ACCOUNT_DELETED) {
+        erasedHere('Ton compte et tes données sont supprimés. Déconnexion…', 'success');
+        leave();
+      }
     },
   });
 

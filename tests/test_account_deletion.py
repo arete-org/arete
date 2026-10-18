@@ -262,6 +262,7 @@ def test_a_failed_erasure_rolls_back_whole_and_a_retry_finishes(
 
     ana = accounts[ANA]
     _fill_every_private_table(ana)
+    _fill_through_services(ana, ANA)
     before = _counts(ana, ANA)
     statements = account_deletion._statements
     monkeypatch.setattr(
@@ -273,8 +274,11 @@ def test_a_failed_erasure_rolls_back_whole_and_a_retry_finishes(
         "/auth/me/delete", json={"confirmation": "SUPPRIMER"}, headers=_bearer(ANA)
     )
     assert failed.status_code == 503
-    assert "reste ouvert" in failed.json()["detail"]
+    assert "réessaie" in failed.json()["detail"]
+    # Rows (``app.files`` included) and the files on disk: all still there.
     assert _counts(ana, ANA) == before
+    assert (_data_dir(ana) / "garmin_tokens/garmin_tokens.json").exists()
+    assert (_data_dir(ana) / "fit_files/1.fit").exists()
     assert clerk == []
 
     monkeypatch.setattr(account_deletion, "_statements", statements)
@@ -284,6 +288,120 @@ def test_a_failed_erasure_rolls_back_whole_and_a_retry_finishes(
     assert retried.status_code == 204
     assert not any(_counts(ana, ANA).values())
     assert clerk == [ANA]
+
+
+def test_a_file_left_behind_never_fails_a_committed_erasure(
+    client, accounts, clerk, monkeypatch, caplog
+):
+    from arete.services import account_deletion
+
+    ana = accounts[ANA]
+    _fill_every_private_table(ana)
+    _fill_through_services(ana, ANA)
+
+    def busy(path):
+        raise OSError("a sync is writing here")
+
+    monkeypatch.setattr(account_deletion.shutil, "rmtree", busy)
+    response = client.post(
+        "/auth/me/delete", json={"confirmation": "SUPPRIMER"}, headers=_bearer(ANA)
+    )
+    assert response.status_code == 204
+    assert clerk == [ANA]
+    assert not any(_counts(ana, ANA).values())
+    [record] = [r for r in caplog.records if "remain" in r.getMessage()]
+    assert record.getMessage() == (
+        f"Athlete {ana} erased, but 2 file(s) remain in its directory"
+    )
+
+
+def test_a_lost_commit_answer_is_finished_by_the_retry(
+    client, accounts, clerk, monkeypatch
+):
+    """COMMIT went through but its answer was lost: the retry, from a login
+    the log already records, deletes it at Clerk instead of a 403."""
+    import duckdb
+
+    from arete.services import account_deletion
+
+    ana = accounts[ANA]
+    _fill_every_private_table(ana)
+    erase = account_deletion.erase_current_athlete
+
+    def committed_then_lost():
+        erase()
+        raise duckdb.IOException("connection lost after COMMIT")
+
+    monkeypatch.setattr(account_deletion, "erase_current_athlete", committed_then_lost)
+    lost = client.post(
+        "/auth/me/delete", json={"confirmation": "SUPPRIMER"}, headers=_bearer(ANA)
+    )
+    assert lost.status_code == 503
+    assert clerk == []
+    assert not any(_counts(ana, ANA).values())
+
+    monkeypatch.setattr(account_deletion, "erase_current_athlete", erase)
+    unconfirmed = client.post(
+        "/auth/me/delete", json={"confirmation": "non"}, headers=_bearer(ANA)
+    )
+    assert unconfirmed.status_code == 422
+    retried = client.post(
+        "/auth/me/delete", json={"confirmation": "SUPPRIMER"}, headers=_bearer(ANA)
+    )
+    assert retried.status_code == 204
+    assert clerk == [ANA]
+    # Only that route: anything else answers the erasure, machine-readably.
+    for path in ("/auth/me", "/goals"):
+        refused = client.get(path, headers=_bearer(ANA))
+        assert refused.status_code == 403
+        assert refused.json() == {
+            "detail": "Ce compte a été supprimé.",
+            "code": "account_deleted",
+        }
+
+
+def test_a_login_attached_during_the_erasure_is_erased_and_deleted_too(
+    client, accounts, clerk, monkeypatch
+):
+    from contextlib import contextmanager
+
+    from arete.services import account_deletion
+
+    ana = accounts[ANA]
+    real = account_deletion.transaction
+
+    @contextmanager
+    def attach_then(*args, **kwargs):
+        # A second login attached to Ana between any earlier read and the work.
+        con = connect()
+        con.execute(
+            "INSERT INTO app.users (clerk_user_id, email, athlete_id) "
+            "VALUES ('user_ana_phone', 'ana@example.com', ?)",
+            [ana],
+        )
+        con.close()
+        with real(*args, **kwargs) as transaction:
+            yield transaction
+
+    monkeypatch.setattr(account_deletion, "transaction", attach_then)
+    response = client.post(
+        "/auth/me/delete", json={"confirmation": "SUPPRIMER"}, headers=_bearer(ANA)
+    )
+    assert response.status_code == 204
+    assert sorted(clerk) == [ANA, "user_ana_phone"]
+    con = connect()
+    left = con.execute(
+        "SELECT count(*) FROM app.users WHERE athlete_id=?", [ana]
+    ).fetchone()
+    log = {
+        row[0]
+        for row in con.execute(
+            "SELECT account_hash FROM app.account_deletions"
+        ).fetchall()
+    }
+    con.close()
+    assert left == (0,)
+    assert log == {sha256(s.encode()).hexdigest() for s in (ANA, "user_ana_phone")}
 
 
 def test_a_clerk_failure_is_reported_once_the_data_is_gone(

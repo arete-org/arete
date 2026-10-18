@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { AUTH_DISABLED, AuthStateContext, type AuthState } from '@/components/auth/authState';
 import { useCoachThreads } from '@/hooks/useCoachThreads';
 import { ApiError, authApi } from '@/lib/api';
+import { endSessionLocally } from '@/lib/auth';
 import { AccountDeletionPanel } from './AccountDeletionPanel';
 
 vi.mock('@/lib/conversations', async (importOriginal) => ({
@@ -17,12 +18,17 @@ vi.mock('@/lib/conversations', async (importOriginal) => ({
     read: vi.fn(),
   },
 }));
+vi.mock('@/lib/auth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/auth')>()),
+  endSessionLocally: vi.fn(async () => {}),
+}));
 vi.mock('@/lib/documents', () => ({ documentsApi: { deleteThread: vi.fn().mockResolvedValue({ deleted: true }) } }));
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
   vi.restoreAllMocks();
+  vi.mocked(endSessionLocally).mockReset().mockResolvedValue(undefined);
 });
 
 const THREADS_7 = 'arete.coach.threads.v1.athlete.7';
@@ -85,8 +91,22 @@ it('keeps the mounted coach panel from writing the erased conversations back', a
   expect(localStorage.getItem(THREADS_9)).toBeNull();
 });
 
-it('shows the erasure even when signing out fails, and offers to sign out again', async () => {
+it('ends the session in this browser when Clerk already revoked it', async () => {
   vi.spyOn(authApi, 'deleteMe').mockResolvedValue(undefined);
+  const signOut = vi.fn().mockRejectedValue(new Error('Session révoquée'));
+  setup({}, signOut);
+  confirmDeletion();
+
+  await waitFor(() => expect(endSessionLocally).toHaveBeenCalledOnce());
+  expect(signOut).toHaveBeenCalledOnce();
+  expect(screen.getByText(/Ton compte et tes données sont supprimés/)).toBeTruthy();
+  expect(screen.queryByText(/La déconnexion a échoué/)).toBeNull();
+  expect(screen.queryByText(/Suppression impossible/)).toBeNull();
+});
+
+it('keeps the erasure on screen and offers to sign out again if even that fails', async () => {
+  vi.spyOn(authApi, 'deleteMe').mockResolvedValue(undefined);
+  vi.mocked(endSessionLocally).mockRejectedValueOnce(new Error('Push'));
   const signOut = vi.fn().mockRejectedValueOnce(new Error('Clerk injoignable')).mockResolvedValue(undefined);
   setup({}, signOut);
   confirmDeletion();
@@ -96,6 +116,27 @@ it('shows the erasure even when signing out fails, and offers to sign out again'
   expect(screen.queryByText(/Suppression impossible/)).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'SE DÉCONNECTER' }));
   await waitFor(() => expect(signOut).toHaveBeenCalledTimes(2));
+});
+
+it('takes an answer saying the account is already erased as done', async () => {
+  const body = JSON.stringify({ detail: 'Ce compte a été supprimé.', code: 'account_deleted' });
+  vi.spyOn(authApi, 'deleteMe').mockRejectedValue(new ApiError(403, body));
+  localStorage.setItem(THREADS_7, '{}');
+  const { signOut } = setup();
+  confirmDeletion();
+
+  await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
+  expect(screen.getByText(/Ton compte et tes données sont supprimés/)).toBeTruthy();
+  expect(localStorage.getItem(THREADS_7)).toBeNull();
+});
+
+it('treats another refusal as one, whatever its text', async () => {
+  const body = JSON.stringify({ detail: 'Ce compte a été supprimé.' });
+  vi.spyOn(authApi, 'deleteMe').mockRejectedValue(new ApiError(403, body));
+  const { signOut } = setup();
+  confirmDeletion();
+  expect(await screen.findByText('Ce compte a été supprimé.')).toBeTruthy();
+  expect(signOut).not.toHaveBeenCalled();
 });
 
 it('shows a refusal and keeps the session', async () => {
