@@ -93,8 +93,16 @@ test('a request that never reaches the server says so until one does', async ({ 
   await expect(banner).toHaveCount(0);
 });
 
-test('a waiting new version is announced and « Recharger » hands over to it', async ({ page }) => {
-  await page.addInitScript(() => {
+/**
+ * A service worker for the dev server (which has none): a page already
+ * controlled, and a new version either waiting as the page loads (`atLoad`) or
+ * finishing its install a moment after. Posting SKIP_WAITING hands over.
+ */
+async function newVersion(page: Page, atLoad: boolean) {
+  await page.addInitScript((waitingAtLoad) => {
+    const loads = Number(sessionStorage.getItem('loads') ?? 0) + 1;
+    sessionStorage.setItem('loads', String(loads));
+    const listeners: Record<string, () => void> = {};
     const worker = {
       state: 'installed',
       postMessage: (message: { type?: string }) => {
@@ -103,18 +111,46 @@ test('a waiting new version is announced and « Recharger » hands over to it', 
       },
       addEventListener() {}, removeEventListener() {},
     };
-    const registration = { waiting: worker, installing: null, addEventListener() {}, removeEventListener() {}, update: async () => {} };
+    const registration = {
+      waiting: waitingAtLoad ? worker : null,
+      installing: null as unknown,
+      addEventListener: (type: string, listener: () => void) => { listeners[type] = listener; },
+      removeEventListener() {},
+      update: async () => {},
+    };
+    if (!waitingAtLoad) {
+      setTimeout(() => { registration.installing = worker; listeners.updatefound?.(); }, 300);
+    }
     Object.defineProperty(navigator.serviceWorker, 'ready', { value: Promise.resolve(registration) });
     Object.defineProperty(navigator.serviceWorker, 'controller', { value: {} });
-  });
+  }, atLoad);
+}
+
+test('a version installed while the page is open is announced and « Recharger » hands over to it', async ({ page }) => {
+  await newVersion(page, false);
   await mockApi(page);
   await page.goto('/');
   const notice = page.getByRole('status', { name: 'Mise à jour' });
   await expect(notice).toContainText('Nouvelle version disponible.');
+  expect(await page.evaluate(() => sessionStorage.getItem('posted'))).toBeNull();
   const reloaded = page.waitForEvent('load');
   await notice.getByRole('button', { name: 'Recharger' }).click();
   await reloaded;
   expect(await page.evaluate(() => sessionStorage.getItem('posted'))).toBe('SKIP_WAITING');
+});
+
+test('a page that loads while a version waits takes it at once, and never loops', async ({ page }) => {
+  await newVersion(page, true);
+  await mockApi(page);
+  await page.goto('/');
+  // The first load handed over and reloaded; the reloaded page, finding a version
+  // still waiting within the loop guard, announces it instead of reloading again.
+  const notice = page.getByRole('status', { name: 'Mise à jour' });
+  await expect(notice).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('posted'))).toBe('SKIP_WAITING');
+  expect(await page.evaluate(() => sessionStorage.getItem('loads'))).toBe('2');
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => sessionStorage.getItem('loads'))).toBe('2');
 });
 
 test('a first install, with no page controlled yet, announces nothing', async ({ page }) => {
@@ -166,12 +202,7 @@ test('the timezone select offers every zone, grouped by region', async ({ page }
 for (const [theme, width] of [['pierre', 390], ['prune', 390], ['pierre', 1440]] as const) {
   test(`404 and notices fit at ${width} px — ${theme}`, async ({ page, context }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.addInitScript(() => {
-      const worker = { state: 'installed', postMessage() {}, addEventListener() {}, removeEventListener() {} };
-      const registration = { waiting: worker, installing: null, addEventListener() {}, removeEventListener() {}, update: async () => {} };
-      Object.defineProperty(navigator.serviceWorker, 'ready', { value: Promise.resolve(registration) });
-      Object.defineProperty(navigator.serviceWorker, 'controller', { value: {} });
-    });
+    await newVersion(page, false);
     await mockApi(page, theme);
     await page.goto('/nope');
     await expect(page.getByRole('heading', { name: 'Page introuvable' })).toBeVisible();

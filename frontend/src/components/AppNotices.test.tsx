@@ -44,3 +44,27 @@ it('holds a dismissal for the current outage only, and keeps the focus out of th
   setOnline(false);
   expect(screen.getByRole('status', { name: 'Connexion' })).toBeTruthy();
 });
+
+it('keeps « Recharger » for after a streaming coach answer', async () => {
+  const { holdReloads } = await import('@/lib/chunkReload');
+  const worker = { state: 'installed', postMessage: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  const registration = { waiting: worker, installing: null, addEventListener: vi.fn(), removeEventListener: vi.fn(), update: vi.fn() };
+  Object.defineProperty(navigator, 'serviceWorker', {
+    configurable: true,
+    value: { ready: Promise.resolve(registration), controller: {}, addEventListener: vi.fn(), removeEventListener: vi.fn() },
+  });
+  try {
+    // Held as the page loads: no automatic hand-over, the notice waits instead.
+    act(() => holdReloads(true));
+    mount();
+    const reload = await screen.findByRole('button', { name: 'Recharger' });
+    expect((reload as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('status', { name: 'Mise à jour' }).textContent).toContain('une fois la réponse de Chiron terminée');
+    act(() => holdReloads(false));
+    expect((screen.getByRole('button', { name: 'Recharger' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(worker.postMessage).not.toHaveBeenCalled();
+  } finally {
+    act(() => holdReloads(false));
+    delete (navigator as { serviceWorker?: unknown }).serviceWorker;
+  }
+});

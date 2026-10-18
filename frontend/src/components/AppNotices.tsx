@@ -4,6 +4,7 @@ import { RefreshCw, WifiOff, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { connectivity, subscribeConnectivity, type Connectivity } from '@/lib/connectivity';
 import { focusNear } from '@/lib/focus';
+import { onReloadHold, reloadsHeld, takeWaitingAtLoad } from '@/lib/chunkReload';
 import { activate, watchForUpdate } from '@/lib/serviceWorker';
 
 const RELOAD_WAIT_MS = 10_000;
@@ -68,12 +69,27 @@ function ConnectivityNotice() {
   );
 }
 
-/** A new version installed in the background waits for the athlete's « Recharger ». */
+/**
+ * A new version installed while the page was open waits for the athlete's
+ * « Recharger »; one already waiting when the page loaded is taken at once.
+ */
 function UpdateNotice() {
   const [worker, setWorker] = useState<ServiceWorker | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [reloading, setReloading] = useState(false);
-  useEffect(() => watchForUpdate(setWorker), []);
+  // A streaming coach answer would be cut: « Recharger » waits for its end.
+  const held = useSyncExternalStore(onReloadHold, reloadsHeld, () => false);
+  useEffect(() => watchForUpdate((waiting, atLoad) => {
+    if (atLoad && takeWaitingAtLoad(waiting)) return;
+    setWorker(waiting);
+  }), []);
+  useEffect(() => {
+    if (!worker) return;
+    // Replaced by an even newer version: that one is announced in turn.
+    const gone = () => { if (worker.state === 'redundant') setWorker(null); };
+    worker.addEventListener('statechange', gone);
+    return () => worker.removeEventListener('statechange', gone);
+  }, [worker]);
   if (!worker || dismissed) return null;
   const reload = async () => {
     setReloading(true);
@@ -87,12 +103,12 @@ function UpdateNotice() {
       dismissLabel="Masquer l’annonce de mise à jour"
       onDismiss={() => setDismissed(true)}
       actions={
-        <Button size="sm" className="min-h-11 shrink-0" loading={reloading} onClick={() => void reload()}>
+        <Button size="sm" className="min-h-11 shrink-0" loading={reloading} disabled={held} onClick={() => void reload()}>
           Recharger
         </Button>
       }
     >
-      Nouvelle version disponible.
+      {held ? 'Nouvelle version disponible : recharge une fois la réponse de Chiron terminée.' : 'Nouvelle version disponible.'}
     </Notice>
   );
 }

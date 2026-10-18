@@ -14,11 +14,27 @@ const LOOP_WINDOW_MS = 30_000;
 const WORKER_WAIT_MS = 10_000;
 let reloading = false;
 let held = false;
+let reloadWhenOnline = false;
+const holdListeners = new Set<() => void>();
 
 /** A streaming coach run must not be cut by an automatic reload (useCoachThreads). */
 export function holdReloads(active: boolean): void {
+  if (held === active) return;
   held = active;
+  holdListeners.forEach((listener) => listener());
 }
+
+/** Whether a reload would cut something now (the update notice waits for it). */
+export function reloadsHeld(): boolean {
+  return held;
+}
+
+export function onReloadHold(listener: () => void): () => void {
+  holdListeners.add(listener);
+  return () => holdListeners.delete(listener);
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function claimReload(): boolean {
   try {
@@ -40,15 +56,41 @@ async function newWorker(): Promise<void> {
   if (worker) await activate(worker, WORKER_WAIT_MS);
 }
 
+function reloadAfter(handOver: Promise<void>): void {
+  reloading = true;
+  // Bounded: an install that never settles must not keep the page from reloading.
+  void Promise.race([handOver, wait(WORKER_WAIT_MS)]).finally(() => window.location.reload());
+}
+
+/**
+ * A page that loads while a new version waits (a new tab, a refresh, the
+ * installed app relaunched) takes it at once rather than run an old build
+ * against the new server: one reload, unless something is held or a reload
+ * just happened (the notice shows instead). False when it did not reload.
+ */
+export function takeWaitingAtLoad(worker: ServiceWorker): boolean {
+  if (reloading) return true;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  if (held || !claimReload()) return false;
+  reloadAfter(activate(worker, WORKER_WAIT_MS));
+  return true;
+}
+
 /** Starts at most one reload; false when the error must surface instead. */
 export function recoverFromStaleBuild(): boolean {
   if (reloading) return true;
   // Offline, a missing chunk is the network, not a new build: reloading would
   // leave the app for the browser's offline page (the banner says why instead).
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  // Back online, one reload brings the missing part back.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    if (!reloadWhenOnline) {
+      reloadWhenOnline = true;
+      window.addEventListener('online', () => { reloadWhenOnline = false; recoverFromStaleBuild(); }, { once: true });
+    }
+    return false;
+  }
   if (held || !claimReload()) return false;
-  reloading = true;
-  void newWorker().finally(() => window.location.reload());
+  reloadAfter(newWorker());
   return true;
 }
 
