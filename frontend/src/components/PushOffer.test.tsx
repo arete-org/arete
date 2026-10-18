@@ -16,18 +16,23 @@ let vapid: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   vapid = vi.spyOn(notificationsApi, 'getVapidPublicKey').mockResolvedValue({ key: 'BPub' });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.mocked(currentState).mockReset(); vi.mocked(subscribeDevice).mockReset(); });
 
-function mount(state: PushState, settings: UserSettings | null = { ...DEFAULT_SETTINGS, user_id: 1 } as UserSettings) {
+const DEFAULTS = { ...DEFAULT_SETTINGS, user_id: 1 } as UserSettings;
+
+function mount(state: PushState, { before = true, moment = 'session' as 'session' | 'briefing' } = {}) {
   vi.mocked(currentState).mockResolvedValue(state);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  if (settings) client.setQueryData(qk.settings, settings);
+  // A cached copy the server no longer has: the ritual must not save from it.
+  client.setQueryData(qk.settings, { ...DEFAULTS, display_name: 'Ancien' });
   const view = render(
     <QueryClientProvider client={client}>
-      <button type="button">Avant</button>
-      <PushOffer moment="session" />
+      {before && <button type="button">Avant</button>}
+      <PushOffer moment={moment} />
+      <button type="button">Après</button>
     </QueryClientProvider>,
   );
   return { client, ...view };
@@ -42,6 +47,7 @@ it.each(['subscribed', 'no-worker', 'denied', 'unsupported'] as PushState[])('st
 
 it('enables push from the click, remembers it and confirms in place with the focus', async () => {
   vi.mocked(subscribeDevice).mockResolvedValue('subscribed');
+  vi.spyOn(settingsApi, 'get').mockResolvedValue(DEFAULTS);
   const update = vi.spyOn(settingsApi, 'update');
   const { client } = mount('unsubscribed');
   const offer = await screen.findByRole('region', { name: SESSION });
@@ -62,8 +68,12 @@ it('turns the moment’s kind and the master switch back on when the athlete had
     ...DEFAULT_SETTINGS, user_id: 1, notifications_enabled: false,
     notification_preferences: { ...DEFAULT_SETTINGS.notification_preferences, kinds: { ...DEFAULT_SETTINGS.notification_preferences.kinds, post_session: false, briefing: false } },
   } as UserSettings;
+  vi.spyOn(settingsApi, 'get').mockResolvedValue(off);
   const update = vi.spyOn(settingsApi, 'update').mockImplementation(async (body) => ({ ...body, user_id: 1 }));
-  mount('unsubscribed', off);
+  const posted = vi.fn();
+  const channel = new BroadcastChannel('arete-preferences');
+  channel.onmessage = posted;
+  mount('unsubscribed');
   fireEvent.click(await screen.findByRole('button', { name: 'Activer les notifications' }));
   await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
   const body = update.mock.calls[0][0];
@@ -72,6 +82,56 @@ it('turns the moment’s kind and the master switch back on when the athlete had
   // Only this moment's ritual: the briefing stays off.
   expect(body.notification_preferences.kinds.briefing).toBe(false);
   expect('user_id' in body).toBe(false);
+  // Saved from the server's fresh copy, never the stale cache.
+  expect(body.display_name).toBe(DEFAULT_SETTINGS.display_name);
+  await waitFor(() => expect(posted).toHaveBeenCalled());
+  channel.close();
+});
+
+it('says so when the ritual cannot be saved, the device still enabled', async () => {
+  vi.mocked(subscribeDevice).mockResolvedValue('subscribed');
+  vi.spyOn(settingsApi, 'get').mockRejectedValue(new TypeError('Failed to fetch'));
+  mount('unsubscribed');
+  fireEvent.click(await screen.findByRole('button', { name: 'Activer les notifications' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('active-les dans Réglages → Coach'));
+  expect(localStorage.getItem(pushOfferKey('session'))).toBe('enabled');
+});
+
+it('stores nothing when the browser prompt is closed without a choice', async () => {
+  vi.mocked(subscribeDevice).mockResolvedValue('unsubscribed');
+  mount('unsubscribed');
+  fireEvent.click(await screen.findByRole('button', { name: 'Activer les notifications' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: SESSION })).toBeNull());
+  expect(localStorage.getItem(pushOfferKey('session'))).toBeNull();
+});
+
+it('quiets the other moment for the session once one is put off', async () => {
+  const first = mount('unsubscribed');
+  fireEvent.click(await screen.findByRole('button', { name: 'Plus tard' }));
+  first.unmount();
+  vi.mocked(currentState).mockClear();
+  mount('unsubscribed', { moment: 'briefing' });
+  expect(screen.queryByRole('region', { name: 'Reçois ton briefing chaque matin' })).toBeNull();
+  expect(currentState).not.toHaveBeenCalled();
+  // Not answered on the device: a later session may ask.
+  expect(localStorage.getItem(pushOfferKey('briefing'))).toBeNull();
+});
+
+it('gives the focus to the next control when none precedes, and leaves a focus moved elsewhere', async () => {
+  vi.spyOn(Element.prototype, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList);
+  const first = mount('unsubscribed', { before: false });
+  await screen.findByRole('region', { name: SESSION });
+  screen.getByRole('button', { name: 'Plus tard' }).focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Après' }));
+  first.unmount();
+  localStorage.clear();
+  sessionStorage.clear();
+  mount('unsubscribed');
+  await screen.findByRole('region', { name: SESSION });
+  screen.getByRole('button', { name: 'Après' }).focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Après' }));
 });
 
 it('remembers « Plus tard », gives the focus back before it and never shows again', async () => {

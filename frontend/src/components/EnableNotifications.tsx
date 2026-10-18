@@ -4,7 +4,7 @@ import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalHeader } from '@/components/ui/Modal';
 import { notificationsApi } from '@/lib/api';
-import { NOTIFICATIONS_OFFERED_KEY, readFlag, writeFlag } from '@/lib/install';
+import { NOTIFICATIONS_OFFERED_KEY, quietPushOffers, readFlag, writeFlag } from '@/lib/install';
 import { currentState, isStandalone, subscribeDevice } from '@/lib/push';
 import { qk } from '@/lib/queryKeys';
 
@@ -33,6 +33,8 @@ export function EnableNotifications() {
 
   const close = () => {
     writeFlag(NOTIFICATIONS_OFFERED_KEY, '1');
+    // Answered here: the contextual offers (PushOffer) do not ask again this session.
+    quietPushOffers();
     setOpen(false);
   };
   const enable = async () => {

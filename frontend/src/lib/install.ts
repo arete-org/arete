@@ -28,6 +28,24 @@ export type PushMoment = 'session' | 'briefing';
 export const pushOfferKey = (moment: PushMoment) => `arete.push-offer.${moment}`;
 /** Set once a briefing was opened on this device: the briefing's offer may follow. */
 export const BRIEFING_READ_KEY = 'arete.push-offer.briefing-read';
+/** For this browsing session: one offer was put off, so no other one asks again. */
+const OFFERS_QUIET_KEY = 'arete.push-offer.quiet';
+
+export function pushOffersQuiet(): boolean {
+  try {
+    return sessionStorage.getItem(OFFERS_QUIET_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function quietPushOffers(): void {
+  try {
+    sessionStorage.setItem(OFFERS_QUIET_KEY, '1');
+  } catch {
+    // Not remembered: at worst the other moment asks once in this session.
+  }
+}
 
 let deferred: BeforeInstallPromptEvent | null = null;
 const listeners = new Set<() => void>();
