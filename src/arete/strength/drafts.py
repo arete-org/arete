@@ -1,8 +1,8 @@
 """Garmin strength activities as sessions awaiting their loads (ARE-132).
 
-The watch recognises exercises and counts sets and reps, never the kilos. An
-imported strength activity no Muscu log completes gets a draft holding what
-Garmin recognised; the athlete adds the loads in the Log's notation (typed or
+Garmin's activity summary names exercises and counts sets and reps; Arete
+imports no load from it. An imported strength activity no Muscu log completes
+gets a draft holding what Garmin recognised; the athlete adds the loads in the Log's notation (typed or
 dictated, read by the grammar, no model) and the draft becomes a Muscu log
 linked to the activity: one session, as any linked pair (ARE-97).
 
@@ -56,15 +56,20 @@ class DraftSettled(RuntimeError):
     """The draft is no longer awaiting loads: completed, dismissed or logged."""
 
 
-def draft_exercises(summaries: Iterable[GarminExerciseSummary]) -> list[DraftExercise]:
-    """Garmin's names through the catalog: French name when recognised, else as is.
+class DraftBusy(RuntimeError):
+    """A concurrent write interrupted the save; the draft still awaits its loads."""
 
-    The finer name is tried first, then the category. An unrecognised name
-    stays as free text the athlete confirms when the session is read back;
-    Garmin's ``UNKNOWN`` carries no name and is left out.
+
+def draft_exercises(summaries: Iterable[GarminExerciseSummary]) -> list[DraftExercise]:
+    """Garmin's names through a reviewed table: French catalog name, or free text.
+
+    ``data/garmin_exercises.py`` lists the Garmin names whose catalog exercise
+    is the same movement; any other name stays free text (no catalog id), never
+    a near guess that would set false records. Garmin's ``UNKNOWN`` carries no
+    name and is left out.
     """
-    from arete.data.exercise_matcher import match_exercise
     from arete.data.exercises_catalog import EXERCISES_BY_ID
+    from arete.data.garmin_exercises import garmin_catalog_id
 
     exercises: list[DraftExercise] = []
     for summary in summaries:
@@ -75,10 +80,7 @@ def draft_exercises(summaries: Iterable[GarminExerciseSummary]) -> list[DraftExe
         ]
         if not keys:
             continue
-        catalog_id = next(
-            (found for key in keys if (found := match_exercise(key).exercise_id)),
-            None,
-        )
+        catalog_id = garmin_catalog_id(summary.category, summary.sub_category)
         name = EXERCISES_BY_ID[catalog_id]["name_fr"] if catalog_id else keys[0]
         sets = summary.sets if summary.sets and summary.sets > 0 else None
         reps = round(summary.reps / sets) if sets and summary.reps else None
@@ -89,14 +91,18 @@ def draft_exercises(summaries: Iterable[GarminExerciseSummary]) -> list[DraftExe
 
 
 def draft_notation(exercises: Iterable[DraftExercise]) -> str:
-    """The Log's text a draft opens with: one line per exercise, loads to add.
+    """The Log's text a draft opens with: one line per catalog exercise.
 
     ``Développé couché 3x10`` reads back as the same catalog exercise; the
-    athlete appends ``@80``. A line without counts is the name alone.
+    athlete appends ``@80``. A line without counts is the name alone. Free-text
+    names are left out: written as notation, the parser's fuzzy matching could
+    read them as a near catalog exercise; the screen lists them for the athlete
+    to write in their own words.
     """
     return "\n".join(
         f"{e.name} {e.sets}x{e.reps}" if e.sets and e.reps else e.name
         for e in exercises
+        if e.exercise_id
     )
 
 
@@ -161,7 +167,8 @@ def complete_draft(
     Same reading and rule as the Log's save: matched exercises are saved,
     unrecognised ones reported. Raises ``DraftNotFound``, ``DraftSettled``
     (completed elsewhere: nothing written, never a second log) or ValueError
-    when nothing in the text looks like an exercise. Records and the planned
+    when nothing in the text looks like an exercise. ``DraftBusy`` when a
+    concurrent write interrupted it and the draft is still pending. Records and the planned
     session follow the commit and never turn a saved log into a failure.
     """
     repo = repo or StrengthRepository()
@@ -190,6 +197,9 @@ def complete_draft(
     )
     session_id = repo.complete_draft(draft_id, session)
     if session_id is None:
+        # Nothing was written: say "already done" only when it is.
+        if repo.pending_drafts(draft_id):
+            raise DraftBusy(draft_id)
         raise DraftSettled(draft_id)
     complete_planned_strength(draft.date)
     message = f"Séance complétée : {len(exercises)} exercice(s)"

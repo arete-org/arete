@@ -1106,6 +1106,20 @@ class StrengthRepository:
                     datetime.now(),
                 ],
             )
+            if exercises:
+                # A draft opened empty (from the Journal, or before Garmin took
+                # over a Strava copy) gets Garmin's names when they arrive.
+                conn.execute(
+                    f"UPDATE app.strength_drafts SET exercises_json = ? WHERE {_DRAFT_SCOPE}"
+                    " AND actual_session_id = ? AND exercises_json = '[]'"
+                    " AND status = 'pending'",
+                    [
+                        json.dumps(
+                            [e.as_dict() for e in exercises], ensure_ascii=False
+                        ),
+                        actual_session_id,
+                    ],
+                )
             if reopen:
                 conn.execute(
                     f"UPDATE app.strength_drafts SET status = 'pending', settled_at = NULL,"
@@ -1118,6 +1132,10 @@ class StrengthRepository:
                 [actual_session_id],
             ).fetchone()
             conn.execute("COMMIT")
+        except duckdb.TransactionException:
+            # Opened concurrently (a double tap, two tabs): the other one won.
+            _rollback(conn)
+            found = self._draft_of(actual_session_id)
         except BaseException:
             _rollback(conn)
             raise
@@ -1125,27 +1143,34 @@ class StrengthRepository:
             conn.close()
         return int(found[0]) if found else None
 
+    def _draft_of(self, actual_session_id: int) -> tuple | None:
+        conn = self._get_connection()
+        try:
+            return conn.execute(
+                "SELECT id FROM app.visible_strength_drafts WHERE actual_session_id = ?",
+                [actual_session_id],
+            ).fetchone()
+        finally:
+            conn.close()
+
     def pending_drafts(
         self, draft_id: int | None = None, limit: int = 20
     ) -> list[StrengthDraft]:
-        """Pending drafts whose activity no Muscu log completes yet, newest first."""
-        query = f"""
-            SELECT d.id, d.actual_session_id, a.date, a.name, a.duration_sec,
-                   d.exercises_json, d.origin, d.created_at
-            FROM app.visible_strength_drafts d
-            JOIN app.visible_actual_sessions a ON a.id = d.actual_session_id
-            WHERE d.status = 'pending'
-              AND {_UNLINKED_ACTIVITY.format(activity="d.actual_session_id")}
+        """Pending drafts whose activity no Muscu log completes yet, newest first.
+
+        The list (no ``draft_id``) leaves out a day that already has a log not
+        linked to any activity: that log is probably this session, to link
+        rather than log twice. A draft asked for by id is returned regardless.
         """
-        params: list = []
-        if draft_id is not None:
-            query += " AND d.id = ?"
-            params.append(draft_id)
-        query += " ORDER BY a.date DESC, d.id DESC LIMIT ?"
-        params.append(limit)
+        where, params = _pending_drafts_where(draft_id)
         conn = self._get_connection()
         try:
-            rows = conn.execute(query, params).fetchall()
+            rows = conn.execute(
+                f"""SELECT d.id, d.actual_session_id, a.date, a.name, a.duration_sec,
+                       d.exercises_json, d.origin, d.created_at
+                {where} ORDER BY a.date DESC, d.id DESC LIMIT ?""",
+                [*params, limit],
+            ).fetchall()
         finally:
             conn.close()
         return [
@@ -1161,6 +1186,31 @@ class StrengthRepository:
             )
             for row in rows
         ]
+
+    def pending_draft_count(self) -> int:
+        """How many drafts the list holds in all, beyond its first page."""
+        where, params = _pending_drafts_where(None)
+        conn = self._get_connection()
+        try:
+            row = conn.execute(f"SELECT count(*) {where}", params).fetchone()
+        finally:
+            conn.close()
+        return int(row[0]) if row else 0
+
+    def dismiss_pending_drafts(self, limit: int = 500) -> int:
+        """Dismiss the listed drafts, at most ``limit`` per call; how many."""
+        where, params = _pending_drafts_where(None)
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "UPDATE app.strength_drafts SET status = 'dismissed', settled_at = ?"
+                f" WHERE {_DRAFT_SCOPE} AND status = 'pending'"
+                f" AND id IN (SELECT d.id {where} LIMIT ?) RETURNING id",
+                [datetime.now(), *params, limit],
+            ).fetchall()
+        finally:
+            conn.close()
+        return len(rows)
 
     def complete_draft(self, draft_id: int, session: StrengthSession) -> int | None:
         """Save ``session`` as the draft's Muscu log, linked to its activity; once.
@@ -1225,6 +1275,19 @@ class StrengthRepository:
         finally:
             conn.close()
 
+    def log_for_activity(self, actual_session_id: int) -> int | None:
+        """The live Muscu log linked to this activity, if any."""
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT min(id) FROM app.visible_strength_sessions"
+                " WHERE actual_session_id = ?",
+                [actual_session_id],
+            ).fetchone()
+        finally:
+            conn.close()
+        return int(row[0]) if row and row[0] is not None else None
+
     def draft_exists(self, draft_id: int) -> bool:
         """Whether this athlete has a draft with this id, whatever its status."""
         conn = self._get_connection()
@@ -1252,6 +1315,21 @@ class StrengthRepository:
         finally:
             conn.close()
         return row is not None
+
+
+def _pending_drafts_where(draft_id: int | None) -> tuple[str, list]:
+    """FROM and WHERE of pending drafts: one by id, or the Journal's list."""
+    where = f"""FROM app.visible_strength_drafts d
+        JOIN app.visible_actual_sessions a ON a.id = d.actual_session_id
+        WHERE d.status = 'pending'
+          AND {_UNLINKED_ACTIVITY.format(activity="d.actual_session_id")}"""
+    if draft_id is not None:
+        return where + " AND d.id = ?", [draft_id]
+    return (
+        where + " AND NOT EXISTS (SELECT 1 FROM app.visible_strength_sessions l"
+        " WHERE l.date = a.date AND l.actual_session_id IS NULL)",
+        [],
+    )
 
 
 #: A strength activity no live Muscu log is linked to; ``activity`` names its id.

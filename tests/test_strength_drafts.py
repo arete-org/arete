@@ -10,6 +10,7 @@ from arete.dataio.db import connect
 from arete.services.athlete_scope import athlete_scope
 from arete.services.settings import athlete_today
 from arete.strength.drafts import (
+    DraftBusy,
     DraftSettled,
     complete_draft,
     draft_exercises,
@@ -18,6 +19,7 @@ from arete.strength.drafts import (
     open_journal_draft,
 )
 from arete.strength.models import (
+    DraftExercise,
     ExerciseSet,
     GarminExerciseSummary,
     SessionExercise,
@@ -65,25 +67,71 @@ def _drafts(con, activity: int) -> list[tuple]:
 
 SUMMARIES = [
     GarminExerciseSummary("BENCH_PRESS", "BARBELL_BENCH_PRESS", sets=3, reps=30),
-    # The finer name misses, the category is recognised.
     GarminExerciseSummary("SHOULDER_PRESS", "OVERHEAD_BARBELL_PRESS", 4, 34),
-    # Neither: free text the athlete confirms.
+    # A category alone, listed.
+    GarminExerciseSummary("PLANK", None, 2, 2),
+    # Not in the table: free text the athlete writes.
     GarminExerciseSummary("SHRUG", None, 3, None),
     GarminExerciseSummary("UNKNOWN", "UNKNOWN", 2, 20),
 ]
 
 
-def test_garmin_names_go_through_the_catalog_and_open_as_notation():
+def test_garmin_names_go_through_the_table_and_open_as_notation():
     exercises = draft_exercises(SUMMARIES)
 
     assert [(e.name, e.exercise_id, e.sets, e.reps) for e in exercises] == [
         ("Développé couché", "bench_press", 3, 10),
         ("Développé militaire", "shoulder_press", 4, 8),
+        ("Gainage", "plank", 2, 1),
         ("shrug", None, 3, None),
     ]
+    # Free text is not written as notation the parser could read as a near exercise.
     assert draft_notation(exercises) == (
-        "Développé couché 3x10\nDéveloppé militaire 4x8\nshrug"
+        "Développé couché 3x10\nDéveloppé militaire 4x8\nGainage 2x1"
     )
+
+
+@pytest.mark.parametrize(
+    ("category", "sub", "expected"),
+    [
+        # Near but wrong under fuzzy matching: now right, or free text.
+        ("HYPEREXTENSION", "BACK_EXTENSION", None),
+        ("SLED", "PUSH", None),
+        ("INDOOR_ROW", None, None),
+        ("ROW", "ONE_ARM_BENT_OVER_ROW", "dumbbell_row"),
+        ("CURL", "DUMBBELL_BICEPS_CURL", None),
+        ("CURL", "CABLE_BICEPS_CURL", None),
+        ("DEADLIFT", "TRAP_BAR_DEADLIFT", None),
+        ("SQUAT", "FRONT_SQUAT", None),
+        ("SQUAT", "GOBLET_SQUAT", None),
+        ("BENCH_PRESS", "DUMBBELL_BENCH_PRESS", None),
+        ("BENCH_PRESS", "INCLINE_DUMBBELL_BENCH_PRESS", None),
+        ("RUN", "RUN", None),
+        # A known category with an unlisted finer name is not its category.
+        ("PLANK", "45_DEGREE_PLANK", None),
+        ("BENCH_PRESS", None, None),
+    ],
+)
+def test_wrong_near_matches_stay_free_text(category, sub, expected):
+    from arete.data.garmin_exercises import garmin_catalog_id
+
+    assert garmin_catalog_id(category, sub) == expected
+
+
+def test_every_mapped_garmin_name_reads_back_as_its_catalog_exercise():
+    from arete.data.exercises_catalog import EXERCISES_BY_ID, EXERCISES_CATALOG
+    from arete.data.garmin_exercises import GARMIN_CATEGORIES, GARMIN_EXERCISES
+    from arete.llm.workout_parser import parse_workout_text
+
+    french = [e["name_fr"].lower() for e in EXERCISES_CATALOG]
+    assert len(french) == len(set(french)), "two catalog exercises share a French name"
+    for catalog_id in {*GARMIN_EXERCISES.values(), *GARMIN_CATEGORIES.values()}:
+        line = draft_notation(
+            [DraftExercise(EXERCISES_BY_ID[catalog_id]["name_fr"], catalog_id, 3, 10)]
+        )
+        parsed = parse_workout_text(line + "@20", workout_date=date(2026, 10, 1))
+        assert [e.exercise_id for e in parsed.exercises] == [catalog_id], line
+        assert parsed.unparsed_lines == []
 
 
 def test_garmin_summaries_are_read_from_the_activity_payload():
@@ -213,9 +261,11 @@ def test_completing_a_draft_makes_one_linked_session_with_records(con, client):
     draft_id = open_garmin_draft(
         activity,
         today,
-        [GarminExerciseSummary("HIP_RAISE", "BARBELL_HIP_THRUST", 3, 30)],
+        [GarminExerciseSummary("HIP_RAISE", "BARBELL_HIP_THRUST_WITH_BENCH", 3, 30)],
     )
-    [listed] = [d for d in client.get("/strength/drafts").json() if d["id"] == draft_id]
+    [listed] = [
+        d for d in client.get("/strength/drafts").json()["items"] if d["id"] == draft_id
+    ]
     assert listed["notation"] == "Hip thrust 3x10"
 
     muscles = {
@@ -242,7 +292,9 @@ def test_completing_a_draft_makes_one_linked_session_with_records(con, client):
     assert (log["id"], log["garmin_activity_id"]) == (session_id, activity)
     assert (log["total_sets"], log["total_volume"]) == (3, 7500)
     assert log["name"] == "draft-test séance"
-    assert draft_id not in [d["id"] for d in client.get("/strength/drafts").json()]
+    assert draft_id not in [
+        d["id"] for d in client.get("/strength/drafts").json()["items"]
+    ]
     after = client.get("/strength/stats/muscles", params={"days": 7}).json()
     assert {m["muscle"]: m["volume"] for m in after["muscles"]}["glutes"] > muscles.get(
         "glutes", 0
@@ -301,7 +353,9 @@ def test_an_old_activity_gets_its_draft_on_demand_and_dismissal_is_reversible(
     assert again.json()["id"] == draft["id"]
 
     assert client.delete(f"/strength/drafts/{draft['id']}").status_code == 200
-    assert draft["id"] not in [d["id"] for d in client.get("/strength/drafts").json()]
+    assert draft["id"] not in [
+        d["id"] for d in client.get("/strength/drafts").json()["items"]
+    ]
     reopened = client.post("/strength/drafts", json={"actual_session_id": activity})
     assert reopened.json()["id"] == draft["id"]
     assert _drafts(con, activity)[0][1] == "pending"
@@ -360,3 +414,153 @@ def test_a_concurrent_completion_writes_nothing(con):
         ).fetchone()[0]
         == 0
     )
+
+
+def test_a_day_with_an_unlinked_log_keeps_its_draft_out_of_the_list(con, client):
+    """That log is probably this session: link it rather than log it twice."""
+    today = athlete_today()
+    first, second = _activity(con, today), _activity(con, today)
+    draft = open_garmin_draft(first, today, [])
+    open_garmin_draft(second, today, [])
+    listed = lambda: [d["id"] for d in client.get("/strength/drafts").json()["items"]]  # noqa: E731
+    assert draft in listed()
+
+    con.execute(
+        "INSERT INTO app.strength_sessions (user_id, date, name) VALUES (1, ?, 'draft-test typed')",
+        [today],
+    )
+    assert draft not in listed()
+    # Asked for by id, it is still there.
+    assert StrengthRepository().pending_drafts(draft)
+
+
+def test_the_list_counts_every_draft_and_dismisses_them_all(con, client):
+    today = athlete_today()
+    for _ in range(3):
+        open_garmin_draft(_activity(con, today - timedelta(days=1)), today, [])
+    with patch("arete.api.strength.DRAFT_PAGE", 2):
+        body = client.get("/strength/drafts").json()
+    assert len(body["items"]) == 2
+    assert body["total"] == StrengthRepository().pending_draft_count() >= 3
+
+    dismissed = client.post("/strength/drafts/dismiss-all").json()["dismissed"]
+    assert dismissed >= 3
+    assert client.get("/strength/drafts").json() == {"items": [], "total": 0}
+
+
+def test_garmin_names_fill_a_draft_opened_empty(con):
+    """Opened from the Journal before Garmin took over a Strava copy."""
+    today = athlete_today()
+    activity = _activity(con, today)
+    draft = open_journal_draft(activity)
+    assert draft is not None and draft.exercises == []
+
+    assert open_garmin_draft(activity, today, SUMMARIES[:1]) == draft.id
+    [filled] = StrengthRepository().pending_drafts(draft.id)
+    assert [e.exercise_id for e in filled.exercises] == ["bench_press"]
+    # Names already there are never overwritten.
+    open_garmin_draft(activity, today, SUMMARIES[1:2])
+    [kept] = StrengthRepository().pending_drafts(draft.id)
+    assert [e.exercise_id for e in kept.exercises] == ["bench_press"]
+
+
+def test_a_concurrent_open_returns_the_draft_the_other_tab_created(con, monkeypatch):
+    today = athlete_today()
+    activity = _activity(con, today)
+    repo = StrengthRepository()
+    opened = repo._get_connection
+
+    class OtherTabFirst:
+        """Commits the same draft from another connection just before ours."""
+
+        def __init__(self, inner):
+            self._inner = inner
+
+        def execute(self, sql, *args):
+            if sql == "COMMIT":
+                other = connect()
+                other.execute(
+                    "INSERT INTO app.strength_drafts"
+                    " (actual_session_id, origin, created_at) VALUES (?, 'journal', now())",
+                    [activity],
+                )
+                other.close()
+            return self._inner.execute(sql, *args)
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+    monkeypatch.setattr(repo, "_get_connection", lambda: OtherTabFirst(opened()))
+    draft_id = repo.open_draft(activity, [], "journal")
+    monkeypatch.undo()
+    assert draft_id == _drafts(con, activity)[0][0]
+    assert len(_drafts(con, activity)) == 1
+
+
+def test_an_interrupted_completion_asks_to_retry_not_already_done(con, client):
+    today = athlete_today()
+    activity = _activity(con, today)
+    draft_id = open_garmin_draft(activity, today, [])
+    other = connect()
+    other.execute("BEGIN TRANSACTION")
+    other.execute("DELETE FROM app.strength_drafts WHERE id = ?", [draft_id])
+    try:
+        with pytest.raises(DraftBusy):
+            complete_draft(draft_id, "Hip thrust 3x10@100")
+    finally:
+        other.execute("ROLLBACK")
+        other.close()
+    response = client.post(
+        f"/strength/drafts/{draft_id}/complete", json={"text": "pas un exercice"}
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("Aucun exercice reconnu")
+    assert _drafts(con, activity)[0][1] == "pending"
+
+
+def test_the_session_page_knows_whether_a_strength_activity_has_its_log(con, client):
+    today = athlete_today()
+    activity = _activity(con, today)
+    url = f"/analytics/sessions/{activity}/detail"
+    assert client.get(url).json()["strength_log_id"] is None
+    log = con.execute(
+        "INSERT INTO app.strength_sessions (user_id, date, name, actual_session_id)"
+        " VALUES (1, ?, 'draft-test linked', ?) RETURNING id",
+        [today, activity],
+    ).fetchone()[0]
+    assert client.get(url).json()["strength_log_id"] == log
+
+
+@pytest.fixture
+def game_db(tmp_path, monkeypatch):
+    from arete.dataio.init_duckdb import main
+
+    monkeypatch.setenv("ARETE_DB", str(tmp_path / "game.duckdb"))
+    monkeypatch.setenv("GAMIFICATION_ENABLED", "true")
+    main()
+
+
+@pytest.mark.parametrize("projected_first", [True, False])
+def test_a_completed_draft_counts_once_in_the_game(game_db, projected_first):
+    """The activity's reward is never doubled nor taken back by its log."""
+    from arete.garmin.models import ActualSession
+    from arete.garmin.repository import GarminRepository
+    from arete.services import gamification as game
+
+    preference = game.preference()
+    game.set_preference(game.Preference(enabled=True, version=preference["version"]))
+    today = athlete_today()
+    activity = GarminRepository().create_actual_session(
+        ActualSession(date=today, sport="strength", duration_sec=3600, source="manual")
+    )
+    if projected_first:
+        assert game.sync()["shards"] == 10
+    draft = open_garmin_draft(
+        activity, today, [GarminExerciseSummary("SQUAT", "BARBELL_BACK_SQUAT", 3, 15)]
+    )
+    assert draft is not None
+    assert complete_draft(draft, "Squat arrière 3x5@100").session_id
+    for _ in range(2):
+        state = game.sync()
+        debits = [r for r in state["history"] if r["xp"] < 0 or r["shards"] < 0]
+        assert (state["sessions"], state["shards"], debits) == (1, 10, [])

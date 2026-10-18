@@ -34,6 +34,7 @@ from arete.garmin.time_series import (
 from arete.services.analytics import MODEL_EXCLUDED_SOURCES
 from arete.services.coaching_repository import SessionFeedbackRepository
 from arete.services.session_conditions import get_terrain, get_weather
+from arete.strength.repository import StrengthRepository
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +288,10 @@ def get_activity_detail(
         "feedback": feedback.to_dict() if feedback else None,
         "terrain": get_terrain(session_id),
         "weather": get_weather(session_id),
+        # A strength activity's Muscu log: the page offers to add the loads without one.
+        "strength_log_id": StrengthRepository().log_for_activity(session_id)
+        if session.sport == "strength"
+        else None,
     }
 
 

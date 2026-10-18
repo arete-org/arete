@@ -722,6 +722,12 @@ def _session_to_detail_response(
 # ─────────────────────────────────────────────────────────────────────────
 
 
+#: What the grammar answers when no line reads as an exercise, in French.
+NO_EXERCISE = (
+    "Aucun exercice reconnu : ajoute au moins une ligne comme « Squat 3x10 60kg »."
+)
+
+
 class WorkoutParseRequest(BaseModel):
     """Request to parse workout text."""
 
@@ -993,7 +999,7 @@ def parse_workout_text_endpoint(request: WorkoutParseRequest):
 
     except ValueError as e:
         # Nothing recognised in the text: a client problem, say so plainly
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        raise HTTPException(status_code=422, detail=NO_EXERCISE) from e
 
 
 def _preview_suggestions(parsed) -> dict[str, dict]:
@@ -1022,7 +1028,11 @@ class DraftExerciseResponse(BaseModel):
 
 
 class StrengthDraftResponse(BaseModel):
-    """A Garmin strength activity awaiting its loads, and the text it opens with."""
+    """A strength activity awaiting its loads, and the text it opens with.
+
+    ``notation`` holds the catalog exercises only; the free-text ones are in
+    ``exercises`` without ``exercise_id``, for the athlete to write.
+    """
 
     id: int
     actual_session_id: int
@@ -1032,6 +1042,13 @@ class StrengthDraftResponse(BaseModel):
     origin: str
     exercises: list[DraftExerciseResponse]
     notation: str
+
+
+class StrengthDraftList(BaseModel):
+    """The Journal's first page of drafts and how many there are in all."""
+
+    items: list[StrengthDraftResponse]
+    total: int
 
 
 class DraftOpenRequest(BaseModel):
@@ -1052,6 +1069,8 @@ class DraftCompleteResponse(BaseModel):
     dropped: list[str] = []
 
 
+#: The Journal shows this many drafts; the total says how many more wait.
+DRAFT_PAGE = 20
 _DRAFT_GONE = "Cette séance n'est plus à compléter : elle a déjà ses charges."
 
 
@@ -1070,10 +1089,18 @@ def _draft_response(draft) -> StrengthDraftResponse:
     )
 
 
-@router.get("/drafts", response_model=list[StrengthDraftResponse])
+@router.get("/drafts", response_model=StrengthDraftList)
 def list_drafts():
-    """Garmin strength sessions awaiting their loads, newest first."""
-    return [_draft_response(d) for d in _repo.pending_drafts()]
+    """Strength sessions awaiting their loads: the newest page, and the total."""
+    items = [_draft_response(d) for d in _repo.pending_drafts(limit=DRAFT_PAGE)]
+    total = len(items) if len(items) < DRAFT_PAGE else _repo.pending_draft_count()
+    return StrengthDraftList(items=items, total=total)
+
+
+@router.post("/drafts/dismiss-all")
+def dismiss_all_drafts():
+    """« Tout ignorer »: leave every listed draft without loads (500 per call)."""
+    return {"dismissed": _repo.dismiss_pending_drafts()}
 
 
 @router.post("/drafts", response_model=StrengthDraftResponse)
@@ -1098,7 +1125,7 @@ def complete_draft(draft_id: int, body: DraftCompleteRequest):
     409 when the draft was completed elsewhere (another tab, a log saved for
     that day): nothing is written, never a second session.
     """
-    from arete.strength.drafts import DraftNotFound, DraftSettled
+    from arete.strength.drafts import DraftBusy, DraftNotFound, DraftSettled
     from arete.strength.drafts import complete_draft as complete
 
     try:
@@ -1107,8 +1134,13 @@ def complete_draft(draft_id: int, body: DraftCompleteRequest):
         raise HTTPException(status_code=404, detail="Séance introuvable") from exc
     except DraftSettled as exc:
         raise HTTPException(status_code=409, detail=_DRAFT_GONE) from exc
+    except DraftBusy as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Enregistrement interrompu par une autre écriture : réessaie.",
+        ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=NO_EXERCISE) from exc
     if outcome.session_id is None:
         raise HTTPException(status_code=422, detail=outcome.message)
     return DraftCompleteResponse(
