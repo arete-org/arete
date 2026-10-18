@@ -64,7 +64,7 @@ export function ConnectionsTab() {
       window.location.href = url;
     },
     onError: (err) =>
-      setSyncResult(`Strava : ${err instanceof Error ? err.message : 'autorisation impossible à lancer'}`),
+      setSyncResult(`Strava : ${readableError(err)}`),
   });
 
   const syncMutation = useMutation({
@@ -76,7 +76,7 @@ export function ConnectionsTab() {
       queryClient.invalidateQueries({ queryKey: ['stravaStatus'] });
       invalidateAfterSession(queryClient);
     },
-    onError: (err) => setSyncResult(`Échec de la synchro : ${err instanceof Error ? err.message : err}`),
+    onError: (err) => setSyncResult(`Échec de la synchro : ${readableError(err)}`),
   });
 
   const disconnectMutation = useMutation({

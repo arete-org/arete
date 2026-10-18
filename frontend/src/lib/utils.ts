@@ -65,29 +65,62 @@ function statusText(status: number): string {
 /** The browser's own wording for a request that never reached the server. */
 const NETWORK = /failed to fetch|load failed|networkerror|network request failed|err_internet_disconnected/i;
 
+/** A request that never got an answer (offline, DNS, connection reset), as opposed to an HTTP error. */
+export function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError && NETWORK.test(error.message);
+}
+
+/** Accents or common French words: the server's and the app's own messages, not a library's. */
+const FRENCH = /[àâäçéèêëîïôöùûüÿœæ’]|\b(?:le|la|les|de|des|du|un|une|est|pas|pour|avec|dans|sur|cette|ton|ta|tes|aux|au|ne|et|ou|plus|trop|vide|aucune?|introuvable|impossible|invalide|inconnue?|requise?|connexion|bilan|objectif)\b/i;
+
+/** Words a library, the browser or an untranslated server message would use. */
+const ENGLISH = /\b(?:the|an?|not|no|is|are|was|be|must|cannot|can't|could|failed|failure|error|of|to|for|with|found|invalid|unexpected|undefined|null|too|large|unknown|missing|required|reading|properties|already|exists|returned|configured|connected|file|over|chars)\b/i;
+
+/** Text fit for the athlete: French, or at least nothing that reads as English. */
+export function looksFrench(text: string): boolean {
+  return FRENCH.test(text) || !ENGLISH.test(text);
+}
+
+const UNEXPECTED = 'Une erreur inattendue est survenue : réessaie.';
+
+/** A FastAPI `detail`: a string, or the validation list whose messages may be French (« Fuseau horaire inconnu. »). */
+function detailText(detail: unknown): string | null {
+  if (typeof detail === 'string') return detail;
+  if (!Array.isArray(detail)) return null;
+  const messages = detail
+    .map((item) => (item && typeof item === 'object' ? (item as { msg?: unknown }).msg : null))
+    .filter((msg): msg is string => typeof msg === 'string')
+    .map((msg) => msg.replace(/^Value error, /, ''));
+  return messages.join(' ') || null;
+}
+
 /**
  * French text for any failure, never the raw technical message: the server's
- * `detail` when it gave one ('API Error 422: {"detail":"Enregistrement vide"}'
- * -> 'Enregistrement vide'), else a sentence for its status, the network or a
- * timeout. Messages the app writes itself (plain `Error`s) pass through.
+ * `detail` when it is French ('API Error 422: {"detail":"Enregistrement vide"}'
+ * -> 'Enregistrement vide'), else a sentence for its status, the network, a
+ * timeout or an unreadable answer. The app's own (French) messages pass
+ * through; anything else becomes a generic sentence. The raw error stays in
+ * the console for debugging.
  */
 export function readableError(error: unknown): string {
+  console.debug('[readableError]', error);
   if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
     return error.name === 'TimeoutError' ? 'Le serveur met trop de temps à répondre : réessaie.' : 'Demande annulée.';
   }
-  const raw = error instanceof Error ? error.message : String(error);
-  if (error instanceof TypeError && NETWORK.test(raw)) return 'Connexion impossible : vérifie ton réseau puis réessaie.';
+  if (isNetworkError(error)) return 'Connexion impossible : vérifie ton réseau puis réessaie.';
+  if (error instanceof SyntaxError) return 'Réponse du serveur illisible : réessaie.';
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  const status = raw.match(/^API Error (\d{3})/);
   const match = raw.match(/\{.*\}/s);
   if (match) {
     try {
-      const body = JSON.parse(match[0]) as { detail?: unknown };
-      if (typeof body.detail === 'string' && body.detail) return body.detail;
+      const detail = detailText((JSON.parse(match[0]) as { detail?: unknown }).detail);
+      if (detail && looksFrench(detail)) return detail;
     } catch {
       // fall through to the status
     }
   }
-  const status = raw.match(/^API Error (\d{3})/);
   if (status) return statusText(Number(status[1]));
-  if (!raw.trim()) return 'Une erreur inattendue est survenue.';
-  return raw;
+  if (raw.trim() && looksFrench(raw)) return raw;
+  return UNEXPECTED;
 }

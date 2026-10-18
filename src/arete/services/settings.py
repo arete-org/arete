@@ -169,7 +169,7 @@ class UserSettingsUpdate(BaseModel):
         try:
             ZoneInfo(value)
         except (ZoneInfoNotFoundError, ValueError) as exc:
-            raise ValueError("Fuseau horaire inconnu.") from exc
+            raise ValueError("Fuseau horaire inconnu du serveur.") from exc
         return value
 
 

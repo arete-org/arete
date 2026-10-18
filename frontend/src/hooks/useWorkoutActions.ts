@@ -29,7 +29,7 @@ export function useWorkoutActions(onResult?: (text: string) => void) {
         for (let offset = 0; offset < action.sessions.length; offset += 5) {
           let batch;
           try { batch = await workoutApi.export(action.sessions.slice(offset, offset + 5), action.deviceId); }
-          catch (error) { throw new Error(`${done}/${action.sessions.length} programmation(s) confirmée(s). Le lot courant est à vérifier avant tout renvoi : ${error instanceof Error ? error.message : 'connexion interrompue'}`); }
+          catch (error) { throw new Error(`${done}/${action.sessions.length} programmation(s) confirmée(s). Le lot courant est à vérifier avant tout renvoi : ${readableError(error)}`); }
           for (const result of batch.results) {
             const session = action.sessions.find(s => s.id === result.session_id)!;
             cacheWorkout(queryClient, { session, export: result });
@@ -49,7 +49,7 @@ export function useWorkoutActions(onResult?: (text: string) => void) {
       return action.kind === 'edit' ? `Séance #${action.session.id} modifiée dans Arete (${action.date}) ; aucun envoi Garmin.` : `Séance #${action.session.id} : vérification Garmin, état ${exportLabel(view.export)}.`;
     },
     onSuccess: text => onResult?.(text),
-    onError: error => onResult?.(`Action interrompue : ${error.message}`),
+    onError: error => onResult?.(`Action interrompue : ${readableError(error)}`),
     onSettled: () => { markWorkout('workout:action-settled'); measureWorkout('workout:action-total', 'workout:action-start', 'workout:action-settled'); invalidateAfterSession(queryClient); },
   });
   const run = async (action: Action) => {

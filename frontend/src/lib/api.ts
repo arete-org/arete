@@ -251,8 +251,7 @@ export const garminApi = {
       }
     );
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Upload Error: ${error}`);
+      throw new ApiError(response.status, await response.text());
     }
     return response.json();
   },
