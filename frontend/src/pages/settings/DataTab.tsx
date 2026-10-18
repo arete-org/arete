@@ -50,8 +50,8 @@ export function DataTab() {
       <Panel variant="inset" title="EXPORTER MES DONNÉES">
         <div className="space-y-4">
           <p className="text-xs text-text-muted font-sans">
-            Séances, santé, force, objectifs, bilans, échanges avec le coach, réglages et jeu. Les courbes détaillées
-            et les conversations sauvegardées, volumineuses, se cochent à part.
+            Séances, santé, force, objectifs, bilans, échanges avec le coach, réglages et jeu. Les historiques
+            volumineux (courbes, conversations, briefings…) se cochent à part, de préférence sur une période.
           </p>
 
           <div className="flex flex-wrap gap-2" role="group" aria-label="Format">
@@ -88,22 +88,27 @@ export function DataTab() {
             journal sont toujours complets. Un export dépassant 4 Mo est refusé : réduis alors la période ou passe au ZIP.
           </p>
 
-          <fieldset>
-            <legend className="text-xs font-sans text-text-muted uppercase mb-2">Contenu</legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {EXPORT_TABLES.map((t) => (
-                <label key={t.id} className="flex items-center gap-2 text-sm text-text-secondary font-sans">
-                  <input
-                    type="checkbox"
-                    className="accent-neon-cyan"
-                    checked={tables.includes(t.id)}
-                    onChange={() => toggle(t.id)}
-                  />
-                  {t.label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          {[
+            { legend: 'Contenu', optIn: false },
+            { legend: 'À la demande (volumineux : choisis une période)', optIn: true },
+          ].map((group) => (
+            <fieldset key={group.legend}>
+              <legend className="text-xs font-sans text-text-muted uppercase mb-2">{group.legend}</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {EXPORT_TABLES.filter((t) => Boolean(t.optIn) === group.optIn).map((t) => (
+                  <label key={t.id} className="flex items-center gap-2 text-sm text-text-secondary font-sans">
+                    <input
+                      type="checkbox"
+                      className="accent-neon-cyan"
+                      checked={tables.includes(t.id)}
+                      onChange={() => toggle(t.id)}
+                    />
+                    {t.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ))}
 
           <div>
             <p className="text-xs font-sans text-text-muted uppercase mb-1">Jamais exporté</p>

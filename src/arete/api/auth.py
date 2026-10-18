@@ -471,6 +471,13 @@ def delete_me(body: AccountDeletion, request: Request) -> Response:
         logins = erase_current_athlete()
     except user_service.AccountError as e:
         raise HTTPException(status_code=e.status, detail=str(e)) from None
+    except duckdb.Error:
+        # One transaction: it rolled back, the account is whole and signed in.
+        logger.exception("Account erasure failed")
+        raise HTTPException(
+            status_code=503,
+            detail="La suppression n'a pas abouti, ton compte reste ouvert : réessaie.",
+        ) from None
     forget_accounts()
     failed = [login for login in logins if not _delete_clerk_user(login)]
     if failed:

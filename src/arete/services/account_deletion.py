@@ -1,11 +1,15 @@
-"""Erase the signed-in athlete for good: rows, account, files (ARE-128).
+"""Erase the signed-in athlete for good: files, rows, account (ARE-128).
 
-Physical deletion, unlike an administrator's deactivation. The walk covers
-every private relation ``dataio.tenant_schema`` declares (each with the
-children that inherit its owner, one transaction per family), soft-deleted
-rows included, then the athlete's files on disk, then the account tables in
-one last transaction that also writes the erasure log: the day and a one-way
-hash of each login's Clerk id, nothing else.
+Physical deletion, unlike an administrator's deactivation. The athlete's
+directory goes first, then one transaction deletes every row of every private
+relation ``dataio.tenant_schema`` declares (soft-deleted rows included), the
+account rows and writes the erasure log: the day and a one-way hash of each
+login's Clerk id, nothing else. One transaction keeps the request within a
+handful of database round trips and makes a failure leave the account whole,
+signed in, for a retry to finish the job.
+
+The owner's athlete is never erased here: the instance keeps its owner, who
+administers it by right (``services/users.py``).
 
 It acts on the trusted athlete scope only. Requests already running, and
 other instances within the account cache's bound, cannot be revoked: a write
@@ -17,127 +21,81 @@ from __future__ import annotations
 
 import logging
 import shutil
-from collections.abc import Iterator
-from pathlib import Path
 
 from arete.config import config
 from arete.dataio.db import db_connection, transaction
-from arete.dataio.mirror import MIRRORED_DIRS, MIRRORED_FILES
-from arete.dataio.tenant_schema import PARENTS, PRIVATE_TABLES, owner_column
-from arete.garmin.token_store import ACCOUNT_FILE, TOKEN_FILE
+from arete.dataio.tenant_schema import PRIVATE_TABLES, owner_column
 from arete.services.athlete_scope import current_athlete_id
-from arete.services.memory import memory_root
 from arete.services.users import OWNER_ATHLETE_ID, AccountError, account_hash
 
 logger = logging.getLogger(__name__)
 
-LAST_ADMIN_DETAIL = (
-    "Tu es le seul administrateur de cette instance : nomme un autre "
-    "administrateur avant de supprimer ton compte."
+OWNER_DETAIL = (
+    "Le compte propriétaire ne peut pas être supprimé depuis l'application : "
+    "l'instance resterait sans propriétaire. Sa suppression se fait à la main, "
+    "par l'opérateur de l'instance."
 )
+#: Account rows keyed by the athlete, erased with its private relations.
+ATHLETE_ACCOUNT_TABLES = {
+    "slack_identities": "athlete_id",
+    "slack_athletes": "athlete_id",
+    "users": "athlete_id",
+    "athletes": "id",
+}
+#: Rows keyed by a login's Clerk id rather than by the athlete.
+LOGIN_TABLES = ("slack_identities", "slack_private_threads", "slack_operations")
 
 
-def table_groups() -> list[tuple[str, ...]]:
-    """Each private root relation with the relations inheriting its owner."""
-    children: dict[str, list[str]] = {}
-    for child, (_, parent, _) in PARENTS.items():
-        children.setdefault(parent, []).append(child)
+def _statements(athlete_id: int) -> str:
+    """Every athlete-keyed deletion, as one script: one round trip, not sixty.
 
-    def family(table: str) -> Iterator[str]:
-        yield table
-        for child in sorted(children.get(table, ())):
-            yield from family(child)
-
-    groups = [tuple(family(t)) for t in PRIVATE_TABLES if t not in PARENTS]
-    covered = [table for group in groups for table in group]
-    assert sorted(covered) == sorted(PRIVATE_TABLES), "a private relation is missed"
-    return groups
-
-
-def athlete_paths(athlete_id: int) -> list[Path]:
-    """Where the athlete's files live on this instance's disk (scope set).
-
-    Another athlete's directory is theirs alone. Athlete 1's is the storage
-    root itself, which holds the local database and the others' directories:
-    only the paths the application writes for an athlete go.
+    The id is inlined, as an integer from the trusted scope, because a script
+    of several statements takes no parameters.
     """
-    root = config.data_dir
-    if athlete_id != OWNER_ATHLETE_ID:
-        assert root != config.storage_root, "an athlete directory is never the root"
-        return [root]
-    paths = [root / name for name in (*MIRRORED_DIRS, *MIRRORED_FILES)]
-    # ARETE_GARMIN_TOKENS_DIR may name a directory of the host: its files only.
-    tokens = [config.garmin_tokens_dir / name for name in (TOKEN_FILE, ACCOUNT_FILE)]
-    return [*paths, *tokens, config.fit_dir, memory_root()]
-
-
-def _remove(path: Path) -> None:
-    if path.is_dir() and not path.is_symlink():
-        shutil.rmtree(path)
-    else:
-        path.unlink(missing_ok=True)
+    assert type(athlete_id) is int and athlete_id > 0, "trusted athlete id"
+    keyed = [(table, owner_column(table)) for table in PRIVATE_TABLES]
+    keyed += list(ATHLETE_ACCOUNT_TABLES.items())
+    return ";\n".join(
+        f"DELETE FROM app.{table} WHERE {column}={athlete_id}"
+        for table, column in keyed
+    )
 
 
 def _logins(athlete_id: int) -> list[str]:
-    """The athlete's Clerk logins; refused while it is the last administrator."""
     with db_connection() as con:
         rows = con.execute(
-            "SELECT clerk_user_id, coalesce(role, 'athlete') FROM app.users "
-            "WHERE athlete_id=?",
-            [athlete_id],
+            "SELECT clerk_user_id FROM app.users WHERE athlete_id=?", [athlete_id]
         ).fetchall()
-        administrator = athlete_id == OWNER_ATHLETE_ID or any(
-            role == "admin" for _, role in rows
-        )
-        if administrator:
-            # The owner is administrator by right: any live login of athlete 1.
-            other = con.execute(
-                "SELECT 1 FROM app.users u JOIN app.athletes a ON a.id=u.athlete_id "
-                "WHERE u.athlete_id<>? AND u.deleted_at IS NULL AND a.deleted_at IS NULL "
-                "AND (u.athlete_id=? OR u.role='admin') LIMIT 1",
-                [athlete_id, OWNER_ATHLETE_ID],
-            ).fetchone()
-            if other is None:
-                raise AccountError(LAST_ADMIN_DETAIL)
     return [str(row[0]) for row in rows]
 
 
 def erase_current_athlete() -> list[str]:
     """Erase the scoped athlete; returns its Clerk logins, for the caller to delete.
 
-    Idempotent: a failure part-way leaves the account signed in, and running
-    it again finishes the job. Raises ``AccountError`` before any deletion
-    when the athlete is the instance's last administrator.
+    Raises ``AccountError`` for the owner, before anything is touched. Its
+    database work is one transaction: a failure rolls it all back and a retry
+    starts again; the directory, removed first, is idempotent to remove.
     """
     athlete_id = current_athlete_id()
+    if athlete_id == OWNER_ATHLETE_ID:
+        raise AccountError(OWNER_DETAIL)
     logins = _logins(athlete_id)
-    for group in table_groups():
-        with transaction() as con:
-            for table in group:
-                con.execute(
-                    f"DELETE FROM app.{table} WHERE {owner_column(table)}=?",
-                    [athlete_id],
-                )
-    for path in athlete_paths(athlete_id):
-        _remove(path)
+    directory = config.data_dir
+    assert directory != config.storage_root, "an athlete directory is never the root"
+    if directory.is_dir():
+        shutil.rmtree(directory)
     marks = ",".join("?" * len(logins)) or "NULL"
     with transaction() as con:
-        con.execute(
-            f"DELETE FROM app.slack_identities WHERE athlete_id=? OR account_id IN ({marks})",
-            [athlete_id, *logins],
-        )
-        for table in ("slack_private_threads", "slack_operations"):
+        con.execute(_statements(athlete_id))
+        for table in LOGIN_TABLES:
             con.execute(
                 f"DELETE FROM app.{table} WHERE account_id IN ({marks})", logins
             )
-        con.execute("DELETE FROM app.slack_athletes WHERE athlete_id=?", [athlete_id])
-        con.execute("DELETE FROM app.users WHERE athlete_id=?", [athlete_id])
-        con.execute("DELETE FROM app.athletes WHERE id=?", [athlete_id])
-        for login in logins:
-            con.execute(
+        if logins:
+            con.executemany(
                 "INSERT INTO app.account_deletions (account_hash, deleted_on) "
                 "VALUES (?, current_date) ON CONFLICT DO NOTHING",
-                [account_hash(login)],
+                [[account_hash(login)] for login in logins],
             )
     logger.info("Erased an athlete and %d login(s)", len(logins))
     return logins

@@ -178,13 +178,7 @@ def upsert_user(
                 )
                 legacy_owner = False
             athlete_id = OWNER_ATHLETE_ID
-            if legacy_owner:
-                # An owner who erased their account comes back to an empty athlete 1.
-                con.execute(
-                    "INSERT INTO app.athletes(id) VALUES(?) ON CONFLICT DO NOTHING",
-                    [OWNER_ATHLETE_ID],
-                )
-            else:
+            if not legacy_owner:
                 created = con.execute(
                     "INSERT INTO app.athletes(id) VALUES(nextval('app.athletes_seq')) RETURNING id"
                 ).fetchone()

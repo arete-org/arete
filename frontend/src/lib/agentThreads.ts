@@ -164,8 +164,13 @@ function storageKey(athleteId: number): string {
   return athleteId === 1 ? THREADS_KEY : `${THREADS_KEY}.athlete.${athleteId}`;
 }
 
+/** Athletes erased in this tab: the coach panel, still mounted until the page
+ *  reloads, must not write their conversations back on unmount or page exit. */
+const forgotten = new Set<number>();
+
 /** Drops the athlete's conversations kept in this browser (its account was erased). */
 export function forgetThreads(athleteId: number): void {
+  forgotten.add(athleteId);
   localStorage.removeItem(storageKey(athleteId));
   if (athleteId === 1) localStorage.removeItem(LEGACY_KEY);
   const conflicts = `arete.coach.conflict.${athleteId}.`;
@@ -191,6 +196,7 @@ export function loadThreads(athleteId = 1): LoadedThreads {
   }
 }
 export function saveThreads(store: ThreadStore, athleteId = 1): string | null {
+  if (forgotten.has(athleteId)) return null;
   try {
     const raw = JSON.stringify(store);
     if (raw.length > MAX_STORAGE_CHARS)

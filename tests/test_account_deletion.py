@@ -13,6 +13,7 @@ from arete.config import config
 from arete.dataio.db import connect
 from arete.dataio.init_duckdb import main as init_schema
 from arete.dataio.tenant_schema import PRIVATE_TABLES, SCOPED_KEYS, owner_column
+from arete.services.account_deletion import ATHLETE_ACCOUNT_TABLES, LOGIN_TABLES
 from arete.services.athlete_scope import athlete_scope
 
 OWNER, ANA, BOB = "user_owner", "user_ana", "user_bob"
@@ -20,18 +21,11 @@ PROFILES = {
     OWNER: ("owner@example.com", "Greg", True),
     ANA: ("ana@example.com", "Ana", True),
     BOB: ("bob@example.com", "Bob", True),
-    "user_owner_again": ("owner@example.com", "Greg", True),
 }
 TOKENS = {f"{subject}-token": subject for subject in PROFILES}
-#: Tables outside ``tenant_schema`` that hold an athlete's or a login's data,
-#: erased with the account. Every other table must hold neither.
-ACCOUNT_TABLES = {
-    "athletes": "id",
-    "users": "athlete_id",
-    "slack_athletes": "athlete_id",
-    "slack_identities": "athlete_id",
-}
-LOGIN_TABLES = ("slack_identities", "slack_private_threads", "slack_operations")
+#: Tables outside ``tenant_schema`` that hold an athlete's or a login's data:
+#: the service's own lists, which the last test checks against the schema.
+ACCOUNT_TABLES = ATHLETE_ACCOUNT_TABLES
 PERSONAL_COLUMNS = {"athlete_id", "user_id", "account_id", "clerk_user_id", "email"}
 
 
@@ -241,34 +235,55 @@ def test_deletion_erases_every_row_and_file_of_one_athlete_only(
     assert client.get("/auth/me", headers=_bearer(BOB)).status_code == 200
 
 
-def test_the_last_administrator_cannot_delete_their_account(client, accounts, clerk):
+def test_the_owner_cannot_delete_their_account(client, accounts, clerk):
+    """The instance keeps its owner, an administrator by right: never erased here."""
     owner = accounts[OWNER]
     _fill_every_private_table(owner)
+    # Even with another administrator, which used to be the only condition.
+    con = connect()
+    con.execute("UPDATE app.users SET role='admin' WHERE clerk_user_id=?", [BOB])
+    con.close()
+    auth.forget_accounts()
     before = _counts(owner, OWNER)
     refused = client.post(
         "/auth/me/delete", json={"confirmation": "SUPPRIMER"}, headers=_bearer(OWNER)
     )
     assert refused.status_code == 409
-    assert "seul administrateur" in refused.json()["detail"]
+    assert "propriétaire ne peut pas être supprimé" in refused.json()["detail"]
     assert _counts(owner, OWNER) == before
     assert clerk == []
+    assert client.get("/auth/me", headers=_bearer(OWNER)).status_code == 200
 
-    # Once Bob administers too, the owner may leave; their address claims an
-    # empty athlete 1 again with a new login.
-    con = connect()
-    con.execute("UPDATE app.users SET role='admin' WHERE clerk_user_id=?", [BOB])
-    con.close()
-    auth.forget_accounts()
-    deleted = client.post(
-        "/auth/me/delete", json={"confirmation": "SUPPRIMER"}, headers=_bearer(OWNER)
+
+def test_a_failed_erasure_rolls_back_whole_and_a_retry_finishes(
+    client, accounts, clerk, monkeypatch
+):
+    from arete.services import account_deletion
+
+    ana = accounts[ANA]
+    _fill_every_private_table(ana)
+    before = _counts(ana, ANA)
+    statements = account_deletion._statements
+    monkeypatch.setattr(
+        account_deletion,
+        "_statements",
+        lambda athlete_id: statements(athlete_id) + ";\nSELECT * FROM app.missing",
     )
-    assert deleted.status_code == 204
-    assert clerk == [OWNER]
-    assert not any(_counts(owner, OWNER).values())
-    back = client.get("/auth/me", headers=_bearer("user_owner_again"))
-    assert back.status_code == 200
-    assert (back.json()["athlete_id"], back.json()["is_owner"]) == (1, True)
-    assert client.get("/goals", headers=_bearer("user_owner_again")).json() == []
+    failed = client.post(
+        "/auth/me/delete", json={"confirmation": "SUPPRIMER"}, headers=_bearer(ANA)
+    )
+    assert failed.status_code == 503
+    assert "reste ouvert" in failed.json()["detail"]
+    assert _counts(ana, ANA) == before
+    assert clerk == []
+
+    monkeypatch.setattr(account_deletion, "_statements", statements)
+    retried = client.post(
+        "/auth/me/delete", json={"confirmation": "SUPPRIMER"}, headers=_bearer(ANA)
+    )
+    assert retried.status_code == 204
+    assert not any(_counts(ana, ANA).values())
+    assert clerk == [ANA]
 
 
 def test_a_clerk_failure_is_reported_once_the_data_is_gone(

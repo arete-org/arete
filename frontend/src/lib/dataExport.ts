@@ -1,11 +1,14 @@
 import { ApiError } from './api';
 import { authFetch } from './auth';
 
-/**
- * What the server can export (services/data_export.py).
- * `optIn` tables are left out of the server's default: too heavy for a whole history.
- */
-export const EXPORT_TABLES: readonly { id: string; label: string; optIn?: boolean }[] = [
+interface ExportTableSpec {
+  id: string;
+  label: string;
+  /** Left out of the server's default: it grows too fast for a whole history in one response. */
+  optIn?: true;
+}
+
+const TABLES = [
   { id: 'actual_sessions', label: 'Séances réalisées' },
   { id: 'planned_sessions', label: 'Séances planifiées' },
   { id: 'daily_metrics', label: 'Santé quotidienne' },
@@ -19,29 +22,34 @@ export const EXPORT_TABLES: readonly { id: string; label: string; optIn?: boolea
   { id: 'session_feedback', label: 'Retours sur les séances' },
   { id: 'activity_terrain', label: 'Terrain des séances' },
   { id: 'activity_weather', label: 'Météo des séances' },
-  { id: 'activity_streams', label: 'Courbes détaillées des séances (volumineux)', optIn: true },
-  { id: 'coach_briefings', label: 'Briefings du coach' },
-  { id: 'plan_decisions', label: 'Décisions d’adaptation du plan' },
   { id: 'coach_followups', label: 'Questions de suivi du coach' },
   { id: 'settings', label: 'Réglages' },
   { id: 'exercises', label: 'Exercices de force' },
-  { id: 'athlete_fact_revisions', label: 'Historique de ce que le coach sait' },
   { id: 'banister_coefficients', label: 'Modèle de forme' },
-  { id: 'conversations', label: 'Conversations sauvegardées (volumineux)', optIn: true },
   { id: 'documents', label: 'Documents joints (noms)' },
   { id: 'game_profile', label: 'Jeu : profil' },
   { id: 'game_periods', label: 'Jeu : périodes' },
   { id: 'game_weeks', label: 'Jeu : semaines' },
-  { id: 'game_events', label: 'Jeu : séances comptées' },
-  { id: 'game_ledger', label: 'Jeu : gains' },
   { id: 'game_owned', label: 'Jeu : apparences' },
   { id: 'automations', label: 'Automatisations' },
-  { id: 'automation_runs', label: 'Exécutions des automatisations' },
-  { id: 'automation_interrupts', label: 'Validations demandées' },
-  { id: 'automation_effects', label: 'Actions des automatisations' },
   { id: 'notifications', label: 'Notifications reçues' },
   { id: 'journal', label: 'Journal du coach' },
-];
+  { id: 'activity_streams', label: 'Courbes détaillées des séances', optIn: true },
+  { id: 'conversations', label: 'Conversations sauvegardées', optIn: true },
+  { id: 'coach_briefings', label: 'Briefings du coach', optIn: true },
+  { id: 'plan_decisions', label: 'Décisions d’adaptation du plan', optIn: true },
+  { id: 'athlete_fact_revisions', label: 'Historique de ce que le coach sait', optIn: true },
+  { id: 'game_events', label: 'Jeu : séances comptées', optIn: true },
+  { id: 'game_ledger', label: 'Jeu : gains', optIn: true },
+  { id: 'automation_runs', label: 'Exécutions des automatisations', optIn: true },
+  { id: 'automation_interrupts', label: 'Validations demandées', optIn: true },
+  { id: 'automation_effects', label: 'Actions des automatisations', optIn: true },
+] as const satisfies readonly ExportTableSpec[];
+
+export type ExportTableId = (typeof TABLES)[number]['id'];
+
+/** What the server can export (services/data_export.py). */
+export const EXPORT_TABLES: readonly (ExportTableSpec & { id: ExportTableId })[] = TABLES;
 
 /** What never leaves in an export, said plainly on the export screen. */
 export const NOT_EXPORTED = [
@@ -51,7 +59,6 @@ export const NOT_EXPORTED = [
   'États techniques : synchronisations, imports, automatisations, envois vers Garmin',
 ] as const;
 
-export type ExportTableId = string;
 export type ExportFormat = 'zip' | 'json';
 
 /** The server's default selection: every table but the opt-in ones. */

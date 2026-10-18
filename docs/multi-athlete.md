@@ -99,31 +99,49 @@ the athlete types `SUPPRIMER`, which the server checks again
 physical, unlike deactivation. `services/account_deletion.py` acts on the
 trusted athlete scope only:
 
-1. It refuses (409) while the athlete is the instance's last administrator:
-   the owner, or an `admin` login, with no other live administrator login.
-2. It deletes every row of every relation in `dataio/tenant_schema.py`
-   (`PRIVATE_TABLES`, soft-deleted rows included), one transaction per family
-   (a relation with the children that inherit its owner). The list is derived
-   from that module, never copied.
-3. It deletes the athlete's files on this instance: `athletes/<id>/` whole; for
-   athlete 1, whose directory is the storage root, only Garmin tokens, FIT
-   files, the legacy journal and the mirrored files.
-4. One last transaction deletes the account rows (`app.users`, `app.athletes`,
-   `app.slack_athletes`, the Slack identities, private threads and operations
-   of its logins) and writes `app.account_deletions` (migration 61): the day
-   and the SHA-256 of each login's Clerk id, nothing else.
-5. The endpoint then deletes each Clerk user with one request, without the
-   SDK's retries. A Clerk failure answers 502 once the data is gone: the page
-   says so and offers to sign out. The log refuses that login a fresh athlete, and the
-   operator deletes it in Clerk's dashboard (the server log names it).
+1. It refuses (409) the owner's athlete, whatever the other administrators:
+   the instance keeps its owner, who administers by right and alone names
+   administrators. Erasing it is a manual operation for the instance's
+   operator. Every other athlete, `admin` logins included, may leave.
+2. It removes the athlete's directory on this instance, `athletes/<id>/`
+   (idempotent: a retry finds nothing left).
+3. One transaction deletes every row of every relation in
+   `dataio/tenant_schema.py` (`PRIVATE_TABLES`, soft-deleted rows included;
+   the list is derived from that module, never copied), the account rows
+   (`app.users`, `app.athletes`, `app.slack_athletes`, the Slack identities,
+   private threads and operations of its logins) and writes
+   `app.account_deletions` (migration 61): the day and the SHA-256 of each
+   login's Clerk id, nothing else. The athlete-keyed deletions travel as one
+   script, so the database work is a handful of round trips: a read of the
+   logins, `BEGIN`, the script, three login-keyed deletions, the log, `COMMIT`.
+   A failure rolls everything back and answers 503 with the account whole and
+   signed in; asking again finishes the job.
+4. The endpoint then deletes each Clerk user with one request (10-second
+   timeout), without the SDK's retries. A Clerk failure answers 502 once the
+   data is gone: the page says so and offers to sign out. The log refuses that
+   login a fresh athlete, and the operator deletes it in Clerk's dashboard (the
+   server log names it).
+
+The worst case is therefore well under Vercel's 300 seconds: the database
+script (about sixty statements in one transaction) plus ten seconds per login,
+and an athlete has one login unless attached by hand.
 
 Data goes before Clerk on purpose: a failure while erasing leaves the session
 open and asking again finishes the job, whereas a Clerk user deleted first
-would leave data nobody can reach to erase. The browser then forgets the
-athlete's conversations and drafts, its caches and its push channel.
+would leave data nobody can reach to erase. Once the server has answered, the
+page shows the erasure whatever the sign-out does (a failed sign-out offers
+**Se déconnecter** again); the browser forgets the athlete's conversations
+and drafts, and the still-mounted coach panel stops saving them, then the
+sign-out clears its caches and its push channel.
 `tests/test_account_deletion.py` fills every private and account table for
 two athletes, erases one and checks the other is untouched; it also fails when
 a new table holds an athlete or a login outside this list.
+
+The export offered first stays within one response for years of history: the
+tables that grow by a text or JSON row a day or per session (streams,
+conversations, briefings, plan decisions, fact revisions, game events and
+ledger, automation runs, interrupts and effects) are opt-in, best taken over a
+period (`tests/test_data_export.py` builds five years of history).
 
 Limits: the MotherDuck clones the boot takes before a migration
 (`<db>_bak_<stamp>`, the two newest kept, `docs/deployment.md`) keep the data
@@ -132,9 +150,7 @@ or served by another instance within the 30-second account cache, cannot be
 revoked: a write they finish lands under an id no login maps to. A Vercel
 instance's `/tmp` copies of the files die with it. Remote providers are not
 called: Strava and Garmin sessions are erased here but not revoked there, and
-events already written to the athlete's Google Calendar stay in it. The owner,
-once another administrator exists, may leave too: their configured address
-later claims an empty athlete 1.
+events already written to the athlete's Google Calendar stay in it.
 
 ## Migrations and deployment
 

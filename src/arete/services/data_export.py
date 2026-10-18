@@ -1,11 +1,12 @@
 """The athlete's own data, downloaded as one JSON document or a ZIP of CSV files.
 
 Only an allowlist of tables leaves the database: sessions done and planned
-with their feedback, terrain, weather and (on request) streams, daily health
+with their feedback, terrain, weather and streams, daily health
 metrics, strength sessions, sets and exercises, goals, athlete facts and their
 revisions, morning check-ins, evening messages, briefings, plan decisions,
-follow-ups, weekly reviews, settings, the game, documents' names, (on
-request) saved conversations and the coach's journal files. Credentials never do: Strava tokens, push
+follow-ups, weekly reviews, settings, the game, documents' names,
+saved conversations and the coach's journal files; the heavy ones
+(``OPT_IN``) only on request. Credentials never do: Strava tokens, push
 subscriptions, accounts, calendar connections and actions and ``app.files``
 (which holds the Garmin session tokens) are not read at all. Neither are
 documents' contents (they stay in their chat) nor technical state: imports,
@@ -25,7 +26,7 @@ import json
 import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 from arete.dataio.db import db_connection
@@ -236,9 +237,24 @@ TABLES: tuple[ExportTable, ...] = (
 
 #: Every name a caller may select, in download order.
 EXPORT_NAMES: tuple[str, ...] = (*(t.name for t in TABLES), JOURNAL)
-#: Selected only on request: one session's samples, or one saved conversation,
-#: weigh up to megabytes, so a whole history would not fit in one response.
-OPT_IN: frozenset[str] = frozenset({"activity_streams", "conversations"})
+#: Selected only on request: a session's samples or a saved conversation weigh
+#: up to megabytes, and the others grow by a text or JSON row a day or per
+#: session. Without them the default stays within one response for years of
+#: history (``tests/test_data_export.py`` builds one).
+OPT_IN: frozenset[str] = frozenset(
+    {
+        "activity_streams",
+        "conversations",
+        "coach_briefings",
+        "plan_decisions",
+        "athlete_fact_revisions",
+        "game_events",
+        "game_ledger",
+        "automation_runs",
+        "automation_interrupts",
+        "automation_effects",
+    }
+)
 
 
 class ExportTooLarge(Exception):
@@ -287,7 +303,12 @@ def collect(
     if start and end and start > end:
         raise ValueError("La date de début suit la date de fin")
     selected = _selected(names)
-    bounds = [start or date.min, end or date.max]
+    # A half-open range: a timestamp late on the end day stays inside it,
+    # which ``BETWEEN`` with a date (midnight) bound would cut.
+    bounds = [
+        start or date.min,
+        end + timedelta(days=1) if end and end < date.max else date.max,
+    ]
     tables: dict[str, tuple[list[str], list[tuple]]] = {}
     with db_connection() as con:
         for table in TABLES:
@@ -295,7 +316,7 @@ def collect(
                 continue
             sql, params = table.select, []
             if table.date_column:
-                sql += f" AND {table.date_column} BETWEEN ? AND ?"
+                sql += f" AND {table.date_column} >= ? AND {table.date_column} < ?"
                 params = bounds
             result = con.execute(f"{sql} ORDER BY {table.order_by}", params)
             columns = [d[0] for d in result.description]
