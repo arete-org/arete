@@ -58,6 +58,7 @@ const ADMIN: AuthState = { ...AUTH_DISABLED, enabled: true, athleteId: 2, isOwne
 beforeEach(() => {
   vi.spyOn(adminApi, 'accounts').mockResolvedValue(ACCOUNTS);
   vi.spyOn(adminApi, 'featureFlags').mockResolvedValue({ glm_flash: false, glm_flash_available: true });
+  vi.spyOn(adminApi, 'kpis').mockResolvedValue([]); // ProductKpisPanel.test.tsx
 });
 
 afterEach(() => {

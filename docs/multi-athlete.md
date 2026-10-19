@@ -86,6 +86,22 @@ athlete's private data:
 Deleting another athlete's account is not an administration action: only the
 athlete erases their own (below).
 
+The same tab shows **Indicateurs produit** (`GET /admin/kpis?weeks=12`, 1 to 52
+ISO weeks, exportable as CSV in the browser): one aggregate SQL per indicator over
+the base tables (`services/product_kpis.py`), returning counts only, never an
+athlete id or row. Like the live projections, it skips soft-deleted rows and
+deactivated athletes, and a ratio's numerator only counts athletes created by the
+week's end. The cohort indicators (first action, 30-day retention) count sign-ups
+only: athletes created after migrations 35 and 36 were recorded, which created the
+pre-existing ones (athlete 1 included) at migration time. The CSV uses `;` and
+decimal commas for French spreadsheets. `last_seen_at` keeps only the latest visit, so a past week's
+active accounts are the athletes with a recorded action in it (check-in answered,
+briefing reaction, strength log, review accepted, evening answer, a thread started
+or last continued, push subscription) or whose last visit falls in it. A device
+subscribing again keeps its first subscription date; deleted push subscriptions
+leave no trace, and no column records a briefing read without a reaction. The
+eight queries read one snapshot.
+
 A change applies at the account's next request on the instance that made it.
 Each instance reuses a resolved account (the login and whether its athlete is
 live, read in one query) for 30 seconds (`ACCOUNT_TTL_SECONDS` in

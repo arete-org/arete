@@ -1,22 +1,23 @@
 """Accounts and rollout flags for administrators; roles for the owner alone.
 
 Reads and writes shared account and rollout tables, never an athlete's private
-data. The rules live in ``services.users`` and ``services.feature_flags``.
+data; the product indicators read it only as counts across athletes. The rules
+live in ``services.users``, ``services.feature_flags`` and ``services.product_kpis``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, StrictBool, model_validator
 
 from arete import scheduler
 from arete.api.auth import forget_accounts, require_admin, require_owner
-from arete.services import users
+from arete.services import product_kpis, users
 from arete.services.feature_flags import (
     FeatureFlags,
     get_feature_flags,
@@ -76,6 +77,28 @@ def update_feature_flags(body: FeatureFlagsUpdate) -> FeatureFlagsOut:
     return FeatureFlagsOut(
         **flags.model_dump(), glm_flash_available=glm_flash_available()
     )
+
+
+class KpiCell(BaseModel):
+    numerator: int
+    denominator: int
+    #: numerator / denominator, or hours for ``first_action_hours``; None
+    #: when nothing is counted.
+    value: float | None
+
+
+class KpiWeek(BaseModel):
+    week_start: date
+    current: bool
+    indicators: dict[str, KpiCell]
+
+
+@router.get("/kpis", response_model=list[KpiWeek])
+def read_kpis(
+    weeks: int = Query(12, ge=1, le=product_kpis.MAX_WEEKS),
+) -> list[product_kpis.WeekKpis]:
+    """Product indicators per ISO week, the current one first; counts only."""
+    return product_kpis.weekly(weeks)
 
 
 @contextmanager

@@ -7,6 +7,7 @@ import { useAuthState } from '@/components/auth/authState';
 import { adminApi, ApiError, type AccountRole, type AdminAccount } from '@/lib/api';
 import { qk } from '@/lib/queryKeys';
 import { cn } from '@/lib/utils';
+import { ProductKpisPanel } from './ProductKpisPanel';
 
 /** The owner's athlete: nobody deactivates it. */
 const OWNER_ATHLETE_ID = 1;
@@ -138,6 +139,7 @@ export function AdminTab() {
   return (
     <div className="space-y-6">
       <FeatureFlagsPanel />
+      <ProductKpisPanel />
       <div className="flex justify-between items-center gap-4">
         <h2 className="text-lg font-sans text-text-primary">COMPTES ET ATHLÈTES</h2>
         <Button

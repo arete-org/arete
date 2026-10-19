@@ -134,6 +134,36 @@ def test_without_sign_in_the_instance_owner_administers(client, monkeypatch):
     assert client.get("/admin/accounts").status_code == 200
 
 
+def test_product_indicators_are_admin_only_bounded_and_anonymous(client, athletes):
+    path = "/admin/kpis"
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=_bearer("ana-token")).status_code == 403
+    for weeks in (0, 53):
+        refused = client.get(f"{path}?weeks={weeks}", headers=_bearer("owner-token"))
+        assert refused.status_code == 422
+    answer = client.get(f"{path}?weeks=3", headers=_bearer("admin-token"))
+    assert answer.status_code == 200
+    weeks = answer.json()
+    assert [w["current"] for w in weeks] == [True, False, False]
+    assert set(weeks[0]["indicators"]) == {
+        "active_accounts",
+        "push_subscribers",
+        "strength_logged",
+        "checkins_answered",
+        "briefings_reacted",
+        "weekly_reviews_accepted",
+        "first_action_hours",
+        "retention_30d",
+    }
+    assert set(weeks[0]["indicators"]["active_accounts"]) == {
+        "numerator",
+        "denominator",
+        "value",
+    }
+    assert "athlete" not in answer.text and "@" not in answer.text
+    assert len(client.get(path, headers=_bearer("owner-token")).json()) == 12
+
+
 def test_feature_flags_are_admin_only_and_persist_across_admins(
     client, athletes, monkeypatch
 ):
