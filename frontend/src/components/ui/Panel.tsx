@@ -5,7 +5,7 @@ interface PanelProps {
   title?: ReactNode;
   children: ReactNode;
   className?: string;
-  /** Tailwind text color class for the title (default text-text-muted). */
+  /** Tailwind text color class for the title (default text-text-primary). */
   titleTone?: string;
   /** glass = primary card surface, inset = quieter nested surface. */
   variant?: 'glass' | 'inset';
@@ -23,7 +23,7 @@ export function Panel({
   title,
   children,
   className,
-  titleTone = 'text-text-muted',
+  titleTone = 'text-text-primary',
   variant = 'glass',
   delay = 0,
   animate = variant === 'glass',
@@ -33,7 +33,7 @@ export function Panel({
     <div
       className={cn(
         variant === 'glass'
-          ? 'glass-panel p-3 sm:p-4'
+          ? 'glass-panel p-4 sm:p-6'
           : 'ui-inset p-4',
         animate && 'animate-fade-up',
         className
@@ -43,8 +43,8 @@ export function Panel({
       {title && (
         <h3
           className={cn(
-            'font-sans font-medium tracking-wide',
-            variant === 'glass' ? 'text-xs sm:text-sm mb-4' : 'text-xs mb-3',
+            'font-sans font-medium',
+            variant === 'glass' ? 'text-[15px] mb-4' : 'text-xs mb-3',
             titleTone
           )}
         >

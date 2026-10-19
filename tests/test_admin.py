@@ -150,6 +150,7 @@ def test_feature_flags_are_admin_only_and_persist_across_admins(
     owner = _bearer("owner-token")
     assert client.get(path, headers=admin).json() == {
         "glm_flash": False,
+        "coaching_attention": False,
         "glm_flash_available": True,
     }
     assert client.put(path, headers=admin, json={"glm_flash": True}).status_code == 200

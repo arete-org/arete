@@ -95,6 +95,8 @@ class NotificationPreferences(BaseModel):
 
     kinds: dict[NotificationKind, bool] = {}
     quiet_hours: QuietHours | None = Field(default_factory=QuietHours)
+    coordinated_coaching: bool = False
+    daily_limit: int = Field(default=2, ge=0, le=3, strict=True)
 
     def allows(self, kind: NotificationKind) -> bool:
         return self.kinds.get(kind, True)
@@ -253,7 +255,14 @@ def update_settings(payload: UserSettingsUpdate):
         threshold_pace_sec_km=payload.threshold_pace_sec_km,
         lthr_measured_on=payload.lthr_measured_on,
         notification_preferences=(
-            json.dumps(payload.notification_preferences.model_dump())
+            json.dumps(
+                {
+                    **stored_preferences(
+                        (repo.get_user_settings() or {}).get("notification_preferences")
+                    ).model_dump(),
+                    **payload.notification_preferences.model_dump(exclude_unset=True),
+                }
+            )
             if payload.notification_preferences is not None
             else None
         ),

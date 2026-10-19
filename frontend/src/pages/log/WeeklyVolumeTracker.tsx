@@ -26,7 +26,7 @@ export function WeeklyVolumeTracker({
   const pct = targetKg > 0 ? (volume / targetKg) * 100 : 0;
 
   return (
-    <Panel title="VOLUME DE LA SEMAINE" delay={0.1}>
+    <Panel title="Volume de la semaine" delay={0.1}>
       <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4">
         <div className="text-center">
           <div className="text-lg sm:text-2xl font-sans font-bold text-neon-cyan">{(volume / 1000).toFixed(1)}k</div>

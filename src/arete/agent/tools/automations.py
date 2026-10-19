@@ -8,6 +8,7 @@ from pydantic import Field
 from arete.agent.tools.validation import typed_tool
 from arete.services import automations as service
 from arete.services.automation_schedule import AutomationInput
+from arete.services.coaching_attention import QuestionSubject
 
 
 def _out(value) -> str:
@@ -56,8 +57,16 @@ def delete_automation(automation_id: str, revision: int) -> str:
 
 
 @typed_tool
-def ask_athlete(question: Annotated[str, Field(min_length=1, max_length=1000)]) -> str:
-    """Ask one indispensable question; the human answer is supplied via respond, without writing training data."""
+def ask_athlete(
+    question: Annotated[str, Field(min_length=1, max_length=1000)],
+    subject: QuestionSubject | None = None,
+) -> str:
+    """Ask one indispensable question; the human answer supplies information only.
+
+    For perceived effort, availability or missing context about a known session,
+    include its typed subject. The server verifies ownership and reuses an existing
+    question. Free-form questions without a subject remain unclassified.
+    """
     raise AssertionError("ask_athlete must be answered by a human interrupt")
 
 

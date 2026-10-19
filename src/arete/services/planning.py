@@ -9,11 +9,16 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import date, timedelta
-from typing import Any, Literal
+from datetime import UTC, date, datetime, time, timedelta
+from hashlib import sha256
+from typing import Any, Literal, cast
+from uuid import UUID, uuid4
 
+import duckdb
 from pydantic import Field, model_validator
 
+from arete.dataio import plan_changes
+from arete.dataio.db import db_connection, transaction
 from arete.garmin.models import (
     PlannedSession,
     SessionStatus,
@@ -29,7 +34,7 @@ from arete.services.prescriptions import (
     conversation_prescription,
     describe,
 )
-from arete.services.settings import athlete_today
+from arete.services.settings import athlete_today, get_settings, utc_now, zone_of
 
 _MAX_LIST = 50
 _HORIZON_DAYS = 120
@@ -274,22 +279,14 @@ def create_manual_session(session: PlannedSession) -> PlannedSession:
     return created
 
 
-def apply_session_changes(
-    session_id: int,
-    revision: int,
+def _validated_changes(
+    current: PlannedSession,
     changes: SessionChanges,
     *,
     require_strength_source: bool = True,
     require_steps: bool = False,
-) -> PlannedSession:
-    """Share one versioned editing boundary between HTTP and coaching tools.
-
-    ``require_steps`` (the coach's tool) refuses to leave a described tempo or
-    interval session without explicit steps; date and status moves stay allowed.
-    """
-    current = _repo().get_planned_session(session_id)
-    if current is None:
-        raise ValueError("Séance introuvable.")
+) -> tuple[dict[str, Any], dict | None]:
+    """One prescription boundary for both single and grouped edits."""
     fields = changes.model_dump(
         exclude_unset=True, exclude={"prescription", "strength_text"}
     )
@@ -340,10 +337,35 @@ def apply_session_changes(
             )
         except NotPushable:
             raise ValueError(_STEPS_REQUIRED) from None
+    return fields, prescription.model_dump(mode="json") if prescription else None
+
+
+def apply_session_changes(
+    session_id: int,
+    revision: int,
+    changes: SessionChanges,
+    *,
+    require_strength_source: bool = True,
+    require_steps: bool = False,
+) -> PlannedSession:
+    """Share one versioned editing boundary between HTTP and coaching tools.
+
+    ``require_steps`` (the coach's tool) refuses to leave a described tempo or
+    interval session without explicit steps; date and status moves stay allowed.
+    """
+    current = _repo().get_planned_session(session_id)
+    if current is None:
+        raise ValueError("Séance introuvable.")
+    fields, prescription = _validated_changes(
+        current,
+        changes,
+        require_strength_source=require_strength_source,
+        require_steps=require_steps,
+    )
     changed = _repo().update_planned_session_fields(
         session_id,
         expected_revision=revision,
-        prescription=prescription.model_dump(mode="json") if prescription else None,
+        prescription=prescription,
         **fields,
         garmin_pushed_at=None,
     )
@@ -381,3 +403,246 @@ def delete_planned_session(session_id: int) -> str:
     if not _repo().delete_planned_session(session_id):
         return json.dumps({"error": f"Planned session {session_id} not found"})
     return json.dumps({"deleted": True, "id": session_id})
+
+
+MAX_CHANGE_SET_SESSIONS = 7
+CHANGE_SET_HOURS = 48
+MAX_CHANGE_SET_BYTES = 128 * 1024
+CHANGE_SET_SECONDS = 5.0
+_COORD_OWNER = "athlete_id=getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes a WHERE a.id=athlete_id AND a.deleted_at IS NULL)"
+
+
+class PlanChangeItem(StrictModel):
+    session_id: int = Field(gt=0)
+    revision: int = Field(gt=0)
+    changes: SessionChanges
+
+
+class PlanChangeSet(StrictModel):
+    items: list[PlanChangeItem] = Field(
+        min_length=1, max_length=MAX_CHANGE_SET_SESSIONS
+    )
+
+    @model_validator(mode="after")
+    def distinct(self):
+        if len({item.session_id for item in self.items}) != len(self.items):
+            raise ValueError("Une séance ne peut apparaître qu’une fois.")
+        return self
+
+
+def _change_set_sessions(con, proposal: PlanChangeSet, today: date):
+    sessions = _repo().get_planned_sessions([i.session_id for i in proposal.items], con)
+    validated = []
+    for item in proposal.items:
+        current = sessions.get(item.session_id)
+        if current is None or current.revision != item.revision:
+            raise ValueError(
+                "Une séance a changé ou n’est plus disponible. Recrée la proposition."
+            )
+        if current.status not in {SessionStatus.PENDING, SessionStatus.MODIFIED}:
+            raise ValueError(
+                "Une séance terminée ou abandonnée ne peut plus être ajustée ensemble."
+            )
+        target_day = item.changes.date_str or current.date
+        if current.date < today or not today <= target_day <= today + timedelta(
+            days=_HORIZON_DAYS
+        ):
+            raise ValueError(
+                "Les séances doivent rester entre aujourd’hui et les 120 prochains jours."
+            )
+        if item.changes.status not in {
+            None,
+            SessionStatus.PENDING,
+            SessionStatus.MODIFIED,
+            SessionStatus.SKIPPED,
+        }:
+            raise ValueError("Un ajustement ne peut pas déclarer une séance terminée.")
+        fields, prescription = _validated_changes(
+            current, item.changes, require_steps=True
+        )
+        # The repository rechecks this before each write in the same transaction.
+        active = con.execute(
+            "SELECT state FROM app.visible_garmin_exports WHERE session_id=?",
+            [item.session_id],
+        ).fetchone()
+        if active and active[0] in {"working", "uncertain", "conflict"}:
+            raise ValueError("Réconcilie l’export Garmin avant de modifier la séance.")
+        if (
+            prescription
+            and (current.garmin_workout_id or current.garmin_schedule_id)
+            and not active
+        ):
+            raise ValueError(
+                "Vérifie d’abord l’ancien export Garmin avant de modifier ses étapes."
+            )
+        after = replace(
+            current,
+            prescription=prescription
+            if prescription is not None
+            else current.prescription,
+            **fields,
+        )
+        validated.append((item, current, after, fields, prescription))
+    return validated
+
+
+def _check_change_deadline(started: float) -> None:
+    from time import monotonic
+
+    if monotonic() - started > CHANGE_SET_SECONDS:
+        raise TimeoutError(
+            "La vérification du planning a dépassé cinq secondes. Aucun changement validé."
+        )
+
+
+def preview_plan_changes(proposal: PlanChangeSet) -> dict[str, Any]:
+    """Persist an immutable before/after proposal without changing any workout."""
+    from time import monotonic
+
+    started = monotonic()
+    now = utc_now()
+    zone = zone_of(get_settings().timezone)
+    today = now.astimezone(zone).date()
+    encoded = proposal.model_dump_json(exclude_unset=True)
+    if len(encoded.encode()) > MAX_CHANGE_SET_BYTES:
+        raise ValueError("Proposition trop volumineuse : limite de 128 Kio.")
+    identifier = str(uuid4())
+    with transaction() as con:
+        validated = _change_set_sessions(con, proposal, today)
+        before = [_session_to_dict(current) for _, current, _, _, _ in validated]
+        after = [_session_to_dict(changed) for _, _, changed, _, _ in validated]
+        last_day = min(
+            min(current.date, changed.date) for _, current, changed, _, _ in validated
+        )
+        expires = min(
+            now + timedelta(hours=CHANGE_SET_HOURS),
+            datetime.combine(last_day + timedelta(days=1), time.min, zone).astimezone(
+                UTC
+            ),
+        )
+        con.execute(
+            "INSERT INTO app.plan_change_sets (id,items_json,before_json,after_json,digest,expires_at,created_at) VALUES (?,?,?,?,?,?,?)",
+            [
+                identifier,
+                encoded,
+                json.dumps(before, ensure_ascii=False),
+                json.dumps(after, ensure_ascii=False),
+                sha256(encoded.encode()).hexdigest(),
+                expires,
+                now,
+            ],
+        )
+        _check_change_deadline(started)
+    return get_plan_changes(identifier)
+
+
+def get_plan_changes(identifier: str, *, connection=None) -> dict[str, Any]:
+    """Read only the current athlete's proposal, including its durable outcome."""
+    UUID(identifier)
+    con = connection
+    # Explicit ownership of the connection avoids leaking one from a read path.
+    if con is None:
+        with db_connection() as owned:
+            return get_plan_changes(identifier, connection=owned)
+    row = con.execute(
+        "SELECT id,revision,before_json,after_json,expires_at,state,receipt_json FROM app.visible_plan_change_sets WHERE id=?",
+        [identifier],
+    ).fetchone()
+    if row is None:
+        raise LookupError("Proposition introuvable.")
+    state = "expired" if row[5] == "pending" and row[4] <= utc_now() else row[5]
+    return {
+        "id": row[0],
+        "revision": row[1],
+        "before": json.loads(row[2]),
+        "after": json.loads(row[3]),
+        "expires_at": row[4].isoformat(),
+        "state": state,
+        "receipt": json.loads(row[6]) if row[6] else None,
+        "url": f"/planning?change_set={row[0]}",
+    }
+
+
+def apply_plan_changes(
+    identifier: str, revision: int, operation_id: str
+) -> dict[str, Any]:
+    """Commit all local edits and their receipt once; never replay remote effects."""
+    from time import monotonic
+
+    UUID(identifier)
+    UUID(operation_id)
+    started = monotonic()
+    today = athlete_today()
+    try:
+        with transaction() as con:
+            row = con.execute(
+                "SELECT revision,items_json,digest,expires_at,state,operation_id,receipt_json FROM app.visible_plan_change_sets WHERE id=?",
+                [identifier],
+            ).fetchone()
+            if row is None:
+                raise LookupError("Proposition introuvable.")
+            if row[0] != revision:
+                raise ValueError("La proposition a changé.")
+            if row[4] == "applied":
+                if row[5] != operation_id:
+                    raise ValueError(
+                        "Cette proposition a déjà été appliquée par une autre opération."
+                    )
+                return cast(dict[str, Any], json.loads(row[6]))
+            if row[4] != "pending" or row[3] <= utc_now():
+                raise ValueError(
+                    "Cette proposition n’est plus disponible. Recrée-la depuis le planning."
+                )
+            assert sha256(row[1].encode()).hexdigest() == row[2], (
+                "Immutable proposal digest changed"
+            )
+            validated = _change_set_sessions(
+                con, PlanChangeSet.model_validate_json(row[1]), today
+            )
+            updated = []
+            for item, _, after, fields, prescription in validated:
+                changed = _repo().update_planned_session_fields(
+                    item.session_id,
+                    expected_revision=item.revision,
+                    connection=con,
+                    prescription=prescription,
+                    **fields,
+                    garmin_pushed_at=None,
+                )
+                if not changed:
+                    raise ValueError(
+                        "Une séance a changé. Aucun ajustement n’a été appliqué."
+                    )
+                updated.append(
+                    {**_session_to_dict(after), "revision": item.revision + 1}
+                )
+            result = {
+                "applied": True,
+                "id": identifier,
+                "operation_id": operation_id,
+                "sessions": updated,
+                "remote": "Le planning Arete est enregistré. Garmin doit être vérifié ou exporté séparément ; le calendrier suit sa synchronisation habituelle.",
+            }
+            con.execute(
+                f"UPDATE app.plan_change_sets SET state='applied',operation_id=?,receipt_json=? WHERE {_COORD_OWNER} AND id=? AND state='pending'",
+                [operation_id, json.dumps(result, ensure_ascii=False), identifier],
+            )
+            _check_change_deadline(started)
+    except duckdb.TransactionException as exc:
+        raise ValueError(
+            "Le planning a changé dans une autre fenêtre. Relis la proposition avant de continuer."
+        ) from exc
+    plan_changes.touch()
+    return result
+
+
+def dismiss_plan_changes(identifier: str, revision: int) -> dict[str, Any]:
+    UUID(identifier)
+    with transaction() as con:
+        found = con.execute(
+            f"UPDATE app.plan_change_sets SET state='dismissed' WHERE {_COORD_OWNER} AND id=? AND revision=? AND state='pending' RETURNING id",
+            [identifier, revision],
+        ).fetchone()
+        if not found:
+            raise ValueError("Cette proposition n’est plus en attente.")
+    return get_plan_changes(identifier)

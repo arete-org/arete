@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./pages/analytics/analytics.css";
 
 /* ========================= */
 /* FONTS - LOCAL HOSTING    */
@@ -115,7 +116,8 @@ html {
 }
 
 /* A theme changes the palette, never the brand's typographic hierarchy. */
-.page-title { font-family: var(--font-display); font-size: clamp(30px, 3vw, 42px); font-weight: 600; line-height: 1.1; letter-spacing: 0; text-transform: none; color: var(--color-text-primary); }
+.page-title { font-family: var(--font-display); font-size: clamp(36px, 3.1vw, 44px); font-weight: 600; line-height: 1.1; letter-spacing: 0; text-transform: none; color: var(--color-text-primary); }
+.page-eyebrow { margin-bottom: 8px; color: var(--color-text-muted); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
 .coach-title { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.1; }
 
 code, kbd, samp, pre { font-family: var(--font-mono); }
@@ -408,6 +410,14 @@ html[data-theme='odyssey'] {
 @keyframes activity-orbit { to { transform: rotate(79714.285deg); } }
 .route-content { animation: fade-in .16s ease-out both; }
 .coach-panel { animation: coach-enter .22s ease-out both; }
+.coach-reference-context:empty { display: none; }
+@media (min-width: 1024px) {
+  .coach-panel[data-display="expanded"] .coach-header { padding-inline: max(24px, calc((100vw - 1248px) / 2)); }
+  .coach-panel[data-display="expanded"] .coach-thread,
+  .coach-panel[data-display="expanded"] > footer { width: 100%; max-width: 848px; margin-inline: auto; }
+  .coach-panel[data-display="expanded"][data-context="attached"] .coach-thread { display: grid; grid-template-columns: minmax(240px, 360px) minmax(0, 800px); align-items: start; gap: 32px; max-width: 1280px; }
+  .coach-panel[data-display="expanded"][data-context="attached"] .coach-reference-context { position: sticky; top: 0; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-void); }
+}
 @keyframes coach-enter { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
 
 /* Keep existing semantic owners: abyss is a card surface throughout the app. */
@@ -454,14 +464,14 @@ html[data-theme='pierre'], html[data-theme='prune'] {
   .animate-fade-in, .animate-fade-out, .animate-fade-up, .animate-fade-down, .animate-fade-left, .animate-scale-in, .animate-scale-out { animation: none !important; }
 }
 
-/* A shared gutter keeps the wordmark and page headings aligned at every width.
-   Content uses the available workspace, including when the coach is docked. */
+/* Page gutters follow the approved desktop/mobile layout. The compact navbar
+   keeps its own edge spacing so a docked coach never changes its geometry. */
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  --page-gutter: 16px;
+  --page-gutter: 20px;
   --mobile-nav-space: calc(4rem + var(--safe-bottom));
   --launcher-space: 68px;
 }
@@ -475,14 +485,14 @@ html[data-theme='pierre'], html[data-theme='prune'] {
   .journal-actions { position: static; }
   .journal-actions > button { width: auto; }
 }
-.navigation-shell { padding-inline: max(var(--page-gutter), var(--safe-left)) max(var(--page-gutter), var(--safe-right)); }
+.navigation-shell { padding-inline: max(20px, var(--safe-left)) max(16px, var(--safe-right)); }
 .page-shell { width: 100%; min-width: 0; padding: 20px max(var(--page-gutter), var(--safe-right)) 20px max(var(--page-gutter), var(--safe-left)); }
 .page-content { width: 100%; min-width: 0; }
 .dashboard-content { container-type: inline-size; }
 .dashboard-grid, .dashboard-primary, .dashboard-secondary { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 20px; align-content: start; }
 @media (min-width: 768px) {
-  :root { --page-gutter: clamp(24px, 3vw, 56px); }
-  .page-shell { padding-block: 28px; }
+  :root { --page-gutter: clamp(24px, 5vw, 72px); }
+  .page-shell { padding-block: 48px; }
 }
 /* Measure the workspace, not the viewport: opening the coach can remove 520 px. */
 @container (min-width: 960px) {

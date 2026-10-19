@@ -1,7 +1,9 @@
 """Planning tool schemas; domain validation and persistence live in services."""
 
+import json
 from datetime import date
 from typing import Annotated, Any, Literal
+from uuid import UUID
 
 from langchain.tools import ToolRuntime
 from langchain_core.tools import BaseTool
@@ -94,6 +96,48 @@ class SessionChangesInput(service.SessionChanges):
     target_hr_zone: ClearableZone | None = None
 
 
+class PlanChangeItemInput(service.PlanChangeItem):
+    changes: SessionChangesInput
+
+
+@typed_tool
+def preview_plan_changes(
+    items: Annotated[list[PlanChangeItemInput], Field(min_length=1, max_length=7)],
+) -> str:
+    """Propose one atomic adjustment of up to seven existing sessions; changes no workout.
+
+    Read their revisions first. Return the before/after and link the returned url so
+    the athlete can review and apply it. A proposal is never permission to apply it.
+    """
+    try:
+        return json.dumps(
+            service.preview_plan_changes(
+                service.PlanChangeSet.model_validate({"items": items})
+            ),
+            ensure_ascii=False,
+        )
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)}, ensure_ascii=False)
+
+
+@typed_tool
+def apply_plan_changes(
+    preview_id: UUID, revision: Annotated[int, Field(ge=1)], operation_id: UUID
+) -> str:
+    """Apply an explicitly approved immutable preview, all sessions in one local transaction.
+
+    Use its id as operation_id to recover the same receipt after an acknowledgement
+    loss. Never replay a run or export to Garmin implicitly. Remote sync is separate.
+    """
+    try:
+        return json.dumps(
+            service.apply_plan_changes(str(preview_id), revision, str(operation_id)),
+            ensure_ascii=False,
+        )
+    except (LookupError, ValueError) as exc:
+        return json.dumps({"error": str(exc)}, ensure_ascii=False)
+
+
 @typed_tool
 def update_planned_session(
     session_id: Annotated[int, Field(gt=0)],
@@ -126,5 +170,7 @@ PLANNING_TOOLS: list[BaseTool] = [
     inspect_planned_session,
     create_planned_session,
     update_planned_session,
+    preview_plan_changes,
+    apply_plan_changes,
     delete_planned_session,
 ]

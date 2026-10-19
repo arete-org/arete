@@ -4,6 +4,7 @@
 
 - [Identité retenue dans Figma](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=5-82) : « Cormorant Garamond pour la marque et les grands titres. Inter pour les données, les boutons et la navigation. »
 - [Maquette comparative ARE-33, éditable](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=17-111) : huit déclinaisons du même spécimen, avec les composants de marque existants et les palettes du produit.
+- [Parcours unifiés, analyses et Chiron](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=334-81) : déclinaisons bureau/mobile, états et interactions natifs. [Correspondance avec le produit](docs/unified-experience.md).
 - La capture de l’incident montre **Plus sombre** : marque serif, titres sans serif, navigation et contrôles monospace.
 
 La référence définit cette hiérarchie pour Pierre et Prune. ARE-33 l’étend à
@@ -17,7 +18,7 @@ interactifs utilisent désormais les mêmes règles sur toutes les pages.
 | Rôle | Police | Traitement |
 | --- | --- | --- |
 | Signature ARETE | Cormorant Garamond SemiBold | 32 px, graisse 600, interligne 1, espacement 1,1 px ; laurier existant |
-| Titre principal de page | Cormorant Garamond SemiBold | `clamp(30px, 3vw, 42px)`, graisse 600, interligne 1,1, sans espacement ajouté |
+| Titre principal de page | Cormorant Garamond SemiBold | `clamp(36px, 3.1vw, 44px)`, graisse 600, interligne 1,1, sans espacement ajouté |
 | Titre du coach | Cormorant Garamond SemiBold | 24 px, graisse 600, interligne 1,1 |
 | Navigation, boutons, formulaires, titres de panneaux | Inter | Tailles et graisses existantes ; une même famille pour tous les thèmes |
 | Texte courant, réponses du coach | Inter | Taille et interligne propres au contenu, conservés |
@@ -186,8 +187,10 @@ Inter Regular, Medium et SemiBold sont chargés localement avec leurs vraies gra
 
 La [référence mobile](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=111-175)
 conserve les jours, les compteurs et le bouton « Ouvrir la séance » sous la carte.
-Les options de filtre, sélection et rafraîchissement sont regroupées dans le menu
-de la barre de semaine. Les cibles tactiles font au moins 44 px :
+Les options de filtre, retour à aujourd’hui, sélection et rafraîchissement sont regroupées
+dans un menu déroulant ancré au bouton de la barre de semaine (`WeekOptions`).
+Échap et un clic extérieur le ferment ; Échap rend le focus au bouton.
+Les cibles tactiles font au moins 44 px :
 le titre d’une carte étend sa cible à la carte entière. Le focus de cette cible
 fusionne avec la bordure de sélection pour éviter deux rectangles imbriqués.
 Les données et les statuts restent ceux du serveur ; aucun retrait Garmin fictif
@@ -220,9 +223,9 @@ Planning ne possède aucune variante de navigation propre à sa page.
   libellés Inter de 10 px et cibles d’au moins 44 × 44 px. L’onglet actif utilise
   la couleur de sélection, l’accent et l’indicateur supérieur du menu commun.
 - Sur bureau : barre de 56 px, signature au laurier, liens Tableau de bord,
-  Planning, Analyses, Journal et Réglages, puis accès au coach. Profil s’insère
-  avant Réglages lorsque la gamification est activée ; les six entrées mobiles
-  restent présentes dans les deux cas.
+  Planning, Analyses, Journal et Réglages, puis Suivi, Profil et Chiron.
+  Profil reste accessible par son icône avec ou sans gamification ; les six
+  entrées mobiles restent présentes dans les deux cas.
 - Les couleurs et rayons suivent les tokens communs. Les textes et les icônes
   des maquettes restent éditables ; les quatre écrans utilisent des instances
   des composants partagés. Le code de référence reste `Navigation.tsx` et

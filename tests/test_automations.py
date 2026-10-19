@@ -383,3 +383,135 @@ def test_failed_push_keeps_completed_mission_and_inbox(monkeypatch):
     inbox.mark(notice["id"], read=True)
     assert inbox.listing()["items"] == []
     assert service.run_detail(run["id"])["state"] == "completed"
+
+
+@pytest.mark.anyio
+async def test_grouped_preview_needs_no_approval_but_application_waits_once(
+    monkeypatch,
+):
+    import json
+
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    from arete import coaching
+    from arete.garmin.models import PlannedSession, SessionType
+    from arete.garmin.repository import GarminRepository
+    from arete.services import planning
+    from arete.services.settings import athlete_today
+
+    repo = GarminRepository()
+    ids = [
+        repo.create_planned_session(
+            PlannedSession(
+                date=athlete_today() + timedelta(days=2),
+                session_type=SessionType.ENDURANCE,
+                target_duration_min=40,
+            )
+        )
+        for _ in range(2)
+    ]
+
+    class Model(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        async def _agenerate(self, messages, **kwargs):
+            previews = [
+                message
+                for message in messages
+                if isinstance(message, ToolMessage)
+                and message.name == "preview_plan_changes"
+            ]
+            if previews and not any(
+                isinstance(message, ToolMessage)
+                and message.name == "apply_plan_changes"
+                for message in messages
+            ):
+                preview = json.loads(previews[-1].content)
+                self.messages = iter(
+                    [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "id": "apply-group",
+                                    "name": "apply_plan_changes",
+                                    "args": {
+                                        "preview_id": preview["id"],
+                                        "revision": 1,
+                                        "operation_id": preview["id"],
+                                    },
+                                }
+                            ],
+                        )
+                    ]
+                )
+            return await super()._agenerate(messages, **kwargs)
+
+    model = Model(
+        messages=iter(
+            [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "preview-group",
+                            "name": "preview_plan_changes",
+                            "args": {
+                                "items": [
+                                    {
+                                        "session_id": identifier,
+                                        "revision": 1,
+                                        "changes": {"target_duration_min": 30},
+                                    }
+                                    for identifier in ids
+                                ]
+                            },
+                        }
+                    ],
+                ),
+                AIMessage(content="Planning enregistré."),
+            ]
+        )
+    )
+    monkeypatch.setattr(coaching, "build_chat_model", lambda **kwargs: model)
+    monkeypatch.setattr("arete.services.inbox.publish", lambda *args: None)
+    run = started()
+    await coaching._run_automation(run)
+    waiting = service.run_detail(run["id"])
+    assert waiting["state"] == "waiting", waiting.get("error")
+    assert len(waiting["interrupts"]) == 1
+    interrupt = waiting["interrupts"][0]
+    assert interrupt["payload"]["name"] == "apply_plan_changes"
+    from arete.services.coaching_attention import projection
+
+    subject = f"plan_change_set:{interrupt['payload']['args']['preview_id']}"
+    priorities = [
+        item for item in projection()["items"] if item["subject_key"] == subject
+    ]
+    assert len(priorities) == 1
+    assert priorities[0]["source_ref"] == f"automation_run:{run['id']}"
+    assert all(repo.get_planned_session(identifier).revision == 1 for identifier in ids)
+    service.decide(
+        run["id"], interrupt["id"], interrupt["revision"], {"type": "approve"}
+    )
+    # A fresh model for the resumed invocation, as with a worker/process restart.
+    monkeypatch.setattr(
+        coaching,
+        "build_chat_model",
+        lambda **kwargs: Model(
+            messages=iter([AIMessage(content="Planning enregistré.")])
+        ),
+    )
+    await coaching._run_automation(service.claim(run["id"]))
+    done = service.run_detail(run["id"])
+    assert done["state"] == "completed", done.get("error")
+    assert all(
+        repo.get_planned_session(identifier).target_duration_min == 30
+        for identifier in ids
+    )
+    assert (
+        planning.get_plan_changes(interrupt["payload"]["args"]["preview_id"])["state"]
+        == "applied"
+    )

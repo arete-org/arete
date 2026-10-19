@@ -37,6 +37,8 @@ async function dashboard(
       : path === '/api/onboarding' ? { status: 'completed', revision: 1 }
       : path === '/api/settings/gamification' ? { enabled: false, opted_in: false, available: true, version: 1 }
       : path === '/api/dashboard' ? dashboardAnswer({ planned: [session] })
+      : path === '/api/coach/today' ? dashboardAnswer().coach
+      : path === '/api/coach/attention' ? { enabled: false, mode: 'observation', items: [], remaining: 0, primary_ref: null }
       : path === '/api/garmin/sync/ensure' ? { state: 'fresh' }
       : [];
     await route.fulfill({ json }).catch(() => {}); // the page may have moved on
@@ -62,7 +64,7 @@ test('the page frame shows at once, today’s session with the one answer, whate
   await expect(page.getByText('Chargement de la progression…')).toBeVisible();
 });
 
-test('the dashboard loads with six reads and one freshness check, its slices read from one answer', async ({ page }) => {
+test('the dashboard loads with seven reads and one freshness check, attention waits for the board', async ({ page }) => {
   // The worst case short of the RPG: Garmin connected and today's session still to send.
   const requests = await dashboard(page, () => 0, (route, path) => {
     if (path === '/api/dashboard') return dashboardAnswer({
@@ -84,11 +86,12 @@ test('the dashboard loads with six reads and one freshness check, its slices rea
   await expect(page.getByText(/Semi de Lyon/)).toBeVisible();
   await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
   await page.waitForLoadState('networkidle');
-  // Six reads include the shared inbox and onboarding progress; a fresh Garmin result adds no reads.
+  // The additional attention projection is bounded and starts after the board settles.
   expect(eager(requests).sort(), requests.join('\n')).toEqual([
-    'GET /api/dashboard', 'GET /api/garmin/workouts', 'GET /api/notifications', 'GET /api/onboarding', 'GET /api/settings', 'GET /api/settings/gamification',
+    'GET /api/coach/attention', 'GET /api/dashboard', 'GET /api/garmin/workouts', 'GET /api/notifications', 'GET /api/onboarding', 'GET /api/settings', 'GET /api/settings/gamification',
     'POST /api/garmin/sync/ensure',
   ]);
+  expect(requests.indexOf('GET /api/coach/attention')).toBeGreaterThan(requests.indexOf('GET /api/dashboard'));
   // The form curve is the page's one lazy read: once, after the dashboard answered.
   expect(requests.filter(r => r === CURVE)).toHaveLength(1);
   expect(requests.indexOf(CURVE)).toBeGreaterThan(requests.indexOf('GET /api/dashboard'));
@@ -163,7 +166,7 @@ test('a repeat visit and a focus refresh stay within the budget, the coach card 
   await expect(page.getByText('Comment était la séance ?')).toBeVisible();
   await page.waitForLoadState('networkidle');
   expect(eager(requests).sort(), requests.join('\n')).toEqual([
-    'GET /api/dashboard', 'GET /api/notifications', 'GET /api/onboarding', 'GET /api/settings', 'GET /api/settings/gamification', 'POST /api/garmin/sync/ensure',
+    'GET /api/coach/attention', 'GET /api/dashboard', 'GET /api/notifications', 'GET /api/onboarding', 'GET /api/settings', 'GET /api/settings/gamification', 'POST /api/garmin/sync/ensure',
   ]);
   expect(requests.filter(r => r === CURVE).length).toBeLessThanOrEqual(1);
 
@@ -176,7 +179,8 @@ test('a repeat visit and a focus refresh stay within the budget, the coach card 
   expect(requests.filter(r => r.endsWith('/coach/today') || r.endsWith('/tips/daily') || r === CURVE), requests.join('\n')).toEqual([]);
   // Progress refreshes too: another device may have confirmed the athlete's profile.
   expect(requests.filter(r => r === 'GET /api/onboarding')).toHaveLength(1);
-  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(5);
+  expect(requests.filter(r => r === 'GET /api/coach/attention')).toHaveLength(1);
+  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(6);
 });
 
 test('a dashboard that fails says so with a retry, and the coach card and briefing load on their own', async ({ page }) => {

@@ -172,6 +172,7 @@ def test_the_daily_run_falls_back_on_any_day_but_sunday():
             "Semaine tenue.",
             "/planning/semaine",
             kind="weekly_review",
+            reference={"kind": "review", "id": 1},
         )
         assert notify.call_count == 1
 

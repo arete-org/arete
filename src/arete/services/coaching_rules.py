@@ -82,7 +82,7 @@ def generate_daily_tip(
 
     if tsb is not None and tsb < -25:
         return (
-            f"Fraîcheur à {tsb:.0f} : tu es en épuisement. "
+            f"Fraîcheur à {tsb:.0f} : la charge récente est élevée par rapport à ta forme de fond. "
             "Prends une semaine de décharge.",
             "alert",
         )

@@ -113,12 +113,12 @@ it('keeps the saved flag and displays a failed update', async () => {
 it('cannot enable an unavailable model but can disable a previously enabled flag', async () => {
   vi.mocked(adminApi.featureFlags).mockResolvedValue({ glm_flash: false, glm_flash_available: false });
   const view = mount();
-  expect(await screen.findByRole('checkbox')).toHaveProperty('disabled', true);
+  expect(await screen.findByRole('checkbox', { name: 'Coach GLM Flash (payant)' })).toHaveProperty('disabled', true);
   view.unmount();
   vi.mocked(adminApi.featureFlags).mockResolvedValue({ glm_flash: true, glm_flash_available: false });
   vi.spyOn(adminApi, 'setFeatureFlags').mockResolvedValue({ glm_flash: false, glm_flash_available: false });
   mount();
-  const toggle = await screen.findByRole('checkbox');
+  const toggle = await screen.findByRole('checkbox', { name: 'Coach GLM Flash (payant)' });
   expect(toggle).toHaveProperty('disabled', false);
   fireEvent.click(toggle);
   await waitFor(() => expect(toggle).toHaveProperty('checked', false));

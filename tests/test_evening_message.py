@@ -226,7 +226,13 @@ def test_the_evening_is_written_and_pushed_once_whatever_the_windows(evening):
     assert scheduler.write_evening_message(monotonic()) == "already ok"
     assert produce.call_count == sent.call_count == 1
     title, body, url = sent.call_args.args
-    assert sent.call_args.kwargs == {"kind": "evening"}
+    assert sent.call_args.kwargs == {
+        "kind": "evening",
+        "reference": {
+            "kind": "evening",
+            "id": evening_message.get_for_day(athlete_today()).id,
+        },
+    }
     (row,) = _rows()
     message_id = evening_message.get_for_day(athlete_today()).id
     assert (title, body) == ("Chiron, pour demain", "Comment sont tes jambes ?")
@@ -276,7 +282,11 @@ def test_a_failed_scheduled_run_is_not_pushed_nor_replayed(evening):
 
 
 def test_an_unreachable_athlete_spends_no_request(db):
-    settings = {"timezone": "Europe/Paris", "coach_evening_enabled": True}
+    settings = {
+        "timezone": "Europe/Paris",
+        "coach_evening_enabled": True,
+        "notification_preferences": {"quiet_hours": None},
+    }
     # No Web Push keys in tests: the push could not leave.
     assert evening_message.unreachable(settings) == "clés Web Push absentes du serveur"
     settings["notification_preferences"] = {"kinds": {"evening": False}}
@@ -829,3 +839,56 @@ def test_the_prompt_counts_the_question_in_its_three_sentences():
 
     assert "au plus 3 phrases en tout" in EVENING_PROMPT
     assert evening_message.MAX_SENTENCES == 3
+
+
+def test_coordinated_evening_remains_in_app_without_a_push_subscription(
+    evening, monkeypatch
+):
+    from time import monotonic
+
+    from arete import scheduler
+    from arete.services import coaching_attention
+
+    settings, produce, sent = evening
+    settings["notifications_enabled"] = False
+    monkeypatch.setattr(
+        evening_message, "unreachable", lambda prefs: "notifications désactivées"
+    )
+    monkeypatch.setattr(coaching_attention, "enabled", lambda prefs: True)
+    monkeypatch.setattr(coaching_attention, "pending_effort", lambda: None)
+    sent.return_value = NotifyResult(0, 0, "notifications désactivées")
+    _plan(1)
+    assert (
+        scheduler.write_evening_message(monotonic())
+        == "written; push: notifications désactivées"
+    )
+    assert evening_message.get_for_day(athlete_today()).status == "ok"
+    assert scheduler.write_evening_message(monotonic()) == "already ok"
+    assert produce.call_count == 1
+
+
+def test_coordinated_evening_reuses_the_pending_rpe_without_a_model_call(
+    evening, monkeypatch
+):
+    from time import monotonic
+    from types import SimpleNamespace
+
+    from arete import scheduler
+    from arete.services import coaching_attention
+
+    _, produce, sent = evening
+    monkeypatch.setattr(coaching_attention, "enabled", lambda prefs: True)
+    monkeypatch.setattr(
+        coaching_attention,
+        "pending_effort",
+        lambda: SimpleNamespace(
+            source_ref="followup:42",
+            title="Quel ressenti ?",
+            url="/follow-up?followup=42",
+        ),
+    )
+    _plan(1)
+    assert scheduler.write_evening_message(monotonic()).startswith("existing followup")
+    assert sent.call_args.kwargs["reference"] == {"kind": "followup", "id": 42}
+    assert _rows() == []
+    produce.assert_not_called()

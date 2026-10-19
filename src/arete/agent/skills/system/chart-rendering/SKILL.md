@@ -1,5 +1,7 @@
 ---
 name: chart-rendering
+metadata:
+  display_name: Visualiser tes données
 description: Présenter une tendance ou une comparaison chiffrée avec un graphique HTML/SVG statique dans le chat navigateur.
 ---
 

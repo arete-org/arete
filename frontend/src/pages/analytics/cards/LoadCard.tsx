@@ -46,10 +46,10 @@ export function LoadCard({
             formatter={(value: number, name: string) => [value?.toFixed?.(0) ?? value, name]}
           />
           <ReferenceLine y={0} stroke={CHART.grid} />
-          <Bar dataKey="tss" name="Charge" fill={CHART.grey} opacity={0.35} />
-          <Area type="monotone" dataKey="tsb" name="Fraîcheur" stroke={COLORS.neonGold} fill={COLORS.neonGold} fillOpacity={0.12} strokeWidth={1.5} connectNulls />
-          <Line type="monotone" dataKey="ctl" name="Forme" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} connectNulls />
-          <Line type="monotone" dataKey="atl" name="Fatigue" stroke={CHART.red} strokeWidth={1.5} dot={false} connectNulls />
+          <Bar isAnimationActive={false} dataKey="tss" name="Charge" fill={CHART.grey} opacity={0.35} />
+          <Area isAnimationActive={false} type="monotone" dataKey="tsb" name="Fraîcheur" stroke={COLORS.neonGold} fill={COLORS.neonGold} fillOpacity={0.12} strokeWidth={1.5} connectNulls={false} />
+          <Line isAnimationActive={false} type="monotone" dataKey="ctl" name="Forme" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} connectNulls={false} />
+          <Line isAnimationActive={false} type="monotone" dataKey="atl" name="Fatigue" stroke={CHART.red} strokeWidth={1.5} dot={false} connectNulls={false} />
         </ComposedChart>
       </ResponsiveContainer>
     </StatCard>

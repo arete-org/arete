@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, StrictBool
+from pydantic import BaseModel, StrictBool, model_validator
 
 from arete import scheduler
 from arete.api.auth import forget_accounts, require_admin, require_owner
@@ -53,7 +53,11 @@ class FeatureFlagsOut(FeatureFlags):
 
 
 class FeatureFlagsUpdate(FeatureFlags):
-    glm_flash: StrictBool
+    @model_validator(mode="after")
+    def specified(self):
+        if not self.model_fields_set:
+            raise ValueError("Indique une option à modifier.")
+        return self
 
 
 @router.get("/feature-flags", response_model=FeatureFlagsOut)

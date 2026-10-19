@@ -8,6 +8,7 @@ import duckdb
 from arete.config import config
 from arete.dataio.automation_schema import DDL as AUTOMATION_DDL
 from arete.dataio.automation_schema import migrate as migrate_automations
+from arete.dataio.coaching_coordination_schema import DDL as COORDINATION_DDL
 from arete.dataio.conversation_schema import DDL as CONVERSATION_DDL
 from arete.dataio.conversation_schema import migrate as migrate_conversations
 from arete.dataio.db import connect
@@ -1003,7 +1004,13 @@ def _m52_evening_messages(con) -> None:
         raise
 
 
-DDL += AUTOMATION_DDL + CONVERSATION_DDL
+def _m53_coaching_coordination(con) -> None:
+    from arete.dataio.coaching_coordination_schema import migrate
+
+    migrate(con)
+
+
+DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
 
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
@@ -1047,6 +1054,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (50, migrate_automations),
     (51, migrate_conversations),
     (52, _m52_evening_messages),
+    (53, _m53_coaching_coordination),
 ]
 
 

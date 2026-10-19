@@ -5,7 +5,7 @@ import { dashboardAnswer, localDay } from './dashboardAnswer';
 const ANSWERED = { date: localDay(), sleep: 4, legs: 4, mood: null, note: null, answered_at: `${localDay()}T05:12:00+00:00`, updated_at: `${localDay()}T05:12:00+00:00` };
 
 // Local fixtures keep layout checks independent of training data or model calls.
-test('desktop aligns the brand and content, uses the workspace and reflows beside the coach', async ({ page }) => {
+test('desktop uses the approved page gutters and reflows beside the coach', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('arete.coach-display.v2', 'sidebar'));
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
@@ -35,9 +35,12 @@ test('desktop aligns the brand and content, uses the workspace and reflows besid
     const grid = (await page.locator('.dashboard-grid').boundingBox())!;
     const primary = (await page.locator('.dashboard-primary').boundingBox())!;
     const secondary = (await page.locator('.dashboard-secondary').boundingBox())!;
-    expect(Math.abs(brand.x - title.x)).toBeLessThan(1);
-    expect(grid.width).toBeGreaterThan(width * .9);
-    expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
+    // The compact navbar and page have distinct gutters in the retained redesign.
+    expect(brand.x).toBe(20);
+    const gutter = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.page-shell')!).paddingLeft));
+    expect(title.x).toBe(gutter);
+    expect(grid.width).toBe(width - 2 * gutter);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(Math.abs(primary.y - secondary.y)).toBeLessThan(1);
     expect(secondary.x).toBeGreaterThan(primary.x + primary.width);
     await expect(page.getByRole('link', { name: 'Saisir une séance', exact: true })).toBeInViewport();

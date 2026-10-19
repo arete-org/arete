@@ -1,0 +1,23 @@
+/* The approved charts share the app's semantic palette; no sample data belongs here. */
+.analytics-page { display: flex; flex-direction: column; gap: 32px; container-type: inline-size; }
+.analytics-banner { display: flex; flex-direction: column; gap: 12px; position: sticky; top: var(--safe-top); z-index: 20; padding-block: 4px 12px; background: var(--color-void); }
+.analytics-year-link { display: inline-flex; align-items: center; flex-shrink: 0; min-height: 44px; padding: 10px 16px; border-radius: var(--radius-control); background: var(--color-shadow); color: var(--color-neon-cyan); font-size: 13px; }
+.analysis-card { min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px; background: var(--color-abyss); border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
+.analysis-insight { padding: 12px; border-radius: var(--radius-control); background: var(--color-void); font-size: 12px; line-height: 1.6; }
+.analysis-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.analysis-section { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.analysis-section h2 { font-size: 22px; font-weight: 500; line-height: 1.4; }
+.analysis-section header > p { margin-top: 8px; }
+.analysis-tab { min-height: 44px; padding: 10px 12px; border-radius: var(--radius-control); color: var(--color-text-secondary); font-size: 12px; transition: background-color .15s; }
+.analysis-tab[aria-pressed='true'], .analysis-tab[aria-current='true'] { background: var(--color-shadow); color: var(--color-neon-cyan); }
+.analysis-tab:hover { color: var(--color-text-primary); background: var(--color-shadow); }
+.analysis-sports { display: flex; flex-direction: column; gap: 16px; }
+.analysis-sport { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; font-size: 12px; }
+.analysis-sport-bar, .analysis-sport-count { grid-column: 1 / -1; }
+@media (min-width: 768px) {
+  .analytics-banner { top: calc(var(--safe-top) + 56px); }
+  .analysis-card { padding: 24px; }
+}
+/* A docked coach must not squeeze two charts into the space for one. */
+@container (min-width: 1000px) { .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { .analysis-tab { transition: none; } }

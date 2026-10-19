@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, ClipboardCheck, Plus, RefreshCw, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardCheck, Plus } from 'lucide-react';
 import { ErrorState, withStrengthLogs } from '@/components';
-import { Button, Select, Modal, ModalHeader, Skeleton } from '@/components/ui';
+import { Button, Modal, ModalHeader, Select, Skeleton } from '@/components/ui';
 import { WorkoutSelection } from '@/components/WorkoutSelection';
 import { garminApi, settingsApi } from '@/lib/api';
 import { exportApi } from '@/lib/documents';
@@ -17,6 +17,8 @@ import { WeeklyReviewPanel } from './planning/WeeklyReviewPanel';
 import { SessionEditor, type EditorState } from './planning/SessionEditor';
 import { SessionDetail, MoveSession } from './planning/SessionDetail';
 import { GarminState, PlanningSessionCard, WeekBoard } from './planning/WeekBoard';
+import { PlanChangeReview } from '@/components/agent/PlanChangeReview';
+import { WeekOptions } from './planning/WeekOptions';
 import { dayLabel, sessionTitle, sessionSummary, sportLabel, SPORTS, STATE_LABELS } from './planning/sessionForm';
 import './planning/planning.css';
 
@@ -60,7 +62,6 @@ export function PlanningPage() {
   const [sport, setSport] = useState('');
   const [selecting, setSelecting] = useState(false);
   const [message, setMessage] = useState('');
-  const [optionsOpen, setOptionsOpen] = useState(false);
   const [analysisOpened, setAnalysisOpened] = useState(false);
   const plannedQuery = useQuery({
     queryKey: qk.planned(weekStart, weekEnd),
@@ -144,7 +145,11 @@ export function PlanningPage() {
       />
     );
   return (
-    <div className="page-shell bg-void">
+    <div className="page-shell planning-shell bg-void">
+      <Modal open={Boolean(params.get('change_set'))} onClose={() => setParams(previous => { const next = new URLSearchParams(previous); next.delete('change_set'); return next; })} className="max-w-2xl p-4 sm:p-6">
+        <ModalHeader title="Proposition de Chiron" onClose={() => setParams(previous => { const next = new URLSearchParams(previous); next.delete('change_set'); return next; })} />
+        {params.get('change_set') && <PlanChangeReview id={params.get('change_set')!} />}
+      </Modal>
       <div className="page-content planning-content">
         <header className="planning-header">
           <div>
@@ -281,13 +286,9 @@ export function PlanningPage() {
                   </option>
                 ))}
               </Select>
-              <Button
-                variant="ghost"
-                aria-label="Options du planning"
-                onClick={() => setOptionsOpen(true)}
-              >
-                <MoreHorizontal className="size-4" />
-              </Button>
+              <WeekOptions sport={sport} onSport={setSport} selecting={selecting} busy={busy}
+                onSelect={() => setSelecting(value => !value)} onToday={() => day(today)}
+                onRefresh={() => { void invalidateAfterSession(client); }} />
             </div>
           </div>
           {exportsQuery.error && (
@@ -405,56 +406,6 @@ export function PlanningPage() {
         >
           <Plus className="size-4" /> Nouvelle séance
         </Button>
-        <Modal
-          open={optionsOpen}
-          onClose={() => setOptionsOpen(false)}
-          label="Options du planning"
-          mobileSheet
-          className="planning-dialog max-w-sm"
-        >
-          <ModalHeader title="Options du planning" onClose={() => setOptionsOpen(false)} />
-          <div className="flex flex-col gap-3">
-            <Select
-              aria-label="Filtrer par sport"
-              value={sport}
-              onChange={(e) => setSport(e.target.value)}
-            >
-              <option value="">Tous les sports</option>
-              {Object.entries(SPORTS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-            <Button
-              onClick={() => {
-                day(today);
-                setOptionsOpen(false);
-              }}
-            >
-              Aujourd’hui
-            </Button>
-            <Button
-              disabled={busy}
-              aria-pressed={selecting}
-              onClick={() => {
-                setSelecting(!selecting);
-                setOptionsOpen(false);
-              }}
-            >
-              {selecting ? 'Terminer la sélection' : 'Sélectionner'}
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                void invalidateAfterSession(client);
-                setOptionsOpen(false);
-              }}
-            >
-              <RefreshCw className="size-4" /> Rafraîchir
-            </Button>
-          </div>
-        </Modal>
         {/* Collapsed by default: the review and the goal projection load when first opened. */}
         <details
           className="planning-analysis"

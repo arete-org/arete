@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { AUTH_DISABLED, AuthStateContext, type AuthState } from '@/components/auth/authState';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { adminApi, settingsApi } from '@/lib/api';
+import { qk } from '@/lib/queryKeys';
 import { initializeTheme } from '@/lib/theme';
 import { SettingsPage } from './Settings';
 import { DEFAULT_SETTINGS } from './settings/types';
@@ -117,6 +118,27 @@ it('falls back to the profile tab on an admin deep link for a non-admin', async 
   expect(await screen.findByRole('heading', { name: 'PROFIL' })).toBeTruthy();
   expect(screen.queryByRole('heading', { name: 'COMPTES ET ATHLÈTES' })).toBeNull();
   expect(accounts).not.toHaveBeenCalled();
+});
+
+it('saves coordinated follow-up without requiring push notifications', async () => {
+  const withoutPush = { ...saved, notifications_enabled: false };
+  const updated = { ...withoutPush, notification_preferences: { ...saved.notification_preferences, coordinated_coaching: true } };
+  client.setQueryData(qk.settings, withoutPush);
+  client.setQueryData(qk.athleteFacts, []);
+  client.setQueryData(qk.syncStatus, { garmin_authenticated: false });
+  client.setQueryData(qk.pushState, 'unsupported');
+  client.setQueryData(qk.vapidKey, { key: null });
+  client.setQueryData(['agentMemory'], { files: [] });
+  vi.spyOn(settingsApi, 'update').mockResolvedValue(updated);
+  mount('/settings?tab=coach');
+  const checkbox = await screen.findByRole('checkbox', { name: /Coordonner les suivis de Chiron/ });
+  expect((checkbox as HTMLInputElement).disabled).toBe(false);
+  fireEvent.click(checkbox);
+  fireEvent.click(screen.getByRole('button', { name: 'ENREGISTRER' }));
+  await waitFor(() => expect(vi.mocked(settingsApi.update).mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+    notifications_enabled: false,
+    notification_preferences: expect.objectContaining({ coordinated_coaching: true }),
+  })));
 });
 
 it.each(['pierre', 'prune'] as const)('saves %s through the settings API and restores it on reload', async theme => {

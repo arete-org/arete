@@ -2,7 +2,6 @@ import { InboxBell } from './AutomationInbox';
 import { lazy, Suspense, type MouseEvent } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { BarChart3, CalendarDays, Dumbbell, LayoutDashboard, Settings } from 'lucide-react';
-import { useGamePreference } from '@/lib/gamification';
 import { AreteMark, AreteWordmark } from './AreteBrand';
 import { User } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -39,10 +38,7 @@ export function Navigation({
   agentBusy: boolean;
   onToggleAgent: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const { data: preference } = useGamePreference();
-  const rpg = preference?.enabled === true;
   const profile = { path: '/profile', label: 'Profil', icon: User };
-  const desktopItems = rpg ? [...navItems.slice(0, 4), profile, navItems[4]] : navItems;
   const mobileItems = [...navItems.slice(0, 4), profile, navItems[4]];
   const auth = useAuthState();
   return (
@@ -59,7 +55,7 @@ export function Navigation({
             </Link>
 
             <div className="flex items-center gap-1">
-              {desktopItems.map((item) => (
+              {navItems.map((item) => (
                 <NavLink
                   key={item.path}
                   to={item.path}
@@ -85,6 +81,9 @@ export function Navigation({
 
             <div className="flex items-center gap-3">
               <InboxBell />
+              <NavLink to="/profile" aria-label="Profil" title="Profil" className={({ isActive }) => cn('navigation-item inline-flex min-h-11 min-w-11 items-center justify-center', isActive ? 'bg-shadow text-neon-cyan' : 'text-text-secondary')}>
+                <User className="size-5" aria-hidden />
+              </NavLink>
               <button
                 onClick={onToggleAgent}
                 onPointerEnter={preloadAgentMarkdown}
@@ -105,7 +104,7 @@ export function Navigation({
                     <span className="absolute -right-1 top-0 size-1.5 rounded-full bg-neon-cyan" />
                   )}
                 </span>
-                <span>{rpg ? 'Chiron' : 'Coach'}</span>
+                <span>Chiron</span>
               </button>
               {auth.enabled && (
                 <Suspense fallback={null}>

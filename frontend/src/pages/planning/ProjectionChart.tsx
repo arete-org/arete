@@ -48,8 +48,8 @@ export function ProjectionChart({ series, today }: { series: ProjectionPoint[]; 
             formatter={(value: number, name: string) => [Math.round(value), SERIES_NAME[name] ?? name]}
           />
           <ReferenceLine yAxisId="load" y={0} stroke={CHART.grid} />
-          <Bar yAxisId="tss" dataKey="plannedTss" fill={CHART.grey} opacity={0.3} />
-          <Area
+          <Bar isAnimationActive={false} yAxisId="tss" dataKey="plannedTss" fill={CHART.grey} opacity={0.3} />
+          <Area isAnimationActive={false}
             yAxisId="load"
             type="monotone"
             dataKey="tsb"
@@ -58,8 +58,8 @@ export function ProjectionChart({ series, today }: { series: ProjectionPoint[]; 
             fillOpacity={0.12}
             strokeWidth={1.5}
           />
-          <Line yAxisId="load" type="monotone" dataKey="ctl" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
-          <Line yAxisId="load" type="monotone" dataKey="atl" stroke={CHART.red} strokeWidth={1.5} dot={false} />
+          <Line isAnimationActive={false} yAxisId="load" type="monotone" dataKey="ctl" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
+          <Line isAnimationActive={false} yAxisId="load" type="monotone" dataKey="atl" stroke={CHART.red} strokeWidth={1.5} dot={false} />
           <ReferenceLine
             yAxisId="load"
             x={today}

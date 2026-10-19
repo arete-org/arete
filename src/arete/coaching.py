@@ -237,10 +237,24 @@ def system_skill_catalog() -> list[dict]:
         paths=set(files),
     )
     discovered = middleware.before_agent({}, None, {})["skills_metadata"]
-    return [
-        {key: skill[key] for key in ("name", "description", "path")}
-        for skill in sorted(discovered, key=lambda item: item["name"])
-    ]
+    catalog = []
+    for skill in sorted(discovered, key=lambda item: item["name"]):
+        # Native discovery keeps presentation metadata beside the immutable body;
+        # the UI does not maintain a second registry or infer permissions from it.
+        label = skill.get("metadata", {}).get("display_name", skill["name"])
+        if (
+            not isinstance(label, str)
+            or not 1 <= len(label.strip()) <= 80
+            or not label.isprintable()
+        ):
+            raise ValueError(f"Invalid system skill display name: {skill['name']}")
+        catalog.append(
+            {
+                **{key: skill[key] for key in ("name", "description", "path")},
+                "display_name": label.strip(),
+            }
+        )
+    return catalog
 
 
 @_serialized

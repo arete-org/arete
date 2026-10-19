@@ -63,8 +63,11 @@ for (const { width, height } of [{ width: 375, height: 812 }, { width: 1440, hei
 
     await expect(card).toBeHidden();
     expect(answers).toEqual([{ sleep: 2, legs: 4, mood: null, note: null }]);
-    // Answered, the desktop dashboard fits its screen again (layout.spec.ts).
-    if (width === 1440) expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
+    // After the answer, the primary briefing and session action remain above the fold.
+    if (width === 1440) {
+      await expect(page.getByRole('heading', { name: 'Briefing du jour' })).toBeInViewport();
+      await expect(page.getByRole('link', { name: 'Saisir une séance', exact: true })).toBeInViewport();
+    }
     // One read again after the answer (it carries the answer: the card stays hidden).
     await expect.poll(() => requests.filter((r) => r === 'GET /api/dashboard').length).toBe(2);
     await page.waitForLoadState('networkidle');

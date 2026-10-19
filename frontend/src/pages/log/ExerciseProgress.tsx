@@ -52,10 +52,11 @@ export function ExerciseProgress({
   const failed = exercises.error || history.error || records.error || suggestion.error;
 
   return (
-    <Panel title="PROGRESSION PAR EXERCICE" delay={0.2}>
+    <Panel title="Progression par exercice" delay={0.2}>
       <label className="block text-xs font-sans text-text-muted">
         Exercice
         <select
+          aria-label="Exercice"
           value={exerciseId ?? ''}
           onChange={(e) => onSelect(e.target.value ? Number(e.target.value) : null)}
           className="block mt-2 min-h-11 w-full rounded border border-text-muted/30 bg-abyss px-3 text-sm text-text-primary"

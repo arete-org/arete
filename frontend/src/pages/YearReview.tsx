@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Bar, BarChart, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
@@ -24,8 +24,9 @@ const monthLabel = (m: number) => new Date(2000, m - 1, 1).toLocaleDateString('f
 
 /** "1h05" or "42 min" for a single session. */
 function duration(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.round((sec % 3600) / 60);
+  const minutes = Math.round(sec / 60);
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
   return h ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`;
 }
 
@@ -46,8 +47,8 @@ type MetricId = (typeof METRICS)[number]['id'];
 
 function Block({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section className={cn('bg-abyss rounded-lg border border-text-muted/20 p-4 space-y-3 min-w-0', className)}>
-      <h2 className="text-sm font-sans text-neon-cyan uppercase tracking-wider">{title}</h2>
+    <section className={cn('analysis-card space-y-4 min-w-0', className)}>
+      <h2 className="text-[15px] font-medium text-text-primary">{title}</h2>
       {children}
     </section>
   );
@@ -55,15 +56,21 @@ function Block({ title, children, className }: { title: string; children: ReactN
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-abyss rounded-lg border border-text-muted/20 p-3 min-w-0">
-      <div className="text-[10px] uppercase tracking-wider text-text-muted font-sans">{label}</div>
-      <div className="text-xl sm:text-2xl font-bold font-sans text-text-primary tabular-nums truncate">{value}</div>
+    <div className="analysis-card min-w-0">
+      <div className="text-xs text-text-muted">{label}</div>
+      <div className="text-2xl sm:text-[32px] font-semibold text-text-primary tabular-nums break-words">{value}</div>
     </div>
   );
 }
 
 function MonthsChart({ months }: { months: YearMonth[] }) {
-  const [metricId, setMetricId] = useState<MetricId>('duration');
+  const [params, setParams] = useSearchParams();
+  const metricId: MetricId = METRICS.find(item => item.id === params.get('metric'))?.id ?? 'duration';
+  const setMetricId = (id: MetricId) => setParams(previous => {
+    const next = new URLSearchParams(previous);
+    next.set('metric', id);
+    return next;
+  });
   const metric = METRICS.find((m) => m.id === metricId) ?? METRICS[0];
   const data = months.map((m) => ({ month: monthLabel(m.month), value: Number(metric.value(m).toFixed(1)) }));
   return (
@@ -75,22 +82,19 @@ function MonthsChart({ months }: { months: YearMonth[] }) {
             type="button"
             aria-pressed={m.id === metricId}
             onClick={() => setMetricId(m.id)}
-            className={cn(
-              'px-3 py-1 text-xs font-sans uppercase rounded transition-colors',
-              m.id === metricId ? 'bg-neon-cyan/15 text-neon-cyan' : 'text-text-secondary hover:text-text-primary'
-            )}
+            className="analysis-tab"
           >
             {m.label}
           </button>
         ))}
       </div>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={256}>
         <BarChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: -16 }}>
           <ChartGrid />
           <XAxis dataKey="month" {...AXIS} tick={TICK} interval={0} tickFormatter={(v: string) => v.slice(0, 3)} />
           <YAxis {...AXIS} tick={TICK} width={44} />
           <ChartTooltip formatter={(value: number) => [`${DECIMAL.format(value)} ${metric.unit}`.trim(), metric.label]} />
-          <Bar dataKey="value" name={metric.label} fill={COLORS.neonCyan} radius={[2, 2, 0, 0]} />
+          <Bar isAnimationActive={false} dataKey="value" name={metric.label} fill={COLORS.neonCyan} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </Block>
@@ -122,7 +126,7 @@ function FitnessChart({ fitness }: { fitness: YearReview['fitness'] }) {
           />
           <YAxis {...AXIS} tick={TICK} width={44} />
           <ChartTooltip labelFormatter={(iso: string) => longDate(iso)} formatter={(v: number) => [DECIMAL.format(v), 'Forme (CTL)']} />
-          <Line type="monotone" dataKey="ctl" name="Forme" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
+          <Line isAnimationActive={false} type="monotone" dataKey="ctl" name="Forme" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </>
@@ -134,12 +138,12 @@ function Highlight({ icon, label, session, value }: { icon: ReactNode; label: st
     <div className="flex items-start gap-3 p-3 rounded border border-text-muted/20 min-w-0">
       <span className="text-neon-gold mt-0.5">{icon}</span>
       <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wider text-text-muted font-sans">{label}</div>
+        <div className="text-xs text-text-muted">{label}</div>
         {session ? (
           <>
             <div className="text-base font-sans text-text-primary tabular-nums">{value(session)}</div>
-            <div className="text-xs text-text-muted truncate">
-              {session.name || sportLabel(session.sport)} · {longDate(session.date)}
+            <div className="text-xs text-text-muted">
+              {session.id !== null ? <Link className="inline-flex min-h-11 items-center underline" to={session.id! < 0 ? `/log?session=${-session.id!}` : `/log/sessions/${session.id}`}>{session.name || sportLabel(session.sport)} · {longDate(session.date)}</Link> : <>{session.name || sportLabel(session.sport)} · {longDate(session.date)}</>}
             </div>
           </>
         ) : (
@@ -162,7 +166,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Review({ data }: { data: YearReview }) {
   const { totals, consistency, highlights, strength } = data;
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <Tile label="Séances" value={NUMBER.format(totals.sessions)} />
         <Tile label="Temps" value={hours(totals.duration_sec)} />
@@ -173,7 +177,7 @@ function Review({ data }: { data: YearReview }) {
 
       <MonthsChart months={data.months} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="analysis-grid">
         <Block title="Sports">
           <ul className="space-y-2">
             {data.sports.map((s) => (
@@ -214,7 +218,7 @@ function Review({ data }: { data: YearReview }) {
         </div>
       </Block>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="analysis-grid">
         <Block title={`Meilleurs efforts · ${data.pr_count} record${data.pr_count > 1 ? 's' : ''}`}>
           {data.best_efforts.length === 0 ? (
             <p className="text-sm text-text-muted">Aucun effort chronométré en course.</p>
@@ -285,13 +289,14 @@ export function YearReviewPage() {
   });
 
   return (
-    <div className="page-shell space-y-4">
+    <div className="page-shell analytics-page">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <Link to="/analytics" className="inline-flex items-center gap-1 text-xs font-sans text-text-muted hover:text-neon-cyan">
+          <Link to="/analytics" className="inline-flex min-h-11 items-center gap-1 text-sm text-text-muted hover:text-neon-cyan">
             <ArrowLeft className="w-3 h-3" aria-hidden />
             Analyses
           </Link>
+          <p className="page-eyebrow">Ton année en mouvement</p>
           <h1 className="page-title">Bilan {year}</h1>
           {data && (
             <p className="text-xs text-text-muted font-sans mt-1">
@@ -304,7 +309,7 @@ export function YearReviewPage() {
           aria-label="Année"
           className="w-28"
           value={year}
-          onChange={(e) => setParams(Number(e.target.value) === current ? {} : { year: e.target.value }, { replace: true })}
+          onChange={(e) => setParams(previous => { const next = new URLSearchParams(previous); next.set('year', e.target.value); return next; })}
         >
           {(data?.years ?? [year]).map((y) => (
             <option key={y} value={y}>

@@ -132,9 +132,9 @@ function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
           <span className="text-xs text-text-muted">({settings.timezone})</span>
         </label>
         <p className="pl-6 text-xs text-text-muted">
-          Arrive par notification dans la soirée, au mieux : parfois plus tard que l’heure
-          choisie. Il faut les notifications activées sur un appareil, et rien n’est envoyé
-          pendant les heures calmes (21 h 30 par défaut) : ces soirs-là, pas de message.
+          Avec le suivi coordonné activé, le message reste disponible dans Suivi, même
+          sans notification. Les notifications nécessitent un appareil activé et respectent
+          les heures calmes (21 h 30 par défaut). Le message peut arriver après l’heure choisie.
         </p>
       </div>
     </Panel>
@@ -218,8 +218,22 @@ function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
           Recevoir les notifications du coach.
         </SettingSwitch>
 
+        <SettingSwitch
+          checked={prefs.coordinated_coaching ?? false}
+          onChange={value => updateSetting('notification_preferences', { ...prefs, coordinated_coaching: value })}
+          hint="Regroupe les suivis dans l’app, même sans notification, une fois la fonctionnalité activée par l’administrateur."
+        >
+          Coordonner les suivis de Chiron
+        </SettingSwitch>
+
         <fieldset className="space-y-2 pl-6" disabled={!settings.notifications_enabled}>
           <legend className="sr-only">Notifications reçues</legend>
+          <label className="grid gap-2 text-sm text-text-secondary">Notifications de coaching par jour
+            <select className="min-h-11 rounded border border-border bg-void px-3" value={prefs.daily_limit ?? 2} onChange={event => updateSetting('notification_preferences', { ...prefs, daily_limit: Number(event.target.value) })}>
+              {[0, 1, 2, 3].map(value => <option key={value} value={value}>{value === 0 ? 'Aucune notification proactive' : `${value} maximum`}</option>)}
+            </select>
+          </label>
+          <p className="text-xs text-text-muted">Plafond commun aux briefings, ressentis et routines lorsque la coordination proactive est activée par l’administrateur. Les suivis restent disponibles dans l’app.</p>
           {KINDS.map(({ kind, label, soon }) => (
             <label key={kind} className="flex items-center gap-3 text-sm text-text-secondary">
               <input

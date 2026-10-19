@@ -102,8 +102,8 @@ it('shows the summary, the coach, the intervals, the laps, the zones and the rou
   expect(await screen.findByText('Fractionné 5×1000')).toBeTruthy();
   expect(analyticsApi.getSessionDetail).toHaveBeenCalledWith(12);
   expect(screen.getByText('Répétitions régulières, bravo.')).toBeTruthy();
-  expect(screen.getByText('FRACTIONNÉ DÉTECTÉ')).toBeTruthy();
-  expect(screen.getByText('TOURS (3)')).toBeTruthy();
+  expect(screen.getByText('Fractionné détecté')).toBeTruthy();
+  expect(screen.getByText('Tours (3)')).toBeTruthy();
   expect(screen.getByText('Échauffement')).toBeTruthy();
   expect(screen.getByText('Récup')).toBeTruthy();
   expect(screen.getByText('Z2 endurance')).toBeTruthy();
@@ -120,7 +120,7 @@ it('shows the grade-adjusted pace, the climbing speeds and the weather', async (
   expect(screen.getByText(/980 m\/h/)).toBeTruthy();
   expect(screen.getByText('27 °C')).toBeTruthy();
   expect(screen.getByText(/Chaleur/)).toBeTruthy();
-  expect(screen.getByText('MÉTÉO AU DÉPART')).toBeTruthy();
+  expect(screen.getByText('Météo au départ')).toBeTruthy();
 });
 
 it('says why a session without a recording has no curve', async () => {
@@ -138,7 +138,7 @@ it('says why a session without a recording has no curve', async () => {
   renderAt('/log/sessions/12');
   expect(await screen.findByText('PAS DE FLUX POUR CETTE SÉANCE')).toBeTruthy();
   expect(screen.queryByRole('img', { name: /Tracé GPS/ })).toBeNull();
-  expect(screen.queryByText('MÉTÉO AU DÉPART')).toBeNull();
+  expect(screen.queryByText('Météo au départ')).toBeNull();
 });
 
 it('rejects an id that is not a number without asking the server', () => {
@@ -206,6 +206,6 @@ it('shows no exercises for a strength activity without a linked log', async () =
   renderAt('/log/sessions/302');
   await screen.findAllByText('Strength');
   await waitFor(() => expect(strengthApi.getSessions).toHaveBeenCalled());
-  expect(screen.queryByText('EXERCICES')).toBeNull();
+  expect(screen.queryByText('Exercices')).toBeNull();
   expect(strengthApi.getSession).not.toHaveBeenCalled();
 });

@@ -126,7 +126,13 @@ def withheld(settings: dict, kind: NotificationKind) -> str | None:
 
 
 def _send(
-    title: str, body: str, url: str = "/", *, kind: NotificationKind | None
+    title: str,
+    body: str,
+    url: str = "/",
+    *,
+    kind: NotificationKind | None,
+    event_key: str = "",
+    reference: dict | None = None,
 ) -> NotifyResult:
     """Send one notification to every subscribed browser. Never raises.
 
@@ -150,6 +156,19 @@ def _send(
         return NotifyResult(0, 0, "aucun appareil abonné")
 
     from pywebpush import WebPushException, webpush
+
+    if kind is not None:
+        from arete.services import coaching_attention
+
+        try:
+            reason = coaching_attention.reserve(
+                kind, event_key, url, reference, settings
+            )
+        except Exception:
+            logger.exception("Coaching delivery reservation failed; no push attempted")
+            return NotifyResult(0, 0, "coordination du suivi indisponible")
+        if reason is not None:
+            return NotifyResult(0, 0, reason)
 
     payload = json.dumps(
         {"title": title, "body": body[:300], "url": url}, ensure_ascii=False
@@ -189,7 +208,9 @@ def _send(
             finally:
                 con.close()
         except Exception:  # noqa: BLE001
-            pass
+            logger.exception(
+                "Push succeeded but its device receipt could not be stored"
+            )
     return NotifyResult(sent, dropped)
 
 
@@ -207,23 +228,29 @@ def notify(
     *,
     kind: NotificationKind | None,
     persist: bool = True,
+    event_key: str | None = None,
+    reference: dict | None = None,
 ) -> NotifyResult:
     from hashlib import sha256
 
     from arete.services import inbox
 
     identifier = None
+    key = (
+        event_key
+        or sha256(
+            json.dumps([kind, title, body, url, utc_now().date().isoformat()]).encode()
+        ).hexdigest()
+    )
     if kind is not None and persist:
         try:
-            key = sha256(
-                json.dumps(
-                    [kind, title, body, url, utc_now().date().isoformat()]
-                ).encode()
-            ).hexdigest()
-            identifier = inbox.record(key, kind, title, body, url)
+            identifier = inbox.record(key, kind, title, body, url, reference)
+            if identifier is None:
+                return NotifyResult(0, 0, "notification déjà enregistrée")
         except Exception:
             logger.exception("Inbox notification could not be stored")
-    result = _send(title, body, url, kind=kind)
+            return NotifyResult(0, 0, "suivi impossible à enregistrer")
+    result = _send(title, body, url, kind=kind, event_key=key, reference=reference)
     if identifier:
         try:
             inbox.delivered(identifier, result.to_dict())

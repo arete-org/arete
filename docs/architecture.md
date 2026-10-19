@@ -225,6 +225,10 @@ The composer lists `GET /agent/skills` when the athlete types `/`, preserving ke
 selection and the ordinary browser draft. Up to three leading `/skill-name` commands
 resolve against trusted metadata. Unknown names fail explicitly. Read bodies and
 references only as needed, reusing results already present in the invocation.
+The catalogue also exposes a French `display_name` from native frontmatter
+metadata (at most 80 characters, falling back to the stable slug). Ten bundled
+methods include training trends, race preparation, return to training and strength
+progression. Display metadata grants no tool and loads no body.
 The browser persists user/assistant history, not tool results: a later user turn
 must read a relevant skill again. Archives store the rendered browser history, not tool results or graph checkpoints.
 The bundle remains bounded to 32 skills of 32 KiB each; filesystem reads are bounded
@@ -323,6 +327,44 @@ The UI shares inbox query state between the bell, home priorities and `/follow-u
 Questions and approvals use the existing Chiron panel, preserving the conversation
 draft. Semantic deduplication of free-form automation questions against legacy
 check-ins, and a dedicated activation card in chat, remain follow-up work.
+
+### Coordinated attention and grouped approvals
+
+`services/coaching_attention.py` projects existing source records; source services
+still own questions, answers and decisions. Migration 53 adds scoped attention
+claims, local-day delivery counters and immutable planning change sets. These
+tables participate in export/deletion, and contain no browser conversation state.
+
+The independent admin flag `coaching_attention` and athlete preference
+`coordinated_coaching` are both required for active delivery coordination. Off
+means an observation projection and the existing source cards. A pass reads at
+most 101 candidates, rejects excess above 100, ranks three visible items plus a
+remaining count, and has a five-second deadline. Ranking needs no model call.
+Pending decisions rank before availability questions, other questions and recaps.
+Revisions, expiry, snoozes, late training and stored RPE determine eligibility.
+
+`notifications.notify` and `inbox.publish` share one event identity and delivery
+reservation. Quiet hours, opt-outs and device availability are checked first;
+an atomic claim plus daily counter bounds outbound coaching to zero–three attempts
+(default two) on the athlete's local date. Imports retain their existing transport
+policy. Unknown push outcomes consume their reservation. Inbox read/archive and
+delivery receipts never close a source question. The typed `ask_athlete` subject
+is validated before native HITL: RPE goes through `coach_followup`, and an existing
+routine question or recorded answer is reused. Free-form questions stay unclassified.
+
+`services/planning.py` owns a one–seven-session preview/apply contract using the
+same `SessionChanges` validation as a single edit. Previews expire within 48 hours
+and at the relevant session's day boundary. Apply rechecks all source revisions
+inside one transaction, commits all edits plus a receipt, and accepts a repeated
+operation ID only as a receipt read. An explicit different operation conflicts;
+no entire run or remote write is automatically replayed. The capability catalog
+classifies previews as proposals, distinct from reads; budget and effect tracking
+still apply, while native HITL asks once for the grouped apply. The UI shares the
+same before/after review between Planning and a routine interrupt. Garmin export
+remains explicit and Calendar keeps its existing reconciliation owner.
+
+See [the unified experience](unified-experience.md) for Figma mappings, migration,
+rollout switches, request envelope and verification boundaries.
 
 ## Native training operations
 
@@ -893,7 +935,11 @@ stored, never provider text). An evening with no session tomorrow
 and no notable signal (that race, a readiness under the rest band or a low
 check-in, today's replanning of a missed session), or whose push could not
 leave (notifications or the `evening` kind off, no Web Push keys, no device),
-makes no request and writes nothing. Exactly once: `app.coach_evening_messages`
+makes no request and writes nothing under the original delivery policy. With
+coordinated coaching enabled, the evening's separate opt-in and chosen hour still
+apply, but the message can remain available in-app when push cannot leave. An
+outstanding RPE question is reused before generation, with no second question or
+evening model request. Exactly once: `app.coach_evening_messages`
 (one row per athlete and evening) is claimed before the request, so overlapping
 windows and ticks pay once and only the writer pushes (kind `evening`,
 « Chiron, pour demain » with the question); a failed or stopped run keeps its

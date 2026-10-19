@@ -39,6 +39,7 @@ function FeatureFlagsPanel() {
     onSuccess: (saved) => queryClient.setQueryData(qk.adminFeatureFlags, saved),
   });
 
+  const attention = useMutation({ mutationFn: adminApi.setCoachingAttention, onSuccess: saved => queryClient.setQueryData(qk.adminFeatureFlags, saved) });
   return (
     <Panel variant="inset" className="space-y-3">
       <h2 className="text-lg font-sans text-text-primary">FONCTIONNALITÉS EXPÉRIMENTALES</h2>
@@ -65,6 +66,12 @@ function FeatureFlagsPanel() {
             Le changement s’applique aux prochaines demandes ; les réponses en cours continuent.
             Désactiver rétablit le modèle configuré sur le serveur.
           </p>
+          <label className="flex min-h-11 items-center gap-3 text-sm text-text-secondary">
+            <input type="checkbox" checked={flags.data.coaching_attention ?? false} disabled={attention.isPending} onChange={event => attention.mutate(event.target.checked)} />
+            Coordination proactive de Chiron
+          </label>
+          <p className="text-xs text-text-muted">Active le plafond quotidien et la déduplication des questions pour les prochains envois. Désactivé : observation des priorités, comportement d’envoi existant.</p>
+          {attention.error && <p role="alert" className="text-xs text-danger-red">{refusal(attention.error)}</p>}
           {!flags.data.glm_flash_available && (
             <p className="text-xs text-warning-orange">OpenRouter et sa clé API doivent être configurés sur le serveur.</p>
           )}

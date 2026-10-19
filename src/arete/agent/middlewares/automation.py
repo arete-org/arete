@@ -1,5 +1,6 @@
 """Framework interception for durable automation budgets and approved effects."""
 
+import json
 from functools import partial
 
 from anyio import to_thread
@@ -25,11 +26,14 @@ def hitl(profile):
         "append_journal",
         "respond_coach_followup",
     }
+    proposals = {
+        name for toolkit in CAPABILITIES.values() for name in toolkit.proposal_tools
+    }
     return HumanInTheLoopMiddleware(
         interrupt_on={
             **{
                 name: {"allowed_decisions": ["approve", "edit", "reject"]}
-                for name in names - read_names()
+                for name in names - read_names() - proposals
             },
             "ask_athlete": {"allowed_decisions": ["respond", "reject"]},
         },
@@ -50,6 +54,41 @@ class AutomationBudgetMiddleware(AgentMiddleware):
         await to_thread.run_sync(execution.charge_tool, identifier, request.tool_call)
         if not tool_available("automation", name):
             raise PermissionError("Outil interdit pour une mission planifiée")
+        if name == "ask_athlete":
+            from arete.agent.tools.automations import ask_athlete
+            from arete.services.coaching_attention import coordinate_question
+
+            try:
+                # Native HITL responds without executing the tool; validate before
+                # interruption so malformed arguments cannot bypass its schema.
+                arguments = (
+                    ask_athlete.get_input_schema()
+                    .model_validate(request.tool_call["args"])
+                    .model_dump()
+                )
+                existing = (
+                    await to_thread.run_sync(
+                        coordinate_question,
+                        identifier,
+                        request.tool_call["id"],
+                        arguments["subject"],
+                    )
+                    if arguments.get("subject") is not None
+                    else None
+                )
+            except (LookupError, ValueError) as exc:
+                return ToolMessage(
+                    content=str(exc),
+                    tool_call_id=request.tool_call["id"],
+                    name=name,
+                    status="error",
+                )
+            if existing is not None:
+                return ToolMessage(
+                    content=json.dumps(existing, ensure_ascii=False),
+                    tool_call_id=request.tool_call["id"],
+                    name=name,
+                )
         if name not in read_names() and name != "ask_athlete":
             await to_thread.run_sync(execution.propose, identifier, request.tool_call)
         return await handler(request)

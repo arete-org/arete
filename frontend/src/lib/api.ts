@@ -430,11 +430,13 @@ export interface AdminAccount {
 
 /** Admins and the owner; the server enforces who may do what and answers a French `detail` otherwise. */
 export interface AdminFeatureFlags {
+  coaching_attention?: boolean;
   glm_flash: boolean;
   glm_flash_available: boolean;
 }
 
 export const adminApi = {
+  setCoachingAttention: (enabled: boolean) => fetchAPI<AdminFeatureFlags>("/admin/feature-flags", { method: 'PUT', body: JSON.stringify({ coaching_attention: enabled }) }),
   featureFlags: () => fetchAPI<AdminFeatureFlags>("/admin/feature-flags"),
   setFeatureFlags: (glmFlash: boolean) =>
     fetchAPI<AdminFeatureFlags>("/admin/feature-flags", {
@@ -511,6 +513,8 @@ export type NotificationKind =
   | 'automation' | 'eve_reminder';
 
 export interface NotificationPreferences {
+  daily_limit?: number;
+  coordinated_coaching?: boolean;
   kinds: Record<NotificationKind, boolean>;
   /** "HH:MM" in the athlete's timezone; null sends at any hour. */
   quiet_hours: { start: string; end: string } | null;

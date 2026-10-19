@@ -60,6 +60,9 @@ TABLES: tuple[ExportTable, ...] = (
             "automation_interrupts",
             "automation_effects",
             "notifications",
+            "coach_attention_claims",
+            "coach_attention_days",
+            "plan_change_sets",
         )
     ),
     ExportTable(
