@@ -135,6 +135,7 @@ export function RecentSessions() {
                     disabled={updateMutation.isPending}
                     className="p-1 hover:bg-text-muted/20 rounded transition-colors text-text-muted hover:text-neon-cyan"
                     title={editing ? 'Enregistrer' : 'Modifier RPE et notes'}
+                    aria-label={editing ? `Enregistrer le RPE et les notes de ${s.name || 'la séance'}` : `Modifier le RPE et les notes de ${s.name || 'la séance'}`}
                   >
                     {editing ? <Save className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
                   </button>

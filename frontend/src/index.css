@@ -580,6 +580,14 @@ body:has([aria-modal='true']) .coach-launcher { visibility: hidden; }
 /* Modal touch scrolling must not move the page behind it. CSS handles nested dialogs. */
 html:has([aria-modal='true']) { overflow: hidden; }
 /* The install invitation occupies its own layer above the persistent launcher. */
+/* App-wide notices (connectivity, new version): above the page and the tab bar, below dialogs. */
+.app-notices { position: fixed; z-index: 60; top: calc(var(--safe-top) + 8px); left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.app-notices:empty { display: none; }
+.app-notice { pointer-events: auto; }
+/* On a phone the open coach takes the top of the screen: its header stays reachable. */
+@media (max-width: 767px) { body:has(.coach-panel) .app-notices { display: none; } }
+/* Desktop: under the 56 px navigation bar, never over its links. */
+@media (min-width: 768px) { .app-notices { top: calc(var(--safe-top) + 64px); left: 50%; right: auto; width: min(32rem, calc(100% - 24px)); transform: translateX(-50%); } }
 .install-invitation { bottom: calc(var(--mobile-nav-space) + var(--launcher-space)); max-height: calc(var(--visible-height, 100dvh) - var(--safe-top) - var(--mobile-nav-space) - var(--launcher-space) - 24px); overflow-y: auto; }
 body:has(.coach-panel) .install-invitation, body:has([aria-modal='true']) .install-invitation { display: none; }
 @media (min-width: 768px) { .install-invitation { bottom: 84px; } }

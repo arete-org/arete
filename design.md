@@ -265,6 +265,19 @@ Planning ne possède aucune variante de navigation propre à sa page.
   appareil, absente si l’appareil est abonné ; sur iPhone hors app installée,
   elle mène d’abord au guide d’installation. Les zones musculaires peuvent
   être consultées au toucher, sans nécessiter un survol.
+- Les annonces de l’application (`AppNotices`) restent en haut, sous la barre de
+  navigation sur bureau, et s’effacent sur mobile devant le coach ouvert : connexion
+  perdue ou serveur injoignable, puis « Nouvelle version disponible » avec « Recharger ».
+  Surfaces `.glass-panel`, contrôles `ui/Button`, croix de 44 px nommée ; une annonce
+  masquée revient à la panne suivante.
+- Nouvelle version : une page qui se charge (nouvel onglet, actualisation, app
+  relancée) pendant qu’une version attend la prend aussitôt, en un seul rechargement
+  (garde de 30 s contre les boucles). Un onglet déjà ouvert l’annonce ; « Recharger »
+  attend la fin d’une réponse de Chiron en cours, qui ne doit pas être coupée.
+  Une adresse inconnue affiche « Page introuvable » et un lien vers l’accueil.
+- Un statut ne repose jamais sur la seule couleur : récupération, VFC et stress
+  ont un mot à côté de leur valeur. Les titres de panneaux sont des `h2` sous le
+  `h1` de la page ; chaque bouton à icône seule porte un `aria-label`.
 
 Validation : `mobile-ux.spec.ts` utilise Chromium et WebKit en mode tactile à
 320, 390 et 430 px, avec zones de sécurité et clavier simulés. Les scénarios

@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal } from '@/components/ui';
 import { authFetch } from '@/lib/auth';
 import { invalidateWithDashboard } from '@/lib/queryKeys';
+import { readableError } from '@/lib/utils';
 
 interface GarminLoginModalProps {
   isOpen: boolean;
@@ -45,7 +46,7 @@ export function GarminLoginModal({ isOpen, onClose, onSuccess }: GarminLoginModa
         onSuccess();
       }
     },
-    onError: (err) => setError(String(err)),
+    onError: (err) => setError(readableError(err)),
   });
 
   const handleClose = () => {

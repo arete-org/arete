@@ -10,6 +10,7 @@ import { useGarminSync } from './useGarminSync';
 import { GarminSyncProgress } from './GarminSyncProgress';
 import { toLocalISODate } from '@/lib/dates';
 import { invalidateWithDashboard } from '@/lib/queryKeys';
+import { readableError } from '@/lib/utils';
 
 type Alert = { type: 'success' | 'error' | 'info'; message: string };
 
@@ -60,7 +61,7 @@ export function SystemTab() {
     onError: (error) => {
       // Garmin may have refused the session: the status then asks to reconnect.
       invalidateWithDashboard(queryClient, ['syncStatus']);
-      setAlert({ type: 'error', message: `LECTURE DU SEUIL IMPOSSIBLE : ${error}` });
+      setAlert({ type: 'error', message: `LECTURE DU SEUIL IMPOSSIBLE : ${readableError(error)}` });
     },
   });
 
@@ -77,7 +78,7 @@ export function SystemTab() {
       });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
     },
-    onError: (error) => setAlert({ type: 'error', message: `RECALCUL IMPOSSIBLE : ${error}` }),
+    onError: (error) => setAlert({ type: 'error', message: `RECALCUL IMPOSSIBLE : ${readableError(error)}` }),
   });
 
   const syncMutation = useGarminSync();
@@ -97,7 +98,7 @@ export function SystemTab() {
     },
     onError: (error) => {
       invalidateWithDashboard(queryClient, ['syncStatus']);
-      setAlert({ type: 'error', message: `SYNCHRO SANTÉ IMPOSSIBLE : ${error}` });
+      setAlert({ type: 'error', message: `SYNCHRO SANTÉ IMPOSSIBLE : ${readableError(error)}` });
     },
   });
 
@@ -127,7 +128,7 @@ export function SystemTab() {
         </div>
       )}
 
-      <Panel variant="inset" title="ÉTAT">
+      <Panel level={3} variant="inset" title="ÉTAT">
         <div className="space-y-2">
           <StatusRow
             icon={<Server className="w-4 h-4" />}
@@ -147,7 +148,7 @@ export function SystemTab() {
         </div>
       </Panel>
 
-      <Panel variant="inset" title="SYNCHRONISATION GARMIN">
+      <Panel level={3} variant="inset" title="SYNCHRONISATION GARMIN">
         {syncStatus?.garmin_authenticated ? (
           <div className="space-y-4">
             <div className="ui-inset p-3">
@@ -211,7 +212,7 @@ export function SystemTab() {
         )}
       </Panel>
 
-      <Panel variant="inset" title="SEUIL ET ZONES">
+      <Panel level={3} variant="inset" title="SEUIL ET ZONES">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-4">
             <p className="text-xs text-text-muted font-sans">

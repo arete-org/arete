@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { documentRequest, type Prescription, type WorkoutStep, type Target } from '@/lib/documents';
 import { endsWithRecovery, SKIPPED_LAST_RECOVERY, stepAmount } from '@/lib/workouts';
 import { TimeInput } from './TimeInput';
+import { readableError } from '@/lib/utils';
 
 const inputClass = inputClasses('cyan', 'text-sm');
 const kinds = { warmup: 'Échauffement', effort: 'Effort', recovery: 'Récupération', cooldown: 'Retour au calme', rest: 'Repos', repeat: 'Répéter un bloc' };
@@ -74,7 +75,7 @@ export function PrescriptionEditor({ value, sport, onChange }: { value: Prescrip
   const exercises = useQuery({ queryKey: ['garmin-exercise-catalog'], queryFn: () => documentRequest<{ name: string }[]>('/garmin/workout-exercises'), enabled: sport === 'strength', staleTime: Infinity, retry: false });
   return <div className="space-y-3">
     {sport === 'swimming' && <label className="block text-xs">Longueur du bassin (m)<input className={inputClass} type="number" min="1" max="100" value={value.pool_length_m ?? ''} onChange={e => onChange({ ...value, pool_length_m: Number(e.target.value) })} /></label>}
-    {exercises.error && <p role="alert" className="text-danger-red text-xs">Catalogue Garmin indisponible : {exercises.error.message}</p>}
+    {exercises.error && <p role="alert" className="text-danger-red text-xs">Catalogue Garmin indisponible : {readableError(exercises.error)}</p>}
     <datalist id={exerciseList}>{exercises.data?.map(e => <option value={e.name} key={e.name} />)}</datalist>
     <StepsEditor steps={value.steps} sport={sport} exerciseList={exerciseList} onChange={steps => onChange({ ...value, steps })} />
   </div>;

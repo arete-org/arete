@@ -31,6 +31,7 @@ import {
   updateThread,
   type ThreadStore,
 } from '@/lib/agentThreads';
+import { readableError } from '@/lib/utils';
 
 // One model run for the whole coach. Switching threads can never fan out requests.
 const MAX_ACTIVE_RUNS = 1;
@@ -95,7 +96,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         setStore(next);
         setError('');
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Impossible d’ouvrir la discussion.');
+        setError(readableError(err));
       }
     };
     window.addEventListener('arete:coach-discuss', discuss);
@@ -151,11 +152,11 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         return { ...prev, activeId: id, threads: [thread, ...prev.threads.filter(t => t.id !== id)] };
       });
       setError('');
-    } catch (err) { setError(err instanceof Error ? err.message : 'Conversation indisponible.'); }
+    } catch (err) { setError(readableError(err)); }
   }, [setStore]);
   useEffect(() => {
     const open = (event: Event) => { const id = (event as CustomEvent).detail; if (typeof id === 'string') void openArchived(id); };
-    const fresh = () => { openSequence.current += 1; try { setStore(prev => addThread(prev)); } catch (err) { setError(String(err)); } };
+    const fresh = () => { openSequence.current += 1; try { setStore(prev => addThread(prev)); } catch (err) { setError(readableError(err)); } };
     const deleted = (event: Event) => { const id = (event as CustomEvent).detail; if (typeof id !== 'string') return; if (runRef.current?.threadId === id) runRef.current.controller.abort(); setStore(prev => removeThread(prev, id)); };
     const renamed = (event: Event) => { const { id, title } = (event as CustomEvent).detail; if (typeof id === 'string' && typeof title === 'string') setStore(prev => updateThread(prev, id, t => ({ ...t, title, titleManual: true }))); };
     window.addEventListener('arete:conversation-deleted', deleted);
@@ -175,7 +176,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         if (await digest(archivePayload(thread)) === thread.archiveDigest) removable.push(thread.id);
       }
       if (!cancelled && removable.length) setStore(prev => ({ ...prev, threads: prev.threads.filter(t => !removable.includes(t.id) || t !== store.threads.find(old => old.id === t.id)) }));
-    })().catch(err => { if (!cancelled) setError(String(err)); });
+    })().catch(err => { if (!cancelled) setError(readableError(err)); });
     return () => { cancelled = true; };
   }, [store, runningId, setStore]);
   const create = () => {
@@ -185,17 +186,13 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       setStore((prev) => addThread(prev, candidate));
       setError('');
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Impossible de créer une conversation.'
-      );
+      setError(readableError(err));
     }
   };
   const remove = async (id: string) => {
     if (runRef.current?.threadId === id) runRef.current.controller.abort();
     try { await conversationsApi.remove(id); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Suppression des documents impossible.'); return; }
+    catch (err) { setError(readableError(err)); return; }
     setStore((prev) => removeThread(prev, id));
     setError('');
   };
@@ -433,11 +430,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         patchAnswer((m) =>
           settleMessage(
             m,
-            controller.signal.aborted
-              ? undefined
-              : err instanceof Error
-                ? err.message
-                : 'Erreur inconnue.',
+            controller.signal.aborted ? undefined : readableError(err),
             controller.signal.aborted
           )
         )
@@ -486,7 +479,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         localStorage.setItem(`arete.coach.conflict.${athleteId}.${local.id}`, JSON.stringify(local));
         setStore(prev => updateThread(prev, local.id, () => ({ ...restoreLocalCharts(remote, local), draft: local.draft, attachmentIds: local.attachmentIds })));
         archive.retry();
-      } catch (err) { setError(err instanceof Error ? err.message : 'Lecture impossible.'); }
+      } catch (err) { setError(readableError(err)); }
     },
     select,
     openArchived,

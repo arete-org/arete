@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Check, Database, Dumbbell, Palette, Save, Target, Terminal, User, Users, Watch, X } from 'lucide-react';
 import { AreteMark } from '@/components/AreteBrand';
-import { cn } from '@/lib/utils';
+import { cn, readableError } from '@/lib/utils';
 import { ErrorState, LoadingState } from '@/components';
 import { useAuthState } from '@/components/auth/authState';
 import { Button, Spinner } from '@/components/ui';
@@ -170,6 +170,11 @@ export function SettingsPage() {
             </Button>
           )}
         </header>
+        {saveStatus === 'error' && saveMutation.error && (
+          <p role="alert" className="-mt-2 mb-4 text-sm font-sans text-danger-red sm:-mt-6">
+            Réglages non enregistrés : {readableError(saveMutation.error)}
+          </p>
+        )}
 
         {/* Below md the tabs become one scrolling row above the panel. */}
         <div className="flex flex-col md:flex-row gap-4 md:gap-6">

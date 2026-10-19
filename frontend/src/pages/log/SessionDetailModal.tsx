@@ -119,8 +119,9 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
                   disabled={linkMutation.isPending}
                   className="p-2 hover:bg-danger-red/20 rounded text-danger-red transition-colors"
                   title="Délier"
+                  aria-label="Délier l’activité Garmin"
                 >
-                  <Unlink className="w-4 h-4" />
+                  <Unlink aria-hidden="true" className="w-4 h-4" />
                 </button>
               </div>
             ) : garminCandidates?.candidates && garminCandidates.candidates.length > 0 ? (

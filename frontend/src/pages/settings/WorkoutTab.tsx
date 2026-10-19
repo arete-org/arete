@@ -117,7 +117,7 @@ export function WorkoutTab({ settings, updateSetting }: SettingsTabProps) {
         </Button>
       </div>
 
-      <Panel variant="inset" title="Mémo de notation">
+      <Panel level={3} variant="inset" title="Mémo de notation">
         <div className="space-y-1.5 font-sans text-xs">
           {QUICK_REFERENCE.map(([notation, meaning]) => (
             <div key={notation} className="flex gap-3">

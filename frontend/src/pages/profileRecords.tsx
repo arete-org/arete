@@ -30,7 +30,7 @@ export function StrengthRecords() {
   const r = records.data;
   return (
     <section className="border-t border-text-muted/20 pt-5 space-y-4">
-      <h3 className="font-bold">Records de force</h3>
+      <h2 className="font-bold">Records de force</h2>
       <label className="block text-xs text-text-muted">
         Exercice
         <select

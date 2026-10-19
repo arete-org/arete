@@ -359,9 +359,7 @@ export async function runAgentStream(
   });
   if (!response.ok)
     throw new Error(
-      `Le coach n'a pas pu répondre (${response.status}) : ${readableError(
-        new Error(await response.text())
-      )}`
+      `Le coach n’a pas pu répondre : ${readableError(new Error(`API Error ${response.status}: ${await response.text()}`))}`
     );
   if (!response.body) throw new Error('Le serveur ne fournit pas de stream.');
   onAccepted?.();

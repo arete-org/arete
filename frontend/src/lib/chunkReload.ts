@@ -7,16 +7,33 @@
  * took over, loads the new build. A second failure soon after is a real error
  * and stays visible instead of looping.
  */
+import { activate, pendingWorker } from './serviceWorker';
+
 const KEY = 'arete.chunk-reload';
 const LOOP_WINDOW_MS = 30_000;
 const WORKER_WAIT_MS = 10_000;
 let reloading = false;
 let held = false;
+const holdListeners = new Set<() => void>();
 
 /** A streaming coach run must not be cut by an automatic reload (useCoachThreads). */
 export function holdReloads(active: boolean): void {
+  if (held === active) return;
   held = active;
+  holdListeners.forEach((listener) => listener());
 }
+
+/** Whether a reload would cut something now (the update notice waits for it). */
+export function reloadsHeld(): boolean {
+  return held;
+}
+
+export function onReloadHold(listener: () => void): () => void {
+  holdListeners.add(listener);
+  return () => holdListeners.delete(listener);
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function claimReload(): boolean {
   try {
@@ -33,20 +50,40 @@ function claimReload(): boolean {
 async function newWorker(): Promise<void> {
   const registration = await navigator.serviceWorker?.getRegistration().catch(() => undefined);
   if (!registration) return;
-  await registration.update().catch(() => {});
-  if (!registration.installing && !registration.waiting) return;
-  await new Promise((resolve) => {
-    navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true });
-    setTimeout(resolve, WORKER_WAIT_MS);
-  });
+  // A new version waits for a signal (src/sw.ts): this reload gives it.
+  const worker = await pendingWorker(registration);
+  if (worker) await activate(worker, WORKER_WAIT_MS);
+}
+
+function reloadAfter(handOver: Promise<void>): void {
+  reloading = true;
+  // Bounded: an install that never settles must not keep the page from reloading.
+  void Promise.race([handOver, wait(WORKER_WAIT_MS)]).finally(() => window.location.reload());
+}
+
+/**
+ * A page that loads while a new version waits (a new tab, a refresh, the
+ * installed app relaunched) takes it at once rather than run an old build
+ * against the new server: one reload, unless something is held or a reload
+ * just happened (the notice shows instead). False when it did not reload.
+ */
+export function takeWaitingAtLoad(worker: ServiceWorker): boolean {
+  if (reloading) return true;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  if (held || !claimReload()) return false;
+  reloadAfter(activate(worker, WORKER_WAIT_MS));
+  return true;
 }
 
 /** Starts at most one reload; false when the error must surface instead. */
 export function recoverFromStaleBuild(): boolean {
   if (reloading) return true;
+  // Offline, a missing chunk is the network, not a new build: reloading would
+  // leave the app for the browser's offline page (the banner says why instead;
+  // the error boundary still showing it reloads once back online).
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
   if (held || !claimReload()) return false;
-  reloading = true;
-  void newWorker().finally(() => window.location.reload());
+  reloadAfter(newWorker());
   return true;
 }
 
@@ -58,6 +95,16 @@ export function importChunk<T>(load: () => Promise<T>): () => Promise<T> {
       if (recoverFromStaleBuild()) return new Promise<T>(() => {});
       throw error;
     });
+}
+
+/** Load the page again (its own function, so tests can watch it). */
+export function reloadPage(): void {
+  window.location.reload();
+}
+
+/** A lazy part of the app that could not be fetched (Chrome, Firefox and Safari wordings). */
+export function isChunkError(error: unknown): boolean {
+  return error instanceof Error && /dynamically imported module|importing a module script failed|error loading dynamically imported module/i.test(error.message);
 }
 
 /** Vite reports every failed dynamic import of the build (chunks loaded outside `importChunk` too). */

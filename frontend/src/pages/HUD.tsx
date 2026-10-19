@@ -39,6 +39,11 @@ const readinessTone = (score: number, threshold: number) =>
       ? 'text-neon-gold border-neon-gold'
       : 'text-danger-red border-danger-red';
 const stressTone = (avg: number) => (avg > 40 ? 'text-danger-red' : avg > 25 ? 'text-neon-gold' : 'text-success-green');
+// Each colour above also reads as words: a colour alone says nothing to a screen reader or a colour-blind eye.
+const readinessWord = (score: number, threshold: number) =>
+  score >= threshold ? 'bonne' : score >= threshold * 0.6 ? 'moyenne' : 'basse';
+const stressWord = (avg: number) => (avg > 40 ? 'élevé' : avg > 25 ? 'modéré' : 'faible');
+const HRV_WORD: Record<string, string> = { BALANCED: 'équilibrée', UNBALANCED: 'déséquilibrée', LOW: 'basse', POOR: 'faible' };
 
 
 
@@ -206,7 +211,7 @@ function TodaySession({
       ? watchLine(view, session.garmin_pushed_at, {
           run: () => push.mutate(),
           pending: push.isPending,
-          error: push.error ? push.error.message || 'Garmin ne répond pas, réessaie plus tard.' : null,
+          error: push.error ? readableError(push.error) : null,
           result: push.data ?? null,
         })
       : undefined;
@@ -553,13 +558,20 @@ export function DashboardPage() {
                 // This morning's row is in: its numbers show even when Arete's own
                 // score is missing (an HRV fetch that failed leaves only Garmin's).
                 <div className="flex items-center gap-6">
-                  <div
-                    className={cn(
-                      'flex-shrink-0 w-20 h-20 rounded-full bg-abyss border-2 flex items-center justify-center',
-                      morningScore != null ? readinessTone(morningScore, fatigueThreshold) : 'text-text-muted border-text-muted/40'
+                  <div className="flex-shrink-0 flex flex-col items-center gap-1">
+                    <div
+                      className={cn(
+                        'w-20 h-20 rounded-full bg-abyss border-2 flex items-center justify-center',
+                        morningScore != null ? readinessTone(morningScore, fatigueThreshold) : 'text-text-muted border-text-muted/40'
+                      )}
+                    >
+                      <span className="text-2xl font-sans font-bold">{morningScore ?? '—'}</span>
+                    </div>
+                    {morningScore != null && (
+                      <span className="text-[11px] font-sans text-text-secondary first-letter:uppercase">
+                        Récupération {readinessWord(morningScore, fatigueThreshold)}
+                      </span>
                     )}
-                  >
-                    <span className="text-2xl font-sans font-bold">{morningScore ?? '—'}</span>
                   </div>
 
                   <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
@@ -576,10 +588,8 @@ export function DashboardPage() {
                         <span className="text-xs font-sans text-text-muted">VFC</span>
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.hrv_last_night} ms
-                          {healthData.hrv_status && (
-                            <span className="text-[11px] text-neon-cyan ml-1">
-                              {healthData.hrv_status === 'BALANCED' ? '⚖' : healthData.hrv_status === 'LOW' ? '↓' : '↑'}
-                            </span>
+                          {healthData.hrv_status && HRV_WORD[healthData.hrv_status] && (
+                            <span className="block text-[11px] text-text-secondary">VFC {HRV_WORD[healthData.hrv_status]}</span>
                           )}
                         </span>
                       </>
@@ -600,8 +610,9 @@ export function DashboardPage() {
                     {healthData.stress_avg != null && (
                       <>
                         <span className="text-xs font-sans text-text-muted">Stress</span>
-                        <span className={cn('text-xs font-sans text-right', stressTone(healthData.stress_avg))}>
-                          {healthData.stress_avg}
+                        <span className="text-xs font-sans text-right">
+                          <span className={stressTone(healthData.stress_avg)}>{healthData.stress_avg}</span>
+                          <span className="block text-[11px] text-text-secondary">Stress {stressWord(healthData.stress_avg)}</span>
                         </span>
                       </>
                     )}

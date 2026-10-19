@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { characterAsset, useGamePreference, useGameSnapshot } from '@/lib/gamification';
+import { readableError } from '@/lib/utils';
 
 export function PlayerSummary() {
   const pref = useGamePreference();
@@ -46,7 +47,7 @@ export function PlayerSummary() {
         )}
         {player.syncError && (
           <p role="alert" className="text-[10px] text-warning-orange truncate">
-            Progression non actualisée : {player.syncError.message}
+            Progression non actualisée : {readableError(player.syncError)}
           </p>
         )}
       </div>

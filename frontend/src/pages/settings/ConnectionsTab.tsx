@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Check, LogOut, Target, Watch } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, readableError } from '@/lib/utils';
 import { garminApi, stravaApi } from '@/lib/api';
 import { Button } from '@/components/ui';
 import { invalidateAfterSession, invalidateWithDashboard } from '@/lib/queryKeys';
@@ -33,7 +33,7 @@ export function ConnectionsTab() {
       garminSync.reset();
       invalidateWithDashboard(queryClient, ['syncStatus']);
     },
-    onError: (error: Error) => setGarminResult(error.message),
+    onError: (error: Error) => setGarminResult(readableError(error)),
   });
 
   const { data: stravaStatus, isError: stravaError } = useQuery({
@@ -64,7 +64,7 @@ export function ConnectionsTab() {
       window.location.href = url;
     },
     onError: (err) =>
-      setSyncResult(`Strava : ${err instanceof Error ? err.message : 'autorisation impossible à lancer'}`),
+      setSyncResult(`Strava : ${readableError(err)}`),
   });
 
   const syncMutation = useMutation({
@@ -76,7 +76,7 @@ export function ConnectionsTab() {
       queryClient.invalidateQueries({ queryKey: ['stravaStatus'] });
       invalidateAfterSession(queryClient);
     },
-    onError: (err) => setSyncResult(`Échec de la synchro : ${err instanceof Error ? err.message : err}`),
+    onError: (err) => setSyncResult(`Échec de la synchro : ${readableError(err)}`),
   });
 
   const disconnectMutation = useMutation({

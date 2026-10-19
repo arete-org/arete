@@ -32,6 +32,7 @@ export function TrainingPacesPanel() {
 
   return (
     <Panel
+      level={3}
       variant="inset"
       title={
         <span className="flex items-center gap-2">

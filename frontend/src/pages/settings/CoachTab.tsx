@@ -385,7 +385,7 @@ export function CoachTab({ settings, updateSetting }: SettingsTabProps) {
 
       {isLoading && <p className="text-sm text-text-muted">Chargement du journal…</p>}
       {isError && (
-        <Panel title="Mémoire du coach">
+        <Panel level={3} title="Mémoire du coach">
           <p className="text-sm text-danger-red">Ledger indisponible (backend à jour ?).</p>
           <Button variant="ghost" onClick={() => refetch()} className="mt-2">
             <RefreshCw className="size-4" /> Réessayer
@@ -398,6 +398,7 @@ export function CoachTab({ settings, updateSetting }: SettingsTabProps) {
         const Icon = meta.icon;
         return (
           <Panel
+            level={3}
             key={file.name}
             title={
               <span className="flex items-center gap-2">

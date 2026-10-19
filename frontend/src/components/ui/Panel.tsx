@@ -13,11 +13,14 @@ interface PanelProps {
   delay?: number;
   animate?: boolean;
   style?: CSSProperties;
+  /** Heading level of the title: 2 under the page's h1, 3 inside a section that has its own h2. */
+  level?: 2 | 3;
 }
 
 /**
- * Titled card. `glass` replaces `<div className="glass-panel p-3 sm:p-4">` + h3,
- * `inset` replaces `<div className="p-4 bg-abyss/50 rounded border border-text-muted/20">` + h3.
+ * Titled card. `glass` replaces `<div className="glass-panel p-3 sm:p-4">` + h2,
+ * `inset` replaces `<div className="p-4 bg-abyss/50 rounded border border-text-muted/20">` + h2.
+ * The title is an h2: panels sit right under the page's h1.
  */
 export function Panel({
   title,
@@ -28,7 +31,9 @@ export function Panel({
   delay = 0,
   animate = variant === 'glass',
   style,
+  level = 2,
 }: PanelProps) {
+  const Heading = level === 3 ? 'h3' : 'h2';
   return (
     <div
       className={cn(
@@ -41,7 +46,7 @@ export function Panel({
       style={delay ? { animationDelay: `${delay}s`, ...style } : style}
     >
       {title && (
-        <h3
+        <Heading
           className={cn(
             'font-sans font-medium',
             variant === 'glass' ? 'text-[15px] mb-4' : 'text-xs mb-3',
@@ -49,7 +54,7 @@ export function Panel({
           )}
         >
           {title}
-        </h3>
+        </Heading>
       )}
       {children}
     </div>

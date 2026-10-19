@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowDownToLine, ChevronLeft, ChevronRight, FileSearch, ScanText, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { documentsApi, originalDocument, type CoachDocument, type SourceBlock } from '@/lib/documents';
-import { cn } from '@/lib/utils';
+import { cn, readableError } from '@/lib/utils';
 import { Button, Modal } from '../ui';
 
 const BLOCKS_PER_VIEW = 50;
@@ -90,7 +90,7 @@ function PreviewContent({ threadId, document: doc }: { threadId: string; documen
   const warnings = source.data?.extraction.warnings ?? [];
 
   if (source.isPending) return <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-text-muted" role="status"><FileSearch size={20} className="animate-pulse text-neon-cyan" />Chargement du document…</div>;
-  if (source.error) return <div className="space-y-4 p-8"><p role="alert" className="text-sm text-danger-red">{source.error.message}</p><Button onClick={() => source.refetch()}>Réessayer</Button></div>;
+  if (source.error) return <div className="space-y-4 p-8"><p role="alert" className="text-sm text-danger-red">{readableError(source.error)}</p><Button onClick={() => source.refetch()}>Réessayer</Button></div>;
   return <>
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-white/[0.02] px-5 py-3 sm:px-6">
       <div className="flex flex-wrap items-center gap-3">

@@ -313,7 +313,7 @@ export function SessionCard({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {state === 'done' && <Check className="w-4 h-4 text-success-green" />}
+          {state === 'done' && <><Check aria-hidden="true" className="w-4 h-4 text-success-green" /><span className="sr-only">{STATE_LABEL.done}</span></>}
           {state !== 'done' && state !== 'pending' && (
             <span className="text-[11px] font-sans text-text-muted">{STATE_LABEL[state]}</span>
           )}
@@ -324,18 +324,20 @@ export function SessionCard({
                 disabled={busy}
                 onClick={() => onStatus('completed')}
                 title="Marquer comme faite (sans montre)"
+                aria-label="Marquer comme faite (sans montre)"
                 className="p-1 rounded text-text-muted hover:text-success-green hover:bg-success-green/10 disabled:opacity-40"
               >
-                <Check className="w-4 h-4" />
+                <Check aria-hidden="true" className="w-4 h-4" />
               </button>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => onStatus(state === 'skipped' ? 'pending' : 'skipped')}
                 title={state === 'skipped' ? 'Remettre en attente' : 'Marquer comme sautée'}
+                aria-label={state === 'skipped' ? 'Remettre en attente' : 'Marquer comme sautée'}
                 className="p-1 rounded text-text-muted hover:text-warning-orange hover:bg-warning-orange/10 disabled:opacity-40"
               >
-                <X className="w-4 h-4" />
+                <X aria-hidden="true" className="w-4 h-4" />
               </button>
             </>
           )}
@@ -345,9 +347,10 @@ export function SessionCard({
               disabled={busy}
               onClick={onDelete}
               title="Supprimer la séance planifiée"
+              aria-label="Supprimer la séance planifiée"
               className="p-1 rounded text-text-muted hover:text-danger-red hover:bg-danger-red/10 disabled:opacity-40"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 aria-hidden="true" className="w-4 h-4" />
             </button>
           )}
         </div>
