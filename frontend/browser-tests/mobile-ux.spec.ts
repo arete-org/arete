@@ -312,7 +312,7 @@ test('touch: a Garmin strength session gets its loads from the Journal in four i
     });
   });
   await page.goto('/log');
-  const drafts = page.getByRole('region', { name: 'À COMPLÉTER (1)' });
+  const drafts = page.getByRole('region', { name: 'À compléter (1)' });
   await expect(drafts).toBeVisible();
   await expect(drafts.getByText('Développé couché · Squat')).toBeVisible();
   await noOverflow(page);

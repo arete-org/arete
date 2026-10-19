@@ -51,11 +51,11 @@ export function StrengthDrafts({ drafts, total, onComplete, paused }: StrengthDr
   if (drafts.length === 0) return null;
   const error = dismiss.error ?? dismissAll.error;
   return (
-    <section ref={section} aria-labelledby="drafts-title" className="mb-4 sm:mb-6">
+    <section ref={section} aria-labelledby="drafts-title">
       <Panel
         title={
           <span ref={heading} id="drafts-title" tabIndex={-1} className="outline-none">
-            À COMPLÉTER ({total})
+            À compléter ({total})
           </span>
         }
         titleTone="text-neon-gold"

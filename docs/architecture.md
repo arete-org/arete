@@ -386,7 +386,7 @@ A skill describes how to interpret documents; planning owns creation; Garmin own
 export. Google Calendar still requires approval through its existing HTTP/UI cards.
 
 A Garmin strength activity no Muscu log completes becomes a draft awaiting its
-loads (`strength/drafts.py`, migration 53's `app.strength_drafts`, one per
+loads (`strength/drafts.py`, migration 54's `app.strength_drafts`, one per
 activity). The sync opens it from Garmin's `summarizedExerciseSets`, already in
 the activity list (no extra request); Arete imports no load from it. Names go
 through a reviewed table (`data/garmin_exercises.py`): only a Garmin name whose

@@ -46,10 +46,10 @@ test('ignoring a draft moves focus to the next one; free-text names are listed; 
     return route.fulfill({ json: [] });
   });
   await page.goto('/log');
-  const list = page.getByRole('region', { name: 'À COMPLÉTER (2)' });
+  const list = page.getByRole('region', { name: 'À compléter (2)' });
   await expect(list.getByRole('button', { name: 'Tout ignorer' })).toBeVisible();
   await list.getByRole('button', { name: /Ignorer la séance du jeu\. 15 oct\./ }).click();
-  await expect(page.getByRole('region', { name: 'À COMPLÉTER (1)' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'À compléter (1)' })).toBeVisible();
   expect(dismissed).toEqual(['/api/strength/drafts/7']);
   await expect(page.getByRole('button', { name: 'Ajoute tes charges' })).toBeFocused();
 
@@ -64,11 +64,11 @@ test('ignoring a draft moves focus to the next one; free-text names are listed; 
 
   drafts = [draft(6, '2026-10-14'), draft(5, '2026-10-13')];
   await page.reload();
-  const two = page.getByRole('region', { name: 'À COMPLÉTER (2)' });
+  const two = page.getByRole('region', { name: 'À compléter (2)' });
   await two.getByRole('button', { name: 'Tout ignorer' }).click();
   await expect(two.getByText('Ignorer les 2 séances à compléter ? Tu pourras en rouvrir une depuis la séance.')).toBeVisible();
   expect(dismissed).toEqual(['/api/strength/drafts/7']);
   await two.getByRole('button', { name: 'Ignorer les 2' }).click();
-  await expect(page.getByRole('region', { name: /À COMPLÉTER/ })).toBeHidden();
+  await expect(page.getByRole('region', { name: /À compléter/ })).toBeHidden();
   expect(dismissed).toEqual(['/api/strength/drafts/7', '/api/strength/drafts/dismiss-all']);
 });
