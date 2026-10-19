@@ -52,7 +52,7 @@ def set_public_replies(enabled: bool) -> bool:
     with db_connection() as con:
         con.execute(
             "INSERT INTO app.slack_athletes (athlete_id, public_replies) VALUES (?, ?) "
-            "ON CONFLICT (athlete_id) DO UPDATE SET public_replies = EXCLUDED.public_replies",
+            "ON CONFLICT (athlete_id) DO UPDATE SET public_replies = EXCLUDED.public_replies RETURNING athlete_id",
             [current_athlete_id(), enabled],
         )
     return enabled

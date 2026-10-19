@@ -541,3 +541,50 @@ def test_migration_53_upgrades_existing_schema_and_keeps_scoped_views(
             assert con.execute(
                 f"SELECT count(*) FROM app.visible_{name}"
             ).fetchone() == (0,)
+
+
+def test_an_apply_racing_a_dismissal_changes_no_session(athlete, monkeypatch):
+    """ARE-150: the dismissal commits inside the apply's snapshot."""
+    from write_race import race
+
+    ids = sessions()
+    preview = planning.preview_plan_changes(proposal(ids))
+    with (
+        race(
+            monkeypatch,
+            r"SET state='applied'",
+            lambda: planning.dismiss_plan_changes(preview["id"], 1),
+        ),
+        pytest.raises(ValueError, match="autre fenêtre"),
+    ):
+        planning.apply_plan_changes(preview["id"], 1, str(uuid4()))
+    assert planning.get_plan_changes(preview["id"])["state"] == "dismissed"
+    repo = GarminRepository()
+    assert [repo.get_planned_session(i).revision for i in ids] == [1, 1]
+
+
+def test_an_rpe_answer_racing_the_athlete_s_own_rpe_keeps_theirs(athlete, monkeypatch):
+    """ARE-150: the session page's RPE commits inside the answer's snapshot."""
+    from write_race import race
+
+    from arete.services import analytics, coach_followup
+
+    monkeypatch.setattr(coach_followup, "athlete_today", lambda: NOW.date())
+    monkeypatch.setattr(
+        coach_followup, "naive_utc_now", lambda: NOW.replace(tzinfo=None)
+    )
+    session = actual()
+    question = followup(session)
+    with (
+        race(
+            monkeypatch,
+            r"UPDATE app\.actual_sessions SET rpe=\?",
+            lambda: analytics.update_session(session, {"rpe": 4}),
+        ),
+        pytest.raises(coach_followup.FollowupConflict),
+    ):
+        coach_followup.respond(question, 1, "answer", rpe=8)
+    with db_connection() as con:
+        assert con.execute(
+            "SELECT rpe FROM app.visible_actual_sessions WHERE id=?", [session]
+        ).fetchone() == (4,)

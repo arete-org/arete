@@ -677,7 +677,7 @@ async def _run_automation(run: dict) -> None:
             raise RuntimeError("La configuration du modèle a changé ; reprise annulée.")
         with db_connection() as con:
             con.execute(
-                f"UPDATE app.automation_runs SET model_policy=? WHERE {OWNER} AND id=?",
+                f"UPDATE app.automation_runs SET model_policy=? WHERE {OWNER} AND id=? RETURNING id",
                 [policy, identifier],
             )
         graph = _assemble("automation", glm_flash=glm, checkpointer=AutomationSaver())

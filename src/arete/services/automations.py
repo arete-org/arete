@@ -130,7 +130,7 @@ def create(
         _validate_session(con, spec)
         # Lock a shared owner row so concurrent activations cannot exceed the cap.
         con.execute(
-            "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id')"
+            "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id') RETURNING id"
         )
         if activate:
             _capacity(con)
@@ -184,7 +184,7 @@ def listing(*, offset: int = 0) -> dict:
 
 def _cancel_pending(con, identifier: str, now: datetime) -> None:
     con.execute(
-        f"UPDATE app.automation_runs SET state='cancelled',finished_at=?,revision=revision+1 WHERE {OWNER} AND automation_id=? AND state IN ('queued','waiting','ready')",
+        f"UPDATE app.automation_runs SET state='cancelled',finished_at=?,revision=revision+1 WHERE {OWNER} AND automation_id=? AND state IN ('queued','waiting','ready') RETURNING id",
         [now, identifier],
     )
 
@@ -202,7 +202,7 @@ def update(identifier: str, change: Update) -> dict:
         ):
             raise ValueError("Échéance passée ou au-delà de 366 jours")
         con.execute(
-            f"UPDATE app.automations SET title=?,mission=?,trigger_json=?,timezone=?,next_due_at=?,activated_at=?,updated_at=?,revision=revision+1 WHERE {OWNER} AND id=? AND revision=?",
+            f"UPDATE app.automations SET title=?,mission=?,trigger_json=?,timezone=?,next_due_at=?,activated_at=?,updated_at=?,revision=revision+1 WHERE {OWNER} AND id=? AND revision=? RETURNING id",
             [
                 change.title,
                 change.mission,
@@ -224,7 +224,7 @@ def set_state(identifier: str, revision: int, state: str) -> dict:
     now = utc_now()
     with transaction() as con:
         con.execute(
-            "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id')"
+            "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id') RETURNING id"
         )
         old = _get(con, "automations", identifier)
         if old["revision"] != revision:
@@ -237,7 +237,7 @@ def set_state(identifier: str, revision: int, state: str) -> dict:
             if isinstance(spec.trigger, Once) and due is None:
                 raise ValueError("Modifiez l’échéance passée avant de réactiver.")
         con.execute(
-            f"UPDATE app.automations SET state=?,revision=revision+1,activated_at=?,next_due_at=?,updated_at=? WHERE {OWNER} AND id=? AND revision=?",
+            f"UPDATE app.automations SET state=?,revision=revision+1,activated_at=?,next_due_at=?,updated_at=? WHERE {OWNER} AND id=? AND revision=? RETURNING id",
             [state, now, due if state == "active" else None, now, identifier, revision],
         )
         _cancel_pending(con, identifier, now)
@@ -252,7 +252,7 @@ def delete(identifier: str, revision: int) -> None:
             raise Conflict("Ce suivi a changé. Rechargez-le.")
         _cancel_pending(con, identifier, now)
         con.execute(
-            f"UPDATE app.automations SET deleted_at=now(),state='deleted',revision=revision+1 WHERE {OWNER} AND id=?",
+            f"UPDATE app.automations SET deleted_at=now(),state='deleted',revision=revision+1 WHERE {OWNER} AND id=? RETURNING id",
             [identifier],
         )
 
@@ -375,7 +375,7 @@ def prepare(now: datetime | None = None) -> dict:
                         "Plus de 366 échéances manquées ; modifiez puis réactivez ce suivi."
                     )
                 con.execute(
-                    f"UPDATE app.automation_runs SET state='missed',finished_at=? WHERE {OWNER} AND automation_id=? AND state='queued' AND due_at<?",
+                    f"UPDATE app.automation_runs SET state='missed',finished_at=? WHERE {OWNER} AND automation_id=? AND state='queued' AND due_at<? RETURNING id",
                     [now, record["id"], occurrences[-1]],
                 )
                 for index, at in enumerate(occurrences):
@@ -388,7 +388,7 @@ def prepare(now: datetime | None = None) -> dict:
                         state="queued" if index == len(occurrences) - 1 else "missed",
                     )
                 con.execute(
-                    f"UPDATE app.automations SET next_due_at=? WHERE {OWNER} AND id=? AND revision=?",
+                    f"UPDATE app.automations SET next_due_at=? WHERE {OWNER} AND id=? AND revision=? RETURNING id",
                     [following, record["id"], record["revision"]],
                 )
             except ValueError as exc:
@@ -401,19 +401,19 @@ def prepare(now: datetime | None = None) -> dict:
                     state="failed",
                 )
                 con.execute(
-                    f"UPDATE app.automation_runs SET error=? WHERE {OWNER} AND automation_id=? AND occurrence_key=?",
+                    f"UPDATE app.automation_runs SET error=? WHERE {OWNER} AND automation_id=? AND occurrence_key=? RETURNING id",
                     [str(exc), record["id"], f"invalid:{record['revision']}"],
                 )
                 con.execute(
-                    f"UPDATE app.automations SET state='paused',revision=revision+1 WHERE {OWNER} AND id=?",
+                    f"UPDATE app.automations SET state='paused',revision=revision+1 WHERE {OWNER} AND id=? RETURNING id",
                     [record["id"]],
                 )
         con.execute(
-            f"UPDATE app.automation_runs SET state='interrupted',error='Exécution interrompue ; aucune écriture ne sera rejouée.',finished_at=?,revision=revision+1 WHERE {OWNER} AND state='running' AND lease_until<=?",
+            f"UPDATE app.automation_runs SET state='interrupted',error='Exécution interrompue ; aucune écriture ne sera rejouée.',finished_at=?,revision=revision+1 WHERE {OWNER} AND state='running' AND lease_until<=? RETURNING id",
             [now, now],
         )
         con.execute(
-            f"UPDATE app.automation_runs SET state='expired',finished_at=?,revision=revision+1 WHERE {OWNER} AND state IN ('waiting','ready') AND expires_at<=?",
+            f"UPDATE app.automation_runs SET state='expired',finished_at=?,revision=revision+1 WHERE {OWNER} AND state IN ('waiting','ready') AND expires_at<=? RETURNING id",
             [now, now],
         )
         # Delete an entire terminated checkpoint chain, never prune an ancestor
@@ -448,12 +448,12 @@ def claim(identifier: str, now: datetime | None = None) -> dict | None:
                     _require_session(con, run["session_key"])
                 except ValueError as exc:
                     con.execute(
-                        f"UPDATE app.automation_runs SET state='failed',error=?,finished_at=?,revision=revision+1 WHERE {OWNER} AND id=?",
+                        f"UPDATE app.automation_runs SET state='failed',error=?,finished_at=?,revision=revision+1 WHERE {OWNER} AND id=? RETURNING id",
                         [str(exc), now, identifier],
                     )
                     return None
             con.execute(
-                "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id')"
+                "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id') RETURNING id"
             )
             zone = ZoneInfo(
                 (get_user_settings() or {}).get("timezone") or "Europe/Paris"
@@ -480,7 +480,7 @@ def claim(identifier: str, now: datetime | None = None) -> dict | None:
                 run["state"] == "ready" and run["resumes"] >= MAX_RESUMES
             ):
                 con.execute(
-                    f"UPDATE app.automation_runs SET state='failed',error='Budget de reprise épuisé',finished_at=? WHERE {OWNER} AND id=?",
+                    f"UPDATE app.automation_runs SET state='failed',error='Budget de reprise épuisé',finished_at=? WHERE {OWNER} AND id=? RETURNING id",
                     [now, identifier],
                 )
                 return None
@@ -491,7 +491,7 @@ def claim(identifier: str, now: datetime | None = None) -> dict | None:
             if slot is None:
                 return None
             con.execute(
-                "UPDATE app.automation_worker_slots SET run_id=?,lease_until=? WHERE id=?",
+                "UPDATE app.automation_worker_slots SET run_id=?,lease_until=? WHERE id=? RETURNING id",
                 [identifier, now + timedelta(seconds=SEGMENT_SECONDS + 60), slot[0]],
             )
             changed = con.execute(
@@ -589,11 +589,11 @@ def decide(run_id: str, interrupt_id: str, revision: int, decision: dict) -> dic
         ):
             raise ValueError("Une modification ne peut pas changer d’outil.")
         con.execute(
-            f"UPDATE app.automation_interrupts SET decision_json=?,revision=revision+1 WHERE {OWNER} AND run_id=? AND id=? AND revision=?",
+            f"UPDATE app.automation_interrupts SET decision_json=?,revision=revision+1 WHERE {OWNER} AND run_id=? AND id=? AND revision=? RETURNING id",
             [encoded, run_id, interrupt_id, revision],
         )
         con.execute(
-            f"UPDATE app.automation_runs SET state='ready',revision=revision+1 WHERE {OWNER} AND id=?",
+            f"UPDATE app.automation_runs SET state='ready',revision=revision+1 WHERE {OWNER} AND id=? RETURNING id",
             [run_id],
         )
     return run_detail(run_id)

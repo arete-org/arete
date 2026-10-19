@@ -33,7 +33,7 @@ def record(key, kind, title, body, url, reference=None):
 def delivered(identifier, result):
     with db_connection() as con:
         con.execute(
-            f"UPDATE app.notifications SET push_json=? WHERE {OWNER} AND id=?",
+            f"UPDATE app.notifications SET push_json=? WHERE {OWNER} AND id=? RETURNING id",
             [json.dumps(result), identifier],
         )
 

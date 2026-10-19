@@ -301,7 +301,7 @@ class GarminRepository:
             # its verified export as is instead of asking for a re-export.
             if set(fields) - {"status", "garmin_pushed_at"}:
                 conn.execute(
-                    "UPDATE garmin_exports SET state='dirty',updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=? AND state<>'removed') ",
+                    "UPDATE garmin_exports SET state='dirty',updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=? AND state<>'removed') RETURNING session_id",
                     [session_id],
                 )
             if connection is None:
@@ -341,7 +341,7 @@ class GarminRepository:
                     "Réconcilie l’export Garmin avant de supprimer la séance."
                 )
             conn.execute(
-                "UPDATE garmin_exports SET deleted=true,state='pending_removal',updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=? AND state<>'removed') ",
+                "UPDATE garmin_exports SET deleted=true,state='pending_removal',updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=? AND state<>'removed') RETURNING session_id",
                 [session_id],
             )
             result = conn.execute(
@@ -706,7 +706,7 @@ class GarminRepository:
         conn = self._get_connection()
         try:
             conn.execute(
-                f"UPDATE actual_sessions SET {assignments} WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) ",
+                f"UPDATE actual_sessions SET {assignments} WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
                 [*fields.values(), session_id],
             )
         finally:
@@ -746,12 +746,12 @@ class GarminRepository:
                 [session_id],
             ).fetchone()
             conn.execute(
-                "UPDATE app.game_events SET eligible=false,reason='removed',processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) ",
+                "UPDATE app.game_events SET eligible=false,reason='removed',processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) RETURNING source_key",
                 [f"actual:{session_id}"],
             )
             # A Muscu log recorded with it is free to pair again.
             conn.execute(
-                "UPDATE app.strength_sessions SET actual_session_id = NULL WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (actual_session_id = ?) ",
+                "UPDATE app.strength_sessions SET actual_session_id = NULL WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (actual_session_id = ?) RETURNING id",
                 [session_id],
             )
             conn.execute("COMMIT")

@@ -649,7 +649,7 @@ class StrengthRepository:
             ).fetchone()
 
             conn.execute(
-                "UPDATE app.game_events SET eligible=false,reason='removed',processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) ",
+                "UPDATE app.game_events SET eligible=false,reason='removed',processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) RETURNING source_key",
                 [f"strength:{session_id}"],
             )
             conn.execute("COMMIT")
@@ -678,11 +678,11 @@ class StrengthRepository:
                 conn.execute("ROLLBACK")
                 return False
             conn.execute(
-                "UPDATE app.exercise_sets SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_exercise_id IN (SELECT id FROM app.visible_session_exercises WHERE session_id = ?))",
+                "UPDATE app.exercise_sets SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_exercise_id IN (SELECT id FROM app.visible_session_exercises WHERE session_id = ?)) RETURNING id",
                 [session_id],
             )
             conn.execute(
-                "UPDATE app.session_exercises SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id = ?)",
+                "UPDATE app.session_exercises SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id = ?) RETURNING id",
                 [session_id],
             )
             for ex in exercises:
@@ -988,12 +988,12 @@ class StrengthRepository:
                 conn.execute("ROLLBACK")
                 return False
             conn.execute(
-                "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) ",
+                "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
                 (garmin_id, session_id),
             )
             # A manual link merges the rewards, even ones an automatic link kept.
             conn.execute(
-                "UPDATE app.game_events SET processed=false, reason=replace(reason, ?, '') WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
+                "UPDATE app.game_events SET processed=false, reason=replace(reason, ?, '') WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) RETURNING source_key",
                 [KEPT_AT_LINK, f"strength:{session_id}", f"actual:{garmin_id}"],
             )
             conn.execute("COMMIT")
@@ -1052,7 +1052,7 @@ class StrengthRepository:
             ).fetchall()
             for session_id, actual_id, _day in pairs:
                 conn.execute(
-                    "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ? AND actual_session_id IS NULL) ",
+                    "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ? AND actual_session_id IS NULL) RETURNING id",
                     (actual_id, session_id),
                 )
                 _keep_settled_rewards(conn, session_id, actual_id)
@@ -1112,7 +1112,7 @@ class StrengthRepository:
                 conn.execute(
                     f"UPDATE app.strength_drafts SET exercises_json = ? WHERE {_DRAFT_SCOPE}"
                     " AND actual_session_id = ? AND exercises_json = '[]'"
-                    " AND status = 'pending'",
+                    " AND status = 'pending' RETURNING id",
                     [
                         json.dumps(
                             [e.as_dict() for e in exercises], ensure_ascii=False
@@ -1124,7 +1124,7 @@ class StrengthRepository:
                 conn.execute(
                     f"UPDATE app.strength_drafts SET status = 'pending', settled_at = NULL,"
                     f" strength_session_id = NULL WHERE {_DRAFT_SCOPE}"
-                    " AND actual_session_id = ? AND status <> 'pending'",
+                    " AND actual_session_id = ? AND status <> 'pending' RETURNING id",
                     [actual_session_id],
                 )
             found = conn.execute(
@@ -1225,8 +1225,8 @@ class StrengthRepository:
         link, its game evidence and the draft's status: None (nothing written)
         when the draft is no longer pending, its activity got a log meanwhile,
         or another tab completes it concurrently. The draft row is deleted and
-        written back completed: DuckDB reports a concurrent delete of the same
-        row as a conflict, which it does not for an update of a keyed table.
+        written back completed: the delete conflicts with any other write of
+        the row, since they all return (docs/architecture.md, Concurrent writes).
         """
         conn = self._get_connection()
         conn.execute("BEGIN TRANSACTION")
@@ -1418,20 +1418,20 @@ def _keep_settled_rewards(conn, session_id: int, actual_id: int) -> None:
     if not past:
         # Nothing counted yet: the next projection merges them, as after a manual link.
         conn.execute(
-            "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
+            "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) RETURNING source_key",
             keys,
         )
     elif len(past) == 1 and weeks == 1:
         kept = past.pop()
         conn.execute(
-            "UPDATE app.game_events SET canonical_key=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (canonical_key=?) ",
+            "UPDATE app.game_events SET canonical_key=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (canonical_key=?) RETURNING source_key",
             [kept, activity if kept == log else log],
         )
     else:
         # A merged group settles in its first week: a later week's credit would
         # be reversed. Both sides counted, or weeks apart: keep both keys.
         conn.execute(
-            "UPDATE app.game_events SET reason=reason || ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? AND NOT ends_with(reason, ?)) ",
+            "UPDATE app.game_events SET reason=reason || ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? AND NOT ends_with(reason, ?)) RETURNING source_key",
             [KEPT_AT_LINK, keys[0], KEPT_AT_LINK],
         )
 

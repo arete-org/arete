@@ -361,7 +361,7 @@ def reserve(
             if counted is None:
                 return "plafond quotidien de coaching atteint"
             con.execute(
-                "INSERT INTO app.coach_attention_claims (subject_key,source_ref,source_revision,kind,state,expires_at,claimed_at,created_at) VALUES (?,?,?,?,'claimed',?,?,?) ON CONFLICT (athlete_id,subject_key) DO UPDATE SET claimed_at=excluded.claimed_at",
+                "INSERT INTO app.coach_attention_claims (subject_key,source_ref,source_revision,kind,state,expires_at,claimed_at,created_at) VALUES (?,?,?,?,'claimed',?,?,?) ON CONFLICT (athlete_id,subject_key) DO UPDATE SET claimed_at=excluded.claimed_at RETURNING subject_key",
                 [
                     candidate.subject_key,
                     candidate.source_ref,

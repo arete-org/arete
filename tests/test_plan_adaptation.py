@@ -486,3 +486,88 @@ def test_the_morning_builds_each_payload_once(tempo, monkeypatch):
         # The next run decides from the same single read, with no request.
         assert plan_adaptation.push_today(client, DAY).startswith("0 sent")
     assert built == [tempo, tempo]
+
+
+# ARE-150: a write committed inside the answer's snapshot is never overwritten.
+_SESSION_WRITE = r"UPDATE planned_sessions SET .*revision=revision\+1"
+
+
+def _calendar_event(session_id: int) -> None:
+    from arete.services.calendar_repository import CalendarRepository
+
+    CalendarRepository("google").record_event(
+        session_id, "cal", "event", "etag", "hash"
+    )
+
+
+def _event_id(session_id: int) -> str | None:
+    con = connect()
+    try:
+        return con.execute(
+            "SELECT google_event_id FROM app.planned_sessions WHERE id = ?",
+            [session_id],
+        ).fetchone()[0]
+    finally:
+        con.close()
+
+
+def test_an_answer_racing_a_calendar_write_applies_nothing(tempo, monkeypatch):
+    from write_race import race
+
+    proposal = _adapt(70.0)[0]
+    with (
+        race(monkeypatch, _SESSION_WRITE, lambda: _calendar_event(tempo)),
+        pytest.raises(plan_adaptation.ProposalConflict),
+    ):
+        plan_adaptation.respond(proposal.id, proposal.revision, "apply")
+    session = GarminRepository().get_planned_session(tempo)
+    assert session is not None and session.session_type == SessionType.TEMPO
+    assert _event_id(tempo) == "event"
+
+
+def test_an_edit_racing_a_calendar_write_is_refused(tempo, monkeypatch):
+    import duckdb
+    from write_race import race
+
+    with (
+        race(monkeypatch, _SESSION_WRITE, lambda: _calendar_event(tempo)),
+        pytest.raises(duckdb.TransactionException),
+    ):
+        GarminRepository().update_planned_session_fields(
+            tempo, expected_revision=1, description="Plus court"
+        )
+    assert _event_id(tempo) == "event"
+
+
+def test_a_reapplied_choice_racing_a_revert_stamp_is_refused(tempo, monkeypatch):
+    import duckdb
+    from write_race import race
+
+    from arete.dataio.db import transaction
+    from arete.services.plan_repository import PlanDecisionRepository
+
+    proposal = _adapt(70.0)[0]
+    kept = plan_adaptation.respond(proposal.id, proposal.revision, "keep")
+    assert kept.state == "dismissed"
+    repo = PlanDecisionRepository()
+    with (
+        race(
+            monkeypatch,
+            r"UPDATE app\.plan_decisions SET\s+decision",
+            lambda: repo.mark(kept.id, "reverted_at"),
+        ),
+        pytest.raises(duckdb.TransactionException),
+        transaction() as con,
+    ):
+        repo.reapply(
+            kept.id,
+            kept.revision,
+            decision="ease",
+            reason="Choix de l’athlète",
+            original={},
+            adapted=None,
+            session_revision=1,
+            con=con,
+        )
+    stamped = repo.get(kept.id)
+    assert stamped is not None and stamped.reverted_at is not None

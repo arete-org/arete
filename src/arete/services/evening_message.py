@@ -584,7 +584,7 @@ def _file(message: EveningMessage) -> str:
         with db_connection() as con:
             con.execute(
                 "UPDATE app.coach_evening_messages SET journaled_at = ? "
-                f"WHERE {_SCOPE} AND id = ? AND journaled_at IS NULL",
+                f"WHERE {_SCOPE} AND id = ? AND journaled_at IS NULL RETURNING id",
                 [naive_utc_now(), message.id],
             )
     except Exception as exc:

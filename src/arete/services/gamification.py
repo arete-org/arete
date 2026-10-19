@@ -107,7 +107,7 @@ def _require(con):
 def _lock(con) -> None:
     # DuckDB rejects overlapping writers on this row. Never retry a failed write.
     con.execute(
-        "UPDATE app.game_profile SET version=version WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+        "UPDATE app.game_profile SET version=version WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
     )
 
 
@@ -130,7 +130,7 @@ def set_preference(command: Preference) -> dict:
         if p[0] != command.enabled:
             now = datetime.now(UTC)
             con.execute(
-                "UPDATE app.game_profile SET enabled=?,version=version+1,activated_at=coalesce(activated_at,?) WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+                "UPDATE app.game_profile SET enabled=?,version=version+1,activated_at=coalesce(activated_at,?) WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
                 [command.enabled, now],
             )
             if command.enabled:
@@ -144,7 +144,7 @@ def set_preference(command: Preference) -> dict:
                 )
             else:
                 con.execute(
-                    "UPDATE app.game_periods SET ended_at=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (ended_at IS NULL) ",
+                    "UPDATE app.game_periods SET ended_at=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (ended_at IS NULL) RETURNING started_at",
                     [now],
                 )
     return preference()
@@ -339,7 +339,7 @@ def sync() -> dict:
                 """UPDATE app.game_events e SET canonical_key=a.canonical_key
                 FROM app.visible_strength_sessions s, app.visible_game_events a
                 WHERE e.athlete_id = getvariable('arete_athlete_id') AND e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=e.athlete_id AND scope_owner.deleted_at IS NULL) AND (e.source_key='strength:'||s.id AND a.source_key='actual:'||s.actual_session_id
-                AND e.canonical_key<>a.canonical_key AND NOT ends_with(e.reason, ?)) """,
+                AND e.canonical_key<>a.canonical_key AND NOT ends_with(e.reason, ?)) RETURNING e.source_key""",
                 [KEPT_AT_LINK],
             )
         # A duplicate imported with another date must settle its original week too.
@@ -361,7 +361,7 @@ def sync() -> dict:
                     )
         if pending:
             con.execute(
-                "UPDATE app.game_events SET processed=true WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key IN (SELECT unnest(?))) ",
+                "UPDATE app.game_events SET processed=true WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key IN (SELECT unnest(?))) RETURNING source_key",
                 [[key for key, _ in pending]],
             )
         xp, _ = _balance(con)
@@ -371,7 +371,7 @@ def sync() -> dict:
             )
         if pending or _balance(con) != balance_before:
             con.execute(
-                "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+                "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
             )
     return snapshot()
 
@@ -499,7 +499,7 @@ def purchase(command: Purchase) -> dict:
             [command.key, fingerprint, json.dumps(result)],
         )
         con.execute(
-            "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+            "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
         )
     return result
 
@@ -515,7 +515,7 @@ def equip(command: Equip) -> dict:
         ).fetchone():
             raise GameError("Cette tenue n’est pas possédée.")
         con.execute(
-            "UPDATE app.game_profile SET equipped=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+            "UPDATE app.game_profile SET equipped=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
             [command.skin],
         )
     return snapshot()
@@ -528,7 +528,7 @@ def appearance(command: Appearance) -> dict:
         if p[1] != command.version:
             raise GameError("Le profil a changé. Actualise-le.")
         con.execute(
-            "UPDATE app.game_profile SET athlete_class=?,silhouette=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+            "UPDATE app.game_profile SET athlete_class=?,silhouette=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
             [command.athlete_class, command.silhouette],
         )
     return snapshot()

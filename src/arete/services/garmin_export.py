@@ -533,7 +533,7 @@ def _claim(
             )
         if old:
             con.execute(
-                "UPDATE app.garmin_exports SET state='working',operation_id=?,updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=?) ",
+                "UPDATE app.garmin_exports SET state='working',operation_id=?,updated_at=current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id=?) RETURNING session_id",
                 [str(uuid4()), session_id],
             )
         else:
@@ -734,7 +734,7 @@ def export(
             writing = None
         with db_connection() as con:
             con.execute(
-                "UPDATE app.planned_sessions SET garmin_workout_id=?,garmin_schedule_id=?,garmin_pushed_at=? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id=?) ",
+                "UPDATE app.planned_sessions SET garmin_workout_id=?,garmin_schedule_id=?,garmin_pushed_at=? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id=?) RETURNING id",
                 # Every source of steps (explicit, parsed, derived) gets its
                 # push time and ids, so a card reads them alike.
                 # Naive UTC: DuckDB stores an aware value (and current_timestamp)
@@ -945,7 +945,7 @@ def _remove(
             _verify_absent(exchange, f"{WORKOUT}/{workout_id}")
         with db_connection() as con:
             con.execute(
-                "UPDATE app.planned_sessions SET garmin_workout_id=NULL,garmin_schedule_id=NULL,garmin_pushed_at=NULL WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id=?) ",
+                "UPDATE app.planned_sessions SET garmin_workout_id=NULL,garmin_schedule_id=NULL,garmin_pushed_at=NULL WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id=?) RETURNING id",
                 [session_id],
             )
         return _update(

@@ -629,3 +629,34 @@ def test_the_session_page_points_to_the_days_unlinked_log(con, client):
     ).fetchone()[0]
     body = client.get(url).json()
     assert (body["strength_log_id"], body["strength_unlinked_log_id"]) == (None, typed)
+
+
+def test_a_completion_racing_garmin_s_names_writes_nothing(con, monkeypatch):
+    """ARE-150: the sync fills the names inside the completion's snapshot."""
+    from write_race import race
+
+    today = athlete_today()
+    activity = _activity(con, today)
+    draft = open_journal_draft(activity)
+    assert draft is not None
+    repo = StrengthRepository()
+    exercise = repo.get_or_create_exercise_from_catalog("hip_thrust")
+    assert exercise is not None and exercise.id is not None
+    session = StrengthSession(
+        name="draft-test racing",
+        exercises=[
+            SessionExercise(
+                exercise_id=exercise.id,
+                exercise=exercise,
+                sets=[ExerciseSet(set_number=1, reps=10, weight_kg=100)],
+            )
+        ],
+    )
+    with race(
+        monkeypatch,
+        r"DELETE FROM app\.strength_drafts",
+        lambda: open_garmin_draft(activity, today, SUMMARIES[:1]),
+    ):
+        assert repo.complete_draft(draft.id, session) is None
+    [kept] = repo.pending_drafts(draft.id)
+    assert [e.exercise_id for e in kept.exercises] == ["bench_press"]

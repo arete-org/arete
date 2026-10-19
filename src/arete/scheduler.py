@@ -652,7 +652,7 @@ def _run_athlete(
             # Dated by the claim: a run that ends past midnight is the day's.
             with db_connection() as con:
                 con.execute(
-                    "UPDATE app.athletes SET last_sync_at=?,sync_lease_until=NULL WHERE id=?",
+                    "UPDATE app.athletes SET last_sync_at=?,sync_lease_until=NULL WHERE id=? RETURNING id",
                     [_naive_utc(claimed_at), athlete_id],
                 )
             # Stamped: an answer given from now on replans on its own.

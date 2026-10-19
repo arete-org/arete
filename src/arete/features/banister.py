@@ -173,6 +173,7 @@ def store_coefficients(coeffs: dict, user_id: int | None = None) -> None:
                 r2 = EXCLUDED.r2,
                 n_samples = EXCLUDED.n_samples,
                 fitted_at = now()
+            RETURNING user_id
             """,
             [
                 user_id,

@@ -159,7 +159,7 @@ def upsert_user(
             "VALUES (?,?,?,?,?) ON CONFLICT (clerk_user_id) DO UPDATE SET "
             "email=EXCLUDED.email,name=coalesce(EXCLUDED.name,app.users.name), "
             "email_verified_at=EXCLUDED.email_verified_at,profile_synced_at=EXCLUDED.profile_synced_at, "
-            "last_seen_at=EXCLUDED.profile_synced_at",
+            "last_seen_at=EXCLUDED.profile_synced_at RETURNING id",
             [clerk_user_id, email, name, now if verified else None, now],
         )
         row = con.execute(
@@ -185,7 +185,7 @@ def upsert_user(
                 assert created is not None
                 athlete_id = int(created[0])
             con.execute(
-                "UPDATE app.users SET athlete_id=? WHERE clerk_user_id=?",
+                "UPDATE app.users SET athlete_id=? WHERE clerk_user_id=? RETURNING id",
                 [athlete_id, clerk_user_id],
             )
             # Fresh accounts start empty; only defaults are shared with the
@@ -337,11 +337,11 @@ def deactivate_athlete(athlete_id: int, *, actor: AppUser) -> None:
                 "Seul le propriétaire peut désactiver un administrateur.", 403
             )
         con.execute(
-            "UPDATE app.athletes SET deleted_at=current_timestamp WHERE id=? AND deleted_at IS NULL",
+            "UPDATE app.athletes SET deleted_at=current_timestamp WHERE id=? AND deleted_at IS NULL RETURNING id",
             [athlete_id],
         )
         con.execute(
-            "UPDATE app.users SET deleted_at=current_timestamp WHERE athlete_id=? AND deleted_at IS NULL",
+            "UPDATE app.users SET deleted_at=current_timestamp WHERE athlete_id=? AND deleted_at IS NULL RETURNING id",
             [athlete_id],
         )
         con.execute("COMMIT")
@@ -364,7 +364,8 @@ def reactivate_athlete(athlete_id: int) -> None:
         if row is None:
             raise AccountError("Athlète inconnu.", 404)
         con.execute(
-            "UPDATE app.users SET deleted_at=NULL WHERE athlete_id=?", [athlete_id]
+            "UPDATE app.users SET deleted_at=NULL WHERE athlete_id=? RETURNING id",
+            [athlete_id],
         )
         con.execute("COMMIT")
     except BaseException:
