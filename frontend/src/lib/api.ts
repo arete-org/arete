@@ -6,22 +6,28 @@ const API_BASE = "/api";
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: string | null;
+  /** Machine-readable reason some answers carry beside the French detail. */
+  readonly code: string | null;
 
   constructor(status: number, body: string) {
     super(`API Error ${status}: ${body}`);
     this.status = status;
-    this.detail = parseDetail(body);
+    this.detail = parseField(body, "detail");
+    this.code = parseField(body, "code");
   }
 }
 
-function parseDetail(body: string): string | null {
+function parseField(body: string, field: "detail" | "code"): string | null {
   try {
-    const detail = (JSON.parse(body) as { detail?: unknown }).detail;
-    return typeof detail === "string" ? detail : null;
+    const value = (JSON.parse(body) as Record<string, unknown>)[field];
+    return typeof value === "string" ? value : null;
   } catch {
     return null;
   }
 }
+
+/** The `code` of an answer refusing a login whose account was erased (api/auth.py). */
+export const ACCOUNT_DELETED = "account_deleted";
 
 /** The record when the answer is one (an object with a numeric id), else null.
  *  "Nothing yet" endpoints answer null; anything else must not pass for a record. */
@@ -430,6 +436,10 @@ export const authApi = {
   },
 
   me: () => fetchAPI<AuthMe>("/auth/me"),
+
+  /** Erases the signed-in athlete for good; the server checks the typed confirmation. */
+  deleteMe: (confirmation: string) =>
+    fetchAPI<void>("/auth/me/delete", { method: "POST", body: JSON.stringify({ confirmation }) }),
 };
 
 // ========================= //

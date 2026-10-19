@@ -82,8 +82,10 @@ def _zip(content: bytes) -> dict[str, str]:
 
 def test_zip_has_one_csv_per_table_and_the_journal(stored):
     files = _zip(data_export.build("zip").content)
-    tables = {t.name for t in data_export.TABLES}
+    tables = {t.name for t in data_export.TABLES} - data_export.OPT_IN
     assert {f"{t}.csv" for t in tables} <= set(files)
+    # Streams weigh too much for a whole history: only on request.
+    assert "activity_streams.csv" not in files
     assert files[f"journal/{ARCHIVE}"].startswith("## 2001-01-10")
     sessions = list(csv.DictReader(io.StringIO(files["actual_sessions.csv"])))
     names = {row["name"] for row in sessions}
@@ -130,6 +132,61 @@ def test_the_range_filters_dated_tables_only(stored):
     assert any(g["name"] == "test-export goal" for g in body["tables"]["goals"])
     assert ARCHIVE in body["journal"]
     assert body["start"] == "2001-01-01"
+
+
+def test_a_session_s_feedback_and_streams_leave_dated_by_their_session(stored):
+    con = connect()
+    (session_id,) = con.execute(
+        "SELECT id FROM app.actual_sessions WHERE name = 'test-export Garmin'"
+    ).fetchone()
+    con.execute(
+        "INSERT INTO app.session_feedback (actual_session_id, text, source, trigger) "
+        "VALUES (?, 'test-export bien géré', 'agent', 'sync')",
+        [session_id],
+    )
+    con.execute(
+        "INSERT INTO app.activity_streams (actual_session_id, sample_count, t_sec) "
+        "VALUES (?, 2, [0, 1])",
+        [session_id],
+    )
+    con.close()
+    try:
+        january = {"start": date(2001, 1, 1), "end": date(2001, 1, 31)}
+        body = json.loads(data_export.build("json", **january).content)
+        [feedback] = body["tables"]["session_feedback"]
+        assert (feedback["date"], feedback["text"]) == (
+            "2001-01-10",
+            "test-export bien géré",
+        )
+        assert "activity_streams" not in body["tables"]
+        asked = json.loads(
+            data_export.build("json", names=["activity_streams"], **january).content
+        )
+        [stream] = asked["tables"]["activity_streams"]
+        assert stream["actual_session_id"] == session_id
+        later = data_export.build(
+            "json", start=date(2001, 2, 1), names=["session_feedback"]
+        ).content
+        assert json.loads(later)["tables"]["session_feedback"] == []
+    finally:
+        con = connect()
+        for table in ("session_feedback", "activity_streams"):
+            con.execute(
+                f"DELETE FROM app.{table} WHERE actual_session_id = ?", [session_id]
+            )
+        con.close()
+
+
+def test_the_settings_page_offers_exactly_what_the_server_exports():
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1] / "frontend/src/lib/dataExport.ts"
+    ).read_text(encoding="utf-8")
+    listed = re.findall(r"\{ id: '(\w+)', label: '[^']*'(, optIn: true)? \}", source)
+    names = [name for name, _ in listed]
+    assert sorted(names) == sorted(data_export.EXPORT_NAMES)
+    assert {name for name, opt_in in listed if opt_in} == data_export.OPT_IN
 
 
 def test_api_downloads_selected_tables_as_an_attachment(stored, router_client):
@@ -214,3 +271,115 @@ def test_a_review_being_written_is_not_exported():
         con.execute("DELETE FROM app.weekly_reviews WHERE week_start < '2002-01-01'")
         con.close()
     assert [r["week_start"] for r in body["tables"]["weekly_reviews"]] == ["2001-01-01"]
+
+
+def test_a_timestamp_late_on_the_end_day_is_inside_the_range():
+    con = connect()
+    con.execute(
+        "INSERT INTO app.notifications (id, event_key, kind, title, body, url, created_at) "
+        "VALUES ('test-export-late', 'test-export-late', 'briefing', 'Briefing', 'Corps', "
+        "'/', TIMESTAMPTZ '2001-01-31 23:30:00'), ('test-export-next', "
+        "'test-export-next', 'briefing', 'Briefing', 'Corps', '/', "
+        "TIMESTAMPTZ '2001-02-01 00:00:00')"
+    )
+    con.close()
+    try:
+        body = json.loads(
+            data_export.build(
+                "json",
+                start=date(2001, 1, 31),
+                end=date(2001, 1, 31),
+                names=["notifications"],
+            ).content
+        )
+    finally:
+        con = connect()
+        con.execute("DELETE FROM app.notifications WHERE id LIKE 'test-export-%'")
+        con.close()
+    assert [r["id"] for r in body["tables"]["notifications"]] == ["test-export-late"]
+
+
+def _text(words: int) -> str:
+    """An SQL expression of about 10 * ``words`` characters, compressing like prose."""
+    return (
+        f"array_to_string(list_transform(range({words}), "
+        "k -> md5(i::VARCHAR || '-' || k::VARCHAR)[1:8 + (k % 5)]), ' ')"
+    )
+
+
+@pytest.fixture
+def five_years():
+    """A long-time athlete: five years of sessions, health, feedback and coaching."""
+    laps = (
+        "to_json(list_transform(range(12), k -> {'lap': k, 'sec': (random() * 400)::INT, "
+        "'dist': (random() * 1000)::INT, 'hr': (120 + random() * 50)::INT, "
+        "'max_hr': (150 + random() * 30)::INT, 'pace': (240 + random() * 120)::INT, "
+        "'cadence': (160 + random() * 30)::INT, 'ascent': (random() * 40)::INT}))::VARCHAR"
+    )
+    days = "range(1825) t(i)"
+    statements = [
+        "INSERT INTO app.actual_sessions (user_id, date, sport, name, notes, duration_sec, "
+        "distance_m, avg_hr, laps_json, splits_json, source) "
+        f"SELECT 1, DATE '1990-01-01' + i::INT, 'running', 'test-five Footing', {_text(20)}, "
+        f"3600, 10000, 140, {laps}, {laps}, 'garmin_connect' FROM {days}",
+        "INSERT INTO app.planned_sessions (user_id, date, sport, session_type, description, "
+        f"structure_json) SELECT 1, DATE '1990-01-01' + i::INT, 'running', 'endurance', "
+        f"{_text(25)}, {laps} FROM {days}",
+        "INSERT INTO app.daily_metrics (user_id, date, resting_hr, hrv_last_night, "
+        "sleep_score, steps, training_readiness_feedback) SELECT 1, "
+        f"DATE '1990-01-01' + i::INT, 48, 60, 80, 9000, {_text(10)} FROM {days}",
+        "INSERT INTO app.session_feedback (actual_session_id, text, source, trigger) "
+        f"SELECT s.id, {_text(60)}, 'agent', 'sync' FROM (SELECT id, id AS i FROM "
+        "app.actual_sessions WHERE name = 'test-five Footing') s",
+        "INSERT INTO app.weekly_reviews (week_start, text, source, proposals_json) "
+        f"SELECT DATE '1990-01-01' + (i * 7)::INT, {_text(300)}, 'agent', '[]' "
+        "FROM range(260) t(i)",
+        "INSERT INTO app.daily_checkins (date, sleep, legs, mood, note, answered_at) "
+        f"SELECT DATE '1990-01-01' + i::INT, 3, 3, 3, {_text(6)}, "
+        f"TIMESTAMP '1990-01-01 06:00' + i * INTERVAL 1 DAY FROM {days}",
+        # Heavy histories the default leaves out: a briefing and a decision a day.
+        "INSERT INTO app.coach_briefings (date, text, priority, source, status, trigger) "
+        f"SELECT DATE '1990-01-01' + i::INT, {_text(200)}, 'info', 'agent', 'ok', 'sync' "
+        f"FROM {days}",
+        "INSERT INTO app.plan_decisions (date, planned_session_id, decision, reason, "
+        f"original_json, adapted_json) SELECT DATE '1990-01-01' + i::INT, i::INT, 'keep', "
+        f"{_text(30)}, {laps}, {laps} FROM {days}",
+    ]
+    con = connect()
+    for statement in statements:
+        con.execute(statement)
+    con.close()
+    yield
+    con = connect()
+    con.execute(
+        "DELETE FROM app.session_feedback WHERE actual_session_id IN "
+        "(SELECT id FROM app.actual_sessions WHERE name = 'test-five Footing')"
+    )
+    for table in (
+        "actual_sessions",
+        "planned_sessions",
+        "daily_metrics",
+        "daily_checkins",
+        "coach_briefings",
+        "plan_decisions",
+    ):
+        con.execute(f"DELETE FROM app.{table} WHERE date < '1995-01-01'")
+    con.execute("DELETE FROM app.weekly_reviews WHERE week_start < '1996-01-01'")
+    con.close()
+
+
+def test_the_default_export_fits_one_response_for_years_of_history(five_years):
+    """What the deletion screen suggests downloading must not be refused."""
+    content = data_export.build("zip").content
+    assert len(content) <= data_export.EXPORT_LIMIT_BYTES
+    files = _zip(content)
+    assert "coach_briefings.csv" not in files and "plan_decisions.csv" not in files
+    assert len(files["actual_sessions.csv"].splitlines()) > 1825
+    # Every opt-in table together would not fit: they come one choice away.
+    everything = [n for n in data_export.EXPORT_NAMES]
+    with pytest.raises(data_export.ExportTooLarge):
+        data_export.build("zip", names=everything)
+    asked = data_export.build(
+        "zip", start=date(1994, 1, 1), names=["coach_briefings", "plan_decisions"]
+    ).content
+    assert set(_zip(asked)) == {"coach_briefings.csv", "plan_decisions.csv"}

@@ -1126,8 +1126,12 @@ decision without replay. See the memory document for thresholds and limitations.
 
 `services/data_export.py` owns what leaves the database in the athlete's
 download: an allowlist of tables plus the journal files, never a credential
-table (`tests/test_data_export.py` also rejects token-like columns). Bodies are
-built in memory and refused above 4 MB, under Vercel's response limit.
+table (`tests/test_data_export.py` also rejects token-like columns and checks
+that **Réglages → Données** offers exactly the server's list). Bodies are
+built in memory and refused above 4 MB, under Vercel's response limit; streams
+and saved conversations are therefore exported only on request.
+`services/account_deletion.py` erases the signed-in athlete for good
+(`POST /auth/me/delete`, [multi-athlete](multi-athlete.md#erasing-an-account)).
 `services/year_review.py` derives a calendar year from the shared TSS estimate
 and fitness series, with no model request. Both are plain HTTP reads
 (`api/data_export.py`, `api/year_review.py`); the coach never receives them.

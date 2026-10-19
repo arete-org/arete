@@ -670,9 +670,14 @@ def test_m54_creates_the_strength_drafts_once_and_atomically(tmp_path, monkeypat
     to_schema_53()
     with migration_connection(str(path)) as con:
         assert init_duckdb.pending_migrations(con) == [54]
-        # The previous release (up to 53) finds the database current.
+        # The previous release (without 54) finds the database current; later
+        # versions may follow 54 in the list.
         with monkeypatch.context() as previous:
-            previous.setattr(init_duckdb, "MIGRATIONS", init_duckdb.MIGRATIONS[:-1])
+            previous.setattr(
+                init_duckdb,
+                "MIGRATIONS",
+                [m for m in init_duckdb.MIGRATIONS if m[0] != 54],
+            )
             assert init_duckdb.pending_migrations(con) == []
 
         def broken_view(*_args):

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from './api';
 import { setTokenGetter } from './auth';
-import { downloadExport, EXPORT_TABLES, exportUrl } from './dataExport';
+import { DEFAULT_EXPORT_TABLES, downloadExport, EXPORT_TABLES, exportUrl } from './dataExport';
 
 afterEach(() => {
   setTokenGetter(null);
@@ -12,7 +12,13 @@ afterEach(() => {
 
 describe('exportUrl', () => {
   it('leaves the defaults out of the URL', () => {
-    expect(exportUrl({ format: 'zip', tables: EXPORT_TABLES.map((t) => t.id) })).toBe('/api/export/zip');
+    expect(exportUrl({ format: 'zip', tables: [...DEFAULT_EXPORT_TABLES].reverse() })).toBe('/api/export/zip');
+  });
+
+  it('names every table once an opt-in one is chosen', () => {
+    const url = exportUrl({ format: 'zip', tables: EXPORT_TABLES.map((t) => t.id) });
+    expect(new URLSearchParams(url.split('?')[1]).getAll('tables')).toEqual(EXPORT_TABLES.map((t) => t.id));
+    expect(DEFAULT_EXPORT_TABLES).not.toContain('activity_streams');
   });
 
   it('carries the range and the selected tables', () => {
@@ -40,7 +46,7 @@ describe('downloadExport', () => {
       downloaded = this.download;
     });
 
-    await downloadExport({ format: 'zip', tables: EXPORT_TABLES.map((t) => t.id) });
+    await downloadExport({ format: 'zip', tables: DEFAULT_EXPORT_TABLES });
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(new Headers(init.headers).get('Authorization')).toBe('Bearer jeton');
