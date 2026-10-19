@@ -47,6 +47,7 @@ class Suggestion:
     exercise_id: str
     name: str
     score: int
+    name_fr: str = ""  # what the French screens show
 
 
 @dataclass
@@ -136,4 +137,5 @@ def match_exercise(raw_name: str) -> ExerciseMatch:
 
 
 def _suggestion(ex_id: str, score: int) -> Suggestion:
-    return Suggestion(ex_id, EXERCISES_BY_ID[ex_id]["name"], score)
+    entry = EXERCISES_BY_ID[ex_id]
+    return Suggestion(ex_id, entry["name"], score, entry["name_fr"])

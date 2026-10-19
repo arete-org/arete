@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Pencil, Save } from 'lucide-react';
+import { ChevronRight, Dumbbell, Pencil, Save } from 'lucide-react';
 import { cn, formatDurationCompact } from '@/lib/utils';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
 import { Button, Panel, RPE_TEXT, RpeBadge, Textarea, rpeTone } from '@/components/ui';
 import { analyticsApi } from '@/lib/api';
-import { qk, strengthSessionsQuery } from '@/lib/queryKeys';
+import { qk, strengthDraftsQuery, strengthSessionsQuery } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import type { CardioSession } from '@/types';
+import { SameDayLogWarning } from './SameDayLogWarning';
+import { useOpenDraft } from './useOpenDraft';
 
 const SOURCE_BADGE: Record<string, string> = {
   strava: 'bg-strava/20 text-strava',
@@ -25,7 +27,17 @@ export function RecentSessions() {
   });
   // A Garmin activity linked to a Muscu log is shown once, as that log (Force tab).
   const { data: strength } = useQuery(strengthSessionsQuery);
-  const linked = new Set((strength ?? []).map((l) => l.garmin_activity_id));
+  // One awaiting its loads is shown once too, in the Force tab's « À compléter ».
+  const { data: drafts } = useQuery(strengthDraftsQuery);
+  const linked = new Set([
+    ...(strength ?? []).map((l) => l.garmin_activity_id),
+    ...(drafts?.items ?? []).map((d) => d.actual_session_id),
+  ]);
+  const openDraft = useOpenDraft();
+  // A day's Muscu log linked to no activity is probably that strength session.
+  const unlinkedLogByDay = new Map(
+    (strength ?? []).filter((l) => !l.garmin_activity_id).map((l) => [l.date, l.id] as const)
+  );
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRpe, setEditRpe] = useState<number | null>(null);
@@ -177,6 +189,24 @@ export function RecentSessions() {
                     </Button>
                   </div>
                 </div>
+              )}
+
+              {!editing && s.sport === 'strength' && unlinkedLogByDay.has(s.date) && (
+                <div className="mt-2">
+                  <SameDayLogWarning logId={unlinkedLogByDay.get(s.date)!} />
+                </div>
+              )}
+              {!editing && s.sport === 'strength' && (
+                <Button
+                  variant="gold"
+                  size="sm"
+                  className="mt-2 min-h-11"
+                  loading={openDraft.isPending && openDraft.variables === s.id}
+                  onClick={() => openDraft.mutate(s.id)}
+                >
+                  <Dumbbell className="w-4 h-4" aria-hidden />
+                  Ajoute tes charges
+                </Button>
               )}
 
               {!editing && s.notes && (

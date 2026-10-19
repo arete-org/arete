@@ -208,6 +208,24 @@ CREATE TABLE IF NOT EXISTS app.exercise_sets (
     notes               VARCHAR
 );
 
+-- A Garmin strength activity awaiting its loads (ARE-132): at most one per
+-- activity. Not a session: only the Journal reads it, so nothing counts it.
+-- Completing it saves a Muscu log linked to the activity, in one transaction.
+CREATE SEQUENCE IF NOT EXISTS app.strength_drafts_seq START 1;
+CREATE TABLE IF NOT EXISTS app.strength_drafts (
+    id                  INTEGER PRIMARY KEY DEFAULT nextval('app.strength_drafts_seq'),
+    athlete_id          INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    actual_session_id   INTEGER NOT NULL,        -- the Garmin strength activity
+    exercises_json      VARCHAR NOT NULL DEFAULT '[]',  -- what Garmin recognised
+    origin              VARCHAR NOT NULL,        -- 'import' or 'journal'
+    status              VARCHAR NOT NULL DEFAULT 'pending',  -- 'pending', 'completed', 'dismissed'
+    strength_session_id INTEGER,                 -- the log that completed it
+    created_at          TIMESTAMP NOT NULL,
+    settled_at          TIMESTAMP,               -- completed or dismissed
+    deleted_at          TIMESTAMP,
+    UNIQUE (athlete_id, actual_session_id)
+);
+
 -- ============================================================
 -- User Settings
 -- ============================================================
@@ -1010,6 +1028,28 @@ def _m53_coaching_coordination(con) -> None:
     migrate(con)
 
 
+def _m54_strength_drafts(con) -> None:
+    """Garmin strength activities awaiting their loads (ARE-132).
+
+    A new relation only, so the previous release runs unchanged on it. Table
+    and view in one transaction, rolled back together (see migration 49).
+    """
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE SEQUENCE IF NOT EXISTS app.strength_drafts_seq")
+    table = DDL.index("CREATE TABLE IF NOT EXISTS app.strength_drafts")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for statement in DDL[start : DDL.index(");", table) + 2].split(";"):
+            if statement.strip():
+                con.execute(statement)
+        _view(con, "strength_drafts")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
 DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
 
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
@@ -1055,6 +1095,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (51, migrate_conversations),
     (52, _m52_evening_messages),
     (53, _m53_coaching_coordination),
+    (54, _m54_strength_drafts),
 ]
 
 

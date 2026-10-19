@@ -318,6 +318,30 @@ export const strengthApi = {
       body: JSON.stringify({ text, date, save }),
     }),
 
+  /** Garmin strength activities awaiting their loads, newest first. */
+  getDrafts: () => fetchAPI<import("@/types").StrengthDraftList>("/strength/drafts"),
+
+  /** « Ajoute tes charges » on a strength activity: its draft, opened once. */
+  openDraft: (actualSessionId: number) =>
+    fetchAPI<import("@/types").StrengthDraft>("/strength/drafts", {
+      method: "POST",
+      body: JSON.stringify({ actual_session_id: actualSessionId }),
+    }),
+
+  /** The loads saved: the draft becomes the activity's Muscu log (409 when already done). */
+  completeDraft: (draftId: number, text: string) =>
+    fetchAPI<import("@/types").DraftCompletion>(`/strength/drafts/${draftId}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+
+  dismissDraft: (draftId: number) =>
+    fetchAPI<{ message: string }>(`/strength/drafts/${draftId}`, { method: "DELETE" }),
+
+  /** « Tout ignorer »: every listed draft, bounded server-side. */
+  dismissAllDrafts: () =>
+    fetchAPI<{ dismissed: number }>("/strength/drafts/dismiss-all", { method: "POST" }),
+
   getExercises: () =>
     fetchAPI<import("@/types").LibraryExercise[]>("/strength/exercises"),
 

@@ -385,6 +385,39 @@ date, Garmin link and game event stay, and records are recomputed.
 A skill describes how to interpret documents; planning owns creation; Garmin owns
 export. Google Calendar still requires approval through its existing HTTP/UI cards.
 
+A Garmin strength activity no Muscu log completes becomes a draft awaiting its
+loads (`strength/drafts.py`, migration 54's `app.strength_drafts`, one per
+activity). The sync opens it from Garmin's `summarizedExerciseSets`, already in
+the activity list (no extra request); Arete imports no load from it. Names go
+through a reviewed table (`data/garmin_exercises.py`): only a Garmin name whose
+catalog exercise is the same movement and equipment gets its id, a category
+alone only from an allowlist and only without a finer name. Anything else stays
+free text, listed beside the pre-filled `3x10` notation rather than written
+into it, so neither the draft nor the parser's fuzzy matching guesses a near
+exercise and sets false records. Only activities of the last seven days get a
+draft on import, so a first full-history import does not flood the Journal; an
+older unlinked strength activity gets one when the athlete taps « Ajoute tes
+charges » (Journal's cardio list, or the session page, which reads the linked
+log from the activity detail's `strength_log_id`), empty since Garmin's summary
+was not kept; Garmin's names later fill an empty draft, never replace names.
+A draft is not a session: only the Journal reads it, so until it is completed
+the Garmin activity alone counts (load, gamification, week facts, missed-session
+check, by that activity's own rules) and the muscle map and weekly volume have
+no sets from it. The Journal lists 20 drafts with their total and a bounded
+« Tout ignorer » (confirmed with its total); it leaves out a day that already has
+an unlinked log, which is probably that session, and the cardio row and session
+page say so beside « Ajoute tes charges » (`strength_unlinked_log_id`), linking
+to that log, without hiding a genuine second session. There is no automatic expiry. Completing a draft parses
+the notation with the grammar (no model) and saves the log linked to the
+activity in one transaction, with its game evidence under the settled-rewards
+rule of an automatic link; records follow as on any save. The draft row is
+claimed by delete-and-rewrite, since DuckDB reports a concurrent delete of a
+row as a conflict but not a concurrent update of a keyed table: a stale tab
+gets 409, never a second log; an interrupted save that left the draft pending
+asks to retry (503). A log linked to the same activity by another request at
+that very moment is not detected (two logs, both linked). Dismissing hides a
+draft; asking again reopens it.
+
 ## Completion, transport and observability
 
 Empty conversations use fixed, page-aware starters (`frontend/src/lib/coachPrompts.ts`).

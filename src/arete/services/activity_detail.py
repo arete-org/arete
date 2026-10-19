@@ -34,6 +34,7 @@ from arete.garmin.time_series import (
 from arete.services.analytics import MODEL_EXCLUDED_SOURCES
 from arete.services.coaching_repository import SessionFeedbackRepository
 from arete.services.session_conditions import get_terrain, get_weather
+from arete.strength.repository import StrengthRepository
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +288,25 @@ def get_activity_detail(
         "feedback": feedback.to_dict() if feedback else None,
         "terrain": get_terrain(session_id),
         "weather": get_weather(session_id),
+        **_strength_links(session),
+    }
+
+
+def _strength_links(session: ActualSession) -> dict[str, int | None]:
+    """A strength activity's Muscu log, or the day's unlinked one to link instead.
+
+    Without a linked log the page offers to add the loads; a log of that day
+    linked to no activity is probably this session, so the page says so.
+    """
+    if session.sport != "strength" or session.id is None:
+        return {"strength_log_id": None, "strength_unlinked_log_id": None}
+    repo = StrengthRepository()
+    linked = repo.log_for_activity(session.id)
+    return {
+        "strength_log_id": linked,
+        "strength_unlinked_log_id": None
+        if linked
+        else repo.unlinked_log_on(session.date),
     }
 
 

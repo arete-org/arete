@@ -251,6 +251,44 @@ export interface StrengthSession {
   garmin_activity_id?: number | null;
 }
 
+/** An exercise Garmin recognised in a strength activity; `exercise_id` when the catalog did too. */
+export interface StrengthDraftExercise {
+  name: string;
+  exercise_id: string | null;
+  sets: number | null;
+  reps: number | null;
+}
+
+/** A Garmin strength activity awaiting its loads: not a session until completed. */
+export interface StrengthDraft {
+  id: number;
+  /** actual_sessions.id of the Garmin activity it completes. */
+  actual_session_id: number;
+  date: string;
+  name: string | null;
+  duration_min: number | null;
+  /** 'import' (Garmin sync) or 'journal' (opened by the athlete). */
+  origin: string;
+  exercises: StrengthDraftExercise[];
+  /** The completion screen's text: one line per catalog exercise (free-text ones are left out). */
+  notation: string;
+}
+
+/** The Journal's newest drafts and how many there are in all. */
+export interface StrengthDraftList {
+  items: StrengthDraft[];
+  total: number;
+}
+
+/** The Muscu log a completed draft became. */
+export interface DraftCompletion {
+  session_id: number;
+  message: string;
+  records: SessionRecord[];
+  unparsed_lines: string[];
+  dropped: string[];
+}
+
 export interface MuscleStat {
   muscle: string;
   /** French label, e.g. "Grands dorsaux". */
@@ -381,6 +419,8 @@ export interface ParsedExercise {
   exercise_matched: boolean;
   sets: ParsedSet[];
   notes: string | null;
+  /** Catalog candidates; the first is the exercise a matched name was read as. */
+  suggestions?: { exercise_id: string; name: string; name_fr?: string | null; score: number }[];
   /** What the history suggested for this session (preview only). */
   progression?: StrengthSuggestion | null;
 }
@@ -620,6 +660,10 @@ export interface ActivityWeather {
 }
 
 export interface ActivityDetail {
+  /** A strength activity's linked Muscu log (null without one, or for another sport). */
+  strength_log_id?: number | null;
+  /** Without a linked log: a Muscu log of that day linked to no activity, probably this session. */
+  strength_unlinked_log_id?: number | null;
   session: {
     id: number;
     date: string;

@@ -396,7 +396,7 @@ EXERCISES_CATALOG: list[ExerciseDefinition] = [
     {
         "id": "triceps_extension",
         "name": "Triceps Extension (Cable)",
-        "name_fr": "Extension triceps poulie",
+        "name_fr": "Extension triceps",
         "category": "push",
         "equipment": ["cable"],
         "primary_muscles": ["triceps"],

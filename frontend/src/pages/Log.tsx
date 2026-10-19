@@ -6,8 +6,9 @@ import { Dumbbell, Heart, Sparkles } from 'lucide-react';
 import { EmptyState, ErrorState, MuscleMap } from '@/components';
 import { Button, Modal, ModalHeader, Panel, Skeleton } from '@/components/ui';
 import { settingsApi, strengthApi } from '@/lib/api';
-import { CardioTab, ExerciseProgress, LogSessionModal, SessionDetailModal, SessionRow, WeeklyVolumeTracker } from './log/index';
-import { invalidateAfterSession, qk, strengthSessionsQuery } from '@/lib/queryKeys';
+import { CardioTab, ExerciseProgress, LogSessionModal, SessionDetailModal, SessionRow, StrengthDrafts, WeeklyVolumeTracker } from './log/index';
+import { invalidateAfterSession, qk, strengthDraftsQuery, strengthSessionsQuery } from '@/lib/queryKeys';
+import type { StrengthDraft } from '@/types';
 
 type Tab = 'force' | 'cardio';
 
@@ -39,7 +40,18 @@ export function LogPage() {
   const selectedExerciseId = exerciseParam && /^\d+$/.test(exerciseParam) ? Number(exerciseParam) : null;
   const setSelectedExerciseId = (id: number | null) => setSearchParams(previous => { const next = new URLSearchParams(previous); if (id === null) next.delete('exercise'); else next.set('exercise', String(id)); return next; }, { replace: true });
 
+  // A Garmin strength session awaiting its loads opens from the Journal or a link (?draft=).
+  const draftParam = searchParams.get('draft');
+  const setDraftId = (id: number | null) => setSearchParams(previous => { const next = new URLSearchParams(previous); if (id === null) next.delete('draft'); else next.set('draft', String(id)); return next; });
+
   const { data: settings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
+  const draftsQuery = useQuery(strengthDraftsQuery);
+  const drafts = draftsQuery.data?.items ?? [];
+  // Kept once found: completing it drops it from the list, not from its own screen.
+  const listedDraft = drafts.find((d) => String(d.id) === draftParam) ?? null;
+  const [keptDraft, setKeptDraft] = useState<StrengthDraft | null>(null);
+  if (listedDraft && listedDraft !== keptDraft) setKeptDraft(listedDraft);
+  const openDraft = listedDraft ?? (keptDraft && String(keptDraft.id) === draftParam ? keptDraft : null);
 
   const muscleQuery = useQuery({
     queryKey: qk.muscleStats(MUSCLE_WINDOW_DAYS),
@@ -92,6 +104,10 @@ export function LogPage() {
         </div>
 
         {activeTab === 'force' && (
+          <StrengthDrafts drafts={drafts} total={draftsQuery.data?.total ?? 0} onComplete={setDraftId} paused={openDraft !== null} />
+        )}
+
+        {activeTab === 'force' && (
           <div className="analysis-grid">
             <div className="space-y-6">
               <Panel title={`Zones travaillées · ${MUSCLE_WINDOW_DAYS} derniers jours`}>
@@ -136,6 +152,7 @@ export function LogPage() {
       </div>
 
       <LogSessionModal open={showNewSession && activeTab === 'force'} onClose={() => setShowNewSession(false)} />
+      {openDraft && <LogSessionModal key={openDraft.id} open draft={openDraft} onClose={() => setDraftId(null)} />}
       <Modal open={toDelete !== null} onClose={() => setToDelete(null)} className="max-w-sm p-4 sm:p-6">
         <ModalHeader title="SUPPRIMER LA SÉANCE" onClose={() => setToDelete(null)} className="mb-4" />
         <p className="text-sm font-sans text-text-secondary mb-6">

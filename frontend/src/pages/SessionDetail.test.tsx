@@ -176,14 +176,14 @@ it('keeps the RPE picker away once rated or dismissed', async () => {
 });
 
 it('shows the exercises of the Muscu log linked to a strength activity', async () => {
-  const strength = { ...detail, session: { ...session, id: 301, sport: 'strength', name: 'Strength' } };
+  // The server names the linked log; the page never searches the latest logs for it.
+  const strength = { ...detail, strength_log_id: 4, session: { ...session, id: 301, sport: 'strength', name: 'Strength' } };
   const log: StrengthSession = {
     id: 4, date: '2026-10-08', name: null, program: null, duration_min: 30, overall_rpe: null,
     fatigue_level: null, sleep_quality: null, notes: null, total_volume: 0, total_sets: 2,
     garmin_activity_id: 301,
   };
   vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue(strength);
-  vi.mocked(strengthApi.getSessions).mockResolvedValue([{ ...log, id: 3, garmin_activity_id: null }, log]);
   vi.mocked(strengthApi.getSession).mockResolvedValue({
     ...log,
     exercises: [{
@@ -199,13 +199,25 @@ it('shows the exercises of the Muscu log linked to a strength activity', async (
   expect(screen.getByRole('link', { name: 'Ouvrir le log Muscu' }).getAttribute('href')).toBe('/log?session=4');
 });
 
-it('shows no exercises for a strength activity without a linked log', async () => {
+it('offers to add the loads of a strength activity without a linked log', async () => {
   vi.mocked(strengthApi.getSession).mockClear();
-  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({ ...detail, session: { ...session, id: 302, sport: 'strength', name: 'Strength' } });
-  vi.mocked(strengthApi.getSessions).mockResolvedValue([]);
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail, strength_log_id: null, session: { ...session, id: 302, sport: 'strength', name: 'Strength' },
+  });
   renderAt('/log/sessions/302');
-  await screen.findAllByText('Strength');
-  await waitFor(() => expect(strengthApi.getSessions).toHaveBeenCalled());
+  expect(await screen.findByRole('button', { name: 'Ajoute tes charges' })).toBeTruthy();
   expect(screen.queryByText('Exercices')).toBeNull();
   expect(strengthApi.getSession).not.toHaveBeenCalled();
+});
+
+it('points to the day\'s unlinked Muscu log rather than inviting a second one', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail, strength_log_id: null, strength_unlinked_log_id: 5,
+    session: { ...session, id: 303, sport: 'strength', name: 'Strength' },
+  });
+  renderAt('/log/sessions/303');
+  expect(await screen.findByText(/Tu as déjà saisi une séance de muscu ce jour-là/)).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Ouvrir la séance saisie' }).getAttribute('href')).toBe('/log?session=5');
+  // A genuine second session can still get its loads.
+  expect(screen.getByRole('button', { name: 'Ajoute tes charges' })).toBeTruthy();
 });
