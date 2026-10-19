@@ -271,47 +271,29 @@ class TestDailySync:
 
     def test_reports_missing_connectors(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(tmp_path / "none"))
-        with (
-            patch("arete.api.strava._get_strava_tokens", return_value=None),
-            patch("arete.services.plan_adaptation.adapt_today", return_value=[]),
-        ):
+        with patch("arete.services.plan_adaptation.adapt_today", return_value=[]):
             status = scheduler.daily_sync()
         assert status == {
             "feedback_pending": "0",
             "garmin": "no tokens",
             "plan": "0 decisions (none)",
-            "strava": "not connected",
             "google_calendar": "disabled",
         }
 
-    def test_adaptation_runs_before_strava_and_failures_are_reported(
-        self, tmp_path, monkeypatch
-    ):
+    def test_adaptation_failures_are_reported(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(tmp_path / "none"))
-        calls: list[str] = []
-
-        def adapt(**_kwargs):
-            calls.append("adapt")
-            raise RuntimeError("db down")
-
-        def tokens():
-            calls.append("strava")
-            return None
-
-        with (
-            patch("arete.services.plan_adaptation.adapt_today", side_effect=adapt),
-            patch("arete.api.strava._get_strava_tokens", side_effect=tokens),
+        with patch(
+            "arete.services.plan_adaptation.adapt_today",
+            side_effect=RuntimeError("db down"),
         ):
             status = scheduler.daily_sync()
-        assert calls == ["adapt", "strava"]
         assert status["plan"] == "failed: db down"
 
     def test_status_is_kept_not_discarded(self, tmp_path, monkeypatch):
         # run_forever ignores the return value; the coach needs to know what
         # the last sync actually did before briefing on the day's data.
         monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(tmp_path / "none"))
-        with patch("arete.api.strava._get_strava_tokens", return_value=None):
-            status = scheduler.daily_sync()
+        status = scheduler.daily_sync()
         assert scheduler.last_status() == status
 
     def test_with_garmin_the_push_follows_the_decisions(self):
@@ -348,17 +330,34 @@ class TestDailySync:
                 "arete.services.plan_adaptation.push_today",
                 side_effect=lambda client: calls.append("push") or "1 sent",
             ),
-            patch("arete.api.strava._get_strava_tokens", return_value=None),
         ):
             status = scheduler.daily_sync()
         assert calls == ["adapt", "push"]
         assert status["garmin_push"] == "1 sent"
 
     def test_new_sessions_are_announced_once(self):
+        # Without the coach's feedback, the import count announces them.
+        from unittest.mock import MagicMock
+
+        garmin = MagicMock()
+        garmin.has_tokens.return_value = True
         with (
+            patch("arete.garmin.client.GarminClient", return_value=garmin),
+            patch(
+                "arete.services.garmin_sync.ensure_fresh",
+                return_value={
+                    "imported": 2,
+                    "session_ids": [4, 5],
+                    "errors": [],
+                    "state": "complete",
+                    "health_checked_at": "2026-10-13",
+                },
+            ),
             patch("arete.services.plan_adaptation.adapt_today", return_value=[]),
-            patch("arete.api.strava._get_strava_tokens", return_value={"x": 1}),
-            patch("arete.api.strava.sync", return_value={"imported": 2}),
+            patch("arete.services.plan_adaptation.push_today", return_value="0"),
+            patch(
+                "arete.coaching.write_sync_feedback", side_effect=RuntimeError("down")
+            ),
             patch("arete.services.notifications.notify") as notify,
         ):
             scheduler.daily_sync()

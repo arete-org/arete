@@ -54,7 +54,6 @@ export const qk = {
   healthDaily: (date: string) => ['garmin-health', 'daily', date] as const,
   healthStatus: ['garminHealthStatus'] as const,
   syncStatus: ['syncStatus'] as const,
-  stravaStatus: ['stravaStatus'] as const,
 
   planToday: ['plan', 'today'] as const,
   /** Last week's review and its proposals. */

@@ -101,7 +101,6 @@
   --color-selection: color-mix(in srgb, var(--color-neon-cyan) 10%, transparent);
   --color-on-accent: #0A0A0F;
   --color-on-purple: #FFFFFF;
-  --color-on-strava: #0A0A0F;
 }
 
 /* ========================= */
@@ -143,7 +142,6 @@ html[data-theme='abyss'] {
 /* Darker accents keep text and chart labels readable on pale surfaces. */
 html[data-theme='light'] {
   --color-on-accent: #FFFFFF;
-  --color-on-strava: #FFFFFF;
   color-scheme: light;
   --color-void: #F4F7FA;
   --color-abyss: #FFFFFF;
@@ -206,7 +204,6 @@ body {
 .ui-button[data-variant='gold'] { --button-accent: var(--color-neon-gold); }
 .ui-button[data-variant='green'] { --button-accent: var(--color-success-green); }
 .ui-button[data-variant='danger'] { --button-accent: var(--color-danger-red); }
-.ui-button[data-variant='strava'] { --button-accent: var(--color-strava); --button-on-accent: var(--color-on-strava); }
 .ui-button[data-strong='true']:not([data-variant='outline'], [data-variant='ghost']) {
   background: var(--button-accent);
   border-color: var(--button-accent);
@@ -423,7 +420,6 @@ html[data-theme='odyssey'] {
 /* Keep existing semantic owners: abyss is a card surface throughout the app. */
 html[data-theme='pierre'] {
   --color-on-accent: #FFFCF5;
-  --color-on-strava: #FFFCF5;
   color-scheme: light;
   --color-void: #F6F3ED; --color-abyss: #FFFCF5; --color-shadow: #EEE8DD;
   --color-text-primary: #1C2927; --color-text-secondary: #586158; --color-text-muted: #696C62;
@@ -438,7 +434,6 @@ html[data-theme='pierre'] {
 html[data-theme='prune'] {
   --color-on-accent: #291E29;
   --color-on-purple: #291E29;
-  --color-on-strava: #291E29;
   color-scheme: dark;
   --color-void: #291E29; --color-abyss: #342636; --color-shadow: #57394E;
   --color-text-primary: #F2E8DA; --color-text-secondary: #D2BBCB; --color-text-muted: #BBA8B5;

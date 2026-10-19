@@ -324,7 +324,7 @@ export function YearReviewPage() {
       ) : isError || !data ? (
         <ErrorState message="BILAN INDISPONIBLE" onRetry={() => refetch()} />
       ) : data.totals.sessions === 0 ? (
-        <EmptyState message={`AUCUNE SÉANCE EN ${year}`} action="Synchronise Garmin ou Strava, ou choisis une autre année." />
+        <EmptyState message={`AUCUNE SÉANCE EN ${year}`} action="Synchronise Garmin ou importe un fichier FIT, ou choisis une autre année." />
       ) : (
         <Review data={data} />
       )}

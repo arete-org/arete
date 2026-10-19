@@ -192,21 +192,6 @@ class Config:
     def stt_max_audio_mb(self) -> int:
         return int(_env("STT_MAX_AUDIO_MB", "10") or 10)
 
-    # --- Strava ------------------------------------------------------------
-    @property
-    def strava_client_id(self) -> str:
-        return _env("STRAVA_CLIENT_ID", "") or ""
-
-    @property
-    def strava_client_secret(self) -> str:
-        return _env("STRAVA_CLIENT_SECRET", "") or ""
-
-    @property
-    def strava_redirect_uri(self) -> str:
-        return (
-            _env("STRAVA_REDIRECT_URI", "http://localhost:8000/strava/callback") or ""
-        )
-
     @property
     def frontend_url(self) -> str:
         return _env("FRONTEND_URL", "http://localhost:3080") or ""

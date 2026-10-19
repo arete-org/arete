@@ -537,18 +537,6 @@ export interface SportSlice {
   pct: number;
 }
 
-export interface PersonalRecord {
-  activity_id?: number;
-  name: string;
-  time_sec: number;
-  time_display: string;
-  date: string;
-  activity_name: string;
-}
-export interface RecordsResponse {
-  records: PersonalRecord[];
-}
-
 export interface CardioSession {
   id: number;
   date: string;

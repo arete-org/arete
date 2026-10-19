@@ -624,37 +624,6 @@ export const tipsApi = {
 };
 
 // ========================= //
-// STRAVA API              //
-// ========================= //
-
-export const stravaApi = {
-  getStatus: () =>
-    fetchAPI<{
-      connected: boolean;
-      athlete_name: string | null;
-      athlete_id: number | null;
-    }>("/strava/status"),
-
-  getAuthorizeUrl: () =>
-    fetchAPI<{ url: string }>("/strava/authorize"),
-
-  sync: (days = 30) =>
-    fetchAPI<{
-      success: boolean;
-      imported: number;
-      merged: number;
-      skipped: number;
-      errors: string[];
-    }>("/strava/sync", {
-      method: "POST",
-      body: JSON.stringify({ days }),
-    }),
-
-  disconnect: () =>
-    fetchAPI<{ success: boolean }>("/strava/disconnect", { method: "DELETE" }),
-};
-
-// ========================= //
 // ANALYTICS API             //
 // ========================= //
 
@@ -662,10 +631,6 @@ export const analyticsApi = {
   getOverview: (period = "30d") =>
     fetchAPI<import("@/types").OverviewResponse>(
       `/analytics/overview?period=${period}`
-    ),
-  getRecords: (sport = "running") =>
-    fetchAPI<import("@/types").RecordsResponse>(
-      `/analytics/records?sport=${sport}`
     ),
   getSessions: (limit = 20, offset = 0) =>
     fetchAPI<import("@/types").CardioSessionsResponse>(

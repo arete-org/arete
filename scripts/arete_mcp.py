@@ -4,8 +4,8 @@ The in-app coach runs on a free model, one request per question. For deeper
 analysis, this stdio server lets a stronger assistant read the same data
 through the HTTP API: training load, form, sessions, health, plan, goals,
 paces, the coach's facts and the weekly review. Only GET requests, nothing is
-written. Sessions imported from Strava are left out (Strava's API agreement
-forbids its data in AI applications); so are records, which are Strava's.
+written. Sessions imported from Strava before its retirement are left out
+(Strava's API agreement forbids its data in AI applications).
 
 Run:
     uv run --extra mcp python scripts/arete_mcp.py

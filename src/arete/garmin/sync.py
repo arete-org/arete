@@ -32,7 +32,6 @@ from arete.garmin.models import (
 from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import ActivityStreams, from_time_series
 from arete.garmin.threshold import refresh_threshold
-from arete.strava.merge import garmin_takeover
 from arete.strength.drafts import open_garmin_draft
 from arete.strength.logging_service import link_garmin_strength
 from arete.strength.models import GarminExerciseSummary
@@ -228,6 +227,25 @@ def zones_from_laps(laps_json: str | None, zones: ZoneModel) -> str | None:
     return json.dumps(zones.seconds_in_zones(samples))
 
 
+def rescore(
+    repo: GarminRepository,
+    actual_id: int,
+    session: ActualSession,
+    planned_id: int,
+    zones: ZoneModel | None = None,
+) -> None:
+    """Score a session against the plan it is already linked to, on its own
+    values: a Garmin takeover keeps the link but not Strava's adherence."""
+    planned = repo.get_planned_session(planned_id)
+    if planned is None:
+        return
+    match = SessionMatcher(zones=zones or athlete_zone_model()).find_match(
+        session, [planned]
+    )
+    if match.planned_session is not None:
+        repo.update_actual_session_match(actual_id, planned_id, match.adherence_score)
+
+
 def auto_match(
     repo: GarminRepository,
     actual_id: int,
@@ -282,6 +300,75 @@ def complete_planned(repo: GarminRepository, day: date, sport: str) -> int | Non
             repo.update_planned_session_status(planned.id, SessionStatus.COMPLETED)
             return planned.id
     return None
+
+
+#: Values only Strava filled on the rows it created (its description in
+#: ``notes``): cleared when Garmin takes such a row over.
+STRAVA_ONLY_FIELDS = (
+    "suffer_score",
+    "best_efforts_json",
+    "splits_json",
+    "avg_watts",
+    "weighted_avg_watts",
+    "workout_type",
+    "device_name",
+    "notes",
+)
+
+#: Computed from the row's measures when it was matched to its plan: Strava's
+#: on a legacy row, so cleared on a takeover rather than read by the coach.
+DERIVED_FROM_STRAVA = ("adherence_score", "intensity_deviation")
+
+#: What a Garmin import measures: on a takeover, its value replaces Strava's,
+#: an empty one included.
+GARMIN_MEASURED_FIELDS = (
+    "date",
+    "sport",
+    "session_type",
+    "start_time",
+    "duration_sec",
+    "moving_time_sec",
+    "distance_m",
+    "calories",
+    "avg_hr",
+    "max_hr",
+    "hr_zones_json",
+    "avg_pace_sec_km",
+    "avg_speed_mps",
+    "max_speed_mps",
+    "ascent_m",
+    "descent_m",
+    "start_lat",
+    "start_lon",
+    "avg_cadence",
+    "max_cadence",
+    "avg_vertical_oscillation",
+    "avg_ground_contact_time",
+    "avg_stride_length",
+    "laps_json",
+    "name",
+    "source_file",
+    "garmin_activity_id",
+)
+
+
+def garmin_takeover(garmin: ActualSession) -> dict[str, Any]:
+    """Columns to write on a legacy Strava row when Garmin imports that workout.
+
+    Strava was retired as a data source (its API agreement forbids its data in
+    an AI application, ARE-126), but the rows it created stay. The row becomes
+    a Garmin row the coach reads, so Garmin's values win: every measured one
+    replaces Strava's and the Strava-only ones go, ``notes`` included (Strava
+    put its description there; a note the athlete added cannot be told apart
+    and goes too). The plan link and the RPE stay; the adherence computed from
+    Strava's values is cleared.
+    """
+    return {
+        "source": garmin.source.value,
+        **{column: getattr(garmin, column) for column in GARMIN_MEASURED_FIELDS},
+        **dict.fromkeys(STRAVA_ONLY_FIELDS),
+        **dict.fromkeys(DERIVED_FROM_STRAVA),
+    }
 
 
 class GarminSyncClient:
@@ -547,7 +634,7 @@ class GarminSyncClient:
                     yield SyncProgress("saving", index, total, activity.activity_name)
                     if checkpoint is not None:
                         checkpoint()
-                    # Same workout already imported from Strava? Garmin takes it over.
+                    # Same workout on a legacy Strava row? Garmin takes it over.
                     twin = self.repository.find_overlapping_session(
                         session.start_time, session.duration_sec
                     )
@@ -562,10 +649,19 @@ class GarminSyncClient:
                         actual_id = twin.id
                         result.activities_merged += 1
                         result.session_ids.append(actual_id)
-                        if twin.planned_session_id is None and auto_match(
-                            self.repository, twin.id, session, self.zones
-                        ):
-                            result.activities_matched += 1
+                        if twin.planned_session_id is None:
+                            if auto_match(
+                                self.repository, twin.id, session, self.zones
+                            ):
+                                result.activities_matched += 1
+                        else:
+                            rescore(
+                                self.repository,
+                                twin.id,
+                                session,
+                                twin.planned_session_id,
+                                self.zones,
+                            )
                     else:
                         actual_id = self.repository.create_actual_session(session)
                         result.activities_synced += 1

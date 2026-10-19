@@ -9,6 +9,7 @@ from typing import Any
 import duckdb
 
 from arete.dataio.db import db_connection, transaction
+from arete.dataio.queries import EXCLUDED_SOURCES_SQL
 from arete.services.coaching_repository import naive_utc_now
 from arete.services.settings import athlete_today
 
@@ -42,7 +43,7 @@ def prepare(today: date | None = None) -> None:
         row = con.execute(
             "SELECT a.id,d.id,a.date,coalesce(a.name,a.sport) FROM app.visible_actual_sessions a "
             "LEFT JOIN app.visible_plan_decisions d ON d.planned_session_id=a.planned_session_id AND d.state='applied' AND d.applied_at IS NOT NULL AND d.decision<>'keep' "
-            "WHERE a.source<>'strava' AND a.date BETWEEN ? AND ? AND a.rpe IS NULL "
+            f"WHERE COALESCE(a.source, '') NOT IN ({EXCLUDED_SOURCES_SQL}) AND a.date BETWEEN ? AND ? AND a.rpe IS NULL "
             "AND NOT EXISTS (SELECT 1 FROM app.visible_coach_followups f WHERE f.session_id=a.id) "
             "AND (d.id IS NOT NULL OR a.session_type IN ('intervals','tempo','long_run') OR a.duration_sec>=?) "
             "ORDER BY (d.id IS NOT NULL) DESC,a.date DESC,a.id DESC LIMIT 1",

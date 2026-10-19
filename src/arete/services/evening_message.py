@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any
 import duckdb
 
 from arete.dataio.db import db_connection, transaction
+from arete.dataio.queries import EXCLUDED_SOURCES_SQL
 from arete.services.coaching_repository import naive_utc_now
 from arete.services.settings import EVENING_DEFAULT_HOUR, athlete_today
 
@@ -259,7 +260,7 @@ def _today_lines(day: date) -> list[str]:
     with db_connection() as con:
         rows = con.execute(
             "SELECT sport, name, duration_sec, distance_m FROM app.visible_actual_sessions "
-            "WHERE date = ? AND source <> 'strava' ORDER BY id LIMIT 5",
+            f"WHERE date = ? AND COALESCE(source, '') NOT IN ({EXCLUDED_SOURCES_SQL}) ORDER BY id LIMIT 5",
             [day],
         ).fetchall()
         strength = con.execute(
