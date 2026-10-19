@@ -529,7 +529,10 @@ in-place write overwrites it, and an in-place write over a deleted version
 reports its row changed and is lost (ARE-150; DuckDB 1.4.2, still in 1.5.6).
 So every runtime write ends with `RETURNING`: any two writers of a row then
 conflict, the later one gets `duckdb.TransactionException`, which its service
-maps to its refusal and the API to 409, and nothing is replayed.
+maps to its refusal and the API to 409, and nothing is replayed,
+except by `dataio.db.write_idempotent`: a bounded rerun (3 attempts) for a write
+that is safe to repeat, such as the scheduler's final stamp, an inbox item's
+delivery record and the calendar sync's lease release.
 `tests/test_write_conflicts.py` enforces the rule (migrations, which run before
 the app serves, are exempt) and pins the engine behavior: its `xfail(strict)`
 tests pass once DuckDB fixes the cross-form case. `tests/write_race.py` commits

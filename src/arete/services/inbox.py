@@ -4,7 +4,7 @@ import json
 import logging
 from uuid import uuid4
 
-from arete.dataio.db import db_connection, transaction
+from arete.dataio.db import db_connection, transaction, write_idempotent
 from arete.services.automations import OWNER, public, rows
 from arete.services.settings import utc_now
 
@@ -31,11 +31,11 @@ def record(key, kind, title, body, url, reference=None):
 
 
 def delivered(identifier, result):
-    with db_connection() as con:
-        con.execute(
-            f"UPDATE app.notifications SET push_json=? WHERE {OWNER} AND id=? RETURNING id",
-            [json.dumps(result), identifier],
-        )
+    # Rerun when the athlete reads or archives the item meanwhile: the push went.
+    write_idempotent(
+        f"UPDATE app.notifications SET push_json=? WHERE {OWNER} AND id=? RETURNING id",
+        [json.dumps(result), identifier],
+    )
 
 
 def publish(key, kind, title, body, url, reference=None):

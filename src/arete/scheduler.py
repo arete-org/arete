@@ -23,7 +23,7 @@ from time import monotonic, sleep
 import duckdb
 
 from arete.config import config
-from arete.dataio.db import db_connection
+from arete.dataio.db import db_connection, write_idempotent
 from arete.services.athlete_scope import athlete_scope, current_athlete_id
 from arete.services.settings import (
     QuietHours,
@@ -583,6 +583,10 @@ def run_scheduled_batch() -> dict:
     }
 
 
+def _lease_until(claimed_at: datetime) -> datetime:
+    return claimed_at + timedelta(seconds=SCHEDULE_LEASE_SECONDS)
+
+
 def _claim(
     athlete_id: int,
     last_sync: datetime | None,
@@ -594,7 +598,7 @@ def _claim(
     Compare-and-set on the markers this dispatch read as owed: a concurrent
     dispatch that claimed or finished the athlete has changed one of them.
     """
-    until = claimed_at + timedelta(seconds=SCHEDULE_LEASE_SECONDS)
+    until = _lease_until(claimed_at)
     try:
         with db_connection() as con:
             row = con.execute(
@@ -650,11 +654,20 @@ def _run_athlete(
             if config.is_remote_db:
                 mirror.flush()
             # Dated by the claim: a run that ends past midnight is the day's.
-            with db_connection() as con:
-                con.execute(
-                    "UPDATE app.athletes SET last_sync_at=?,sync_lease_until=NULL WHERE id=? RETURNING id",
-                    [_naive_utc(claimed_at), athlete_id],
-                )
+            # Rerun on a conflict with another writer of the athlete's row: the
+            # day's work is done and a lost stamp would keep the lease all day.
+            # Frees only this run's lease, not one a later dispatch took after
+            # it expired.
+            write_idempotent(
+                "UPDATE app.athletes SET last_sync_at=?,sync_lease_until=CASE "
+                "WHEN sync_lease_until=? THEN NULL ELSE sync_lease_until END "
+                "WHERE id=? RETURNING id",
+                [
+                    _naive_utc(claimed_at),
+                    _naive_utc(_lease_until(claimed_at)),
+                    athlete_id,
+                ],
+            )
             # Stamped: an answer given from now on replans on its own.
             if (settled := settle_checkin()) is not None:
                 status["checkin"] = settled

@@ -160,7 +160,8 @@ def _sql_strings(tree: ast.AST):
 
 
 WRITE_IN_PLACE = re.compile(
-    r"\bUPDATE\s+\S+(\s+\w+)?\s+SET\b|\bDO\s+UPDATE\b|\bINSERT\s+OR\s+REPLACE\b"
+    r"\bUPDATE\s+\S+(\s+(AS\s+)?\w+)?\s+SET\b|\bDO\s+UPDATE\b|\bINSERT\s+OR\s+REPLACE\b",
+    re.IGNORECASE,
 )
 
 
@@ -171,8 +172,59 @@ def test_every_runtime_update_returns_so_duckdb_deletes_the_old_row():
         for path in sorted(ROOT.rglob("*.py"))
         if path.relative_to(ROOT).as_posix() not in MIGRATIONS
         for line, sql in _sql_strings(ast.parse(path.read_text()))
-        if WRITE_IN_PLACE.search(sql) and "RETURNING" not in sql
+        if WRITE_IN_PLACE.search(sql) and "RETURNING" not in sql.upper()
     ]
     assert not violations, "write without RETURNING (ARE-150):\n" + "\n".join(
         violations
     )
+
+
+def test_an_idempotent_write_reruns_a_bounded_number_of_times(monkeypatch):
+    from contextlib import contextmanager
+
+    from arete.dataio import db
+
+    attempts = []
+
+    class Conflicting:
+        def execute(self, sql, params):
+            attempts.append(sql)
+            raise duckdb.TransactionException("Conflict on tuple deletion!")
+
+    @contextmanager
+    def connection():
+        yield Conflicting()
+
+    monkeypatch.setattr(db, "db_connection", connection)
+    monkeypatch.setattr(db.time, "sleep", lambda seconds: None)
+    with pytest.raises(duckdb.TransactionException):
+        db.write_idempotent("UPDATE t SET x=1 RETURNING id", [])
+    assert len(attempts) == db.IDEMPOTENT_WRITE_ATTEMPTS
+
+
+def test_an_idempotent_write_waits_out_an_open_competitor(monkeypatch):
+    """The conflict is raised while the other writer's transaction is open."""
+    from arete.dataio import db
+
+    with db.db_connection() as con:
+        con.execute(
+            "CREATE OR REPLACE TABLE main.idem (id INTEGER PRIMARY KEY, x INTEGER, y INTEGER)"
+        )
+        con.execute("INSERT INTO main.idem VALUES (1, 0, 0)")
+    other = db.connect()
+    other.execute("BEGIN TRANSACTION")
+    other.execute("UPDATE main.idem SET y = 2 WHERE id = 1 RETURNING id").fetchall()
+    waits = []
+
+    def wait(seconds):
+        waits.append(seconds)
+        other.execute("COMMIT")
+
+    monkeypatch.setattr(db.time, "sleep", wait)
+    written = db.write_idempotent(
+        "UPDATE main.idem SET x = 1 WHERE id = 1 RETURNING id", []
+    )
+    other.close()
+    with db.db_connection() as con:
+        assert con.execute("SELECT x, y FROM main.idem").fetchone() == (1, 2)
+    assert written == [(1,)] and waits == [db.IDEMPOTENT_WRITE_RETRY_SECONDS]

@@ -1,5 +1,6 @@
 """Atomic planning and cross-producer attention, using a disposable athlete."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from threading import Barrier
@@ -588,3 +589,24 @@ def test_an_rpe_answer_racing_the_athlete_s_own_rpe_keeps_theirs(athlete, monkey
         assert con.execute(
             "SELECT rpe FROM app.visible_actual_sessions WHERE id=?", [session]
         ).fetchone() == (4,)
+
+
+def test_a_delivery_racing_the_athlete_reading_the_item_keeps_both(
+    athlete, monkeypatch
+):
+    """ARE-150: the athlete marks the item read inside the delivery's snapshot."""
+    from write_race import race
+
+    from arete.services import inbox
+
+    identifier = inbox.record("one", "automation", "Un suivi", "Un retour", "/x")
+    with race(
+        monkeypatch, r"SET push_json=\?", lambda: inbox.mark(identifier, read=True)
+    ):
+        inbox.delivered(identifier, {"sent": 1})
+    with db_connection() as con:
+        push, read = con.execute(
+            "SELECT push_json, read_at IS NOT NULL FROM app.notifications WHERE id=?",
+            [identifier],
+        ).fetchone()
+    assert read and json.loads(push) == {"sent": 1}

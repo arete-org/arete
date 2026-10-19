@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import duckdb
 
-from arete.dataio.db import db_connection
+from arete.dataio.db import db_connection, write_idempotent
 from arete.services.calendar_models import (
     ACTION_TTL_SECONDS,
     MAX_ACTION_CHARS,
@@ -288,21 +288,22 @@ class CalendarRepository:
         """Ask for a pass; take the lease unless another run holds it.
 
         The holder sees the request and runs one more pass, so a change
-        written while it synced is not left behind.
+        written while it synced is not left behind. Both writes rerun on a
+        conflict: the request sets the same value, the lease's condition
+        re-reads it; one still conflicting after the reruns counts as busy.
         """
         try:
-            with db_connection() as con:
-                con.execute(
-                    "UPDATE app.calendar_connections SET plan_requested = TRUE WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (connection_key = ?) RETURNING connection_key",
-                    [self.key],
-                )
-                row = con.execute(
-                    "UPDATE app.calendar_connections SET plan_lease = ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (connection_key = ? AND coalesce(plan_lease, 0) < ?) RETURNING 1",
-                    [now() + seconds, self.key, now()],
-                ).fetchone()
+            write_idempotent(
+                "UPDATE app.calendar_connections SET plan_requested = TRUE WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (connection_key = ?) RETURNING connection_key",
+                [self.key],
+            )
+            row = write_idempotent(
+                "UPDATE app.calendar_connections SET plan_lease = ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (connection_key = ? AND coalesce(plan_lease, 0) < ?) RETURNING 1",
+                [now() + seconds, self.key, now()],
+            )
         except duckdb.TransactionException:
             return False
-        return row is not None
+        return bool(row)
 
     def begin_plan_pass(self) -> None:
         with db_connection() as con:
@@ -312,15 +313,19 @@ class CalendarRepository:
             )
 
     def release_plan_sync(self, *, error: str | None, force: bool) -> bool:
-        """Record the outcome and free the lease; False when a pass is owed."""
-        with db_connection() as con:
-            row = con.execute(
+        """Record the outcome and free the lease; False when a pass is owed.
+
+        Rerun on a conflict: a request for another pass then fails the
+        condition, any other writer leaves it to hold, and the lease is freed.
+        """
+        return bool(
+            write_idempotent(
                 "UPDATE app.calendar_connections SET plan_lease = NULL, plan_synced_at = ?, plan_error = ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (connection_key = ?) "
                 + ("" if force else " AND NOT coalesce(plan_requested, FALSE)")
                 + " RETURNING 1",
                 [now(), error, self.key],
-            ).fetchone()
-        return row is not None
+            )
+        )
 
     @staticmethod
     def timezone() -> str:

@@ -11,6 +11,8 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
+import duckdb
+
 from arete.dataio.db import db_connection, transaction
 from arete.garmin.workouts import canonical, convert, matches
 from arete.services.documents import DocumentError
@@ -757,7 +759,12 @@ def export(
             session_id,
             state["operation_id"],
             state=_outcome(exchange, writing),
-            error=f"{type(exc).__name__}: {exc}. Aucun renvoi automatique.",
+            error=(
+                "Une autre écriture de la séance est passée en même temps"
+                if isinstance(exc, duckdb.TransactionException)
+                else f"{type(exc).__name__}: {exc}"
+            )
+            + ". Aucun renvoi automatique.",
         )
 
 
