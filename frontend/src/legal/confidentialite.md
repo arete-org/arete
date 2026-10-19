@@ -18,11 +18,11 @@ Selon ce que tu connectes et utilises :
 - **Compte** : adresse e-mail et sa vérification, nom, identifiant Clerk, rôle, dates de connexion.
 - **Données de santé** (article 9 du RGPD) importées de Garmin : variabilité de la fréquence cardiaque (VFC), sommeil (durée, phases, score), fréquence cardiaque au repos, stress, Body Battery, disponibilité à l'entraînement, VO2max, prédictions de course, pas et minutes d'intensité ; ton seuil et tes zones de fréquence cardiaque.
 - **Ressenti quotidien** : sommeil, jambes, motivation et note que tu saisis le matin.
-- **Activités** : séances Garmin, Strava ou fichiers FIT, avec leurs mesures (fréquence cardiaque, allure, puissance, cadence, altitude) et leur trace GPS ; la météo à leur départ.
+- **Activités** : séances Garmin ou fichiers FIT (et séances importées de Strava avant l'arrêt de cette connexion, jamais transmises au coach), avec leurs mesures (fréquence cardiaque, allure, puissance, cadence, altitude) et leur trace GPS ; la météo à leur départ.
 - **Musculation, plans, objectifs** : séances de force, plan d'entraînement, objectifs de course, bilans et décisions du coach.
 - **Mémoire du coach** : journal, faits que tu lui confies, notes de séance, conversations enregistrées, documents que tu importes (PDF, images) et leur texte extrait.
 - **Dictée vocale** : l'enregistrement que tu envoies pour être transcrit.
-- **Connexions** : session Garmin (ton mot de passe n'est jamais conservé), jetons Strava, connexion Google Agenda et événements concernés, lien entre ton compte Slack et ton compte Arete, abonnements aux notifications de tes appareils.
+- **Connexions** : session Garmin (ton mot de passe n'est jamais conservé), connexion Google Agenda et événements concernés, lien entre ton compte Slack et ton compte Arete, abonnements aux notifications de tes appareils.
 - **Réglages** : fuseau horaire, préférences de notification, thème et préférences d'entraînement.
 - **Consentement** : versions des textes acceptées, date du consentement et de son retrait éventuel.
 
@@ -51,7 +51,6 @@ Arete ne vend pas tes données, ne s'en sert pas pour de la publicité et ne pre
 | Fournisseurs de modèles choisis par OpenRouter | Production des réponses du coach, des briefings et des messages | Idem | Variable selon le fournisseur retenu ; par défaut des modèles gratuits (NVIDIA Nemotron, Google Gemma), sur décision d'un administrateur le modèle GLM de Z.ai [À COMPLÉTER : liste et pays des fournisseurs, conservation et éventuel entraînement sur les requêtes gratuites] |
 | LangSmith (LangChain), seulement si le traçage est activé | Suivi technique des requêtes du coach | Contenu des échanges avec le coach, avis 👍/👎 | [À COMPLÉTER : région ; société américaine] |
 | Garmin | Source des activités et des données de santé ; envoi des séances planifiées | Identifiants le temps de la connexion, session, séances | Selon les conditions de Garmin |
-| Strava | Source d'activités, si connecté | Jetons, activités | Selon les conditions de Strava |
 | Google | Agenda, si connecté | Événements d'entraînement | Selon les conditions de Google |
 | Slack | Coach dans Slack, si utilisé | Messages échangés, e-mail du profil Slack | Selon les conditions de Slack |
 | Services de notification des navigateurs (Google, Mozilla, Apple) | Acheminement des notifications | Contenu chiffré des notifications | Selon le navigateur |

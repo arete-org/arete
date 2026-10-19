@@ -41,7 +41,6 @@ GATED = [
     ("post", "/agent/chat"),
     ("post", "/agent/chat/stream"),
     ("post", "/tips/daily"),
-    ("post", "/strava/sync"),
     ("get", "/dashboard"),
     ("get", "/settings"),
 ]
@@ -607,17 +606,6 @@ def test_an_administrator_cannot_read_an_athlete_without_consent(
         admin_athlete_data.read("T", "U", "acct", second.athlete_id, "settings")
     give_consent(second.athlete_id)
     assert admin_athlete_data.read("T", "U", "acct", second.athlete_id, "settings")
-
-
-def test_the_strava_callback_refuses_an_athlete_without_consent(accounts, client):
-    from arete.api.strava import _state_secret
-    from arete.services import oauth_state
-
-    first, _ = accounts
-    state = oauth_state.issue(_state_secret(), athlete_id=first.athlete_id)
-    refused = client.get(f"/strava/callback?code=x&state={state}")
-    assert refused.status_code == 403
-    assert refused.json() == {"detail": consent.CONSENT_REQUIRED_DETAIL}
 
 
 # ------------------------------------------------------------- texts --

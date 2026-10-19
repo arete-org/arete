@@ -738,8 +738,8 @@ due); a session automation only answers activities registered after the
 consent in force; and consent is read again before each run, so nothing fires
 late after a new consent. The paths that bypass the middleware check it
 themselves: the Slack resolution (no coach run; the French reply, once per
-event, goes to a DM when asked in a channel), the administrator's Slack reads
-and the Strava OAuth callback. The API key neither gives nor withdraws
+event, goes to a DM when asked in a channel) and the administrator's Slack
+reads. The API key neither gives nor withdraws
 consent; a withdrawal records the login that made it. The browser shows the
 texts (`frontend/src/legal/*.md`, their versions in their header, which a
 consent sends: a page older than the server is refused), two unticked boxes

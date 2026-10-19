@@ -17,7 +17,7 @@ Arete est un assistant d'entraînement édité par **[NOM DU RESPONSABLE DU TRAI
 
 Arete réunit tes données d'entraînement (activités, santé, musculation, planification) et un coach conversationnel fondé sur des modèles d'intelligence artificielle. Il propose notamment :
 
-- la synchronisation de ton compte Garmin Connect, de Strava et de Google Agenda lorsque tu les connectes ;
+- la synchronisation de ton compte Garmin Connect et de Google Agenda lorsque tu les connectes ;
 - l'import de fichiers d'activité (FIT) et de documents (PDF, images) ;
 - un briefing quotidien, un bilan de séance, un bilan hebdomadaire, un message du soir (si tu l'actives) et des adaptations de ton plan ;
 - un coach que tu interroges dans l'application ou dans Slack ;
@@ -39,7 +39,7 @@ Arete n'est pas un dispositif médical. Ses analyses, ses plans et les réponses
 ## 5. Services tiers
 
 - **Garmin Connect** : Arete se connecte avec l'identifiant et le mot de passe que tu saisis, au moyen d'une bibliothèque non officielle. Ton mot de passe sert à la connexion et n'est pas conservé ; la session Garmin obtenue l'est. Garmin peut modifier ou bloquer cet accès à tout moment, et tu restes soumis à ses propres conditions.
-- **Strava**, **Google Agenda** et **Slack** ne sont utilisés que si tu les connectes, selon leurs propres conditions.
+- **Google Agenda** et **Slack** ne sont utilisés que si tu les connectes, selon leurs propres conditions.
 - Les réponses du coach sont produites par des modèles tiers (voir la politique de confidentialité).
 
 ## 6. Disponibilité et responsabilité
