@@ -636,3 +636,16 @@ def test_the_published_texts_carry_the_versions_asked(name, version):
     assert "**[NOM DU RESPONSABLE DU TRAITEMENT], personne physique**" in text
     for placeholder in ("[EMAIL DE CONTACT]", "[ADRESSE POSTALE]"):
         assert placeholder in text
+
+
+def test_a_shared_database_needs_consent_even_without_sign_in(monkeypatch):
+    # A Docker stack without sign-in shares production's MotherDuck database:
+    # its workers must honour a withdrawal recorded there.
+    from arete.config import Config
+    from arete.services import consent
+
+    monkeypatch.setenv("ARETE_AUTH", "")
+    monkeypatch.setattr(Config, "is_remote_db", property(lambda self: True))
+    assert consent.required() is True
+    monkeypatch.setattr(Config, "is_remote_db", property(lambda self: False))
+    assert consent.required() is False

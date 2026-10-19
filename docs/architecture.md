@@ -745,7 +745,10 @@ texts (`frontend/src/legal/*.md`, their versions in their header, which a
 consent sends: a page older than the server is refused), two unticked boxes
 and the export in place of the app until consent (`ConsentScreen`), drops its
 query caches as a sign-out does while consent is missing, and Settings → À
-propos shows the state and withdraws it.
+propos shows the state and withdraws it. Processing (jobs, automations, Slack)
+needs consent with sign-in on and also on any MotherDuck database without it:
+a Docker stack without sign-in shares production's database and must honour a
+withdrawal made there. Only a local file without accounts asks nothing.
 
 The browser keeps an allowlist of query answers (dashboard, settings, goals and
 the session windows containing today) in IndexedDB for 24 hours so a repeat visit

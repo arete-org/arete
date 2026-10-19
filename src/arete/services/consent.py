@@ -17,9 +17,11 @@ versions; publishing a new version (``TERMS_VERSION``/``PRIVACY_VERSION``)
 asks everyone again. Nothing is deleted on withdrawal: processing stops until
 the athlete consents again.
 
-Required only with sign-in on (``ARETE_AUTH=clerk``): a self-hosted instance
-without accounts is the athlete's own installation, with no third party to
-consent to. Timestamps are naive UTC, written from this clock.
+Required with sign-in on (``ARETE_AUTH=clerk``), and for every processing
+step (jobs, automations, Slack) on a MotherDuck database even without it: a
+Docker stack without sign-in shares production's database, and its workers
+must honour a withdrawal made there. Only a local file without accounts is
+the athlete's own installation, with no third party to consent to. Timestamps are naive UTC, written from this clock.
 """
 
 from __future__ import annotations
@@ -75,8 +77,9 @@ class Consent:
 
 
 def required() -> bool:
-    """Whether this deployment asks for consent: with sign-in on."""
-    return config.auth_provider == "clerk"
+    """Whether processing needs consent: with sign-in on, or on a shared
+    MotherDuck database (a stack without sign-in may run beside production)."""
+    return config.auth_provider == "clerk" or config.is_remote_db
 
 
 def _now() -> datetime:
