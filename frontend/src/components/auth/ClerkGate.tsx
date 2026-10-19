@@ -273,7 +273,12 @@ function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGat
     );
   }
   if (consentMissing) {
-    return <ConsentScreen consent={current.me.consent} email={current.me.email} onConsent={setConsent} signOut={leave} />;
+    // The account is known: its deletion stays offered without consent (AccountDeletionPanel reads it).
+    return (
+      <AuthStateContext.Provider value={value}>
+        <ConsentScreen consent={current.me.consent} email={current.me.email} onConsent={setConsent} signOut={leave} />
+      </AuthStateContext.Provider>
+    );
   }
   return <AuthStateContext.Provider key={key} value={value}>{children}</AuthStateContext.Provider>;
 }

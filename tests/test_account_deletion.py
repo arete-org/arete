@@ -13,6 +13,7 @@ from arete.config import config
 from arete.dataio.db import connect
 from arete.dataio.init_duckdb import main as init_schema
 from arete.dataio.tenant_schema import PRIVATE_TABLES, SCOPED_KEYS, owner_column
+from arete.services import consent
 from arete.services.account_deletion import (
     ATHLETE_ACCOUNT_TABLES,
     KEPT_TABLES,
@@ -238,6 +239,8 @@ def test_deletion_erases_every_row_and_file_of_one_athlete_only(
     ).fetchone()
     con.close()
     assert kept == (1,)
+    # ...yet allows nothing: another instance may still hold Ana's login.
+    assert not consent.is_current(ana)
 
     # A session token outlives the account by a minute: no fresh athlete.
     again = client.get("/auth/me", headers=_bearer(ANA))

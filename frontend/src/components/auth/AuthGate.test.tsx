@@ -114,6 +114,7 @@ function server(config: unknown, me?: Me | Refusal) {
         }
         return new Response(JSON.stringify(GIVEN), { status: 200 });
       }
+      if (url === '/api/auth/me/delete') return new Response(null, { status: 204 });
       if (url === '/api/auth/config') {
         if (config instanceof Error) throw config;
         return new Response(JSON.stringify(config), { status: 200 });
@@ -287,6 +288,18 @@ it('tells a withdrawn athlete their data is kept, and offers the export and the 
   expect(screen.getByText(/Tes données sont conservées/)).toBeTruthy();
   expect(screen.getByRole('button', { name: /Exporter mes données/ })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeTruthy();
+  expect(screen.queryByText('Tableau de bord')).toBeNull();
+});
+
+it('lets an athlete who does not consent erase their account from the consent screen', async () => {
+  clerk.signedIn = true;
+  const requests = server(enabled, { ...FRESH, consent: NOT_ASKED });
+  mount();
+  fireEvent.change(await screen.findByLabelText('Tape SUPPRIMER pour confirmer'), { target: { value: 'SUPPRIMER' } });
+  fireEvent.click(screen.getByRole('button', { name: /SUPPRIMER DÉFINITIVEMENT/ }));
+  await waitFor(() => expect(clerk.signOut).toHaveBeenCalled());
+  const deletion = requests.find((r) => r.url === '/api/auth/me/delete');
+  expect(deletion?.body).toEqual({ confirmation: 'SUPPRIMER' });
   expect(screen.queryByText('Tableau de bord')).toBeNull();
 });
 

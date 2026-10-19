@@ -90,10 +90,13 @@ def _now() -> datetime:
 #: with the health-data consent, to the texts this server publishes. Any such
 #: row counts, whatever was recorded after it: a rollback to older texts finds
 #: the consent given to them still in force. Every reader uses it: the
-#: middleware, ``/auth/me``, the scheduler and the automation dispatch.
+#: middleware, ``/auth/me``, the scheduler and the automation dispatch. An
+#: erased athlete's rows stay as proof (``account_deletion.KEPT_TABLES``) but
+#: allow nothing: another instance may still hold its login for a moment.
 _IN_FORCE = (
     "c.withdrawn_at IS NULL AND c.health_data "
-    "AND c.terms_version = ? AND c.privacy_version = ?"
+    "AND c.terms_version = ? AND c.privacy_version = ? "
+    "AND EXISTS (SELECT 1 FROM app.athletes ca WHERE ca.id = c.athlete_id)"
 )
 
 

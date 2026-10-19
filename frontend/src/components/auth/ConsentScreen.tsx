@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Download, ShieldCheck } from 'lucide-react';
 import { AreteWordmark } from '@/components/AreteBrand';
 import { Button } from '@/components/ui/Button';
@@ -6,6 +7,7 @@ import { ApiError, authApi, type ConsentState } from '@/lib/api';
 import { downloadExport, EXPORT_TABLES } from '@/lib/dataExport';
 import { formatConsentDate } from '@/lib/consent';
 import { LegalReader } from '@/legal/LegalReader';
+import { AccountDeletionPanel } from '@/pages/settings/AccountDeletionPanel';
 import { GateScreen } from './GateScreen';
 import { SignOutButton } from './SignOutButton';
 
@@ -36,6 +38,8 @@ export function ConsentScreen({ consent, email, onConsent, signOut }: ConsentScr
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // The app's query client lives behind this screen; the deletion needs its own.
+  const [deletionClient] = useState(() => new QueryClient());
   const withdrawnAt = consent.latest?.withdrawn_at ?? null;
   const outdated = consent.latest !== null && withdrawnAt === null;
 
@@ -130,6 +134,9 @@ export function ConsentScreen({ consent, email, onConsent, signOut }: ConsentScr
             {exportError}
           </p>
         )}
+        <QueryClientProvider client={deletionClient}>
+          <AccountDeletionPanel />
+        </QueryClientProvider>
         <p className="text-xs font-sans text-text-muted">
           Connecté en tant que <span className="text-text-secondary">{email}</span>
         </p>
