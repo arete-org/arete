@@ -133,12 +133,12 @@ for (const width of [1440, 390]) {
         periods.push(period);
         return route.fulfill({ json: overview(period) });
       }
-      if (path === '/api/analytics/records') return route.fulfill({ json: { records: [] } });
       return route.fulfill({ json: [] });
     });
     await page.goto('/analytics?period=7d');
     await expect(page.getByText('42 km', { exact: true })).toBeVisible();
-    await expect(page.locator('.analysis-card')).toHaveCount(15);
+    // No Records card since Strava's retirement (ARE-126; ARE-139 brings it back).
+    await expect(page.locator('.analysis-card')).toHaveCount(14);
     await expect(page.locator('.recharts-wrapper')).toHaveCount(13);
     const selector = page.getByRole('group', { name: 'Période analysée' });
     for (const [label, value] of [
