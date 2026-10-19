@@ -253,6 +253,8 @@ OPT_IN: frozenset[str] = frozenset(
         "automation_runs",
         "automation_interrupts",
         "automation_effects",
+        # before/after copies of the plan for every proposal
+        "plan_change_sets",
     }
 )
 

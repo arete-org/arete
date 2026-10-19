@@ -33,6 +33,8 @@ const TABLES = [
   { id: 'game_owned', label: 'Jeu : apparences' },
   { id: 'automations', label: 'Automatisations' },
   { id: 'notifications', label: 'Notifications reçues' },
+  { id: 'coach_attention_claims', label: 'Coach : sujets à suivre' },
+  { id: 'coach_attention_days', label: 'Coach : relances par jour' },
   { id: 'journal', label: 'Journal du coach' },
   { id: 'activity_streams', label: 'Courbes détaillées des séances', optIn: true },
   { id: 'conversations', label: 'Conversations sauvegardées', optIn: true },
@@ -44,6 +46,7 @@ const TABLES = [
   { id: 'automation_runs', label: 'Exécutions des automatisations', optIn: true },
   { id: 'automation_interrupts', label: 'Validations demandées', optIn: true },
   { id: 'automation_effects', label: 'Actions des automatisations', optIn: true },
+  { id: 'plan_change_sets', label: 'Modifications du plan proposées', optIn: true },
 ] as const satisfies readonly ExportTableSpec[];
 
 export type ExportTableId = (typeof TABLES)[number]['id'];
