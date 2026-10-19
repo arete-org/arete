@@ -43,6 +43,28 @@ type Tab = (typeof TABS)[number] | typeof ADMIN_TAB;
 type TabId = Tab['id'];
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * The server's value, except where the form differs from the copy it was filled
+ * from. Plain objects merge key by key, at any depth: editing the quiet hours
+ * keeps a notification kind another tab turned on, and the reverse.
+ */
+function mergeEdits(form: unknown, previous: unknown, server: unknown): unknown {
+  if (isPlainObject(form) && isPlainObject(previous) && isPlainObject(server)) {
+    const merged: Record<string, unknown> = { ...server };
+    for (const key of Object.keys(form)) merged[key] = mergeEdits(form[key], previous[key], server[key]);
+    return merged;
+  }
+  return JSON.stringify(form) !== JSON.stringify(previous) ? form : server;
+}
+
+function keepEdits(form: LocalSettings, previous: UserSettings, server: LocalSettings): LocalSettings {
+  const { user_id, ...was } = previous;
+  return mergeEdits(form, was, server) as LocalSettings;
+}
+
 const isTabId = (tabs: readonly Tab[], value: string | null): value is TabId =>
   tabs.some((tab) => tab.id === value);
 
@@ -63,12 +85,14 @@ export function SettingsPage() {
 
   const [settings, setSettings] = useState<LocalSettings>(DEFAULT_SETTINGS);
 
-  // Adopt fetched settings into local form state whenever the server copy changes
+  // Adopt fetched settings into local form state whenever the server copy changes,
+  // field by field: a value edited here and not saved yet stays as typed (another
+  // tab's save, broadcast on `arete-preferences`, must not wipe it).
   const [syncedFrom, setSyncedFrom] = useState<UserSettings | null>(null);
   if (savedSettings && savedSettings !== syncedFrom) {
     setSyncedFrom(savedSettings);
     const { user_id, ...rest } = savedSettings;
-    setSettings(rest);
+    setSettings(syncedFrom ? keepEdits(settings, syncedFrom, rest) : rest);
   }
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -93,6 +117,11 @@ export function SettingsPage() {
     mutationFn: settingsApi.update,
     onMutate: () => setSaveStatus('saving'),
     onSuccess: (saved) => {
+      // The saved copy is the new reference: a value the server normalized
+      // must not count as an edit (and keep « Enregistrer » on screen).
+      const { user_id, ...rest } = saved;
+      setSyncedFrom(saved);
+      setSettings(rest);
       queryClient.setQueryData(['settings'], saved);
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       // The threshold pace feeds the VDOT when Garmin has no race prediction.

@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, ChevronDown, Sunrise } from 'lucide-react';
 import { AretePresence } from '@/components/AreteBrand';
+import { PushOffer } from '@/components/PushOffer';
 import { Button } from '@/components/ui';
 import { tipsApi, type DailyTip } from '@/lib/api';
 import { discussWithCoach } from '@/lib/coachToday';
 import { parseLocalDate } from '@/lib/dates';
 import { frenchClock } from '@/lib/fr';
+import { BRIEFING_READ_KEY, readFlag, writeFlag } from '@/lib/install';
 import { qk } from '@/lib/queryKeys';
 
 /** Times remain visible when a sync replaces the day's recommendation. */
@@ -19,7 +21,7 @@ function briefingTimes(tip: DailyTip): string | null {
   return parts.join(' · ');
 }
 
-function BriefingHistory() {
+function BriefingHistory({ onOpen }: { onOpen: () => void }) {
   const { data, isPending, error, refetch } = useQuery({
     queryKey: qk.tipHistory,
     queryFn: tipsApi.history,
@@ -30,7 +32,7 @@ function BriefingHistory() {
   if (!data.length) return <p className="text-xs text-text-muted">Pas encore de briefing précédent.</p>;
   return <ol className="space-y-2 border-t border-text-muted/15 pt-3">
     {data.map(past => <li key={past.id}>
-      <button type="button" className="briefing-history-link w-full text-left" onClick={() => discussWithCoach({ kind: 'briefing', id: past.id })}>
+      <button type="button" className="briefing-history-link w-full text-left" onClick={() => { onOpen(); discussWithCoach({ kind: 'briefing', id: past.id }); }}>
         <span className="flex items-center justify-between gap-2 text-xs text-text-muted">
           <span className="first-letter:uppercase">{parseLocalDate(past.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
           <ArrowUpRight aria-hidden="true" className="size-4 shrink-0" />
@@ -50,8 +52,11 @@ export function BriefingCard({ tip, writing, stalled, refresh }: {
   refresh: () => void;
 }) {
   const [history, setHistory] = useState(false);
+  // A briefing read on this device: the offer to receive it by push follows (ARE-131).
+  const [read, setRead] = useState(() => readFlag(BRIEFING_READ_KEY) !== null);
+  const markRead = () => { writeFlag(BRIEFING_READ_KEY, '1'); setRead(true); };
   const ready = !writing && !!tip?.tip && tip.id != null;
-  const open = () => { if (ready) discussWithCoach({ kind: 'briefing', id: tip.id! }); };
+  const open = () => { if (ready) { markRead(); discussWithCoach({ kind: 'briefing', id: tip.id! }); } };
   const times = tip && briefingTimes(tip);
   return <div className="space-y-2 font-sans">
     <h2>
@@ -73,6 +78,7 @@ export function BriefingCard({ tip, writing, stalled, refresh }: {
         <Button variant="ghost" size="sm" className="min-h-11 px-0" aria-expanded={history} onClick={() => setHistory(!history)}>Briefings précédents <ChevronDown aria-hidden="true" className="size-3.5" /></Button>
       </div>
     </>}
-    {history && <BriefingHistory />}
+    {history && <BriefingHistory onOpen={markRead} />}
+    {read && <PushOffer moment="briefing" />}
   </div>;
 }

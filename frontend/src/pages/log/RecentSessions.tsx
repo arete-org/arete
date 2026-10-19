@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight, Dumbbell, Pencil, Save } from 'lucide-react';
 import { cn, formatDurationCompact } from '@/lib/utils';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
+import { PushOffer } from '@/components/PushOffer';
 import { Button, Panel, RPE_TEXT, RpeBadge, Textarea, rpeTone } from '@/components/ui';
 import { analyticsApi } from '@/lib/api';
 import { qk, strengthDraftsQuery, strengthSessionsQuery } from '@/lib/queryKeys';
@@ -82,6 +83,7 @@ export function RecentSessions() {
   return (
     <Panel title="SÉANCES RÉCENTES" delay={0.1}>
       <div className="space-y-2">
+        <PushOffer moment="session" />
         {sessions.map((s) => {
           const Icon = getSportIconComponent(s.sport);
           const editing = editingId === s.id;

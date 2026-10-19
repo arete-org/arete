@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Dumbbell, Heart, Sparkles } from 'lucide-react';
 import { EmptyState, ErrorState, MuscleMap } from '@/components';
+import { PushOffer } from '@/components/PushOffer';
 import { Button, Modal, ModalHeader, Panel, Skeleton } from '@/components/ui';
 import { settingsApi, strengthApi } from '@/lib/api';
 import { CardioTab, ExerciseProgress, LogSessionModal, SessionDetailModal, SessionRow, StrengthDrafts, WeeklyVolumeTracker } from './log/index';
@@ -138,6 +139,8 @@ export function LogPage() {
                       onDelete={() => setToDelete(session.id)}
                     />
                   ))}
+                  {/* Under the five rows: the session that just arrived comes first. */}
+                  {sessions.length > 0 && <PushOffer moment="session" />}
                   {sessionsQuery.isSuccess && sessions.length === 0 && (
                     <EmptyState message="AUCUNE SÉANCE" action="Saisis ta première séance de muscu" />
                   )}
