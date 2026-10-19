@@ -62,7 +62,7 @@ Certains de ces services sont situés hors de l'Union européenne, notamment aux
 ## 5. Combien de temps
 
 - Tes données sont conservées tant que ton compte existe. Retirer ton consentement arrête leur traitement mais ne les supprime pas.
-- La suppression de ton compte efface tes données immédiatement de la base. Les copies de sauvegarde de la base (clones `_bak_` créés avant chaque mise à jour du schéma) les conservent jusqu'à leur remplacement par des sauvegardes plus récentes : deux sont gardées. [À COMPLÉTER : durée maximale, et durée de rétention des instantanés MotherDuck et des journaux Vercel.]
+- La suppression de ton compte efface tes données immédiatement de la base, sauf l'historique de tes consentements (dates et versions des textes acceptés, sans autre donnée), conservé comme preuve. Les copies de sauvegarde de la base (clones `_bak_` créés avant chaque mise à jour du schéma) les conservent jusqu'à leur remplacement par des sauvegardes plus récentes : deux sont gardées. [À COMPLÉTER : durée maximale, et durée de rétention des instantanés MotherDuck et des journaux Vercel.]
 - Une connexion Garmin en attente de code de vérification expire au bout de 10 minutes.
 
 ## 6. Tes droits

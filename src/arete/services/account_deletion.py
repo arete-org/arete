@@ -44,6 +44,9 @@ ATHLETE_ACCOUNT_TABLES = {
 }
 #: Rows keyed by a login's Clerk id rather than by the athlete.
 LOGIN_TABLES = ("slack_identities", "slack_private_threads", "slack_operations")
+#: Kept on purpose: the consent history is the proof that consent was given
+#: (GDPR art. 7(1)), and names the athlete and logins by number only.
+KEPT_TABLES = ("athlete_consents",)
 
 
 def _statements(athlete_id: int) -> str:

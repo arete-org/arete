@@ -140,7 +140,8 @@ trusted athlete scope only:
    script, so the database work is a handful of round trips: `BEGIN`, the
    logins, the script, three login-keyed deletions, the log, `COMMIT`. A
    failure rolls everything back, files included, and answers 503; asking
-   again finishes the job.
+   again finishes the job. The consent history (`app.athlete_consents`,
+   `KEPT_TABLES`) stays, as proof that consent was given (GDPR art. 7(1)).
 3. After the commit, it removes the athlete's directory on this instance,
    `athletes/<id>/`, best effort: a file a sync is still writing does not fail
    the erasure, the server logs how many remain with the athlete's id.
