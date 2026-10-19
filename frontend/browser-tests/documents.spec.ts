@@ -92,8 +92,11 @@ test('PDF upload delegates extraction to the server without a browser OCR worker
 });
 
 test('Garmin export is an explicit selected action and never claims watch delivery', async ({ page }) => {
-  // The planning shows the browser's local week: the UTC day is yesterday just after midnight in Paris.
-  const day = toLocalISODate();
+  // The planning shows the browser's local week. Half past midnight, when the UTC day
+  // is still yesterday east of Greenwich: a UTC date would show the session missed.
+  const now = new Date(2026, 9, 20, 0, 30);
+  await page.clock.install({ time: now });
+  const day = toLocalISODate(now);
   const session = { id: 42, date: day, sport: 'running', session_type: 'endurance', description: 'Footing de référence', source: 'coach', status: 'pending', revision: 1, prescription: { version: 1, steps: [{ kind: 'effort', duration_kind: 'seconds', value: 1800, steps: [] }] } };
   let sent = 0;
   let statuses: object[] = [];
