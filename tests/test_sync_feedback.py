@@ -197,14 +197,16 @@ class TestSyncFeedback:
 
 class TestDailySync:
     def _garmin(self, session_ids):
-        garmin = MagicMock()
-        garmin.has_tokens.return_value = True
+        from arete.garmin.client import GarminClient
+
         sync_client = MagicMock()
         sync_client.sync_activities.return_value = MagicMock(
             activities_synced=len(session_ids), errors=[], session_ids=session_ids
         )
         return (
-            patch("arete.garmin.client.GarminClient", return_value=garmin),
+            # Only the method: replacing the class would leave its mock bound in
+            # any module first imported under this patch (arete.garmin.health_sync).
+            patch.object(GarminClient, "has_tokens", return_value=True),
             patch(
                 "arete.services.garmin_sync.ensure_fresh",
                 return_value={

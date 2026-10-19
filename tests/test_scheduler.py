@@ -317,15 +317,17 @@ class TestDailySync:
     def test_with_garmin_the_push_follows_the_decisions(self):
         from unittest.mock import MagicMock
 
-        garmin = MagicMock()
-        garmin.has_tokens.return_value = True
+        from arete.garmin.client import GarminClient
+
         calls: list[str] = []
         sync_client = MagicMock()
         sync_client.sync_activities.return_value = MagicMock(
             activities_synced=0, errors=[]
         )
         with (
-            patch("arete.garmin.client.GarminClient", return_value=garmin),
+            # Only the method: replacing the class would leave its mock bound in
+            # any module first imported under this patch (arete.garmin.health_sync).
+            patch.object(GarminClient, "has_tokens", return_value=True),
             patch(
                 "arete.services.garmin_sync.ensure_fresh",
                 return_value={
