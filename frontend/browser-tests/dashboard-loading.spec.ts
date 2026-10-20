@@ -205,7 +205,7 @@ test('a dashboard that fails says so with a retry, and the coach card and briefi
   });
   await page.goto('/');
   await expect(page.getByText('Séance du jour indisponible.')).toBeVisible();
-  await expect(page.getByText('Récupération indisponible.')).toBeVisible();
+  await expect(page.getByText('Préparation indisponible.')).toBeVisible();
   await expect(page.getByText('Statistiques indisponibles.')).toBeVisible();
   await expect(page.getByText('Repos — aucune séance prévue')).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Connecter Garmin' })).toHaveCount(0);

@@ -44,7 +44,7 @@ test('desktop uses the approved page gutters and reflows beside the coach', asyn
     expect(Math.abs(primary.y - secondary.y)).toBeLessThan(1);
     expect(secondary.x).toBeGreaterThan(primary.x + primary.width);
     await expect(page.getByRole('link', { name: 'Saisir une séance', exact: true })).toBeInViewport();
-    await expect(page.getByRole('heading', { name: 'Récupération', exact: true })).toBeInViewport();
+    await expect(page.getByRole('heading', { name: 'Préparation', exact: true })).toBeInViewport();
   }
 
   await page.setViewportSize({ width: 1440, height: 1000 });

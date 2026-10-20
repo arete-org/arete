@@ -113,7 +113,7 @@ def seed_history(con, today: date, *, days: int = 730, label: str = "") -> None:
     decision = con.execute(
         "INSERT INTO app.plan_decisions (date, planned_session_id, decision, reason,"
         " readiness_score, state, session_revision, original_json, adapted_json)"
-        " VALUES (?, ?, 'easier', 'Récupération basse', 52, 'pending', 1,"
+        " VALUES (?, ?, 'easier', 'Préparation basse', 52, 'pending', 1,"
         ' \'{"session_type": "tempo"}\', \'{"session_type": "endurance"}\')'
         " RETURNING id",
         [today, planned],

@@ -180,6 +180,32 @@ test('short viewport keeps planning and cardio forms reachable with keyboard and
 });
 
 
+for (const [width, height] of [[375, 812], [844, 390]] as const) {
+  test(`${width}x${height}: session entry and planning editor selects are 44 px touch targets matching their fields`, async ({ page }) => {
+    await fixture(page);
+    await page.setViewportSize({ width, height });
+    await page.goto('/log?tab=cardio&new=1');
+    let dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: 'Séance sans montre' })).toBeVisible();
+    const date = (await dialog.getByLabel('Date', { exact: true }).boundingBox())!;
+    const sport = (await dialog.locator('select').boundingBox())!;
+    expect(sport.height).toBeGreaterThanOrEqual(44);
+    expect(sport.height).toBeCloseTo(date.height, 0);
+    // A phone stacks the date above the sport; a wider screen sets them side by side.
+    if (width < 640) {
+      expect(sport.y).toBeGreaterThan(date.y + date.height);
+      expect(sport.x).toBeCloseTo(date.x, 0);
+      expect(sport.width).toBeCloseTo(date.width, 0);
+    } else expect(sport.y).toBeCloseTo(date.y, 0);
+    await page.goto('/planning?new=1');
+    dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const selects = await dialog.locator('select').all();
+    expect(selects.length).toBeGreaterThan(0);
+    for (const select of selects) expect((await select.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  });
+}
+
 test('touch navigation and display changes preserve a live response and manual draft', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const stream = await coachStream(page, false, 'floating');
@@ -359,6 +385,54 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
   });
 }
 
+// ARE-164: the Garmin notice above the bar pushes the navigation down; the panel follows it.
+for (const [width, height] of [[844, 390], [1280, 800]] as const) for (const notice of [true, false]) for (const mode of ['floating', 'sidebar'] as const) {
+  test(`${width}x${height}: Chiron starts below the navigation (${notice ? 'with' : 'without'} the Garmin notice, ${mode})`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await fixture(page);
+    // A long conversation: the floating panel reaches its maximum height.
+    const messages = Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `Message ${i + 1}. ${'Une phrase pour allonger la conversation. '.repeat(4)}` }));
+    await page.addInitScript(([display, seeded]) => {
+      localStorage.setItem('arete.coach-display.v2', display);
+      localStorage.setItem('arete.coach.threads.v1', JSON.stringify({ version: 1, activeId: 'long', threads: [{ id: 'long', title: 'Longue conversation', createdAt: 1, updatedAt: 1, messages: seeded }] }));
+    }, [mode, messages] as const);
+    if (!notice) await page.route('**/api/garmin/sync/ensure', route => route.fulfill({ json: { state: 'fresh' } }));
+    const ensured = page.waitForResponse('**/api/garmin/sync/ensure');
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
+    await ensured;
+    const status = page.getByRole('status').filter({ hasText: 'Garmin' });
+    if (notice) await expect(status).toBeVisible();
+    else await expect(status).toHaveCount(0);
+    const nav = page.getByRole('navigation', { name: 'Navigation principale' });
+    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const close = panel.getByRole('button', { name: 'Masquer le coach' });
+    const navBottom = async () => { const bar = (await nav.boundingBox())!; return bar.y + bar.height; };
+    const headerGap = async () => (await panel.locator('header').boundingBox())!.y - await navBottom();
+    const belowNavigation = async () => {
+      await expect.poll(headerGap).toBeGreaterThanOrEqual(-0.5);
+      // A docked panel meets the bar, without a gap.
+      if (mode === 'sidebar') await expect.poll(headerGap).toBeLessThanOrEqual(1);
+    };
+    await openCoach(page);
+    await expect(panel).toHaveAttribute('data-display', mode);
+    const top = await navBottom();
+    expect(top).toBeGreaterThan(notice ? 80 : 50);
+    await belowNavigation();
+    if (width === 1280) {
+      // The page beneath scrolls here: the notice leaves and the bar sticks to the top.
+      await page.evaluate(() => window.scrollTo(0, 200));
+      if (notice) await expect.poll(navBottom).toBeLessThan(top - 20);
+      await belowNavigation();
+    }
+    // Nothing covers the close button: a tap at its centre lands on it.
+    const box = (await close.boundingBox())!;
+    expect(await close.evaluate((button, [x, y]) => button.contains(document.elementFromPoint(x, y)), [box.x + box.width / 2, box.y + box.height / 2])).toBe(true);
+    await close.tap();
+    await expect(panel).toBeHidden();
+  });
+}
+
 // The upright phone layout ends at 767 px; a wider, taller touch screen keeps a scrollable page.
 for (const [width, locked] of [[767, true], [768, false], [1024, false]] as const) {
   test(`${width} px: the open coach ${locked ? 'holds' : 'leaves'} the page beneath`, async ({ page }) => {
@@ -372,6 +446,67 @@ for (const [width, locked] of [[767, true], [768, false], [1024, false]] as cons
     else await expect(page.locator('html')).not.toHaveCSS('overflow-y', 'hidden');
   });
 }
+
+/** The control fits its dialog and the page does not scroll sideways. */
+async function fitsDialog(page: Page, control: ReturnType<Page['getByLabel']>) {
+  // Measure the settled dialog, not its entrance.
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+    .map((animation) => animation.finished)));
+  const dialog = (await page.getByRole('dialog').boundingBox())!;
+  const box = (await control.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(dialog.x);
+  expect(box.x + box.width).toBeLessThanOrEqual(dialog.x + dialog.width);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(await control.evaluate((input) => input.scrollWidth <= input.clientWidth)).toBe(true);
+  await noOverflow(page);
+}
+
+test('touch: closing the session entry opened from Home returns Home, and its date fits', async ({ page }, info) => {
+  await page.clock.setFixedTime(new Date('2026-10-15T19:00:00'));
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fixture(page);
+  await page.goto('/');
+  await safeArea(page);
+  const briefing = page.getByRole('heading', { name: 'Ma forme du jour' });
+  await expect(briefing).toBeVisible();
+  await page.getByRole('link', { name: 'Saisir une séance', exact: true }).tap();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Saisir une séance' })).toBeVisible();
+  const date = dialog.getByLabel('Date', { exact: true });
+  await expect(date).toHaveValue('2026-10-15');
+  await fitsDialog(page, date);
+  await page.screenshot({ path: `../.context/are-159/session-entry-375-${info.project.name}.png` });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await fitsDialog(page, date);
+  await page.screenshot({ path: `../.context/are-159/session-entry-320-${info.project.name}.png` });
+  await date.fill('2026-10-12');
+  await expect(date).toHaveValue('2026-10-12');
+
+  await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(briefing).toBeVisible();
+
+  // Without a page before it (a link opened in a new tab), closing lands on Home too.
+  await page.goto('/log?tab=cardio&new=1');
+  await expect(dialog.getByRole('heading', { name: 'Séance sans montre' })).toBeVisible();
+  await fitsDialog(page, dialog.getByLabel('Date', { exact: true }));
+  await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(briefing).toBeVisible();
+
+  // Opened by the Journal itself, the entry closes in place.
+  await page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('link', { name: 'Journal', exact: true }).tap();
+  const journal = page.getByRole('heading', { name: 'Journal', exact: true });
+  await expect(journal).toBeVisible();
+  await page.getByRole('button', { name: 'Saisir une séance', exact: true }).tap();
+  await expect(dialog.getByRole('heading', { name: 'Saisir une séance' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/\/log$/);
+  await expect(journal).toBeVisible();
+});
 
 test('touch: the morning check-in is three taps at 375 px and then gives the page back', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });

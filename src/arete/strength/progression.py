@@ -344,7 +344,7 @@ def suggest_next(
             n_sets,
             low,
             "deload",
-            f"Récupération basse aujourd'hui ({readiness:.0f}/100) : {what}.",
+            f"Préparation basse aujourd'hui ({readiness:.0f}/100) : {what}.",
         )
 
     all_top = all(r >= high for r in reps)

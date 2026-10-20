@@ -515,3 +515,41 @@ test('floating mobile: long answers and menus stay inside a resized visual viewp
     await page.screenshot({ path: '../.context/chiron-floating-keyboard-app.png' });
   } finally { await stream.close(); }
 });
+
+// ARE-164 with a mouse: the Garmin notice above the bar pushes the navigation down,
+// including when it appears after the coach opened; the docked panel follows the bar.
+for (const notice of ['shown', 'absent', 'appearing after opening'] as const) {
+  test(`desktop: the docked coach starts at the navigation's bottom edge (Garmin notice ${notice})`, async ({ page }) => {
+    const stream = await fixture(page);
+    try {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      let state = notice === 'shown' ? 'partial' : 'fresh';
+      await page.route('**/api/garmin/sync/ensure', route => route.fulfill({ json: { state } }));
+      const ensured = page.waitForResponse('**/api/garmin/sync/ensure');
+      const panel = await openCoach(page);
+      await ensured;
+      const status = page.getByRole('status').filter({ hasText: 'Garmin' });
+      if (notice === 'appearing after opening') {
+        await expect(status).toHaveCount(0);
+        state = 'partial';
+        // Coming back to the tab rechecks Garmin.
+        await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      }
+      if (notice === 'absent') await expect(status).toHaveCount(0);
+      else await expect(status).toBeVisible();
+      const nav = page.getByRole('navigation', { name: 'Navigation principale' });
+      const navBottom = async () => { const bar = (await nav.boundingBox())!; return bar.y + bar.height; };
+      const gap = async () => (await panel.locator('header').boundingBox())!.y - await navBottom();
+      expect(await navBottom()).toBeGreaterThan(notice === 'absent' ? 50 : 80);
+      await expect.poll(gap).toBeGreaterThanOrEqual(-0.5);
+      await expect.poll(gap).toBeLessThanOrEqual(1);
+      const close = panel.getByRole('button', { name: 'Masquer le coach' });
+      const box = (await close.boundingBox())!;
+      expect(await close.evaluate((button, [x, y]) => button.contains(document.elementFromPoint(x, y)), [box.x + box.width / 2, box.y + box.height / 2])).toBe(true);
+      await close.click();
+      await expect(panel).toBeHidden();
+    } finally {
+      await stream.close();
+    }
+  });
+}

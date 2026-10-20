@@ -58,7 +58,7 @@ export function GoalCard({ goal, day, ready }: { goal: Goal | null; day: string 
         <>
           {tsb != null && planReachesRaceWeek(data, goal.race_date) ? (
             <p className="text-xs text-text-secondary">
-              Forme prévue le jour J : <span className="text-neon-gold">{formBand(tsb, goal.days_left)}</span>
+              Fraîcheur prévue le jour J : <span className="text-neon-gold">{formBand(tsb, goal.days_left)}</span>
             </p>
           ) : (
             // A band over weeks of assumed rest would reassure for nothing.

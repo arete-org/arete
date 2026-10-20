@@ -9,7 +9,7 @@ import { currentState, isStandalone, subscribeDevice } from '@/lib/push';
 import { qk } from '@/lib/queryKeys';
 
 const EXAMPLES = [
-  { title: 'Briefing du coach', body: 'Forme en hausse : garde le seuil prévu, 3 × 10 min.' },
+  { title: 'Briefing du coach', body: 'Fraîcheur en hausse : garde le seuil prévu, 3 × 10 min.' },
   { title: 'Séance analysée', body: 'Allure régulière sur la sortie longue, la fin était solide.' },
   { title: 'Bilan de la semaine', body: 'Semaine tenue à 92 %, deux ajustements proposés.' },
 ];

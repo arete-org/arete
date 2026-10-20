@@ -101,9 +101,9 @@ class PlayerStats(BaseModel):
     """RPG-style bars over real training data."""
 
     hp: StatBar = Field(
-        description="Récupération: Garmin readiness (today or yesterday), else the CTL/ATL model"
+        description="Préparation: Garmin readiness (today or yesterday), else the CTL/ATL model"
     )
-    mp: StatBar = Field(description="Forme: TSB mapped to 0-100")
+    mp: StatBar = Field(description="Fraîcheur: TSB mapped to 0-100")
     xp: StatBar = Field(description="Charge de la semaine: TSS vs the weekly goal")
     level: int = Field(description="Consecutive finished weeks at or above the goal")
     weeks_at_goal: int = Field(default=0, description="All-time count of weeks at goal")
@@ -300,7 +300,7 @@ def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
         return StatBar(
             current=50.0,
             max=100,
-            label="Récupération",
+            label="Préparation",
             detail="Aucune donnée de charge ni mesure Garmin",
             source="model",
         )
@@ -308,7 +308,7 @@ def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
         return StatBar(
             current=readiness.score,
             max=100,
-            label="Récupération",
+            label="Préparation",
             detail="Préparation à l'entraînement Garmin (ce matin)",
             source="garmin_training",
         )
@@ -317,7 +317,7 @@ def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
         return StatBar(
             current=readiness.score,
             max=100,
-            label="Récupération",
+            label="Préparation",
             detail=(
                 "Garmin (VFC, sommeil, body battery)"
                 if same_day
@@ -328,7 +328,7 @@ def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
     return StatBar(
         current=readiness.score,
         max=100,
-        label="Récupération",
+        label="Préparation",
         detail="Estimée depuis la charge (aucune mesure Garmin récente)",
         source="model",
     )
@@ -367,7 +367,7 @@ def player_stats(settings: dict, today: date, form: Form) -> PlayerStats:
     mp = StatBar(
         current=mp_current,
         max=100,
-        label="Forme",
+        label="Fraîcheur",
         detail=f"TSB {shown:+.1f}".replace(".", ",") if shown else "TSB 0,0",
         source="model",
     )

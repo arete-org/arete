@@ -64,9 +64,9 @@ test('with a race, the goal card leads and the curve projects to race day in pla
   const panel = page.locator('figure');
   await panel.scrollIntoViewIfNeeded();
   await expect(panel.locator('.recharts-surface')).toBeVisible();
-  await expect(panel.locator('figcaption')).toContainText('Aujourd’hui : fatigue 38, forme +2.');
-  await expect(panel.locator('figcaption')).toContainText('Projection le jour J : forme de fond 44, forme entre +3 et +13.');
-  // The card says the same form as the dashboard's "Forme" card.
+  await expect(panel.locator('figcaption')).toContainText('Aujourd’hui : fatigue 38, fraîcheur +2.');
+  await expect(panel.locator('figcaption')).toContainText('Projection le jour J : forme de fond 44, fraîcheur entre +3 et +13.');
+  // The card says the same form as the dashboard's "Fraîcheur" card.
   await expect(page.getByText('+2,0', { exact: true })).toBeVisible();
   await expect(page.getByText('Pointillés : projection')).toBeVisible();
   // The goal card and the curve share one lazy read, after the dashboard's.

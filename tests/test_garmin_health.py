@@ -10,7 +10,11 @@ import pytest
 from arete.api.garmin_health import router
 from arete.dataio.db import connect
 from arete.garmin.health_sync import _upsert_daily_metrics
-from arete.garmin.readiness import compute_readiness, fetch_window
+from arete.garmin.readiness import (
+    compute_readiness,
+    fetch_window,
+    readiness_from_rows,
+)
 
 
 @pytest.fixture
@@ -140,6 +144,24 @@ class TestReadinessFormula:
             ]
             score = compute_readiness(date(2026, 6, 1))
             assert score >= 0
+
+    @pytest.mark.parametrize(
+        ("resting_hr", "expected"),
+        [(46, 71), (50, 71), (52, 68), (56, 62)],
+    )
+    def test_resting_hr_costs_three_points_per_std_dev_above_baseline(
+        self, resting_hr, expected
+    ):
+        """Baseline RHR 50 +/- 2 bpm; the base score is 71.43 (HRV 0.5,
+        sleep 0.5/0.7, Body Battery 1) and stress is flat, so only RHR moves it.
+        +6 bpm is +3 std-dev: -9 points, not the -3.6 of "-3 per +5 bpm"."""
+        day = date(2026, 6, 15)
+        rows = [
+            (day - timedelta(days=i), 60, 7 * 3600, 80, 30, 48 + 4 * (i % 2), None)
+            for i in range(1, 15)
+        ]
+        rows.append((day, 60, 8 * 3600, 100, 30, resting_hr, None))
+        assert readiness_from_rows(day, rows) == expected
 
 
 class TestReadinessWindow:

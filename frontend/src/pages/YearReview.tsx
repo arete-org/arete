@@ -108,7 +108,7 @@ function FitnessChart({ fitness }: { fitness: YearReview['fitness'] }) {
       <p className="text-sm text-text-secondary">
         {fitness.peak && (
           <>
-            Pic de forme à <strong className="text-text-primary">{DECIMAL.format(fitness.peak.ctl)}</strong> le{' '}
+            Pic de forme de fond à <strong className="text-text-primary">{DECIMAL.format(fitness.peak.ctl)}</strong> le{' '}
             {longDate(fitness.peak.date)}.{' '}
           </>
         )}
@@ -125,8 +125,8 @@ function FitnessChart({ fitness }: { fitness: YearReview['fitness'] }) {
             tickFormatter={(iso: string) => monthLabel(Number(iso.slice(5, 7)))}
           />
           <YAxis {...AXIS} tick={TICK} width={44} />
-          <ChartTooltip labelFormatter={(iso: string) => longDate(iso)} formatter={(v: number) => [DECIMAL.format(v), 'Forme (CTL)']} />
-          <Line isAnimationActive={false} type="monotone" dataKey="ctl" name="Forme" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
+          <ChartTooltip labelFormatter={(iso: string) => longDate(iso)} formatter={(v: number) => [DECIMAL.format(v), 'Forme de fond (CTL)']} />
+          <Line isAnimationActive={false} type="monotone" dataKey="ctl" name="Forme de fond" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </>
@@ -205,7 +205,7 @@ function Review({ data }: { data: YearReview }) {
         </Block>
       </div>
 
-      <Block title="Forme (CTL)">
+      <Block title="Forme de fond (CTL)">
         <FitnessChart fitness={data.fitness} />
       </Block>
 

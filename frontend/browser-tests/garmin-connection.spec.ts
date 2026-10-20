@@ -101,7 +101,8 @@ test('one live progress bar follows Garmin work in System, including partial fai
     state.syncController.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
   }, event);
   await emit({ type: 'progress', stage: 'fetching', completed: 0, total: null, activity_name: null });
-  await expect(page.getByRole('status')).toContainText('Récupération des activités Garmin');
+  // The app keeps an empty live region for the Garmin freshness outcome: name the sync's.
+  await expect(page.getByRole('status').filter({ hasText: 'Récupération des activités Garmin' })).toBeVisible();
   await emit({ type: 'progress', stage: 'fit', completed: 12, total: 24, activity_name: 'Sortie longue · 18 km' });
   await expect(page.getByText('12 / 24 activités traitées')).toBeVisible();
   await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '52');
@@ -113,7 +114,7 @@ test('one live progress bar follows Garmin work in System, including partial fai
   await emit({ type: 'progress', stage: 'finalizing', completed: 0, total: null, activity_name: null });
   await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '95');
   await emit({ type: 'done', success: true, activities_synced: 20, activities_merged: 1, activities_matched: 0, activities_skipped: 3, errors: ['Un fichier FIT indisponible'], last_activity_date: null });
-  await expect(page.getByRole('status')).toContainText('terminée avec des erreurs');
+  await expect(page.getByRole('status').filter({ hasText: 'terminée avec des erreurs' })).toBeVisible();
   await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
   await page.getByText('1 erreur(s) à consulter').click();
   await expect(page.getByText('Un fichier FIT indisponible')).toBeVisible();

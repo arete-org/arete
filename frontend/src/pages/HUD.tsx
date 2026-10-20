@@ -126,7 +126,7 @@ function TermLabel({ term, label }: { term: GlossaryId; label: string }) {
 
 /**
  * One bar of the day's form. Without the RPG it reads in plain words (the
- * coach's: récupération, forme, charge); with it, the HP/MP/TSS tags lead.
+ * coach's: préparation, fraîcheur, charge); with it, the HP/MP/TSS tags lead.
  * The detail stays on screen: a `title` never shows on a phone.
  */
 function FormBar({ stat, color, tag, term }: { stat: StatBar; color: string; tag?: string; term: GlossaryId }) {
@@ -537,7 +537,7 @@ export function DashboardPage() {
                   subtitle="ACWR · cette semaine face aux quatre dernières"
                 />
                 <MetricCard
-                  title="Forme"
+                  title="Fraîcheur"
                   value={fitness?.tsb != null ? formatDecimal(fitness.tsb, 1, true) : '—'}
                   kind="form"
                   term="tsb"
@@ -547,7 +547,7 @@ export function DashboardPage() {
               </div>
             </Panel>
 
-            {/* One curve for forme de fond, fatigue and forme: its own lazy request. */}
+            {/* One curve for forme de fond, fatigue and fraîcheur: its own lazy request. */}
             <Panel className="p-4">
               <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="Courbe de forme" term="ctl" />
               <Suspense
@@ -569,12 +569,12 @@ export function DashboardPage() {
 
             {/* Block 3: Readiness (Garmin) */}
             <Panel className="p-4">
-              <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="Récupération" term="preparation" />
+              <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="Préparation" term="preparation" />
 
               {healthPending ? (
-                <Skeleton label="Chargement de la récupération" />
+                <Skeleton label="Chargement de la préparation" />
               ) : boardFailed ? (
-                <Unavailable what="Récupération" retry={() => void retryBoard()} />
+                <Unavailable what="Préparation" retry={() => void retryBoard()} />
               ) : healthData && morningIn ? (
                 // This morning's row is in: its numbers show even when Arete's own
                 // score is missing (an HRV fetch that failed leaves only Garmin's).
@@ -590,7 +590,7 @@ export function DashboardPage() {
                     </div>
                     {morningScore != null && (
                       <span className="text-[11px] font-sans text-text-secondary first-letter:uppercase">
-                        Récupération {readinessWord(morningScore, fatigueThreshold)}
+                        Préparation {readinessWord(morningScore, fatigueThreshold)}
                       </span>
                     )}
                   </div>

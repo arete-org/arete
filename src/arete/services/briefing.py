@@ -286,7 +286,7 @@ def briefing_facts(
         [
             f"Nous sommes {weekday} {target_date.isoformat()}.",
             f"Conseil calculé par les règles : {rule_text}",
-            bullet_block("Charge, forme et récupération", load),
+            bullet_block("Charge, fraîcheur et préparation", load),
             # Only once answered: a day without one keeps its facts (and digest).
             *(
                 [bullet_block("Check-in déclaré par l'athlète", lambda: declared)]

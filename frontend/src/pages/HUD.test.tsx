@@ -24,8 +24,8 @@ const board: DashboardData = {
     weekly_goal_tss: 300,
     recent_weeks_at_goal: 9,
     recent_weeks: 12,
-    hp: { current: 62, max: 100, label: 'Récupération', detail: 'Préparation à l’entraînement Garmin (ce matin)', source: 'garmin_training' },
-    mp: { current: 57, max: 100, label: 'Forme', detail: 'TSB +4,2', source: 'model' },
+    hp: { current: 62, max: 100, label: 'Préparation', detail: 'Préparation à l’entraînement Garmin (ce matin)', source: 'garmin_training' },
+    mp: { current: 57, max: 100, label: 'Fraîcheur', detail: 'TSB +4,2', source: 'model' },
     xp: { current: 120, max: 300, label: 'Charge de la semaine', detail: 'Objectif 300 TSS · 6 séances', source: 'model' },
   },
   fitness: {
@@ -116,16 +116,16 @@ it('speaks plain words without the RPG: no HP, MP, XP, player nor level', async 
   expect(screen.queryAllByText(/joueur/i)).toHaveLength(0);
   expect(screen.queryAllByText(/niveau/i)).toHaveLength(0);
   // Each bar names itself and keeps its detail on screen (a title never shows on a phone).
-  for (const label of ['Récupération', 'Charge de la semaine']) expect(screen.getByText(label, { selector: ':not(h2)' })).toBeTruthy();
+  for (const label of ['Préparation', 'Charge de la semaine']) expect(screen.getByText(label, { selector: ':not(h2)' })).toBeTruthy();
   expect(screen.getByText('Objectif 300 TSS · 6 séances')).toBeTruthy();
   expect(screen.getByText('Préparation à l’entraînement Garmin (ce matin)')).toBeTruthy();
   expect(document.querySelector('[title]')).toBeNull();
   // Plain label first, the acronym as a secondary line, French decimals. TSB is
-  // "Forme", as the coach says it: the bar and the card name the same number.
+  // "Fraîcheur", as the coach says it: the bar and the card name the same number.
   expect(screen.getByText('Équilibre de charge')).toBeTruthy();
   expect(screen.getByText('1,12')).toBeTruthy();
   expect(screen.getByText('ACWR · cette semaine face aux quatre dernières')).toBeTruthy();
-  expect(screen.getAllByText('Forme')).toHaveLength(2);
+  expect(screen.getAllByText('Fraîcheur')).toHaveLength(2);
   expect(screen.getByText('+4,2')).toBeTruthy();
   expect(screen.getByText(/^TSB ·/)).toBeTruthy();
 });
@@ -216,7 +216,7 @@ it('leads with the race goal above the briefing, and the one form curve in plain
   expect(goal.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(await screen.findByText('entre +3 et +13')).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Courbe de forme' })).toBeTruthy();
-  expect(await screen.findByText(/Aujourd’hui : fatigue 36, forme \+4\./)).toBeTruthy();
+  expect(await screen.findByText(/Aujourd’hui : fatigue 36, fraîcheur \+4\./)).toBeTruthy();
   // The goal card and the curve share one request.
   expect(formCurveApi.get).toHaveBeenCalledTimes(1);
 });

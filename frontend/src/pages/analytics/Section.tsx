@@ -8,7 +8,7 @@ export interface SectionDef {
 }
 
 export const SECTIONS: SectionDef[] = [
-  { id: 'charge', title: 'Charge', intro: 'Le volume réalisé et l’équilibre entre forme, fatigue et fraîcheur.' },
+  { id: 'charge', title: 'Charge', intro: 'Le volume réalisé et l’équilibre entre forme de fond, fatigue et fraîcheur.' },
   { id: 'intensite', title: 'Intensité', intro: 'Le temps passé dans chaque zone et la place de chaque sport.' },
   { id: 'efficacite', title: 'Efficacité', intro: 'La relation entre l’allure et l’effort cardiaque, avec tes meilleurs chronos.' },
   { id: 'terrain', title: 'Terrain & foulée', intro: 'La montée, la descente et les caractéristiques de ta foulée.' },

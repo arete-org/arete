@@ -56,11 +56,11 @@ describe('French formatting', () => {
 it('shows a deload as such, with its reason', () => {
   render(
     <SuggestionNote
-      suggestion={suggestion({ deload: true, rule: 'deload', reason: 'Récupération basse aujourd’hui (40/100).' })}
+      suggestion={suggestion({ deload: true, rule: 'deload', reason: 'Préparation basse aujourd’hui (40/100).' })}
     />
   );
   expect(screen.getByText(/Allègement/)).toBeTruthy();
-  expect(screen.getByText(/Récupération basse/)).toBeTruthy();
+  expect(screen.getByText(/Préparation basse/)).toBeTruthy();
 });
 
 it('celebrates each record, grouped by exercise', () => {

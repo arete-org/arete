@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { RenegotiationOutcome } from '@/components/dashboard/RenegotiationOutcome';
-import { Button, Panel } from '@/components/ui';
+import { Button, Panel, Select } from '@/components/ui';
 import { coachApi, coachTodayKey, discussWithCoach, type Followup, type Proposal, type SeenRevision } from '@/lib/coachToday';
 import { invalidateAfterSession } from '@/lib/queryKeys';
 import { dayLabel, type DayOutcome } from '@/lib/renegotiation';
@@ -99,7 +99,7 @@ export function ProposalCard({
       <p className="font-semibold">{discussion ? 'Examiner les étapes ensemble' : `Proposé : ${outcome(proposal)}`}</p>
     </>}
     <p className="text-sm text-text-secondary">{proposal.reason}</p>
-    <p className="text-xs text-text-muted">{missed ? 'Aucune activité enregistrée aujourd’hui' : proposal.readiness_measured_on ? `Mesure de récupération du ${proposal.readiness_measured_on}` : 'Récupération estimée par la charge'} · Rien n’a encore changé.</p>
+    <p className="text-xs text-text-muted">{missed ? 'Aucune activité enregistrée aujourd’hui' : proposal.readiness_measured_on ? `Mesure de préparation du ${proposal.readiness_measured_on}` : 'Préparation estimée par la charge'} · Rien n’a encore changé.</p>
     {/* 44 px targets: the card is answered with a thumb. */}
     <div className="flex flex-wrap gap-2 [&>button]:min-h-11">
       {!discussion && <Button disabled={disabled || stale} onClick={() => action.mutate('apply')}>{applyLabel}</Button>}
@@ -133,7 +133,7 @@ export function FollowupCard({ followup }: { followup: Followup }) {
     <Link className="text-sm text-neon-cyan underline" to={`/log/sessions/${current.session_id}`}>Voir la séance</Link>
     <form className="space-y-3" onSubmit={e => { e.preventDefault(); action.mutate('answer'); }}>
       <label className="block text-sm">Effort ressenti · 1 très facile, 10 maximal
-        <select required aria-label="Effort ressenti" value={rpe} onChange={e => setRpe(e.target.value)} className="mt-2 block w-full rounded border border-text-muted/30 bg-abyss p-3"><option value="">Choisir</option>{Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}/10</option>)}</select>
+        <Select required aria-label="Effort ressenti" value={rpe} onChange={e => setRpe(e.target.value)} className="mt-2 block min-h-11"><option value="">Choisir</option>{Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}/10</option>)}</Select>
       </label>
       <label className="block text-sm">Une précision ? <span className="text-text-muted">Facultatif</span><textarea aria-label="Note de séance" maxLength={2000} value={notes} onChange={e => setNotes(e.target.value)} className="mt-2 block w-full rounded border border-text-muted/30 bg-abyss p-3" /></label>
       <div className="flex flex-wrap gap-2">
@@ -168,7 +168,7 @@ export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { ena
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button variant="outline" size="sm" aria-describedby="coach-prepare-hint" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>
-        <p id="coach-prepare-hint" className="text-xs text-text-muted">{coach.The} relit ta récupération et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
+        <p id="coach-prepare-hint" className="text-xs text-text-muted">{coach.The} relit ta préparation et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
       </div>
     </div>
   </Panel>;

@@ -17,7 +17,13 @@ interface Upload {
 }
 
 
-export function CardioTab({ showManual, onManualChange }: { showManual: boolean; onManualChange: (open: boolean) => void }) {
+export function CardioTab({ showManual, onManualChange, onManualSaved }: {
+  showManual: boolean;
+  /** Opens the manual entry, or dismisses it. */
+  onManualChange: (open: boolean) => void;
+  /** Closes the manual entry after a save. */
+  onManualSaved: () => void;
+}) {
   const coach = useCoachWords();
   const queryClient = useQueryClient();
   const [recentUploads, setRecentUploads] = useState<Upload[]>([]);
@@ -126,7 +132,7 @@ export function CardioTab({ showManual, onManualChange }: { showManual: boolean;
       <ManualCardioModal
         open={showManual}
         onClose={() => onManualChange(false)}
-        onCreated={(id) => void requestFeedback(id)}
+        onCreated={(id) => { onManualSaved(); void requestFeedback(id); }}
       />
     </div>
   );

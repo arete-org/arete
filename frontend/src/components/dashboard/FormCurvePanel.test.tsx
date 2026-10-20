@@ -34,7 +34,7 @@ it('shows a skeleton, then the curve with its summary in words', async () => {
   mount();
   expect(screen.getByRole('status', { name: 'Chargement de la courbe de forme' })).toBeTruthy();
   const caption = await screen.findByText(/^Sur 12 semaines/);
-  expect(caption.textContent).toBe('Sur 12 semaines, ta forme de fond est passée de 32 à 40. Aujourd’hui : fatigue 36, forme +5.');
+  expect(caption.textContent).toBe('Sur 12 semaines, ta forme de fond est passée de 32 à 40. Aujourd’hui : fatigue 36, fraîcheur +5.');
   expect(caption.tagName).toBe('FIGCAPTION');
   // No acronym in the words the athlete reads.
   expect(screen.queryAllByText(/\b(CTL|ATL|TSB)\b/)).toHaveLength(0);
@@ -63,7 +63,7 @@ it('adds race morning to the summary only when the plan reaches race week', () =
     last_planned: '2026-11-18',
   };
   // 38 days out: ±5.
-  expect(curveSummary(projected)).toMatch(/Projection le jour J : forme de fond 45, forme entre \+4 et \+14\.$/);
+  expect(curveSummary(projected)).toMatch(/Projection le jour J : forme de fond 45, fraîcheur entre \+4 et \+14\.$/);
   expect(curveSummary({ ...projected, last_planned: '2026-10-25' })).toMatch(/Plan jusqu’au 25 oct\., la courbe suppose du repos ensuite\.$/);
   expect(curveSummary({ ...curve, series: [] })).toMatch(/^Pas encore de charge/);
 });
@@ -77,7 +77,7 @@ it('reads today from the logged load, the projection after it', () => {
     race_day: { ctl: 45, tsb: 8 },
     series: [...history, { date: '2026-10-14', ctl: 41, atl: 45, tsb: -4, planned: true }],
   };
-  expect(curveSummary(withPlanToday)).toContain('Aujourd’hui : fatigue 36, forme +5.');
+  expect(curveSummary(withPlanToday)).toContain('Aujourd’hui : fatigue 36, fraîcheur +5.');
 });
 
 it('fails with the dashboard, with its retry, and reads nothing', () => {

@@ -47,8 +47,8 @@ describe('glossary entries', () => {
     expect(glossaryHref('acwr')).toBe('/analytics/lexique#acwr');
     expect(glossaryQuestion('vfc')).toBe('Qu’est-ce que la VFC ?');
     expect(glossaryQuestion('zones')).toBe('Qu’est-ce que les zones cardiaques ?');
-    expect(glossaryQuestion('preparation', 'barre Récupération')).toBe(
-      'Qu’est-ce que la préparation ? (barre Récupération)',
+    expect(glossaryQuestion('preparation', 'barre Préparation')).toBe(
+      'Qu’est-ce que la préparation ? (barre Préparation)',
     );
     // Every term reads after « Qu’est-ce que » without elision: it starts with its article.
     for (const named of Object.values(GLOSSARY_TERMS)) expect(named).toMatch(/^(le |la |les |l’)/);

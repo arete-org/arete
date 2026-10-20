@@ -9,7 +9,7 @@ const FormCurveChart = lazy(importChunk(() => import('./FormCurveChart').then((m
 const LEGEND = [
   { label: 'Forme de fond', className: 'bg-neon-cyan' },
   { label: 'Fatigue', className: 'bg-chart-red' },
-  { label: 'Forme', className: 'bg-neon-gold' },
+  { label: 'Fraîcheur', className: 'bg-neon-gold' },
 ];
 
 /** The settled block's height (chart, legend, a three-line caption on a phone), kept while it loads: no jump. */
