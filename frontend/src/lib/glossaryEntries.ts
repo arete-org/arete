@@ -96,10 +96,10 @@ export const GLOSSARY = [
   {
     id: 'ctl',
     term: 'Forme de fond (CTL)',
-    aliases: ['CTL', 'Forme de fond', 'Forme (Analyses)'],
+    aliases: ['CTL', 'Forme de fond'],
     category: 'charge',
     definition:
-      'La moyenne de ta charge quotidienne, lissée sur environ six semaines : ce que ton corps a appris à encaisser. Elle monte lentement quand tu t’entraînes avec régularité et redescend lentement quand tu coupes. La page Analyses l’appelle « Forme ».',
+      'La moyenne de ta charge quotidienne, lissée sur environ six semaines : ce que ton corps a appris à encaisser. Elle monte lentement quand tu t’entraînes avec régularité et redescend lentement quand tu coupes.',
     scale: 'Points de charge par jour (même unité que le TSS).',
     range: 'Propre à chacun : compare-la à tes propres semaines.',
     reading: [
@@ -129,10 +129,10 @@ export const GLOSSARY = [
   {
     id: 'tsb',
     term: 'Fraîcheur (TSB)',
-    aliases: ['TSB', 'Fraîcheur', 'Forme (accueil)'],
+    aliases: ['TSB', 'Fraîcheur'],
     category: 'charge',
     definition:
-      'Ta forme de fond moins ta fatigue. Négative, la fatigue récente dépasse ce que tu encaisses d’habitude ; positive, tu es reposé. L’accueil et le bilan de la semaine l’appellent « Forme ».',
+      'Ta forme de fond moins ta fatigue. Négative, la fatigue récente dépasse ce que tu encaisses d’habitude ; positive, tu es reposé.',
     scale: 'Points, avec un signe : de −30 à +30 la plupart du temps.',
     reading: [
       { tone: 'good', text: 'De +10 à +25 : frais, bon moment pour une course ou un test.' },
@@ -327,8 +327,8 @@ export const GLOSSARY = [
   // pages/HUD readinessTone (threshold, 60 %), services/weekly_review (50).
   {
     id: 'preparation',
-    term: 'Préparation (récupération du jour)',
-    aliases: ['Récupération', 'Préparation', 'Préparation Garmin', 'Préparation à l’entraînement Garmin', 'Seuil de préparation'],
+    term: 'Préparation',
+    aliases: ['Préparation Garmin', 'Préparation à l’entraînement Garmin', 'Seuil de préparation'],
     category: 'recuperation',
     definition:
       'Un score qui dit si ton corps est prêt à encaisser une séance. Arete lit d’abord la préparation à l’entraînement de ta montre Garmin, sinon son propre score tiré de tes données Garmin (VFC face à ta moyenne de 14 jours pour 40 %, sommeil face à 8 h pour 30 %, Body Battery pour 30 %, moins un malus si stress ou FC de repos sont au-dessus de ta moyenne), sinon une estimation par la charge.',

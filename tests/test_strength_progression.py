@@ -142,7 +142,7 @@ def test_low_readiness_lowers_load_and_volume_and_says_why():
     s = suggest_next(session(1, *sets(3, 10, 100), target="8-10"), readiness=42)
     assert s is not None and s.rule == "deload"
     assert (s.weight_kg, s.sets, s.reps) == (90, 2, 8)
-    assert "Récupération basse" in s.reason and "42/100" in s.reason
+    assert "Préparation basse" in s.reason and "42/100" in s.reason
     assert "−10 %" in s.reason
 
 

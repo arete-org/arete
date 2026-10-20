@@ -111,7 +111,7 @@ def test_the_preview_shows_the_suggestion_and_a_deload_when_recovery_is_low(
     progression = preview["exercises"][0]["progression"]
     assert progression["deload"] is True
     assert progression["weight_kg"] == 90
-    assert "Récupération basse" in progression["reason"]
+    assert "Préparation basse" in progression["reason"]
 
 
 def test_the_suggestion_route_and_the_coach_tool_agree(client, clean, readiness):

@@ -164,7 +164,7 @@ export function GoalsTab({ settings, updateSetting }: SettingsTabProps) {
         <TrainingPacesPanel />
 
         <Field
-          label="Seuil de préparation (%)"
+          label="Seuil de préparation"
           hint="Au-dessus de ce score, le conseil du jour propose une séance dure"
         >
           <div className="flex items-center gap-4">

@@ -37,6 +37,7 @@ class TestPmc:
     def test_balanced_is_good(self):
         r = insights.pmc_insight(97, 3, 1.05, "optimal")
         assert r["tone"] == "good" and "optimal" in r["text"]
+        assert r["text"].startswith("Forme de fond 97, fraîcheur +3.")
 
     def test_too_fresh_warns(self):
         assert insights.pmc_insight(50, 30, 0.6, "undertraining")["tone"] == "warn"

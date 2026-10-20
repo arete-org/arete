@@ -360,7 +360,7 @@ class TestPlayerStatsSemantics:
             body = client.get("/metrics/player-stats").json()
         assert body["hp"]["current"] == 73.0
         assert body["hp"]["source"] == "garmin"
-        assert body["hp"]["label"] == "Récupération"
+        assert body["hp"]["label"] == "Préparation"
 
     def test_hp_uses_yesterday_before_the_model(self, client):
         # Garmin publishes the night's HRV at wake-up: early in the day only

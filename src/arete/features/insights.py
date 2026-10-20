@@ -55,7 +55,7 @@ def volume_insight(km: float, prev_km: float | None, hours: float) -> Insight:
 def pmc_insight(
     ctl: float, tsb: float, acwr: float | None, acwr_zone: str | None
 ) -> Insight:
-    head = f"Forme {ctl:.0f}, fraîcheur {tsb:+.0f}"
+    head = f"Forme de fond {ctl:.0f}, fraîcheur {tsb:+.0f}"
     if acwr is not None and acwr > 1.5:
         return _insight(
             f"{head}. Charge aiguë très supérieure à la chronique (ACWR {acwr:.2f}) : risque de blessure.",

@@ -89,7 +89,7 @@ function Recap({ recap, review }: { recap: WeekRecap; review: WeeklyReview }) {
           )}
         </div>
         <Tile
-          label="Forme"
+          label="Fraîcheur"
           term="tsb"
           value={recap.tsb == null ? '—' : formatDecimal(recap.tsb, 0, true)}
           detail="TSB, forme de fond moins fatigue"

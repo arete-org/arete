@@ -8,16 +8,16 @@ import { AXIS, ChartGrid, ChartTooltip, TICK } from '@/pages/analytics/chartPart
 const CURVE_LABEL: Record<string, string> = {
   ctl: 'Forme de fond',
   atl: 'Fatigue',
-  tsb: 'Forme',
+  tsb: 'Fraîcheur',
   ctlPlan: 'Forme de fond (prévue)',
   atlPlan: 'Fatigue (prévue)',
-  tsbPlan: 'Forme (prévue)',
+  tsbPlan: 'Fraîcheur (prévue)',
 };
 
 const shortDate = (iso: string) => parseLocalDate(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 
 /**
- * Forme de fond, fatigue and forme: solid up to the last logged day, dotted for the
+ * Forme de fond, fatigue and fraîcheur: solid up to the last logged day, dotted for the
  * projection to race day. recharts loads with this chunk only (ARE-46).
  */
 export function FormCurveChart({ series, today }: { series: CurvePoint[]; today: string }) {

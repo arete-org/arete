@@ -424,7 +424,7 @@ def _recommendations_ramp_rate(ramp_rate: float | None) -> list[Recommendation]:
                 category=Category.PROGRESSION,
                 title="Charge en diminution",
                 message=f"Ramp rate ({ramp_rate:.1f} pts/semaine) : baisse significative",
-                reason="Votre forme (CTL) diminue",
+                reason="Votre forme de fond (CTL) diminue",
                 actions=[
                     "Normal si vous êtes en décharge",
                     "Sinon, reprenez progressivement",
