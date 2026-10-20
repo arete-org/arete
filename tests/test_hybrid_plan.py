@@ -8,23 +8,35 @@ from datetime import date, timedelta
 import pytest
 
 from arete.features.hybrid_plan import (
+    ACTIVATION,
     BENCHMARK,
     COMPROMISED,
     EASY,
     HARD,
     HEAVY_LOWER,
+    HYBRID_PLANNED_RPE,
+    KEPT,
     KEY_RUN,
     RACE,
     STATION,
+    STRENGTH,
     UPPER,
     HybridInputs,
     athlete_level,
     default_rules,
     generate_hybrid_plan,
+    kept_tags,
     plan_violations,
     violations,
 )
-from arete.features.plan_generator import DraftSession, PlanError, WeekPlan
+from arete.features.plan_generator import (
+    PLANNED_RPE,
+    DraftSession,
+    PlanError,
+    WeekPlan,
+    monday_of,
+    planned_tss,
+)
 from arete.features.running import training_paces
 from arete.services.adaptation import ACWR_REST_AT, TSB_EASE_AT
 
@@ -349,3 +361,159 @@ def test_the_taper_forbids_heavy_legs_and_late_hard_sessions():
     assert _rules_broken(_session(2, HEAVY_LOWER), race_date=race_day) == ["taper"]
     assert _rules_broken(_session(7, HARD), race_date=race_day) == []
     assert _rules_broken(_session(8, HARD), race_date=race_day) == ["taper"]
+
+
+# --------------------------------------------------------------------------- #
+# Generation keeps every rule, the taper's volume included
+# --------------------------------------------------------------------------- #
+RESTS = [
+    frozenset(),
+    frozenset({0}),
+    frozenset({2, 5}),
+    frozenset({5, 6}),
+    frozenset({1, 3, 5, 6}),
+]
+
+
+@pytest.mark.parametrize(
+    "rest", RESTS, ids=lambda r: "rest" + "".join(map(str, sorted(r)))
+)
+@pytest.mark.parametrize("training_days", [3, 4, 5, 6])
+@pytest.mark.parametrize("weeks_out", [6, 9, 13])
+def test_the_taper_volume_holds_for_every_pattern(rest, training_days, weeks_out):
+    for start_day in (0, 3):  # a Monday, then a mid-week start
+        for race_weekday in range(7):
+            start = START + timedelta(days=start_day)
+            race_day = monday_of(start) + timedelta(
+                weeks=weeks_out - 1, days=race_weekday
+            )
+            _, weeks = _plan(
+                start=start,
+                race_date=race_day,
+                rest_days=rest,
+                training_days=training_days,
+                weekly_minutes_now=100,
+            )
+            assert plan_violations(weeks, RULES, race_day) == [], (start, race_day)
+
+
+def test_a_capped_taper_says_which_sessions_it_gave_up():
+    # Wednesday race, three training days, two rest days: the taper overflowed.
+    race_day = START + timedelta(weeks=5, days=2)
+    _, weeks = _plan(
+        race_date=race_day,
+        weekly_minutes_now=100,
+        rest_days=frozenset({2, 5}),
+        training_days=3,
+    )
+    assert plan_violations(weeks, RULES, race_day) == []
+    dropped = [line for w in weeks for line in w.dropped]
+    assert any("affûtage" in line for line in dropped)
+
+
+def test_a_full_week_with_three_days_in_a_row_keeps_its_key_sessions():
+    _, weeks = _plan(rest_days=frozenset({0, 1, 2, 3}), training_days=3)
+    assert plan_violations(weeks, RULES, RACE_DAY) == []
+    for week in _loading(weeks):
+        mix = _mix(week)
+        assert mix[KEY_RUN] == mix[COMPROMISED] == 1
+        assert sum(1 for s in week.sessions if STRENGTH in s.tags) >= 1
+        if len(week.sessions) < 6:
+            assert week.dropped and all("retirée" in line for line in week.dropped)
+
+
+def test_a_monday_race_keeps_its_activation_in_the_week_before():
+    race_day = START + timedelta(weeks=8)  # a Monday
+    _, weeks = _plan(race_date=race_day)
+    activation = [s for w in weeks for s in w.sessions if ACTIVATION in s.tags]
+    assert len(activation) == 1
+    assert 2 <= (race_day - activation[0].date).days <= 4
+    assert HARD not in activation[0].tags
+
+
+def test_heavy_legs_on_the_key_run_day_say_they_come_after_it():
+    _, weeks = _plan()
+    for week in weeks:
+        key_days = {s.date for s in week.sessions if KEY_RUN in s.tags}
+        for s in week.sessions:
+            if HEAVY_LOWER in s.tags and s.date in key_days:
+                assert s.description.endswith("(après la course clé)")
+
+
+def test_a_block_starting_later_does_not_deload_on_todays_load():
+    block_end = START + timedelta(weeks=9, days=6)  # starts two weeks from now
+    _, weeks = _plan(kind="hybrid", race_date=block_end, weeks=8, acwr=2.0)
+    assert weeks[0].start == START + timedelta(weeks=2)
+    assert weeks[0].recovery is False
+    _, now = _plan(
+        kind="hybrid", race_date=block_end - timedelta(weeks=2), weeks=8, acwr=2.0
+    )
+    assert now[0].recovery is True
+
+
+def test_the_compromised_run_s_steps_own_its_targets():
+    _, weeks = _plan()
+    run = next(s for s in weeks[0].sessions if COMPROMISED in s.tags)
+    assert run.hr_zone is None and run.intensity is None
+    assert run.duration_min  # the planned load the projection reads
+
+
+def test_strength_and_circuits_weigh_more_only_in_a_hybrid_plan():
+    assert planned_tss("strength", 60) == planned_tss("other", 60)  # unchanged
+    assert PLANNED_RPE.get("cross_training") is None
+    assert planned_tss("strength", 60, HYBRID_PLANNED_RPE) > planned_tss("strength", 60)
+    assert planned_tss("cross_training", 60, HYBRID_PLANNED_RPE) > planned_tss(
+        "cross_training", 60
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Sessions the athlete edited
+# --------------------------------------------------------------------------- #
+def _kept(
+    day: date, sport: str, session_type: str, intensity: str | None, structured=False
+):
+    return DraftSession(
+        day,
+        session_type,
+        45,
+        None,
+        intensity,
+        "modifiée",
+        sport=sport,
+        tags=kept_tags(sport, session_type, intensity, structured, "intermediate"),
+    )
+
+
+def test_kept_sessions_are_read_strictly():
+    assert kept_tags("running", "tempo", "hard", False, "intermediate") >= {
+        KEY_RUN,
+        KEPT,
+    }
+    assert COMPROMISED in kept_tags("running", "intervals", None, True, "intermediate")
+    assert HEAVY_LOWER in kept_tags("strength", "strength", "hard", False, "novice")
+    assert UPPER in kept_tags("strength", "strength", "moderate", False, "novice")
+    assert STATION in kept_tags("strength", "cross_training", None, False, "novice")
+
+
+def test_a_moved_key_run_is_not_planned_twice_and_the_rules_see_it():
+    week_two = START + timedelta(weeks=1)
+    moved = _kept(week_two + timedelta(days=3), "running", "tempo", "hard")  # Thursday
+    _, weeks = _plan(kept=(moved,))
+    assert plan_violations(weeks, RULES, RACE_DAY) == []
+    week = next(w for w in weeks if w.start == week_two)
+    assert [s for s in week.sessions if KEY_RUN in s.tags] == [moved]
+    heavy = [s for s in week.sessions if HEAVY_LOWER in s.tags]
+    assert all(not 0 < (moved.date - s.date).days < 3 for s in heavy)
+    assert not any(s.date == moved.date and KEPT not in s.tags for s in week.sessions)
+
+
+def test_kept_heavy_legs_push_the_key_run_away():
+    week_two = START + timedelta(weeks=1)
+    legs = _kept(week_two, "strength", "strength", "hard")  # Monday
+    _, weeks = _plan(rest_days=frozenset(), kept=(legs,))
+    assert plan_violations(weeks, RULES, RACE_DAY) == []
+    week = next(w for w in weeks if w.start == week_two)
+    key = next(s for s in week.sessions if KEY_RUN in s.tags)
+    assert (key.date - legs.date).days >= 3
+    assert sum(1 for s in week.sessions if HEAVY_LOWER in s.tags) == 1

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -10,7 +12,7 @@ from arete.dataio.db import connect
 from arete.garmin.models import PlannedSession, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services import goals
-from arete.services.settings import today_in
+from arete.services.settings import athlete_today, today_in
 
 FAR = today_in(None) + timedelta(days=900)  # from the default athlete's day
 
@@ -140,8 +142,13 @@ class TestNextGoal:
         assert [s for s in statement_log if "visible_goals" in s] == [statement_log[-1]]
 
     def test_a_hybrid_block_is_never_the_next_race(self):
+        start = FAR - timedelta(weeks=9)
         goals.create_goal(
-            name="test-block", race_date=FAR, goal_type="hybrid", details={"weeks": 8}
+            name="test-block",
+            race_date=goals.hybrid_end_window(8, start)[0],
+            goal_type="hybrid",
+            details={"weeks": 8},
+            today=start,
         )
         hyrox = goals.create_goal(
             name="test-hyrox",
@@ -238,3 +245,91 @@ class TestGoalTypes:
             f"/goals/{created.json()['id']}", json={"details": {"weeks": 9}}
         )
         assert patched.status_code == 422 and "semaines" in patched.json()["detail"]
+
+    def test_patching_details_replaces_them_whole(self):
+        g = goals.create_goal(
+            name="test-hyrox",
+            race_date=FAR,
+            goal_type="hyrox",
+            details={"division": "pro", "category": "women", "equipment": ["sled"]},
+        )
+        updated = goals.update_goal(g.id, details={"category": "men"})
+        # Not merged: what the new details omit takes its default again.
+        assert updated is not None and updated.details == {
+            "division": "open",
+            "format": "solo",
+            "category": "men",
+            "equipment": ["none"],
+            "weeks": 12,
+        }
+
+    def test_a_hybrid_block_ends_a_whole_block_from_next_monday(self):
+        today = FAR - timedelta(days=FAR.weekday() + 3)  # a Friday
+        earliest, latest = goals.hybrid_end_window(8, today)
+        assert earliest.weekday() == 6 and (earliest - today).days == 3 + 8 * 7 - 1
+        assert latest == earliest + timedelta(weeks=2)
+        for end in (earliest, latest):
+            block = goals.create_goal(
+                name="test-block",
+                race_date=end,
+                goal_type="hybrid",
+                details={"weeks": 8},
+                today=today,
+            )
+            assert (block.goal_type, block.distance_km) == ("hybrid", 0.0)
+        for end in (earliest - timedelta(days=1), latest + timedelta(days=1)):
+            with pytest.raises(ValueError, match="La fin du bloc doit tomber entre"):
+                goals.create_goal(
+                    name="test-block",
+                    race_date=end,
+                    goal_type="hybrid",
+                    details={"weeks": 8},
+                    today=today,
+                )
+
+    def test_the_routes_word_hybrid_and_plan_errors_in_french(
+        self, router_client, monkeypatch
+    ):
+        from arete.api import goals as api
+        from arete.api.goals import router
+
+        today = FAR - timedelta(days=900)
+        monkeypatch.setattr(api, "athlete_today", lambda: today)
+        client = router_client(router)
+        past = client.post(
+            "/goals",
+            json={
+                "name": "test-block",
+                "race_date": (today - timedelta(days=1)).isoformat(),
+                "goal_type": "hybrid",
+                "details": {"weeks": 8},
+            },
+        )
+        assert (
+            past.status_code == 422
+            and past.json()["detail"] == "La fin du bloc est passée"
+        )
+        early = client.post(
+            "/goals",
+            json={
+                "name": "test-block",
+                "race_date": (today + timedelta(weeks=4)).isoformat(),
+                "goal_type": "hybrid",
+                "details": {"weeks": 8},
+            },
+        )
+        assert early.status_code == 422 and "La fin du bloc" in early.json()["detail"]
+        soon = goals.create_goal(
+            name="test-hyrox-soon",
+            race_date=athlete_today() + timedelta(weeks=3),
+            goal_type="hyrox",
+            details={"category": "women"},
+        )
+        with patch(
+            "arete.services.coaching_rules.rule_facts",
+            return_value=SimpleNamespace(acwr=None, tsb=None),
+        ):
+            resp = client.post(f"/goals/{soon.id}/plan/preview")
+        assert (
+            resp.status_code == 422 and "moins de 6 semaines" in resp.json()["detail"]
+        )

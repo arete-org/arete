@@ -17,21 +17,35 @@ from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from typing import Any
 
+import duckdb
+
 from arete.dataio.db import connect
 from arete.dataio.queries import RUNNING_SPORTS, sql_in
 from arete.dataio.settings import get_user_settings
 from arete.features.hybrid_plan import (
+    HYBRID_PLANNED_RPE,
+    KEPT,
     HybridInputs,
     athlete_level,
     default_rules,
     generate_hybrid_plan,
+    kept_tags,
+    loading_sessions,
 )
-from arete.features.plan_generator import PlanInputs, WeekPlan, generate_plan
+from arete.features.plan_generator import (
+    PLANNED_RPE,
+    DraftSession,
+    PlanInputs,
+    WeekPlan,
+    generate_plan,
+    planned_tss,
+)
 from arete.features.running import training_paces
 from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services.adaptation import ACWR_REST_AT, TSB_EASE_AT
 from arete.services.goals import Goal, GoalDetails, get_goal
+from arete.services.prescriptions import Prescription
 from arete.services.settings import athlete_today
 
 _WEEKDAYS = (
@@ -45,8 +59,10 @@ _WEEKDAYS = (
 )
 HISTORY_DAYS = 28
 DEFAULT_RUNS_PER_WEEK = 4
-#: Training days a week for a Hyrox or hybrid plan without a weekly goal.
-DEFAULT_HYBRID_DAYS = 5
+#: Settings' weekly sessions goal when unset (``services.settings``). A
+#: Hyrox or hybrid plan reads it as training days: past them, sessions pair
+#: on hard days rather than taking another day.
+DEFAULT_WEEKLY_SESSIONS = 6
 #: Interference rules; the deload starts where the daily adaptation rests or eases.
 HYBRID_RULES = default_rules(acwr_above=ACWR_REST_AT, tsb_below=TSB_EASE_AT)
 
@@ -119,29 +135,55 @@ def plan_inputs(goal: Goal, today: date | None = None) -> PlanInputs:
     )
 
 
+def _kept(con, goal: Goal, start: date) -> list[PlannedSession]:
+    """The goal's sessions from ``start`` that regeneration keeps: those the
+    athlete edited (``revision > 1``) or the daily adaptation changed."""
+    return [
+        s
+        for s in GarminRepository().list_planned_sessions(
+            start_date=start,
+            end_date=goal.race_date,
+            status=None,
+            limit=500,
+            ascending=True,
+            connection=con,
+        )
+        if s.goal_id == goal.id
+        and (
+            s.status == SessionStatus.MODIFIED
+            or (s.status == SessionStatus.PENDING and s.revision > 1)
+        )
+    ]
+
+
 def hybrid_inputs(goal: Goal, today: date | None = None) -> HybridInputs:
     from arete.services.coaching_rules import rule_facts
     from arete.services.metrics import current_vdot
 
     assert goal.goal_type in ("hyrox", "hybrid"), goal.goal_type
     today = today or athlete_today()
+    start = today + timedelta(days=1)  # today belongs to the daily adaptation
     settings = get_user_settings() or {}
     con = connect()
     try:
         minutes, runs = _recent_running(con, today)
         strength = _recent_strength(con, today)
         vdot = current_vdot(con)
+        kept = _kept(con, goal, start)
     finally:
         con.close()
     facts = rule_facts(today)  # the readiness rules' ACWR and TSB
     details = GoalDetails.model_validate(goal.details or {})
+    level = athlete_level(runs, minutes, strength)
     return HybridInputs(
-        start=today + timedelta(days=1),  # today belongs to the daily adaptation
+        start=start,
         race_date=goal.race_date,
         kind="hyrox" if goal.goal_type == "hyrox" else "hybrid",
-        level=athlete_level(runs, minutes, strength),
+        level=level,
         weekly_minutes_now=minutes,
-        training_days=int(settings.get("weekly_training_goal") or DEFAULT_HYBRID_DAYS),
+        training_days=int(
+            settings.get("weekly_training_goal") or DEFAULT_WEEKLY_SESSIONS
+        ),
         rest_days=_rest_days(settings),
         paces=training_paces(vdot[0]) if vdot else None,
         race_name=goal.name,
@@ -151,6 +193,26 @@ def hybrid_inputs(goal: Goal, today: date | None = None) -> HybridInputs:
         weeks=details.weeks,
         acwr=facts.acwr,
         tsb=facts.tsb,
+        kept=tuple(
+            DraftSession(
+                s.date,
+                s.session_type.value,
+                s.target_duration_min,
+                s.target_hr_zone,
+                s.target_intensity,
+                s.description or "",
+                s.target_distance_km,
+                sport=s.sport,
+                tags=kept_tags(
+                    s.sport,
+                    s.session_type.value,
+                    s.target_intensity,
+                    s.prescription is not None,
+                    level,
+                ),
+            )
+            for s in kept
+        ),
     )
 
 
@@ -176,16 +238,25 @@ def _generate(goal: Goal, today: date | None) -> _Plan:
             },
         )
     hybrid = hybrid_inputs(goal, today)
+    weeks = generate_hybrid_plan(hybrid, HYBRID_RULES)
     return _Plan(
         hybrid.start,
-        generate_hybrid_plan(hybrid, HYBRID_RULES),
+        weeks,
         {
             "weekly_minutes_now": round(hybrid.weekly_minutes_now),
+            # The goals panel's figure: the sessions of a loading week.
+            "sessions_per_week": loading_sessions(hybrid.level),
             "training_days": hybrid.training_days,
             "rest_days": sorted(hybrid.rest_days),
             "vdot": round(hybrid.paces.vdot, 1) if hybrid.paces else None,
             "level": hybrid.level,
-            "deload": HYBRID_RULES.deload.triggered(hybrid.acwr, hybrid.tsb),
+            "deload": bool(weeks)
+            and weeks[0].recovery
+            and HYBRID_RULES.deload.triggered(hybrid.acwr, hybrid.tsb),
+            "kept": [
+                {"date": k.date.isoformat(), "description": k.description}
+                for k in hybrid.kept
+            ],
         },
     )
 
@@ -201,6 +272,7 @@ def _weeks_to_dict(weeks: list[WeekPlan]) -> list[dict[str, Any]]:
                 {**asdict(s), "date": s.date.isoformat(), "tags": sorted(s.tags)}
                 for s in w.sessions
             ],
+            "dropped": w.dropped,
         }
         for w in weeks
     ]
@@ -228,7 +300,9 @@ def _delete_future(goal_id: int, start: date, *, untouched_only: bool = False) -
     """Delete the goal's sessions still to do from ``start``, through the
     repository so a Garmin export follows the deletion; one it refuses (an
     export still in progress) stays. ``untouched_only`` keeps the sessions
-    the athlete edited (moved, adjusted, re-statused: ``revision > 1``)."""
+    the athlete edited (moved, adjusted, re-statused: ``revision > 1``), an
+    edit committed meanwhile included: each deletion expects revision 1, and
+    a concurrent edit makes it conflict instead of being lost (ARE-150)."""
     edited = " AND revision = 1" if untouched_only else ""
     con = connect()
     try:
@@ -236,7 +310,8 @@ def _delete_future(goal_id: int, start: date, *, untouched_only: bool = False) -
             r[0]
             for r in con.execute(
                 "SELECT id FROM app.visible_planned_sessions WHERE goal_id = ? AND status = 'pending' AND date >= ?"
-                + edited,
+                + edited
+                + " ORDER BY id",
                 [goal_id, start],
             ).fetchall()
         ]
@@ -245,15 +320,20 @@ def _delete_future(goal_id: int, start: date, *, untouched_only: bool = False) -
     repo, deleted = GarminRepository(), 0
     for session_id in ids:
         try:
-            deleted += bool(repo.delete_planned_session(session_id))
-        except ValueError:
-            continue
+            deleted += bool(
+                repo.delete_planned_session(
+                    session_id, expected_revision=1 if untouched_only else None
+                )
+            )
+        except (ValueError, duckdb.TransactionException):
+            continue  # an export in progress, or the athlete's edit won
     return deleted
 
 
 def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
     """Write the goal's plan, replacing its own future sessions still to do
-    that the athlete left untouched; the days of those they edited are kept."""
+    that the athlete left untouched; those they edited stay, and a Hyrox or
+    hybrid plan is placed around them."""
     goal = _goal_or_raise(goal_id)
     plan = _generate(goal, today)
     replaced = _delete_future(goal.id, plan.start, untouched_only=True)
@@ -272,6 +352,8 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
     created, skipped = 0, []
     for week in plan.weeks:
         for draft in week.sessions:
+            if KEPT in draft.tags:
+                continue  # already there: the athlete's edit
             if draft.date in taken:
                 skipped.append(draft.date.isoformat())
                 continue
@@ -285,7 +367,11 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
                     target_hr_zone=draft.hr_zone,
                     target_intensity=draft.intensity,
                     description=draft.description,
-                    prescription=draft.prescription,
+                    prescription=Prescription.model_validate(
+                        draft.prescription
+                    ).model_dump(mode="json")
+                    if draft.prescription is not None
+                    else None,
                     source="plan",
                     status=SessionStatus.PENDING,
                     goal_id=goal.id,
@@ -313,6 +399,15 @@ def remove(goal_id: int, today: date | None = None) -> int:
 FALLBACK_RACE_PACE_SEC_KM = 360
 #: A Hyrox without a target time: its 8 km of running are not the race.
 HYROX_FALLBACK_MIN = 90
+
+
+def session_tss(session: PlannedSession, goal: Goal, minutes: float) -> float:
+    """A planned session's load: a Hyrox or hybrid goal's own sessions weigh
+    strength and station circuits by that plan's RPE, every other one as
+    before (``PLANNED_RPE``)."""
+    hybrid = goal.goal_type != "race" and session.goal_id == goal.id
+    table = HYBRID_PLANNED_RPE if hybrid else PLANNED_RPE
+    return planned_tss(session.session_type.value, minutes, table)
 
 
 def _race_minutes(goal: Goal, con=None) -> float:
@@ -362,7 +457,6 @@ def project(
 ) -> Projected:
     """``projection`` for a goal already read, every statement on ``con``."""
     from arete.dataio.queries import daily_tss_by_date
-    from arete.features.plan_generator import planned_tss
     from arete.services.metrics import fitness_series
 
     history = {d: t for d, t in daily_tss_by_date(con).items() if d <= today}
@@ -388,9 +482,7 @@ def project(
             minutes = _race_minutes(goal, con)
         else:
             minutes = float(s.target_duration_min or 0)
-        future[s.date] = future.get(s.date, 0.0) + planned_tss(
-            s.session_type.value, minutes
-        )
+        future[s.date] = future.get(s.date, 0.0) + session_tss(s, goal, minutes)
 
     loads = {**history, **future}
     loads.setdefault(goal.race_date, 0.0)

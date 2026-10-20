@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -9,6 +10,8 @@ from unittest.mock import patch
 import pytest
 
 from arete.dataio.db import connect
+from arete.features.hybrid_plan import HYBRID_PLANNED_RPE
+from arete.features.plan_generator import monday_of, planned_tss
 from arete.garmin.models import PlannedSession, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services import goals, plan_builder
@@ -166,8 +169,6 @@ def hyrox(goal):
 
 
 def test_a_hyrox_plan_is_written_with_its_sports_and_prescriptions(hyrox):
-    from arete.features.plan_generator import planned_tss
-
     body = plan_builder.preview(hyrox.id, TODAY)
     assert body["inputs"]["level"] == "intermediate"
     assert body["inputs"]["deload"] is True  # ACWR above the rest threshold
@@ -179,20 +180,118 @@ def test_a_hyrox_plan_is_written_with_its_sports_and_prescriptions(hyrox):
     assert {s.sport for s in sessions} == {"running", "strength", "other"}
     compromised = [s for s in sessions if s.prescription is not None]
     assert compromised and all(s.sport == "running" for s in compromised)
+    # Its steps own pace and effort; the duration stays for the planned load.
+    assert all(
+        s.target_hr_zone is None and s.target_intensity is None for s in compromised
+    )
+    assert all(s.target_duration_min for s in compromised)
     race = sessions[-1]
     assert (race.session_type, race.date) == (SessionType.RACE, hyrox.race_date)
     # Race day weighs a 90-minute Hyrox, not an 8 km run.
     series = plan_builder.projection(hyrox.id, TODAY)["series"]
     race_point = next(p for p in series if p["date"] == hyrox.race_date.isoformat())
     assert race_point["tss"] == round(planned_tss("race", 90), 1)
+    # Its strength and circuits weigh by the hybrid table, nobody else's.
+    circuit = next(s for s in sessions if s.session_type == SessionType.CROSS_TRAINING)
+    point = next(p for p in series if p["date"] == circuit.date.isoformat())
+    day_minutes = {
+        s.session_type: s.target_duration_min
+        for s in sessions
+        if s.date == circuit.date
+    }
+    assert point["tss"] == round(
+        sum(
+            planned_tss(t.value, float(m or 0), HYBRID_PLANNED_RPE)
+            for t, m in day_minutes.items()
+        ),
+        1,
+    )
+
+
+def test_a_running_athletes_projection_keeps_the_usual_rpe(goal):
+    manual = PlannedSession(
+        date=TODAY + timedelta(days=3),
+        sport="strength",
+        session_type=SessionType.STRENGTH,
+        target_duration_min=60,
+    )
+    assert plan_builder.session_tss(manual, goal, 60) == planned_tss("strength", 60)
+    hyrox_goal = replace(goal, goal_type="hyrox")
+    own = replace(manual, goal_id=goal.id)
+    assert plan_builder.session_tss(own, hyrox_goal, 60) == planned_tss(
+        "strength", 60, HYBRID_PLANNED_RPE
+    )
+    # Another goal's or a manual session stays on the usual table.
+    assert plan_builder.session_tss(manual, hyrox_goal, 60) == planned_tss(
+        "strength", 60
+    )
+
+
+@pytest.mark.parametrize(
+    "window",
+    [
+        r"SELECT id FROM app.visible_planned_sessions WHERE goal_id",  # the ids read
+        r"SELECT revision FROM visible_planned_sessions",  # the delete's own read
+    ],
+)
+def test_regeneration_does_not_delete_an_edit_landing_meanwhile(
+    goal, monkeypatch, window
+):
+    """ARE-150: the athlete's edit commits between the select and the delete."""
+    from write_race import race
+
+    repo = GarminRepository()
+    plan_builder.apply(goal.id, TODAY)
+    first = min(_plan_sessions(goal.id), key=lambda s: s.id or 0)
+
+    def edit() -> None:
+        assert repo.update_planned_session_fields(
+            first.id or 0, expected_revision=1, description="Déplacée par moi"
+        )
+
+    with race(monkeypatch, window, edit):
+        plan_builder.apply(goal.id, TODAY)
+    kept = repo.get_planned_session(first.id or 0)
+    assert kept is not None and kept.description == "Déplacée par moi"
+
+
+def test_a_hyrox_preview_lists_the_kept_sessions_and_apply_skips_them(hyrox):
+    repo = GarminRepository()
+    plan_builder.apply(hyrox.id, TODAY)
+    key = next(
+        s for s in _plan_sessions(hyrox.id) if s.session_type == SessionType.TEMPO
+    )
+    assert repo.update_planned_session_fields(
+        key.id or 0, expected_revision=1, date=key.date + timedelta(days=1)
+    )
+    body = plan_builder.preview(hyrox.id, TODAY)
+    assert body["inputs"]["kept"] == [
+        {
+            "date": (key.date + timedelta(days=1)).isoformat(),
+            "description": key.description,
+        }
+    ]
+    assert body["inputs"]["sessions_per_week"] == 6
+    kept = [s for w in body["weeks"] for s in w["sessions"] if "kept" in s["tags"]]
+    assert [s["date"] for s in kept] == [(key.date + timedelta(days=1)).isoformat()]
+    again = plan_builder.apply(hyrox.id, TODAY)
+    same_week = [
+        s
+        for s in _plan_sessions(hyrox.id)
+        if monday_of(s.date) == monday_of(key.date)
+        and s.session_type == SessionType.TEMPO
+    ]
+    assert len(same_week) == 1  # the moved key run, not a second one
+    assert again["created"] > 0
 
 
 def test_a_hybrid_block_previews_without_a_race(goal):
     block = goals.create_goal(
         name="test-hybrid",
-        race_date=TODAY + timedelta(weeks=8),
+        race_date=goals.hybrid_end_window(8, TODAY)[0],
         goal_type="hybrid",
         details={"weeks": 8},
+        today=TODAY,
     )
     facts = SimpleNamespace(acwr=None, tsb=None)
     with patch("arete.services.coaching_rules.rule_facts", return_value=facts):

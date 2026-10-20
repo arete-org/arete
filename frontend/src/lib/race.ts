@@ -25,9 +25,10 @@ export function parseRaceTime(text: string): number | null {
   return total > 0 ? total : null;
 }
 
-/** "J-65 · Semi de Paris (21,1 km)"; race day reads "Jour J". */
-export function goalCountdown(goal: Pick<Goal, 'name' | 'days_left' | 'distance_km'>): string {
+/** "J-65 · Semi de Paris (21,1 km)"; race day reads "Jour J"; a hybrid block has no distance. */
+export function goalCountdown(goal: Pick<Goal, 'name' | 'days_left' | 'distance_km' | 'goal_type'>): string {
   const when = goal.days_left > 0 ? `J-${goal.days_left}` : 'Jour J';
+  if (goal.goal_type === 'hybrid') return `${when} · ${goal.name}`;
   return `${when} · ${goal.name} (${formatKm(goal.distance_km)} km)`;
 }
 

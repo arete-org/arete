@@ -16,20 +16,23 @@ break one. Pure: no I/O, no clock.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
+from itertools import combinations
 from typing import Any, Literal
 
 from arete.features.plan_generator import (
+    PLANNED_RPE,
     RECOVERY_SHARE,
     WEEKLY_GROWTH,
     DraftSession,
     Phase,
     PlanError,
     WeekPlan,
-    _monday,
-    _paced,
+    monday_of,
+    paced,
 )
 from arete.features.running import TrainingPaces, format_pace
 
@@ -48,8 +51,11 @@ HEAVY_LOWER = "heavy_lower"
 UPPER = "upper"
 STATION = "station"
 BENCHMARK = "benchmark"
+ACTIVATION = "activation"
 RACE = "race"
 HARD = "hard"
+#: A session the athlete edited, kept as it is when the plan is regenerated.
+KEPT = "kept"
 
 #: Hyrox: 8 × 1 km of running whatever the division.
 HYROX_DISTANCE_KM = 8.0
@@ -82,6 +88,15 @@ LOWER_MIN = 50
 UPPER_MIN = 45
 CIRCUIT_MIN = 45
 BENCHMARK_MIN = 40
+ACTIVATION_MIN = 30
+
+#: Planned RPE for a Hyrox or hybrid goal's sessions: strength and station
+#: circuits weigh in its projection; every other plan keeps ``PLANNED_RPE``.
+HYBRID_PLANNED_RPE: dict[str, float] = {
+    **PLANNED_RPE,
+    "strength": 6,
+    "cross_training": 7,  # a station circuit
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -230,9 +245,17 @@ def plan_violations(
     for week in weeks:
         out += violations(week, rules, previous=previous, race_date=race_date)
         previous = week
-    if race_date is None:
-        return out
-    taper = rules.taper
+    if race_date is not None and _taper_over(weeks, rules.taper, race_date):
+        out.append(Violation(f"{rules.taper.id}_volume", race_date))
+    return out
+
+
+def _in_taper(day: date, taper: Taper, race_date: date) -> bool:
+    return 0 < (race_date - day).days <= taper.days
+
+
+def _taper_over(weeks: Sequence[WeekPlan], taper: Taper, race_date: date) -> bool:
+    """The taper's days, per seven, above ``volume_share`` of the peak week."""
     peak = max(
         (w.minutes for w in weeks if w.phase not in ("taper", "race")), default=0
     )
@@ -240,11 +263,9 @@ def plan_violations(
         s.duration_min or 0
         for w in weeks
         for s in w.sessions
-        if 0 < (race_date - s.date).days <= taper.days
+        if _in_taper(s.date, taper, race_date)
     )
-    if window * 7 / taper.days > taper.volume_share * peak:
-        out.append(Violation(f"{taper.id}_volume", race_date))
-    return out
+    return window * 7 / taper.days > taper.volume_share * peak
 
 
 # --------------------------------------------------------------------------- #
@@ -292,6 +313,12 @@ def athlete_level(
     return "intermediate"
 
 
+def loading_sessions(level: Level) -> int:
+    """Sessions in a loading week: a novice runs twice, the others three times,
+    with two strength sessions and a station circuit."""
+    return 5 if level == "novice" else 6
+
+
 # --------------------------------------------------------------------------- #
 # Generation
 # --------------------------------------------------------------------------- #
@@ -302,7 +329,8 @@ class HybridInputs:
     kind: GoalKind
     level: Level
     weekly_minutes_now: float  # running minutes per week, last 4 weeks
-    training_days: int  # days a week; beyond, sessions pair on hard days
+    #: Days a week the athlete trains; more sessions pair on hard days.
+    training_days: int
     rest_days: frozenset[int] = frozenset()  # weekdays, Monday 0
     paces: TrainingPaces | None = None
     race_name: str = "Hyrox"
@@ -312,6 +340,37 @@ class HybridInputs:
     weeks: int = MAX_WEEKS  # chosen length: 8 or 12
     acwr: float | None = None
     tsb: float | None = None
+    #: Sessions the athlete edited, dated and tagged (``kept_tags``): the
+    #: rules see them, their days stay theirs and each replaces its kind.
+    kept: tuple[DraftSession, ...] = ()
+
+
+def kept_tags(
+    sport: str, session_type: str, intensity: str | None, structured: bool, level: Level
+) -> frozenset[str]:
+    """The tags of a session the athlete edited, read from what it is now.
+    When in doubt, the stricter reading: a hard session, a key run."""
+    tags: set[str]
+    if session_type == "race":
+        tags = {RACE, HARD}
+    elif sport == "running" and session_type in ("tempo", "intervals"):
+        if structured:  # the compromised run carries its steps
+            tags = {RUN, COMPROMISED, HARD} | (
+                {KEY_RUN} if level == "novice" else set()
+            )
+        else:
+            tags = {RUN, KEY_RUN, HARD}
+    elif sport == "running":
+        tags = {RUN, EASY}
+    elif session_type == "cross_training":
+        tags = {STATION, HARD}
+    elif sport == "strength":
+        tags = (
+            {STRENGTH, HEAVY_LOWER, HARD} if intensity == "hard" else {STRENGTH, UPPER}
+        )
+    else:
+        tags = {HARD} if intensity == "hard" else set()
+    return frozenset(tags | {KEPT})
 
 
 @dataclass(frozen=True)
@@ -321,7 +380,15 @@ class _Slot:
     rank: int  # order within a day, and of placement
 
 
-_RANK = {RACE: 0, KEY_RUN: 1, COMPROMISED: 2, EASY: 3, STATION: 4, HEAVY_LOWER: 5}
+_RANK = {
+    RACE: 0,
+    KEY_RUN: 1,
+    COMPROMISED: 2,
+    ACTIVATION: 2,
+    EASY: 3,
+    STATION: 4,
+    HEAVY_LOWER: 5,
+}
 _PREFS: dict[str, tuple[int, ...]] = {
     KEY_RUN: (1, 2, 3, 0, 4, 5, 6),
     COMPROMISED: (5, 6, 4, 3, 2, 1, 0),
@@ -331,10 +398,33 @@ _PREFS: dict[str, tuple[int, ...]] = {
     EASY: (0, 2, 4, 6, 3, 1, 5),
     BENCHMARK: (5, 6, 4, 3, 2, 1, 0),
 }
-#: Dropped first when a partial week cannot hold everything; a taper week,
-#: which may not hold hard sessions near the race, loses those first.
-_DROP_ORDER = (EASY, UPPER, STATION, HEAVY_LOWER, COMPROMISED, KEY_RUN, BENCHMARK)
-_TAPER_DROP_ORDER = (STATION, KEY_RUN, COMPROMISED, UPPER, EASY)
+#: What a week may give up when the rules leave no room, least important
+#: first. A full week keeps its key run, its compromised run and one strength
+#: session; a partial week (the plan's first, a block's end) may lose any
+#: session; a taper week loses hard sessions first.
+_FULL_DROPS = (EASY, UPPER, STATION, HEAVY_LOWER)
+_PARTIAL_DROPS = (
+    EASY,
+    UPPER,
+    STATION,
+    HEAVY_LOWER,
+    ACTIVATION,
+    COMPROMISED,
+    KEY_RUN,
+    BENCHMARK,
+)
+_TAPER_DROPS = (STATION, KEY_RUN, COMPROMISED, UPPER, ACTIVATION, EASY)
+_LABELS = {
+    EASY: "Footing",
+    UPPER: "Force haut du corps",
+    STATION: "Circuit stations",
+    HEAVY_LOWER: "Force bas du corps",
+    ACTIVATION: "Activation",
+    COMPROMISED: "Course compromise",
+    KEY_RUN: "Séance clé",
+    BENCHMARK: "Test de fin de bloc",
+}
+_NO_ROOM = "pas de jour libre sans enfreindre les règles d'enchaînement"
 
 
 def _round5(minutes: float) -> int:
@@ -342,7 +432,16 @@ def _round5(minutes: float) -> int:
 
 
 def _primary(tags: frozenset[str]) -> str:
-    for tag in (RACE, BENCHMARK, KEY_RUN, COMPROMISED, HEAVY_LOWER, STATION, UPPER):
+    for tag in (
+        RACE,
+        BENCHMARK,
+        ACTIVATION,
+        KEY_RUN,
+        COMPROMISED,
+        HEAVY_LOWER,
+        STATION,
+        UPPER,
+    ):
         if tag in tags:
             return tag
     return EASY
@@ -397,12 +496,14 @@ def _compromised(
     km_min = (paces.threshold + paces.marathon) / 120 if paces else FALLBACK_KM_MIN
     minutes = 2 * WARMUP_SEC / 60 + reps * (km_min + STATION_MIN)
     tags = {RUN, COMPROMISED, HARD} | ({KEY_RUN} if key else set())
+    # Its steps own pace and effort, as a manual session's do; the duration
+    # stays: the projection and the dashboard weigh planned load from it.
     return DraftSession(
         date.min,
         "intervals",
         _round5(minutes),
-        "Z4",
-        "hard",
+        None,
+        None,
         f"Course compromise : {reps}×(1 km {_pace_label(paces)} + {station}), "
         "échauffement et retour au calme 10'",
         prescription=compromised_prescription(reps, station, paces),
@@ -412,7 +513,7 @@ def _compromised(
 
 def _key_run(phase: Phase, recovery: bool, paces: TrainingPaces | None) -> DraftSession:
     tags = frozenset({RUN, KEY_RUN, HARD})
-    t = _paced("au seuil", paces, "threshold")
+    t = paced("au seuil", paces, "threshold")
     if phase == "taper":
         return DraftSession(
             date.min,
@@ -434,7 +535,7 @@ def _key_run(phase: Phase, recovery: bool, paces: TrainingPaces | None) -> Draft
             tags=tags,
         )
     if phase == "build":
-        i = _paced("à l'allure VMA", paces, "interval")
+        i = paced("à l'allure VMA", paces, "interval")
         return DraftSession(
             date.min,
             "intervals",
@@ -466,7 +567,7 @@ def _easy(
         each,
         "Z1" if recovery else "Z2",
         "easy",
-        _paced("Footing", paces, "easy"),
+        paced("Footing", paces, "easy"),
         tags=frozenset({RUN, EASY}),
     )
 
@@ -531,6 +632,23 @@ def _benchmark(inp: HybridInputs) -> DraftSession:
         sport="strength",
         tags=frozenset({STATION, BENCHMARK, HARD}),
     )
+
+
+def _activation(inp: HybridInputs, station: str) -> DraftSession:
+    return DraftSession(
+        date.min,
+        "intervals",
+        ACTIVATION_MIN,
+        "Z3",
+        "moderate",
+        f"Activation : 15' facile + 2×(1 km {_pace_label(inp.paces)} + {station})",
+        tags=frozenset({RUN, ACTIVATION}),
+    )
+
+
+def _activation_days(race_weekday: int) -> tuple[int, ...]:
+    """Three, two then four days before the race, as weekdays."""
+    return tuple((race_weekday - n) % 7 for n in (3, 2, 4))
 
 
 def _race(inp: HybridInputs) -> DraftSession:
@@ -615,27 +733,22 @@ def _week_slots(
     recovery: bool,
     index: int,
     final: bool,
+    activation_before: bool,
 ) -> list[_Slot]:
+    """The week's sessions before placement. ``activation_before``: the race
+    falls on a Monday or a Tuesday, its activation in this week."""
     paces = inp.paces
     novice = inp.level == "novice"
     station = _stations(inp, index, 1)[0]
+    race_wd = inp.race_date.weekday()
+    activation = _Slot(
+        _activation(inp, station), _activation_days(race_wd), _RANK[ACTIVATION]
+    )
     if phase == "race":
-        race_wd = inp.race_date.weekday()
-        activation = DraftSession(
-            date.min,
-            "intervals",
-            30,
-            "Z3",
-            "moderate",
-            f"Activation : 15' facile + 2×(1 km {_pace_label(paces)} + {station})",
-            tags=frozenset({RUN}),
-        )
-        near = tuple(d for d in (race_wd - 3, race_wd - 2, race_wd - 4) if d >= 0)
-        return [
-            _slot(_race(inp), (race_wd,)),
-            _Slot(activation, near, _RANK[KEY_RUN]),
-            _slot(_easy(30, False, paces)),
-        ]
+        slots = [_slot(_race(inp), (race_wd,)), _slot(_easy(30, False, paces))]
+        if race_wd >= 2:
+            slots.insert(1, activation)
+        return slots
     if final:  # a hybrid block's deload, closed by its benchmark
         easy = [_slot(_easy(run_minutes / (1 if novice else 2), True, paces, factor))]
         if not novice:
@@ -659,6 +772,8 @@ def _week_slots(
     slots.append(_slot(_circuit(inp, factor, index)))
     slots.append(_slot(_upper(factor)))
     slots.append(_slot(_easy(run_minutes - used, recovery, paces, factor)))
+    if activation_before:
+        slots.append(activation)
     return slots
 
 
@@ -675,16 +790,30 @@ def _available(monday: date, inp: HybridInputs) -> list[int]:
     return out
 
 
-def _as_week(
-    template: WeekPlan, monday: date, placed: list[tuple[int, _Slot]]
-) -> WeekPlan:
+def _as_week(template: WeekPlan, placed: list[tuple[int, _Slot]]) -> WeekPlan:
     ordered = sorted(placed, key=lambda p: (p[0], p[1].rank))
-    sessions = [replace(s.draft, date=monday + timedelta(days=d)) for d, s in ordered]
+    sessions = [
+        replace(s.draft, date=template.start + timedelta(days=d)) for d, s in ordered
+    ]
     return replace(
         template,
         sessions=sessions,
         minutes=sum(s.duration_min or 0 for s in sessions),
     )
+
+
+def _after_key_run(week: WeekPlan) -> WeekPlan:
+    """Say it when heavy legs or stations share the key run's day: after it."""
+    key_days = {s.date for s in week.sessions if KEY_RUN in s.tags}
+    sessions = [
+        replace(s, description=f"{s.description} (après la course clé)")
+        if s.date in key_days
+        and KEPT not in s.tags
+        and (HEAVY_LOWER in s.tags or STATION in s.tags)
+        else s
+        for s in week.sessions
+    ]
+    return replace(week, sessions=sessions)
 
 
 def place_week(
@@ -694,16 +823,28 @@ def place_week(
     max_days: int,
     rules: Rules,
     *,
+    fixed: Sequence[DraftSession] = (),
     previous: WeekPlan | None = None,
     race_date: date | None = None,
 ) -> WeekPlan | None:
-    """The first assignment of ``slots`` to weekdays without any violation.
+    """The first assignment of ``slots`` to weekdays that adds no violation.
 
+    ``fixed`` sessions (the athlete's edits) keep their day and count for the
+    rules; what they already break themselves is not held against the plan.
     Slots are placed in rank order, each trying its unused preferred days
     first, then a day it can share (at most two sessions, one of them hard,
     at most ``max_days`` days). None when no assignment exists.
+
+    Bound: at most 8 slots, each trying at most 7 days, so at most 7**8
+    leaves; the monotone rules prune a branch at its first violation, and the
+    fuzz over 120,000 plans keeps the slowest plan under a second.
     """
-    monday = template.start
+    pinned = [(s.date.weekday(), _slot(s, (s.date.weekday(),))) for s in fixed]
+    baseline = Counter(
+        violations(
+            _as_week(template, pinned), rules, previous=previous, race_date=race_date
+        )
+    )
     order = sorted(slots, key=lambda s: s.rank)
 
     def search(
@@ -726,23 +867,128 @@ def place_week(
             if same and any(RACE in s.draft.tags for s in [*same, slot]):
                 continue
             candidate = [*placed, (d, slot)]
-            week = _as_week(template, monday, candidate)
-            if violations(week, rules, previous=previous, race_date=race_date):
+            found = violations(
+                _as_week(template, candidate),
+                rules,
+                previous=previous,
+                race_date=race_date,
+            )
+            if Counter(found) - baseline:
                 continue
-            found = search(i + 1, candidate)
-            if found is not None:
-                return found
+            result = search(i + 1, candidate)
+            if result is not None:
+                return result
         return None
 
-    found = search(0, [])
-    return None if found is None else _as_week(template, monday, found)
+    result = search(0, pinned)
+    return None if result is None else _after_key_run(_as_week(template, result))
+
+
+def _fit(
+    template: WeekPlan,
+    slots: list[_Slot],
+    days: Sequence[int],
+    max_days: int,
+    rules: Rules,
+    *,
+    drops: tuple[str, ...],
+    keep_strength: bool,
+    fixed: Sequence[DraftSession],
+    previous: WeekPlan | None,
+    race_date: date | None,
+) -> tuple[WeekPlan, list[_Slot]] | None:
+    """The week with every slot when the rules allow it, else without the
+    fewest, least important ones ``drops`` lists; None when even that fails."""
+    droppable = sorted(
+        (i for i, s in enumerate(slots) if _primary(s.draft.tags) in drops),
+        key=lambda i: drops.index(_primary(slots[i].draft.tags)),
+    )
+    has_strength = any(STRENGTH in s.draft.tags for s in slots)
+    for count in range(len(droppable) + 1):
+        for gone in combinations(droppable, count):
+            left = [s for i, s in enumerate(slots) if i not in gone]
+            strength_left = any(STRENGTH in s.draft.tags for s in left)
+            if keep_strength and has_strength and not strength_left:
+                continue
+            week = place_week(
+                template,
+                left,
+                days,
+                max_days,
+                rules,
+                fixed=fixed,
+                previous=previous,
+                race_date=race_date,
+            )
+            if week is not None:
+                return week, [slots[i] for i in gone]
+    return None
+
+
+def _without_kept_kinds(
+    slots: list[_Slot], kept: Sequence[DraftSession]
+) -> list[_Slot]:
+    """The slots less one of each kind a kept session already fills."""
+    left = list(slots)
+    for session in kept:
+        kind = _primary(session.tags)
+        if kind not in session.tags:
+            continue
+        for k, slot in enumerate(left):
+            if _primary(slot.draft.tags) == kind:
+                del left[k]
+                break
+    return left
+
+
+def _dropped(sessions: Sequence[DraftSession], reason: str) -> list[str]:
+    """What the preview says of sessions a week gave up, in French."""
+    return [
+        f"Séance « {_LABELS.get(_primary(s.tags), s.description)} » retirée : {reason}."
+        for s in sessions
+    ]
+
+
+def _cap_taper(weeks: list[WeekPlan], taper: Taper, race_date: date) -> None:
+    """Drop sessions from the taper's days, hard ones first, until their
+    volume fits ``taper.volume_share``; never the race or a kept session."""
+    reason = (
+        f"l'affûtage reste sous {round(taper.volume_share * 100)} % "
+        "de la semaine la plus chargée"
+    )
+
+    def rank(at: tuple[int, int]) -> tuple[int, int, int]:
+        s = weeks[at[0]].sessions[at[1]]
+        kind = _primary(s.tags)
+        order = _TAPER_DROPS.index(kind) if kind in _TAPER_DROPS else len(_TAPER_DROPS)
+        return order, -(s.duration_min or 0), -s.date.toordinal()
+
+    while _taper_over(weeks, taper, race_date):
+        candidates = [
+            (w, k)
+            for w, week in enumerate(weeks)
+            for k, s in enumerate(week.sessions)
+            if _in_taper(s.date, taper, race_date)
+            and RACE not in s.tags
+            and KEPT not in s.tags
+        ]
+        if not candidates:
+            return  # the athlete's own sessions: theirs to keep
+        w, k = min(candidates, key=rank)
+        week = weeks[w]
+        gone = week.sessions[k]
+        sessions = week.sessions[:k] + week.sessions[k + 1 :]
+        weeks[w] = replace(
+            week,
+            sessions=sessions,
+            minutes=sum(s.duration_min or 0 for s in sessions),
+            dropped=[*week.dropped, *_dropped([gone], reason)],
+        )
 
 
 def plan_length(inp: HybridInputs) -> int:
-    """Weeks the plan covers, the current (partial) week included."""
-    n_weeks = (_monday(inp.race_date) - _monday(inp.start)).days // 7 + 1
-    if inp.kind == "hybrid":
-        return min(n_weeks, inp.weeks)
+    """Weeks a Hyrox plan covers, the current (partial) week included."""
+    n_weeks = (monday_of(inp.race_date) - monday_of(inp.start)).days // 7 + 1
     if n_weeks < MIN_WEEKS:
         raise PlanError(
             f"Hyrox dans moins de {MIN_WEEKS} semaines : trop tard pour un plan "
@@ -764,82 +1010,83 @@ def generate_hybrid_plan(inp: HybridInputs, rules: Rules) -> list[WeekPlan]:
             f"Au moins {MIN_TRAINING_DAYS} jours sans repos sont nécessaires par semaine."
         )
     full_days = min(max(MIN_TRAINING_DAYS, inp.training_days), 7 - len(inp.rest_days))
-    if inp.kind == "hybrid":
-        # The block is anchored on its end: past weeks are not replanned.
-        block_weeks = inp.weeks
-        first = _monday(inp.race_date) - timedelta(weeks=block_weeks - 1)
-        mondays = [first + timedelta(weeks=k) for k in range(block_weeks)]
-    else:
-        n_weeks = plan_length(inp)
-        first = _monday(inp.race_date) - timedelta(weeks=n_weeks - 1)
-        mondays = [first + timedelta(weeks=k) for k in range(n_weeks)]
+    # A block is anchored on its end, a Hyrox on its race: past weeks are
+    # not replanned, and a regenerated block keeps its rhythm.
+    n_weeks = inp.weeks if inp.kind == "hybrid" else plan_length(inp)
+    first = monday_of(inp.race_date) - timedelta(weeks=n_weeks - 1)
+    mondays = [first + timedelta(weeks=k) for k in range(n_weeks)]
     phases = _phases(mondays, inp, rules)
-    current = _monday(inp.start)
-    deload_first = rules.deload.triggered(inp.acwr, inp.tsb)
-    if inp.kind == "hybrid":
-        # Weeks already behind keep their place in the block's 3:1 rhythm.
-        past = sum(1 for m in mondays if m < current)
+    upcoming = [m for m in mondays if m + timedelta(days=6) >= inp.start]
+    # Today's load says nothing of a block starting weeks from now.
+    deload_first = rules.deload.triggered(inp.acwr, inp.tsb) and (
+        upcoming[0] <= inp.start + timedelta(days=7)
+    )
+    past = len(mondays) - len(upcoming)
+    if inp.kind == "hyrox":  # it starts now: its 3:1 count follows the deload
+        volumes = _volumes(phases, inp, deload_first)
+    else:  # a block keeps its rhythm; the week starting now lightens
         volumes = _volumes(phases, inp, deload_first=False)
         if deload_first and past < len(mondays) - 1 and not volumes[past][2]:
             run_minutes, _, _ = volumes[past]
             volumes[past] = (run_minutes * RECOVERY_SHARE, RECOVERY_SHARE, True)
-    else:
-        volumes = _volumes(phases, inp, deload_first)
     race_date = inp.race_date if inp.kind == "hyrox" else None
+    race_wd = inp.race_date.weekday()
+    usual = len([d for d in range(7) if d not in inp.rest_days])
 
     weeks: list[WeekPlan] = []
     previous: WeekPlan | None = None
     for index, (monday, phase, (run_minutes, factor, recovery)) in enumerate(
         zip(mondays, phases, volumes, strict=True)
     ):
-        if monday + timedelta(days=6) < inp.start:
+        if index < past:
             continue
         final = inp.kind == "hybrid" and index == len(mondays) - 1
-        template = WeekPlan(start=monday, phase=phase, minutes=0, recovery=recovery)
-        slots = _week_slots(inp, phase, run_minutes, factor, recovery, index, final)
-        days = _available(monday, inp)
+        activation_before = (
+            inp.kind == "hyrox" and index == len(mondays) - 2 and race_wd < 2
+        )
+        kept = [k for k in inp.kept if monday <= k.date <= monday + timedelta(days=6)]
+        slots = _without_kept_kinds(
+            _week_slots(
+                inp,
+                phase,
+                run_minutes,
+                factor,
+                recovery,
+                index,
+                final,
+                activation_before,
+            ),
+            kept,
+        )
+        open_days = _available(monday, inp)
+        kept_days = {k.date.weekday() for k in kept}
+        days = [d for d in open_days if d not in kept_days]
         tapering = phase in ("taper", "race")
-        partial = tapering or len(days) < 7 - len(inp.rest_days)
-        max_days = min(full_days, len(days) + (phase == "race"))
-        week = place_week(
-            template,
+        partial = len(open_days) < usual
+        drops = _TAPER_DROPS if tapering else _PARTIAL_DROPS if partial else _FULL_DROPS
+        max_days = min(full_days, len(days) + len(kept_days) + (phase == "race"))
+        fitted = _fit(
+            WeekPlan(start=monday, phase=phase, minutes=0, recovery=recovery),
             slots,
             days,
             max_days,
             rules,
+            drops=drops,
+            keep_strength=not (tapering or partial),
+            fixed=kept,
             previous=previous,
             race_date=race_date,
         )
-        while week is None and partial:
-            smaller = _drop_one(slots, _TAPER_DROP_ORDER if tapering else _DROP_ORDER)
-            if smaller is None:
-                break
-            slots = smaller
-            week = place_week(
-                template,
-                slots,
-                days,
-                max_days,
-                rules,
-                previous=previous,
-                race_date=race_date,
-            )
-        if week is None:
+        if fitted is None:
             raise PlanError(
                 f"Impossible de placer la semaine du {monday:%d/%m} sans enchaîner "
                 "jambes lourdes, stations et séance clé : libère un jour "
                 "d'entraînement ou retire un jour de repos."
             )
+        week, gone = fitted
+        week = replace(week, dropped=_dropped([s.draft for s in gone], _NO_ROOM))
         weeks.append(week)
         previous = week
+    if race_date is not None:
+        _cap_taper(weeks, rules.taper, race_date)
     return weeks
-
-
-def _drop_one(slots: list[_Slot], order: tuple[str, ...]) -> list[_Slot] | None:
-    """The slots without the first one ``order`` names; None when only the
-    race (or nothing) is left."""
-    for tag in order:
-        for k in range(len(slots) - 1, -1, -1):
-            if _primary(slots[k].draft.tags) == tag:
-                return slots[:k] + slots[k + 1 :]
-    return None

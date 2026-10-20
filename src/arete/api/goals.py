@@ -62,9 +62,14 @@ def next_goal() -> dict[str, Any] | None:
 def create_goal(body: GoalCreate) -> dict[str, Any]:
     today = athlete_today()
     if body.race_date < today:
-        raise HTTPException(status_code=422, detail="La date de course est passée")
+        raise HTTPException(
+            status_code=422,
+            detail="La fin du bloc est passée"
+            if body.goal_type == "hybrid"
+            else "La date de course est passée",
+        )
     try:
-        return service.create_goal(**body.model_dump()).to_dict(today)
+        return service.create_goal(**body.model_dump(), today=today).to_dict(today)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from None
 
@@ -100,7 +105,8 @@ def preview_plan(goal_id: int) -> dict[str, Any]:
 
 @router.post("/{goal_id}/plan")
 def write_plan(goal_id: int) -> dict[str, Any]:
-    """Write the plan; replaces only this goal's future sessions still to do."""
+    """Write the plan; replaces only this goal's future sessions still to do
+    that the athlete left untouched."""
     from arete.features.plan_generator import PlanError
     from arete.services import plan_builder
 

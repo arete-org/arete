@@ -10,18 +10,20 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from arete.dataio.db import connect
+from arete.features.hybrid_plan import HYROX_DISTANCE_KM, Division, Format
 from arete.services.settings import athlete_today
 
 PRIORITIES = ("A", "B", "C")
 STATUSES = ("active", "done", "cancelled")
 GOAL_TYPES = ("race", "hyrox", "hybrid")
-HYROX_DISTANCE_KM = 8.0
+#: Weeks a hybrid block may wait before it starts, past its own length.
+HYBRID_LEAD_WEEKS = 2
 #: A hybrid block has no distance; the column requires one.
 HYBRID_DISTANCE_KM = 0.0
 _COLUMNS = (
@@ -46,8 +48,8 @@ class GoalDetails(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    division: Literal["open", "pro"] = "open"
-    format: Literal["solo", "doubles"] = "solo"
+    division: Division = "open"
+    format: Format = "solo"
     category: Literal["men", "women", "mixed"] | None = None
     #: Equipment flags, or ``["none"]`` when there is none.
     equipment: list[Literal["sled", "ski_erg", "rower", "wall_ball", "none"]] = ["none"]
@@ -94,6 +96,14 @@ def validate_details(goal_type: str, details: dict[str, Any] | None) -> str | No
     if parsed.category == "mixed" and parsed.format != "doubles":
         raise ValueError("La catégorie mixte se court en doubles.")
     return parsed.model_dump_json()
+
+
+def hybrid_end_window(weeks: int, today: date) -> tuple[date, date]:
+    """The days a hybrid block of ``weeks`` may end: a whole block from next
+    Monday at the earliest, starting at most ``HYBRID_LEAD_WEEKS`` later."""
+    next_monday = today + timedelta(days=7 - today.weekday())
+    earliest = next_monday + timedelta(weeks=weeks, days=-1)
+    return earliest, earliest + timedelta(weeks=HYBRID_LEAD_WEEKS)
 
 
 @dataclass(frozen=True)
@@ -204,10 +214,19 @@ def create_goal(
     priority: str = "A",
     goal_type: str = "race",
     details: dict[str, Any] | None = None,
+    today: date | None = None,
 ) -> Goal:
     details_json = validate_details(goal_type, details)
     if goal_type == "race" and distance_km is None:
         raise ValueError("La distance de la course est requise.")
+    if goal_type == "hybrid":
+        weeks = GoalDetails.model_validate(details or {}).weeks
+        earliest, latest = hybrid_end_window(weeks, today or athlete_today())
+        if not earliest <= race_date <= latest:
+            raise ValueError(
+                f"La fin du bloc doit tomber entre le {earliest:%d/%m/%Y} et le "
+                f"{latest:%d/%m/%Y} pour un bloc de {weeks} semaines."
+            )
     fields = {
         "name": name.strip(),
         "race_date": race_date,

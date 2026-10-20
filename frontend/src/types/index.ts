@@ -712,6 +712,8 @@ export interface Goal {
   /** Days until race day, from the server's today. */
   days_left: number;
   created_at: string | null;
+  /** A hybrid block has no race and no distance; its race_date is its end. */
+  goal_type?: 'race' | 'hyrox' | 'hybrid';
 }
 
 export interface GoalCreate {
