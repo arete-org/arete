@@ -385,6 +385,54 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
   });
 }
 
+// ARE-164: the Garmin notice above the bar pushes the navigation down; the panel follows it.
+for (const [width, height] of [[844, 390], [1280, 800]] as const) for (const notice of [true, false]) for (const mode of ['floating', 'sidebar'] as const) {
+  test(`${width}x${height}: Chiron starts below the navigation (${notice ? 'with' : 'without'} the Garmin notice, ${mode})`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await fixture(page);
+    // A long conversation: the floating panel reaches its maximum height.
+    const messages = Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `Message ${i + 1}. ${'Une phrase pour allonger la conversation. '.repeat(4)}` }));
+    await page.addInitScript(([display, seeded]) => {
+      localStorage.setItem('arete.coach-display.v2', display);
+      localStorage.setItem('arete.coach.threads.v1', JSON.stringify({ version: 1, activeId: 'long', threads: [{ id: 'long', title: 'Longue conversation', createdAt: 1, updatedAt: 1, messages: seeded }] }));
+    }, [mode, messages] as const);
+    if (!notice) await page.route('**/api/garmin/sync/ensure', route => route.fulfill({ json: { state: 'fresh' } }));
+    const ensured = page.waitForResponse('**/api/garmin/sync/ensure');
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
+    await ensured;
+    const status = page.getByRole('status').filter({ hasText: 'Garmin' });
+    if (notice) await expect(status).toBeVisible();
+    else await expect(status).toHaveCount(0);
+    const nav = page.getByRole('navigation', { name: 'Navigation principale' });
+    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const close = panel.getByRole('button', { name: 'Masquer le coach' });
+    const navBottom = async () => { const bar = (await nav.boundingBox())!; return bar.y + bar.height; };
+    const headerGap = async () => (await panel.locator('header').boundingBox())!.y - await navBottom();
+    const belowNavigation = async () => {
+      await expect.poll(headerGap).toBeGreaterThanOrEqual(-0.5);
+      // A docked panel meets the bar, without a gap.
+      if (mode === 'sidebar') await expect.poll(headerGap).toBeLessThanOrEqual(1);
+    };
+    await openCoach(page);
+    await expect(panel).toHaveAttribute('data-display', mode);
+    const top = await navBottom();
+    expect(top).toBeGreaterThan(notice ? 80 : 50);
+    await belowNavigation();
+    if (width === 1280) {
+      // The page beneath scrolls here: the notice leaves and the bar sticks to the top.
+      await page.evaluate(() => window.scrollTo(0, 200));
+      if (notice) await expect.poll(navBottom).toBeLessThan(top - 20);
+      await belowNavigation();
+    }
+    // Nothing covers the close button: a tap at its centre lands on it.
+    const box = (await close.boundingBox())!;
+    expect(await close.evaluate((button, [x, y]) => button.contains(document.elementFromPoint(x, y)), [box.x + box.width / 2, box.y + box.height / 2])).toBe(true);
+    await close.tap();
+    await expect(panel).toBeHidden();
+  });
+}
+
 // The upright phone layout ends at 767 px; a wider, taller touch screen keeps a scrollable page.
 for (const [width, locked] of [[767, true], [768, false], [1024, false]] as const) {
   test(`${width} px: the open coach ${locked ? 'holds' : 'leaves'} the page beneath`, async ({ page }) => {

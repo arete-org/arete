@@ -41,5 +41,6 @@ export function GarminFreshness() {
       document.removeEventListener('visibilitychange', foreground);
     };
   }, [queryClient]);
-  return message ? <p role="status" className="px-4 py-2 text-xs text-text-secondary">{message}</p> : null;
+  // Always mounted: the navigation observes this line, which moves the bar when it shows.
+  return <p role="status" hidden={!message} className="px-4 py-2 text-xs text-text-secondary">{message}</p>;
 }

@@ -55,6 +55,8 @@ function Harness() {
 beforeEach(() => {
   localStorage.clear();
   Element.prototype.scrollTo = vi.fn();
+  // jsdom has no ResizeObserver; the open coach's navigation observes its own edge.
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
 });
 afterEach(cleanup);
 

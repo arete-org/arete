@@ -360,10 +360,11 @@ select.ui-input {
 .coach-markdown input[type="checkbox"] { margin-right: 0.5em; accent-color: var(--color-neon-cyan); }
 
 /* Keep the coach below desktop navigation and above the mobile tab bar,
-   so its toggle remains reachable while the conversation is open. */
+   so its toggle remains reachable while the conversation is open. Navigation
+   publishes its real bottom edge, which a notice above the bar moves. */
 .coach-panel { right: var(--safe-right); width: calc(100% - var(--safe-left) - var(--safe-right)); top: calc(var(--visible-top, 0px) + var(--safe-top)); bottom: max(var(--mobile-nav-space), var(--keyboard-inset, 0px)); max-height: calc(var(--visible-height, 100dvh) - var(--safe-top)); }
 @media (min-width: 768px) {
-  .coach-panel { top: max(3.5rem, var(--visible-top, 0px)); bottom: var(--keyboard-inset, 0px); }
+  .coach-panel { top: max(var(--navigation-bottom, 3.5rem), var(--visible-top, 0px)); bottom: var(--keyboard-inset, 0px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .coach-panel { animation: none; }
@@ -562,7 +563,7 @@ html[data-theme='pierre'], html[data-theme='prune'] {
   .coach-panel[data-display="floating"] {
     --coach-bottom: max(24px, var(--safe-bottom), calc(var(--keyboard-inset, 0px) + 12px));
     right: max(24px, var(--safe-right));
-    max-height: min(560px, calc(var(--visible-height, 100dvh) - 104px));
+    max-height: min(560px, calc(var(--visible-height, 100dvh) - var(--navigation-bottom, 3.5rem) - 48px));
   }
 }
 @media (prefers-reduced-transparency: reduce) {
