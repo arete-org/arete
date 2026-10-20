@@ -239,18 +239,22 @@ test('landscape respects lateral safe areas and preserves the draft through rota
   await noOverflow(page);
 });
 
-/** A finger drag on the compositor (Chromium only): a positive distance pulls the content down. */
+/** A finger drag on the compositor (Chromium only). A positive distance moves the
+ *  finger down, which scrolls towards the top (scrollTop decreases); the test asserts it. */
 async function swipe(page: Page, x: number, y: number, yDistance: number) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.synthesizeScrollGesture', { x, y, yDistance, gestureSourceType: 'touch', speed: 1200 });
   await cdp.detach();
 }
 
+/** The floating launcher, or the navigation's toggle where the layout hides it. */
+const openCoach = (page: Page) => page.locator('button[aria-controls="coach-panel"]:visible').first().tap();
+
 // ARE-155 opens Chiron from the launcher on a long conversation; ARE-156 lands on
 // the onboarding recap through the same hand-off as the end of the onboarding.
-for (const entry of ['launcher', 'onboarding'] as const) for (const mode of ['floating', 'sidebar'] as const) {
-  test(`touch: a swipe in Chiron scrolls the conversation, never the page beneath (${entry}, ${mode})`, async ({ page }, info) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entry of ['launcher', 'onboarding'] as const) for (const mode of ['floating', 'sidebar'] as const) {
+  test(`touch: a swipe in Chiron scrolls the conversation, never the page beneath (${width}x${height}, ${entry}, ${mode})`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height });
     await fixture(page);
     const messages = Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `Message ${i + 1}. ${'Une phrase pour allonger la conversation. '.repeat(4)}` }));
     await page.addInitScript(([display, seeded]) => {
@@ -268,15 +272,13 @@ for (const entry of ['launcher', 'onboarding'] as const) for (const mode of ['fl
     const pageY = () => page.evaluate(() => scrollY);
     const threadTop = () => thread.evaluate(el => el.scrollTop);
     const chromium = info.project.name === 'mobile-chromium';
-    let position: number;
     if (entry === 'launcher') {
       await page.goto('/');
       await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
       await page.waitForLoadState('networkidle');
       await page.evaluate(() => window.scrollTo(0, 300));
       await expect.poll(pageY).toBe(300);
-      position = await pageY();
-      await page.getByRole('button', { name: 'Demander à Chiron', exact: true }).tap();
+      await openCoach(page);
       await expect(panel.getByText(/^Message 24\./)).toBeInViewport();
     } else {
       await page.goto('/onboarding');
@@ -284,25 +286,40 @@ for (const entry of ['launcher', 'onboarding'] as const) for (const mode of ['fl
       await expect(page).toHaveURL(/\/$/);
       await expect(panel.getByRole('region', { name: 'Ton point de départ' })).toContainText('Réponse 30');
       await page.waitForLoadState('networkidle');
-      position = await pageY();
+      // The dashboard refetches after the hand-off: let its height settle, or scroll
+      // anchoring moves the page on its own. Then leave it mid-way, so a leak in
+      // either direction would move it.
+      await expect.poll(async () => {
+        const height = await page.evaluate(() => document.documentElement.scrollHeight);
+        await page.waitForTimeout(500);
+        return page.evaluate(previous => document.documentElement.scrollHeight === previous, height);
+      }).toBe(true);
+      await page.evaluate(() => window.scrollTo(0, 300));
+      await expect.poll(pageY).toBe(300);
     }
+    const position = await pageY();
     await expect(panel).toHaveAttribute('data-display', mode);
-    // The thread is the bounded scroller: its content runs past the panel.
+    // The page beneath can scroll, so a position that does not move proves something.
+    expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 300)).toBe(true);
+    // The thread is the bounded scroller: its content runs past the panel. Start mid-way,
+    // whatever the recap or the follow mode left, so the first swipes have room both ways.
     expect(await thread.evaluate(el => el.scrollHeight > el.clientHeight + 200)).toBe(true);
+    await thread.evaluate(el => { el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 2); });
     const box = (await thread.boundingBox())!;
     const header = (await panel.locator('header').boundingBox())!;
+    const composer = (await panel.locator('.coach-composer').boundingBox())!;
     if (chromium) {
-      // Read upwards from the latest message, or down through the recap.
-      const before = await threadTop();
-      const pull = entry === 'launcher' ? 250 : -250;
-      await swipe(page, box.x + box.width / 2, box.y + box.height / 2, pull);
-      await expect.poll(threadTop).not.toBe(before);
-      expect(Math.sign(before - await threadTop())).toBe(Math.sign(pull));
-      expect(await pageY()).toBe(position);
-      // Past the end of the thread, and from the header, nothing reaches the page.
-      for (const [target, distance] of [[box, -2 * pull], [box, -4 * pull], [header, -pull], [header, pull]] as const) {
-        await swipe(page, target.x + target.width / 3, target.y + target.height / 2, distance);
+      for (const pull of [100, -100]) {
+        const before = await threadTop();
+        await swipe(page, box.x + box.width / 2, box.y + box.height / 2, pull);
+        await expect.poll(threadTop).not.toBe(before);
+        expect(Math.sign(before - await threadTop())).toBe(Math.sign(pull));
         expect(await pageY()).toBe(position);
+      }
+      // From the composer, the header, or past either end of the thread, nothing reaches the page.
+      for (const [name, target] of [['composer', composer], ['header', header], ['thread', box]] as const) for (const distance of [150, -150, -1500, 1500]) {
+        await swipe(page, target.x + target.width / 3, target.y + target.height / 2, distance);
+        expect(await pageY(), `${name} swipe ${distance}`).toBe(position);
       }
     } else {
       // Playwright cannot drag a finger in mobile WebKit: check what Safari honours instead.
@@ -315,25 +332,29 @@ for (const entry of ['launcher', 'onboarding'] as const) for (const mode of ['fl
     expect(await pageY()).toBe(position);
     await expect(page.locator('html')).not.toHaveCSS('overflow-y', 'hidden');
     if (chromium) {
-      await swipe(page, 195, 500, -200);
+      await swipe(page, width / 4, height * 0.6, -150);
       await expect.poll(pageY).toBeGreaterThan(position);
     }
     // The conversation and its draft survive the round trip.
-    await page.getByRole('button', { name: 'Demander à Chiron', exact: true }).tap();
+    await openCoach(page);
     if (entry === 'launcher') await expect(panel.getByLabel('Message au coach')).toHaveValue('Brouillon à garder');
     else await expect(panel.getByRole('region', { name: 'Ton point de départ' })).toBeVisible();
   });
 }
 
-test('wide viewport: the open coach leaves the page scrollable', async ({ page }) => {
-  await page.setViewportSize({ width: 1024, height: 768 });
-  await fixture(page);
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
-  await page.getByRole('button', { name: 'Demander à Chiron', exact: true }).click();
-  await expect(page.getByRole('complementary', { name: 'Coach IA' })).toBeVisible();
-  await expect(page.locator('html')).not.toHaveCSS('overflow-y', 'hidden');
-});
+// The upright phone layout ends at 767 px; a wider, taller touch screen keeps a scrollable page.
+for (const [width, locked] of [[767, true], [768, false], [1024, false]] as const) {
+  test(`${width} px: the open coach ${locked ? 'holds' : 'leaves'} the page beneath`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await fixture(page);
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
+    await openCoach(page);
+    await expect(page.getByRole('complementary', { name: 'Coach IA' })).toBeVisible();
+    if (locked) await expect(page.locator('html')).toHaveCSS('overflow-y', 'hidden');
+    else await expect(page.locator('html')).not.toHaveCSS('overflow-y', 'hidden');
+  });
+}
 
 test('touch: the morning check-in is three taps at 375 px and then gives the page back', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });

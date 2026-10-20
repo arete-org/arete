@@ -576,10 +576,13 @@ body:has([aria-modal='true']) .coach-launcher { visibility: hidden; }
 
 /* Modal touch scrolling must not move the page behind it. CSS handles nested dialogs. */
 html:has([aria-modal='true']) { overflow: hidden; }
-/* On a phone the open coach covers the page the same way: a swipe on its header,
-   composer or past the end of the thread must not scroll the page beneath, which
-   keeps its offset for when the coach closes. Desktop keeps a scrollable page. */
-@media (max-width: 767px) { html:has(.coach-panel) { overflow: hidden; } }
+/* On a phone, upright or on its side, the open coach overlays the page the same way:
+   a swipe on its header, composer or past the end of the thread must not scroll the
+   page beneath, which keeps its offset for when the coach closes. Desktop and
+   tablets keep a scrollable page. */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) and (max-height: 500px) {
+  html:has(.coach-panel) { overflow: hidden; }
+}
 /* The install invitation occupies its own layer above the persistent launcher. */
 /* App-wide notices (connectivity, new version): above the page and the tab bar, below dialogs. */
 .app-notices { position: fixed; z-index: 60; top: calc(var(--safe-top) + 8px); left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
