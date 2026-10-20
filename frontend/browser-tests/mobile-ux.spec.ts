@@ -180,6 +180,32 @@ test('short viewport keeps planning and cardio forms reachable with keyboard and
 });
 
 
+for (const [width, height] of [[375, 812], [844, 390]] as const) {
+  test(`${width}x${height}: session entry and planning editor selects are 44 px touch targets matching their fields`, async ({ page }) => {
+    await fixture(page);
+    await page.setViewportSize({ width, height });
+    await page.goto('/log?tab=cardio&new=1');
+    let dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
+    const date = (await dialog.getByLabel('Date', { exact: true }).boundingBox())!;
+    const sport = (await dialog.locator('select').boundingBox())!;
+    expect(sport.height).toBeGreaterThanOrEqual(44);
+    expect(sport.height).toBeCloseTo(date.height, 0);
+    // A phone stacks the date above the sport; a wider screen sets them side by side.
+    if (width < 640) {
+      expect(sport.y).toBeGreaterThan(date.y + date.height);
+      expect(sport.x).toBeCloseTo(date.x, 0);
+      expect(sport.width).toBeCloseTo(date.width, 0);
+    } else expect(sport.y).toBeCloseTo(date.y, 0);
+    await page.goto('/planning?new=1');
+    dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const selects = await dialog.locator('select').all();
+    expect(selects.length).toBeGreaterThan(0);
+    for (const select of selects) expect((await select.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  });
+}
+
 test('touch navigation and display changes preserve a live response and manual draft', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const stream = await coachStream(page, false, 'floating');
