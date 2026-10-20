@@ -421,12 +421,12 @@ def skip_due(reason: str, now: datetime | None = None) -> int:
                         break
                     _insert_run(con, record, at, at.isoformat(), now, state="missed")
                     con.execute(
-                        f"UPDATE app.automation_runs SET error=? WHERE {OWNER} AND automation_id=? AND occurrence_key=? AND state='missed'",
+                        f"UPDATE app.automation_runs SET error=? WHERE {OWNER} AND automation_id=? AND occurrence_key=? AND state='missed' RETURNING id",
                         [reason, record["id"], at.isoformat()],
                     )
                     at = next_due(spec, at)
                 con.execute(
-                    f"UPDATE app.automations SET next_due_at=? WHERE {OWNER} AND id=? AND revision=?",
+                    f"UPDATE app.automations SET next_due_at=? WHERE {OWNER} AND id=? AND revision=? RETURNING id",
                     [at, record["id"], record["revision"]],
                 )
             except ValueError as exc:

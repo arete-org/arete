@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from arete.config import config
-from arete.dataio.db import db_connection
+from arete.dataio.db import db_connection, write_idempotent
 
 #: The published texts' versions (``frontend/src/legal/*.md`` carry them in
 #: their header; ``tests/test_consent.py`` keeps them aligned). A new version
@@ -228,13 +228,13 @@ def give(
 
 def withdraw(athlete_id: int, user_id: int | None) -> None:
     """Withdraw every consent in force, recording the login that did; the
-    data stays, its processing stops."""
-    with db_connection() as con:
-        con.execute(
-            "UPDATE app.athlete_consents SET withdrawn_at = ?, withdrawn_by = ? "
-            "WHERE athlete_id = ? AND withdrawn_at IS NULL",
-            [_now(), user_id, athlete_id],
-        )
+    data stays, its processing stops. Safe to rerun on a write conflict: it
+    only stamps the rows still in force."""
+    write_idempotent(
+        "UPDATE app.athlete_consents SET withdrawn_at = ?, withdrawn_by = ? "
+        "WHERE athlete_id = ? AND withdrawn_at IS NULL RETURNING id",
+        [_now(), user_id, athlete_id],
+    )
 
 
 def state(athlete_id: int | None) -> dict:
