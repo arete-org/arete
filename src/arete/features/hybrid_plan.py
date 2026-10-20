@@ -387,6 +387,22 @@ def kind_tags(kind: str, level: Level) -> frozenset[str] | None:
     return tags | {KEPT}
 
 
+def kept_tags(
+    kind: str, level: Level, session_type: str, intensity: str | None
+) -> frozenset[str] | None:
+    """A kept session's tags: its kind's (``kind_tags``), and hard when its
+    current content is, whatever it was generated as (an easy run turned into
+    intervals). The kind still names what it replaces; an activation stays
+    light unless it was made hard explicitly."""
+    tags = kind_tags(kind, level)
+    if tags is None:
+        return None
+    hard_type = session_type in ("tempo", "intervals", "race") and kind != ACTIVATION
+    if intensity == "hard" or hard_type:
+        tags = tags | {HARD}
+    return tags
+
+
 @dataclass(frozen=True)
 class _Slot:
     draft: DraftSession

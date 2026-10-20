@@ -118,6 +118,37 @@ def _check_hybrid_end(end: date, weeks: int, today: date) -> None:
         )
 
 
+#: Weeks a running block's end may move later (an illness, a trip).
+HYBRID_POSTPONE_WEEKS = 2
+
+
+def _check_block_edit(
+    current: Goal, end: date, weeks: int, resized: bool, today: date
+) -> None:
+    """A block not started yet keeps its creation window. A running one keeps
+    its length; its end may move to a Sunday from next Sunday on, at most
+    ``HYBRID_POSTPONE_WEEKS`` past its current end."""
+    stored = int((current.details or {})["weeks"])
+    last_sunday = current.race_date - timedelta(
+        days=(current.race_date.weekday() + 1) % 7
+    )
+    started = last_sunday - timedelta(weeks=stored, days=-1) <= today
+    if not started:
+        _check_hybrid_end(end, weeks, today)
+        return
+    if resized:
+        raise ValueError("La durée d’un bloc déjà commencé ne se modifie pas.")
+    if end.weekday() != 6:
+        raise ValueError("La fin du bloc doit tomber un dimanche.")
+    earliest = today + timedelta(days=6 - today.weekday() or 7)
+    latest = current.race_date + timedelta(weeks=HYBRID_POSTPONE_WEEKS)
+    if not earliest <= end <= latest:
+        raise ValueError(
+            f"La fin d’un bloc commencé doit tomber entre le {earliest:%d/%m/%Y} "
+            f"et le {latest:%d/%m/%Y}."
+        )
+
+
 @dataclass(frozen=True)
 class Goal:
     id: int
@@ -159,7 +190,20 @@ def _from_row(row: tuple) -> Goal:
     )
 
 
+#: Fields a goal always has: an edit may change them, never empty them.
+_REQUIRED = {
+    "name": "le nom",
+    "race_date": "la date",
+    "distance_km": "la distance",
+    "priority": "la priorité",
+    "status": "le statut",
+}
+
+
 def _validate(fields: dict[str, Any]) -> None:
+    for key, label in _REQUIRED.items():
+        if key in fields and fields[key] is None:
+            raise ValueError(f"Un objectif garde toujours {label}.")
     if "priority" in fields and fields["priority"] not in PRIORITIES:
         raise ValueError("priority must be A, B or C")
     if "status" in fields and fields["status"] not in STATUSES:
@@ -284,10 +328,10 @@ def update_goal(goal_id: int, **fields: Any) -> Goal | None:
         end = fields.get("race_date", current.race_date)
         moved = end != current.race_date
         resized = weeks != (current.details or {}).get("weeks")
-        # A running block's other edits (name, equipment…) leave its dates be.
+        # A block's other edits (name, equipment…) leave its dates be.
         if current.goal_type == "hybrid" and (moved or resized):
             assert weeks is not None, "a stored hybrid block has its weeks"
-            _check_hybrid_end(end, int(weeks), athlete_today())
+            _check_block_edit(current, end, int(weeks), resized, athlete_today())
     if fields:
         con = connect()
         try:

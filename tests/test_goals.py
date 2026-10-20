@@ -352,19 +352,52 @@ class TestGoalTypes:
             details={"weeks": 8},
             today=today,
         )
-        # Three weeks on, the block runs: its end left the creation window.
-        monkeypatch.setattr(goals, "athlete_today", lambda: today + timedelta(weeks=3))
+        # Not started yet: the creation window holds.
+        with pytest.raises(ValueError, match="doit tomber entre"):
+            goals.update_goal(block.id, race_date=end + timedelta(weeks=3))
+        later = goals.update_goal(block.id, race_date=end + timedelta(weeks=1))
+        assert later is not None
+        end = later.race_date
+        # Three weeks on, the block runs.
+        running = today + timedelta(weeks=3)
+        monkeypatch.setattr(goals, "athlete_today", lambda: running)
         renamed = goals.update_goal(
             block.id,
             name="test-block-renamed",
             details={"weeks": 8, "equipment": ["sled"]},
         )
         assert renamed is not None and renamed.race_date == end
+        with pytest.raises(ValueError, match="déjà commencé ne se modifie pas"):
+            goals.update_goal(block.id, details={"weeks": 12})
         with pytest.raises(ValueError, match="un dimanche"):
             goals.update_goal(block.id, race_date=end + timedelta(days=1))
-        with pytest.raises(ValueError, match="doit tomber entre"):
-            goals.update_goal(block.id, race_date=end + timedelta(weeks=1))
-        with pytest.raises(ValueError, match="doit tomber entre"):
-            goals.update_goal(block.id, details={"weeks": 12})
-        moved = goals.update_goal(block.id, race_date=end + timedelta(weeks=3))
-        assert moved is not None and moved.race_date == end + timedelta(weeks=3)
+        with pytest.raises(ValueError, match="bloc commencé doit tomber entre"):
+            goals.update_goal(block.id, race_date=end + timedelta(weeks=3))
+        past_sunday = running - timedelta(days=running.weekday() + 1)
+        with pytest.raises(ValueError, match="bloc commencé doit tomber entre"):
+            goals.update_goal(block.id, race_date=past_sunday)
+
+    def test_a_running_block_may_be_postponed_two_weeks(self, monkeypatch):
+        today = athlete_today()
+        end = goals.hybrid_end_window(8, today)[0]
+        block = goals.create_goal(
+            name="test-block",
+            race_date=end,
+            goal_type="hybrid",
+            details={"weeks": 8},
+            today=today,
+        )
+        monkeypatch.setattr(goals, "athlete_today", lambda: today + timedelta(weeks=4))
+        postponed = goals.update_goal(block.id, race_date=end + timedelta(weeks=2))
+        assert postponed is not None
+        assert postponed.race_date == end + timedelta(weeks=2)
+
+    def test_a_goal_keeps_its_date(self, router_client):
+        from arete.api.goals import router
+
+        g = goals.create_goal(name="test-road", race_date=FAR, distance_km=10)
+        with pytest.raises(ValueError, match="garde toujours la date"):
+            goals.update_goal(g.id, race_date=None)
+        resp = router_client(router).patch(f"/goals/{g.id}", json={"race_date": None})
+        assert resp.status_code == 422
+        assert resp.json()["detail"] == "Un objectif garde toujours la date."

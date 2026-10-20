@@ -731,8 +731,13 @@ def test_m64_adds_the_goal_types_once_and_atomically(tmp_path, monkeypatch):
             )
             assert init_duckdb.pending_migrations(con) == []
 
-        def broken_view(*_args):
-            raise RuntimeError("view refresh failed")
+        real_view = tenant_schema._view
+
+        def broken_view(connection, table):
+            # The goals view is rebuilt, then the sessions' fails.
+            if table == "planned_sessions":
+                raise RuntimeError("view refresh failed")
+            real_view(connection, table)
 
         with monkeypatch.context() as broken:
             broken.setattr(tenant_schema, "_view", broken_view)
@@ -741,6 +746,8 @@ def test_m64_adds_the_goal_types_once_and_atomically(tmp_path, monkeypatch):
         # Rolled back together: never a column the private view does not show.
         columns = {r[0] for r in con.execute("DESCRIBE app.goals").fetchall()}
         assert not {"goal_type", "details_json"} & columns
+        shown = {r[0] for r in con.execute("DESCRIBE app.visible_goals").fetchall()}
+        assert "goal_type" not in shown
         planned = {
             r[0] for r in con.execute("DESCRIBE app.planned_sessions").fetchall()
         }

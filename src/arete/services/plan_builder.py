@@ -29,8 +29,8 @@ from arete.features.hybrid_plan import (
     athlete_level,
     default_rules,
     generate_hybrid_plan,
+    kept_tags,
     kind_of,
-    kind_tags,
     loading_sessions,
 )
 from arete.features.plan_generator import (
@@ -210,7 +210,12 @@ def hybrid_inputs(goal: Goal, today: date | None = None) -> HybridInputs:
                 tags=tags,
             )
             for s in kept
-            if (tags := kind_tags(s.plan_kind or "", level)) is not None
+            if (
+                tags := kept_tags(
+                    s.plan_kind or "", level, s.session_type.value, s.target_intensity
+                )
+            )
+            is not None
         ),
     )
 

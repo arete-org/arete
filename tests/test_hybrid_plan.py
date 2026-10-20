@@ -26,11 +26,13 @@ from arete.features.hybrid_plan import (
     athlete_level,
     default_rules,
     generate_hybrid_plan,
+    kept_tags,
     kind_of,
     kind_tags,
     plan_violations,
     violations,
 )
+from arete.features.hybrid_plan import _primary as _primary_kind
 from arete.features.plan_generator import (
     PLANNED_RPE,
     DraftSession,
@@ -650,3 +652,28 @@ def test_a_race_moved_off_race_day_is_not_doubled():
     _, weeks = _plan(kept=(moved,))
     races = [s for w in weeks for s in w.sessions if RACE in s.tags]
     assert races == [moved]
+
+
+def test_a_kept_easy_run_made_hard_counts_as_hard():
+    tags = kept_tags(EASY, "intermediate", "intervals", "hard")
+    assert tags is not None and HARD in tags and _primary_kind(tags) == EASY
+    activation = kept_tags(ACTIVATION, "intermediate", "intervals", "moderate")
+    assert activation is not None and HARD not in activation
+    week_two = START + timedelta(weeks=1)
+    _, plain = _plan(rest_days=frozenset())
+    easy = next(
+        s for w in plain if w.start == week_two for s in w.sessions if EASY in s.tags
+    )
+    edited = replace(easy, session_type="intervals", intensity="hard", tags=tags)
+    _, weeks = _plan(rest_days=frozenset(), kept=(edited,))
+    assert plan_violations(weeks, RULES, RACE_DAY) == []
+    hard_days = sorted({s.date for w in weeks for s in w.sessions if HARD in s.tags})
+    run = longest = 1
+    for before, day in zip(hard_days, hard_days[1:], strict=False):
+        run = run + 1 if (day - before).days == 1 else 1
+        longest = max(longest, run)
+    assert longest <= 2
+    # Still an easy run by kind: nothing doubles it, the key run stays.
+    week = next(w for w in weeks if w.start == week_two)
+    assert sum(1 for s in week.sessions if EASY in s.tags) == 1
+    assert sum(1 for s in week.sessions if KEY_RUN in s.tags) == 1
