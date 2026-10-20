@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 /** History state of a session screen the Journal opened over itself. */
@@ -21,10 +22,15 @@ function hasPreviousPage(): boolean {
  */
 export function useEntryClose(closeInPlace: () => void) {
   const navigate = useNavigate();
-  const { state } = useLocation();
+  const { state, key } = useLocation();
+  // The entry being left: a second close before the navigation lands (a double
+  // tap, Escape) must not go back one more page.
+  const leaving = useRef<string | null>(null);
   return () => {
-    if (openedInJournal(state)) closeInPlace();
-    else if (hasPreviousPage()) navigate(-1);
+    if (openedInJournal(state)) return closeInPlace();
+    if (leaving.current === key) return;
+    leaving.current = key;
+    if (hasPreviousPage()) navigate(-1);
     else navigate('/', { replace: true });
   };
 }

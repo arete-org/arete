@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Plus } from 'lucide-react';
 import { Button, Field, Input, Modal, ModalHeader, Select, Textarea } from '@/components/ui';
@@ -43,6 +43,7 @@ export function ManualCardioModal({
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(empty());
+  const dateId = useId();
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -63,9 +64,12 @@ export function ManualCardioModal({
     },
   });
 
+  // A save in flight keeps the screen: leaving the page would lose its outcome.
+  const dismiss = () => { if (!createMutation.isPending) onClose(); };
+
   return (
-    <Modal mobileSheet open={open} onClose={onClose} className="max-w-md p-4 sm:p-6">
-      <ModalHeader title="SÉANCE SANS MONTRE" icon={<Plus className="w-5 h-5" />} onClose={onClose} className="mb-4" />
+    <Modal mobileSheet open={open} onClose={dismiss} className="max-w-md p-4 sm:p-6">
+      <ModalHeader title="SÉANCE SANS MONTRE" icon={<Plus className="w-5 h-5" />} onClose={dismiss} className="mb-4" />
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -75,10 +79,11 @@ export function ManualCardioModal({
       >
         {/* A phone column is too narrow for a full date: stacked, like the planning editor. */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Date">
+          <Field label="Date" htmlFor={dateId}>
             <Input
+              id={dateId}
               type="date"
-              aria-label="Date"
+              className="session-date-input"
               value={form.date}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
               required

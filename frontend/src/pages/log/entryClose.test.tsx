@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BrowserRouter, Link, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { OPENED_IN_JOURNAL, useEntryClose } from './entryClose';
 
 /** The Journal's contract: `new=1` opens the entry, which the Journal can open itself. */
@@ -22,7 +22,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<><h1>Accueil</h1><Link to="/log?new=1">Saisir une séance</Link><Link to="/log">Journal</Link></>} />
+        <Route path="/" element={<><h1>Accueil</h1><Link to="/log?new=1">Saisir une séance</Link><Link to="/log">Journal</Link><Link to="/planning">Planning</Link></>} />
         <Route path="/planning" element={<><h1>Planning</h1><Link to="/log?new=1">Saisir</Link></>} />
         <Route path="/log" element={<Journal />} />
       </Routes>
@@ -72,4 +72,17 @@ it('closes in place when the Journal opened it, though a page precedes the Journ
   expect(screen.getByRole('heading', { name: 'Journal' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Fermer' })).toBeNull();
   expect(window.location.pathname + window.location.search).toBe('/log');
+});
+
+it('goes back one page only, however many times it is closed', async () => {
+  fireEvent.click(screen.getByRole('link', { name: 'Planning' }));
+  fireEvent.click(screen.getByRole('link', { name: 'Saisir' }));
+  const go = vi.spyOn(window.history, 'go');
+  const close = screen.getByRole('button', { name: 'Fermer' });
+  // A double tap lands before the first navigation does.
+  fireEvent.click(close);
+  fireEvent.click(close);
+  expect(await screen.findByRole('heading', { name: 'Planning' })).toBeTruthy();
+  expect(go).toHaveBeenCalledOnce();
+  go.mockRestore();
 });

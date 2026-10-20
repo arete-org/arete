@@ -375,6 +375,10 @@ for (const [width, locked] of [[767, true], [768, false], [1024, false]] as cons
 
 /** The control fits its dialog and the page does not scroll sideways. */
 async function fitsDialog(page: Page, control: ReturnType<Page['getByLabel']>) {
+  // Measure the settled dialog, not its entrance.
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+    .map((animation) => animation.finished)));
   const dialog = (await page.getByRole('dialog').boundingBox())!;
   const box = (await control.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(dialog.x);
@@ -417,6 +421,17 @@ test('touch: closing the session entry opened from Home returns Home, and its da
   await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
   await expect(page).toHaveURL(/\/$/);
   await expect(briefing).toBeVisible();
+
+  // Opened by the Journal itself, the entry closes in place.
+  await page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('link', { name: 'Journal', exact: true }).tap();
+  const journal = page.getByRole('heading', { name: 'Journal', exact: true });
+  await expect(journal).toBeVisible();
+  await page.getByRole('button', { name: 'Saisir une séance', exact: true }).tap();
+  await expect(dialog.getByRole('heading', { name: 'SAISIR UNE SÉANCE' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/\/log$/);
+  await expect(journal).toBeVisible();
 });
 
 test('touch: the morning check-in is three taps at 375 px and then gives the page back', async ({ page }) => {

@@ -45,7 +45,7 @@ export function LogPage() {
 
   // A Garmin strength session awaiting its loads opens from the Journal or a link (?draft=).
   const draftParam = searchParams.get('draft');
-  const setDraftId = (id: number | null) => setSearchParams(previous => { const next = new URLSearchParams(previous); if (id === null) next.delete('draft'); else next.set('draft', String(id)); return next; }, id === null ? undefined : { state: OPENED_IN_JOURNAL });
+  const setDraftId = (id: number | null) => setSearchParams(previous => { const next = new URLSearchParams(previous); if (id === null) next.delete('draft'); else next.set('draft', String(id)); return next; }, { replace: true, state: id === null ? undefined : OPENED_IN_JOURNAL });
   const closeDraft = useEntryClose(() => setDraftId(null));
 
   const { data: settings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
