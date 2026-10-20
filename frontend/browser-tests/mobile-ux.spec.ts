@@ -239,12 +239,23 @@ test('landscape respects lateral safe areas and preserves the draft through rota
   await noOverflow(page);
 });
 
-/** A finger drag on the compositor (Chromium only). A positive distance moves the
- *  finger down, which scrolls towards the top (scrollTop decreases); the test asserts it. */
+/** A finger drag made of raw touch events (Chromium only), kept inside the viewport.
+ *  A positive distance moves the finger down, which scrolls towards the top (scrollTop
+ *  decreases); the test asserts it. `Input.synthesizeScrollGesture` with a touch source
+ *  does nothing in headless Chromium on Linux, so CI would never move anything. */
 async function swipe(page: Page, x: number, y: number, yDistance: number) {
+  const height = page.viewportSize()!.height;
+  const at = (offset: number) => [{ x, y: Math.min(height - 1, Math.max(1, y + offset)) }];
   const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Input.synthesizeScrollGesture', { x, y, yDistance, gestureSourceType: 'touch', speed: 1200 });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at(0) });
+  for (let step = 1; step <= 10; step++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at((yDistance * step) / 10) });
+  // Hold still before lifting: no fling outlives the gesture, so offsets read after it are final.
+  await page.waitForTimeout(150);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at(yDistance) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await cdp.detach();
+  // Let the compositor's scroll reach the page before anyone reads an offset.
+  await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
 }
 
 /** The floating launcher, or the navigation's toggle where the layout hides it. */
@@ -316,10 +327,16 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
         expect(Math.sign(before - await threadTop())).toBe(Math.sign(pull));
         expect(await pageY()).toBe(position);
       }
-      // From the composer, the header, or past either end of the thread, nothing reaches the page.
-      for (const [name, target] of [['composer', composer], ['header', header], ['thread', box]] as const) for (const distance of [150, -150, -1500, 1500]) {
+      // From the composer or the header, nothing reaches the page.
+      for (const [name, target] of [['composer', composer], ['header', header]] as const) for (const distance of [100, -100]) {
         await swipe(page, target.x + target.width / 3, target.y + target.height / 2, distance);
         expect(await pageY(), `${name} swipe ${distance}`).toBe(position);
+      }
+      // Nor past either end of the thread.
+      for (const [edge, distance] of [['top', 100], ['bottom', -100]] as const) {
+        await thread.evaluate((el, top) => { el.scrollTop = top ? 0 : el.scrollHeight; }, edge === 'top');
+        await swipe(page, box.x + box.width / 2, box.y + box.height / 2, distance);
+        expect(await pageY(), `thread ${edge} swipe ${distance}`).toBe(position);
       }
     } else {
       // Playwright cannot drag a finger in mobile WebKit: check what Safari honours instead.
