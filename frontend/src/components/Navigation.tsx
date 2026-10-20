@@ -1,5 +1,5 @@
 import { InboxBell } from './AutomationInbox';
-import { lazy, Suspense, useLayoutEffect, useRef, type MouseEvent } from 'react';
+import { lazy, Suspense, useRef, type MouseEvent } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { BarChart3, CalendarDays, Dumbbell, LayoutDashboard, Settings } from 'lucide-react';
 import { AreteMark, AreteWordmark } from './AreteBrand';
@@ -9,6 +9,7 @@ import { useAuthState } from '@/components/auth/authState';
 import { preloadAgentMarkdown } from './agent/markdownRenderer';
 import { preloadRoute } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
+import { useNavigationBottom } from '@/hooks/useNavigationBottom';
 
 // Clerk's account menu lives in the lazily loaded auth chunk; it only renders when sign-in is on.
 const AccountButton = lazy(importChunk(() =>
@@ -42,38 +43,7 @@ export function Navigation({
   const mobileItems = [...navItems.slice(0, 4), profile, navItems[4]];
   const auth = useAuthState();
   const desktopNav = useRef<HTMLElement>(null);
-  // The open coach starts where this bar really ends: a notice above it pushes it down
-  // until the page scrolls it away. Published only while the coach is open.
-  useLayoutEffect(() => {
-    const bar = desktopNav.current;
-    if (!agentOpen || !bar) return;
-    const root = document.documentElement;
-    const viewport = window.visualViewport;
-    const update = () => {
-      // Phones hide this bar: the coach then ignores the value.
-      if (!bar.getClientRects().length) { root.style.removeProperty('--navigation-bottom'); return; }
-      // WebKit measures from the visual viewport, others from the layout viewport,
-      // which places the fixed panel: convert to the layout viewport's top edge.
-      const layoutTop = viewport ? viewport.pageTop - viewport.offsetTop - window.scrollY : 0;
-      root.style.setProperty('--navigation-bottom', `${Math.max(0, bar.getBoundingClientRect().bottom - layoutTop)}px`);
-    };
-    // Whatever the shell renders above the bar moves it when its height changes.
-    const resized = new ResizeObserver(update);
-    for (let above: Element | null = bar; above; above = above.previousElementSibling) resized.observe(above);
-    for (const target of [window, viewport]) {
-      target?.addEventListener('scroll', update, { passive: true });
-      target?.addEventListener('resize', update);
-    }
-    update();
-    return () => {
-      resized.disconnect();
-      for (const target of [window, viewport]) {
-        target?.removeEventListener('scroll', update);
-        target?.removeEventListener('resize', update);
-      }
-      root.style.removeProperty('--navigation-bottom');
-    };
-  }, [agentOpen]);
+  useNavigationBottom(desktopNav, agentOpen);
   return (
     <>
       {/* Desktop top nav — hidden on mobile */}

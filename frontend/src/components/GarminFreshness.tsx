@@ -6,6 +6,7 @@ import { invalidateAfterGarminRefresh } from '@/lib/queryKeys';
 /** One browser-owned refresh on entry/foreground; the server deduplicates tabs. */
 export function GarminFreshness() {
   const queryClient = useQueryClient();
+  const [checking, setChecking] = useState(false);
   const [message, setMessage] = useState('');
   useEffect(() => {
     const controller = new AbortController();
@@ -15,7 +16,8 @@ export function GarminFreshness() {
       if (document.visibilityState === 'hidden' || active) return;
       active = true;
       let state: string | undefined;
-      setMessage('Vérification Garmin…');
+      setChecking(true);
+      setMessage('');
       try {
         const result = await fetchAPI<{ state: string; complete?: boolean }>('/garmin/sync/ensure', {
           method: 'POST', signal: controller.signal,
@@ -28,6 +30,7 @@ export function GarminFreshness() {
       } finally {
         active = false;
         if (!disposed) {
+          setChecking(false);
           invalidateAfterGarminRefresh(queryClient, state);
         }
       }
@@ -41,6 +44,10 @@ export function GarminFreshness() {
       document.removeEventListener('visibilitychange', foreground);
     };
   }, [queryClient]);
-  // Always mounted: the navigation observes this line, which moves the bar when it shows.
-  return <p role="status" hidden={!message} className="px-4 py-2 text-xs text-text-secondary">{message}</p>;
+  // The live region exists before it speaks and announces outcomes only; the transient
+  // check stays visible without interrupting a screen reader at every page entry.
+  return <div>
+    {checking && <p className="px-4 py-2 text-xs text-text-secondary">Vérification Garmin…</p>}
+    <div role="status">{message && <p className="px-4 py-2 text-xs text-text-secondary">{message}</p>}</div>
+  </div>;
 }

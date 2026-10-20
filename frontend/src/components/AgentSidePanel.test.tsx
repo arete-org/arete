@@ -36,6 +36,7 @@ vi.mock('@/lib/agentStream', async (importOriginal) => ({
       })
   ),
 }));
+const resizeCallbacks: (() => void)[] = [];
 function Harness() {
   const [open, setOpen] = useState(false);
   const [queryClient] = useState(() => new QueryClient());
@@ -55,10 +56,45 @@ function Harness() {
 beforeEach(() => {
   localStorage.clear();
   Element.prototype.scrollTo = vi.fn();
-  // jsdom has no ResizeObserver; the open coach's navigation observes its own edge.
-  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  resizeCallbacks.length = 0;
+  // jsdom has neither: the open coach's navigation observes its own edge on a desktop.
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback: () => void) { resizeCallbacks.push(callback); }
+    observe() {}
+    disconnect() {}
+  });
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === '(min-width: 768px)',
+    addEventListener() {},
+    removeEventListener() {},
+  }));
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+it('publishes the bottom edge of the navigation only while the coach is open', () => {
+  const edge = () => document.documentElement.style.getPropertyValue('--navigation-bottom');
+  const view = render(<Harness />);
+  const bar = screen.getByRole('navigation', { name: 'Navigation principale' });
+  let bottom = 89;
+  vi.spyOn(bar, 'getBoundingClientRect').mockImplementation(() => ({ bottom }) as DOMRect);
+  const toggle = screen.getAllByRole('button', { name: 'Ouvrir le coach' })[0];
+  expect(edge()).toBe('');
+  fireEvent.click(toggle);
+  expect(edge()).toBe('89px');
+  // The notice above the bar disappears: the observer reports the bar's new edge.
+  bottom = 57;
+  act(() => { for (const callback of resizeCallbacks) callback(); });
+  expect(edge()).toBe('57px');
+  fireEvent.click(toggle);
+  expect(edge()).toBe('');
+  fireEvent.click(toggle);
+  expect(edge()).toBe('57px');
+  view.unmount();
+  expect(edge()).toBe('');
+});
 
 it('toggles the coach from navigation and hides it with Escape', () => {
   render(<Harness />);
