@@ -142,7 +142,7 @@ def flush() -> int:
             for relative, data in changed:
                 con.execute(
                     "INSERT OR REPLACE INTO app.files (path, content, updated_at) "
-                    "VALUES (?, ?, now())",
+                    "VALUES (?, ?, now()) RETURNING path",
                     [relative, data],
                 )
             for relative in deleted:

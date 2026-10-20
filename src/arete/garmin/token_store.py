@@ -109,7 +109,7 @@ def _store_record(token_file: Path, record: dict, *, remote: bool) -> None:
     if remote:
         with db_connection() as con:
             con.execute(
-                "INSERT OR REPLACE INTO app.files(path,content,updated_at) VALUES(?,?,now())",
+                "INSERT OR REPLACE INTO app.files(path,content,updated_at) VALUES(?,?,now()) RETURNING path",
                 [ACCOUNT_PATH, data],
             )
 
@@ -135,7 +135,7 @@ def save(path: Path) -> None:
     assert len(data) <= MAX_TOKEN_BYTES
     with db_connection() as con:
         con.execute(
-            "INSERT OR REPLACE INTO app.files(path,content,updated_at) VALUES(?,?,now())",
+            "INSERT OR REPLACE INTO app.files(path,content,updated_at) VALUES(?,?,now()) RETURNING path",
             [TOKEN_PATH, data],
         )
 

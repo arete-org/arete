@@ -128,7 +128,7 @@ def save(
             "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (athlete_id, date) DO UPDATE SET "
             "sleep = EXCLUDED.sleep, legs = EXCLUDED.legs, mood = EXCLUDED.mood, "
             "note = EXCLUDED.note, updated_at = EXCLUDED.updated_at, "
-            "answered_at = coalesce(answered_at, EXCLUDED.answered_at)",
+            "answered_at = coalesce(answered_at, EXCLUDED.answered_at) RETURNING date",
             [day, sleep, legs, mood, note, now, now],
         )
         saved = get(day, con)

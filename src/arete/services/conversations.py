@@ -182,7 +182,7 @@ def delete(thread_id: str) -> None:
             [_id(thread_id)],
         )
         con.execute(
-            f"UPDATE app.coach_conversations SET deleted_at=now(),payload='{{}}',search_text='',title='' WHERE {SCOPE} AND id=?",
+            f"UPDATE app.coach_conversations SET deleted_at=now(),payload='{{}}',search_text='',title='' WHERE {SCOPE} AND id=? RETURNING id",
             [_id(thread_id)],
         )
     delete_documents(thread_id)

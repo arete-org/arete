@@ -543,7 +543,7 @@ def reconcile_abandoned(operation_id: str, *, workers_stopped: bool) -> dict:
             errors=["Import interrompu réconcilié ; couverture à revérifier."],
         )
         con.execute(
-            "UPDATE app.garmin_sync_state SET owner=NULL,revision=revision+1,payload=? WHERE athlete_id=? AND owner=?",
+            "UPDATE app.garmin_sync_state SET owner=NULL,revision=revision+1,payload=? WHERE athlete_id=? AND owner=? RETURNING athlete_id",
             [json.dumps(state), current_athlete_id(), operation_id],
         )
     return state

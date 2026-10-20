@@ -146,7 +146,7 @@ def update_goal(goal_id: int, **fields: Any) -> Goal | None:
         con = connect()
         try:
             con.execute(
-                f"UPDATE app.goals SET {', '.join(f'{k} = ?' for k in fields)} WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) ",
+                f"UPDATE app.goals SET {', '.join(f'{k} = ?' for k in fields)} WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
                 [*fields.values(), goal_id],
             )
         finally:
@@ -164,7 +164,7 @@ def delete_goal(goal_id: int) -> bool:
     con = connect()
     try:
         con.execute(
-            "UPDATE app.planned_sessions SET goal_id = NULL WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (goal_id = ?) ",
+            "UPDATE app.planned_sessions SET goal_id = NULL WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (goal_id = ?) RETURNING id",
             [goal_id],
         )
         row = con.execute(

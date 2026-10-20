@@ -624,7 +624,7 @@ def apply_plan_changes(
                 "remote": "Le planning Arete est enregistré. Garmin doit être vérifié ou exporté séparément ; le calendrier suit sa synchronisation habituelle.",
             }
             con.execute(
-                f"UPDATE app.plan_change_sets SET state='applied',operation_id=?,receipt_json=? WHERE {_COORD_OWNER} AND id=? AND state='pending'",
+                f"UPDATE app.plan_change_sets SET state='applied',operation_id=?,receipt_json=? WHERE {_COORD_OWNER} AND id=? AND state='pending' RETURNING id",
                 [operation_id, json.dumps(result, ensure_ascii=False), identifier],
             )
             _check_change_deadline(started)

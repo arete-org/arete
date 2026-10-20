@@ -1170,3 +1170,38 @@ def test_a_missed_session_is_replanned_in_its_athletes_scope_only(
     with athlete_scope(first.athlete_id):
         (proposal,) = missed_sessions.replan()
         assert proposal.planned_session_id == session_id
+
+
+def test_a_run_stamp_racing_another_write_of_the_athlete_frees_the_lease(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """ARE-150: another write of the athlete's row commits inside the stamp's snapshot."""
+    from write_race import race
+
+    from arete import scheduler
+
+    first = athletes[0]
+    seen: list[int] = []
+    _stub_scheduled_work(monkeypatch, seen)
+
+    def other_writer():
+        con = connect()
+        con.execute(
+            "UPDATE app.athletes SET deleted_at=deleted_at WHERE id=? RETURNING id",
+            [first.athlete_id],
+        ).fetchall()
+        con.close()
+
+    with race(monkeypatch, r"SET last_sync_at=\?,sync_lease_until=CASE", other_writer):
+        result = scheduler.run_scheduled_batch()
+    assert result["athletes"][str(first.athlete_id)] == {
+        "sync": "ok",
+        "briefing": "rules",
+        "review": "rules",
+    }
+    con = connect()
+    assert con.execute(
+        "SELECT sync_lease_until IS NULL AND last_sync_at = ? FROM app.athletes WHERE id=?",
+        [_naive(NOON), first.athlete_id],
+    ).fetchone() == (True,)
+    con.close()

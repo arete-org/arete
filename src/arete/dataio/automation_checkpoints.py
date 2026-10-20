@@ -64,7 +64,7 @@ def put_writes(thread, namespace, identifier, task, writes, path):
             raise ValueError("Checkpoint write count limit exceeded")
         for position, channel, kind, value in writes:
             conflict = (
-                "DO UPDATE SET channel=excluded.channel,value_type=excluded.value_type,value=excluded.value"
+                "DO UPDATE SET channel=excluded.channel,value_type=excluded.value_type,value=excluded.value RETURNING position"
                 if position < 0
                 else "DO NOTHING"
             )

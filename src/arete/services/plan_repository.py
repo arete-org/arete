@@ -263,7 +263,7 @@ class PlanDecisionRepository:
         con = connect()
         try:
             con.execute(
-                f"UPDATE app.plan_decisions SET {column} = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) ",
+                f"UPDATE app.plan_decisions SET {column} = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
                 [datetime.now(), decision_id],
             )
         finally:

@@ -495,7 +495,7 @@ def _claim(week_start: date, *, scheduled: bool) -> int | None:
                 logger.warning("Weekly review: claim %s restored as written", row[0])
                 con.execute(
                     f"UPDATE app.weekly_reviews SET source = ? WHERE {_SCOPE} "
-                    f"AND id = ? AND source = '{PENDING}'",
+                    f"AND id = ? AND source = '{PENDING}' RETURNING id",
                     [_source_of(row[3]), row[0]],
                 )
                 return None
@@ -848,7 +848,7 @@ def _give_back(review_id: int, indices: list[int], *, unanswered: bool = False) 
                 con.execute(
                     "UPDATE app.weekly_reviews SET applied_json = ?, "
                     "applied_at = CASE WHEN ? THEN NULL ELSE applied_at END "
-                    f"WHERE {_SCOPE} AND id = ?",
+                    f"WHERE {_SCOPE} AND id = ? RETURNING id",
                     [json.dumps(kept), unanswered and not kept, review_id],
                 )
             return

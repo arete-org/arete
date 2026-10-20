@@ -184,7 +184,7 @@ def begin_effect(identifier, call):
             )
         original["executed"] = call
         con.execute(
-            f"UPDATE app.automation_effects SET state='started',arguments_json=? WHERE {OWNER} AND run_id=? AND tool_call_id=?",
+            f"UPDATE app.automation_effects SET state='started',arguments_json=? WHERE {OWNER} AND run_id=? AND tool_call_id=? RETURNING tool_call_id",
             [json.dumps(original, sort_keys=True, default=str), identifier, call["id"]],
         )
     return None
@@ -241,7 +241,7 @@ def finish(identifier, *, seconds, result=None, interrupts=(), error=None):
             else None
         )
         con.execute(
-            f"UPDATE app.automation_runs SET state=?,result=?,error=?,finished_at=?,expires_at=?,lease_until=NULL,active_seconds=active_seconds+?,revision=revision+1 WHERE {OWNER} AND id=?",
+            f"UPDATE app.automation_runs SET state=?,result=?,error=?,finished_at=?,expires_at=?,lease_until=NULL,active_seconds=active_seconds+?,revision=revision+1 WHERE {OWNER} AND id=? RETURNING id",
             [
                 state,
                 result,
@@ -253,7 +253,7 @@ def finish(identifier, *, seconds, result=None, interrupts=(), error=None):
             ],
         )
         con.execute(
-            "UPDATE app.automation_worker_slots SET run_id=NULL,lease_until=NULL WHERE run_id=?",
+            "UPDATE app.automation_worker_slots SET run_id=NULL,lease_until=NULL WHERE run_id=? RETURNING id",
             [identifier],
         )
     from arete.services import inbox

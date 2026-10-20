@@ -181,7 +181,7 @@ def set_delivery_thread(message: SlackMessage, destination: SlackMessage) -> Non
     """Record the actual reply destination before any provisional text can land."""
     with transaction() as con:
         con.execute(
-            "UPDATE app.slack_deliveries SET thread_id = ? WHERE event_key = ?",
+            "UPDATE app.slack_deliveries SET thread_id = ? WHERE event_key = ? RETURNING event_key",
             [destination.thread_id, message.key],
         )
 
@@ -209,13 +209,13 @@ def finish(message: SlackMessage, status: str, *, release: bool) -> None:
             with transaction() as con:
                 con.execute(
                     "UPDATE app.slack_deliveries SET status = ?, updated_at = now() "
-                    "WHERE event_key = ?",
+                    "WHERE event_key = ? RETURNING event_key",
                     [status, message.key],
                 )
                 if release:
                     con.execute(
                         "UPDATE app.slack_athletes SET run_event_key = NULL "
-                        "WHERE athlete_id = ? AND run_event_key = ?",
+                        "WHERE athlete_id = ? AND run_event_key = ? RETURNING athlete_id",
                         [current_athlete_id(), message.key],
                     )
             return

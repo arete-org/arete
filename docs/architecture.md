@@ -411,8 +411,8 @@ to that log, without hiding a genuine second session. There is no automatic expi
 the notation with the grammar (no model) and saves the log linked to the
 activity in one transaction, with its game evidence under the settled-rewards
 rule of an automatic link; records follow as on any save. The draft row is
-claimed by delete-and-rewrite, since DuckDB reports a concurrent delete of a
-row as a conflict but not a concurrent update of a keyed table: a stale tab
+claimed by delete-and-rewrite, which conflicts with any other write of the
+row (every draft write returns, see Concurrent writes): a stale tab
 gets 409, never a second log; an interrupted save that left the draft pending
 asks to retry (503). A log linked to the same activity by another request at
 that very moment is not detected (two logs, both linked). Dismissing hides a
@@ -515,6 +515,28 @@ checks, load-before-execute, concurrent invocation isolation, call/deadline limi
 context schema accounting and completion events. Service/API tests cover domain
 behavior and wire compatibility. Trace regression tests cover cancellation, parent spans, metadata and export
 failures.
+
+### Concurrent writes
+
+DuckDB detects a write-write conflict only between writes of one physical form.
+On a keyed table (every `app` table) a plain `UPDATE`, `ON CONFLICT DO UPDATE` or
+`INSERT OR REPLACE` changes the row in place, and conflicts only with another
+in-place write of the same column; an `UPDATE … RETURNING`, an update of a key
+column and a `DELETE` delete the row version (an update re-inserts it), and
+conflict with any other such write. Across the two forms nothing is detected,
+committed or still running: a compare-and-set whose snapshot predates an
+in-place write overwrites it, and an in-place write over a deleted version
+reports its row changed and is lost (ARE-150; DuckDB 1.4.2, still in 1.5.6).
+So every runtime write ends with `RETURNING`: any two writers of a row then
+conflict, the later one gets `duckdb.TransactionException`, which its service
+maps to its refusal and the API to 409, and nothing is replayed,
+except by `dataio.db.write_idempotent`: a bounded rerun (3 attempts) for a write
+that is safe to repeat, such as the scheduler's final stamp, an inbox item's
+delivery record and the calendar sync's lease release.
+`tests/test_write_conflicts.py` enforces the rule (migrations, which run before
+the app serves, are exempt) and pins the engine behavior: its `xfail(strict)`
+tests pass once DuckDB fixes the cross-form case. `tests/write_race.py` commits
+a competing write inside a path's snapshot window for per-site tests.
 
 ## Slack transport
 

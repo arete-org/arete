@@ -18,6 +18,7 @@ import os
 import pathlib
 import shutil
 import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -178,6 +179,33 @@ def db_connection(read_only: bool = False) -> Iterator[duckdb.DuckDBPyConnection
         yield con
     finally:
         con.close()
+
+
+#: Attempts of an idempotent write whose row a concurrent writer changed (ARE-150),
+#: and the wait before each rerun times its number: the conflict is raised while
+#: the other transaction may still be open, so an immediate rerun would hit it.
+IDEMPOTENT_WRITE_ATTEMPTS = 3
+IDEMPOTENT_WRITE_RETRY_SECONDS = 0.2
+
+
+def write_idempotent(sql: str, params: list) -> list[tuple]:
+    """Run one write, rerun on a write-write conflict; returns its rows.
+
+    Only for a write whose rerun is safe whatever committed in between: it sets
+    the same values, or its condition re-reads the row. The last conflict raises.
+    """
+    for attempt in range(1, IDEMPOTENT_WRITE_ATTEMPTS + 1):
+        try:
+            with db_connection() as con:
+                return con.execute(sql, params).fetchall()
+        except duckdb.TransactionException:
+            if attempt == IDEMPOTENT_WRITE_ATTEMPTS:
+                raise
+            logger.info(
+                "Write conflict, attempt %d of %d", attempt, IDEMPOTENT_WRITE_ATTEMPTS
+            )
+            time.sleep(IDEMPOTENT_WRITE_RETRY_SECONDS * attempt)
+    raise AssertionError("unreachable")
 
 
 @contextmanager

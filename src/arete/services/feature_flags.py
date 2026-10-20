@@ -40,7 +40,7 @@ def set_feature_flags(flags: FeatureFlags) -> FeatureFlags:
         # Older clients update only GLM; they must not reset the independent rollout.
         for name in sorted(flags.model_fields_set or type(flags).model_fields):
             con.execute(
-                "INSERT INTO app.feature_flags (name,enabled) VALUES (?,?) ON CONFLICT (name) DO UPDATE SET enabled=excluded.enabled",
+                "INSERT INTO app.feature_flags (name,enabled) VALUES (?,?) ON CONFLICT (name) DO UPDATE SET enabled=excluded.enabled RETURNING name",
                 [name, getattr(flags, name)],
             )
     finally:

@@ -60,7 +60,7 @@ def link(team: str, slack_user: str, email: str, timezone: str) -> None:
             "INSERT INTO app.slack_identities (team_id,slack_user_id,email,account_id,athlete_id,timezone) "
             "VALUES (?,?,?,?,?,?) ON CONFLICT (team_id,slack_user_id) DO UPDATE SET "
             "email=EXCLUDED.email,account_id=EXCLUDED.account_id,athlete_id=EXCLUDED.athlete_id,"
-            "timezone=EXCLUDED.timezone,verified_at=now()",
+            "timezone=EXCLUDED.timezone,verified_at=now() RETURNING slack_user_id",
             [
                 team,
                 slack_user,

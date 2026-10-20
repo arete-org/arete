@@ -992,3 +992,67 @@ def test_planning_s_apply_reserves_like_accept(clock, coach, client):
     )
     assert response.json() == {"applied": [0], "stale": []}
     assert wr.get_review_by_id(review.id).applied == [0]
+
+
+# --------------------------------------------------------------------------- #
+# ARE-150: a write committed inside an answer's snapshot window is detected
+# --------------------------------------------------------------------------- #
+def test_a_give_back_racing_another_answer_keeps_that_answer(clock, coach, monkeypatch):
+    from write_race import race
+
+    run, _refresh, _push = coach
+    review, (_intervals, long_run) = _accepted_week(run)
+    GarminRepository().update_planned_session_fields(long_run, target_duration_min=100)
+    other: dict = {}
+
+    def another_tab():
+        other["answer"] = wr.accept(review.id, [0])
+
+    with (
+        patch("arete.services.plan_adaptation.push_week", return_value={}),
+        race(monkeypatch, r"SET applied_json = \?, applied_at = CASE", another_tab),
+    ):
+        first = wr.accept(review.id, [1])
+    assert first["stale"] == [1] and other["answer"]["applied"] == [0]
+    # The give-back's stale write conflicts and is retried on the answer's value.
+    assert json.loads(_stored(review.id)[0]) == [0]
+
+
+def test_a_reservation_racing_a_give_back_takes_nothing(clock, coach, monkeypatch):
+    from write_race import race
+
+    run, _refresh, _push = coach
+    review, _ids = _accepted_week(run)
+    with patch("arete.services.plan_adaptation.push_week", return_value={}):
+        assert wr.accept(review.id, [0])["applied"] == [0]
+    with (
+        patch("arete.services.plan_adaptation.push_week") as push,
+        race(
+            monkeypatch,
+            r"applied_at = coalesce\(applied_at, now\(\)\)",
+            lambda: wr._give_back(review.id, [0]),
+        ),
+        pytest.raises(wr.AcceptInProgress),
+    ):
+        wr.accept(review.id, [1])
+    push.assert_not_called()
+    assert json.loads(_stored(review.id)[0]) == []  # the give-back stands
+
+
+def test_a_rewrite_racing_a_give_back_is_refused(clock, coach, monkeypatch):
+    from write_race import race
+
+    run, _refresh, _push = coach
+    review, _ids = _accepted_week(run)
+    with patch("arete.services.plan_adaptation.push_week", return_value={}):
+        wr.accept(review.id, [0])
+    with (
+        patch.object(wr, "week_facts", return_value=_facts()),
+        race(
+            monkeypatch, r"created_at = greatest", lambda: wr._give_back(review.id, [0])
+        ),
+        pytest.raises(wr.ReviewChanged),
+    ):
+        wr.generate_review(run, refresh=True, review_id=review.id)
+    kept = wr.get_review_by_id(review.id)
+    assert kept is not None and kept.created_at == review.created_at

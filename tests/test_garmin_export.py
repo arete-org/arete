@@ -1656,3 +1656,32 @@ def test_an_automatic_resend_follows_the_latest_manual_choice_of_watch(planned):
     result = service.export(planned, client=garmin, prepared=stale, keep_device=True)
     assert result["state"] == "scheduled" and result["device_id"] is None
     assert all("devicemessage" not in path for _, path, _ in garmin.calls)
+
+
+def test_a_reconciliation_racing_the_previous_worker_s_write_claims_nothing(
+    planned, monkeypatch
+):
+    """ARE-150: the previous worker's update commits inside the claim's snapshot."""
+    import duckdb
+    from write_race import race
+
+    old = service._claim(planned)
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.garmin_exports SET updated_at=current_timestamp-INTERVAL '5 minutes' WHERE session_id=? RETURNING session_id",
+            [planned],
+        )
+    with (
+        race(
+            monkeypatch,
+            r"SET state='working'",
+            lambda: service._update(planned, old["operation_id"], state="scheduled"),
+        ),
+        pytest.raises(duckdb.TransactionException),
+    ):
+        service._claim(planned, reconcile=True)
+    with db_connection() as con:
+        assert con.execute(
+            "SELECT state, operation_id FROM app.garmin_exports WHERE session_id=?",
+            [planned],
+        ).fetchone() == ("scheduled", old["operation_id"])

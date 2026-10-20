@@ -217,6 +217,7 @@ def update_readiness_for_date(target_date: date) -> int | None:
             UPDATE app.daily_metrics
             SET readiness_score = ?
             WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (user_id = getvariable('arete_athlete_id') AND date = ?)
+            RETURNING date
             """,
             [score, target_date],
         )

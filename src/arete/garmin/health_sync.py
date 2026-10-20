@@ -268,6 +268,7 @@ def _upsert_daily_metrics(metrics: dict[str, Any]) -> None:
             INSERT INTO app.daily_metrics ({col_list})
             VALUES ({placeholders})
             ON CONFLICT (user_id, date) DO UPDATE SET {update_set}
+            RETURNING date
             """,
             values,
         )

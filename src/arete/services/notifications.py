@@ -75,7 +75,7 @@ def subscribe(
             "INSERT INTO app.push_subscriptions (endpoint, p256dh, auth, user_agent) "
             "VALUES (?, ?, ?, ?) ON CONFLICT (athlete_id, endpoint) DO UPDATE SET "
             "p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, "
-            "user_agent = EXCLUDED.user_agent",
+            "user_agent = EXCLUDED.user_agent RETURNING endpoint",
             [endpoint, p256dh, auth, (user_agent or "")[:300] or None],
         )
         con.execute(
@@ -206,7 +206,7 @@ def _send(
             con = connect()
             try:
                 con.execute(
-                    "UPDATE app.push_subscriptions SET last_success_at = ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (endpoint = ?) ",
+                    "UPDATE app.push_subscriptions SET last_success_at = ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (endpoint = ?) RETURNING endpoint",
                     [datetime.now(), endpoint],
                 )
             finally:

@@ -293,7 +293,7 @@ class SlackProduct:
     def _complete(op_id: str, slack_id: str, status: str) -> None:
         with transaction() as con:
             con.execute(
-                "UPDATE app.slack_operations SET slack_id=?,status=? WHERE operation_id=?",
+                "UPDATE app.slack_operations SET slack_id=?,status=? WHERE operation_id=? RETURNING operation_id",
                 [slack_id, status, op_id],
             )
 

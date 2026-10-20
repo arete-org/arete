@@ -515,3 +515,24 @@ async def test_grouped_preview_needs_no_approval_but_application_waits_once(
         planning.get_plan_changes(interrupt["payload"]["args"]["preview_id"])["state"]
         == "applied"
     )
+
+
+def test_a_claim_racing_a_deletion_never_starts_the_cancelled_run(monkeypatch):
+    """ARE-150: the deletion's cancel commits inside the claim's snapshot."""
+    from write_race import race
+
+    now = datetime.now(UTC)
+    item = service.create(
+        spec({"kind": "once", "at": now - timedelta(minutes=1)}),
+        activate=True,
+        now=now - timedelta(minutes=2),
+    )
+    service.prepare(now)
+    run = service.runs(item["id"])["items"][0]
+
+    def deleted():
+        service.delete(item["id"], service.get(item["id"])["revision"])
+
+    with race(monkeypatch, r"SET state='running'", deleted):
+        assert service.claim(run["id"], now) is None
+    assert service.run_detail(run["id"])["state"] == "cancelled"
