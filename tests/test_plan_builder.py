@@ -222,6 +222,26 @@ def test_a_hyrox_plan_is_written_with_its_sports_and_prescriptions(hyrox):
     )
 
 
+def test_the_preview_route_sums_up_a_hyrox_week_by_phase(hyrox, goal, router_client):
+    from arete.api.goals import router
+
+    client = router_client(router)
+    with patch("arete.services.plan_builder.athlete_today", return_value=TODAY):
+        body = client.post(f"/goals/{hyrox.id}/plan/preview").json()
+        road = client.post(f"/goals/{goal.id}/plan/preview").json()
+    summary = body["summary"]
+    assert summary[0].startswith("Semaine type (base) : ")
+    assert summary[-1].startswith("Semaine de course : ")
+    assert "course clé" in summary[0]
+    rest = summary[0].split(" · ")[-1]  # Monday is the athlete's rest day
+    assert rest.startswith("lun.") and rest.endswith(" repos")
+    kinds = {s["kind"] for w in body["weeks"] for s in w["sessions"]}
+    assert {"key_run", "compromised", "heavy_lower", "race"} <= kinds
+    # A road plan keeps its preview: no summary, no kinds.
+    assert road["summary"] == []
+    assert {s["kind"] for w in road["weeks"] for s in w["sessions"]} == {None}
+
+
 def test_a_running_athletes_projection_keeps_the_usual_rpe(goal):
     manual = PlannedSession(
         date=TODAY + timedelta(days=3),

@@ -108,6 +108,25 @@ it('offers a retry when the projection could not be read', async () => {
   expect(read).toHaveBeenCalledTimes(2);
 });
 
+it('names a Hyrox by its division and date, a hybrid block by its end, without a distance', () => {
+  vi.spyOn(formCurveApi, 'get').mockResolvedValue(curve);
+  const hyrox: Goal = {
+    ...goal,
+    name: 'Hyrox Paris',
+    distance_km: 8,
+    goal_type: 'hyrox',
+    details: { division: 'pro', format: 'solo', category: 'women', equipment: ['none'], weeks: 12 },
+  };
+  mount({ goal: hyrox, day: '2026-10-14', ready: false });
+  expect(screen.getByText('Hyrox Pro · 23 novembre')).toBeTruthy();
+  expect(screen.queryByText(/8 km/)).toBeNull();
+  cleanup();
+  const block: Goal = { ...goal, name: 'Bloc hiver', distance_km: 0, goal_type: 'hybrid', race_date: '2027-01-17' };
+  mount({ goal: block, day: '2026-10-14', ready: false });
+  expect(screen.getByText('Bloc hybride · fin le 17 janvier')).toBeTruthy();
+  expect(screen.queryByText(/km/)).toBeNull();
+});
+
 it('narrows the band near the race and widens it far out', () => {
   expect([formBandWidth(0), formBandWidth(6), formBandWidth(14), formBandWidth(40), formBandWidth(200)]).toEqual([3, 3, 4, 5, 8]);
   expect(formBand(8.4, 3)).toBe('entre +5 et +11');
