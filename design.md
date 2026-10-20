@@ -243,8 +243,13 @@ Planning ne possède aucune variante de navigation propre à sa page.
 - Le Journal présente « Saisir une séance » sous son titre. Cette action reste
   visible en haut pendant le défilement mobile et ouvre le formulaire de l’onglet
   Force ou Cardio. `/log?new=1` ouvre directement la saisie force depuis l’accueil ;
-  `/log?tab=cardio&new=1` ouvre la saisie cardio manuelle. Fermer retire `new` sans
-  ajouter une entrée d’historique.
+  `/log?tab=cardio&new=1` ouvre la saisie cardio manuelle. Ouverte depuis le
+  Journal, la fermer retire `new` sans ajouter une entrée d’historique ; ouverte
+  depuis une autre page (accueil, séance, lien du coach), la fermer y revient, ou
+  revient à l’accueil si le lien a ouvert l’onglet. Il en va de même pour un
+  brouillon (`?draft=`). Un enregistrement cardio reste sur le Journal, où
+  s’affiche l’avis du coach. Les champs de date restent dans leur colonne sur
+  téléphone (320 px compris).
 - `useVisualViewport` fournit une seule mesure de l’espace visible aux dialogues
   et à Chiron. Le clavier ne doit masquer ni les champs ni les commandes ; les
   champs mobiles font au moins 16 px et les commandes tactiles au moins 44 px.

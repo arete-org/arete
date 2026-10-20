@@ -35,8 +35,11 @@ export function ManualCardioModal({
 }: {
   open: boolean;
   onClose: () => void;
-  /** Called with the new session's id, e.g. to ask the coach for feedback. */
-  onCreated?: (id: number) => void;
+  /**
+   * Called with the new session's id, in place of onClose: a save closes the
+   * screen where its feedback appears, a dismissal may leave the page.
+   */
+  onCreated: (id: number) => void;
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(empty());
@@ -56,8 +59,7 @@ export function ManualCardioModal({
     onSuccess: (session) => {
       invalidateAfterSession(queryClient);
       setForm(empty());
-      onClose();
-      onCreated?.(session.id);
+      onCreated(session.id);
     },
   });
 
@@ -71,10 +73,12 @@ export function ManualCardioModal({
         }}
         className="space-y-4"
       >
-        <div className="grid grid-cols-2 gap-3">
+        {/* A phone column is too narrow for a full date: stacked, like the planning editor. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Date">
             <Input
               type="date"
+              aria-label="Date"
               value={form.date}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
               required

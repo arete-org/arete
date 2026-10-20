@@ -161,6 +161,7 @@ export function LogSessionModal({ open, onClose, draft = null }: LogSessionModal
             <Field label="Date">
               <Input
                 type="date"
+                aria-label="Date"
                 accent="gold"
                 value={workoutDate}
                 onChange={(e) => setWorkoutDate(e.target.value)}

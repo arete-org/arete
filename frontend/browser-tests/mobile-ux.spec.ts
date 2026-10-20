@@ -373,6 +373,52 @@ for (const [width, locked] of [[767, true], [768, false], [1024, false]] as cons
   });
 }
 
+/** The control fits its dialog and the page does not scroll sideways. */
+async function fitsDialog(page: Page, control: ReturnType<Page['getByLabel']>) {
+  const dialog = (await page.getByRole('dialog').boundingBox())!;
+  const box = (await control.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(dialog.x);
+  expect(box.x + box.width).toBeLessThanOrEqual(dialog.x + dialog.width);
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(await control.evaluate((input) => input.scrollWidth <= input.clientWidth)).toBe(true);
+  await noOverflow(page);
+}
+
+test('touch: closing the session entry opened from Home returns Home, and its date fits', async ({ page }, info) => {
+  await page.clock.setFixedTime(new Date('2026-10-15T19:00:00'));
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fixture(page);
+  await page.goto('/');
+  await safeArea(page);
+  const briefing = page.getByRole('heading', { name: 'MA FORME DU JOUR' });
+  await expect(briefing).toBeVisible();
+  await page.getByRole('link', { name: 'Saisir une séance', exact: true }).tap();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'SAISIR UNE SÉANCE' })).toBeVisible();
+  const date = dialog.getByLabel('Date', { exact: true });
+  await expect(date).toHaveValue('2026-10-15');
+  await fitsDialog(page, date);
+  await page.screenshot({ path: `../.context/are-159/session-entry-375-${info.project.name}.png` });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await fitsDialog(page, date);
+  await page.screenshot({ path: `../.context/are-159/session-entry-320-${info.project.name}.png` });
+  await date.fill('2026-10-12');
+  await expect(date).toHaveValue('2026-10-12');
+
+  await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(briefing).toBeVisible();
+
+  // Without a page before it (a link opened in a new tab), closing lands on Home too.
+  await page.goto('/log?tab=cardio&new=1');
+  await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
+  await fitsDialog(page, dialog.getByLabel('Date', { exact: true }));
+  await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(briefing).toBeVisible();
+});
+
 test('touch: the morning check-in is three taps at 375 px and then gives the page back', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await fixture(page);
