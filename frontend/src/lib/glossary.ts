@@ -12,9 +12,10 @@ export const GLOSSARY_TERMS = {
   atl: 'la fatigue (ATL)',
   tsb: 'la fraîcheur (TSB)',
   rpe: 'l’effort ressenti (RPE)',
-  zones: 'une zone cardiaque',
+  zones: 'les zones cardiaques',
   seuil: 'le seuil',
   decouplage: 'le découplage cardiaque',
+  'derive-fc': 'la dérive de la FC',
   'cout-cardiaque': 'le coût cardiaque',
   allure: 'l’allure',
   gap: 'l’allure ajustée à la pente (GAP)',
@@ -35,11 +36,15 @@ export const GLOSSARY_TERMS = {
 export type GlossaryId = keyof typeof GLOSSARY_TERMS;
 
 /** The page's address; `#term` lands on its entry. */
-export const GLOSSARY_PATH = '/analytics/lexique';
+const GLOSSARY_PATH = '/analytics/lexique';
 
 export const glossaryHref = (term: GlossaryId): string => `${GLOSSARY_PATH}#${term}`;
 
-/** The accessible name of a term's "?" link. */
-export const glossaryQuestion = (term: GlossaryId): string => `Qu’est-ce que ${GLOSSARY_TERMS[term]} ?`;
+/**
+ * The accessible name of a term's "?" link; `about` names the spot when one
+ * page links the same term twice, so a screen reader's link list tells them apart.
+ */
+export const glossaryQuestion = (term: GlossaryId, about?: string): string =>
+  `Qu’est-ce que ${GLOSSARY_TERMS[term]} ?${about ? ` (${about})` : ''}`;
 
 export const isGlossaryId = (value: string): value is GlossaryId => Object.hasOwn(GLOSSARY_TERMS, value);

@@ -109,17 +109,17 @@ function SectionHeader({ icon, title, term }: { icon: React.ReactNode; title: st
     <div className="flex items-center gap-2 mb-4">
       {icon}
       <h2 className="text-sm font-sans text-text-muted uppercase tracking-wider">{title}</h2>
-      {term && <GlossaryLink term={term} />}
+      {term && <GlossaryLink term={term} about={`section ${title.toLowerCase()}`} />}
     </div>
   );
 }
 
 /** A recovery row's label with the "?" of its term. */
-function TermLabel({ term, children }: { term: GlossaryId; children: React.ReactNode }) {
+function TermLabel({ term, label }: { term: GlossaryId; label: string }) {
   return (
     <span className="flex items-center gap-1 text-xs font-sans text-text-muted">
-      {children}
-      <GlossaryLink term={term} />
+      {label}
+      <GlossaryLink term={term} about={label} />
     </span>
   );
 }
@@ -149,7 +149,7 @@ function FormBar({ stat, color, tag, term }: { stat: StatBar; color: string; tag
         <div className="flex items-baseline justify-between gap-3 mb-1">
           <span className="flex items-center gap-1 self-center text-xs font-sans text-text-primary">
             {stat.label}
-            <GlossaryLink term={term} />
+            <GlossaryLink term={term} about={`barre ${stat.label}`} />
           </span>
           {value}
         </div>
@@ -167,7 +167,7 @@ function FormBar({ stat, color, tag, term }: { stat: StatBar; color: string; tag
       <div className="flex flex-wrap justify-between gap-x-2 pl-11 pr-1 text-[11px] font-sans text-text-muted">
         <span className="flex items-center gap-1">
           {stat.label}
-          <GlossaryLink term={term} />
+          <GlossaryLink term={term} about={`barre ${stat.label}`} />
         </span>
         {stat.detail && <span>{stat.detail}</span>}
       </div>
@@ -598,7 +598,7 @@ export function DashboardPage() {
                   <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
                     {healthData.training_readiness_score != null && (
                       <>
-                        <TermLabel term="preparation">Préparation Garmin</TermLabel>
+                        <TermLabel term="preparation" label="Préparation Garmin" />
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.training_readiness_score}/100
                         </span>
@@ -606,7 +606,7 @@ export function DashboardPage() {
                     )}
                     {healthData.hrv_last_night != null && (
                       <>
-                        <TermLabel term="vfc">VFC</TermLabel>
+                        <TermLabel term="vfc" label="VFC" />
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.hrv_last_night} ms
                           {healthData.hrv_status && HRV_WORD[healthData.hrv_status] && (
@@ -617,7 +617,7 @@ export function DashboardPage() {
                     )}
                     {healthData.sleep_score != null && (
                       <>
-                        <TermLabel term="sommeil">Sommeil</TermLabel>
+                        <TermLabel term="sommeil" label="Sommeil" />
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.sleep_score}/100
                           {healthData.sleep_duration_sec != null && (
@@ -630,7 +630,7 @@ export function DashboardPage() {
                     )}
                     {healthData.stress_avg != null && (
                       <>
-                        <TermLabel term="stress">Stress</TermLabel>
+                        <TermLabel term="stress" label="Stress" />
                         <span className="text-xs font-sans text-right">
                           <span className={stressTone(healthData.stress_avg)}>{healthData.stress_avg}</span>
                           <span className="block text-[11px] text-text-secondary">Stress {stressWord(healthData.stress_avg)}</span>

@@ -3,9 +3,12 @@
  * scale and how to read it. Only the glossary page imports this module, so
  * the dashboard's "?" links do not carry it in the entry chunk.
  *
- * Every threshold here is the one the app itself applies; the comment above
- * each entry names the code that owns it. A threshold that moves there must
- * move here too. Values Garmin computes are said to come from Garmin.
+ * Every number (threshold, band, weight, duration) is the one the app itself
+ * applies; the comment above each entry names the code that owns it, and a
+ * number that moves there must move here too. The plain-language sentences
+ * saying what a notion is (a threshold, Garmin's stress, the HRV) are general
+ * definitions, not computations. Values Garmin computes are said to come
+ * from Garmin.
  */
 
 import type { GlossaryId } from './glossary';
@@ -61,7 +64,7 @@ export const GLOSSARY = [
     aliases: ['ACWR', 'Équilibre de charge', 'Charge aiguë/chronique'],
     category: 'charge',
     definition:
-      'Ta charge des 7 derniers jours divisée par ta charge hebdomadaire moyenne des 4 dernières semaines (celle-ci comprise). La charge d’une séance vaut sa durée en minutes multipliée par ton RPE (5 si tu ne l’as pas noté). À 1,27, ta semaine pèse 27 % de plus que ta moyenne récente.',
+      'Ta charge des 7 derniers jours divisée par ta charge hebdomadaire moyenne des 4 dernières semaines (celle-ci comprise). La charge d’une journée vaut ses minutes d’entraînement multipliées par le RPE moyen de ses séances (5 pour une séance sans RPE). À 1,27, ta semaine pèse 27 % de plus que ta moyenne récente.',
     scale: 'Ratio sans unité, à deux décimales.',
     range: 'Autour de 1 quand la charge est stable.',
     reading: [
@@ -149,11 +152,12 @@ export const GLOSSARY = [
     category: 'intensite',
     definition:
       'La note que tu donnes à la difficulté d’une séance, juste après. C’est l’entrée la plus fiable de ta charge : sans elle, Arete estime la séance par la fréquence cardiaque ou la compte comme moyenne (5).',
-    scale: 'De 1 (très facile) à 10 (maximal), échelle de Borg CR-10.',
+    scale:
+      'De 1 à 10, échelle de Borg CR-10 : 1 très facile, 2 facile, 3 modéré, 4 un peu dur, 5 dur, 6 dur +, 7 très dur, 8 très dur +, 9 extrêmement dur, 10 maximal.',
     reading: [
-      { tone: 'good', text: 'Jusqu’à 6 : facile à modéré (badge vert).' },
-      { tone: 'caution', text: '7 et 8 : dur (badge orange).' },
-      { tone: 'bad', text: '9 et 10 : très dur à maximal (badge rouge).' },
+      { tone: 'neutral', text: 'De 1 à 6 : badge vert.' },
+      { tone: 'neutral', text: '7 et 8 : badge orange.' },
+      { tone: 'neutral', text: '9 et 10 : badge rouge. Une séance dure n’est pas une erreur : c’est la charge de la semaine qui compte.' },
     ],
     source: 'Ta saisie.',
   },
@@ -173,23 +177,23 @@ export const GLOSSARY = [
       { tone: 'caution', text: 'Moins de 60 % en Z1-Z2 : trop d’intensité moyenne.' },
       { tone: 'neutral', text: 'Moins d’une heure avec une mesure de FC sur la période : pas assez pour juger.' },
     ],
-    source: 'Calculé par Arete à partir de ton seuil (Réglages > Objectifs).',
+    source: 'Calculé par Arete à partir de ton seuil (Réglages › Objectifs).',
   },
   // garmin/threshold (Garmin's lactate threshold refreshes the settings),
   // features/hr_zones (LTHR_FROM_MAX_HR 0.9, DEFAULT_MAX_HR 190).
   {
     id: 'seuil',
     term: 'Seuil (FC et allure au seuil)',
-    aliases: ['FC au seuil', 'Allure au seuil', 'Seuil lactique', 'LTHR', 'FC max'],
+    aliases: ['FC au seuil', 'Allure au seuil', 'Seuil lactique', 'LTHR'],
     category: 'intensite',
     definition:
-      'L’effort le plus intense que tu peux tenir environ une heure. La fréquence cardiaque à ce seuil sert de référence aux zones et à la charge estimée par la FC. Garmin la remesure de lui-même : chaque synchronisation adopte un test plus récent.',
+      'La fréquence cardiaque d’un effort soutenu, à fond mais régulier. Arete la mesure comme les Réglages : un test de 30 min, dont tu retiens la FC moyenne des 20 dernières minutes. Elle sert de référence aux zones et à la charge estimée par la FC ; Garmin la remesure de lui-même et chaque synchronisation adopte un test plus récent.',
     scale: 'Battements par minute (bpm) ; l’allure au seuil en min/km.',
-    range: 'Sans mesure, Arete l’estime à 90 % de ta FC max, ou de 190 bpm si elle est inconnue.',
+    range: 'Sans mesure, Arete l’estime à 90 % de ta FC max ou, sans FC max, à 171 bpm (90 % de 190).',
     reading: [
       { tone: 'neutral', text: 'Ce n’est pas un score : une valeur à jour rend tes zones et ta charge justes.' },
     ],
-    source: 'Mesuré par Garmin, ou saisi dans Réglages > Objectifs.',
+    source: 'Mesuré par Garmin, ou saisi dans Réglages › Objectifs.',
   },
   // garmin/time_series._calculate_decoupling (session, > 5 % flagged),
   // services/activity_detail (20 min), features/hr_drift + insights
@@ -197,18 +201,34 @@ export const GLOSSARY = [
   {
     id: 'decouplage',
     term: 'Découplage cardiaque',
-    aliases: ['Découplage', 'Dérive de la FC', 'Dérive cardiaque'],
+    aliases: ['Découplage'],
     category: 'efficacite',
     definition:
-      'Ce que ton efficacité (vitesse par battement de cœur) perd entre la première et la seconde moitié d’une sortie régulière. Positif, le cœur travaille plus pour la même vitesse : fatigue, chaleur, déshydratation ou base aérobie à développer. La dérive de la FC, elle, compare seulement la FC moyenne des deux moitiés.',
+      'Ce que ton efficacité (vitesse par battement de cœur) perd entre la première et la seconde moitié d’une sortie régulière. Positif, le cœur travaille plus pour la même vitesse : fatigue, chaleur, déshydratation ou base aérobie à développer. Il se calcule de deux façons : la page d’une séance compare la vitesse par battement des deux moitiés, seconde par seconde ; Analyses additionne le ralentissement et la dérive de la FC entre les deux moitiés de tes tours au kilomètre.',
     scale: 'Pourcentage, positif quand l’efficacité baisse.',
-    range: 'Mesuré sur une séance d’au moins 20 min ; dans Analyses, sur les sorties d’au moins 40 min avec des tours au kilomètre.',
+    range:
+      'Page d’une séance : séance régulière d’au moins 20 min avec les flux de la montre. Analyses : sorties de course d’au moins 40 min avec au moins 4 tours au kilomètre, moyenne de la période.',
     reading: [
-      { tone: 'good', text: 'Sous 5 % : base aérobie solide.' },
-      { tone: 'neutral', text: 'De 5 à 10 % : correct, encore de la marge.' },
-      { tone: 'caution', text: '10 % et plus : base aérobie à travailler, ou conditions difficiles.' },
+      { tone: 'good', text: 'Analyses, sous 5 % : base aérobie solide.' },
+      { tone: 'neutral', text: 'Analyses, de 5 à 10 % : correct, encore de la marge.' },
+      { tone: 'caution', text: 'Analyses, 10 % et plus : base aérobie à travailler, ou conditions difficiles. Sur une séance, au-delà de 5 %, l’efficacité aérobie a baissé.' },
     ],
     source: 'Calculé par Arete à partir des flux et des tours de ta montre.',
+  },
+  // garmin/time_series._calculate_drift (session page, 20 min: services/activity_detail).
+  {
+    id: 'derive-fc',
+    term: 'Dérive de la FC',
+    aliases: ['Dérive de la FC', 'Dérive cardiaque'],
+    category: 'efficacite',
+    definition:
+      'L’écart entre ta fréquence cardiaque moyenne de la seconde moitié d’une sortie et celle de la première. Contrairement au découplage, elle ne tient pas compte de l’allure : une seconde moitié plus rapide la fait monter sans fatigue.',
+    scale: 'Pourcentage, positif quand la FC monte.',
+    range: 'Affichée sur la page d’une séance régulière d’au moins 20 min.',
+    reading: [
+      { tone: 'neutral', text: 'Arete ne lui applique pas de seuil : lis-la avec l’allure des deux moitiés, le terrain et la chaleur.' },
+    ],
+    source: 'Calculé par Arete à partir des flux de ta montre.',
   },
   // features/overview.build_decoupling_card (avg HR / speed, weighted by duration).
   {
@@ -265,12 +285,12 @@ export const GLOSSARY = [
     aliases: ['VDOT', 'Allures d’entraînement', 'Équivalences de course'],
     category: 'efficacite',
     definition:
-      'Un indice de niveau en course à pied (Jack Daniels), déduit des prédictions de course Garmin ou de ton allure au seuil. Il donne tes allures d’entraînement : E endurance, M marathon, T seuil, I intervalles, R répétitions, et tes temps équivalents sur d’autres distances.',
+      'Un indice de niveau en course à pied (Jack Daniels), déduit de la prédiction 10 km de Garmin ou de ton allure au seuil. Il donne tes allures d’entraînement : E endurance, M marathon, T seuil, I intervalles, R répétitions, et tes temps équivalents sur d’autres distances.',
     scale: 'Indice sans unité : plus il est élevé, plus tu es rapide.',
     reading: [
       { tone: 'neutral', text: 'Ce n’est pas un objectif en soi : il sert à caler chaque type de séance à la bonne allure.' },
     ],
-    source: 'Calculé par Arete (Réglages > Objectifs).',
+    source: 'Calculé par Arete (Réglages › Objectifs).',
   },
   // features/terrain (VAM_MINUTES), features/insights.vam_insight.
   {
@@ -295,7 +315,7 @@ export const GLOSSARY = [
     aliases: ['Cadence', 'pas/min'],
     category: 'terrain',
     definition: 'Le nombre de pas par minute en course, les deux pieds comptés.',
-    scale: 'Pas par minute (tr/min à vélo).',
+    scale: 'Pas par minute.',
     reading: [
       { tone: 'neutral', text: 'À partir de 160 pas/min : rien à signaler ; un écart de 3 pas/min ou plus d’une période à l’autre est noté.' },
       { tone: 'caution', text: 'Sous 160 pas/min : plutôt basse, une foulée plus courte allège les impacts.' },
@@ -318,7 +338,8 @@ export const GLOSSARY = [
       { tone: 'caution', text: 'De 60 à 79 : une séance dure du jour est allégée en endurance Z2.' },
       { tone: 'caution', text: 'De 40 à 59 : la séance devient 30 min de récupération en Z1.' },
       { tone: 'bad', text: 'Sous 40 : repos. Sur une moyenne de la semaine sous 50, le bilan propose d’alléger la suite.' },
-      { tone: 'neutral', text: 'À l’accueil, « bonne » au-dessus de ton seuil de préparation (Réglages, 85 par défaut), « moyenne » au-dessus de 60 % de ce seuil, « basse » en dessous.' },
+      { tone: 'neutral', text: 'Ces paliers de 80, 60 et 40 sont fixes : ton seuil de préparation ne les change pas.' },
+      { tone: 'neutral', text: 'Ton seuil de préparation (Réglages › Objectifs, 85 par défaut) colore l’accueil : « bonne » à partir du seuil, « moyenne » à partir de 60 % du seuil, « basse » en dessous. Atteint, il fait proposer une séance dure ou un test par le conseil du jour, si l’ACWR et la fraîcheur ne demandent pas d’abord de lever le pied.' },
     ],
     source: 'Garmin (préparation à l’entraînement) ou calculé par Arete.',
   },
@@ -346,7 +367,7 @@ export const GLOSSARY = [
     aliases: ['FC de repos', 'FC au repos'],
     category: 'recuperation',
     definition:
-      'Ton pouls le plus bas de la journée, au calme. Il baisse avec l’entraînement d’endurance et remonte avec la fatigue, le manque de sommeil ou une infection.',
+      'Ta FC mesurée au repos par ta montre. Il baisse avec l’entraînement d’endurance et remonte avec la fatigue, le manque de sommeil ou une infection.',
     scale: 'Battements par minute (bpm).',
     range: 'Propre à chacun : c’est son évolution qui compte.',
     reading: [
@@ -410,7 +431,7 @@ export const GLOSSARY = [
     aliases: ['Check-in', 'Jambes', 'Motivation / stress'],
     category: 'recuperation',
     definition:
-      'Trois questions sur ton sommeil, tes jambes et ta motivation. Ta réponse pèse sur la décision du jour, uniquement à la baisse : une bonne réponse ne remplace jamais une mesure basse.',
+      'Trois questions sur ton sommeil, tes jambes et ta motivation. Seuls le sommeil et les jambes pèsent sur la décision du jour, et uniquement à la baisse : une bonne réponse ne remplace jamais une mesure basse. La motivation est transmise au coach pour son message, sans effet sur la décision.',
     scale: 'De 1 (le pire) à 5 (le mieux) pour chaque question.',
     reading: [
       { tone: 'neutral', text: '3 et plus : rien ne change.' },
@@ -425,7 +446,7 @@ export const GLOSSARY = [
     aliases: ['Adhérence'],
     category: 'intensite',
     definition:
-      'À quel point une séance réalisée ressemble à celle prévue ce jour-là : 50 points pour le jour, jusqu’à 30 pour la durée, 10 pour le type de séance et 10 pour l’intensité (FC moyenne face au milieu de la zone prévue).',
+      'À quel point une séance réalisée ressemble à celle prévue ce jour-là : 50 points pour la date (25 de moins par jour d’écart), jusqu’à 30 pour la durée, 10 pour le type de séance et 10 pour l’intensité (FC moyenne face au milieu de la zone prévue).',
     scale: 'De 0 à 100 %.',
     reading: [
       { tone: 'good', text: '85 et plus : séance faite comme prévue.' },
@@ -445,7 +466,7 @@ export const GLOSSARY = [
     scale: 'Pourcentage.',
     reading: [
       { tone: 'good', text: 'À partir de 75 % : la semaine a tenu l’essentiel du plan. La barre change de couleur à 90, 75 et 50 %.' },
-      { tone: 'caution', text: 'Sous 60 % avec au moins 3 séances prévues : le bilan propose de retirer une séance facile pour tenir les autres.' },
+      { tone: 'caution', text: 'Sous 60 % avec au moins 3 séances prévues : le bilan propose de retirer une séance facile pour tenir les autres, sauf s’il propose déjà d’alléger la suite pour la charge, la fraîcheur ou la préparation.' },
       { tone: 'bad', text: 'Sous 50 % : moins d’une séance sur deux faite.' },
     ],
     source: 'Calculé par Arete à partir du planning.',

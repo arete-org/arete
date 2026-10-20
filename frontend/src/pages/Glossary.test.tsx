@@ -46,6 +46,15 @@ it('lands on the anchored entry: scrolled into view, focused and marked', () => 
   expect(document.getElementById('acwr')?.dataset.current).toBeUndefined();
 });
 
+it('ignores a malformed or unknown hash', () => {
+  mount('/analytics/lexique#%');
+  expect(screen.getByRole('heading', { level: 1, name: 'Lexique' })).toBeTruthy();
+  cleanup();
+  mount('/analytics/lexique#lexique-charge');
+  expect(scrolled).toEqual([]);
+  expect(document.querySelector('[data-current]')).toBeNull();
+});
+
 it('opens the entry from a metric’s "?"', () => {
   mount('/');
   const link = screen.getByRole('link', { name: 'Qu’est-ce que le ratio charge aiguë / chronique (ACWR) ?' });

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
+import { dashboardAnswer, localDay } from './dashboardAnswer';
 
 const headline = (display: string) => ({
   display,
@@ -42,11 +43,19 @@ async function stubApi(page: Page) {
     if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'disconnected' } });
     if (path === '/api/analytics/overview') return route.fulfill({ json: overview() });
+    if (path === '/api/onboarding') return route.fulfill({ json: { status: 'completed', revision: 1 } });
+    if (path === '/api/dashboard')
+      return route.fulfill({
+        json: dashboardAnswer({
+          workload: { ...dashboardAnswer().workload, acwr: 1.27, acwr_zone: 'optimal' },
+          checkin: { date: localDay(), sleep: 4, legs: 4, mood: null, note: null, answered_at: `${localDay()}T05:12:00+00:00`, updated_at: `${localDay()}T05:12:00+00:00` },
+        }),
+      });
     return route.fulfill({ json: [] });
   });
 }
 
-for (const width of [1440, 390]) {
+for (const width of [1440, 390, 320]) {
   test(`a metric's "?" opens its glossary entry at ${width}px`, async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -82,7 +91,7 @@ for (const width of [1440, 390]) {
   });
 }
 
-for (const width of [1440, 390]) {
+for (const width of [1440, 390, 320]) {
   test(`the analytics page leads to the glossary at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await stubApi(page);
@@ -95,5 +104,27 @@ for (const width of [1440, 390]) {
     await expect(page).toHaveURL(/\/analytics\/lexique$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Lexique' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
+
+for (const width of [1440, 390, 320]) {
+  test(`the dashboard's load ratio and form bars open their entries at ${width}px`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await stubApi(page);
+    await page.goto('/');
+    await expect(page.getByText('1,27', { exact: true })).toBeVisible();
+    // Each bar's "?" names its bar: the readiness is linked from three places.
+    await expect(page.getByRole('link', { name: 'Qu’est-ce que la préparation ? (barre Récupération)' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Qu’est-ce que la charge d’entraînement (TSS) ? (barre Charge de la semaine)' })).toBeVisible();
+    await page.getByRole('link', { name: 'Qu’est-ce que le ratio charge aiguë / chronique (ACWR) ?' }).click();
+    await expect(page).toHaveURL(/\/analytics\/lexique#acwr$/);
+    const term = page.getByRole('heading', { level: 3, name: 'Ratio charge aiguë / chronique (ACWR)' });
+    await expect(term).toBeFocused();
+    await expect(term).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(errors).toEqual([]);
   });
 }

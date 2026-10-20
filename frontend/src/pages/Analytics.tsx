@@ -103,7 +103,8 @@ export function AnalyticsPage() {
             )}
           </div>
           <div className="flex shrink-0 gap-2">
-            {/* A phone keeps the sticky banner as it was: its link closes the page. */}
+            {/* From 640 px only: on a phone this button would push the sticky banner onto a
+                second row (and overflow it at 320 px); the link at the end of the page serves there. */}
             <div className="hidden sm:block">
               <Link to="/analytics/lexique" className="ui-button analytics-year-link gap-2">
                 <BookOpen className="size-4" aria-hidden />

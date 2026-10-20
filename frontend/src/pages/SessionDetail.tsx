@@ -315,7 +315,7 @@ function Analysis({ metrics, foot }: { metrics: ActivityMetrics; foot: boolean }
         />
       )}
       {metrics.hr_drift_pct !== undefined && (
-        <Row label="Dérive de la FC" term="decouplage" value={pct(metrics.hr_drift_pct)} hint="FC moyenne de la 2e moitié par rapport à la 1re." />
+        <Row label="Dérive de la FC" term="derive-fc" value={pct(metrics.hr_drift_pct)} hint="FC moyenne de la 2e moitié par rapport à la 1re." />
       )}
       {foot && metrics.pace_first_half_sec_km !== undefined && metrics.pace_second_half_sec_km !== undefined && (
         <Row

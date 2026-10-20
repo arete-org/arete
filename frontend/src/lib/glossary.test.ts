@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { GLOSSARY_TERMS, glossaryHref, glossaryQuestion, isGlossaryId } from './glossary';
 import { GLOSSARY, GLOSSARY_CATEGORIES, searchGlossary } from './glossaryEntries';
 
-// Every component source, to find the terms its "?" links name.
+// Every component source, to find the terms its "?" links name. TypeScript already
+// rejects an unknown term; the scan proves the main metrics carry a link.
 const SOURCES = import.meta.glob(['../**/*.tsx', '!../**/*.test.tsx'], {
   query: '?raw',
   import: 'default',
@@ -45,6 +46,12 @@ describe('glossary entries', () => {
   it('link to their anchor on the glossary page, with a question as their name', () => {
     expect(glossaryHref('acwr')).toBe('/analytics/lexique#acwr');
     expect(glossaryQuestion('vfc')).toBe('Qu’est-ce que la VFC ?');
+    expect(glossaryQuestion('zones')).toBe('Qu’est-ce que les zones cardiaques ?');
+    expect(glossaryQuestion('preparation', 'barre Récupération')).toBe(
+      'Qu’est-ce que la préparation ? (barre Récupération)',
+    );
+    // Every term reads after « Qu’est-ce que » without elision: it starts with its article.
+    for (const named of Object.values(GLOSSARY_TERMS)) expect(named).toMatch(/^(le |la |les |l’)/);
     expect(isGlossaryId('toString')).toBe(false);
   });
 });

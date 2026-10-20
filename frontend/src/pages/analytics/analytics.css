@@ -17,6 +17,8 @@
 /* Lexique: an anchored entry clears the sticky desktop bar; the one a "?" opened is outlined. */
 .glossary-entry { scroll-margin-top: calc(var(--safe-top) + 16px); }
 .glossary-entry[data-current] { border-color: var(--color-neon-cyan); }
+/* The focus a "?" moves here shows as the keyboard ring does, after a tap or click too. */
+.glossary-entry h3:focus { outline: 2px solid var(--color-neon-cyan); outline-offset: 3px; }
 @media (min-width: 768px) {
   .analytics-banner { top: calc(var(--safe-top) + 56px); }
   .analysis-card { padding: 24px; }

@@ -9,6 +9,7 @@ import {
   type GlossaryEntry,
   type GlossaryTone,
 } from '@/lib/glossaryEntries';
+import { isGlossaryId } from '@/lib/glossary';
 import { cn } from '@/lib/utils';
 
 const TONE_CLASS: Record<GlossaryTone, string> = {
@@ -28,7 +29,7 @@ function Entry({ entry, current }: { entry: GlossaryEntry; current: boolean }) {
       className="glossary-entry analysis-card"
     >
       <header>
-        <h3 id={`${entry.id}-term`} tabIndex={-1} className="text-[15px] font-medium text-text-primary outline-none">
+        <h3 id={`${entry.id}-term`} tabIndex={-1} className="text-[15px] font-medium text-text-primary">
           {entry.term}
         </h3>
         {others.length > 0 && (
@@ -74,7 +75,9 @@ function Entry({ entry, current }: { entry: GlossaryEntry; current: boolean }) {
 /** « Lexique »: every term and metric of the app, anchored per term (`#acwr`). */
 export function GlossaryPage() {
   const { hash } = useLocation();
-  const target = decodeURIComponent(hash.slice(1));
+  // Only a known term is a target: a hand-typed or malformed hash is ignored.
+  const raw = hash.slice(1);
+  const target = isGlossaryId(raw) ? raw : '';
   const [query, setQuery] = useState('');
   const searchId = useId();
   const entries = searchGlossary(query);
