@@ -267,10 +267,19 @@ def _insert_run(
     state: str = "queued",
     session_key: str | None = None,
 ) -> None:
-    snapshot = {
-        **definition(record).model_dump(mode="json"),
-        "revision": record["revision"],
-    }
+    try:
+        stored = definition(record).model_dump(mode="json")
+    except ValueError:
+        if state != "failed":
+            raise
+        # The failed run of a definition that no longer validates keeps it as stored.
+        stored = {
+            "title": record["title"],
+            "mission": record["mission"],
+            "timezone": record["timezone"],
+            "trigger": record["trigger_json"],
+        }
+    snapshot = {**stored, "revision": record["revision"]}
     con.execute(
         "INSERT INTO app.automation_runs (id,automation_id,occurrence_key,definition_json,session_key,due_at,state,created_at,finished_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
         [
@@ -287,7 +296,28 @@ def _insert_run(
     )
 
 
-def _sessions(con, record: dict, now: datetime) -> None:
+def _disable_invalid(con, record: dict, now: datetime, exc: ValueError) -> None:
+    """A stored automation that no longer validates: one failed run says why,
+    and it is paused; the others go on."""
+    _insert_run(
+        con,
+        record,
+        now,
+        f"invalid:{record['revision']}",
+        now,
+        state="failed",
+    )
+    con.execute(
+        f"UPDATE app.automation_runs SET error=? WHERE {OWNER} AND automation_id=? AND occurrence_key=? RETURNING id",
+        [str(exc), record["id"], f"invalid:{record['revision']}"],
+    )
+    con.execute(
+        f"UPDATE app.automations SET state='paused',revision=revision+1 WHERE {OWNER} AND id=? RETURNING id",
+        [record["id"]],
+    )
+
+
+def _sessions(con, record: dict, now: datetime, since: datetime | None = None) -> None:
     spec = definition(record)
     trigger = spec.trigger
     assert isinstance(trigger, AfterSession)
@@ -318,7 +348,14 @@ def _sessions(con, record: dict, now: datetime) -> None:
           AND NOT EXISTS (SELECT 1 FROM app.visible_automation_runs r WHERE r.automation_id=? AND (r.occurrence_key='session:'||e.canonical_key OR r.session_key=e.source_key OR EXISTS (SELECT 1 FROM events prior WHERE prior.source_key=r.session_key AND prior.canonical_key=e.canonical_key)))
         ORDER BY e.created_at,e.source_key LIMIT ?
         """,
-            [record["activated_at"], now, record["id"], MAX_SCAN + 1],
+            [
+                record["activated_at"]
+                if since is None
+                else max(record["activated_at"], since),
+                now,
+                record["id"],
+                MAX_SCAN + 1,
+            ],
         )
     )
     if len(events) > MAX_SCAN:
@@ -344,7 +381,65 @@ def _sessions(con, record: dict, now: datetime) -> None:
         )
 
 
-def prepare(now: datetime | None = None) -> dict:
+def skip_due(reason: str, now: datetime | None = None) -> int:
+    """Record as missed, with ``reason``, what comes due while it may not run.
+
+    For an athlete without consent: each scheduled occurrence that comes due
+    is recorded missed and the schedule moves past now, and runs already due
+    are closed missed, so nothing piles up and nothing fires late once the
+    athlete consents again. Pure bookkeeping on the automation tables: no
+    session or health data is read. Returns how many runs were closed.
+    """
+    now = now or utc_now()
+    # Most athletes without consent have nothing due: one read, no write.
+    with db_connection() as con:
+        pending = con.execute(
+            "SELECT EXISTS (SELECT 1 FROM app.visible_automation_runs WHERE state IN ('queued','ready') AND due_at<=?) "
+            "OR EXISTS (SELECT 1 FROM app.visible_automations WHERE state='active' AND next_due_at<=?)",
+            [now, now],
+        ).fetchone()
+    if not (pending and pending[0]):
+        return 0
+    with transaction() as con:
+        closed = con.execute(
+            f"UPDATE app.automation_runs SET state='missed',error=?,finished_at=?,revision=revision+1 WHERE {OWNER} AND state IN ('queued','ready') AND due_at<=? RETURNING id",
+            [reason, now, now],
+        ).fetchall()
+        due = rows(
+            con.execute(
+                "SELECT * FROM app.visible_automations WHERE state='active' AND next_due_at<=? ORDER BY next_due_at,id LIMIT ?",
+                [now, MAX_ACTIVE_AUTOMATIONS],
+            )
+        )
+        for record in due:
+            try:
+                spec = definition(record)
+                at: datetime | None = record["next_due_at"]
+                # Bounded per pass; a longer backlog continues at the next one.
+                for _ in range(MAX_SCHEDULE_DAYS):
+                    if at is None or at > now:
+                        break
+                    _insert_run(con, record, at, at.isoformat(), now, state="missed")
+                    con.execute(
+                        f"UPDATE app.automation_runs SET error=? WHERE {OWNER} AND automation_id=? AND occurrence_key=? AND state='missed' RETURNING id",
+                        [reason, record["id"], at.isoformat()],
+                    )
+                    at = next_due(spec, at)
+                con.execute(
+                    f"UPDATE app.automations SET next_due_at=? WHERE {OWNER} AND id=? AND revision=? RETURNING id",
+                    [at, record["id"], record["revision"]],
+                )
+            except ValueError as exc:
+                _disable_invalid(con, record, now, exc)
+    return len(closed)
+
+
+def prepare(
+    now: datetime | None = None, *, sessions_since: datetime | None = None
+) -> dict:
+    """Queue what is due. ``sessions_since`` (aware) is when the athlete's
+    consent in force was given: an activity registered before it, while
+    consent was missing, never triggers a session automation."""
     now = now or utc_now()
     with transaction() as con:
         active = rows(
@@ -358,7 +453,7 @@ def prepare(now: datetime | None = None) -> dict:
             spec = definition(record)
             try:
                 if isinstance(spec.trigger, AfterSession):
-                    _sessions(con, record, now)
+                    _sessions(con, record, now, sessions_since)
                     continue
                 due = record["next_due_at"]
                 if due is None or due > now:
@@ -392,22 +487,7 @@ def prepare(now: datetime | None = None) -> dict:
                     [following, record["id"], record["revision"]],
                 )
             except ValueError as exc:
-                _insert_run(
-                    con,
-                    record,
-                    now,
-                    f"invalid:{record['revision']}",
-                    now,
-                    state="failed",
-                )
-                con.execute(
-                    f"UPDATE app.automation_runs SET error=? WHERE {OWNER} AND automation_id=? AND occurrence_key=? RETURNING id",
-                    [str(exc), record["id"], f"invalid:{record['revision']}"],
-                )
-                con.execute(
-                    f"UPDATE app.automations SET state='paused',revision=revision+1 WHERE {OWNER} AND id=? RETURNING id",
-                    [record["id"]],
-                )
+                _disable_invalid(con, record, now, exc)
         con.execute(
             f"UPDATE app.automation_runs SET state='interrupted',error='Exécution interrompue ; aucune écriture ne sera rejouée.',finished_at=?,revision=revision+1 WHERE {OWNER} AND state='running' AND lease_until<=? RETURNING id",
             [now, now],

@@ -15,6 +15,7 @@ from typing import Any
 
 from arete.config import config
 from arete.dataio.db import connect
+from arete.services import consent
 
 logger = logging.getLogger(__name__)
 
@@ -124,24 +125,27 @@ def get_user(clerk_user_id: str) -> AppUser | None:
     return _from_row(row) if row else None
 
 
-def get_account(clerk_user_id: str) -> tuple[AppUser, bool] | None:
-    """The login and whether its athlete is live, in one query; None if unknown.
+def get_account(clerk_user_id: str) -> tuple[AppUser, bool, bool] | None:
+    """The login, whether its athlete is live and whether the athlete's
+    consent is in force (``services/consent.py``), in one query; None if unknown.
 
-    The flag is False for a deactivated or missing athlete, and True for a
+    The live flag is False for a deactivated or missing athlete, and True for a
     login with no athlete yet (nothing to deactivate).
     """
+    consented, params = consent.in_force_sql("u.athlete_id")
     con = connect()
     try:
         row = con.execute(
             f"SELECT {_JOINED_COLUMNS}, u.athlete_id IS NULL OR "
-            "(a.id IS NOT NULL AND a.deleted_at IS NULL) "
+            "(a.id IS NOT NULL AND a.deleted_at IS NULL), "
+            f"{consented} "
             "FROM app.users u LEFT JOIN app.athletes a ON a.id = u.athlete_id "
             "WHERE u.clerk_user_id = ?",
-            [clerk_user_id],
+            [*params, clerk_user_id],
         ).fetchone()
     finally:
         con.close()
-    return (_from_row(row[:-1]), bool(row[-1])) if row else None
+    return (_from_row(row[:-2]), bool(row[-2]), bool(row[-1])) if row else None
 
 
 def upsert_user(

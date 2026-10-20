@@ -415,8 +415,8 @@ export interface AuthConfig {
 
 export type AccountRole = "athlete" | "admin";
 
-/** The signed-in account; `athlete_id` stays null until the owner attaches an athlete. */
-export interface AuthMe {
+/** A login account; `athlete_id` stays null until the owner attaches an athlete. */
+export interface Account {
   email: string;
   name: string | null;
   athlete_id: number | null;
@@ -424,6 +424,42 @@ export interface AuthMe {
   role: AccountRole;
   /** The owner, or an account with the admin role. */
   is_admin: boolean;
+}
+
+/** The signed-in account and its athlete's consent. */
+export interface AuthMe extends Account {
+  consent: ConsentState;
+}
+
+/** The athlete's latest consent, in force or withdrawn (UTC ISO dates). */
+export interface ConsentRecord {
+  terms_version: string;
+  privacy_version: string;
+  health_data: boolean;
+  consented_at: string;
+  withdrawn_at: string | null;
+}
+
+/**
+ * Consent to the terms, the privacy policy and health data (GDPR art. 9).
+ * Until `current`, an account with `required` reaches nothing but its account.
+ */
+export interface ConsentState {
+  /** False on an instance without sign-in: nothing is asked. */
+  required: boolean;
+  /** A consent to the versions below is in force. */
+  current: boolean;
+  /** The versions to accept now. */
+  terms_version: string;
+  privacy_version: string;
+  latest: ConsentRecord | null;
+}
+
+export interface ConsentAnswer {
+  terms_version: string;
+  privacy_version: string;
+  terms_accepted: boolean;
+  health_data: boolean;
 }
 
 export const authApi = {
@@ -439,6 +475,12 @@ export const authApi = {
   /** Erases the signed-in athlete for good; the server checks the typed confirmation. */
   deleteMe: (confirmation: string) =>
     fetchAPI<void>("/auth/me/delete", { method: "POST", body: JSON.stringify({ confirmation }) }),
+
+  giveConsent: (answer: ConsentAnswer) =>
+    fetchAPI<ConsentState>("/auth/consent", { method: "POST", body: JSON.stringify(answer) }),
+
+  /** The data stays; syncs, briefings, automations and the coach stop until consent is given again. */
+  withdrawConsent: () => fetchAPI<ConsentState>("/auth/consent/withdraw", { method: "POST" }),
 };
 
 // ========================= //
@@ -510,7 +552,7 @@ export const adminApi = {
 
   /** Owner only, never on an owner's row. */
   setRole: (userId: number, role: AccountRole) =>
-    fetchAPI<AuthMe>(`/admin/accounts/${userId}/role`, {
+    fetchAPI<Account>(`/admin/accounts/${userId}/role`, {
       method: "POST",
       body: JSON.stringify({ role }),
     }),

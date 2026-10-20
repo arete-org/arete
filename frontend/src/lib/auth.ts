@@ -49,7 +49,25 @@ export function reportUnauthorized(): void {
   if (tokenGetter) unauthorizedHandler?.();
 }
 
-/** `fetch` with the session header; a 401 reports the lost session before returning. */
+/** The header the server sets on a 403 for missing consent (api/auth.py `CONSENT_HEADER`). */
+export const CONSENT_HEADER = 'X-Arete-Consent';
+
+let consentRequiredHandler: (() => void) | null = null;
+
+/**
+ * Registers what to do when the server refuses a request for missing consent
+ * (a new text version, a withdrawal on another device). Returns the function
+ * that unregisters it.
+ */
+export function onConsentRequired(handler: () => void): () => void {
+  consentRequiredHandler = handler;
+  return () => {
+    if (consentRequiredHandler === handler) consentRequiredHandler = null;
+  };
+}
+
+/** `fetch` with the session header; a 401 reports the lost session, a 403 for
+ *  missing consent the consent to ask again, before returning. */
 export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   for (const [name, value] of Object.entries(await authHeaders())) headers.set(name, value);
@@ -63,6 +81,9 @@ export async function authFetch(input: string, init: RequestInit = {}): Promise<
   }
   reportRequest(true);
   if (response.status === 401) reportUnauthorized();
+  if (response.status === 403 && response.headers.get(CONSENT_HEADER) === 'required') {
+    consentRequiredHandler?.();
+  }
   return response;
 }
 

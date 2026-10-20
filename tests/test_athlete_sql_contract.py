@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from arete.dataio.tenant_schema import PRIVATE_TABLES
-from arete.scheduler import _CANDIDATES
+from arete.scheduler import _CANDIDATES_FROM
 from arete.services.product_kpis import TRUSTED_READS
 
 # Bootstrap is deliberately privileged and never used by a domain request.
@@ -24,9 +24,10 @@ def _trusted(relative: str, sql: str) -> bool:
     # Bootstrap owner lookup before a scope exists.
     if relative == "services/users.py":
         return sql == "SELECT email FROM app.user_settings WHERE user_id = 1"
-    # Trusted dispatch: every athlete's zone and quiet hours.
+    # Trusted dispatch: every athlete's zone and quiet hours (the query's
+    # literal head, joined to the consent predicate).
     if relative == "scheduler.py":
-        return sql == _CANDIDATES
+        return sql == _CANDIDATES_FROM
     # Administrators' indicators: counts, never a row.
     if relative == "services/product_kpis.py":
         return sql in TRUSTED_READS

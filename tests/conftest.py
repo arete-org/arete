@@ -90,6 +90,37 @@ def fresh_account_cache() -> Generator[None, None, None]:
     forget_accounts()
 
 
+@pytest.fixture
+def give_consent() -> Callable[..., None]:
+    """Record each athlete's consent to the current texts, as the gate would."""
+    from arete.services import consent
+
+    def give(*athlete_ids: int) -> None:
+        for athlete_id in athlete_ids:
+            consent.give(
+                athlete_id,
+                None,
+                terms_version=consent.TERMS_VERSION,
+                privacy_version=consent.PRIVACY_VERSION,
+                terms_accepted=True,
+                health_data=True,
+            )
+
+    return give
+
+
+@pytest.fixture
+def consented(monkeypatch) -> None:
+    """Every athlete has consented: for sign-in tests about something else,
+    whose accounts appear at their first request. The gate itself is tested
+    in ``test_consent.py``."""
+    from arete.api import auth
+    from arete.services import consent
+
+    monkeypatch.setattr(auth, "consent_in_force", lambda *args: True)
+    monkeypatch.setattr(consent, "is_current", lambda athlete_id: True)
+
+
 class _CountingConnection:
     """A DuckDB connection that records every statement it runs."""
 

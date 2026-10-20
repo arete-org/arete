@@ -17,7 +17,7 @@ from arete.services.users import upsert_user
 
 
 @pytest.fixture
-def athletes(tmp_path, monkeypatch):
+def athletes(tmp_path, monkeypatch, give_consent):
     monkeypatch.setenv("ARETE_DB", str(tmp_path / "tenants.duckdb"))
     monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path / "files"))
     monkeypatch.setenv("ARETE_OWNER_EMAIL", "first@example.com")
@@ -27,6 +27,7 @@ def athletes(tmp_path, monkeypatch):
     second = upsert_user("second", "second@example.com", "Second", verified=True)
     assert first.athlete_id == 1
     assert second.athlete_id != first.athlete_id
+    give_consent(first.athlete_id, second.athlete_id)
     return first, second
 
 

@@ -591,6 +591,22 @@ CREATE TABLE IF NOT EXISTS app.account_deletions (
     account_hash VARCHAR PRIMARY KEY,               -- sha256 of the Clerk user id
     deleted_on   DATE NOT NULL
 );
+
+-- Consent to the terms, the privacy policy and health data (GDPR art. 9), per
+-- athlete and given by a login: append-only proof, a withdrawal stamps the
+-- rows in force (services/consent.py). Timestamps are naive UTC.
+CREATE SEQUENCE IF NOT EXISTS app.athlete_consents_seq START 1;
+CREATE TABLE IF NOT EXISTS app.athlete_consents (
+    id               INTEGER PRIMARY KEY DEFAULT nextval('app.athlete_consents_seq'),
+    athlete_id       INTEGER NOT NULL,
+    user_id          INTEGER,               -- the login, NULL without sign-in
+    terms_version    VARCHAR NOT NULL,
+    privacy_version  VARCHAR NOT NULL,
+    health_data      BOOLEAN NOT NULL,      -- explicit consent to health data
+    consented_at     TIMESTAMP NOT NULL,
+    withdrawn_at     TIMESTAMP,             -- NULL while in force
+    withdrawn_by     INTEGER                -- the login that withdrew it
+);
 """
 
 
@@ -1063,6 +1079,27 @@ def _m61_account_deletions(con) -> None:
     con.execute(DDL[start : DDL.index(");", start) + 2])
 
 
+def _m63_athlete_consents(con) -> None:
+    """Consent records (ARE-127): a new sequence and account-level table.
+
+    No private view: like ``app.users``, it is read by authentication and the
+    scheduler before any scope exists, always filtered by athlete. One
+    transaction; the previous release never reads it. Nobody has consented
+    yet, so with sign-in on every athlete's processing pauses until they do.
+    """
+    start = DDL.index("CREATE SEQUENCE IF NOT EXISTS app.athlete_consents_seq")
+    table = DDL.index("CREATE TABLE IF NOT EXISTS app.athlete_consents")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for statement in DDL[start : DDL.index(");", table) + 2].split(";"):
+            if statement.strip():
+                con.execute(statement)
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
 DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
 
 
@@ -1147,6 +1184,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (54, _m54_strength_drafts),
     (61, _m61_account_deletions),
     (62, _m62_strava_values_off_garmin_rows),
+    (63, _m63_athlete_consents),
 ]
 
 

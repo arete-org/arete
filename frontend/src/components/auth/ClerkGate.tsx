@@ -3,9 +3,10 @@ import { ClerkProvider, SignIn, UserButton, useAuth, useUser } from '@clerk/reac
 import { frFR } from '@clerk/localizations/fr-FR';
 import { ErrorState } from '@/components/States';
 import { AreteWordmark } from '@/components/AreteBrand';
-import { ApiError, authApi, type AuthMe } from '@/lib/api';
-import { clearApiCache, clearSignedOutCaches, endSession, onUnauthorized, setTokenGetter } from '@/lib/auth';
+import { ApiError, authApi, type AuthMe, type ConsentState } from '@/lib/api';
+import { clearApiCache, clearSignedOutCaches, endSession, onConsentRequired, onUnauthorized, setTokenGetter } from '@/lib/auth';
 import { AuthStateContext, type AuthState } from './authState';
+import { ConsentScreen } from './ConsentScreen';
 import { GateScreen, GateSpinner } from './GateScreen';
 import { SignOutButton } from './SignOutButton';
 import { claimPushDevice } from '@/lib/pushSession';
@@ -167,8 +168,47 @@ function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGat
     [user]
   );
 
+  // A consent or a withdrawal answers with the new state: the gate follows it without asking again.
+  const setConsent = useCallback(
+    (consent: ConsentState) =>
+      setAccount((previous) =>
+        previous?.value.status === 'ready'
+          ? { key: previous.key, value: { status: 'ready', me: { ...previous.value.me, consent } } }
+          : previous
+      ),
+    []
+  );
+
   const current = account?.key === key ? account.value : null;
   const me = current?.status === 'ready' ? current.me : null;
+  const consentMissing = me !== null && me.consent.required && !me.consent.current;
+
+  // Mid-session, the server refused a request for missing consent (a new text version, a withdrawal
+  // on another device): ask the account again, once at a time, and let the gate follow its answer.
+  const refreshing = useRef(false);
+  useEffect(
+    () =>
+      onConsentRequired(() => {
+        if (refreshing.current) return;
+        refreshing.current = true;
+        authApi
+          .me()
+          .then((fresh) => setConsent(fresh.consent))
+          .catch((error: unknown) => console.error(error))
+          .finally(() => {
+            refreshing.current = false;
+          });
+      }),
+    [setConsent]
+  );
+
+  // Without consent no health data stays in the browser: drop the caches as a sign-out does,
+  // once the consent screen has replaced the app.
+  useEffect(() => {
+    if (!consentMissing) return;
+    onSessionEnd?.();
+    void clearSignedOutCaches();
+  }, [consentMissing, onSessionEnd]);
   const value = useMemo<AuthState>(
     () => ({
       enabled: true,
@@ -178,8 +218,10 @@ function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGat
       isAdmin: me?.is_admin ?? false,
       signOut: leave,
       grantGoogleScopes,
+      consent: me?.consent ?? null,
+      setConsent,
     }),
-    [me, leave, grantGoogleScopes]
+    [me, leave, grantGoogleScopes, setConsent]
   );
 
   if (!isLoaded) return <GateSpinner />;
@@ -228,6 +270,14 @@ function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGat
         email={current.me.email}
         signOut={leave}
       />
+    );
+  }
+  if (consentMissing) {
+    // The account is known: its deletion stays offered without consent (AccountDeletionPanel reads it).
+    return (
+      <AuthStateContext.Provider value={value}>
+        <ConsentScreen consent={current.me.consent} email={current.me.email} onConsent={setConsent} signOut={leave} />
+      </AuthStateContext.Provider>
     );
   }
   return <AuthStateContext.Provider key={key} value={value}>{children}</AuthStateContext.Provider>;

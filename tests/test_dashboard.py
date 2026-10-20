@@ -210,7 +210,9 @@ def test_one_connection_one_load_history_and_no_write(
     assert len(statement_log) == count
 
 
-def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
+def test_each_athlete_reads_only_their_dashboard(
+    tmp_path, client, monkeypatch, give_consent
+):
     from arete.api import auth
     from arete.services.users import upsert_user
 
@@ -220,6 +222,8 @@ def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
     init_schema()
     first = upsert_user("first", "first@example.com", "First", verified=True)
     second = upsert_user("second", "second@example.com", "Second", verified=True)
+    assert first.athlete_id is not None and second.athlete_id is not None
+    give_consent(first.athlete_id, second.athlete_id)
     today = athlete_today()
     with athlete_scope(first.athlete_id):
         con = connect()

@@ -33,7 +33,7 @@ def _clean_users():
 
 
 @pytest.fixture
-def enforced(monkeypatch):
+def enforced(monkeypatch, consented):
     """Clerk mode with a fake verifier: no network, no real keys."""
     monkeypatch.setenv("ARETE_AUTH", "clerk")
     monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test_fake")
@@ -89,6 +89,7 @@ def test_enforced_mode_requires_a_credential(client, enforced):
 
 def test_each_account_gets_its_own_athlete(client, enforced):
     me = client.get("/auth/me", headers=_bearer("owner-token")).json()
+    assert me.pop("consent")["required"] is True  # test_consent.py covers it
     assert me == {
         "email": "owner@example.com",
         "name": "Greg",
@@ -144,7 +145,7 @@ def _session_token(key: Any, subject: str = OWNER, **claims: Any) -> str:
 
 
 @pytest.fixture
-def real_verifier(monkeypatch):
+def real_verifier(monkeypatch, consented):
     """Clerk mode through the SDK's real verification; Clerk itself is a stub."""
     from clerk_backend_api.security import verifytoken
 

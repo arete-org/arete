@@ -13,7 +13,12 @@ from arete.config import config
 from arete.dataio.db import connect
 from arete.dataio.init_duckdb import main as init_schema
 from arete.dataio.tenant_schema import PRIVATE_TABLES, SCOPED_KEYS, owner_column
-from arete.services.account_deletion import ATHLETE_ACCOUNT_TABLES, LOGIN_TABLES
+from arete.services import consent
+from arete.services.account_deletion import (
+    ATHLETE_ACCOUNT_TABLES,
+    KEPT_TABLES,
+    LOGIN_TABLES,
+)
 from arete.services.athlete_scope import athlete_scope
 
 OWNER, ANA, BOB = "user_owner", "user_ana", "user_bob"
@@ -193,9 +198,10 @@ def _data_dir(athlete_id: int):
 
 
 def test_deletion_erases_every_row_and_file_of_one_athlete_only(
-    client, accounts, clerk
+    client, accounts, clerk, give_consent
 ):
     ana, bob = accounts[ANA], accounts[BOB]
+    give_consent(ana, bob)
     for athlete_id, subject in ((ana, ANA), (bob, BOB)):
         _fill_every_private_table(athlete_id)
         _fill_through_services(athlete_id, subject)
@@ -226,6 +232,15 @@ def test_deletion_erases_every_row_and_file_of_one_athlete_only(
     con.close()
     # The day and a one-way hash, nothing that names the account.
     assert log == [(sha256(ANA.encode()).hexdigest(), date.today())]
+    # The consent history outlives the account, as proof (KEPT_TABLES).
+    con = connect()
+    kept = con.execute(
+        "SELECT count(*) FROM app.athlete_consents WHERE athlete_id = ?", [ana]
+    ).fetchone()
+    con.close()
+    assert kept == (1,)
+    # ...yet allows nothing: another instance may still hold Ana's login.
+    assert not consent.is_current(ana)
 
     # A session token outlives the account by a minute: no fresh athlete.
     again = client.get("/auth/me", headers=_bearer(ANA))
@@ -461,7 +476,8 @@ def test_only_a_signed_in_login_deletes_itself(client, monkeypatch):
 
 
 def test_every_table_with_personal_data_is_erased(accounts):
-    """A new table holding an athlete or a login must join the erasure."""
+    """A new table holding an athlete or a login must join the erasure, or be
+    declared kept."""
     con = connect()
     tables = con.execute(
         "SELECT table_name, list(column_name) FROM duckdb_columns() "
@@ -477,4 +493,5 @@ def test_every_table_with_personal_data_is_erased(accounts):
         if table not in PRIVATE_TABLES and PERSONAL_COLUMNS & set(columns)
     }
     # ``app.athletes`` is the athlete itself: its key is ``id``.
-    assert personal == (set(ACCOUNT_TABLES) | set(LOGIN_TABLES)) - {"athletes"}
+    erased = set(ACCOUNT_TABLES) | set(LOGIN_TABLES) | set(KEPT_TABLES)
+    assert personal == erased - {"athletes"}
