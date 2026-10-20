@@ -14,9 +14,10 @@ Penalties apply only above the baseline mean, in proportion to the z-score
   - resting HR: -3 points per std-dev above the baseline mean
 The result is truncated to an integer and clamped to 0-100.
 
-Without a usable baseline (cold start) the HRV ratio counts as 1.0 (sub-score
-0.5) and no penalty applies; sleep and Body Battery still count, a missing one
-as 0. A day without HRV scores None.
+Without a baseline (fewer than 5 HRV days in the 14) the HRV ratio counts as
+1.0 (sub-score 0.5) and no penalty applies; with one, a metric with fewer than
+5 values skips only its own penalty. Sleep and Body Battery always count, a
+missing one as 0. A day without HRV scores None.
 """
 
 from __future__ import annotations
