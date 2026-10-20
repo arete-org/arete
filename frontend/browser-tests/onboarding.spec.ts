@@ -77,6 +77,12 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     });
     await page.goto('/onboarding');
     await expect(page.getByRole('heading', { level: 1 })).toHaveCSS('font-family', /Cormorant/);
+    if (width === 390) {
+      // Browser emulation has no notch: exercise the safe-area token explicitly.
+      await page.evaluate(() => document.documentElement.style.setProperty('--safe-top', '47px'));
+      expect((await page.locator('.onboarding-header .arete-wordmark').boundingBox())!.y).toBeGreaterThanOrEqual(47);
+      await page.evaluate(() => document.documentElement.style.removeProperty('--safe-top'));
+    }
     await page.getByLabel('Ton prénom').fill('Camille');
     await page.locator('.onboarding-scroll').evaluate(node => { node.scrollTop = 0; });
     await page.screenshot({ path: `../.context/onboarding/accueil-${theme}-${width}.png` });

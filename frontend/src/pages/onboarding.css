@@ -1,4 +1,4 @@
-.onboarding-shell { position: fixed; inset-inline: 0; top: var(--visible-top, 0px); height: var(--visible-height, 100dvh); z-index: 45; display: flex; flex-direction: column; background: var(--color-void); color: var(--color-text-primary); }
+.onboarding-shell { position: fixed; inset-inline: 0; top: var(--visible-top, 0px); height: var(--visible-height, 100dvh); z-index: 45; display: flex; flex-direction: column; padding: var(--safe-top) var(--safe-right) 0 var(--safe-left); background: var(--color-void); color: var(--color-text-primary); }
 .onboarding-header { max-width: 1280px; width: 100%; margin: 0 auto; padding: 24px 48px; display: flex; align-items: center; justify-content: space-between; }
 .onboarding-scroll { overflow-y: auto; min-height: 0; flex: 1; overscroll-behavior: contain; }
 .onboarding-layout { width: min(1120px, calc(100% - 64px)); margin: 30px auto 40px; display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 64px; align-items: start; }

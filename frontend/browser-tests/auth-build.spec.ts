@@ -53,4 +53,7 @@ test('the sign-in page shows while the API is still cold', async ({ page }) => {
   await expect(page.getByText('Formulaire Clerk simulé')).toBeVisible();
   expect(Date.now() - started).toBeLessThan(10_000);
   expect(api).not.toContain('/api/auth/config');
+  // Browser emulation has no notch: exercise the safe-area token explicitly.
+  await page.evaluate(() => document.documentElement.style.setProperty('--safe-top', '47px'));
+  await expect(page.locator('.gate-screen')).toHaveCSS('padding-top', '47px');
 });
