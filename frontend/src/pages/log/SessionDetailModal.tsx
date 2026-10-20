@@ -169,7 +169,7 @@ function Stat({ value, label, tone }: { value: number | string; label: string; t
   return (
     <div className="text-center p-2 sm:p-3 bg-abyss rounded border border-text-muted/20">
       <div className={cn('text-lg sm:text-2xl font-sans', tone)}>{value}</div>
-      <div className="text-[10px] sm:text-xs font-sans text-text-muted uppercase">{label}</div>
+      <div className="text-[10px] sm:text-xs font-sans text-text-muted">{label}</div>
     </div>
   );
 }

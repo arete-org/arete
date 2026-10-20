@@ -57,7 +57,7 @@ for (const width of [390, 430, 768, 1440]) {
     // Previewing themes is reversible and must never write a preference implicitly.
     expect(counts.writes).toBe(0);
     expect(counts.refreshes).toBe(1);
-    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Coach)$/ }).filter({ visible: true }).first().click();
+    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander au coach)$/ }).filter({ visible: true }).first().click();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await expect(panel.locator('.coach-title')).toHaveCSS('font-family', /Cormorant Garamond/);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

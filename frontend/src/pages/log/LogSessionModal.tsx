@@ -9,7 +9,7 @@ import { parseLocalDate, toLocalISODate } from '@/lib/dates';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { VoiceDictation, type VoiceDictationHandle } from './VoiceDictation';
 import { RecordsCelebration, SuggestionNote } from './progression';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 const today = () => toLocalISODate();
 
@@ -34,7 +34,7 @@ interface LogSessionModalProps {
  * activity's; saving completes the draft (one session with the activity).
  */
 export function LogSessionModal({ open, onClose, draft = null }: LogSessionModalProps) {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const queryClient = useQueryClient();
   const [workoutText, setWorkoutText] = useState(() => draft?.notation ?? '');
   const [workoutDate, setWorkoutDate] = useState(() => draft?.date ?? today());
@@ -195,7 +195,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
           {heard && (
             <div className="p-3 rounded border border-neon-cyan/30 bg-neon-cyan/5 space-y-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-sans text-neon-cyan uppercase tracking-wider">
+                <span className="text-[10px] font-sans text-neon-cyan">
                   Ce qui a été entendu
                 </span>
                 {textBeforeDictation !== null && (
@@ -295,7 +295,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
 
           {unparsed.length > 0 && (
             <div className="p-3 rounded border border-warning-orange/30 bg-warning-orange/5">
-              <div className="flex items-center gap-2 text-warning-orange text-xs font-sans uppercase tracking-wider mb-2">
+              <div className="flex items-center gap-2 text-warning-orange text-xs font-sans mb-2">
                 <AlertTriangle className="w-4 h-4" />
                 Lignes non reconnues ({unparsed.length})
               </div>
@@ -358,7 +358,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
           {feedback.data && (
             <div className="text-left glass-panel p-3">
               <p className="text-[11px] font-sans text-neon-cyan mb-1">
-                {feedback.data.source === 'agent' ? `Le regard de ${coach}` : 'Calculé à partir de la séance'}
+                {feedback.data.source === 'agent' ? `Le regard ${coach.of}` : 'Calculé à partir de la séance'}
               </p>
               <p className="text-sm font-sans text-text-secondary">{feedback.data.feedback}</p>
             </div>

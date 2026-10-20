@@ -21,7 +21,7 @@ import { PlanChangeReview } from '@/components/agent/PlanChangeReview';
 import { WeekOptions } from './planning/WeekOptions';
 import { dayLabel, sessionTitle, sessionSummary, sportLabel, SPORTS, STATE_LABELS } from './planning/sessionForm';
 import './planning/planning.css';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 function monday(date: string) {
   const d = parseLocalDate(date);
@@ -38,7 +38,7 @@ function validDate(value: string | null, fallback: string) {
 }
 
 export function PlanningPage() {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const today = toLocalISODate();
   const client = useQueryClient();
   const busy = useIsMutating({ mutationKey: ['workout-action'] }) > 0;
@@ -149,7 +149,7 @@ export function PlanningPage() {
   return (
     <div className="page-shell planning-shell bg-void">
       <Modal open={Boolean(params.get('change_set'))} onClose={() => setParams(previous => { const next = new URLSearchParams(previous); next.delete('change_set'); return next; })} className="max-w-2xl p-4 sm:p-6">
-        <ModalHeader title={`Proposition de ${coach}`} onClose={() => setParams(previous => { const next = new URLSearchParams(previous); next.delete('change_set'); return next; })} />
+        <ModalHeader title={`Proposition ${coach.of}`} onClose={() => setParams(previous => { const next = new URLSearchParams(previous); next.delete('change_set'); return next; })} />
         {params.get('change_set') && <PlanChangeReview id={params.get('change_set')!} />}
       </Modal>
       <div className="page-content planning-content">

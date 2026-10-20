@@ -6,7 +6,7 @@ import { connectivity, subscribeConnectivity, type Connectivity } from '@/lib/co
 import { focusNear } from '@/lib/focus';
 import { onReloadHold, reloadsHeld, takeWaitingAtLoad } from '@/lib/chunkReload';
 import { activate, watchForUpdate } from '@/lib/serviceWorker';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 const RELOAD_WAIT_MS = 10_000;
 
@@ -80,7 +80,7 @@ function UpdateNotice() {
   const [reloading, setReloading] = useState(false);
   // A streaming coach answer would be cut: « Recharger » waits for its end.
   const held = useSyncExternalStore(onReloadHold, reloadsHeld, () => false);
-  const coach = useCoachName();
+  const coach = useCoachWords();
   useEffect(() => watchForUpdate((waiting, atLoad) => {
     if (atLoad && takeWaitingAtLoad(waiting)) return;
     setWorker(waiting);
@@ -110,7 +110,7 @@ function UpdateNotice() {
         </Button>
       }
     >
-      {held ? `Nouvelle version disponible : recharge une fois la réponse de ${coach} terminée.` : 'Nouvelle version disponible.'}
+      {held ? `Nouvelle version disponible : recharge une fois la réponse ${coach.of} terminée.` : 'Nouvelle version disponible.'}
     </Notice>
   );
 }

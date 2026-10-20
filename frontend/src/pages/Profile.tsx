@@ -127,7 +127,7 @@ function ActiveProfile() {
           />
         </button>
         <div className="min-w-0 flex-1 font-sans space-y-2">
-          <p className="text-xs sm:text-sm text-neon-cyan uppercase break-words">
+          <p className="text-xs sm:text-sm text-neon-cyan break-words">
             {settings.data?.display_name ?? 'Athlète'} /{' '}
             {classes.find((c) => c.id === p.athlete_class)?.name}
           </p>

@@ -13,7 +13,7 @@ interface GarminLoginModalProps {
 }
 
 const FIELD = inputClasses('cyan', 'text-sm');
-const LABEL = 'text-xs text-text-muted font-sans uppercase tracking-wider block mb-1';
+const LABEL = 'text-xs text-text-muted font-sans block mb-1';
 
 export function GarminLoginModal({ isOpen, onClose, onSuccess }: GarminLoginModalProps) {
   const queryClient = useQueryClient();

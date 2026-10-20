@@ -6,7 +6,7 @@ import { invalidateAfterSession } from '@/lib/queryKeys';
 import { readableError } from '@/lib/utils';
 import { sportLabel } from '@/lib/fr';
 import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 interface Snapshot {
   id: number;
@@ -94,7 +94,7 @@ export function PlanChangeReview({
   onReady?: (ready: boolean) => void;
 }) {
   const client = useQueryClient();
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const query = useQuery({
     queryKey: ['plan-change-set', id],
     queryFn: () => fetchAPI<ChangeSet>(`/coach/plan-changes/${id}`),
@@ -173,7 +173,7 @@ export function PlanChangeReview({
         <p role="status" className="text-sm text-text-muted">
           {proposal.state === 'dismissed'
             ? 'Proposition refusée. Ton planning est conservé.'
-            : `Cette proposition a expiré. Demande une nouvelle proposition à ${coach}.`}
+            : `Cette proposition a expiré. Demande une nouvelle proposition ${coach.to}.`}
         </p>
       ) : (
         <>

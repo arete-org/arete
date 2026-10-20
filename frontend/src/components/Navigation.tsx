@@ -9,7 +9,7 @@ import { useAuthState } from '@/components/auth/authState';
 import { preloadAgentMarkdown } from './agent/markdownRenderer';
 import { preloadRoute } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 // Clerk's account menu lives in the lazily loaded auth chunk; it only renders when sign-in is on.
 const AccountButton = lazy(importChunk(() =>
@@ -42,7 +42,7 @@ export function Navigation({
   const profile = { path: '/profile', label: 'Profil', icon: User };
   const mobileItems = [...navItems.slice(0, 4), profile, navItems[4]];
   const auth = useAuthState();
-  const coach = useCoachName();
+  const coach = useCoachWords();
   return (
     <>
       {/* Desktop top nav — hidden on mobile */}
@@ -106,7 +106,7 @@ export function Navigation({
                     <span className="absolute -right-1 top-0 size-1.5 rounded-full bg-neon-cyan" />
                   )}
                 </span>
-                <span>{coach}</span>
+                <span>{coach.name}</span>
               </button>
               {auth.enabled && (
                 <Suspense fallback={null}>

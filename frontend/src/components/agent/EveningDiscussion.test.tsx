@@ -24,16 +24,16 @@ it('says where an answer went once it is kept', async () => {
   vi.spyOn(coachApi, 'evening').mockResolvedValue({ ...message, answer: 'Lourdes.', answered_at: '2026-10-16T18:40:00+00:00', answerable: false, journaled: true });
   mount();
   await screen.findByText('Comment sont tes jambes ?');
-  expect(screen.getByRole('status').textContent).toContain('notée dans le journal de Coach : « Lourdes. »');
+  expect(screen.getByRole('status').textContent).toContain('notée dans le journal du coach : « Lourdes. »');
 });
 it('is honest about an answer not filed yet and a closed question', async () => {
   const read = vi.spyOn(coachApi, 'evening').mockResolvedValue({ ...message, answer: 'Lourdes.', answered_at: '2026-10-16T18:40:00+00:00', answerable: false, journaled: false });
   const first = mount();
   await screen.findByText('Comment sont tes jambes ?');
-  expect(screen.getByRole('status').textContent).toContain('pas encore dans le journal de Coach');
+  expect(screen.getByRole('status').textContent).toContain('pas encore dans le journal du coach');
   first.unmount();
   read.mockResolvedValue({ ...message, answerable: false });
   mount();
   await screen.findByText('Comment sont tes jambes ?');
-  expect(screen.getByRole('status').textContent).toBe('Cette question est close : écris à Coach si tu veux en parler.');
+  expect(screen.getByRole('status').textContent).toBe('Cette question est close : écris au coach si tu veux en parler.');
 });

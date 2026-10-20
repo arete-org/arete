@@ -143,7 +143,7 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const tooSmall = await page.locator('.onboarding-shell button').evaluateAll(nodes => nodes.filter(n => n.getBoundingClientRect().height > 0 && n.getBoundingClientRect().height < 44).map(n => n.textContent));
     expect(tooSmall).toEqual([]);
-    await page.getByRole('button', { name: 'Enregistrer et ouvrir Coach' }).click();
+    await page.getByRole('button', { name: 'Enregistrer et ouvrir le coach' }).click();
     await expect(page.getByRole('alert').filter({ hasText: 'Enregistrement non confirmé' })).toBeVisible();
     await expect(page.getByText('3 séance(s) par semaine')).toBeVisible();
     await page.getByRole('button', { name: 'Réessayer l’enregistrement' }).click();
@@ -167,7 +167,7 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     expect(active.reference).toEqual({ kind: 'onboarding', id: 1 });
     expect(active.messages).toEqual([]);
     await page.reload();
-    await page.getByRole('button', { name: 'Demander à Coach', exact: true }).click();
+    await page.getByRole('button', { name: 'Demander au coach', exact: true }).click();
     await expect(panel.getByRole('region', { name: 'Ton point de départ' })).toContainText('Camille');
     expect(chats).toEqual([]);
     await page.screenshot({ path: `../.context/onboarding/chiron-${theme}-${width}.png` });

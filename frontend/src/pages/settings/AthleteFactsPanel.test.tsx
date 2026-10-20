@@ -43,9 +43,9 @@ it('lists active facts first and dims resolved ones', () => {
   expect(rows.map((r) => r.dataset.status)).toEqual(['active', 'resolved']);
   expect(rows[0].className).not.toContain('opacity-50');
   expect(rows[1].className).toContain('opacity-50');
-  expect(within(rows[0]).getByText('contrainte')).toBeTruthy();
+  expect(within(rows[0]).getByText('Contrainte')).toBeTruthy();
   expect(within(rows[0]).getByText('coach')).toBeTruthy();
-  expect(within(rows[1]).getByText('préférence')).toBeTruthy();
+  expect(within(rows[1]).getByText('Préférence')).toBeTruthy();
   expect(within(rows[1]).getByText('toi')).toBeTruthy();
 });
 

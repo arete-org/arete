@@ -49,7 +49,7 @@ it('shows each week against each indicator, the current one first and on its own
   expect(kpis).toHaveBeenCalledWith(12);
   const headers = within(table).getAllByRole('columnheader').map((cell) => cell.textContent);
   expect(headers).toEqual([
-    'SEMAINE DU',
+    'Semaine du',
     'Comptes actifs',
     'Abonnés aux notifications',
     'Séances de force saisies',

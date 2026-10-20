@@ -131,7 +131,7 @@ it('saves coordinated follow-up without requiring push notifications', async () 
   client.setQueryData(['agentMemory'], { files: [] });
   vi.spyOn(settingsApi, 'update').mockResolvedValue(updated);
   mount('/settings?tab=coach');
-  const checkbox = await screen.findByRole('checkbox', { name: /Coordonner les suivis de Coach/ });
+  const checkbox = await screen.findByRole('checkbox', { name: /Coordonner les suivis du coach/ });
   expect((checkbox as HTMLInputElement).disabled).toBe(false);
   fireEvent.click(checkbox);
   fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));

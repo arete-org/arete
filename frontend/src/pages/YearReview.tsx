@@ -235,7 +235,7 @@ function Review({ data }: { data: YearReview }) {
                   <div className="text-right shrink-0">
                     <div className="text-sm font-sans text-text-primary tabular-nums">{e.time_display}</div>
                     {e.is_pr && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-sans uppercase text-neon-gold">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-sans text-neon-gold">
                         <Award className="w-3 h-3" aria-hidden />
                         {e.previous_best_sec === null ? 'Premier chrono' : `Record ${gain(e.previous_best_sec, e.time_sec)}`}
                       </span>

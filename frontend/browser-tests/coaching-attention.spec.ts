@@ -41,7 +41,7 @@ for (const width of [1440, 390]) {
       return route.fulfill({ json: [] });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à (?:Coach|Chiron))$/ }).filter({ visible: true }).first().click();
+    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await panel.getByLabel('Message au coach').fill('Mon brouillon attend.');
     await panel.getByRole('button', { name: 'Masquer le coach' }).click();
@@ -62,6 +62,6 @@ for (const width of [1440, 390]) {
     expect(chats).toEqual([]);
     unavailable = true;
     await page.goto('/');
-    await expect(page.getByRole('alert').filter({ hasText: 'Priorités de Coach indisponibles.' })).toBeVisible();
+    await expect(page.getByRole('alert').filter({ hasText: 'Priorités du coach indisponibles.' })).toBeVisible();
   });
 }

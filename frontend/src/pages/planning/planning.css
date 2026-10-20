@@ -9,7 +9,7 @@
 .planning-dialog input:not([type='checkbox']), .planning-dialog select { min-height: 44px; }
 .planning-desktop-create, .planning-summary, .planning-active, .planning-today,
 .planning-sport-filter, .planning-day-heading, .planning-day-add, .planning-card-title { display: none; }
-.planning-eyebrow { font-size: 12px; font-weight: 400; text-transform: uppercase; color: var(--color-text-muted); }
+.planning-eyebrow { font-size: 12px; font-weight: 400; color: var(--color-text-muted); }
 .planning-toolbar, .planning-week-controls, .planning-extra-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .planning-toolbar { justify-content: space-between; padding-bottom: 20px; flex-wrap: wrap; }
 .planning-week-controls { flex: 1; gap: 4px; flex-wrap: wrap; }

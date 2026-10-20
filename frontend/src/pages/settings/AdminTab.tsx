@@ -8,12 +8,12 @@ import { adminApi, ApiError, type AccountRole, type AdminAccount } from '@/lib/a
 import { qk } from '@/lib/queryKeys';
 import { cn } from '@/lib/utils';
 import { ProductKpisPanel } from './ProductKpisPanel';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 /** The owner's athlete: nobody deactivates it. */
 const OWNER_ATHLETE_ID = 1;
 
-const COLUMNS = ['COMPTE', 'RÔLE', 'ÉTAT', 'DERNIÈRE ACTIVITÉ', 'DERNIÈRE SYNCHRO', 'SYNCHRO AUTO', 'ACTIONS'];
+const COLUMNS = ['Compte', 'Rôle', 'État', 'Dernière activité', 'Dernière synchro', 'Synchro auto', 'Actions'];
 
 const DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 const when = (iso: string | null) => (iso ? DATE_FORMAT.format(new Date(iso)) : 'jamais');
@@ -34,7 +34,7 @@ const refusal = (error: Error) =>
   error instanceof ApiError ? (error.detail ?? 'Action impossible.') : 'Action impossible.';
 
 function FeatureFlagsPanel() {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const queryClient = useQueryClient();
   const flags = useQuery({ queryKey: qk.adminFeatureFlags, queryFn: adminApi.featureFlags, retry: false });
   const update = useMutation({
@@ -71,7 +71,7 @@ function FeatureFlagsPanel() {
           </p>
           <label className="flex min-h-11 items-center gap-3 text-sm text-text-secondary">
             <input type="checkbox" checked={flags.data.coaching_attention ?? false} disabled={attention.isPending} onChange={event => attention.mutate(event.target.checked)} />
-            Coordination proactive de {coach}
+            Coordination proactive {coach.of}
           </label>
           <p className="text-xs text-text-muted">Active le plafond quotidien et la déduplication des questions pour les prochains envois. Désactivé : observation des priorités, comportement d’envoi existant.</p>
           {attention.error && <p role="alert" className="text-xs text-danger-red">{refusal(attention.error)}</p>}

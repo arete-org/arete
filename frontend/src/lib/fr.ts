@@ -41,6 +41,9 @@ export const ZONE_LABEL: Record<ZoneKind, Record<string, string>> = {
 export const zoneLabel = (kind: ZoneKind, zone: string | null | undefined): string =>
   !zone || zone === 'unknown' ? 'inconnu' : (ZONE_LABEL[kind][zone] ?? zone.replace(/_/g, ' '));
 
+/** A label shown alone (badge, chip, option) in natural case: « inconnu » → « Inconnu ». */
+export const capitalized = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
 /** "7h12" from seconds, for sleep durations. */
 export function formatHoursMinutes(seconds: number): string {
   const h = Math.floor(seconds / 3600);

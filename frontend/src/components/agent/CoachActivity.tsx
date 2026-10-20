@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { markWorkout, measureWorkout } from '@/lib/workoutPerformance';
 import { ToolActivity } from './ToolActivity';
 import { AretePresence } from '../AreteBrand';
-import type { CoachName } from '@/lib/coachName';
+import { coachWords, type CoachWords } from '@/lib/coachName';
 
 const LONG_WAIT_SECONDS = 8;
 const CLOCK_TICK_MS = 1_000;
@@ -46,7 +46,7 @@ export function CoachPresence({ active = true }: { active?: boolean }) {
   return <AretePresence active={active} />;
 }
 
-export function CoachActivity({ message, coach = 'Coach' }: { message: ChatMessage; coach?: CoachName }) {
+export function CoachActivity({ message, coach = coachWords(false) }: { message: ChatMessage; coach?: CoachWords }) {
   const pending = message.pending === true;
   const elapsed = useElapsedSeconds(message.startedAt, pending);
   useEffect(() => {
@@ -72,7 +72,7 @@ export function CoachActivity({ message, coach = 'Coach' }: { message: ChatMessa
         : uncertain ? 'Résultat à vérifier'
           : pending && hasText ? 'Réponse en cours'
             : confirmed ? pending ? `${toolLabel(last)} · préparation de la réponse` : toolLabel(last)
-              : message.streamAccepted ? `${coach} prépare sa réponse` : 'Demande envoyée';
+              : message.streamAccepted ? `${coach.The} prépare sa réponse` : 'Demande envoyée';
   const memoryReceipt = !pending && !interrupted && !failed && !uncertain && message.parts?.some(p => p.kind === 'coach_card' && p.ref_kind === 'fact');
   const statusKey = `${running?.id ?? last?.id ?? 'response'}:${label}`;
 

@@ -56,7 +56,7 @@ test('the coach reads its workout cards once and not again when reopened', async
   }, sessions.slice(0, 5).map(s => ({ type: 'workout_update', id: `w-${s.id}`, thread_id: 't1', sequence: 1, ...view(s.id) })));
   await page.goto('/planning?date=2027-01-12');
   await expect(page.getByTestId('workout-109')).toBeVisible();
-  const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander à (?:Coach|Chiron))$/ }).filter({ visible: true }).first().click();
+  const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
   await open();
   const panel = page.getByRole('complementary', { name: 'Coach IA' });
   await expect(panel.getByTestId('workout-104').getByText('Programmée dans Garmin Connect', { exact: true })).toBeVisible();

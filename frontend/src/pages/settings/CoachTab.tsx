@@ -9,7 +9,7 @@ import { currentState, subscribeDevice, unsubscribeDevice, type PushState } from
 import { qk } from '@/lib/queryKeys';
 import type { SettingsTabProps } from './types';
 import { AthleteFactsPanel } from './AthleteFactsPanel';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 interface LedgerFile {
   name: string;
@@ -67,7 +67,7 @@ function SettingSwitch({
 }
 
 function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const { data: syncStatus } = useQuery({ queryKey: qk.syncStatus, queryFn: garminApi.getSyncStatus });
   const garminMissing = syncStatus != null && !syncStatus.garmin_authenticated;
   return (
@@ -79,7 +79,7 @@ function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
       }
     >
       <div className="space-y-3">
-        <p className="text-sm text-text-secondary">{coach} propose des ajustements sur l’accueil. Ton planning change uniquement après ta validation ou ta demande explicite dans le chat.</p>
+        <p className="text-sm text-text-secondary">{coach.The} propose des ajustements sur l’accueil. Ton planning change uniquement après ta validation ou ta demande explicite dans le chat.</p>
         <SettingSwitch
           checked={settings.push_to_garmin_enabled}
           onChange={(value) => updateSetting('push_to_garmin_enabled', value)}
@@ -101,7 +101,7 @@ function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
 const EVENING_HOURS = [18, 19, 20, 21] as const;
 
 function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const enabled = settings.coach_evening_enabled;
   return (
     <Panel
@@ -117,7 +117,7 @@ function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
           onChange={(value) => updateSetting('coach_evening_enabled', value)}
           hint="Désactivé par défaut. Rien n’est envoyé les soirs sans séance prévue le lendemain ni signal notable (course proche, préparation basse, séance manquée replanifiée)."
         >
-          Le soir, {coach} t’écrit sur ta journée de demain, en trois phrases au plus, question
+          Le soir, {coach.the} t’écrit sur ta journée de demain, en trois phrases au plus, question
           comprise. Ta réponse est notée dans son journal pour le briefing du lendemain.
         </SettingSwitch>
         <label className="flex flex-wrap items-center gap-2 pl-6 text-sm text-text-secondary">
@@ -167,7 +167,7 @@ const DEVICE_HINT: Partial<Record<PushState, string>> = {
 };
 
 function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const queryClient = useQueryClient();
   const { data: state } = useQuery({ queryKey: qk.pushState, queryFn: currentState, staleTime: Infinity });
   const { data: vapid } = useQuery({ queryKey: qk.vapidKey, queryFn: notificationsApi.getVapidPublicKey });
@@ -227,7 +227,7 @@ function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
           onChange={value => updateSetting('notification_preferences', { ...prefs, coordinated_coaching: value })}
           hint="Regroupe les suivis dans l’app, même sans notification, une fois la fonctionnalité activée par l’administrateur."
         >
-          Coordonner les suivis de {coach}
+          Coordonner les suivis {coach.of}
         </SettingSwitch>
 
         <fieldset className="space-y-2 pl-6" disabled={!settings.notifications_enabled}>
@@ -290,7 +290,7 @@ function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
         </fieldset>
 
         <div className="border-t border-text-muted/10 pt-3 space-y-2">
-          <p className="text-xs font-sans uppercase tracking-wider text-text-muted">Cet appareil</p>
+          <p className="text-xs font-sans text-text-muted">Cet appareil</p>
           {hint ? (
             <div className="space-y-2">
               <p className="text-sm text-text-secondary">{hint}</p>

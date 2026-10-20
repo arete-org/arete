@@ -16,7 +16,7 @@ function CurrentWeek({ week }: { week: KpiWeek }) {
     <ul aria-label="Semaine en cours" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {KPI_KEYS.map((key) => (
         <li key={key} className="rounded border border-text-muted/20 p-3">
-          <div className="text-[11px] font-sans uppercase tracking-wider text-text-muted">{KPI_LABELS[key].label}</div>
+          <div className="text-[11px] font-sans text-text-muted">{KPI_LABELS[key].label}</div>
           <div className="mt-1 text-2xl font-sans font-semibold tabular-nums text-text-primary">
             {kpiValue(key, week.indicators[key])}
           </div>
@@ -72,7 +72,7 @@ export function ProductKpisPanel() {
               <thead>
                 <tr className="font-sans text-[11px] tracking-wider text-text-muted align-bottom">
                   <th scope="col" className="pb-2 pr-4 font-normal whitespace-nowrap">
-                    SEMAINE DU
+                    Semaine du
                   </th>
                   {KPI_KEYS.map((key) => (
                     <th key={key} scope="col" className="pb-2 pr-4 font-normal min-w-[7rem]">

@@ -59,7 +59,7 @@ for (const width of [320, 390, 430]) {
     await expect(page.locator('[aria-live="polite"]').getByText('Pectoraux', { exact: true })).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const content = (await page.locator('.page-shell').boundingBox())!;
-    const bubble = (await page.getByRole('button', { name: 'Demander à Coach' }).boundingBox())!;
+    const bubble = (await page.getByRole('button', { name: 'Demander au coach' }).boundingBox())!;
     // WebKit rounds scroll offsets to device pixels; allow one CSS pixel at the boundary.
     expect(content.y + content.height).toBeLessThanOrEqual(bubble.y + 1);
     await page.evaluate(() => window.scrollTo(0, 350));
@@ -71,7 +71,7 @@ for (const width of [320, 390, 430]) {
     await entry.tap();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Demander à Coach' })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Demander au coach' })).toBeHidden();
     await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
     await expect(dialog).toBeHidden();
     await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(position, 0);
@@ -117,7 +117,7 @@ test('floating default migrates once, survives navigation and fits the keyboard'
   await fixture(page);
   await page.goto('/log');
   await safeArea(page);
-  const launcher = page.getByRole('button', { name: 'Demander à Coach', exact: true });
+  const launcher = page.getByRole('button', { name: 'Demander au coach', exact: true });
   await launcher.tap();
   const panel = page.getByRole('complementary', { name: 'Coach IA' });
   await expect(panel).toHaveAttribute('data-display', 'floating');
@@ -186,7 +186,7 @@ test('touch navigation and display changes preserve a live response and manual d
   try {
     await page.goto('/planning');
     await expect(page.getByRole('heading', { name: 'Planning', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Demander à Coach' }).tap();
+    await page.getByRole('button', { name: 'Demander au coach' }).tap();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     const input = panel.getByLabel('Message au coach');
     await input.fill('Comment adapter ma semaine ?');
@@ -225,7 +225,7 @@ test('landscape respects lateral safe areas and preserves the draft through rota
   });
   await expect(page.getByRole('heading', { name: 'Planning', exact: true })).toBeVisible();
   expect((await page.getByRole('link', { name: 'Arete · Accueil' }).boundingBox())!.x).toBeGreaterThanOrEqual(47);
-  await page.getByRole('button', { name: 'Demander à Coach' }).tap();
+  await page.getByRole('button', { name: 'Demander au coach' }).tap();
   const panel = page.getByRole('complementary', { name: 'Coach IA' });
   const input = panel.getByLabel('Message au coach');
   await input.fill('Brouillon en paysage');
@@ -293,7 +293,7 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
       await expect(panel.getByText(/^Message 24\./)).toBeInViewport();
     } else {
       await page.goto('/onboarding');
-      await page.getByRole('button', { name: 'Ouvrir Coach' }).tap();
+      await page.getByRole('button', { name: 'Ouvrir le coach' }).tap();
       await expect(page).toHaveURL(/\/$/);
       await expect(panel.getByRole('region', { name: 'Ton point de départ' })).toContainText('Réponse 30');
       await page.waitForLoadState('networkidle');

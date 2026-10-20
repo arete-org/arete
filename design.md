@@ -65,11 +65,18 @@ de base. Un nouveau compte et un navigateur neuf partent de « Système ».
 
 ## Nom du coach
 
-`coachName()` (`lib/coachName.ts`) donne le nom affiché : « Chiron » avec la
-gamification activée, « Coach » sinon, y compris tant que la préférence n’est pas
-connue. Le mode classique n’affiche jamais « Chiron » ; `coach-name.spec.ts` le
-vérifie dans les deux modes. Les titres de panneaux et les boutons sont en casse
-naturelle ; seuls les petits labels de métadonnées gardent les capitales.
+`coachWords()` (`lib/coachName.ts`) donne les mots de chaque position dans la
+phrase. Avec la gamification activée, « Chiron » est un nom propre : « Demander à
+Chiron », « Avec Chiron aujourd’hui ». Sinon, et tant que la préférence n’est pas
+connue, « le coach » est un nom commun avec son article : « Demander au coach »,
+« Le regard du coach », « Le coach aujourd’hui » ; seuls les en-têtes disent
+« Coach ». Le mode classique n’affiche jamais « Chiron » ni « à Coach » ;
+`coach-name.spec.ts` le vérifie dans les deux modes.
+
+Tous les textes sont en casse naturelle, titres, boutons, labels, badges et
+puces compris ; le CSS ne met plus rien en capitales, hors la première lettre
+d’une date. Les sigles (TSB,
+ACWR, TSS, RPE, FIT) gardent leurs capitales.
 
 ## Hiérarchie
 
@@ -84,8 +91,8 @@ naturelle ; seuls les petits labels de métadonnées gardent les capitales.
 | Code, paramètres et résultats techniques des outils | JetBrains Mono | Monospace dans chaque thème, y compris Pierre et Prune |
 
 Le choix typographique dépend du rôle du texte. Un grand titre n’impose pas une
-police serif aux titres de panneaux, aux labels ou aux données. Les titres de page sont en casse naturelle. Les petits labels de
-métadonnées peuvent rester en capitales ; ils ne deviennent pas des titres serif.
+police serif aux titres de panneaux, aux labels ou aux données. Tous les textes sont en casse naturelle, petits labels de
+métadonnées compris ; ils ne deviennent pas des titres serif.
 
 ## Maquette
 

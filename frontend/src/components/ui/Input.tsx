@@ -64,7 +64,7 @@ export function Field({ label, children, hint, className, gap = 'md' }: FieldPro
     <div className={className}>
       <label
         className={cn(
-          'text-xs font-sans text-text-muted uppercase block',
+          'text-xs font-sans text-text-muted block',
           gap === 'md' ? 'mb-2' : 'mb-1'
         )}
       >

@@ -14,7 +14,7 @@ import { readableError } from '@/lib/utils';
 import { garminApi } from '@/lib/api';
 import { sportLabel } from '@/lib/fr';
 import './followUp.css';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 const examples = [
   { title: 'Débrief après sortie longue', mission: 'Analyser ma prochaine sortie longue et me demander le ressenti manquant.', trigger: { kind: 'session', sport: 'running', session_type: 'long_run', delay_minutes: 0 } },
@@ -88,14 +88,14 @@ function AutomationList() {
 
 function ConversationArchive() {
   const [deleting, setDeleting] = useState<string | null>(null);
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const client = useQueryClient();
   const remove = useMutation({ mutationFn: conversationsApi.remove, onSuccess: (_data, id) => { window.dispatchEvent(new CustomEvent("arete:conversation-deleted", { detail: id })); setDeleting(null); void client.invalidateQueries({ queryKey: conversationsKey }); } });
-  return <>{deleting && <div role="alert" className="ui-inset p-4"><p>Supprimer cette conversation et ses documents ? Le coach ne pourra plus la relire ; ce qu’il a noté dans son journal (dont tes réponses aux questions du soir) y reste : consultable dans Réglages › Coach, {coach} peut l’oublier si tu le lui demandes.</p><Button onClick={() => remove.mutate(deleting)} disabled={remove.isPending}>Supprimer</Button><Button variant="ghost" onClick={() => setDeleting(null)}>Annuler</Button><ErrorText error={remove.error} /></div>}<ThreadHistory threads={[]} activeId="" runningId={null} onSelect={openConversation} onCreate={() => { window.dispatchEvent(new Event("arete:conversation-new")); window.dispatchEvent(new Event("arete:coach-open")); }} onDelete={setDeleting} /></>;
+  return <>{deleting && <div role="alert" className="ui-inset p-4"><p>Supprimer cette conversation et ses documents ? Le coach ne pourra plus la relire ; ce qu’il a noté dans son journal (dont tes réponses aux questions du soir) y reste : consultable dans Réglages › Coach, {coach.the} peut l’oublier si tu le lui demandes.</p><Button onClick={() => remove.mutate(deleting)} disabled={remove.isPending}>Supprimer</Button><Button variant="ghost" onClick={() => setDeleting(null)}>Annuler</Button><ErrorText error={remove.error} /></div>}<ThreadHistory threads={[]} activeId="" runningId={null} onSelect={openConversation} onCreate={() => { window.dispatchEvent(new Event("arete:conversation-new")); window.dispatchEvent(new Event("arete:coach-open")); }} onDelete={setDeleting} /></>;
 }
 
 export function FollowUpPage() {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'conversations' ? 'conversations' : params.get('tab') === 'automations' ? 'automations' : 'inbox';
@@ -128,12 +128,12 @@ export function FollowUpPage() {
   const attention = useCoachingAttention(tab === 'inbox' && filter === 'todo');
   const coaching = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled: tab === 'inbox' && filter === 'todo' });
   return <div className="suivi-page">
-    <header className="suivi-header"><h1 className="page-title">Suivi</h1><p>Les prochains échanges avec {coach}.</p></header>
+    <header className="suivi-header"><h1 className="page-title">Suivi</h1><p>Les prochains échanges avec {coach.the}.</p></header>
     <nav className="suivi-tabs" aria-label="Suivi et routines"><Button variant="ghost" aria-current={tab === 'inbox' ? 'page' : undefined} onClick={() => setParams({})}>Suivi{query.data?.unread ? ` · ${query.data.unread}` : ''}</Button><Button variant="ghost" aria-current={tab === 'automations' ? 'page' : undefined} onClick={() => setParams({ tab: 'automations' })}>Routines</Button><Button variant="ghost" aria-current={tab === "conversations" ? "page" : undefined} onClick={() => setParams({ tab: "conversations" })}>Conversations</Button></nav>
     <div className="suivi-grid"><div className="suivi-stack">{tab === 'conversations' ? <ConversationArchive /> : tab === 'automations' ? <AutomationList /> : <>
       <div className="suivi-actions" aria-label="Filtres">{[['todo', 'À traiter'], ['all', 'Tout'], ['archives', 'Archives']].map(([value, label]) => <Button variant="ghost" key={value} aria-pressed={filter === value} onClick={() => { setFilter(value); setOffset(0); }}>{label}</Button>)}</div>
       {filter === 'todo' && <CoachingAttention compact />}
-      {filter === 'todo' && !attention.data?.enabled && coaching.data?.items.map(item => <article className="suivi-row" key={`${item.kind}-${item.record.id}`}><div className="flex-1"><h2>{item.kind === 'followup' ? item.record.question : 'Une proposition pour ton entraînement'}</h2><p className="suivi-note">{coach} attend ton retour</p></div><Button variant="ghost" onClick={() => discussWithCoach({ kind: item.kind, id: item.record.id })}>En parler ↗</Button></article>)}
+      {filter === 'todo' && !attention.data?.enabled && coaching.data?.items.map(item => <article className="suivi-row" key={`${item.kind}-${item.record.id}`}><div className="flex-1"><h2>{item.kind === 'followup' ? item.record.question : 'Une proposition pour ton entraînement'}</h2><p className="suivi-note">{coach.The} attend ton retour</p></div><Button variant="ghost" onClick={() => discussWithCoach({ kind: item.kind, id: item.record.id })}>En parler ↗</Button></article>)}
       {query.isPending && <p role="status">Chargement du suivi…</p>}<ErrorText error={query.error} />
       {query.data?.items.length === 0 && (filter !== 'todo' || (!attention.data?.enabled && coaching.data?.items.length === 0)) && <div className="suivi-empty"><h2>{filter === 'archives' ? 'Aucune archive' : 'Le suivi est à jour'}</h2><p>Les prochaines questions et notifications apparaîtront ici.</p></div>}
       <div className="suivi-list">{query.data?.items.map(item => <article className="suivi-row" key={item.id}><Link className="suivi-plain suivi-row-main" to={item.url}><div className="min-w-0 flex-1"><h2>{item.title}</h2><p className="suivi-note line-clamp-2">{item.body}</p><p className="suivi-note">{new Date(item.created_at).toLocaleDateString('fr-FR')}{!item.read_at ? ' · non lu' : ''}</p></div><span aria-hidden="true">↗</span></Link><NoticeActions id={item.id} read={Boolean(item.read_at)} archived={Boolean(item.archived_at)} /></article>)}</div>

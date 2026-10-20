@@ -74,7 +74,7 @@ for (const width of [375, 1440]) {
 
     await composer.fill('Un peu lourdes, nuit courte.');
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
-    await expect(card.getByRole('status')).toContainText('notée dans le journal de Coach : « Un peu lourdes, nuit courte. »');
+    await expect(card.getByRole('status')).toContainText('notée dans le journal du coach : « Un peu lourdes, nuit courte. »');
     await expect(panel.getByRole('article', { name: 'Ton message' })).toHaveText('Un peu lourdes, nuit courte.');
     await expect(composer).toHaveValue('');
     expect(answers).toEqual([{ text: 'Un peu lourdes, nuit courte.' }]);
@@ -97,7 +97,7 @@ for (const width of [375, 1440]) {
     await page.setViewportSize({ width, height: width < 768 ? 812 : 900 });
     const { saved } = await evening(page);
     await page.goto('/settings?tab=coach');
-    const toggle = page.getByRole('checkbox', { name: /Le soir, Coach t’écrit/ });
+    const toggle = page.getByRole('checkbox', { name: /Le soir, le coach t’écrit/ });
     await expect(toggle).not.toBeChecked();
     const hour = page.getByRole('combobox', { name: /À partir de/ });
     await expect(hour).toBeDisabled();

@@ -29,7 +29,7 @@ import { SameDayLogWarning } from './log/SameDayLogWarning';
 import { useOpenDraft } from './log/useOpenDraft';
 import { RouteTrace } from './session/RouteTrace';
 import { StreamChart } from './session/StreamChart';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 const ZONE_NAME = ['Z1 récupération', 'Z2 endurance', 'Z3 tempo', 'Z4 seuil', 'Z5 VO2max'];
 const SOURCE_LABEL: Record<string, string> = {
@@ -82,7 +82,7 @@ export function SessionDetailPage() {
 }
 
 function SessionView({ detail }: { detail: ActivityDetail }) {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const { session } = detail;
   // The post-session notification opens /log/sessions/{id}?rpe=1.
   const [params] = useSearchParams();
@@ -153,7 +153,7 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
           title={
             <span className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
-              {detail.feedback.source === 'agent' ? `Le regard de ${coach}` : 'Calculé à partir de la séance'}
+              {detail.feedback.source === 'agent' ? `Le regard ${coach.of}` : 'Calculé à partir de la séance'}
             </span>
           }
           titleTone="text-neon-cyan"

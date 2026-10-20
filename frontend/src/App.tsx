@@ -23,7 +23,7 @@ import { DashboardPage, SettingsPage } from '@/pages';
 import { OnboardingEntry } from '@/components/OnboardingEntry';
 import { loadLogPage, loadPlanningPage, loadWeekReviewPage } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 const FollowUpPage = lazy(importChunk(() => import('@/pages/FollowUp').then(m => ({ default: m.FollowUpPage }))));
 const NotFoundPage = lazy(importChunk(() => import('@/pages/NotFound').then(m => ({ default: m.NotFoundPage }))));
@@ -90,8 +90,8 @@ function RouteContent({ children }: { children: ReactNode }) {
 
 /** The launcher reads the opt-in below the query provider that App mounts. */
 function CoachLauncherLabel({ busy }: { busy: boolean }) {
-  const coach = useCoachName();
-  return <>{busy ? `${coach} répond…` : `Demander à ${coach}`}</>;
+  const coach = useCoachWords();
+  return <>{busy ? `${coach.The} répond…` : `Demander ${coach.to}`}</>;
 }
 
 function OutsideOnboarding({ children }: { children: ReactNode }) {

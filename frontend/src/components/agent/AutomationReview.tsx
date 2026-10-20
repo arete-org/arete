@@ -6,7 +6,7 @@ import { automationApi, inboxKey, stateLabel, type Interrupt } from '@/lib/autom
 import { discussWithCoach } from '@/lib/coachToday';
 import { PlanChangeReview } from './PlanChangeReview';
 import { readableError } from '@/lib/utils';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 const labels: Record<string, string> = {
   date_str: 'Date', date: 'Date', session_id: 'Séance', session_ids: 'Séances', session_type: 'Type', sport: 'Sport',
@@ -67,7 +67,7 @@ function Decision({ runId, item }: { runId: string; item: Interrupt }) {
 
 /** The existing Chiron shell owns navigation, focus, size and the preserved chat draft. */
 export function AutomationReview({ id }: { id: string }) {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const query = useQuery({ queryKey: ['automation-run', id], queryFn: () => automationApi.run(id), refetchInterval: 15000 });
   if (query.isPending) return <p role="status" className="p-4 text-sm">Chargement du suivi…</p>;
   if (!query.data) return <p role="alert" className="p-4 text-sm text-danger-red">{readableError(query.error)}</p>;
@@ -78,6 +78,6 @@ export function AutomationReview({ id }: { id: string }) {
     {run.error && <p role="alert" className="text-sm text-danger-red">{run.error}</p>}
     {run.interrupts.map(item => <Decision key={item.id} runId={id} item={item} />)}
     {run.effects.some(effect => effect.state !== 'proposed') && <details className="text-xs text-text-secondary"><summary className="min-h-11 cursor-pointer py-3">Actions effectuées</summary>{run.effects.filter(effect => effect.state !== 'proposed').map(effect => <p key={effect.tool_call_id}>{label((effect.arguments.executed ?? effect.arguments.call).name)} · {effect.state === 'completed' ? 'effectuée' : 'issue incertaine, sans rejeu'}</p>)}</details>}
-    <button className="min-h-11 text-xs text-text-secondary hover:text-text-primary" onClick={() => discussWithCoach({ kind: 'automation_run', id, mode: 'discussion' })}>En parler à {coach} ↗</button>
+    <button className="min-h-11 text-xs text-text-secondary hover:text-text-primary" onClick={() => discussWithCoach({ kind: 'automation_run', id, mode: 'discussion' })}>En parler {coach.to} ↗</button>
   </div>;
 }

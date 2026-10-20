@@ -4,11 +4,11 @@ import { Check, Pencil, Trash2, UserRound, X } from 'lucide-react';
 import { Button, Input, Panel, Select } from '@/components/ui';
 import { athleteFactsApi } from '@/lib/api';
 import { parseLocalDate } from '@/lib/dates';
-import { FACT_KIND_LABEL } from '@/lib/fr';
+import { capitalized, FACT_KIND_LABEL } from '@/lib/fr';
 import { qk } from '@/lib/queryKeys';
 import { cn, readableError } from '@/lib/utils';
 import type { AthleteFact, FactKind } from '@/types';
-import { useCoachName } from '@/lib/coachName';
+import { useCoachWords } from '@/lib/coachName';
 
 const MAX_TEXT = 300;
 const KINDS = Object.keys(FACT_KIND_LABEL) as FactKind[];
@@ -38,7 +38,7 @@ function FactRow({ fact, compact = false, busyId, onSave, onToggle, onDelete, on
       className={cn('rounded border border-text-muted/20 p-3 space-y-2', resolved && 'opacity-50')}
     >
       {!compact && <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans">
-        <span className="text-neon-purple uppercase">{FACT_KIND_LABEL[fact.kind] ?? fact.kind}</span>
+        <span className="text-neon-purple">{capitalized(FACT_KIND_LABEL[fact.kind] ?? fact.kind)}</span>
         <span className="text-text-muted">
           depuis le {parseLocalDate(fact.since).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
         </span>
@@ -160,7 +160,7 @@ function AddFactForm() {
         >
           {KINDS.map((k) => (
             <option key={k} value={k}>
-              {FACT_KIND_LABEL[k]}
+              {capitalized(FACT_KIND_LABEL[k])}
             </option>
           ))}
         </Select>
@@ -186,7 +186,7 @@ function AddFactForm() {
 
 /** The durable facts the coach reads every turn; editable at once, apart from the form's save. */
 export function AthleteFactsPanel({ factId, embedded = false }: { factId?: number; embedded?: boolean } = {}) {
-  const coach = useCoachName();
+  const coach = useCoachWords();
   const queryClient = useQueryClient();
   const facts = useQuery({ queryKey: qk.athleteFacts, queryFn: athleteFactsApi.list, refetchOnMount: 'always' });
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -242,5 +242,5 @@ export function AthleteFactsPanel({ factId, embedded = false }: { factId?: numbe
       </div>
   );
   if (embedded) return content;
-  return <Panel title={<span className="flex items-center gap-2"><UserRound className="size-4 text-neon-purple" />{factId ? selected?.[0]?.evidence === 'hypothesis' ? 'À confirmer' : 'Retenu' : `Ce que ${coach} sait de moi`}</span>}>{content}</Panel>;
+  return <Panel title={<span className="flex items-center gap-2"><UserRound className="size-4 text-neon-purple" />{factId ? selected?.[0]?.evidence === 'hypothesis' ? 'À confirmer' : 'Retenu' : `Ce que ${coach.the} sait de moi`}</span>}>{content}</Panel>;
 }

@@ -78,7 +78,7 @@ export function ExerciseProgress({
 
       {enabled && history.isSuccess && (
         <div className="mt-4">
-          <h4 className="text-[11px] font-sans text-text-muted uppercase mb-2">1RM estimé (Epley)</h4>
+          <h4 className="text-[11px] font-sans text-text-muted mb-2">1RM estimé (Epley)</h4>
           {points.length > 1 ? (
             <Suspense fallback={<div className="h-[180px]" />}>
               <E1rmChart points={points} />

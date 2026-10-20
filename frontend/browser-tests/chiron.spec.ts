@@ -4,7 +4,7 @@ import { coachStream as fixture } from './coachStream';
 
 async function openCoach(page: Page) {
   await page.goto('/planning?date=2026-10-10');
-  const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander à (?:Coach|Chiron))$/ }).filter({ visible: true }).first();
+  const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first();
   await toggle.click();
   const panel = page.getByRole('complementary', { name: 'Coach IA' });
   await expect(panel).toHaveCSS('opacity', '1');
@@ -329,10 +329,10 @@ test('classic coach: one memory receipt, inline files, drafts and reload', async
     await expect(panel.getByRole('status')).toHaveCount(0);
     await expect(panel.getByText('RETENU', { exact: true })).toHaveCount(0);
     await panel.getByLabel('Message au coach').fill('Mon brouillon');
-    await panel.getByRole('button', { name: 'Ce que Coach sait de moi' }).click();
+    await panel.getByRole('button', { name: 'Ce que le coach sait de moi' }).click();
     await expect(panel.getByText('Ce que je retiens de toi')).toBeVisible();
     await expect(panel.getByLabel('Nouveau fait')).toHaveCount(0);
-    await panel.getByRole('button', { name: 'Ce que Coach sait de moi' }).click();
+    await panel.getByRole('button', { name: 'Ce que le coach sait de moi' }).click();
     await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon');
     expect(stream.requests()).toBe(1);
     expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -346,7 +346,7 @@ test('classic coach: one memory receipt, inline files, drafts and reload', async
       await route.fulfill({ json: { enabled: false } });
     });
     await page.reload();
-    const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander à (?:Coach|Chiron))$/ }).filter({ visible: true }).first();
+    const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first();
     releaseBootstrap();
     await toggle.click();
     await expect(receipt).toHaveCount(1);
@@ -442,7 +442,7 @@ test('display opt-in and opt-out preserve a live stream, input node, draft and f
     await expect(input).toHaveValue('Garde mon dimanche libre.');
     await chooseDisplay(panel, 'Panneau latéral classique');
     await page.reload();
-    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à (?:Coach|Chiron))$/ }).filter({ visible: true }).first().click();
+    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     await expect(panel).toHaveAttribute('data-display', 'sidebar');
     await expect(page.locator('main')).toHaveCSS('margin-right', '520px');
     expect(stream.requests()).toBe(1);

@@ -79,7 +79,7 @@ export function PlanningSessionCard({
         onDragEnd={() => onDrag(null)}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-neon-cyan">
+          <span className="text-[10px] font-semibold text-neon-cyan">
             {sportLabel(planned.sport)}
           </span>
           {selecting && (
@@ -253,7 +253,7 @@ export function WeekBoard({
                 </Button>
               </header>
               <header className="planning-day-heading">
-                <h3 className="text-[13px] uppercase font-semibold text-text-muted">
+                <h3 className="text-[13px] font-semibold text-text-muted first-letter:uppercase">
                   {parseLocalDate(date).toLocaleDateString('fr-FR', {
                     weekday: 'long',
                   })}

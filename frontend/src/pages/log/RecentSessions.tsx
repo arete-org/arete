@@ -18,6 +18,7 @@ const SOURCE_BADGE: Record<string, string> = {
   garmin: 'bg-info-blue/20 text-info-blue',
   manual: 'bg-text-muted/20 text-text-muted',
 };
+const SOURCE_LABEL: Record<string, string> = { strava: 'Strava', garmin: 'Garmin', manual: 'Manuel' };
 
 /** Recent cardio sessions with inline RPE/notes editing. */
 export function RecentSessions() {
@@ -121,11 +122,11 @@ export function RecentSessions() {
                   {s.source && (
                     <span
                       className={cn(
-                        'px-1.5 py-0.5 rounded text-[10px] font-sans uppercase',
+                        'px-1.5 py-0.5 rounded text-[10px] font-sans',
                         SOURCE_BADGE[s.source] ?? SOURCE_BADGE.manual
                       )}
                     >
-                      {s.source}
+                      {SOURCE_LABEL[s.source] ?? s.source}
                     </span>
                   )}
                   {!editing && <RpeBadge rpe={s.rpe} showEmpty />}
@@ -145,7 +146,7 @@ export function RecentSessions() {
               {editing && (
                 <div className="mt-3 pt-3 border-t border-text-muted/10 space-y-3 animate-fade-in">
                   <div>
-                    <label className="text-xs font-sans text-text-muted uppercase block mb-1">RPE (1-10)</label>
+                    <label className="text-xs font-sans text-text-muted block mb-1">RPE (1-10)</label>
                     <input
                       type="range"
                       min={1}
@@ -174,7 +175,7 @@ export function RecentSessions() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-sans text-text-muted uppercase block mb-1">Notes</label>
+                    <label className="text-xs font-sans text-text-muted block mb-1">Notes</label>
                     <Textarea
                       value={editNotes}
                       onChange={(e) => setEditNotes(e.target.value)}

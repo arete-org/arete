@@ -64,7 +64,7 @@ export function MovedSession({
     <div className="rounded-lg border border-text-muted/20 bg-void/40 px-3 py-2 text-[11px] font-sans">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <DecisionBadge decision="move" />
-        <span className="text-xs uppercase tracking-wider text-text-primary">{SESSION_TYPE_LABEL[type] ?? type}</span>
+        <span className="text-xs text-text-primary">{SESSION_TYPE_LABEL[type] ?? type}</span>
         {to && <span className="text-text-muted">→ {dayLabel(to)}</span>}
       </div>
       <p className="mt-1 text-text-secondary">{decision.reason}</p>

@@ -193,7 +193,7 @@ html {
 
 /* A theme changes the palette, never the brand's typographic hierarchy. */
 .page-title { font-family: var(--font-display); font-size: clamp(36px, 3.1vw, 44px); font-weight: 600; line-height: 1.1; letter-spacing: 0; text-transform: none; color: var(--color-text-primary); }
-.page-eyebrow { margin-bottom: 8px; color: var(--color-text-muted); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.page-eyebrow { margin-bottom: 8px; color: var(--color-text-muted); font-size: 11px; }
 .coach-title { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.1; }
 
 code, kbd, samp, pre { font-family: var(--font-mono); }

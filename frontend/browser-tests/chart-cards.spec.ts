@@ -27,7 +27,7 @@ const bars = {
 
 async function openCoach(page: Page) {
   await page.goto('/analytics');
-  await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à (?:Coach|Chiron))$/ }).filter({ visible: true }).first().click();
+  await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
   return page.getByRole('complementary', { name: 'Coach IA' });
 }
 
@@ -109,7 +109,7 @@ test('charts render in all themes and both chat modes, stay offline and survive 
     const beforeReload = [...stream.archives.values()][0];
     await page.reload();
     // Sidebar stays mounted after reload; reopen only if the restored mode is collapsed.
-    if (!await panel.isVisible()) await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à (?:Coach|Chiron))$/ }).filter({ visible: true }).first().click();
+    if (!await panel.isVisible()) await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     await expect(panel.locator('iframe')).toHaveCount(2);
     await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon reste ici.');
     // Restoring settles transient message flags; wait for that snapshot's ack
