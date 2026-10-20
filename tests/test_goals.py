@@ -138,3 +138,103 @@ class TestNextGoal:
         )
         goals.next_goal(FAR - timedelta(days=1))
         assert [s for s in statement_log if "visible_goals" in s] == [statement_log[-1]]
+
+    def test_a_hybrid_block_is_never_the_next_race(self):
+        goals.create_goal(
+            name="test-block", race_date=FAR, goal_type="hybrid", details={"weeks": 8}
+        )
+        hyrox = goals.create_goal(
+            name="test-hyrox",
+            race_date=FAR + timedelta(days=20),
+            goal_type="hyrox",
+            details={"category": "men"},
+            priority="B",
+        )
+        assert goals.next_goal(FAR - timedelta(days=1)) == hyrox
+
+
+class TestGoalTypes:
+    def test_a_hyrox_goal_runs_8_km_and_keeps_its_details(self):
+        g = goals.create_goal(
+            name="test-hyrox",
+            race_date=FAR,
+            distance_km=21.1,  # ignored: a Hyrox is 8 km of running
+            goal_type="hyrox",
+            details={"format": "doubles", "category": "mixed", "equipment": ["sled"]},
+        )
+        assert (g.goal_type, g.distance_km) == ("hyrox", 8.0)
+        assert g.details == {
+            "division": "open",
+            "format": "doubles",
+            "category": "mixed",
+            "equipment": ["sled"],
+            "weeks": 12,
+        }
+        assert goals.get_goal(g.id) == g
+        updated = goals.update_goal(g.id, details={**g.details, "division": "pro"})
+        assert updated is not None and updated.details["division"] == "pro"
+
+    def test_a_road_race_is_unchanged(self):
+        g = goals.create_goal(name="test-road", race_date=FAR, distance_km=10)
+        assert (g.goal_type, g.details) == ("race", None)
+        assert g.to_dict()["goal_type"] == "race"
+
+    @pytest.mark.parametrize(
+        ("goal_type", "details", "message"),
+        [
+            ("hyrox", {}, "catégorie Hyrox"),
+            ("hyrox", {"category": "mixed"}, "mixte se court en doubles"),
+            ("hyrox", {"category": "men", "division": "elite"}, "open ou pro"),
+            ("hyrox", {"category": "men", "equipment": ["none", "sled"]}, "matériel"),
+            ("hybrid", {"weeks": 10}, "8 ou 12 semaines"),
+            ("hybrid", {"color": "red"}, "Détail inconnu"),
+            ("race", {"weeks": 8}, "ne s’appliquent qu’aux"),
+            ("trail", None, "type d’objectif"),
+        ],
+    )
+    def test_invalid_details_are_refused_in_french(self, goal_type, details, message):
+        with pytest.raises(ValueError, match=message):
+            goals.create_goal(
+                name="test-bad",
+                race_date=FAR,
+                distance_km=10,
+                goal_type=goal_type,
+                details=details,
+            )
+
+    def test_a_hyrox_distance_cannot_be_edited(self):
+        g = goals.create_goal(
+            name="test-hyrox",
+            race_date=FAR,
+            goal_type="hyrox",
+            details={"category": "women"},
+        )
+        with pytest.raises(ValueError, match="ne se modifie pas"):
+            goals.update_goal(g.id, distance_km=10)
+
+    def test_the_routes_validate_types_in_french(self, router_client, monkeypatch):
+        from arete.api import goals as api
+        from arete.api.goals import router
+
+        today = FAR - timedelta(days=900)
+        monkeypatch.setattr(api, "athlete_today", lambda: today)
+        client = router_client(router)
+        body = {"name": "test-api-hyrox", "race_date": FAR.isoformat()}
+        created = client.post(
+            "/goals",
+            json={**body, "goal_type": "hyrox", "details": {"category": "women"}},
+        )
+        assert created.status_code == 201
+        assert created.json()["goal_type"] == "hyrox"
+        assert created.json()["distance_km"] == 8.0
+        refused = client.post(
+            "/goals", json={**body, "goal_type": "hyrox", "details": {}}
+        )
+        assert refused.status_code == 422 and "catégorie" in refused.json()["detail"]
+        no_distance = client.post("/goals", json=body)
+        assert no_distance.status_code == 422
+        assert "distance" in no_distance.json()["detail"]
+        patched = client.patch(
+            f"/goals/{created.json()['id']}", json={"details": {"weeks": 9}}
+        )
+        assert patched.status_code == 422 and "semaines" in patched.json()["detail"]

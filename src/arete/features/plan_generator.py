@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from arete.features.running import TrainingPaces, format_pace, race_time_sec
 
@@ -76,6 +76,11 @@ class DraftSession:
     intensity: str | None
     description: str
     distance_km: float | None = None
+    sport: str = "running"
+    #: Structured steps (``services.prescriptions.Prescription`` as a dict).
+    prescription: dict[str, Any] | None = field(default=None, hash=False)
+    #: What the interference rules read (``features.hybrid_plan``).
+    tags: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -396,6 +401,8 @@ PLANNED_RPE: dict[str, float] = {
     "tempo": 7,
     "intervals": 8,
     "race": 9,
+    "strength": 6,
+    "cross_training": 7,  # a station circuit
 }
 DEFAULT_PLANNED_RPE = 5
 

@@ -228,7 +228,9 @@ def survey(day: date | None = None) -> Survey:
             *(
                 (g.race_date, g.name)
                 for g in list_goals(today=day)
-                if g.status == "active" and day < g.race_date <= horizon
+                if g.status == "active"
+                and day < g.race_date <= horizon
+                and g.goal_type != "hybrid"  # a block's end is no race
             ),
         }
     )

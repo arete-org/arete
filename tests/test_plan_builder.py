@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -51,7 +52,7 @@ def _plan_sessions(goal_id: int) -> list[PlannedSession]:
         s
         for s in GarminRepository().list_planned_sessions(
             start_date=TODAY,
-            end_date=TODAY + timedelta(weeks=9),
+            end_date=TODAY + timedelta(weeks=11),
             status=None,
             limit=200,
             ascending=True,
@@ -129,3 +130,90 @@ def test_planned_tss_uses_the_history_formula():
 
     assert round(planned_tss("tempo", 60)) == round(60 * 0.49 / 0.36)
     assert planned_tss("intervals", 50) > planned_tss("endurance", 50)
+
+
+def test_regenerating_keeps_the_sessions_the_athlete_edited(goal):
+    repo = GarminRepository()
+    first = plan_builder.apply(goal.id, TODAY)
+    generated = _plan_sessions(goal.id)
+    edited, untouched = generated[0], generated[1]
+    assert edited.revision == untouched.revision == 1
+    assert repo.update_planned_session_fields(
+        edited.id or 0, expected_revision=1, description="Footing avec un ami"
+    )
+    again = plan_builder.apply(goal.id, TODAY)
+    kept = repo.get_planned_session(edited.id or 0)
+    assert kept is not None and kept.description == "Footing avec un ami"
+    assert repo.get_planned_session(untouched.id or 0) is None  # replaced
+    assert again["replaced"] == first["created"] - 1
+    # Its day stays the athlete's: no generated session lands on it again.
+    assert edited.date.isoformat() in again["skipped_days"]
+    assert [s.date for s in _plan_sessions(goal.id)].count(edited.date) == 1
+
+
+@pytest.fixture
+def hyrox(goal):
+    """A Hyrox 10 weeks out, on the same athlete and history as ``goal``."""
+    g = goals.create_goal(
+        name="test-hyrox",
+        race_date=TODAY + timedelta(weeks=10),
+        goal_type="hyrox",
+        details={"division": "open", "category": "women", "equipment": ["wall_ball"]},
+    )
+    facts = SimpleNamespace(acwr=1.7, tsb=-5.0)
+    with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
+        yield g
+
+
+def test_a_hyrox_plan_is_written_with_its_sports_and_prescriptions(hyrox):
+    from arete.features.plan_generator import planned_tss
+
+    body = plan_builder.preview(hyrox.id, TODAY)
+    assert body["inputs"]["level"] == "intermediate"
+    assert body["inputs"]["deload"] is True  # ACWR above the rest threshold
+    assert body["weeks"][0]["recovery"] is True
+    assert body["weeks"][-1]["phase"] == "race"
+    result = plan_builder.apply(hyrox.id, TODAY)
+    sessions = _plan_sessions(hyrox.id)
+    assert result["created"] == len(sessions) > 0
+    assert {s.sport for s in sessions} == {"running", "strength", "other"}
+    compromised = [s for s in sessions if s.prescription is not None]
+    assert compromised and all(s.sport == "running" for s in compromised)
+    race = sessions[-1]
+    assert (race.session_type, race.date) == (SessionType.RACE, hyrox.race_date)
+    # Race day weighs a 90-minute Hyrox, not an 8 km run.
+    series = plan_builder.projection(hyrox.id, TODAY)["series"]
+    race_point = next(p for p in series if p["date"] == hyrox.race_date.isoformat())
+    assert race_point["tss"] == round(planned_tss("race", 90), 1)
+
+
+def test_a_hybrid_block_previews_without_a_race(goal):
+    block = goals.create_goal(
+        name="test-hybrid",
+        race_date=TODAY + timedelta(weeks=8),
+        goal_type="hybrid",
+        details={"weeks": 8},
+    )
+    facts = SimpleNamespace(acwr=None, tsb=None)
+    with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
+        body = plan_builder.preview(block.id, TODAY)
+    sessions = [s for w in body["weeks"] for s in w["sessions"]]
+    assert sessions and not any(s["session_type"] == "race" for s in sessions)
+    last = body["weeks"][-1]
+    assert last["recovery"] is True
+    assert any("benchmark" in s["tags"] for s in last["sessions"])
+
+
+def test_strength_history_counts_logged_days(goal):
+    con = connect()
+    try:
+        for i in range(1, 28, 4):  # 7 days over four weeks
+            con.execute(
+                "INSERT INTO app.strength_sessions (user_id, date, name)"
+                " VALUES (1, ?, 'test-plan')",
+                [TODAY - timedelta(days=i)],
+            )
+        assert plan_builder._recent_strength(con, TODAY) == 7 / 4
+    finally:
+        con.execute("DELETE FROM app.strength_sessions WHERE name = 'test-plan'")
+        con.close()

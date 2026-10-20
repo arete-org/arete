@@ -16,10 +16,15 @@ router = APIRouter(prefix="/goals", tags=["goals"])
 
 class GoalCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    race_date: date
-    distance_km: float = Field(ge=1, le=250)
+    race_date: date  # a hybrid block's last day
+    #: Required for a race; Hyrox is 8 km, a hybrid block has none.
+    distance_km: float | None = Field(default=None, ge=1, le=250)
     target_time_sec: int | None = Field(default=None, gt=0)
     priority: Literal["A", "B", "C"] = "A"
+    goal_type: Literal["race", "hyrox", "hybrid"] = "race"
+    #: Hyrox/hybrid: division, format, category, equipment, weeks
+    #: (``services.goals.GoalDetails``, validated there in French).
+    details: dict[str, Any] | None = None
 
 
 class GoalUpdate(BaseModel):
@@ -29,6 +34,7 @@ class GoalUpdate(BaseModel):
     target_time_sec: int | None = Field(default=None, gt=0)
     priority: Literal["A", "B", "C"] | None = None
     status: Literal["active", "done", "cancelled"] | None = None
+    details: dict[str, Any] | None = None
 
 
 def _found(goal: service.Goal | None) -> dict[str, Any]:
@@ -57,12 +63,19 @@ def create_goal(body: GoalCreate) -> dict[str, Any]:
     today = athlete_today()
     if body.race_date < today:
         raise HTTPException(status_code=422, detail="La date de course est passée")
-    return service.create_goal(**body.model_dump()).to_dict(today)
+    try:
+        return service.create_goal(**body.model_dump()).to_dict(today)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
 
 
 @router.patch("/{goal_id}")
 def update_goal(goal_id: int, body: GoalUpdate) -> dict[str, Any]:
-    return _found(service.update_goal(goal_id, **body.model_dump(exclude_unset=True)))
+    try:
+        goal = service.update_goal(goal_id, **body.model_dump(exclude_unset=True))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
+    return _found(goal)
 
 
 @router.delete("/{goal_id}", status_code=204)

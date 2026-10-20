@@ -442,7 +442,9 @@ CREATE TABLE IF NOT EXISTS app.goals (
     target_time_sec  INTEGER,                 -- optional finishing time
     priority         VARCHAR NOT NULL DEFAULT 'A',      -- 'A', 'B', 'C'
     status           VARCHAR NOT NULL DEFAULT 'active', -- 'active', 'done', 'cancelled'
-    created_at       TIMESTAMP DEFAULT now()
+    created_at       TIMESTAMP DEFAULT now(),
+    goal_type        VARCHAR DEFAULT 'race',  -- 'race', 'hyrox', 'hybrid'
+    details_json     VARCHAR                  -- hyrox/hybrid: division, format, category, equipment, weeks
 );
 
 CREATE SEQUENCE IF NOT EXISTS app.athlete_facts_seq START 1;
@@ -1100,6 +1102,27 @@ def _m63_athlete_consents(con) -> None:
         raise
 
 
+def _m64_goal_types(con) -> None:
+    """Hyrox and hybrid goals (ARE-138): a type and its details on ``app.goals``.
+
+    Two nullable columns; every existing goal reads as a race through the
+    default. The previous release names the columns it reads and writes, so it
+    runs unchanged on them. ``visible_goals`` froze ``t.*`` when it was made:
+    rebuilt in the same transaction, rolled back together (see migration 52).
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for column in ("goal_type VARCHAR DEFAULT 'race'", "details_json VARCHAR"):
+            con.execute(f"ALTER TABLE app.goals ADD COLUMN IF NOT EXISTS {column}")
+        _view(con, "goals")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
 DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
 
 
@@ -1185,6 +1208,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (61, _m61_account_deletions),
     (62, _m62_strava_values_off_garmin_rows),
     (63, _m63_athlete_consents),
+    (64, _m64_goal_types),
 ]
 
 
