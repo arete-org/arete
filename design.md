@@ -1,17 +1,86 @@
-# Arete — Design system commun aux huit thèmes
+# Arete — Design system commun aux quatre thèmes
 
 ## Références et décision
 
 - [Identité retenue dans Figma](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=5-82) : « Cormorant Garamond pour la marque et les grands titres. Inter pour les données, les boutons et la navigation. »
-- [Maquette comparative ARE-33, éditable](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=17-111) : huit déclinaisons du même spécimen, avec les composants de marque existants et les palettes du produit.
+- [Maquette comparative ARE-33, éditable](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=17-111) : huit déclinaisons du même spécimen, avec les composants de marque existants et les palettes de l’époque (cinq ont été retirées par ARE-134).
 - [Parcours unifiés, analyses et Chiron](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=334-81) : déclinaisons bureau/mobile, états et interactions natifs. [Correspondance avec le produit](docs/unified-experience.md).
-- La capture de l’incident montre **Plus sombre** : marque serif, titres sans serif, navigation et contrôles monospace.
 
-La référence définit cette hiérarchie pour Pierre et Prune. ARE-33 l’étend à
-Clair, Sombre, Plus sombre, Abysse, Performance et Odyssey. Changer de thème
-ne change plus les familles de polices ni la hiérarchie des titres.
-Les palettes et préférences sont conservées. Les surfaces, contrôles et états
-interactifs utilisent désormais les mêmes règles sur toutes les pages.
+La référence définit cette hiérarchie pour Pierre et Prune. ARE-134 réduit les
+palettes à une seule langue visuelle : Pierre (clair), Prune (prune), Odyssey
+(sable clair) et Encre (sombre, celle du laurier crème sur fond presque noir),
+plus « Système », qui suit l’appareil. Changer de thème ne change ni les familles
+de polices ni la hiérarchie des titres. Les surfaces, contrôles et états
+interactifs utilisent les mêmes règles sur toutes les pages.
+
+## Thèmes et tokens sémantiques
+
+| Choix | Rôle | Fond | Texte | Accent |
+| --- | --- | --- | --- | --- |
+| Système (par défaut) | Pierre si l’appareil est clair, Encre s’il est sombre ; suit un changement en direct | — | — | — |
+| Pierre | Clair, pierre et encre | `#F6F3ED` | `#1C2927` | `#285349` |
+| Prune | Sombre prune | `#291E29` | `#F2E8DA` | `#DBB5BC` |
+| Odyssey | Clair sable, chaud | `#F5EBDD` | `#3B3432` | `#96472D` |
+| Encre | Sombre, laurier crème sur l’encre de Pierre assombrie | `#0E1413` | `#F2E8DA` | `#DBB5BC`, sélection `#57394E` |
+
+Encre est construit avec la palette existante : l’encre `#1C2927` de Pierre
+assombrie en fond (`#0E1413`) et en surface relevée, la crème `#F2E8DA` du laurier
+sombre en texte, la prune `#57394E` en fond de sélection. Le prune est trop
+sombre pour porter du texte sur ce fond (1,9:1) : le texte d’accent reprend le
+rose clair de Prune (`#DBB5BC`), comme le badge prune du laurier. Variante non
+retenue : un accent crème (`#F2E8DA`), plus sobre mais qui ne distingue plus
+l’accent du texte principal.
+
+Chaque thème définit une fois, dans `index.css`, les tokens `--surface-page`,
+`--surface-card`, `--surface-raised`, `--surface-border`, `--surface-selection`,
+`--ink-primary|secondary|muted|on-accent`, `--accent` (et `--accent-secondary|tertiary`),
+`--signal-success|warning|danger|info`, la marque Strava et la carte musculaire.
+Les utilitaires Tailwind `surface-*`, `ink-*`, `accent` et `signal-*` les exposent.
+Les séries de graphiques (`chartTheme.ts`) réutilisent les signaux, donc les mêmes
+contrastes. Les anciens noms (`void`, `abyss`, `shadow`, `neon-*`, `text-*`,
+`success-green`…, `--arete-border`) restent des alias de ces tokens pendant une
+version, le temps de migrer les composants.
+
+Contraste WCAG mesuré (minimum sur fond de page, carte et surface relevée ;
+AA demande 4,5:1 pour le texte) :
+
+| Thème | Texte principal | Secondaire | Discret | Accents | Signaux et séries | Texte sur accent | Accent sur sélection |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Pierre | 12,34 | 5,27 | 4,73 | 4,70 | 4,70 | 6,60 | 7,01 |
+| Prune | 8,25 | 5,58 | 4,62 | 4,68 | 4,68 | 7,65 | 5,40 |
+| Odyssey | 9,16 | 5,00 | 5,00 | 4,88 | 5,04 | 6,49 | 4,88 |
+| Encre | 12,42 | 8,90 | 5,98 | 7,04 | 7,04 | 8,90 | 5,40 |
+
+Ajustements pour atteindre AA : texte discret de Pierre `#64675D` (4,39 avant sur
+surface relevée) et de Prune `#BEABB8` (4,47), Strava `#B03E0F` sur Pierre et
+`#A63A0E` sur Odyssey ; Odyssey reçoit ses propres couleurs de séries et de carte
+musculaire au lieu des valeurs sombres héritées. `design-system.spec.ts` recalcule
+ces contrastes dans le navigateur.
+
+Les thèmes retirés (Clair, Sombre, Plus sombre, Abysse, Performance) migrent une
+seule fois au chargement : clairs vers Pierre, sombres vers Encre. Le navigateur
+réécrit sa copie locale (`arete.theme.v1`) ; le serveur lit l’ancienne valeur
+comme son remplacement et l’enregistre à la prochaine sauvegarde, sans migration
+de base. Un nouveau compte et un navigateur neuf partent de « Système ».
+Un court script dans `index.html` applique le thème mis en cache (ou « Système »)
+et la couleur `theme-color` avant le premier rendu, pour qu’un thème sombre ne
+s’affiche jamais d’abord en crème ; `theme.test.ts` vérifie qu’il choisit le même
+thème que `initializeTheme()`.
+
+## Nom du coach
+
+`coachWords()` (`lib/coachName.ts`) donne les mots de chaque position dans la
+phrase. Avec la gamification activée, « Chiron » est un nom propre : « Demander à
+Chiron », « Avec Chiron aujourd’hui ». Sinon, et tant que la préférence n’est pas
+connue, « le coach » est un nom commun avec son article : « Demander au coach »,
+« Le regard du coach », « Le coach aujourd’hui » ; seuls les en-têtes disent
+« Coach ». Le mode classique n’affiche jamais « Chiron » ni « à Coach » ;
+`coach-name.spec.ts` le vérifie dans les deux modes.
+
+Tous les textes sont en casse naturelle, titres, boutons, labels, badges et
+puces compris ; le CSS ne met plus rien en capitales, hors la première lettre
+d’une date. Les sigles (TSB,
+ACWR, TSS, RPE, FIT) gardent leurs capitales.
 
 ## Hiérarchie
 
@@ -26,14 +95,14 @@ interactifs utilisent désormais les mêmes règles sur toutes les pages.
 | Code, paramètres et résultats techniques des outils | JetBrains Mono | Monospace dans chaque thème, y compris Pierre et Prune |
 
 Le choix typographique dépend du rôle du texte. Un grand titre n’impose pas une
-police serif aux titres de panneaux, aux labels ou aux données. Les titres de page sont en casse naturelle. Les petits labels de
-métadonnées peuvent rester en capitales ; ils ne deviennent pas des titres serif.
+police serif aux titres de panneaux, aux labels ou aux données. Tous les textes sont en casse naturelle, petits labels de
+métadonnées compris ; ils ne deviennent pas des titres serif.
 
 ## Maquette
 
 La planche reprend le spécimen produit de la référence Figma (`6:155`) :
 signature, navigation, titre « Réglages », texte courant, mesure et bouton.
-Les huit variantes utilisent les mêmes familles et dimensions ; seules leurs
+Les variantes utilisent les mêmes familles et dimensions ; seules leurs
 couleurs diffèrent. Les valeurs affichées sont fictives. Cette planche définit
 la typographie, pas une refonte de la disposition de la page Réglages.
 
@@ -41,12 +110,8 @@ la typographie, pas une refonte de la disposition de la page Réglages.
 | --- | --- | --- | --- |
 | Pierre | `#F6F3ED` | `#1C2927` | Hiérarchie commune |
 | Prune | `#291E29` | `#F2E8DA` | Hiérarchie commune |
-| Clair | `#F4F7FA` | `#172B3A` | Hiérarchie commune |
-| Sombre | `#0A0A0F` | `#E8E8E8` | Hiérarchie commune |
-| Plus sombre | `#050508` | `#E8E8E8` | Hiérarchie commune |
-| Abysse | `#000000` | `#E8E8E8` | Hiérarchie commune |
-| Performance | `#F4F5EF` | `#17281E` | Hiérarchie commune |
 | Odyssey | `#F5EBDD` | `#3B3432` | Hiérarchie commune |
+| Encre | `#0E1413` | `#F2E8DA` | Hiérarchie commune |
 
 ## Propriétaire dans le code
 
@@ -72,7 +137,7 @@ la typographie, pas une refonte de la disposition de la page Réglages.
 | Mesure de santé | Valeur Inter, chiffres tabulaires ; statut porté par le badge et son texte | `MetricCard` |
 | Aide sur une mesure | « ? » de 20 px à côté du libellé, cible tactile de 44 px, nom « Qu’est-ce que … ? », sans infobulle ; mène à l’entrée du Lexique (`/analytics/lexique#terme`) | `GlossaryLink`, `lib/glossary.ts`, `lib/glossaryEntries.ts` |
 | Connexion et accès refusé | Même signature au laurier ; widget Clerk relié aux tokens | `AreteWordmark`, `ClerkGate` |
-| Sélecteur de thème | Huit aperçus de même taille avec signature, titre et donnée fictive ; sélection cochée et `aria-pressed` | `AppearanceTab`, `THEMES` |
+| Sélecteur de thème | « Système » (aperçu Pierre en haut, Encre en bas) puis quatre aperçus de même taille avec signature, titre et donnée fictive ; sélection cochée et `aria-pressed` | `AppearanceTab`, `THEMES` |
 | Mouvement | Apparition courte, sans cascade retardant la lecture ; respect du mouvement réduit | `index.css` |
 
 La refonte conserve les routes, formulaires, requêtes, permissions, outils du coach
@@ -88,17 +153,17 @@ enregistrée n’est ajouté.
 
 ## Critères de vérification
 
-1. Passer par les huit thèmes dans Réglages : navigation, labels et boutons restent en Inter.
+1. Passer par les quatre thèmes et « Système » dans Réglages : navigation, labels et boutons restent en Inter.
 2. Comparer Planning, Analyses et Bilan annuel : tous les titres principaux utilisent Cormorant Garamond, graisse 600.
 3. Ouvrir le coach : son titre suit la même règle ; son texte courant reste en Inter.
-4. Vérifier le code Markdown et les aperçus techniques : JetBrains Mono dans les huit thèmes.
+4. Vérifier le code Markdown et les aperçus techniques : JetBrains Mono dans les quatre thèmes.
 5. Vérifier à 390 px et sur bureau : aucun débordement horizontal dû aux titres ; la navigation reste utilisable.
 6. Prévisualiser, abandonner puis enregistrer un thème : conserver les comportements existants.
 7. Exécuter `make check` et les contrôles navigateur pertinents.
 
 ## Validation de l’identité
 
-Les huit spécimens de la planche Figma ont été inspectés : signature et titre en
+Les spécimens de la planche Figma ont été inspectés : signature et titre en
 Cormorant Garamond SemiBold, texte d’interface en Inter, deux instances de marque
 par spécimen (signature et symbole). Les références approuvées restent intactes.
 Les rayons et traitements de contrôles généralisent les composants Pierre/Prune
@@ -106,9 +171,10 @@ existants ; ils constituent l’adaptation produit de cette identité, et non un
 copie de la disposition de la planche de marque.
 
 La vérification locale comprend `make check`, les scénarios Playwright existants,
-et `frontend/browser-tests/design-system.spec.ts` pour les huit thèmes à 390, 430,
+et `frontend/browser-tests/design-system.spec.ts` pour les quatre thèmes à 390, 430,
 768 et 1440 px : polices calculées, couleurs des aperçus, focus clavier, absence de
-débordement horizontal et retour à la préférence enregistrée après rechargement.
+débordement horizontal, retour à la préférence enregistrée après rechargement,
+contrastes AA, « Système » qui suit l’appareil et migration d’un thème retiré.
 
 ## Chiron : chat compact optionnel
 
@@ -146,13 +212,13 @@ Les graphiques de Chiron prolongent la référence compacte `62:143` : carte opa
 `Panel`, bordure neutre, rayon partagé de 16 px, titre et données en Inter. Le SVG
 est statique et responsive ; le titre et le résumé restent des éléments React
 accessibles. Les couleurs et les classes de séries viennent de `chartTheme.ts` et
-suivent les huit thèmes, y compris après réception ou rechargement d’une carte.
+suivent les quatre thèmes, y compris après réception ou rechargement d’une carte.
 L’iframe isolée reçoit les polices Inter locales embarquées et les tokens du thème.
 Le modèle ne choisit ni CSS, ni police, ni couleur littérale. Une carte invalide
 conserve son résumé et signale l’échec. Les cartes suivent le fil et son ordre de
 réception dans les modes flottant et latéral ; aucun téléchargement n’est proposé.
 
-`chart-cards.spec.ts` vérifie courbes et barres à 390 et 1440 px, les huit thèmes,
+`chart-cards.spec.ts` vérifie courbes et barres à 390 et 1440 px, les quatre thèmes,
 le rechargement, le changement de fil pendant une réponse et l’isolation du rendu.
 
 ## Chiron — jauge de contexte
@@ -182,7 +248,7 @@ La semaine affiche sept colonnes sur grand écran ; sous 1050 px de largeur
 Sur mobile, les compteurs deviennent une ligne pour laisser la priorité aux séances.
 La proposition A ne concerne que le contenu de la page : la navigation, la marge de page
 et l’en-tête (`page-title` « Planning » et sous-titre discret) sont ceux des autres pages.
-Les cartes utilisent les tokens communs aux huit thèmes.
+Les cartes utilisent les tokens communs aux quatre thèmes.
 Inter Regular, Medium et SemiBold sont chargés localement avec leurs vraies graisses
 (version 4.0, licence OFL fournie), sans dépendre du gras simulé par le navigateur.
 
@@ -230,7 +296,7 @@ Planning ne possède aucune variante de navigation propre à sa page.
 - Les couleurs et rayons suivent les tokens communs. Les textes et les icônes
   des maquettes restent éditables ; les quatre écrans utilisent des instances
   des composants partagés. Le code de référence reste `Navigation.tsx` et
-  `index.css` pour les huit thèmes et les zones de sécurité.
+  `index.css` pour les quatre thèmes et les zones de sécurité.
 
 - `App` réserve les zones de sécurité système et l’espace de la navigation et du
   lanceur. Les tokens `--safe-*`, `--mobile-nav-space` et `--launcher-space` dans
@@ -290,7 +356,7 @@ Planning ne possède aucune variante de navigation propre à sa page.
 
 Validation : `mobile-ux.spec.ts` utilise Chromium et WebKit en mode tactile à
 320, 390 et 430 px, avec zones de sécurité et clavier simulés. Les scénarios
-existants vérifient les huit thèmes à 390, 430, 768 et 1440 px, les flux SSE et
+existants vérifient les quatre thèmes à 390, 430, 768 et 1440 px, les flux SSE et
 les écritures Planning sur une base jetable. Les captures sont enregistrées
 sous `.context/`. L’émulation ne remplace pas une recette sur iPhone et Android
 réels, notamment pour le clavier système, les barres du navigateur et le mode installé.
@@ -364,7 +430,7 @@ met à jour ces contrats et conserve la référence de marque `5:81` et le chat 
 La [proposition éditable](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=271-3203)
 ajoute « Conversations » à Suivi et Automatisations. `ThreadHistory` partage la
 recherche explicite, la liste à séparateurs, le renommage et la pagination entre
-cette page et le panneau Chiron. Les huit thèmes utilisent les tokens existants.
+cette page et le panneau Chiron. Les quatre thèmes utilisent les tokens existants.
 Ouvrir un résultat reprend le fil sans appel modèle ni remplissage du brouillon.
 La saisie reste celle de `AgentSidePanel` ; les réponses en cours et les brouillons
 restent dans leur fil d’origine. Une erreur de sauvegarde est visible et conserve

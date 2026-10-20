@@ -1,5 +1,5 @@
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
-import { type ZoneKind, zoneLabel } from '@/lib/fr';
+import { capitalized, type ZoneKind, zoneLabel } from '@/lib/fr';
 import type { GlossaryId } from '@/lib/glossary';
 import { cn, getZoneColor } from '@/lib/utils';
 import { GlossaryLink } from './GlossaryLink';
@@ -39,7 +39,7 @@ export function MetricCard({ title, value, kind, zone, subtitle, trend, term }: 
   return (
     <div className="glass-panel p-4 animate-fade-up">
       <div className="flex items-center justify-between mb-2">
-        <span className="flex items-center gap-1 text-xs font-sans text-text-muted uppercase tracking-wider">
+        <span className="flex items-center gap-1 text-xs font-sans text-text-muted">
           {title}
           {term && <GlossaryLink term={term} />}
         </span>
@@ -58,9 +58,9 @@ export function MetricCard({ title, value, kind, zone, subtitle, trend, term }: 
       <div className="text-3xl font-sans font-semibold tabular-nums text-text-primary mb-2">{value}</div>
 
       <div
-        className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-sans uppercase', colors.badge)}
+        className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-sans', colors.badge)}
       >
-        {zoneLabel(kind, zone)}
+        {capitalized(zoneLabel(kind, zone))}
         {zoneColor === 'green' && ' ✓'}
         {zoneColor === 'red' && ' ⚠'}
       </div>

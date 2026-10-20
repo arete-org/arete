@@ -67,7 +67,7 @@ export function AccountDeletionPanel() {
   if (!auth.enabled) return null;
 
   return (
-    <Panel variant="inset" title="SUPPRIMER MON COMPTE">
+    <Panel variant="inset" title="Supprimer mon compte">
       {auth.isOwner ? (
         <p className="text-sm text-text-secondary font-sans">
           Le compte propriétaire ne peut pas être supprimé depuis l’application : l’instance resterait sans
@@ -80,7 +80,7 @@ export function AccountDeletionPanel() {
             <p className="text-sm text-text-secondary font-sans">La déconnexion a échoué : relance-la.</p>
           )}
           <Button variant="danger" onClick={leave}>
-            SE DÉCONNECTER
+            Se déconnecter
           </Button>
         </div>
       ) : (
@@ -118,7 +118,7 @@ export function AccountDeletionPanel() {
             disabled={typed !== DELETE_CONFIRMATION}
           >
             {!deletion.isPending && <Trash2 className="w-4 h-4" />}
-            {deletion.isPending ? 'SUPPRESSION…' : 'SUPPRIMER DÉFINITIVEMENT'}
+            {deletion.isPending ? 'Suppression…' : 'Supprimer définitivement'}
           </Button>
         </div>
       )}

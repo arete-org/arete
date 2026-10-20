@@ -93,7 +93,7 @@ function CalendarDay({ date, planned, actual, isToday, today, onClick }: Calenda
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-[11px] font-sans text-text-muted tracking-wider">REPOS</span>
+          <span className="text-[11px] font-sans text-text-muted tracking-wider">Repos</span>
         </div>
       )}
     </div>

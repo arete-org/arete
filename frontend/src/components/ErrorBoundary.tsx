@@ -49,7 +49,7 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback;
       return (
         <div className="min-h-[400px] flex flex-col items-center justify-center gap-4 p-8">
-          <div className="text-red-500 font-sans text-sm uppercase tracking-wider">
+          <div className="text-danger-red font-sans text-sm font-medium">
             Erreur d'affichage
           </div>
           <p className="text-text-muted text-sm text-center max-w-md">

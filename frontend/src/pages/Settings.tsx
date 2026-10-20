@@ -27,19 +27,19 @@ const AdminTab = lazy(importChunk(() => import('./settings/AdminTab').then((m) =
 const AboutTab = lazy(importChunk(() => import('./settings/AboutTab').then((m) => ({ default: m.AboutTab }))));
 
 const TABS = [
-  { id: 'profile', label: 'PROFIL', icon: User },
-  { id: 'goals', label: 'OBJECTIFS', icon: Target },
-  { id: 'workout', label: 'NOTATION', icon: Dumbbell },
-  { id: 'connections', label: 'CONNEXIONS', icon: Watch },
-  { id: 'coach', label: 'COACH', icon: AreteMark },
-  { id: 'gamification', label: 'GAMIFICATION', icon: Target },
-  { id: 'appearance', label: 'APPARENCE', icon: Palette },
-  { id: 'data', label: 'DONNÉES', icon: Database },
-  { id: 'system', label: 'SYSTÈME', icon: Terminal },
-  { id: 'about', label: 'À PROPOS', icon: Info },
+  { id: 'profile', label: 'Profil', icon: User },
+  { id: 'goals', label: 'Objectifs', icon: Target },
+  { id: 'workout', label: 'Notation', icon: Dumbbell },
+  { id: 'connections', label: 'Connexions', icon: Watch },
+  { id: 'coach', label: 'Coach', icon: AreteMark },
+  { id: 'gamification', label: 'Gamification', icon: Target },
+  { id: 'appearance', label: 'Apparence', icon: Palette },
+  { id: 'data', label: 'Données', icon: Database },
+  { id: 'system', label: 'Système', icon: Terminal },
+  { id: 'about', label: 'À propos', icon: Info },
 ] as const;
 /** Listed for the owner and admins only. */
-const ADMIN_TAB = { id: 'admin', label: 'ADMINISTRATION', icon: Users } as const;
+const ADMIN_TAB = { id: 'admin', label: 'Administration', icon: Users } as const;
 
 type Tab = (typeof TABS)[number] | typeof ADMIN_TAB;
 type TabId = Tab['id'];
@@ -144,13 +144,13 @@ export function SettingsPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-void p-6 flex items-center justify-center">
-        <LoadingState message="CHARGEMENT DES RÉGLAGES…" />
+        <LoadingState message="Chargement des réglages…" />
       </div>
     );
   }
 
   if (isError) {
-    return <ErrorState message="RÉGLAGES INDISPONIBLES" onRetry={() => refetch()} />;
+    return <ErrorState message="Réglages indisponibles" onRetry={() => refetch()} />;
   }
 
   const tabProps = { settings, updateSetting };
@@ -230,28 +230,28 @@ function SaveStatusContent({ status }: { status: SaveStatus }) {
       return (
         <>
           <Spinner />
-          ENREGISTREMENT…
+          Enregistrement…
         </>
       );
     case 'saved':
       return (
         <>
           <Check className="w-4 h-4" />
-          ENREGISTRÉ
+          Enregistré
         </>
       );
     case 'error':
       return (
         <>
           <X className="w-4 h-4 text-danger-red" />
-          ÉCHEC
+          Échec
         </>
       );
     default:
       return (
         <>
           <Save className="w-4 h-4" />
-          ENREGISTRER
+          Enregistrer
         </>
       );
   }

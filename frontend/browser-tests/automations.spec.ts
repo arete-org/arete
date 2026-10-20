@@ -34,7 +34,7 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
       return route.fulfill({ json: [] });
     });
     await page.goto('/follow-up');
-    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
+    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     await page.getByLabel('Message au coach').fill('Mon brouillon à conserver.');
     await page.getByRole('button', { name: 'Masquer le coach', exact: true }).filter({ visible: true }).first().click();
     await page.getByRole('link', { name: /Après ta sortie longue/ }).click();
@@ -75,7 +75,7 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
     await page.screenshot({ path: `../.context/validation-${theme}-${width}.png`, animations: 'disabled' });
     await panel.getByRole('button', { name: 'Approuver', exact: true }).click();
     await expect(panel.getByText('Décision enregistrée.', { exact: true })).toBeVisible();
-    await panel.getByRole('button', { name: 'En parler à Chiron ↗' }).click();
+    await panel.getByRole('button', { name: 'En parler au coach ↗' }).click();
     await expect(page.getByLabel('Message au coach')).toHaveValue('Mon brouillon à conserver.');
     expect(modelCalls).toBe(0);
     await page.getByRole('button', { name: 'Masquer le coach', exact: true }).filter({ visible: true }).first().click();

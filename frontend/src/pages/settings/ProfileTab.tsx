@@ -11,7 +11,7 @@ export function ProfileTab({ settings, updateSetting }: SettingsTabProps) {
   const zones = useMemo(() => timezoneGroups(settings.timezone), [settings.timezone]);
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-sans text-text-primary mb-4">PROFIL</h2>
+      <h2 className="text-lg font-sans text-text-primary mb-4">Profil</h2>
 
       <div className="space-y-4">
         <Field label="Nom affiché">

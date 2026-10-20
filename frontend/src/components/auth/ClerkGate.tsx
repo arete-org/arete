@@ -230,7 +230,7 @@ function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGat
     return (
       <GateScreen>
         <ErrorState
-          message="AUTHENTIFICATION MAL CONFIGURÉE"
+          message="Authentification mal configurée"
           onRetry={() => {
             setLeaving('yes');
             leave().catch(() => setLeaving('failed'));
@@ -243,7 +243,7 @@ function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGat
     return (
       <GateScreen>
         <ErrorState
-          message="SESSION EXPIRÉE"
+          message="Session expirée"
           onRetry={() => {
             setLeaving('yes');
             leave().catch(() => setLeaving('failed'));
@@ -256,7 +256,7 @@ function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGat
   if (current.status === 'error') {
     return (
       <GateScreen>
-        <ErrorState message="COMPTE INJOIGNABLE" onRetry={() => setAttempt((n) => n + 1)} />
+        <ErrorState message="Compte injoignable" onRetry={() => setAttempt((n) => n + 1)} />
       </GateScreen>
     );
   }

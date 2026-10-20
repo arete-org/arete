@@ -12,9 +12,9 @@ export function AboutTab() {
   const { consent, setConsent } = useAuthState();
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-sans text-text-primary">À PROPOS</h2>
+      <h2 className="text-lg font-sans text-text-primary">À propos</h2>
 
-      <Panel variant="inset" title="TEXTES">
+      <Panel variant="inset" title="Textes">
         <div className="space-y-3">
           <LegalReader />
           <p className="text-xs text-text-muted font-sans">
@@ -24,7 +24,7 @@ export function AboutTab() {
         </div>
       </Panel>
 
-      <Panel variant="inset" title="CONSENTEMENT">
+      <Panel variant="inset" title="Consentement">
         {consent ? (
           <ConsentStatus consent={consent} onWithdrawn={setConsent} />
         ) : (
@@ -73,17 +73,17 @@ function ConsentStatus({
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="danger" strong onClick={() => withdraw.mutate()} loading={withdraw.isPending}>
-              CONFIRMER LE RETRAIT
+              Confirmer le retrait
             </Button>
             <Button variant="outline" onClick={() => setConfirming(false)} disabled={withdraw.isPending}>
-              ANNULER
+              Annuler
             </Button>
           </div>
         </div>
       ) : (
         <Button variant="danger" onClick={() => setConfirming(true)}>
           <ShieldOff className="size-4" />
-          RETIRER MON CONSENTEMENT
+          Retirer mon consentement
         </Button>
       )}
       {withdraw.isError && (

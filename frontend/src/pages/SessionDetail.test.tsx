@@ -136,7 +136,7 @@ it('says why a session without a recording has no curve', async () => {
     weather: null,
   });
   renderAt('/log/sessions/12');
-  expect(await screen.findByText('PAS DE FLUX POUR CETTE SÉANCE')).toBeTruthy();
+  expect(await screen.findByText('Pas de flux pour cette séance')).toBeTruthy();
   expect(screen.queryByRole('img', { name: /Tracé GPS/ })).toBeNull();
   expect(screen.queryByText('Météo au départ')).toBeNull();
 });
@@ -144,7 +144,7 @@ it('says why a session without a recording has no curve', async () => {
 it('rejects an id that is not a number without asking the server', () => {
   vi.mocked(analyticsApi.getSessionDetail).mockClear();
   renderAt('/log/sessions/abc');
-  expect(screen.getByText('SÉANCE INTROUVABLE')).toBeTruthy();
+  expect(screen.getByText('Séance introuvable')).toBeTruthy();
   expect(analyticsApi.getSessionDetail).not.toHaveBeenCalled();
 });
 

@@ -25,7 +25,7 @@ const proposal = {
 };
 
 /** The athlete's evening; every request but the auth configuration is recorded. */
-async function evening(page: Page, theme = 'dark') {
+async function evening(page: Page, theme = 'encre') {
   const requests: string[] = [];
   const answers: unknown[] = [];
   await page.clock.setFixedTime(NOW);
@@ -117,7 +117,7 @@ for (const { width, height, name } of [
 
 test('mobile light: decline a missed session’s replanning in one tap', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  const { answers } = await evening(page, 'light');
+  const { answers } = await evening(page, 'pierre');
   await page.goto('/');
   const card = page.getByRole('article').filter({ hasText: 'Séance manquée' });
   await expect(card).toBeVisible();

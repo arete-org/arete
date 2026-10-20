@@ -3,7 +3,7 @@ import { coachStream } from './coachStream';
 
 async function openCoach(page: Page, query = '?contextGaugeAlways=false') {
   await page.goto(`/planning${query}`);
-  await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
+  await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
   return page.getByRole('complementary', { name: 'Coach IA' });
 }
 

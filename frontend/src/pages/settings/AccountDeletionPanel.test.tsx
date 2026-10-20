@@ -47,7 +47,7 @@ function setup(auth: Partial<AuthState> = {}, signOut = vi.fn(async () => {})) {
 }
 
 const confirmation = () => screen.getByLabelText('Tape SUPPRIMER pour confirmer');
-const deleteButton = () => screen.getByRole('button', { name: /SUPPRIMER DÉFINITIVEMENT/ });
+const deleteButton = () => screen.getByRole('button', { name: /Supprimer définitivement/ });
 function confirmDeletion() {
   fireEvent.change(confirmation(), { target: { value: 'SUPPRIMER' } });
   fireEvent.click(deleteButton());
@@ -114,7 +114,7 @@ it('keeps the erasure on screen and offers to sign out again if even that fails'
   expect(await screen.findByText('La déconnexion a échoué : relance-la.')).toBeTruthy();
   expect(screen.getByText(/Ton compte et tes données sont supprimés/)).toBeTruthy();
   expect(screen.queryByText(/Suppression impossible/)).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'SE DÉCONNECTER' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
   await waitFor(() => expect(signOut).toHaveBeenCalledTimes(2));
 });
 
@@ -157,7 +157,7 @@ it('offers to sign out when the data is gone but the login could not be deleted'
   confirmDeletion();
   expect(await screen.findByText(detail)).toBeTruthy();
   expect(localStorage.getItem(THREADS_7)).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'SE DÉCONNECTER' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }));
   await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
 });
 
@@ -169,5 +169,5 @@ it('explains to the owner why their account stays', () => {
 
 it('is absent without sign-in', () => {
   setup({ enabled: false });
-  expect(screen.queryByText('SUPPRIMER MON COMPTE')).toBeNull();
+  expect(screen.queryByText('Supprimer mon compte')).toBeNull();
 });

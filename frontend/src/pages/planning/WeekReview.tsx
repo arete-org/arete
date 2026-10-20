@@ -52,7 +52,7 @@ const CALENDAR: Record<string, string> = {
 function Tile({ label, value, detail, term }: { label: string; value: string; detail?: string; term?: GlossaryId }) {
   return (
     <div className="ui-inset min-w-0 p-3">
-      <p className="flex items-center gap-1 text-[11px] font-sans uppercase tracking-wide text-text-muted">
+      <p className="flex items-center gap-1 text-[11px] font-sans text-text-muted">
         {label}
         {term && <GlossaryLink term={term} />}
       </p>
@@ -75,7 +75,7 @@ function Recap({ recap, review }: { recap: WeekRecap; review: WeeklyReview }) {
           detail={`sur ${minutes(recap.minutes_planned)} prévues`}
         />
         <div className="ui-inset min-w-0 p-3">
-          <p className="flex items-center gap-1 text-[11px] font-sans uppercase tracking-wide text-text-muted">
+          <p className="flex items-center gap-1 text-[11px] font-sans text-text-muted">
             Régularité
             <GlossaryLink term="regularite" />
           </p>

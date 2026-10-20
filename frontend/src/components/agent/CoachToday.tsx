@@ -7,6 +7,7 @@ import { coachApi, coachTodayKey, discussWithCoach, type Followup, type Proposal
 import { invalidateAfterSession } from '@/lib/queryKeys';
 import { dayLabel, type DayOutcome } from '@/lib/renegotiation';
 import { readableError } from '@/lib/utils';
+import { useCoachWords } from '@/lib/coachName';
 
 function description(value: Record<string, unknown> | null) {
   if (!value) return 'Repos';
@@ -89,7 +90,7 @@ export function ProposalCard({
     ? proposal.decision === 'move' ? 'Déplacer' : 'Laisser de côté'
     : 'Appliquer';
   return <article className="space-y-3 rounded-xl border border-neon-cyan/25 bg-neon-cyan/5 p-4">
-    <p className="text-xs uppercase tracking-wide text-neon-cyan">{stale ? 'Proposition périmée' : missed ? 'Séance manquée' : 'Proposition'} · {proposal.date}</p>
+    <p className="text-xs text-neon-cyan">{stale ? 'Proposition périmée' : missed ? 'Séance manquée' : 'Proposition'} · {proposal.date}</p>
     {group.length > 1 ? <>
       <p className="font-semibold">{discussion ? 'Examiner les étapes ensemble' : 'Proposé pour la journée'}</p>
       <ul className="space-y-1 text-sm">{group.map(p => <li key={p.id}>{description(p.original)} → {outcome(p)}</li>)}</ul>
@@ -127,7 +128,7 @@ export function FollowupCard({ followup }: { followup: Followup }) {
   const check = async () => { const result = await checked.refetch(); if (result.isSuccess) { setUncertain(false); action.reset(); await client.invalidateQueries({ queryKey: coachTodayKey }); } };
   if (current.state !== 'pending') return <p role="status" className="p-3 text-sm">{current.state === 'answered' ? `Ressenti enregistré : ${current.rpe}/10${current.notes ? ` — ${current.notes}` : ''}` : 'Suivi passé.'}</p>;
   return <article className="rounded-xl border border-text-muted/20 p-4 space-y-3">
-    <p className="text-xs uppercase tracking-wide text-neon-purple">Pour mieux te connaître</p>
+    <p className="text-xs text-neon-purple">Pour mieux te connaître</p>
     <p className="font-semibold">{current.question}</p>
     <Link className="text-sm text-neon-cyan underline" to={`/log/sessions/${current.session_id}`}>Voir la séance</Link>
     <form className="space-y-3" onSubmit={e => { e.preventDefault(); action.mutate('answer'); }}>
@@ -155,9 +156,10 @@ export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { ena
   const client = useQueryClient();
   const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled, refetchOnWindowFocus: refetchOnFocus });
   const prepare = useMutation({ mutationFn: coachApi.prepare, onSuccess: data => client.setQueryData(coachTodayKey, data) });
+  const coach = useCoachWords();
   // The last answer, which takes the focus as its card leaves.
   const [outcome, setOutcome] = useState<DayOutcome | null>(null);
-  return <Panel title="Avec Chiron aujourd’hui">
+  return <Panel title={coach.today}>
     <div className="space-y-3">
       {outcome && <RenegotiationOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />}
       {query.isPending && <p role="status">Chargement du suivi…</p>}
@@ -166,7 +168,7 @@ export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { ena
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button variant="outline" size="sm" aria-describedby="coach-prepare-hint" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>
-        <p id="coach-prepare-hint" className="text-xs text-text-muted">Chiron relit ta préparation et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
+        <p id="coach-prepare-hint" className="text-xs text-text-muted">{coach.The} relit ta préparation et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
       </div>
     </div>
   </Panel>;

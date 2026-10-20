@@ -84,7 +84,7 @@ test('a fresh account sees the texts and cannot reach the app before consenting'
   const health = page.getByRole('checkbox', { name: /article 9 du RGPD/ });
   await expect(terms).not.toBeChecked();
   await expect(health).not.toBeChecked();
-  const accept = page.getByRole('button', { name: /ACCEPTER ET CONTINUER/ });
+  const accept = page.getByRole('button', { name: /Accepter et continuer/ });
   await expect(accept).toBeDisabled();
   await terms.check();
   await expect(accept).toBeDisabled();

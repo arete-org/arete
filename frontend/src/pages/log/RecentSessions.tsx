@@ -18,6 +18,7 @@ const SOURCE_BADGE: Record<string, string> = {
   garmin: 'bg-info-blue/20 text-info-blue',
   manual: 'bg-text-muted/20 text-text-muted',
 };
+const SOURCE_LABEL: Record<string, string> = { strava: 'Strava', garmin: 'Garmin', manual: 'Manuel' };
 
 /** Recent cardio sessions with inline RPE/notes editing. */
 export function RecentSessions() {
@@ -68,20 +69,20 @@ export function RecentSessions() {
     });
   };
 
-  if (isLoading) return <LoadingState message="CHARGEMENT DES SÉANCES…" />;
-  if (isError) return <ErrorState message="ÉCHEC DU CHARGEMENT DES SÉANCES" onRetry={() => refetch()} />;
+  if (isLoading) return <LoadingState message="Chargement des séances…" />;
+  if (isError) return <ErrorState message="Échec du chargement des séances" onRetry={() => refetch()} />;
 
   const sessions = (data?.sessions || []).filter((s) => !linked.has(s.id));
   if (sessions.length === 0) {
     return (
       <Panel animate={false}>
-        <EmptyState message="AUCUNE SÉANCE CARDIO" action="Importe un fichier FIT, saisis-la sans montre ou synchronise Garmin" />
+        <EmptyState message="Aucune séance cardio" action="Importe un fichier FIT, saisis-la sans montre ou synchronise Garmin" />
       </Panel>
     );
   }
 
   return (
-    <Panel title="SÉANCES RÉCENTES" delay={0.1}>
+    <Panel title="Séances récentes" delay={0.1}>
       <div className="space-y-2">
         <PushOffer moment="session" />
         {sessions.map((s) => {
@@ -121,11 +122,11 @@ export function RecentSessions() {
                   {s.source && (
                     <span
                       className={cn(
-                        'px-1.5 py-0.5 rounded text-[10px] font-sans uppercase',
+                        'px-1.5 py-0.5 rounded text-[10px] font-sans',
                         SOURCE_BADGE[s.source] ?? SOURCE_BADGE.manual
                       )}
                     >
-                      {s.source}
+                      {SOURCE_LABEL[s.source] ?? s.source}
                     </span>
                   )}
                   {!editing && <RpeBadge rpe={s.rpe} showEmpty />}
@@ -145,7 +146,7 @@ export function RecentSessions() {
               {editing && (
                 <div className="mt-3 pt-3 border-t border-text-muted/10 space-y-3 animate-fade-in">
                   <div>
-                    <label className="text-xs font-sans text-text-muted uppercase block mb-1">RPE (1-10)</label>
+                    <label className="text-xs font-sans text-text-muted block mb-1">RPE (1-10)</label>
                     <input
                       type="range"
                       min={1}
@@ -174,7 +175,7 @@ export function RecentSessions() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-sans text-text-muted uppercase block mb-1">Notes</label>
+                    <label className="text-xs font-sans text-text-muted block mb-1">Notes</label>
                     <Textarea
                       value={editNotes}
                       onChange={(e) => setEditNotes(e.target.value)}
@@ -185,10 +186,10 @@ export function RecentSessions() {
                   </div>
                   <div className="flex gap-2 justify-end">
                     <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>
-                      ANNULER
+                      Annuler
                     </Button>
                     <Button size="sm" strong onClick={saveEdit} loading={updateMutation.isPending}>
-                      {updateMutation.isPending ? 'ENREGISTREMENT…' : 'ENREGISTRER'}
+                      {updateMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
                     </Button>
                   </div>
                 </div>

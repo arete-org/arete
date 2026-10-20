@@ -267,7 +267,7 @@ export function SessionCard({
             <SessionFacts session={realised} />
           ) : (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-sans">
-              <span className="text-text-primary uppercase tracking-wider">{typeLabel}</span>
+              <span className="text-text-primary">{typeLabel}</span>
               <span className="text-text-muted capitalize">{planned.sport}</span>
               {targets.map((t) => (
                 <span key={t} className="text-text-muted">

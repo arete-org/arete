@@ -142,7 +142,7 @@ def confirm(command: ConfirmOnboarding) -> dict:
         return get_progress()
     if file.revision or command.expected_revision:
         raise memory.MemoryConflict(
-            "Profil déjà enregistré ou modifié. Relis-le avant de le corriger avec Chiron."
+            "Profil déjà enregistré ou modifié. Relis-le avant de le corriger avec le coach."
         )
     memory.append_entry(
         memory.PROFILE_LEDGER,

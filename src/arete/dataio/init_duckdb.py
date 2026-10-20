@@ -243,7 +243,7 @@ CREATE TABLE IF NOT EXISTS app.user_settings (
     coach_briefing_enabled  BOOLEAN DEFAULT TRUE,  -- the coach writes a daily briefing
     auto_adapt_enabled      BOOLEAN DEFAULT TRUE,  -- readiness adapts today's session
     push_to_garmin_enabled  BOOLEAN DEFAULT FALSE, -- schedule it on Garmin's calendar
-    theme                   VARCHAR DEFAULT 'dark',    -- 'light', 'dark', 'darker', 'abyss'
+    theme                   VARCHAR DEFAULT 'system',  -- 'system', 'pierre', 'prune', 'odyssey', 'encre'
     exercise_abbreviations  VARCHAR DEFAULT '{}',      -- JSON: {"bp": "bench press", "ng": "neutral grip", ...}
     weekly_volume_target_kg INTEGER DEFAULT 20000,     -- strength tonnage goal per week
     lthr                    INTEGER,                   -- threshold heart rate, drives HR zones

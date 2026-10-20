@@ -49,7 +49,7 @@ it('shows each week against each indicator, the current one first and on its own
   expect(kpis).toHaveBeenCalledWith(12);
   const headers = within(table).getAllByRole('columnheader').map((cell) => cell.textContent);
   expect(headers).toEqual([
-    'SEMAINE DU',
+    'Semaine du',
     'Comptes actifs',
     'Abonnés aux notifications',
     'Séances de force saisies',
@@ -102,7 +102,7 @@ it('exports the table as CSV, raw values beside their counts', async () => {
   mount();
 
   await screen.findByRole('table');
-  fireEvent.click(screen.getByRole('button', { name: /EXPORTER EN CSV/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Exporter en CSV/ }));
 
   expect(click).toHaveBeenCalledOnce();
   expect(createObjectURL).toHaveBeenCalledOnce();
@@ -132,9 +132,9 @@ it('exports the table as CSV, raw values beside their counts', async () => {
 it('says when the server has no indicator and when it fails', async () => {
   vi.spyOn(adminApi, 'kpis').mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('down'));
   const first = mount();
-  expect(await screen.findByText('AUCUN INDICATEUR')).toBeTruthy();
-  expect((screen.getByRole('button', { name: /EXPORTER EN CSV/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect(await screen.findByText('Aucun indicateur')).toBeTruthy();
+  expect((screen.getByRole('button', { name: /Exporter en CSV/ }) as HTMLButtonElement).disabled).toBe(true);
   first.unmount();
   mount();
-  expect(await screen.findByText('INDICATEURS INDISPONIBLES')).toBeTruthy();
+  expect(await screen.findByText('Indicateurs indisponibles')).toBeTruthy();
 });

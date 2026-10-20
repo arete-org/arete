@@ -6,6 +6,7 @@ import { coachApi, coachTodayKey } from '@/lib/coachToday';
 import { readableError } from '@/lib/utils';
 import { InboxPriority } from '@/components/AutomationInbox';
 import { CoachTodayPanel } from './CoachToday';
+import { useCoachWords } from '@/lib/coachName';
 
 /** Source cards remain usable when coordination is observing or unavailable. */
 export function CoachingAttention({
@@ -17,6 +18,7 @@ export function CoachingAttention({
 }) {
   const client = useQueryClient();
   const query = useCoachingAttention(enabled);
+  const coach = useCoachWords();
   const prepare = useMutation({
     mutationFn: coachApi.prepare,
     onSuccess: async (data) => {
@@ -26,7 +28,7 @@ export function CoachingAttention({
   });
   const unavailable = query.isError ? (
     <p role="alert" className="text-xs text-danger-red">
-      Priorités de Chiron indisponibles.{' '}
+      Priorités {coach.of} indisponibles.{' '}
       <button className="min-h-11 underline" onClick={() => void query.refetch()}>
         Réessayer
       </button>
@@ -44,7 +46,7 @@ export function CoachingAttention({
     );
   }
   return (
-    <Panel title="À suivre avec Chiron">
+    <Panel title={`À suivre avec ${coach.the}`}>
       <div className="space-y-3">
         {unavailable}
         {query.data.items.map((item, index) => (
@@ -73,7 +75,7 @@ export function CoachingAttention({
         ))}
         {query.data.items.length === 0 && (
           <p className="text-sm text-text-muted">
-            Le suivi est à jour. Chiron reste disponible quand tu en as besoin.
+            Le suivi est à jour. {coach.The} reste disponible quand tu en as besoin.
           </p>
         )}
         {query.data.remaining > 0 && (

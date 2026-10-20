@@ -59,7 +59,7 @@ for (const width of [320, 390, 430]) {
     await expect(page.locator('[aria-live="polite"]').getByText('Pectoraux', { exact: true })).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const content = (await page.locator('.page-shell').boundingBox())!;
-    const bubble = (await page.getByRole('button', { name: 'Demander à Chiron' }).boundingBox())!;
+    const bubble = (await page.getByRole('button', { name: 'Demander au coach' }).boundingBox())!;
     // WebKit rounds scroll offsets to device pixels; allow one CSS pixel at the boundary.
     expect(content.y + content.height).toBeLessThanOrEqual(bubble.y + 1);
     await page.evaluate(() => window.scrollTo(0, 350));
@@ -71,7 +71,7 @@ for (const width of [320, 390, 430]) {
     await entry.tap();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Demander à Chiron' })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Demander au coach' })).toBeHidden();
     await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
     await expect(dialog).toBeHidden();
     await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(position, 0);
@@ -93,18 +93,18 @@ for (const width of [320, 390, 430]) {
     await page.screenshot({ path: `../.context/mobile-journal-${width}-${info.project.name}.png` });
     await page.getByRole('button', { name: 'Cardio', exact: true }).tap();
     await entry.tap();
-    await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Séance sans montre' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Fermer' }).tap();
     await nav.getByRole('link', { name: 'Tableau de bord' }).tap();
     // The RPG is off: the day's form reads in plain words, with no game tag nor level.
     const form = page.locator('.dashboard-secondary');
-    await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
     await expect(form.getByText('Charge de la semaine')).toBeVisible();
     await expect(form.getByText(/^(HP|MP|XP|TSS)$/)).toHaveCount(0);
     await expect(form.getByText(/joueur|niveau/i)).toHaveCount(0);
     await noOverflow(page);
     await page.getByRole('link', { name: 'Saisir une séance', exact: true }).tap();
-    await expect(dialog.getByRole('heading', { name: 'SAISIR UNE SÉANCE' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Saisir une séance' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
     await nav.getByRole('link', { name: 'Profil', exact: true }).tap();
     await expect(page.getByRole('heading', { name: 'Mon profil' })).toBeInViewport();
@@ -117,7 +117,7 @@ test('floating default migrates once, survives navigation and fits the keyboard'
   await fixture(page);
   await page.goto('/log');
   await safeArea(page);
-  const launcher = page.getByRole('button', { name: 'Demander à Chiron', exact: true });
+  const launcher = page.getByRole('button', { name: 'Demander au coach', exact: true });
   await launcher.tap();
   const panel = page.getByRole('complementary', { name: 'Coach IA' });
   await expect(panel).toHaveAttribute('data-display', 'floating');
@@ -170,10 +170,10 @@ test('short viewport keeps planning and cardio forms reachable with keyboard and
   await dialog.getByRole('button', { name: 'Annuler', exact: true }).tap();
   await page.goto('/log?tab=cardio&new=1');
   dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Séance sans montre' })).toBeVisible();
   await page.route('**/api/garmin/actual', route => route.fulfill({ status: 503, json: { detail: 'Indisponible' } }));
   await dialog.getByPlaceholder('Footing au parc').fill('Séance à conserver');
-  await dialog.getByRole('button', { name: 'ENREGISTRER', exact: true }).tap();
+  await dialog.getByRole('button', { name: 'Enregistrer', exact: true }).tap();
   await expect(dialog.getByText(/Enregistrement impossible/)).toBeVisible();
   await expect(dialog.getByPlaceholder('Footing au parc')).toHaveValue('Séance à conserver');
   await noOverflow(page);
@@ -186,7 +186,7 @@ for (const [width, height] of [[375, 812], [844, 390]] as const) {
     await page.setViewportSize({ width, height });
     await page.goto('/log?tab=cardio&new=1');
     let dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Séance sans montre' })).toBeVisible();
     const date = (await dialog.getByLabel('Date', { exact: true }).boundingBox())!;
     const sport = (await dialog.locator('select').boundingBox())!;
     expect(sport.height).toBeGreaterThanOrEqual(44);
@@ -212,7 +212,7 @@ test('touch navigation and display changes preserve a live response and manual d
   try {
     await page.goto('/planning');
     await expect(page.getByRole('heading', { name: 'Planning', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Demander à Chiron' }).tap();
+    await page.getByRole('button', { name: 'Demander au coach' }).tap();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     const input = panel.getByLabel('Message au coach');
     await input.fill('Comment adapter ma semaine ?');
@@ -251,7 +251,7 @@ test('landscape respects lateral safe areas and preserves the draft through rota
   });
   await expect(page.getByRole('heading', { name: 'Planning', exact: true })).toBeVisible();
   expect((await page.getByRole('link', { name: 'Arete · Accueil' }).boundingBox())!.x).toBeGreaterThanOrEqual(47);
-  await page.getByRole('button', { name: 'Demander à Chiron' }).tap();
+  await page.getByRole('button', { name: 'Demander au coach' }).tap();
   const panel = page.getByRole('complementary', { name: 'Coach IA' });
   const input = panel.getByLabel('Message au coach');
   await input.fill('Brouillon en paysage');
@@ -311,7 +311,7 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
     const chromium = info.project.name === 'mobile-chromium';
     if (entry === 'launcher') {
       await page.goto('/');
-      await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
       await page.waitForLoadState('networkidle');
       await page.evaluate(() => window.scrollTo(0, 300));
       await expect.poll(pageY).toBe(300);
@@ -319,7 +319,7 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
       await expect(panel.getByText(/^Message 24\./)).toBeInViewport();
     } else {
       await page.goto('/onboarding');
-      await page.getByRole('button', { name: 'Ouvrir Chiron' }).tap();
+      await page.getByRole('button', { name: 'Ouvrir le coach' }).tap();
       await expect(page).toHaveURL(/\/$/);
       await expect(panel.getByRole('region', { name: 'Ton point de départ' })).toContainText('Réponse 30');
       await page.waitForLoadState('networkidle');
@@ -399,7 +399,7 @@ for (const [width, height] of [[844, 390], [1280, 800]] as const) for (const not
     if (!notice) await page.route('**/api/garmin/sync/ensure', route => route.fulfill({ json: { state: 'fresh' } }));
     const ensured = page.waitForResponse('**/api/garmin/sync/ensure');
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
     await ensured;
     const status = page.getByRole('status').filter({ hasText: 'Garmin' });
     if (notice) await expect(status).toBeVisible();
@@ -439,7 +439,7 @@ for (const [width, locked] of [[767, true], [768, false], [1024, false]] as cons
     await page.setViewportSize({ width, height: 844 });
     await fixture(page);
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
     await openCoach(page);
     await expect(page.getByRole('complementary', { name: 'Coach IA' })).toBeVisible();
     if (locked) await expect(page.locator('html')).toHaveCSS('overflow-y', 'hidden');
@@ -468,11 +468,11 @@ test('touch: closing the session entry opened from Home returns Home, and its da
   await fixture(page);
   await page.goto('/');
   await safeArea(page);
-  const briefing = page.getByRole('heading', { name: 'MA FORME DU JOUR' });
+  const briefing = page.getByRole('heading', { name: 'Ma forme du jour' });
   await expect(briefing).toBeVisible();
   await page.getByRole('link', { name: 'Saisir une séance', exact: true }).tap();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'SAISIR UNE SÉANCE' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Saisir une séance' })).toBeVisible();
   const date = dialog.getByLabel('Date', { exact: true });
   await expect(date).toHaveValue('2026-10-15');
   await fitsDialog(page, date);
@@ -490,7 +490,7 @@ test('touch: closing the session entry opened from Home returns Home, and its da
 
   // Without a page before it (a link opened in a new tab), closing lands on Home too.
   await page.goto('/log?tab=cardio&new=1');
-  await expect(dialog.getByRole('heading', { name: 'SÉANCE SANS MONTRE' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Séance sans montre' })).toBeVisible();
   await fitsDialog(page, dialog.getByLabel('Date', { exact: true }));
   await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
   await expect(page).toHaveURL(/\/$/);
@@ -501,7 +501,7 @@ test('touch: closing the session entry opened from Home returns Home, and its da
   const journal = page.getByRole('heading', { name: 'Journal', exact: true });
   await expect(journal).toBeVisible();
   await page.getByRole('button', { name: 'Saisir une séance', exact: true }).tap();
-  await expect(dialog.getByRole('heading', { name: 'SAISIR UNE SÉANCE' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Saisir une séance' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Fermer', exact: true }).tap();
   await expect(dialog).toBeHidden();
   await expect(page).toHaveURL(/\/log$/);
@@ -595,15 +595,16 @@ test('touch: a Garmin strength session gets its loads from the Journal in four i
   await noOverflow(page);
   await page.screenshot({ path: '../.context/are-132/completion-mobile.png', animations: 'disabled' });
   await text.fill('Développé couché 3x10@80\nSquat 5x5@100'); // 2
-  await dialog.getByRole('button', { name: 'ANALYSER' }).tap(); // 3
-  await dialog.getByRole('button', { name: 'ENREGISTRER' }).tap(); // 4
+  await dialog.getByRole('button', { name: 'Analyser' }).tap(); // 3
+  await dialog.getByRole('button', { name: 'Enregistrer' }).tap(); // 4
 
-  await expect(dialog.getByText('SÉANCE ENREGISTRÉE')).toBeVisible();
+  await expect(dialog.getByText('Séance enregistrée')).toBeVisible();
   await expect(dialog.getByRole('region', { name: 'Nouveaux records' })).toBeVisible();
   expect(completions).toEqual([{ text: 'Développé couché 3x10@80\nSquat 5x5@100' }]);
   await page.screenshot({ path: '../.context/are-132/completed-mobile.png', animations: 'disabled' });
   // The completed draft leaves the list; its screen stays until closed.
   await expect(drafts).toBeHidden();
-  await dialog.getByRole('button', { name: 'FERMER', exact: true }).tap();
+  // The header's close icon shares the name: tap the closing action under the result.
+  await dialog.getByRole('button', { name: 'Fermer', exact: true }).last().tap();
   await expect(page).toHaveURL(/\/log$/);
 });

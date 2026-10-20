@@ -35,22 +35,22 @@ const DAY_LABEL: Record<string, string> = {
   sunday: 'DIM',
 };
 const GOALS = [
-  { value: 'maintenance', label: 'MAINTIEN', desc: 'Garder le niveau actuel' },
-  { value: 'build', label: 'CONSTRUCTION', desc: 'Monter la charge progressivement' },
-  { value: 'peak', label: 'AFFÛTAGE', desc: 'Être au pic le jour J' },
-  { value: 'recovery', label: 'RÉCUPÉRATION', desc: 'Phase de récupération active' },
+  { value: 'maintenance', label: 'Maintien', desc: 'Garder le niveau actuel' },
+  { value: 'build', label: 'Construction', desc: 'Monter la charge progressivement' },
+  { value: 'peak', label: 'Affûtage', desc: 'Être au pic le jour J' },
+  { value: 'recovery', label: 'Récupération', desc: 'Phase de récupération active' },
 ];
 
 export function GoalsTab({ settings, updateSetting }: SettingsTabProps) {
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-sans text-text-primary mb-4">OBJECTIFS</h2>
+      <h2 className="text-lg font-sans text-text-primary mb-4">Objectifs</h2>
 
       <RaceGoalsPanel />
 
       <div className="space-y-6">
         <div>
-          <label className="text-xs font-sans text-text-muted uppercase block mb-3">Objectif principal</label>
+          <label className="text-xs font-sans text-text-muted block mb-3">Objectif principal</label>
           <div className="grid grid-cols-2 gap-3">
             {GOALS.map((goal) => (
               <button
@@ -88,7 +88,7 @@ export function GoalsTab({ settings, updateSetting }: SettingsTabProps) {
         </Field>
 
         <div>
-          <label className="text-xs font-sans text-text-muted uppercase block mb-3">Jours de repos préférés</label>
+          <label className="text-xs font-sans text-text-muted block mb-3">Jours de repos préférés</label>
           <div className="flex flex-wrap gap-2">
             {DAYS.map((day) => (
               <button
@@ -102,7 +102,7 @@ export function GoalsTab({ settings, updateSetting }: SettingsTabProps) {
                   updateSetting('rest_day_preference', updated);
                 }}
                 className={cn(
-                  'px-3 py-1.5 rounded text-xs font-sans uppercase transition-all',
+                  'px-3 py-1.5 rounded text-xs font-sans transition-all',
                   settings.rest_day_preference.includes(day)
                     ? 'bg-neon-purple/20 text-neon-purple border border-neon-purple/30'
                     : 'bg-abyss text-text-muted border border-text-muted/20 hover:border-text-muted/40'
@@ -115,7 +115,7 @@ export function GoalsTab({ settings, updateSetting }: SettingsTabProps) {
         </div>
 
         <div className="border-t border-text-muted/10 pt-6">
-          <label className="text-xs font-sans text-text-muted uppercase block mb-1">Repères physiologiques</label>
+          <label className="text-xs font-sans text-text-muted block mb-1">Repères physiologiques</label>
           <p className="text-xs text-text-muted mb-1">
             Les zones cardiaques sont calculées à partir de ton seuil. Sans seuil, elles retombent sur la FC max.
           </p>

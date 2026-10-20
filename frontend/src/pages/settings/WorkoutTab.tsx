@@ -44,10 +44,10 @@ export function WorkoutTab({ settings, updateSetting }: SettingsTabProps) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-sans text-text-primary mb-4">NOTATION DES SÉANCES</h2>
+      <h2 className="text-lg font-sans text-text-primary mb-4">Notation des séances</h2>
 
       <div>
-        <label className="text-xs font-sans text-text-muted uppercase block mb-2">
+        <label className="text-xs font-sans text-text-muted block mb-2">
           Abréviations d'exercices
         </label>
         <p className="text-xs text-text-muted font-sans mb-4">
@@ -113,7 +113,7 @@ export function WorkoutTab({ settings, updateSetting }: SettingsTabProps) {
           disabled={!newAbbrev.trim() || !newFull.trim()}
         >
           <Plus className="w-4 h-4" />
-          AJOUTER
+          Ajouter
         </Button>
       </div>
 

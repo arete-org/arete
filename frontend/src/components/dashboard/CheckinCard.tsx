@@ -152,7 +152,7 @@ export function CheckinCard({
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <ClipboardCheck aria-hidden className="w-4 h-4 text-neon-cyan" />
-          <h2 id={`${id}-title`} className="text-sm font-sans text-text-muted uppercase tracking-wider">
+          <h2 id={`${id}-title`} className="text-[15px] font-sans font-medium text-text-primary">
             Check-in du matin
           </h2>
         </div>

@@ -62,7 +62,7 @@ export function TrainingPacesPanel() {
           </div>
           {equivalents && (
             <div>
-              <p className="text-xs font-sans text-text-muted uppercase mb-1">Équivalences de course</p>
+              <p className="text-xs font-sans text-text-muted mb-1">Équivalences de course</p>
               <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-sm">
                 {(Object.keys(RACE_LABEL) as RaceKey[]).map((key) => (
                   <div key={key} className="flex justify-between gap-2">

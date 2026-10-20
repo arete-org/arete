@@ -284,12 +284,8 @@ test('mobile prioritizes sessions, uses one focus ring and stays usable in every
     for (const theme of [
       'pierre',
       'prune',
-      'light',
-      'dark',
-      'darker',
-      'abyss',
-      'performance',
       'odyssey',
+      'encre',
     ]) {
       await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(

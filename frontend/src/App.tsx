@@ -23,6 +23,7 @@ import { DashboardPage, SettingsPage } from '@/pages';
 import { OnboardingEntry } from '@/components/OnboardingEntry';
 import { loadLogPage, loadPlanningPage, loadWeekReviewPage } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
+import { useCoachWords } from '@/lib/coachName';
 
 const FollowUpPage = lazy(importChunk(() => import('@/pages/FollowUp').then(m => ({ default: m.FollowUpPage }))));
 const NotFoundPage = lazy(importChunk(() => import('@/pages/NotFound').then(m => ({ default: m.NotFoundPage }))));
@@ -85,6 +86,12 @@ function PersistedQueries({ children }: { children: ReactNode }) {
 function RouteContent({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   return <div key={pathname} className="route-content">{children}</div>;
+}
+
+/** The launcher reads the opt-in below the query provider that App mounts. */
+function CoachLauncherLabel({ busy }: { busy: boolean }) {
+  const coach = useCoachWords();
+  return <>{busy ? `${coach.The} répond…` : `Demander ${coach.to}`}</>;
 }
 
 function OutsideOnboarding({ children }: { children: ReactNode }) {
@@ -229,7 +236,7 @@ function App() {
                 aria-controls="coach-panel" aria-expanded={false}
                 onClick={event => { triggerRef.current = event.currentTarget; setAgentOpen(true); }}
                 onPointerEnter={preloadAgentMarkdown} onFocus={preloadAgentMarkdown}
-              ><AreteMark size={18} />{agentBusy ? 'Chiron répond…' : 'Demander à Chiron'}</button>}</OutsideOnboarding>
+              ><AreteMark size={18} /><CoachLauncherLabel busy={agentBusy} /></button>}</OutsideOnboarding>
               <RouteAwareCoach
                 display={display.mode}
                 onDisplayChange={display.setMode}

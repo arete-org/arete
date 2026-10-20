@@ -146,7 +146,7 @@ export function RenegotiateMenu({
               ) : (
                 menu.data.reasons.map((reason) => (
                   <section key={reason.id} aria-labelledby={`${id}-${reason.id}`}>
-                    <h3 id={`${id}-${reason.id}`} className="text-[11px] font-sans uppercase tracking-wider text-text-muted">
+                    <h3 id={`${id}-${reason.id}`} className="text-[11px] font-sans text-text-muted">
                       {reason.label}
                     </h3>
                     <div className="mt-1 grid gap-1.5 sm:grid-cols-2">

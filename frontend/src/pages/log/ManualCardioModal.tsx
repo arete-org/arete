@@ -69,7 +69,7 @@ export function ManualCardioModal({
 
   return (
     <Modal mobileSheet open={open} onClose={dismiss} className="max-w-md p-4 sm:p-6">
-      <ModalHeader title="SÉANCE SANS MONTRE" icon={<Plus className="w-5 h-5" />} onClose={dismiss} className="mb-4" />
+      <ModalHeader title="Séance sans montre" icon={<Plus className="w-5 h-5" />} onClose={dismiss} className="mb-4" />
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -173,11 +173,11 @@ export function ManualCardioModal({
 
         <Button type="submit" strong size="lg" fullWidth loading={createMutation.isPending}>
           {createMutation.isPending ? (
-            'ENREGISTREMENT…'
+            'Enregistrement…'
           ) : (
             <>
               <Check className="w-4 h-4" />
-              ENREGISTRER
+              Enregistrer
             </>
           )}
         </Button>

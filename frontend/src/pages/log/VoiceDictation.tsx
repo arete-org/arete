@@ -72,10 +72,10 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
             <>
               <Button variant="danger" strong onClick={recorder.stop}>
                 <Square className="w-4 h-4" />
-                ARRÊTER · {clock(recorder.elapsedMs)}
+                Arrêter · {clock(recorder.elapsedMs)}
               </Button>
               <Button variant="outline" size="sm" onClick={recorder.cancel}>
-                ANNULER
+                Annuler
               </Button>
               <span
                 className="w-2 h-2 rounded-full bg-danger-red animate-pulse motion-reduce:animate-none"
@@ -96,12 +96,12 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
             >
               <Mic className="w-4 h-4" />
               {sending
-                ? 'TRANSCRIPTION…'
+                ? 'Transcription…'
                 : recorder.status === 'requesting'
-                  ? 'AUTORISE LE MICRO…'
+                  ? 'Autorise le micro…'
                   : failure
-                    ? 'RÉESSAYER'
-                    : 'DICTER LA SÉANCE'}
+                    ? 'Réessayer'
+                    : 'Dicter la séance'}
             </Button>
           )}
 
@@ -111,7 +111,7 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
               size="sm"
               onClick={() => abortRef.current?.abort()}
             >
-              ANNULER
+              Annuler
             </Button>
           )}
         </div>

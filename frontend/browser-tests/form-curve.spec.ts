@@ -84,7 +84,7 @@ test('without a race, a compact call to set one, and the curve read only once on
   await page.waitForLoadState('networkidle');
   // Below the fold on a phone: nothing read yet.
   expect(requests).not.toContain('/api/dashboard/form-curve');
-  await page.getByRole('heading', { name: 'COURBE DE FORME' }).scrollIntoViewIfNeeded();
+  await page.getByRole('heading', { name: 'Courbe de forme' }).scrollIntoViewIfNeeded();
   await expect(page.locator('figcaption')).toContainText('Sur 12 semaines, ta forme de fond est passée de 32 à 40.');
   expect(requests.filter(p => p === '/api/dashboard/form-curve')).toHaveLength(1);
 });

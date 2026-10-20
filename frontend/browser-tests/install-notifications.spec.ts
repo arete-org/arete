@@ -80,7 +80,7 @@ test('notification kinds and quiet hours are saved with the settings', async ({ 
   await expect(page.getByRole('checkbox', { name: /Message du soir \(si activé/ })).toBeEnabled();
   await expect(page.getByRole('checkbox', { name: /Rappel la veille/ })).toBeDisabled();
   await page.getByLabel('Début des heures calmes').fill('22:00');
-  await page.getByRole('button', { name: 'ENREGISTRER' }).click();
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
   await expect.poll(() => saved.length).toBe(1);
   expect(saved[0].notification_preferences.kinds.imports).toBe(false);
   expect(saved[0].notification_preferences.kinds.briefing).toBe(true);

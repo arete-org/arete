@@ -75,7 +75,7 @@ def test_retries_do_not_duplicate_and_forgotten_profile_cannot_be_resurrected():
     assert onboarding.confirm(body) == first
     assert memory.read_file("profile.md").content.count("Mon point de départ") == 1
     memory.delete_file("profile.md")
-    with pytest.raises(memory.MemoryConflict):
+    with pytest.raises(memory.MemoryConflict, match="avec le coach"):
         onboarding.confirm(body)
     assert onboarding.confirmed_context()["content"] == ""
     assert onboarding.get_progress()["status"] == "completed"

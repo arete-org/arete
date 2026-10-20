@@ -47,9 +47,9 @@ test('loading pages reads the RPG snapshot and logging a session syncs it once',
   expect(reads.length).toBeGreaterThanOrEqual(2);
 
   await page.goto('/log?tab=cardio');
-  await page.getByRole('button', { name: 'SANS MONTRE' }).click();
-  await page.getByRole('button', { name: 'ENREGISTRER' }).click();
-  await expect(page.getByRole('button', { name: 'ENREGISTRER' })).toBeHidden();
+  await page.getByRole('button', { name: 'Sans montre' }).click();
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('button', { name: 'Enregistrer' })).toBeHidden();
   await expect.poll(() => syncs.length).toBe(1);
   // The journal's summary shows the sync's answer: the cache holds it before the reload.
   await expect(page.getByText('Dernier reçu : Séance sans montre')).toBeVisible();

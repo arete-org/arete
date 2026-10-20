@@ -126,11 +126,11 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     await expect(page.locator('.onboarding-garmin')).not.toContainText(/connexion|import/i);
     if (index % 2) {
       await page.getByRole('button', { name: 'Connecter Garmin', exact: true }).click();
-      await page.getByLabel('[EMAIL]', { exact: true }).fill('camille@example.com');
-      await page.getByLabel('[MOT DE PASSE]', { exact: true }).fill('illustration-only');
-      await page.getByRole('button', { name: '[CONNECTER]', exact: true }).click();
-      await page.getByLabel('[CODE]', { exact: true }).fill('123456');
-      await page.getByRole('button', { name: '[VÉRIFIER]', exact: true }).click();
+      await page.getByLabel('E-mail', { exact: true }).fill('camille@example.com');
+      await page.getByLabel('Mot de passe', { exact: true }).fill('illustration-only');
+      await page.getByRole('button', { name: 'Connecter', exact: true }).click();
+      await page.getByLabel('Code', { exact: true }).fill('123456');
+      await page.getByRole('button', { name: 'Vérifier', exact: true }).click();
       await expect(page.getByText('Garmin connecté', { exact: true })).toBeVisible();
       await expect(page.getByText(/aucun import confirmé/)).toBeVisible();
       await page.getByRole('button', { name: 'Importer mes activités récentes' }).click();
@@ -143,7 +143,7 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const tooSmall = await page.locator('.onboarding-shell button').evaluateAll(nodes => nodes.filter(n => n.getBoundingClientRect().height > 0 && n.getBoundingClientRect().height < 44).map(n => n.textContent));
     expect(tooSmall).toEqual([]);
-    await page.getByRole('button', { name: 'Enregistrer et ouvrir Chiron' }).click();
+    await page.getByRole('button', { name: 'Enregistrer et ouvrir le coach' }).click();
     await expect(page.getByRole('alert').filter({ hasText: 'Enregistrement non confirmé' })).toBeVisible();
     await expect(page.getByText('3 séance(s) par semaine')).toBeVisible();
     await page.getByRole('button', { name: 'Réessayer l’enregistrement' }).click();
@@ -167,7 +167,7 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     expect(active.reference).toEqual({ kind: 'onboarding', id: 1 });
     expect(active.messages).toEqual([]);
     await page.reload();
-    await page.getByRole('button', { name: 'Demander à Chiron', exact: true }).click();
+    await page.getByRole('button', { name: 'Demander au coach', exact: true }).click();
     await expect(panel.getByRole('region', { name: 'Ton point de départ' })).toContainText('Camille');
     expect(chats).toEqual([]);
     await page.screenshot({ path: `../.context/onboarding/chiron-${theme}-${width}.png` });

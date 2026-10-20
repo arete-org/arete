@@ -48,6 +48,7 @@ import { canRetryMessage, isThinking } from '@/lib/agentActivity';
 import { DocumentAttachments, type AttachmentsHandle } from './agent/DocumentAttachments';
 import { CalendarActionCard } from './agent/CalendarActionCard';
 import { ChartCard } from './agent/ChartCard';
+import { coachWords } from '@/lib/coachName';
 
 const PAGE_LABELS: Record<string, string> = {
   dashboard: 'Tableau de bord',
@@ -140,6 +141,7 @@ export function AgentSidePanel({
   const [showMemory, setShowMemory] = useState(false);
   const { data: preference } = useGamePreference();
   const rpg = preference?.enabled === true;
+  const coachLabel = coachWords(rpg);
   const expanded = display === 'expanded';
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
@@ -270,17 +272,17 @@ export function AgentSidePanel({
       <header className="coach-header flex shrink-0 items-center gap-2 border-b border-text-muted/15 px-4 py-3">
         {floating ? <>
           <AreteMark size={18} />
-          <h2 className="coach-title">Chiron</h2>
+          <h2 className="coach-title">{coachLabel.name}</h2>
           <span className="min-w-0 flex-1 truncate text-[11px] text-text-muted">{page}</span>
         </> : <>
         <div className={cn('flex size-9 shrink-0 items-center justify-center', !rpg && 'rounded-xl border border-neon-cyan/15 bg-neon-cyan/5')}>
           <AreteMark size={36} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="coach-title text-sm font-semibold">Chiron</h2>
+          <h2 className="coach-title text-sm font-semibold">{coachLabel.name}</h2>
           {rpg ? <button onClick={() => setShowHistory(true)} aria-label="Changer de conversation" className="mt-0.5 flex max-w-full items-center gap-1 text-[11px] text-text-muted hover:text-text-primary"><span className="truncate">{active.title}</span><ChevronDown className="size-3 shrink-0" /></button> : <p className="mt-0.5 text-[11px] text-text-muted">{page}</p>}
         </div>
-        <button className="min-h-11 rounded px-2 text-xs text-text-muted hover:text-text-primary" aria-label="Ce que Chiron sait de moi" aria-expanded={showMemory} onClick={() => { setShowMemory(value => !value); setShowHistory(false); }}>Mémoire</button>
+        <button className="min-h-11 rounded px-2 text-xs text-text-muted hover:text-text-primary" aria-label={`Ce que ${coachLabel.the} sait de moi`} aria-expanded={showMemory} onClick={() => { setShowMemory(value => !value); setShowHistory(false); }}>Mémoire</button>
         {onDisplayChange && <button aria-label={expanded ? 'Réduire la conversation' : 'Agrandir la conversation'} onClick={() => onDisplayChange(expanded ? 'sidebar' : 'expanded')} className="ml-auto hidden md:flex size-11 items-center justify-center text-text-muted">{expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>}
         <button
           onClick={() => { setShowHistory((v) => !v); setShowMemory(false); }}
@@ -464,7 +466,7 @@ export function AgentSidePanel({
                           <AreteMark size={24} /> CHIRON
                         </div>
                       )}
-                      <CoachActivity message={message} />
+                      <CoachActivity message={message} coach={coachLabel} />
                       <MessageSurfaces message={message} chiron locked={busy} onAction={text => coach.recordAction(active.id, text)} />
                       <div className="mt-1 flex flex-wrap items-center gap-x-0.5">
                         {message.trace && !message.pending && !message.error && !message.interrupted && <MessageFeedback
@@ -518,6 +520,7 @@ export function AgentSidePanel({
                   className="col-start-1 row-start-1 flex size-11 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-text-primary focus-visible:outline-2 focus-visible:outline-neon-cyan disabled:opacity-30"
                 ><Plus className="size-4" aria-hidden="true" /></button>
                 <SkillInput
+                  coach={coachLabel}
                   key={active.id}
                   inputRef={inputRef}
                   aria-label="Message au coach"
@@ -538,7 +541,7 @@ export function AgentSidePanel({
                       send();
                     }
                   }}
-                  placeholder={floating ? 'Demander à Chiron…' : 'Ton message…'}
+                  placeholder={floating ? `Demander ${coachLabel.to}…` : 'Ton message…'}
                   className={cn('coach-composer-input block min-h-11 max-h-36 min-w-0 flex-1 resize-none appearance-none overflow-x-hidden overflow-y-auto bg-transparent py-1.5 text-sm leading-relaxed outline-none', 'col-start-2 row-start-1 w-full px-1')}
                 />
                 {streaming ? (

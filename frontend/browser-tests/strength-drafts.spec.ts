@@ -58,7 +58,7 @@ test('ignoring a draft moves focus to the next one; free-text names are listed; 
   await expect(dialog.getByRole('textbox', { name: 'Séance en texte libre' })).toHaveValue('Squat arrière 5x5');
   await expect(dialog.getByText('Aussi vu par ta montre, à écrire avec tes mots : barbell shrug (3 séries)')).toBeVisible();
   await dialog.getByRole('textbox', { name: 'Séance en texte libre' }).fill('bench press 3x10@80');
-  await dialog.getByRole('button', { name: 'ANALYSER' }).click();
+  await dialog.getByRole('button', { name: 'Analyser' }).click();
   await expect(dialog.getByText('✓ RECONNU : Développé couché')).toBeVisible();
   await dialog.getByRole('button', { name: 'Fermer', exact: true }).click();
 

@@ -136,7 +136,7 @@ for (const width of [1440, 390]) {
     await expect(page).toHaveURL(/\/log\/sessions\/1$/);
     await expect(page.getByRole('heading', { name: 'Fractionné 5×1000' })).toBeVisible();
     await page.goto(`/analytics/bilan?year=${year - 2}`);
-    await expect(page.getByText(`AUCUNE SÉANCE EN ${year - 2}`)).toBeVisible();
+    await expect(page.getByText(`Aucune séance en ${year - 2}`)).toBeVisible();
     expect(errors).toEqual([]);
   });
 

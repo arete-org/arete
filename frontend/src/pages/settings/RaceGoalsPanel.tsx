@@ -232,7 +232,7 @@ export function RaceGoalsPanel() {
       {/* The settings tab is a transformed, blurred panel: a fixed overlay must leave it. */}
       {createPortal(
         <Modal open={toDelete !== null} onClose={closeDelete} className="max-w-sm p-4 sm:p-6">
-          <ModalHeader title="SUPPRIMER LA COURSE" onClose={closeDelete} className="mb-4" />
+          <ModalHeader title="Supprimer la course" onClose={closeDelete} className="mb-4" />
           <p className="text-sm text-text-secondary mb-2">Supprimer « {toDelete?.name} » ?</p>
           <p className="text-xs text-text-muted mb-6">Les séances à venir générées pour cette course sont supprimées aussi.</p>
           {remove.isError && <p className="text-xs text-danger-red mb-3">{readableError(remove.error)}</p>}

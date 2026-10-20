@@ -44,54 +44,54 @@ function mount(path: string, auth: AuthState = AUTH_DISABLED) {
 async function openAppearance(path = '/settings') {
   const view = mount(path);
   if (path === '/settings') {
-    fireEvent.click(screen.getByRole('button', { name: 'APPARENCE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apparence' }));
   }
-  fireEvent.click(await screen.findByRole('button', { name: 'CLAIR' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Odyssey' }));
   return view;
 }
 
-it('previews light immediately and restores the saved theme on exit', async () => {
+it('previews Odyssey immediately and restores the saved theme on exit', async () => {
   const view = await openAppearance();
-  expect(document.documentElement.dataset.theme).toBe('light');
-  expect(screen.getByRole('button', { name: 'CLAIR' }).getAttribute('aria-pressed')).toBe('true');
-  expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#F4F7FA');
+  expect(document.documentElement.dataset.theme).toBe('odyssey');
+  expect(screen.getByRole('button', { name: 'Odyssey' }).getAttribute('aria-pressed')).toBe('true');
+  expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe('#F5EBDD');
   view.unmount();
-  expect(document.documentElement.dataset.theme).toBe('dark');
+  expect(document.documentElement.dataset.theme).toBe('pierre');
   initializeTheme();
-  expect(document.documentElement.dataset.theme).toBe('dark');
+  expect(document.documentElement.dataset.theme).toBe('pierre');
 });
 
 it('opens the appearance deep link and keeps the preview while switching tabs', async () => {
   const view = await openAppearance('/settings?tab=appearance');
-  fireEvent.click(screen.getByRole('button', { name: 'PROFIL' }));
-  expect(document.documentElement.dataset.theme).toBe('light');
-  fireEvent.click(screen.getByRole('button', { name: 'APPARENCE' }));
-  expect((await screen.findByRole('button', { name: 'CLAIR' })).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(screen.getByRole('button', { name: 'Profil' }));
+  expect(document.documentElement.dataset.theme).toBe('odyssey');
+  fireEvent.click(screen.getByRole('button', { name: 'Apparence' }));
+  expect((await screen.findByRole('button', { name: 'Odyssey' })).getAttribute('aria-pressed')).toBe('true');
   view.unmount();
-  expect(document.documentElement.dataset.theme).toBe('dark');
+  expect(document.documentElement.dataset.theme).toBe('pierre');
 });
 
-it('keeps a successfully saved light theme after exit and reload', async () => {
-  const light = { ...saved, theme: 'light' as const };
-  vi.spyOn(settingsApi, 'update').mockResolvedValue(light);
-  vi.mocked(settingsApi.get).mockResolvedValue(light);
+it('keeps a successfully saved Odyssey theme after exit and reload', async () => {
+  const odyssey = { ...saved, theme: 'odyssey' as const };
+  vi.spyOn(settingsApi, 'update').mockResolvedValue(odyssey);
+  vi.mocked(settingsApi.get).mockResolvedValue(odyssey);
   const view = await openAppearance();
-  fireEvent.click(screen.getByRole('button', { name: 'ENREGISTRER' }));
-  await waitFor(() => expect(client.getQueryData(['settings'])).toEqual(light));
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() => expect(client.getQueryData(['settings'])).toEqual(odyssey));
   view.unmount();
   initializeTheme();
-  expect(document.documentElement.dataset.theme).toBe('light');
+  expect(document.documentElement.dataset.theme).toBe('odyssey');
 });
 
 it('does not persist a preview when saving fails', async () => {
   vi.spyOn(settingsApi, 'update').mockRejectedValue(new Error('Offline'));
   const view = await openAppearance();
-  fireEvent.click(screen.getByRole('button', { name: 'ENREGISTRER' }));
-  await screen.findByText('ÉCHEC');
-  expect(document.documentElement.dataset.theme).toBe('light');
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await screen.findByText('Échec');
+  expect(document.documentElement.dataset.theme).toBe('odyssey');
   view.unmount();
   initializeTheme();
-  expect(document.documentElement.dataset.theme).toBe('dark');
+  expect(document.documentElement.dataset.theme).toBe('pierre');
 });
 
 const SIGNED_IN: AuthState = { ...AUTH_DISABLED, enabled: true, email: 'ana@exemple.fr' };
@@ -100,23 +100,23 @@ it('shows the administration tab to admins only', async () => {
   vi.spyOn(adminApi, 'accounts').mockResolvedValue([]);
   vi.spyOn(adminApi, 'featureFlags').mockResolvedValue({ glm_flash: false, glm_flash_available: true });
   const view = mount('/settings');
-  expect(screen.queryByRole('button', { name: 'ADMINISTRATION' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Administration' })).toBeNull();
   view.unmount();
   const signedIn = mount('/settings', SIGNED_IN);
-  expect(screen.queryByRole('button', { name: 'ADMINISTRATION' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Administration' })).toBeNull();
   signedIn.unmount();
 
   mount('/settings', { ...SIGNED_IN, isAdmin: true });
-  fireEvent.click(screen.getByRole('button', { name: 'ADMINISTRATION' }));
-  expect(await screen.findByRole('heading', { name: 'COMPTES ET ATHLÈTES' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Administration' }));
+  expect(await screen.findByRole('heading', { name: 'Comptes et athlètes' })).toBeTruthy();
   expect(adminApi.accounts).toHaveBeenCalled();
 });
 
 it('falls back to the profile tab on an admin deep link for a non-admin', async () => {
   const accounts = vi.spyOn(adminApi, 'accounts').mockResolvedValue([]);
   mount('/settings?tab=admin', SIGNED_IN);
-  expect(await screen.findByRole('heading', { name: 'PROFIL' })).toBeTruthy();
-  expect(screen.queryByRole('heading', { name: 'COMPTES ET ATHLÈTES' })).toBeNull();
+  expect(await screen.findByRole('heading', { name: 'Profil' })).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Comptes et athlètes' })).toBeNull();
   expect(accounts).not.toHaveBeenCalled();
 });
 
@@ -131,10 +131,10 @@ it('saves coordinated follow-up without requiring push notifications', async () 
   client.setQueryData(['agentMemory'], { files: [] });
   vi.spyOn(settingsApi, 'update').mockResolvedValue(updated);
   mount('/settings?tab=coach');
-  const checkbox = await screen.findByRole('checkbox', { name: /Coordonner les suivis de Chiron/ });
+  const checkbox = await screen.findByRole('checkbox', { name: /Coordonner les suivis du coach/ });
   expect((checkbox as HTMLInputElement).disabled).toBe(false);
   fireEvent.click(checkbox);
-  fireEvent.click(screen.getByRole('button', { name: 'ENREGISTRER' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   await waitFor(() => expect(vi.mocked(settingsApi.update).mock.calls[0]?.[0]).toEqual(expect.objectContaining({
     notifications_enabled: false,
     notification_preferences: expect.objectContaining({ coordinated_coaching: true }),
@@ -146,9 +146,9 @@ it.each(['pierre', 'prune'] as const)('saves %s through the settings API and res
   vi.spyOn(settingsApi, 'update').mockResolvedValue(updated);
   vi.mocked(settingsApi.get).mockResolvedValue(updated);
   const view = await openAppearance();
-  fireEvent.click(screen.getByRole('button', { name: theme.toUpperCase() }));
+  fireEvent.click(screen.getByRole('button', { name: theme[0].toUpperCase() + theme.slice(1) }));
   expect(document.documentElement.dataset.theme).toBe(theme);
-  fireEvent.click(screen.getByRole('button', { name: 'ENREGISTRER' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   await waitFor(() => expect(client.getQueryData(['settings'])).toEqual(updated));
   expect(vi.mocked(settingsApi.update).mock.calls[0][0]).toEqual(expect.objectContaining({ theme }));
   view.unmount();
@@ -168,7 +168,7 @@ it('keeps an unsaved edit when another tab saves, and adopts the fields left alo
     await new Promise((resolve) => setTimeout(resolve, 0)); // React Query notifies on the next tick
   });
   expect((screen.getByDisplayValue('Nouveau nom') as HTMLInputElement).value).toBe('Nouveau nom');
-  fireEvent.click(screen.getByRole('button', { name: /ENREGISTRER/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Enregistrer/ }));
   await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
   expect(update.mock.calls[0][0].display_name).toBe('Nouveau nom');
   expect(update.mock.calls[0][0].notifications_enabled).toBe(false);
@@ -188,7 +188,7 @@ it('keeps quiet hours edited here and a kind another tab turned on, both in the 
     await client.invalidateQueries({ queryKey: ['settings'] });
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  fireEvent.click(screen.getByRole('button', { name: /ENREGISTRER/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Enregistrer/ }));
   await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
   const body = update.mock.calls[0][0];
   expect(body.notification_preferences.quiet_hours?.start).toBe('22:15');
@@ -220,7 +220,7 @@ it('shows the texts and the current consent in À propos, and withdraws it after
   const setConsent = vi.fn();
   mount('/settings?tab=about', { ...SIGNED_IN, consent: CONSENTED, setConsent });
 
-  expect(await screen.findByRole('heading', { name: 'À PROPOS' })).toBeTruthy();
+  expect(await screen.findByRole('heading', { name: 'À propos' })).toBeTruthy();
   const accepted = screen.getByText(/Conditions d’utilisation et politique de confidentialité acceptées le/);
   expect(accepted.textContent).toContain('18 octobre 2026');
   expect(accepted.textContent).toContain('2026-10-draft-1');
@@ -235,9 +235,9 @@ it('shows the texts and the current consent in À propos, and withdraws it after
   const privacy = await screen.findByRole('region', { name: 'Politique de confidentialité' });
   expect(await within(privacy).findByText(/\[NOM DU RESPONSABLE DU TRAITEMENT\], personne physique/)).toBeTruthy();
 
-  fireEvent.click(screen.getByRole('button', { name: /RETIRER MON CONSENTEMENT/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Retirer mon consentement/ }));
   expect(withdraw).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'CONFIRMER LE RETRAIT' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirmer le retrait' }));
   await waitFor(() => expect(setConsent).toHaveBeenCalledWith(withdrawn));
   expect(withdraw).toHaveBeenCalledTimes(1);
 });
@@ -245,5 +245,5 @@ it('shows the texts and the current consent in À propos, and withdraws it after
 it('says no consent is asked on an instance without sign-in', async () => {
   mount('/settings?tab=about');
   expect(await screen.findByText(/aucun consentement n’y est demandé/)).toBeTruthy();
-  expect(screen.queryByRole('button', { name: /RETIRER MON CONSENTEMENT/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Retirer mon consentement/ })).toBeNull();
 });

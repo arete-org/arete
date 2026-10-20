@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject, ty
 import { useQuery } from '@tanstack/react-query';
 import { documentRequest } from '@/lib/documents';
 import { cn, readableError } from '@/lib/utils';
+import { coachWords, type CoachWords } from '@/lib/coachName';
 
 interface SystemSkill { name: string; display_name?: string; description: string; path: string }
 const MAX_SYSTEM_SKILLS = 32;
@@ -35,9 +36,11 @@ type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChan
   value: string;
   onValueChange: (value: string) => void;
   inputRef: RefObject<HTMLTextAreaElement | null>;
+  /** The coach's words for the athlete's mode (coachWords). */
+  coach?: CoachWords;
 };
 
-export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect, ...props }: Props) {
+export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect, coach = coachWords(false), ...props }: Props) {
   const listId = useId();
   const [caret, setCaret] = useState(value.length);
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -82,7 +85,7 @@ export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect
 
   return <>
     {open && <div className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-text-muted/20 bg-abyss shadow-xl">
-      <p className="border-b border-text-muted/15 px-3 py-2 text-xs text-text-muted">Méthodes de Chiron · Entrée pour sélectionner · Échap pour fermer</p>
+      <p className="border-b border-text-muted/15 px-3 py-2 text-xs text-text-muted">Méthodes {coach.of} · Entrée pour sélectionner · Échap pour fermer</p>
       {catalog.isPending ? <p role="status" className="px-3 py-3 text-sm text-text-muted">Chargement des méthodes…</p>
         : catalog.isError ? <div role="alert" className="px-3 py-3 text-sm">
           <p>{readableError(catalog.error)}</p>

@@ -88,7 +88,7 @@ it('keeps the Journal cardio tab after a save opened from Home, and Home after a
 
   fireEvent.click(screen.getByRole('link', { name: 'Sans montre' }));
   dialog = await screen.findByRole('dialog');
-  fireEvent.click(within(dialog).getByRole('button', { name: /ENREGISTRER/ }));
+  fireEvent.click(within(dialog).getByRole('button', { name: /Enregistrer/ }));
   expect(await screen.findByText('Belle sortie.')).toBeTruthy();
   await dialogGone();
   expect(here()).toBe('/log?tab=cardio');
@@ -102,7 +102,7 @@ it('ignores a dismissal while the cardio save is in flight', async () => {
   openTab('/');
   fireEvent.click(screen.getByRole('link', { name: 'Sans montre' }));
   const dialog = await screen.findByRole('dialog');
-  fireEvent.click(within(dialog).getByRole('button', { name: /ENREGISTRER/ }));
+  fireEvent.click(within(dialog).getByRole('button', { name: /Enregistrer/ }));
   await waitFor(() => expect(garminApi.createActual).toHaveBeenCalledOnce());
   fireEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
   fireEvent.keyDown(window, { key: 'Escape' });
@@ -127,13 +127,14 @@ it('ignores a dismissal while the strength save is in flight', async () => {
   fireEvent.click(screen.getByRole('link', { name: 'Saisir une séance' }));
   const dialog = await screen.findByRole('dialog');
   fireEvent.change(within(dialog).getByRole('textbox', { name: 'Séance en texte libre' }), { target: { value: 'Squat 1x5@100' } });
-  fireEvent.click(within(dialog).getByRole('button', { name: /ANALYSER/ }));
-  fireEvent.click(await within(dialog).findByRole('button', { name: /ENREGISTRER/ }));
+  fireEvent.click(within(dialog).getByRole('button', { name: /Analyser/ }));
+  fireEvent.click(await within(dialog).findByRole('button', { name: /Enregistrer/ }));
   await waitFor(() => expect(strengthApi.parseWorkout).toHaveBeenCalledTimes(2));
   fireEvent.click(within(dialog).getByRole('button', { name: 'Fermer' }));
   expect(here()).toBe('/log?new=1');
   finish({ ...parsed, session_id: 90 } as typeof parsed);
-  expect(await within(dialog).findByText('SÉANCE ENREGISTRÉE')).toBeTruthy();
-  fireEvent.click(within(dialog).getByRole('button', { name: 'FERMER' }));
+  expect(await within(dialog).findByText('Séance enregistrée')).toBeTruthy();
+  // The header's close icon shares the name of the closing action under the result.
+  fireEvent.click(within(dialog).getAllByRole('button', { name: 'Fermer' }).at(-1)!);
   expect(await screen.findByRole('heading', { name: 'Accueil' })).toBeTruthy();
 });

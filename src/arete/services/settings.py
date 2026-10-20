@@ -131,6 +131,24 @@ EVENING_FIRST_HOUR = 18
 EVENING_LAST_HOUR = 21
 EVENING_DEFAULT_HOUR = 20
 
+# The browser's palettes (frontend/src/lib/theme.ts); "system" follows the device.
+ThemePreference = Literal["system", "pierre", "prune", "odyssey", "encre"]
+DEFAULT_THEME: ThemePreference = "system"
+# Retired themes (ARE-134): stored rows keep them until the next save, so they
+# are read, and still accepted from an older tab, as the closest kept palette.
+LEGACY_THEMES: dict[str, ThemePreference] = {
+    "light": "pierre",
+    "performance": "pierre",
+    "dark": "encre",
+    "darker": "encre",
+    "abyss": "encre",
+}
+
+
+def migrate_theme(value: object) -> object:
+    """A retired theme as its replacement; anything else is left to validation."""
+    return LEGACY_THEMES.get(value, value) if isinstance(value, str) else value
+
 
 class UserSettingsUpdate(BaseModel):
     display_name: str = "HUNTER"
@@ -144,9 +162,7 @@ class UserSettingsUpdate(BaseModel):
     coach_briefing_enabled: bool = True
     auto_adapt_enabled: bool = False
     push_to_garmin_enabled: bool = False
-    theme: Literal[
-        "light", "dark", "darker", "abyss", "performance", "odyssey", "pierre", "prune"
-    ] = "dark"
+    theme: ThemePreference = DEFAULT_THEME
     exercise_abbreviations: dict[str, str] = {}
     weekly_volume_target_kg: int = Field(ge=1000, le=200000, default=20000)
     lthr: int | None = Field(ge=100, le=220, default=None)
@@ -172,6 +188,11 @@ class UserSettingsUpdate(BaseModel):
             raise ValueError("Fuseau horaire inconnu du serveur.") from exc
         return value
 
+    @field_validator("theme", mode="before")
+    @classmethod
+    def migrate_legacy_theme(cls, value: object) -> object:
+        return migrate_theme(value)
+
 
 class UserSettingsOut(BaseModel):
     user_id: int
@@ -186,7 +207,7 @@ class UserSettingsOut(BaseModel):
     coach_briefing_enabled: bool
     auto_adapt_enabled: bool = False
     push_to_garmin_enabled: bool = False
-    theme: str
+    theme: ThemePreference
     exercise_abbreviations: dict[str, str]
     weekly_volume_target_kg: int
     lthr: int | None
@@ -198,6 +219,13 @@ class UserSettingsOut(BaseModel):
     )
     coach_evening_enabled: bool = False
     coach_evening_hour: int = EVENING_DEFAULT_HOUR
+
+    @field_validator("theme", mode="before")
+    @classmethod
+    def read_theme(cls, value: object) -> object:
+        # A stored row is never rejected: an unknown or empty theme follows the device.
+        value = migrate_theme(value)
+        return value if value in get_args(ThemePreference) else DEFAULT_THEME
 
 
 def _settings_out(settings: dict) -> UserSettingsOut:
@@ -221,7 +249,7 @@ def get_settings():
             fitness_goal="build",
             notifications_enabled=True,
             coach_briefing_enabled=True,
-            theme="dark",
+            theme=DEFAULT_THEME,
             exercise_abbreviations={},
             weekly_volume_target_kg=20000,
             lthr=None,

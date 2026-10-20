@@ -75,7 +75,7 @@ export function FitDropzone({ onUpload, isUploading = false, recentUploads = [] 
 
           <div>
             <span className={cn('text-sm font-sans', isDragOver ? 'text-neon-cyan' : 'text-text-muted')}>
-              {isUploading ? 'IMPORT EN COURS…' : 'DÉPOSE UN FICHIER .FIT ICI'}
+              {isUploading ? 'Import en cours…' : 'Dépose un fichier .FIT ici'}
             </span>
             <div className="text-xs text-text-muted/70 mt-1 font-sans">ou clique pour parcourir</div>
           </div>

@@ -67,7 +67,7 @@ export function Field({ label, children, hint, className, htmlFor, gap = 'md' }:
       <label
         htmlFor={htmlFor}
         className={cn(
-          'text-xs font-sans text-text-muted uppercase block',
+          'text-xs font-sans text-text-muted block',
           gap === 'md' ? 'mb-2' : 'mb-1'
         )}
       >

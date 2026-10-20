@@ -136,7 +136,7 @@ export function DocumentPreview({ threadId, document: doc, onClose }: { threadId
   return createPortal(<Modal open onClose={onClose} padded={false} label={`Aperçu de ${doc.name}`} className="flex h-[min(860px,92dvh)] max-w-6xl flex-col overflow-hidden rounded-xl border-white/10 bg-abyss! shadow-2xl">
     <header className="flex shrink-0 items-center gap-4 border-b border-white/10 px-5 py-5 sm:px-6">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neon-cyan/15 bg-neon-cyan/5 text-neon-cyan"><FileSearch size={20} /></div>
-      <div className="min-w-0 flex-1"><p className="mb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-text-muted">Aperçu du document</p><h2 className="truncate text-sm font-medium text-text-primary sm:text-base" title={doc.name}>{doc.name}</h2></div>
+      <div className="min-w-0 flex-1"><p className="mb-1 text-[10px] font-medium text-text-muted">Aperçu du document</p><h2 className="truncate text-sm font-medium text-text-primary sm:text-base" title={doc.name}>{doc.name}</h2></div>
       <button aria-label="Fermer l’aperçu" onClick={onClose} className="rounded-lg p-2 text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary"><X size={20} /></button>
     </header>
     <PreviewContent threadId={threadId} document={doc} />
