@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { documentRequest } from '@/lib/documents';
+import { Select } from '@/components/ui';
 
 interface Exercise {
   id: number;
@@ -33,10 +34,10 @@ export function StrengthRecords() {
       <h2 className="font-bold">Records de force</h2>
       <label className="block text-xs text-text-muted">
         Exercice
-        <select
+        <Select
           value={id}
           onChange={(e) => setId(e.target.value)}
-          className="block mt-2 min-h-11 w-full rounded border border-text-muted/30 bg-abyss px-3 text-sm text-text-primary"
+          className="block mt-2 min-h-11 text-sm"
         >
           <option value="">Choisir un exercice</option>
           {exercises.data?.map((e) => (
@@ -44,7 +45,7 @@ export function StrengthRecords() {
               {e.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {(exercises.error || records.error) && (
         <p role="alert" className="text-danger-red text-sm">

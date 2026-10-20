@@ -235,6 +235,9 @@ Planning ne possède aucune variante de navigation propre à sa page.
 - `App` réserve les zones de sécurité système et l’espace de la navigation et du
   lanceur. Les tokens `--safe-*`, `--mobile-nav-space` et `--launcher-space` dans
   `index.css` en sont les propriétaires communs, y compris en mode installé.
+  Tant que Chiron est ouvert, `Navigation` publie `--navigation-bottom`, le bord
+  inférieur réel de la barre du bureau (abaissée par l’avis Garmin, puis collée
+  en haut au défilement) : le panneau commence dessous, sans décalage fixe.
 - Le document défile pour les pages. Une navigation vers une autre page repart
   en haut ; le retour navigateur restaure les 100 dernières positions en mémoire.
   La restauration attend au plus deux secondes l’arrivée du contenu différé et

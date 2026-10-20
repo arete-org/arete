@@ -1,5 +1,5 @@
 import { InboxBell } from './AutomationInbox';
-import { lazy, Suspense, type MouseEvent } from 'react';
+import { lazy, Suspense, useRef, type MouseEvent } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { BarChart3, CalendarDays, Dumbbell, LayoutDashboard, Settings } from 'lucide-react';
 import { AreteMark, AreteWordmark } from './AreteBrand';
@@ -9,6 +9,7 @@ import { useAuthState } from '@/components/auth/authState';
 import { preloadAgentMarkdown } from './agent/markdownRenderer';
 import { preloadRoute } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
+import { useNavigationBottom } from '@/hooks/useNavigationBottom';
 
 // Clerk's account menu lives in the lazily loaded auth chunk; it only renders when sign-in is on.
 const AccountButton = lazy(importChunk(() =>
@@ -41,10 +42,13 @@ export function Navigation({
   const profile = { path: '/profile', label: 'Profil', icon: User };
   const mobileItems = [...navItems.slice(0, 4), profile, navItems[4]];
   const auth = useAuthState();
+  const desktopNav = useRef<HTMLElement>(null);
+  useNavigationBottom(desktopNav, agentOpen);
   return (
     <>
       {/* Desktop top nav — hidden on mobile */}
       <nav
+        ref={desktopNav}
         aria-label="Navigation principale"
         className="hidden md:block sticky top-0 z-50 bg-void/95 backdrop-blur-sm border-b border-text-muted/20"
       >

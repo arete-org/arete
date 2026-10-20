@@ -11,15 +11,18 @@ vi.mock('@/lib/api', () => ({ fetchAPI: vi.fn(), strengthApi: {} }));
 vi.mock('@/lib/gamification', () => ({ syncGame: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-it('shows progress and invalidates cached data even after a partial import', async () => {
+it('shows progress outside the live region and announces only the outcome', async () => {
   let finish!: (value: { state: string }) => void;
   vi.mocked(fetchAPI).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
   const client = new QueryClient();
   const invalidate = vi.spyOn(client, 'invalidateQueries');
   render(<QueryClientProvider client={client}><GarminFreshness /></QueryClientProvider>);
-  expect(screen.getByRole('status').textContent).toContain('Vérification Garmin');
+  // The region exists before the outcome, and the transient check is not announced.
+  expect(screen.getByText('Vérification Garmin…')).toBeTruthy();
+  expect(screen.getByRole('status').textContent).toBe('');
   await act(async () => { finish({ state: 'partial' }); });
   expect(screen.getByRole('status').textContent).toContain('incomplète');
+  expect(screen.queryByText('Vérification Garmin…')).toBeNull();
   expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.health });
   expect(invalidate).toHaveBeenCalledWith({ queryKey: qk.cardioSessions });
   expect(syncGame).not.toHaveBeenCalled();
@@ -30,7 +33,8 @@ it.each(['fresh', 'disconnected'])('does not invalidate or settle the game after
   const client = new QueryClient();
   const invalidate = vi.spyOn(client, 'invalidateQueries');
   render(<QueryClientProvider client={client}><GarminFreshness /></QueryClientProvider>);
-  await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+  await waitFor(() => expect(screen.queryByText('Vérification Garmin…')).toBeNull());
+  expect(screen.getByRole('status').textContent).toBe('');
   expect(invalidate).not.toHaveBeenCalled();
   expect(syncGame).not.toHaveBeenCalled();
 });
