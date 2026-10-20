@@ -24,6 +24,8 @@ import { readableError } from '@/lib/utils';
 import { useDailyTip } from '@/lib/dailyTip';
 import { formatDecimal, formatHoursMinutes, weeksAtGoalText } from '@/lib/fr';
 import { cn } from '@/lib/utils';
+import type { GlossaryId } from '@/lib/glossary';
+import { GlossaryLink } from '@/components/GlossaryLink';
 import { importChunk } from '@/lib/chunkReload';
 import { toLocalISODate } from '@/lib/dates';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
@@ -102,12 +104,23 @@ function LogSessionLink() {
   );
 }
 
-function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
+function SectionHeader({ icon, title, term }: { icon: React.ReactNode; title: string; term?: GlossaryId }) {
   return (
     <div className="flex items-center gap-2 mb-4">
       {icon}
       <h2 className="text-sm font-sans text-text-muted uppercase tracking-wider">{title}</h2>
+      {term && <GlossaryLink term={term} />}
     </div>
+  );
+}
+
+/** A recovery row's label with the "?" of its term. */
+function TermLabel({ term, children }: { term: GlossaryId; children: React.ReactNode }) {
+  return (
+    <span className="flex items-center gap-1 text-xs font-sans text-text-muted">
+      {children}
+      <GlossaryLink term={term} />
+    </span>
   );
 }
 
@@ -116,7 +129,7 @@ function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }
  * coach's: récupération, forme, charge); with it, the HP/MP/TSS tags lead.
  * The detail stays on screen: a `title` never shows on a phone.
  */
-function FormBar({ stat, color, tag }: { stat: StatBar; color: string; tag?: string }) {
+function FormBar({ stat, color, tag, term }: { stat: StatBar; color: string; tag?: string; term: GlossaryId }) {
   const value = (
     <span className="text-xs font-sans text-text-secondary tabular-nums">
       {Math.round(stat.current)}/{Math.round(stat.max)}
@@ -134,7 +147,10 @@ function FormBar({ stat, color, tag }: { stat: StatBar; color: string; tag?: str
     return (
       <div>
         <div className="flex items-baseline justify-between gap-3 mb-1">
-          <span className="text-xs font-sans text-text-primary">{stat.label}</span>
+          <span className="flex items-center gap-1 self-center text-xs font-sans text-text-primary">
+            {stat.label}
+            <GlossaryLink term={term} />
+          </span>
           {value}
         </div>
         {bar}
@@ -149,7 +165,10 @@ function FormBar({ stat, color, tag }: { stat: StatBar; color: string; tag?: str
         <span className="w-20 text-right">{value}</span>
       </div>
       <div className="flex flex-wrap justify-between gap-x-2 pl-11 pr-1 text-[11px] font-sans text-text-muted">
-        <span>{stat.label}</span>
+        <span className="flex items-center gap-1">
+          {stat.label}
+          <GlossaryLink term={term} />
+        </span>
         {stat.detail && <span>{stat.detail}</span>}
       </div>
     </div>
@@ -500,9 +519,9 @@ export function DashboardPage() {
                 playerStats && (
                   <div className="space-y-3 mb-4">
                     {/* The RPG's XP is its own ledger (Profile): the weekly load stays TSS. */}
-                    <FormBar stat={playerStats.hp} color="bg-danger-red" tag={rpg ? 'HP' : undefined} />
-                    <FormBar stat={playerStats.mp} color="bg-neon-cyan" tag={rpg ? 'MP' : undefined} />
-                    <FormBar stat={playerStats.xp} color="bg-neon-gold" tag={rpg ? 'TSS' : undefined} />
+                    <FormBar stat={playerStats.hp} color="bg-danger-red" tag={rpg ? 'HP' : undefined} term="preparation" />
+                    <FormBar stat={playerStats.mp} color="bg-neon-cyan" tag={rpg ? 'MP' : undefined} term="tsb" />
+                    <FormBar stat={playerStats.xp} color="bg-neon-gold" tag={rpg ? 'TSS' : undefined} term="tss" />
                   </div>
                 )
               )}
@@ -513,6 +532,7 @@ export function DashboardPage() {
                   title="Équilibre de charge"
                   value={workload?.acwr != null ? formatDecimal(workload.acwr, 2) : '—'}
                   kind="acwr"
+                  term="acwr"
                   zone={workload?.acwr_zone}
                   subtitle="ACWR · cette semaine face aux quatre dernières"
                 />
@@ -520,6 +540,7 @@ export function DashboardPage() {
                   title="Forme"
                   value={fitness?.tsb != null ? formatDecimal(fitness.tsb, 1, true) : '—'}
                   kind="form"
+                  term="tsb"
                   zone={fitness?.form_zone}
                   subtitle="TSB · forme de fond moins fatigue"
                 />
@@ -528,7 +549,7 @@ export function DashboardPage() {
 
             {/* One curve for forme de fond, fatigue and forme: its own lazy request. */}
             <Panel className="p-4">
-              <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="COURBE DE FORME" />
+              <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="COURBE DE FORME" term="ctl" />
               <Suspense
                 fallback={
                   <div className="min-h-[19rem]">
@@ -548,7 +569,7 @@ export function DashboardPage() {
 
             {/* Block 3: Readiness (Garmin) */}
             <Panel className="p-4">
-              <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="RÉCUPÉRATION" />
+              <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="RÉCUPÉRATION" term="preparation" />
 
               {healthPending ? (
                 <Skeleton label="Chargement de la récupération" />
@@ -577,7 +598,7 @@ export function DashboardPage() {
                   <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
                     {healthData.training_readiness_score != null && (
                       <>
-                        <span className="text-xs font-sans text-text-muted">Préparation Garmin</span>
+                        <TermLabel term="preparation">Préparation Garmin</TermLabel>
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.training_readiness_score}/100
                         </span>
@@ -585,7 +606,7 @@ export function DashboardPage() {
                     )}
                     {healthData.hrv_last_night != null && (
                       <>
-                        <span className="text-xs font-sans text-text-muted">VFC</span>
+                        <TermLabel term="vfc">VFC</TermLabel>
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.hrv_last_night} ms
                           {healthData.hrv_status && HRV_WORD[healthData.hrv_status] && (
@@ -596,7 +617,7 @@ export function DashboardPage() {
                     )}
                     {healthData.sleep_score != null && (
                       <>
-                        <span className="text-xs font-sans text-text-muted">Sommeil</span>
+                        <TermLabel term="sommeil">Sommeil</TermLabel>
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.sleep_score}/100
                           {healthData.sleep_duration_sec != null && (
@@ -609,7 +630,7 @@ export function DashboardPage() {
                     )}
                     {healthData.stress_avg != null && (
                       <>
-                        <span className="text-xs font-sans text-text-muted">Stress</span>
+                        <TermLabel term="stress">Stress</TermLabel>
                         <span className="text-xs font-sans text-right">
                           <span className={stressTone(healthData.stress_avg)}>{healthData.stress_avg}</span>
                           <span className="block text-[11px] text-text-secondary">Stress {stressWord(healthData.stress_avg)}</span>

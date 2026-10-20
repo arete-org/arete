@@ -50,6 +50,7 @@ export function ZonesCard({
   return (
     <StatCard
       title="Zones cardiaques"
+      term="zones"
       question="Quelle part du temps passée en facile, et quelle part en dur ?"
       card={card}
       secondaryLabels={['Z4-Z5', 'Temps mesuré']}

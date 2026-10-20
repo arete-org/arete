@@ -32,6 +32,8 @@ export function LoadCard({
       question="Où en sont la forme, la fatigue et la fraîcheur ?"
       card={card}
       secondaryLabels={['Fraîcheur', 'Fatigue', 'ACWR']}
+      term="ctl"
+      secondaryTerms={['tsb', 'atl', 'acwr']}
       previousLabel={previousLabel}
       loading={loading}
       error={error}

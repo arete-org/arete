@@ -30,6 +30,8 @@ export function EfficiencyCard({
       question="Le cœur dérive-t-il quand la sortie s'allonge ?"
       card={card}
       secondaryLabels={['Coût cardiaque']}
+      term="decouplage"
+      secondaryTerms={['cout-cardiaque']}
       previousLabel={previousLabel}
       loading={loading}
       error={error}

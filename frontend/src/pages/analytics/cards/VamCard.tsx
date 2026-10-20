@@ -31,6 +31,7 @@ export function VamCard({
   return (
     <StatCard
       title="Vitesse ascensionnelle"
+      term="vam"
       question="À quelle vitesse je monte, sur 5 min comme sur une heure ? (sorties à pied avec les flux)"
       card={card}
       secondaryLabels={['Record 30 min', 'Meilleure 5 min']}

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Dumbbell, Sparkles } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
+import { GlossaryLink } from '@/components/GlossaryLink';
 import { RpePicker } from '@/components/RpePicker';
 import { Button, Modal, ModalHeader, Panel, RpeBadge } from '@/components/ui';
 import { analyticsApi, strengthApi } from '@/lib/api';
@@ -10,6 +11,7 @@ import { chartRows, formatElapsed, intensityLabel, isFootSport } from '@/lib/act
 import { CHART, COLORS, HR_ZONE_COLORS } from '@/lib/chartTheme';
 import { parseLocalDate } from '@/lib/dates';
 import { sportLabel } from '@/lib/fr';
+import { glossaryHref, type GlossaryId } from '@/lib/glossary';
 import { qk } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import { cn, formatDurationCompact, formatPace, readableError } from '@/lib/utils';
@@ -110,7 +112,12 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
             {start && ` · ${start}`} · {sportLabel(session.sport)} · {SOURCE_LABEL[session.source] ?? session.source}
           </p>
         </div>
-        <RpeBadge rpe={session.rpe} />
+        {session.rpe != null && (
+          <span className="flex shrink-0 items-center gap-1">
+            <RpeBadge rpe={session.rpe} />
+            <GlossaryLink term="rpe" />
+          </span>
+        )}
       </header>
 
       {session.rpe == null && <RpePicker sessionId={session.id} autoFocus={params.get('rpe') === '1'} />}
@@ -281,11 +288,14 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function Row({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
+function Row({ label, value, hint, term }: { label: string; value: ReactNode; hint?: string; term?: GlossaryId }) {
   return (
     <div className="py-2 border-b border-text-muted/10 last:border-0">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-xs font-sans text-text-secondary">{label}</span>
+        <span className="flex items-center gap-1 self-center text-xs font-sans text-text-secondary">
+          {label}
+          {term && <GlossaryLink term={term} />}
+        </span>
         <span className="text-sm font-sans text-text-primary text-right">{value}</span>
       </div>
       {hint && <p className="text-[11px] font-sans text-text-muted mt-0.5">{hint}</p>}
@@ -299,12 +309,13 @@ function Analysis({ metrics, foot }: { metrics: ActivityMetrics; foot: boolean }
       {metrics.decoupling_pct !== undefined && (
         <Row
           label="Découplage cardiaque"
+          term="decouplage"
           value={pct(metrics.decoupling_pct)}
           hint="Évolution de la vitesse par battement en seconde moitié. À interpréter avec le terrain, la chaleur et la durée."
         />
       )}
       {metrics.hr_drift_pct !== undefined && (
-        <Row label="Dérive de la FC" value={pct(metrics.hr_drift_pct)} hint="FC moyenne de la 2e moitié par rapport à la 1re." />
+        <Row label="Dérive de la FC" term="decouplage" value={pct(metrics.hr_drift_pct)} hint="FC moyenne de la 2e moitié par rapport à la 1re." />
       )}
       {foot && metrics.pace_first_half_sec_km !== undefined && metrics.pace_second_half_sec_km !== undefined && (
         <Row
@@ -344,6 +355,7 @@ function Terrain({ terrain }: { terrain: ActivityTerrain }) {
       {terrain.gap_sec_km !== null && (
         <Row
           label="Allure ajustée à la pente (GAP)"
+          term="gap"
           value={pace(terrain.gap_sec_km)}
           hint={`L'allure à plat pour le même effort (coût énergétique de Minetti)${
             effort ? ` : la pente a pesé ${pct(effort)}.` : '.'
@@ -351,7 +363,7 @@ function Terrain({ terrain }: { terrain: ActivityTerrain }) {
         />
       )}
       {VAM_MINUTES.filter((m) => terrain.vam[m] !== undefined).map((m) => (
-        <Row key={m} label={`Vitesse ascensionnelle ${m} min`} value={`${terrain.vam[m].toLocaleString('fr-FR')} m/h`} />
+        <Row key={m} label={`Vitesse ascensionnelle ${m} min`} term="vam" value={`${terrain.vam[m].toLocaleString('fr-FR')} m/h`} />
       ))}
     </Panel>
   );
@@ -547,6 +559,12 @@ function Zones({ zones }: { zones: NonNullable<ActivityDetail['zones']> }) {
           </li>
         ))}
       </ul>
+      <Link
+        to={glossaryHref('zones')}
+        className="mt-2 inline-flex min-h-11 items-center text-xs font-sans text-text-muted hover:text-neon-cyan"
+      >
+        Comprendre les zones
+      </Link>
     </Panel>
   );
 }

@@ -28,6 +28,7 @@ export function CadenceCard({
   return (
     <StatCard
       title="Cadence"
+      term="cadence"
       question="Combien de pas par minute en course ?"
       card={card}
       secondaryLabels={['Longueur de pas']}

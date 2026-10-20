@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { notificationsApi, tipsApi, type DailyTip } from '@/lib/api';
 import { BRIEFING_READ_KEY } from '@/lib/install';
@@ -17,7 +18,7 @@ beforeEach(() => { localStorage.clear(); vi.spyOn(notificationsApi, 'getVapidPub
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 function mount(value = tip, writing = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}><BriefingCard tip={value} writing={writing} stalled={false} refresh={() => {}} /></QueryClientProvider>);
+  return render(<MemoryRouter><QueryClientProvider client={client}><BriefingCard tip={value} writing={writing} stalled={false} refresh={() => {}} /></QueryClientProvider></MemoryRouter>);
 }
 
 it('opens a briefing from its title or action, without writing feedback or sending a message', () => {

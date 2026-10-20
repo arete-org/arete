@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
+import { BookOpen } from 'lucide-react';
 import type { Period } from '@/types';
 import { analyticsApi } from '@/lib/api';
 import { CHART, COLORS } from '@/lib/chartTheme';
@@ -101,12 +102,21 @@ export function AnalyticsPage() {
               </p>
             )}
           </div>
+          <div className="flex shrink-0 gap-2">
+            {/* A phone keeps the sticky banner as it was: its link closes the page. */}
+            <div className="hidden sm:block">
+              <Link to="/analytics/lexique" className="ui-button analytics-year-link gap-2">
+                <BookOpen className="size-4" aria-hidden />
+                Lexique
+              </Link>
+            </div>
             <Link
               to="/analytics/bilan"
               className="ui-button analytics-year-link"
             >
               Bilan annuel
             </Link>
+          </div>
         </div>
         <PeriodSelector period={period} onChange={setPeriod} />
         {data?.prev_start && data.prev_end && <p className="text-xs text-text-muted">
@@ -145,6 +155,7 @@ export function AnalyticsPage() {
       <Section def={SECTIONS[4]}>
         <RecoveryCard
           title="Préparation"
+          term="preparation"
           question="La montre dit-elle que le corps est prêt ?"
           card={cards?.readiness}
           color={COLORS.neonCyan}
@@ -153,6 +164,7 @@ export function AnalyticsPage() {
         />
         <RecoveryCard
           title="VFC"
+          term="vfc"
           question="La variabilité cardiaque tient-elle la charge ?"
           card={cards?.hrv}
           color={CHART.purple}
@@ -161,6 +173,7 @@ export function AnalyticsPage() {
         />
         <RecoveryCard
           title="Sommeil"
+          term="sommeil"
           question="Assez de sommeil pour encaisser ?"
           card={cards?.sleep}
           color={COLORS.infoBlue}
@@ -170,6 +183,7 @@ export function AnalyticsPage() {
         />
         <RecoveryCard
           title="FC de repos"
+          term="fc-repos"
           question="La fréquence de repos dérive-t-elle ?"
           card={cards?.resting_hr}
           color={CHART.red}
@@ -177,6 +191,14 @@ export function AnalyticsPage() {
           {...state}
         />
       </Section>
+
+      <Link
+        to="/analytics/lexique"
+        className="inline-flex min-h-11 items-center gap-2 self-start text-sm text-text-muted hover:text-neon-cyan"
+      >
+        <BookOpen className="size-4" aria-hidden />
+        Lexique : les termes et les seuils expliqués
+      </Link>
     </div>
   );
 }

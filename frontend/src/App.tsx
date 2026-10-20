@@ -42,6 +42,9 @@ const SessionDetailPage = lazy(importChunk(() =>
 const YearReviewPage = lazy(importChunk(() =>
   import('@/pages/YearReview').then((m) => ({ default: m.YearReviewPage })),
 ));
+const GlossaryPage = lazy(importChunk(() =>
+  import('@/pages/Glossary').then((m) => ({ default: m.GlossaryPage })),
+));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -175,6 +178,14 @@ function App() {
                         element={
                           <Suspense fallback={<LoadingState message="Chargement de la page…" />}>
                             <YearReviewPage />
+                          </Suspense>
+                        }
+                      />
+                      <Route
+                        path="/analytics/lexique"
+                        element={
+                          <Suspense fallback={<LoadingState message="Chargement de la page…" />}>
+                            <GlossaryPage />
                           </Suspense>
                         }
                       />
