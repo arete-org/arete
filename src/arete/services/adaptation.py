@@ -90,8 +90,8 @@ def readiness_phrase(score: float, source: str) -> str:
     if source == "garmin_training":
         return f"Préparation Garmin {score:.0f}/100"
     if source == "garmin":
-        return f"Récupération (VFC, sommeil) {score:.0f}/100"
-    return f"Forme estimée par la charge {score:.0f}/100"
+        return f"Préparation (VFC, sommeil) {score:.0f}/100"
+    return f"Préparation estimée par la charge {score:.0f}/100"
 
 
 def declared_fatigue(sleep: int | None, legs: int | None) -> str | None:

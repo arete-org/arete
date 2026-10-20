@@ -126,7 +126,10 @@ def test_the_facts_carry_tomorrow_and_the_message_its_one_question(db):
     (facts,) = seen
     assert "Séance(s) prévue(s) demain :\n- tempo — 50 min — Z4" in facts
     assert "Pourquoi ce message : une séance est prévue demain." in facts
-    assert "Météo prévue demain" in facts and "Charge, forme" in facts
+    assert (
+        "Météo prévue demain" in facts
+        and "Charge, fraîcheur et préparation (ce matin) :\n- Charge aiguë" in facts
+    )
 
 
 def test_a_second_write_finds_the_evening_held_and_pays_nothing(db):

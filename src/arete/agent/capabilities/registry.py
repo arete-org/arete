@@ -166,10 +166,10 @@ Aucun accès aux conversations conservées uniquement dans les navigateurs ni au
     "analytics": Toolkit(
         id="analytics",
         description=(
-            "Analyser l'entraînement : charge (ACWR, monotonie), forme "
-            "(CTL/ATL/TSB), records, séances récentes et détail d'une séance "
-            "(tours, découplage, fractionné), conseils chiffrés sur une "
-            "fenêtre de jours au choix."
+            "Analyser l'entraînement : charge (ACWR, monotonie), forme de fond, "
+            "fatigue et fraîcheur (CTL/ATL/TSB), records, séances récentes et "
+            "détail d'une séance (tours, découplage, fractionné), conseils "
+            "chiffrés sur une fenêtre de jours au choix."
         ),
         tools=ANALYTICS_TOOLS,
         instructions=ANALYTICS_INSTRUCTIONS,

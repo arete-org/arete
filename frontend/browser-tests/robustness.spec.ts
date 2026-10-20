@@ -169,11 +169,11 @@ test('readiness, HRV and stress say their status in words, not only in colour', 
   await mockApi(page);
   await page.goto('/');
   await expect(page.getByText('48', { exact: true })).toBeVisible();
-  await expect(page.getByText('Récupération basse')).toBeVisible();
+  await expect(page.getByText('Préparation basse')).toBeVisible();
   await expect(page.getByText('VFC basse')).toBeVisible();
   await expect(page.getByText('Stress élevé')).toBeVisible();
   await page.getByText('Stress élevé').scrollIntoViewIfNeeded();
-  await page.locator('.glass-panel').filter({ hasText: 'Récupération basse' }).screenshot({ path: '../.context/robustness-statuses-1440.png', animations: 'disabled' });
+  await page.locator('.glass-panel').filter({ hasText: 'Préparation basse' }).screenshot({ path: '../.context/robustness-statuses-1440.png', animations: 'disabled' });
 });
 
 for (const [path, ready] of [['/', /Bonjour/], ['/planning', 'Planning'], ['/log', 'Journal']] as const) {

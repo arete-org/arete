@@ -44,7 +44,7 @@ export function GoalProjectionPanel() {
           </Suspense>
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm font-sans">
             <span className="text-text-secondary">
-              Forme le jour J : <span className="text-neon-gold">{data.race_day.tsb != null ? signed(data.race_day.tsb) : '—'}</span>
+              Fraîcheur le jour J : <span className="text-neon-gold">{data.race_day.tsb != null ? signed(data.race_day.tsb) : '—'}</span>
             </span>
             <span className="text-text-secondary">
               Pic de forme de fond : <span className="text-neon-cyan">{data.peak_ctl != null ? Math.round(data.peak_ctl) : '—'}</span>

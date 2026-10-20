@@ -117,7 +117,7 @@ for (const width of [1440, 390, 320]) {
     await page.goto('/');
     await expect(page.getByText('1,27', { exact: true })).toBeVisible();
     // Each bar's "?" names its bar: the readiness is linked from three places.
-    await expect(page.getByRole('link', { name: 'Qu’est-ce que la préparation ? (barre Récupération)' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Qu’est-ce que la préparation ? (barre Préparation)' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Qu’est-ce que la charge d’entraînement (TSS) ? (barre Charge de la semaine)' })).toBeVisible();
     await page.getByRole('link', { name: 'Qu’est-ce que le ratio charge aiguë / chronique (ACWR) ?' }).click();
     await expect(page).toHaveURL(/\/analytics\/lexique#acwr$/);

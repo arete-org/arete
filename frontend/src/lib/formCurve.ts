@@ -4,7 +4,7 @@ import { fetchAPI } from './api';
 import { formatDecimal } from './fr';
 import { qk } from './queryKeys';
 
-/** One day of the curve: forme de fond (CTL), fatigue (ATL) and forme (TSB). */
+/** One day of the curve: forme de fond (CTL), fatigue (ATL) and fraîcheur (TSB). */
 export interface CurvePoint {
   date: string;
   ctl: number;
@@ -104,7 +104,7 @@ const signed = (value: number) => formatDecimal(Math.round(value), 0, true);
 
 /**
  * The curve in words, for screen readers and a phone at a glance: where the
- * forme de fond went over the weeks shown, today's fatigue and forme, and
+ * forme de fond went over the weeks shown, today's fatigue and fraîcheur, and
  * race morning when a race is projected.
  */
 export function curveSummary(curve: FormCurve): string {
@@ -116,13 +116,13 @@ export function curveSummary(curve: FormCurve): string {
   const weeks = Math.max(1, Math.round((parseDay(now.date) - parseDay(first.date)) / (7 * 86_400_000)));
   const parts = [
     `Sur ${weeks} semaine${weeks > 1 ? 's' : ''}, ta forme de fond est passée de ${whole(first.ctl)} à ${whole(now.ctl)}.`,
-    `Aujourd’hui : fatigue ${whole(now.atl)}, forme ${signed(now.tsb)}.`,
+    `Aujourd’hui : fatigue ${whole(now.atl)}, fraîcheur ${signed(now.tsb)}.`,
   ];
   const race = curve.race_day;
   const end = curve.series[curve.series.length - 1];
   if (curve.goal_id != null && end && race?.ctl != null && race.tsb != null) {
     if (planReachesRaceWeek(curve, end.date))
-      parts.push(`Projection le jour J : forme de fond ${whole(race.ctl)}, forme ${formBand(race.tsb, daysBetween(curve.today, end.date))}.`);
+      parts.push(`Projection le jour J : forme de fond ${whole(race.ctl)}, fraîcheur ${formBand(race.tsb, daysBetween(curve.today, end.date))}.`);
     else parts.push(`${plannedUntil(curve.last_planned)}, la courbe suppose du repos ensuite.`);
   }
   return parts.join(' ');

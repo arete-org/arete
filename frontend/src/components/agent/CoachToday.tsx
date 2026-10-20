@@ -98,7 +98,7 @@ export function ProposalCard({
       <p className="font-semibold">{discussion ? 'Examiner les étapes ensemble' : `Proposé : ${outcome(proposal)}`}</p>
     </>}
     <p className="text-sm text-text-secondary">{proposal.reason}</p>
-    <p className="text-xs text-text-muted">{missed ? 'Aucune activité enregistrée aujourd’hui' : proposal.readiness_measured_on ? `Mesure de récupération du ${proposal.readiness_measured_on}` : 'Récupération estimée par la charge'} · Rien n’a encore changé.</p>
+    <p className="text-xs text-text-muted">{missed ? 'Aucune activité enregistrée aujourd’hui' : proposal.readiness_measured_on ? `Mesure de préparation du ${proposal.readiness_measured_on}` : 'Préparation estimée par la charge'} · Rien n’a encore changé.</p>
     {/* 44 px targets: the card is answered with a thumb. */}
     <div className="flex flex-wrap gap-2 [&>button]:min-h-11">
       {!discussion && <Button disabled={disabled || stale} onClick={() => action.mutate('apply')}>{applyLabel}</Button>}
@@ -166,7 +166,7 @@ export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { ena
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button variant="outline" size="sm" aria-describedby="coach-prepare-hint" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>
-        <p id="coach-prepare-hint" className="text-xs text-text-muted">Chiron relit ta récupération et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
+        <p id="coach-prepare-hint" className="text-xs text-text-muted">Chiron relit ta préparation et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
       </div>
     </div>
   </Panel>;

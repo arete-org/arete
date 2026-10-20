@@ -343,13 +343,13 @@ def _recommendations_form(
             Recommendation(
                 priority=Priority.LOW,
                 category=Category.PERFORMANCE,
-                title="✅ Forme optimale",
+                title="✅ Fraîcheur optimale",
                 message=f"TSB ({tsb:.0f}) : vous êtes frais et prêt",
                 reason="TSB entre 10 et 25 : idéal pour performer",
                 actions=[
                     "Bon moment pour un test ou une compétition",
                     "Vous pouvez maintenir ce niveau quelques jours",
-                    "Profitez de cette forme !",
+                    "Profitez de cette fraîcheur !",
                 ],
             )
         )
@@ -364,7 +364,7 @@ def _recommendations_form(
                 reason="TSB > 25 : vous pourriez perdre en condition",
                 actions=[
                     "Reprenez progressivement l'entraînement",
-                    "Bon moment pour un pic de forme puis reprendre",
+                    "Bon moment pour une course ou un test, puis reprendre",
                     "Ne restez pas trop longtemps à ce niveau",
                 ],
             )
@@ -424,7 +424,7 @@ def _recommendations_ramp_rate(ramp_rate: float | None) -> list[Recommendation]:
                 category=Category.PROGRESSION,
                 title="Charge en diminution",
                 message=f"Ramp rate ({ramp_rate:.1f} pts/semaine) : baisse significative",
-                reason="Votre forme (CTL) diminue",
+                reason="Votre forme de fond (CTL) diminue",
                 actions=[
                     "Normal si vous êtes en décharge",
                     "Sinon, reprenez progressivement",

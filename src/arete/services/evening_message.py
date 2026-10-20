@@ -360,7 +360,7 @@ def facts_text(evening: Survey) -> str:
                 lambda: [session_line(s) for s in evening.tomorrow],
             ),
             bullet_block("Météo prévue demain", lambda: _weather_lines(day)),
-            bullet_block("Charge, forme et récupération (ce matin)", readiness),
+            bullet_block("Charge, fraîcheur et préparation (ce matin)", readiness),
             bullet_block("Aujourd'hui", today),
             *([bullet_block("Course proche", lambda: races)] if races else []),
         ]

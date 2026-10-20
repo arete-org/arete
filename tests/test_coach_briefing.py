@@ -729,6 +729,8 @@ class TestBriefingFacts:
         assert "Préparation Garmin (VFC, sommeil, cette nuit) : 71/100" in garmin
         assert "Préparation estimée par la charge" in model
         assert garmin.count("Préparation") == 1
+        # The heading names what its lines hold, in the dashboard's words.
+        assert "Charge, fraîcheur et préparation :\n- Charge aiguë" in garmin
 
     def test_the_facts_carry_the_decision_and_its_reason(self, clean_day):
         from arete.services.briefing import briefing_facts

@@ -93,7 +93,7 @@ class CurvePoint(BaseModel):
     date: date_type
     ctl: float = Field(description="Forme de fond")
     atl: float = Field(description="Fatigue")
-    tsb: float = Field(description="Forme")
+    tsb: float = Field(description="Fraîcheur")
     planned: bool = Field(description="The day's load comes from the plan")
 
 
