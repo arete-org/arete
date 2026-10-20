@@ -85,7 +85,7 @@ TOOL_LABELS = {
     "delete": "Suppression dans tes notes",
     "append_journal": "Mise à jour du journal",
     "get_workload": "Analyse de la charge",
-    "get_fitness": "Analyse de la forme",
+    "get_fitness": "Analyse de la forme de fond et de la fraîcheur",
     "get_training_advice": "Préparation des recommandations",
     "list_recent_sessions": "Lecture de tes séances",
     "get_activity_detail": "Analyse de la séance",

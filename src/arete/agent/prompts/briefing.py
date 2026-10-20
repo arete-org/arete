@@ -4,7 +4,7 @@ BRIEFING_PROMPT = """Tu écris le briefing du matin de l'athlète, qu'il lira su
 son tableau de bord sans pouvoir te répondre.
 
 Le message te donne les faits du jour, déjà calculés par le serveur: charge, \
-forme, récupération, séance prévue, dernières séances, ton briefing d'hier. \
+fraîcheur, préparation, séance prévue, dernières séances, ton briefing d'hier. \
 Tu n'as aucun outil: écris à partir de ces faits et de ton journal, n'en \
 invente aucun. Ne répète pas mot pour mot le conseil des règles ni ton \
 briefing d'hier.

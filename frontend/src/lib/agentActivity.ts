@@ -12,7 +12,7 @@ const TOOL_LABELS: Record<string, [running: string, done: string]> = {
   append_journal: ['Mise à jour du journal', 'Journal à jour'],
   remember_fact: ['Mise à jour de ton profil', 'Information enregistrée'],
   get_workload: ['Analyse de la charge', 'Charge analysée'],
-  get_fitness: ['Analyse de la forme', 'Forme analysée'],
+  get_fitness: ['Analyse de la forme de fond et de la fraîcheur', 'Forme de fond et fraîcheur analysées'],
   get_training_advice: ['Préparation des recommandations', 'Analyse terminée'],
   list_recent_sessions: ['Lecture de tes séances', 'Séances consultées'],
   save_workout: ['Enregistrement de la séance', 'Séance enregistrée'],

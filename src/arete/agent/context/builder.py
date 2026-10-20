@@ -117,7 +117,7 @@ def build_context(
         ContextSection(
             "garmin_freshness",
             (
-                "Fraîcheur Garmin : "
+                "Synchronisation Garmin : "
                 + json.dumps(
                     {
                         key: value

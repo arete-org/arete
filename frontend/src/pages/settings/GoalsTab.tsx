@@ -176,8 +176,9 @@ export function GoalsTab({ settings, updateSetting }: SettingsTabProps) {
               onChange={(e) => updateSetting('fatigue_threshold', parseInt(e.target.value))}
               className="flex-1"
             />
-            <span className="text-xl font-sans text-warning-orange w-12 text-center">
+            <span className="text-xl font-sans text-warning-orange w-20 text-center tabular-nums">
               {settings.fatigue_threshold}
+              <span className="text-xs text-text-muted">/100</span>
             </span>
           </div>
         </Field>

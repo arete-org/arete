@@ -416,7 +416,7 @@ def sync_recent(deadline: float | None = None) -> dict:
     if not result.get("complete"):
         result["error"] = (
             "; ".join(result.get("errors", []))
-            or "Synchronisation incomplète ; consulte la fraîcheur des données."
+            or "Synchronisation incomplète ; consulte l’état des données."
         )
     return result
 

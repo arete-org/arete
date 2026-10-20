@@ -166,7 +166,7 @@ export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { ena
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button variant="outline" size="sm" aria-describedby="coach-prepare-hint" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>
-        <p id="coach-prepare-hint" className="text-xs text-text-muted">Chiron relit ta récupération et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
+        <p id="coach-prepare-hint" className="text-xs text-text-muted">Chiron relit ta préparation et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
       </div>
     </div>
   </Panel>;
