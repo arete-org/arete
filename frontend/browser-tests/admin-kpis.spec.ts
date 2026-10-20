@@ -26,7 +26,7 @@ for (const mobile of [false, true]) {
     if (mobile) await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/settings?tab=admin');
 
-    await expect(page.getByRole('heading', { name: 'INDICATEURS PRODUIT' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Indicateurs produit' })).toBeVisible();
     const tiles = page.getByRole('list', { name: 'Semaine en cours' }).getByRole('listitem');
     await expect(tiles).toHaveCount(KPI_KEYS.length);
     await expect(tiles.first()).toContainText('Comptes actifs25 %1 / 4');
@@ -43,7 +43,7 @@ for (const mobile of [false, true]) {
     }
 
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'EXPORTER EN CSV' }).click();
+    await page.getByRole('button', { name: 'Exporter en CSV' }).click();
     expect((await download).suggestedFilename()).toBe('arete-indicateurs-2026-10-12.csv');
   });
 }

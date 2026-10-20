@@ -58,7 +58,7 @@ const moved = {
 };
 
 /** The athlete's evening; every request but the auth configuration is recorded. */
-async function evening(page: Page, theme = 'dark') {
+async function evening(page: Page, theme = 'encre') {
   const requests: string[] = [];
   const chosen: unknown[] = [];
   await page.clock.setFixedTime(NOW);
@@ -161,7 +161,7 @@ for (const { width, height, name } of [
 
 test('mobile light: a move leaves the session’s row with its reason, Garmin reported', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  const { chosen } = await evening(page, 'light');
+  const { chosen } = await evening(page, 'pierre');
   await page.goto('/');
   await page.getByRole('button', { name: 'Modifier', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Pas le temps' })).toBeVisible();

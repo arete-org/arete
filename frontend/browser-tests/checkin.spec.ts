@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
 import { dashboardAnswer, localDay } from './dashboardAnswer';
 
 /** The dashboard with today unanswered; every request but the auth configuration is recorded. */
-async function morning(page: Page, theme = 'dark', replanned = false) {
+async function morning(page: Page, theme = 'encre', replanned = false) {
   const requests: string[] = [];
   const answers: Record<string, unknown>[] = [];
   const at = `${localDay()}T05:12:00+00:00`;
@@ -78,7 +78,7 @@ for (const { width, height } of [{ width: 375, height: 812 }, { width: 1440, hei
 
 test('the push link brings back a card put off for the day, focused, and a proposal refreshes the page', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  const { requests, answers } = await morning(page, 'dark', true);
+  const { requests, answers } = await morning(page, 'encre', true);
   await page.goto('/');
   const card = page.getByRole('region', { name: 'Check-in du matin' });
   await card.getByRole('button', { name: /Plus tard/ }).click();
@@ -106,7 +106,7 @@ test('the push link brings back a card put off for the day, focused, and a propo
   await expect.poll(() => requests.filter((r) => r === 'GET /api/dashboard').length).toBe(before + 1);
 });
 
-for (const theme of ['dark', 'light']) {
+for (const theme of ['encre', 'pierre']) {
   test(`375 px ${theme}: the card before and after answering`, async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await morning(page, theme);

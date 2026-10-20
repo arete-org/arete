@@ -45,9 +45,9 @@ export function DataTab() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-sans text-text-primary">DONNÉES</h2>
+      <h2 className="text-lg font-sans text-text-primary">Données</h2>
 
-      <Panel level={3} variant="inset" title="EXPORTER MES DONNÉES">
+      <Panel level={3} variant="inset" title="Exporter mes données">
         <div className="space-y-4">
           <p className="text-xs text-text-muted font-sans">
             Séances, santé, force, objectifs, bilans, échanges avec le coach, réglages et jeu. Les historiques
@@ -129,12 +129,12 @@ export function DataTab() {
             disabled={tables.length === 0}
           >
             {!exportMutation.isPending && <Download className="w-4 h-4" />}
-            {exportMutation.isPending ? 'PRÉPARATION…' : 'TÉLÉCHARGER'}
+            {exportMutation.isPending ? 'Préparation…' : 'Télécharger'}
           </Button>
         </div>
       </Panel>
 
-      <Panel level={3} variant="inset" title="BILAN ANNUEL">
+      <Panel level={3} variant="inset" title="Bilan annuel">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p className="text-xs text-text-muted font-sans">
             L’année en chiffres : volume, sports, records, régularité, forme et force.

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { automationApi, inboxKey } from '@/lib/automations';
 import { readableError } from '@/lib/utils';
+import { useCoachName } from '@/lib/coachName';
 
 export function InboxBell({ className = '' }: { className?: string }) {
   const query = useQuery({ queryKey: [...inboxKey, 'todo', 0], queryFn: () => automationApi.inbox(), refetchInterval: 60000 });
@@ -12,9 +13,10 @@ export function InboxBell({ className = '' }: { className?: string }) {
 
 /** Dashboard and inbox project the same server records and query cache. */
 export function InboxPriority() {
+  const coach = useCoachName();
   const query = useQuery({ queryKey: [...inboxKey, 'todo', 0], queryFn: () => automationApi.inbox() });
   if (!query.data?.items.length) return null;
-  return <section className="space-y-3" aria-label="Suivis prioritaires"><h2 className="font-display text-2xl">À suivre avec Chiron</h2>{query.data.items.slice(0, 3).map(item => <Link key={item.id} to={item.url} className="block border-b border-border py-4"><strong>{item.title}</strong><p className="text-sm text-text-secondary">{item.body}</p></Link>)}<Link className="underline" to="/follow-up">Tout le suivi</Link></section>;
+  return <section className="space-y-3" aria-label="Suivis prioritaires"><h2 className="font-display text-2xl">À suivre avec {coach}</h2>{query.data.items.slice(0, 3).map(item => <Link key={item.id} to={item.url} className="block border-b border-border py-4"><strong>{item.title}</strong><p className="text-sm text-text-secondary">{item.body}</p></Link>)}<Link className="underline" to="/follow-up">Tout le suivi</Link></section>;
 }
 
 export function NoticeActions({ id, read, archived }: { id: string; read: boolean; archived: boolean }) {

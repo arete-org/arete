@@ -9,6 +9,7 @@ import { currentState, subscribeDevice, unsubscribeDevice, type PushState } from
 import { qk } from '@/lib/queryKeys';
 import type { SettingsTabProps } from './types';
 import { AthleteFactsPanel } from './AthleteFactsPanel';
+import { useCoachName } from '@/lib/coachName';
 
 interface LedgerFile {
   name: string;
@@ -66,6 +67,7 @@ function SettingSwitch({
 }
 
 function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
+  const coach = useCoachName();
   const { data: syncStatus } = useQuery({ queryKey: qk.syncStatus, queryFn: garminApi.getSyncStatus });
   const garminMissing = syncStatus != null && !syncStatus.garmin_authenticated;
   return (
@@ -77,7 +79,7 @@ function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
       }
     >
       <div className="space-y-3">
-        <p className="text-sm text-text-secondary">Chiron propose des ajustements sur l’accueil. Ton planning change uniquement après ta validation ou ta demande explicite dans le chat.</p>
+        <p className="text-sm text-text-secondary">{coach} propose des ajustements sur l’accueil. Ton planning change uniquement après ta validation ou ta demande explicite dans le chat.</p>
         <SettingSwitch
           checked={settings.push_to_garmin_enabled}
           onChange={(value) => updateSetting('push_to_garmin_enabled', value)}
@@ -99,6 +101,7 @@ function AdaptationPanel({ settings, updateSetting }: SettingsTabProps) {
 const EVENING_HOURS = [18, 19, 20, 21] as const;
 
 function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
+  const coach = useCoachName();
   const enabled = settings.coach_evening_enabled;
   return (
     <Panel
@@ -114,7 +117,7 @@ function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
           onChange={(value) => updateSetting('coach_evening_enabled', value)}
           hint="Désactivé par défaut. Rien n’est envoyé les soirs sans séance prévue le lendemain ni signal notable (course proche, préparation basse, séance manquée replanifiée)."
         >
-          Le soir, Chiron t’écrit sur ta journée de demain, en trois phrases au plus, question
+          Le soir, {coach} t’écrit sur ta journée de demain, en trois phrases au plus, question
           comprise. Ta réponse est notée dans son journal pour le briefing du lendemain.
         </SettingSwitch>
         <label className="flex flex-wrap items-center gap-2 pl-6 text-sm text-text-secondary">
@@ -164,6 +167,7 @@ const DEVICE_HINT: Partial<Record<PushState, string>> = {
 };
 
 function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
+  const coach = useCoachName();
   const queryClient = useQueryClient();
   const { data: state } = useQuery({ queryKey: qk.pushState, queryFn: currentState, staleTime: Infinity });
   const { data: vapid } = useQuery({ queryKey: qk.vapidKey, queryFn: notificationsApi.getVapidPublicKey });
@@ -223,7 +227,7 @@ function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
           onChange={value => updateSetting('notification_preferences', { ...prefs, coordinated_coaching: value })}
           hint="Regroupe les suivis dans l’app, même sans notification, une fois la fonctionnalité activée par l’administrateur."
         >
-          Coordonner les suivis de Chiron
+          Coordonner les suivis de {coach}
         </SettingSwitch>
 
         <fieldset className="space-y-2 pl-6" disabled={!settings.notifications_enabled}>

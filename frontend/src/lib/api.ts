@@ -589,7 +589,7 @@ export interface UserSettings {
   auto_adapt_enabled: boolean;
   /** The morning sync sends today's cardio sessions to the Garmin calendar. */
   push_to_garmin_enabled: boolean;
-  theme: import('./theme').Theme;
+  theme: import('./theme').ThemePreference;
   exercise_abbreviations: Record<string, string>;
   weekly_volume_target_kg: number;
   /** Threshold heart rate: the reference the HR zones are built on. */

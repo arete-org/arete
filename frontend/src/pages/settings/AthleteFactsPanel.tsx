@@ -8,6 +8,7 @@ import { FACT_KIND_LABEL } from '@/lib/fr';
 import { qk } from '@/lib/queryKeys';
 import { cn, readableError } from '@/lib/utils';
 import type { AthleteFact, FactKind } from '@/types';
+import { useCoachName } from '@/lib/coachName';
 
 const MAX_TEXT = 300;
 const KINDS = Object.keys(FACT_KIND_LABEL) as FactKind[];
@@ -185,6 +186,7 @@ function AddFactForm() {
 
 /** The durable facts the coach reads every turn; editable at once, apart from the form's save. */
 export function AthleteFactsPanel({ factId, embedded = false }: { factId?: number; embedded?: boolean } = {}) {
+  const coach = useCoachName();
   const queryClient = useQueryClient();
   const facts = useQuery({ queryKey: qk.athleteFacts, queryFn: athleteFactsApi.list, refetchOnMount: 'always' });
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -240,5 +242,5 @@ export function AthleteFactsPanel({ factId, embedded = false }: { factId?: numbe
       </div>
   );
   if (embedded) return content;
-  return <Panel title={<span className="flex items-center gap-2"><UserRound className="size-4 text-neon-purple" />{factId ? selected?.[0]?.evidence === 'hypothesis' ? 'À confirmer' : 'Retenu' : 'Ce que Chiron sait de moi'}</span>}>{content}</Panel>;
+  return <Panel title={<span className="flex items-center gap-2"><UserRound className="size-4 text-neon-purple" />{factId ? selected?.[0]?.evidence === 'hypothesis' ? 'À confirmer' : 'Retenu' : `Ce que ${coach} sait de moi`}</span>}>{content}</Panel>;
 }

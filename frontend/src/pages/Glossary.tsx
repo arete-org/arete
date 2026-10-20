@@ -104,7 +104,7 @@ export function GlossaryPage() {
           <p className="page-eyebrow">Arete / Lexique</p>
           <h1 className="page-title">Lexique</h1>
           <p className="mt-1 text-sm text-text-muted">
-            Les termes et les mesures d’Arete et de Chiron : ce qu’ils veulent dire, leur échelle et les seuils que
+            Les termes et les mesures d’Arete et de son coach : ce qu’ils veulent dire, leur échelle et les seuils que
             l’application applique.
           </p>
         </header>

@@ -73,7 +73,7 @@ export function SyncOptionsForm({
           </div>
         </div>
         <Button type="submit" strong fullWidth className="mt-3" disabled={isLoading}>
-          {isLoading ? 'SYNCHRONISATION EN COURS' : 'SYNCHRONISER LES ACTIVITÉS'}
+          {isLoading ? 'Synchronisation en cours' : 'Synchroniser les activités'}
         </Button>
       </fieldset>
     </form>

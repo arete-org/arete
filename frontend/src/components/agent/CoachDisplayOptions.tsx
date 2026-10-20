@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Ellipsis, PanelsTopLeft } from 'lucide-react';
 import type { CoachDisplay } from '@/hooks/useCoachDisplay';
+import { useCoachName } from '@/lib/coachName';
 
 type Props = {
   mode: CoachDisplay;
@@ -16,10 +17,11 @@ export function CoachDisplayOptions({ mode, onChange, onHistory, onMemory, onCre
   const trigger = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
   const id = useId();
+  const coach = useCoachName();
   const actions = [
     { action: onCreate, label: 'Nouvelle conversation' },
     { action: onHistory, label: 'Historique des conversations' },
-    { action: onMemory, label: 'Ce que Chiron sait de moi' },
+    { action: onMemory, label: `Ce que ${coach} sait de moi` },
   ];
   useEffect(() => {
     if (!open) return;

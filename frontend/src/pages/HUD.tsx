@@ -108,7 +108,7 @@ function SectionHeader({ icon, title, term }: { icon: React.ReactNode; title: st
   return (
     <div className="flex items-center gap-2 mb-4">
       {icon}
-      <h2 className="text-sm font-sans text-text-muted uppercase tracking-wider">{title}</h2>
+      <h2 className="text-[15px] font-sans font-medium text-text-primary">{title}</h2>
       {term && <GlossaryLink term={term} about={`section ${title.toLowerCase()}`} />}
     </div>
   );
@@ -442,7 +442,7 @@ export function DashboardPage() {
 
             {/* Today's plan, right below the briefing */}
             <Panel className="p-4">
-              <SectionHeader icon={<Calendar className="w-4 h-4 text-neon-purple" />} title="SÉANCE DU JOUR" />
+              <SectionHeader icon={<Calendar className="w-4 h-4 text-neon-purple" />} title="Séance du jour" />
               {plannedPending ? (
                 <Skeleton label="Chargement de la séance du jour" />
               ) : boardFailed ? (
@@ -502,7 +502,7 @@ export function DashboardPage() {
             <Panel className="p-4">
               <SectionHeader
                 icon={<Dumbbell className="w-4 h-4 text-neon-gold" />}
-                title={rpg ? 'ÉTAT DU JOUEUR' : 'MA FORME DU JOUR'}
+                title={rpg ? 'État du joueur' : 'Ma forme du jour'}
               />
               <PlayerSummary />
 
@@ -549,7 +549,7 @@ export function DashboardPage() {
 
             {/* One curve for forme de fond, fatigue and forme: its own lazy request. */}
             <Panel className="p-4">
-              <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="COURBE DE FORME" term="ctl" />
+              <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="Courbe de forme" term="ctl" />
               <Suspense
                 fallback={
                   <div className="min-h-[19rem]">
@@ -569,7 +569,7 @@ export function DashboardPage() {
 
             {/* Block 3: Readiness (Garmin) */}
             <Panel className="p-4">
-              <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="RÉCUPÉRATION" term="preparation" />
+              <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="Récupération" term="preparation" />
 
               {healthPending ? (
                 <Skeleton label="Chargement de la récupération" />

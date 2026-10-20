@@ -68,20 +68,20 @@ export function RecentSessions() {
     });
   };
 
-  if (isLoading) return <LoadingState message="CHARGEMENT DES SÉANCES…" />;
-  if (isError) return <ErrorState message="ÉCHEC DU CHARGEMENT DES SÉANCES" onRetry={() => refetch()} />;
+  if (isLoading) return <LoadingState message="Chargement des séances…" />;
+  if (isError) return <ErrorState message="Échec du chargement des séances" onRetry={() => refetch()} />;
 
   const sessions = (data?.sessions || []).filter((s) => !linked.has(s.id));
   if (sessions.length === 0) {
     return (
       <Panel animate={false}>
-        <EmptyState message="AUCUNE SÉANCE CARDIO" action="Importe un fichier FIT, saisis-la sans montre ou synchronise Garmin" />
+        <EmptyState message="Aucune séance cardio" action="Importe un fichier FIT, saisis-la sans montre ou synchronise Garmin" />
       </Panel>
     );
   }
 
   return (
-    <Panel title="SÉANCES RÉCENTES" delay={0.1}>
+    <Panel title="Séances récentes" delay={0.1}>
       <div className="space-y-2">
         <PushOffer moment="session" />
         {sessions.map((s) => {
@@ -185,10 +185,10 @@ export function RecentSessions() {
                   </div>
                   <div className="flex gap-2 justify-end">
                     <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>
-                      ANNULER
+                      Annuler
                     </Button>
                     <Button size="sm" strong onClick={saveEdit} loading={updateMutation.isPending}>
-                      {updateMutation.isPending ? 'ENREGISTREMENT…' : 'ENREGISTRER'}
+                      {updateMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
                     </Button>
                   </div>
                 </div>

@@ -120,7 +120,7 @@ export function ConsentScreen({ consent, email, onConsent, signOut }: ConsentScr
         <div className="flex flex-wrap items-start gap-3">
           <Button variant="cyan" strong onClick={accept} disabled={!terms || !health} loading={pending}>
             {!pending && <ShieldCheck className="size-4" />}
-            ACCEPTER ET CONTINUER
+            Accepter et continuer
           </Button>
           {/* An existing athlete meets this screen with data already stored: the export is always offered. */}
           <Button variant="outline" onClick={exportData} loading={exporting}>

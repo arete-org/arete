@@ -79,5 +79,5 @@ it('says so when the year holds no session', async () => {
     review({ totals: { sessions: 0, duration_sec: 0, distance_m: 0, ascent_m: 0, tss: 0 } })
   );
   show(`/analytics/bilan?year=${year - 1}`);
-  expect(await screen.findByText(`AUCUNE SÉANCE EN ${year - 1}`)).toBeTruthy();
+  expect(await screen.findByText(`Aucune séance en ${year - 1}`)).toBeTruthy();
 });

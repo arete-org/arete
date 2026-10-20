@@ -59,7 +59,7 @@ it('keeps « Recharger » for after a streaming coach answer', async () => {
     mount();
     const reload = await screen.findByRole('button', { name: 'Recharger' });
     expect((reload as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole('status', { name: 'Mise à jour' }).textContent).toContain('une fois la réponse de Chiron terminée');
+    expect(screen.getByRole('status', { name: 'Mise à jour' }).textContent).toContain('une fois la réponse de Coach terminée');
     act(() => holdReloads(false));
     expect((screen.getByRole('button', { name: 'Recharger' }) as HTMLButtonElement).disabled).toBe(false);
     expect(worker.postMessage).not.toHaveBeenCalled();

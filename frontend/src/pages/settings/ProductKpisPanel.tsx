@@ -38,7 +38,7 @@ export function ProductKpisPanel() {
   return (
     <Panel variant="inset" className="space-y-4">
       <div className="flex flex-wrap justify-between items-center gap-3">
-        <h2 className="text-lg font-sans text-text-primary">INDICATEURS PRODUIT</h2>
+        <h2 className="text-lg font-sans text-text-primary">Indicateurs produit</h2>
         <Button
           variant="outline"
           size="sm"
@@ -47,7 +47,7 @@ export function ProductKpisPanel() {
           className="text-text-secondary hover:border-neon-cyan/50 hover:text-neon-cyan"
         >
           <Download className="w-3 h-3" />
-          EXPORTER EN CSV
+          Exporter en CSV
         </Button>
       </div>
       <p className="text-xs text-text-muted">
@@ -57,11 +57,11 @@ export function ProductKpisPanel() {
       </p>
 
       {kpis.isPending ? (
-        <LoadingState message="CHARGEMENT DES INDICATEURS…" />
+        <LoadingState message="Chargement des indicateurs…" />
       ) : kpis.isError ? (
-        <ErrorState message="INDICATEURS INDISPONIBLES" onRetry={() => void kpis.refetch()} />
+        <ErrorState message="Indicateurs indisponibles" onRetry={() => void kpis.refetch()} />
       ) : weeks.length === 0 ? (
-        <EmptyState message="AUCUN INDICATEUR" />
+        <EmptyState message="Aucun indicateur" />
       ) : (
         <>
           <CurrentWeek week={weeks[0]} />

@@ -6,6 +6,7 @@ import { qk } from '@/lib/queryKeys';
 import { AthleteFactsPanel } from '@/pages/settings/AthleteFactsPanel';
 import type { AthleteFact } from '@/types';
 import { OnboardingContext } from './OnboardingContext';
+import { useCoachName } from '@/lib/coachName';
 
 function MemoryRows({ facts }: { facts: AthleteFact[] }) {
   return <ul className="divide-y divide-text-muted/15">{facts.map(fact => <li key={fact.id}>
@@ -20,11 +21,12 @@ function MemoryRows({ facts }: { facts: AthleteFact[] }) {
 }
 
 export function CoachMemory({ factIds }: { factIds?: number[] }) {
+  const coach = useCoachName();
   const query = useQuery({ queryKey: qk.athleteFacts, queryFn: athleteFactsApi.list, refetchOnMount: 'always' });
   if (query.isPending) return <p role="status" className="py-2 text-xs text-text-muted">Chargement de la mémoire…</p>;
   if (query.isError) return <p role="alert" className="py-2 text-xs text-danger-red">Mémoire indisponible. <button className="min-h-11 underline" onClick={() => void query.refetch()}>Réessayer</button></p>;
   const facts = factIds ? query.data.filter(f => factIds.includes(f.id)) : query.data;
-  return <>{!factIds && <OnboardingContext hideEmpty />}{facts.length ? <MemoryRows facts={facts} /> : <p className="py-3 text-sm text-text-muted">{factIds ? 'Ce souvenir a été oublié.' : 'Aucun autre souvenir enregistré. Tu peux partager tes habitudes avec Chiron.'}</p>}</>;
+  return <>{!factIds && <OnboardingContext hideEmpty />}{facts.length ? <MemoryRows facts={facts} /> : <p className="py-3 text-sm text-text-muted">{factIds ? 'Ce souvenir a été oublié.' : `Aucun autre souvenir enregistré. Tu peux partager tes habitudes avec ${coach}.`}</p>}</>;
 }
 
 /** One disclosure per answer, even when several writes/duplicates were streamed.

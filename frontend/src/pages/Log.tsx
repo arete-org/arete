@@ -72,7 +72,7 @@ export function LogPage() {
   });
 
   if (sessionsQuery.isError) {
-    return <ErrorState message="ÉCHEC DU CHARGEMENT DES SÉANCES" onRetry={() => sessionsQuery.refetch()} />;
+    return <ErrorState message="Échec du chargement des séances" onRetry={() => sessionsQuery.refetch()} />;
   }
 
   const sessions = sessionsQuery.data ?? [];
@@ -115,7 +115,7 @@ export function LogPage() {
                 {muscleQuery.isPending ? (
                   <Skeleton label="Chargement des zones travaillées" lines={4} />
                 ) : muscleQuery.isError ? (
-                  <ErrorState message="VOLUME INDISPONIBLE" onRetry={() => muscleQuery.refetch()} />
+                  <ErrorState message="Volume indisponible" onRetry={() => muscleQuery.refetch()} />
                 ) : (
                   <MuscleMap muscles={muscleQuery.data?.muscles ?? []} />
                 )}
@@ -142,7 +142,7 @@ export function LogPage() {
                   {/* Under the five rows: the session that just arrived comes first. */}
                   {sessions.length > 0 && <PushOffer moment="session" />}
                   {sessionsQuery.isSuccess && sessions.length === 0 && (
-                    <EmptyState message="AUCUNE SÉANCE" action="Saisis ta première séance de muscu" />
+                    <EmptyState message="Aucune séance" action="Saisis ta première séance de muscu" />
                   )}
                 </div>
               </Panel>
@@ -157,7 +157,7 @@ export function LogPage() {
       <LogSessionModal open={showNewSession && activeTab === 'force'} onClose={() => setShowNewSession(false)} />
       {openDraft && <LogSessionModal key={openDraft.id} open draft={openDraft} onClose={() => setDraftId(null)} />}
       <Modal open={toDelete !== null} onClose={() => setToDelete(null)} className="max-w-sm p-4 sm:p-6">
-        <ModalHeader title="SUPPRIMER LA SÉANCE" onClose={() => setToDelete(null)} className="mb-4" />
+        <ModalHeader title="Supprimer la séance" onClose={() => setToDelete(null)} className="mb-4" />
         <p className="text-sm font-sans text-text-secondary mb-6">
           Cette séance et ses séries seront définitivement supprimées.
         </p>

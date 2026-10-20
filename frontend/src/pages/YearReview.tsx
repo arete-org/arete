@@ -320,11 +320,11 @@ export function YearReviewPage() {
       </header>
 
       {isLoading ? (
-        <LoadingState message="CALCUL DU BILAN…" />
+        <LoadingState message="Calcul du bilan…" />
       ) : isError || !data ? (
-        <ErrorState message="BILAN INDISPONIBLE" onRetry={() => refetch()} />
+        <ErrorState message="Bilan indisponible" onRetry={() => refetch()} />
       ) : data.totals.sessions === 0 ? (
-        <EmptyState message={`AUCUNE SÉANCE EN ${year}`} action="Synchronise Garmin ou importe un fichier FIT, ou choisis une autre année." />
+        <EmptyState message={`Aucune séance en ${year}`} action="Synchronise Garmin ou importe un fichier FIT, ou choisis une autre année." />
       ) : (
         <Review data={data} />
       )}

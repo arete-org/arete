@@ -7,6 +7,7 @@ import { coachApi, coachTodayKey, discussWithCoach, type Followup, type Proposal
 import { invalidateAfterSession } from '@/lib/queryKeys';
 import { dayLabel, type DayOutcome } from '@/lib/renegotiation';
 import { readableError } from '@/lib/utils';
+import { useCoachName } from '@/lib/coachName';
 
 function description(value: Record<string, unknown> | null) {
   if (!value) return 'Repos';
@@ -155,9 +156,10 @@ export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { ena
   const client = useQueryClient();
   const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled, refetchOnWindowFocus: refetchOnFocus });
   const prepare = useMutation({ mutationFn: coachApi.prepare, onSuccess: data => client.setQueryData(coachTodayKey, data) });
+  const coach = useCoachName();
   // The last answer, which takes the focus as its card leaves.
   const [outcome, setOutcome] = useState<DayOutcome | null>(null);
-  return <Panel title="Avec Chiron aujourd’hui">
+  return <Panel title={`Avec ${coach} aujourd’hui`}>
     <div className="space-y-3">
       {outcome && <RenegotiationOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />}
       {query.isPending && <p role="status">Chargement du suivi…</p>}
@@ -166,7 +168,7 @@ export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { ena
       {!!query.data?.remaining && <p className="text-xs text-text-muted">{query.data.remaining} autre(s) point(s) à examiner après ceux-ci.</p>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button variant="outline" size="sm" aria-describedby="coach-prepare-hint" disabled={prepare.isPending} onClick={() => prepare.mutate()}>{prepare.isPending ? 'Actualisation…' : 'Actualiser le suivi'}</Button>
-        <p id="coach-prepare-hint" className="text-xs text-text-muted">Chiron relit ta récupération et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
+        <p id="coach-prepare-hint" className="text-xs text-text-muted">{coach} relit ta récupération et tes dernières séances pour proposer une adaptation ou une question. Rien ne change sans ton accord.</p>
       </div>
     </div>
   </Panel>;

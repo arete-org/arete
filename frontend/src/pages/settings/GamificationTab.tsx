@@ -31,10 +31,10 @@ export function GamificationTab() {
   const p = preference.data;
   return (
     <section className="space-y-5">
-      <h2 className="text-lg font-bold">Profil RPG & Chiron</h2>
+      <h2 className="text-lg font-bold">Profil RPG</h2>
       <p className="text-sm text-text-secondary">
         Un personnage, des succès et des Éclats pour collectionner des tenues.
-        L’expérience inclut Chiron et les pièces jointes dans le message.
+        Ton coach y devient un personnage, avec les pièces jointes dans le message.
       </p>
       <Button
         role="switch"

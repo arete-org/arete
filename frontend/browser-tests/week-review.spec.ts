@@ -34,7 +34,7 @@ const recap = {
 };
 
 /** The athlete's Sunday evening; every request but the auth configuration is recorded. */
-async function sunday(page: Page, theme = 'dark') {
+async function sunday(page: Page, theme = 'encre') {
   const requests: string[] = [];
   const accepted: unknown[] = [];
   await page.clock.setFixedTime(NOW);
@@ -140,7 +140,7 @@ for (const { width, height, name } of [
 
 test('mobile light: the screen, and « Ajuster » opens the coach with the review, composer empty', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  const { requests, accepted } = await sunday(page, 'light');
+  const { requests, accepted } = await sunday(page, 'pierre');
   await page.goto('/');
   await expect(page.getByRole('link', { name: /Ta semaine est prête/ })).toBeVisible();
   await page.screenshot({ path: `${SCREENS}/dashboard-entry-mobile-light.png`, animations: 'disabled' });

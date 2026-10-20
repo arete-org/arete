@@ -109,14 +109,14 @@ async function mount(rpg: boolean) {
 
 it('speaks plain words without the RPG: no HP, MP, XP, player nor level', async () => {
   await mount(false);
-  expect(screen.getByRole('heading', { name: 'MA FORME DU JOUR' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Ma forme du jour' })).toBeTruthy();
   // Per element: the page's joined text would hide a tag between two words.
   expect(screen.queryAllByText(/^(HP|MP|XP|TSS)$/)).toHaveLength(0);
   expect(screen.queryAllByText(/\b(HP|MP|XP)\b/)).toHaveLength(0);
   expect(screen.queryAllByText(/joueur/i)).toHaveLength(0);
   expect(screen.queryAllByText(/niveau/i)).toHaveLength(0);
   // Each bar names itself and keeps its detail on screen (a title never shows on a phone).
-  for (const label of ['Récupération', 'Charge de la semaine']) expect(screen.getByText(label)).toBeTruthy();
+  for (const label of ['Récupération', 'Charge de la semaine']) expect(screen.getByText(label, { selector: ':not(h2)' })).toBeTruthy();
   expect(screen.getByText('Objectif 300 TSS · 6 séances')).toBeTruthy();
   expect(screen.getByText('Préparation à l’entraînement Garmin (ce matin)')).toBeTruthy();
   expect(document.querySelector('[title]')).toBeNull();
@@ -132,7 +132,7 @@ it('speaks plain words without the RPG: no HP, MP, XP, player nor level', async 
 
 it('keeps the RPG tags with the game on, and a single level: the RPG one', async () => {
   await mount(true);
-  expect(screen.getByRole('heading', { name: 'ÉTAT DU JOUEUR' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'État du joueur' })).toBeTruthy();
   for (const tag of ['HP', 'MP', 'TSS']) expect(screen.getByText(tag)).toBeTruthy();
   expect(screen.getAllByText(/Niveau/)).toHaveLength(1);
 });
@@ -175,7 +175,7 @@ it('leads with the briefing, today\'s session right below it', async () => {
   await mount(false);
   const headings = screen.getAllByRole('heading').map((h) => h.textContent);
   expect(headings.indexOf('Briefing du jour')).toBeGreaterThanOrEqual(0);
-  expect(headings.indexOf('Briefing du jour') + 1).toBe(headings.indexOf('SÉANCE DU JOUR'));
+  expect(headings.indexOf('Briefing du jour') + 1).toBe(headings.indexOf('Séance du jour'));
   const briefing = screen.getByText(written.tip!);
   const session = screen.getByText('Repos — aucune séance prévue');
   expect(briefing.compareDocumentPosition(session) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -215,7 +215,7 @@ it('leads with the race goal above the briefing, and the one form curve in plain
   const briefing = screen.getByRole('heading', { name: 'Briefing du jour' });
   expect(goal.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(await screen.findByText('entre +3 et +13')).toBeTruthy();
-  expect(screen.getByRole('heading', { name: 'COURBE DE FORME' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Courbe de forme' })).toBeTruthy();
   expect(await screen.findByText(/Aujourd’hui : fatigue 36, forme \+4\./)).toBeTruthy();
   // The goal card and the curve share one request.
   expect(formCurveApi.get).toHaveBeenCalledTimes(1);

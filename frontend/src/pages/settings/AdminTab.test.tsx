@@ -128,7 +128,7 @@ it('cannot enable an unavailable model but can disable a previously enabled flag
 it('does not show a false off switch when the flag cannot be read', async () => {
   vi.mocked(adminApi.featureFlags).mockRejectedValue(new TypeError('offline'));
   mount();
-  expect(await screen.findByText('OPTIONS INDISPONIBLES')).toBeTruthy();
+  expect(await screen.findByText('Options indisponibles')).toBeTruthy();
   expect(screen.queryByRole('checkbox')).toBeNull();
 });
 

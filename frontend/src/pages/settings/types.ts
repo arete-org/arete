@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: LocalSettings = {
   coach_briefing_enabled: true,
   auto_adapt_enabled: true,
   push_to_garmin_enabled: false,
-  theme: 'dark',
+  theme: 'system',
   exercise_abbreviations: {},
   weekly_volume_target_kg: 20000,
   lthr: null,

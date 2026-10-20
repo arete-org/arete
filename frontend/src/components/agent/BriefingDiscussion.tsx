@@ -6,10 +6,12 @@ import { frenchClock } from '@/lib/fr';
 import { readableError } from '@/lib/utils';
 import { FeedbackRating } from './FeedbackRating';
 import { AgentMarkdown } from './AgentMarkdown';
+import { useCoachName } from '@/lib/coachName';
 
 /** The stored briefing is context, never a fabricated assistant turn or trace. */
 export function BriefingDiscussion({ id }: { id: number }) {
   const client = useQueryClient();
+  const coach = useCoachName();
   const key = ['briefing', id] as const;
   const query = useQuery({ queryKey: key, queryFn: () => tipsApi.briefing(id), retry: false });
   const save = useMutation({
@@ -30,7 +32,7 @@ export function BriefingDiscussion({ id }: { id: number }) {
   return <section aria-label="Briefing dans cette conversation" className="mb-5 space-y-3">
     <div>
       <h3 className="text-sm font-medium text-text-primary">Briefing du {parseLocalDate(briefing.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</h3>
-      <p className="mt-1 text-xs text-text-muted">{briefing.source === 'rules' ? 'Calculé à partir de tes métriques' : 'Par Chiron'}{briefing.generated_at ? ` · ${frenchClock(briefing.generated_at)}` : ''}</p>
+      <p className="mt-1 text-xs text-text-muted">{briefing.source === 'rules' ? 'Calculé à partir de tes métriques' : `Par ${coach}`}{briefing.generated_at ? ` · ${frenchClock(briefing.generated_at)}` : ''}</p>
     </div>
     <AgentMarkdown text={briefing.tip} />
     <div role="group" aria-label="Ton avis sur ce briefing" className="flex items-center gap-0.5">

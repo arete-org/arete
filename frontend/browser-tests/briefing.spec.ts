@@ -60,7 +60,7 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
     await expect(page.getByText('Hier : sortie tranquille.')).toBeVisible();
     await page.getByRole('button', { name: 'Briefings précédents' }).click();
 
-    await page.getByRole('button', { name: 'Demander à Chiron' }).click();
+    await page.getByRole('button', { name: 'Demander à Coach' }).click();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await panel.getByLabel('Message au coach').fill('Mon brouillon reste ici.');
     await panel.getByRole('button', { name: 'Masquer le coach' }).click();
@@ -68,7 +68,7 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
     await page.keyboard.press('Enter');
     await expect(panel.getByRole('region', { name: 'Briefing dans cette conversation' })).toContainText(text);
     await expect(panel.getByLabel('Message au coach')).toHaveValue('');
-    await expect(panel.getByRole('heading', { name: 'Chiron', exact: true })).toHaveCSS('font-family', /Cormorant Garamond/);
+    await expect(panel.getByRole('heading', { name: 'Coach', exact: true })).toHaveCSS('font-family', /Cormorant Garamond/);
     await expect(panel.getByRole('button', { name: 'Briefing utile', exact: true }).locator('svg')).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Briefing utile', exact: true })).toHaveCSS('border-radius', '9px');
     await expect(panel.getByLabel('Message au coach')).toBeInViewport();
@@ -95,7 +95,7 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
     expect(chats[0].thread_id).toBe(briefingThread);
     if (theme === 'pierre' && width === 390) await page.screenshot({ path: '../.context/briefing-03-discussion.png' });
     await page.reload();
-    await page.getByRole('button', { name: 'Demander à Chiron' }).click();
+    await page.getByRole('button', { name: 'Demander à Coach' }).click();
     await expect(panel.getByRole('region', { name: 'Briefing dans cette conversation' })).toContainText(text);
     await expect(panel.getByRole('button', { name: 'Briefing utile', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await panel.getByRole('button', { name: 'Options du coach' }).click();

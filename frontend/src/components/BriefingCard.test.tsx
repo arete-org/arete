@@ -16,8 +16,9 @@ const tip: DailyTip = {
 };
 beforeEach(() => { localStorage.clear(); vi.spyOn(notificationsApi, 'getVapidPublicKey').mockResolvedValue({ key: 'BPub' }); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
-function mount(value = tip, writing = false) {
+function mount(value = tip, writing = false, rpg = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  client.setQueryData(['game-preference'], { enabled: rpg, opted_in: rpg, available: true, version: 1 });
   return render(<MemoryRouter><QueryClientProvider client={client}><BriefingCard tip={value} writing={writing} stalled={false} refresh={() => {}} /></QueryClientProvider></MemoryRouter>);
 }
 
@@ -29,7 +30,7 @@ it('opens a briefing from its title or action, without writing feedback or sendi
   expect(screen.getByText('Écrit à 7 h · calculé à partir de tes métriques')).toBeTruthy();
   expect(screen.queryByRole('group', { name: /avis/ })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: /^Briefing du jour/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'En parler avec Chiron' }));
+  fireEvent.click(screen.getByRole('button', { name: 'En parler avec Coach' }));
   window.removeEventListener('arete:coach-discuss', asked);
   expect(asked).toHaveBeenCalledTimes(2);
   expect((asked.mock.calls[0][0] as CustomEvent).detail).toEqual({ kind: 'briefing', id: 41 });
@@ -53,7 +54,7 @@ it('reads history on demand and opens the selected historical briefing', async (
 it('does not open a thread before a stored briefing is ready', () => {
   mount({ ...tip, id: null, tip: null, status: 'pending' }, true);
   expect((screen.getByRole('button', { name: /^Briefing du jour/ }) as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByRole('status').textContent).toContain('Chiron écrit');
+  expect(screen.getByRole('status').textContent).toContain('Coach écrit');
 });
 
 it('offers the morning push once a briefing was opened on this device, not before', async () => {
@@ -61,11 +62,20 @@ it('offers the morning push once a briefing was opened on this device, not befor
   const first = mount();
   expect(screen.queryByRole('region', offer)).toBeNull();
   expect(currentState).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'En parler avec Chiron' }));
+  fireEvent.click(screen.getByRole('button', { name: 'En parler avec Coach' }));
   expect(await screen.findByRole('region', offer)).toBeTruthy();
   expect(localStorage.getItem(BRIEFING_READ_KEY)).toBe('1');
   first.unmount();
   // Read once: the offer stays until answered.
   mount();
   expect(await screen.findByRole('region', offer)).toBeTruthy();
+});
+
+it('names the coach Chiron only in the RPG experience', () => {
+  const classic = mount();
+  expect(screen.getByRole('button', { name: 'En parler avec Coach' })).toBeTruthy();
+  expect(document.body.textContent).not.toContain('Chiron');
+  classic.unmount();
+  mount(tip, false, true);
+  expect(screen.getByRole('button', { name: 'En parler avec Chiron' })).toBeTruthy();
 });

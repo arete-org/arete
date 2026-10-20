@@ -14,7 +14,7 @@ it('speaks French when idle and lists recent uploads', () => {
       ]}
     />
   );
-  expect(html).toContain('DÉPOSE UN FICHIER .FIT ICI');
+  expect(html).toContain('Dépose un fichier .FIT ici');
   expect(html).toContain('ou clique pour parcourir');
   expect(html).toContain('Imports récents');
   expect(html).toContain('Analysé');
@@ -24,6 +24,6 @@ it('speaks French when idle and lists recent uploads', () => {
 
 it('says the import is running', () => {
   const html = renderToStaticMarkup(<FitDropzone onUpload={noop} isUploading />);
-  expect(html).toContain('IMPORT EN COURS…');
+  expect(html).toContain('Import en cours…');
   expect(html).not.toContain('UPLOADING');
 });

@@ -9,6 +9,7 @@ import { parseLocalDate, toLocalISODate } from '@/lib/dates';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { VoiceDictation, type VoiceDictationHandle } from './VoiceDictation';
 import { RecordsCelebration, SuggestionNote } from './progression';
+import { useCoachName } from '@/lib/coachName';
 
 const today = () => toLocalISODate();
 
@@ -33,6 +34,7 @@ interface LogSessionModalProps {
  * activity's; saving completes the draft (one session with the activity).
  */
 export function LogSessionModal({ open, onClose, draft = null }: LogSessionModalProps) {
+  const coach = useCoachName();
   const queryClient = useQueryClient();
   const [workoutText, setWorkoutText] = useState(() => draft?.notation ?? '');
   const [workoutDate, setWorkoutDate] = useState(() => draft?.date ?? today());
@@ -120,7 +122,7 @@ export function LogSessionModal({ open, onClose, draft = null }: LogSessionModal
   return (
     <Modal mobileSheet open={open} onClose={reset} className="max-w-lg overflow-y-auto">
       <ModalHeader
-        title={draft ? 'AJOUTE TES CHARGES' : 'SAISIR UNE SÉANCE'}
+        title={draft ? 'Ajoute tes charges' : 'Saisir une séance'}
         tone="text-neon-gold"
         icon={<Sparkles className="w-5 h-5" />}
         onClose={reset}
@@ -202,7 +204,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
                     onClick={undoDictation}
                     className="text-[10px] font-sans text-text-muted hover:text-text-primary"
                   >
-                    ANNULER L'INSERTION
+                    Annuler l'insertion
                   </button>
                 )}
               </div>
@@ -227,11 +229,11 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
             loading={parseMutation.isPending}
           >
             {parseMutation.isPending ? (
-              'ANALYSE…'
+              'Analyse…'
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                ANALYSER
+                Analyser
               </>
             )}
           </Button>
@@ -322,7 +324,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
               loading={saving}
             >
               {!saving && <Check className="w-4 h-4" />}
-              ENREGISTRER
+              Enregistrer
             </Button>
           </div>
 
@@ -341,7 +343,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
             <Check className="w-8 h-8 text-success-green" />
           </div>
           <div>
-            <h4 className="font-sans text-lg text-success-green">SÉANCE ENREGISTRÉE</h4>
+            <h4 className="font-sans text-lg text-success-green">Séance enregistrée</h4>
             <p className="text-sm font-sans text-text-muted mt-1">
               {parseResult.message || `${parseResult.exercises.length} exercice(s) enregistré(s)`}
             </p>
@@ -356,13 +358,13 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
           {feedback.data && (
             <div className="text-left glass-panel p-3">
               <p className="text-[11px] font-sans text-neon-cyan mb-1">
-                {feedback.data.source === 'agent' ? 'LE COACH' : 'CALCULÉ À PARTIR DE LA SÉANCE'}
+                {feedback.data.source === 'agent' ? `Le regard de ${coach}` : 'Calculé à partir de la séance'}
               </p>
               <p className="text-sm font-sans text-text-secondary">{feedback.data.feedback}</p>
             </div>
           )}
           <Button variant="outline" strong size="lg" fullWidth onClick={reset}>
-            FERMER
+            Fermer
           </Button>
         </div>
       )}

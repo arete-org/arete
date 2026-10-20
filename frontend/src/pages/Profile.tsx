@@ -194,7 +194,7 @@ function ActiveProfile() {
       {tab === 'overview' && (
         <>
           <section className="rpg-surface p-4 font-sans space-y-3">
-            <p className="text-xs text-text-muted">CETTE SEMAINE</p>
+            <p className="text-xs text-text-muted">Cette semaine</p>
             <h3 className="text-lg font-bold text-neon-cyan">
               {p.week.complete
                 ? 'Objectif respecté'
@@ -212,7 +212,7 @@ function ActiveProfile() {
             </p>
           </section>
           <h3 className="text-xs font-sans text-text-muted">
-            DERNIERS ACCOMPLISSEMENTS
+            Derniers accomplissements
           </h3>
           {!p.history.length && (
             <p className="text-sm text-text-secondary">

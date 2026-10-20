@@ -587,7 +587,7 @@ it('chats normally once the evening question is closed', async () => {
   act(() => window.dispatchEvent(new CustomEvent('arete:coach-discuss', { detail: { kind: 'evening', id: 8 } })));
   act(() => result.current.draft('On en parle ?'));
   await act(async () => { result.current.send(); });
-  await waitFor(() => expect(result.current.error).toBe('Cette question est close : renvoie ton message pour en parler avec Chiron.'));
+  await waitFor(() => expect(result.current.error).toBe('Cette question est close : renvoie ton message pour en parler dans la conversation.'));
   expect(result.current.active.draft).toBe('On en parle ?');
   act(() => { result.current.send(); });
   expect(runs).toHaveLength(1);

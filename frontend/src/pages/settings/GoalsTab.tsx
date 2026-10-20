@@ -35,16 +35,16 @@ const DAY_LABEL: Record<string, string> = {
   sunday: 'DIM',
 };
 const GOALS = [
-  { value: 'maintenance', label: 'MAINTIEN', desc: 'Garder le niveau actuel' },
-  { value: 'build', label: 'CONSTRUCTION', desc: 'Monter la charge progressivement' },
-  { value: 'peak', label: 'AFFÛTAGE', desc: 'Être au pic le jour J' },
-  { value: 'recovery', label: 'RÉCUPÉRATION', desc: 'Phase de récupération active' },
+  { value: 'maintenance', label: 'Maintien', desc: 'Garder le niveau actuel' },
+  { value: 'build', label: 'Construction', desc: 'Monter la charge progressivement' },
+  { value: 'peak', label: 'Affûtage', desc: 'Être au pic le jour J' },
+  { value: 'recovery', label: 'Récupération', desc: 'Phase de récupération active' },
 ];
 
 export function GoalsTab({ settings, updateSetting }: SettingsTabProps) {
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-sans text-text-primary mb-4">OBJECTIFS</h2>
+      <h2 className="text-lg font-sans text-text-primary mb-4">Objectifs</h2>
 
       <RaceGoalsPanel />
 

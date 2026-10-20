@@ -65,7 +65,7 @@ it('shows a deload as such, with its reason', () => {
 
 it('celebrates each record, grouped by exercise', () => {
   render(<RecordsCelebration records={[record(), record({ kind: 'e1rm', value: 139.3, previous: 126.7 })]} />);
-  expect(screen.getByText('2 NOUVEAUX RECORDS !')).toBeTruthy();
+  expect(screen.getByText('2 nouveaux records !')).toBeTruthy();
   expect(screen.getAllByText('Hip Thrust')).toHaveLength(1);
   expect(screen.getByText(/1RM estimé/)).toBeTruthy();
 });

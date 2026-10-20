@@ -88,7 +88,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         const evening = reference.kind === 'evening'
           ? current.threads.find(t => t.reference?.kind === 'evening' && t.reference.id === reference.id)
           : undefined;
-        const titles = { briefing: 'Briefing avec Chiron', onboarding: 'Mon point de départ', evening: 'Question du soir' } as const;
+        const titles = { briefing: 'Discussion du briefing', onboarding: 'Mon point de départ', evening: 'Question du soir' } as const;
         const next = evening ? { ...current, activeId: evening.id }
           : reference.kind === 'briefing' || reference.kind === 'onboarding' || reference.kind === 'evening'
           ? addThread(current, { ...createThread(), title: titles[reference.kind], reference })
@@ -238,7 +238,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         const close = () => {
           // Closed: the draft stays, and sending it again talks to Chiron.
           closedEvenings.current.add(id);
-          setError('Cette question est close : renvoie ton message pour en parler avec Chiron.');
+          setError('Cette question est close : renvoie ton message pour en parler dans la conversation.');
         };
         if (err instanceof ApiError && err.status === 404) {
           close();

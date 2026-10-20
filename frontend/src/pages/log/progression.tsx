@@ -40,7 +40,7 @@ export function RecordsCelebration({ records }: { records: SessionRecord[] }) {
     >
       <h5 className="flex items-center gap-2 font-sans text-neon-gold">
         <Trophy className="w-5 h-5" aria-hidden />
-        {records.length > 1 ? `${records.length} NOUVEAUX RECORDS !` : 'NOUVEAU RECORD !'}
+        {records.length > 1 ? `${records.length} nouveaux records !` : 'Nouveau record !'}
       </h5>
       <ul className="mt-2 space-y-2">
         {[...byExercise].map(([exercise, items]) => (

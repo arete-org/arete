@@ -38,7 +38,7 @@ for (const rpg of [false, true]) {
       }] }));
     }, { thread, trace, answer });
     await page.reload();
-    const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
+    const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander à (?:Coach|Chiron))$/ }).filter({ visible: true }).first().click();
     await open();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await expect(panel).toHaveCSS('opacity', '1');

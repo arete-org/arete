@@ -8,6 +8,7 @@ import { ManualCardioModal } from './ManualCardioModal';
 import { garminApi, tipsApi, type PostSessionFeedback } from '@/lib/api';
 import { RecentSessions } from './RecentSessions';
 import { invalidateAfterSession } from '@/lib/queryKeys';
+import { useCoachName } from '@/lib/coachName';
 
 interface Upload {
   filename: string;
@@ -17,6 +18,7 @@ interface Upload {
 
 
 export function CardioTab({ showManual, onManualChange }: { showManual: boolean; onManualChange: (open: boolean) => void }) {
+  const coach = useCoachName();
   const queryClient = useQueryClient();
   const [recentUploads, setRecentUploads] = useState<Upload[]>([]);
   const [feedback, setFeedback] = useState<PostSessionFeedback | null>(null);
@@ -69,10 +71,10 @@ export function CardioTab({ showManual, onManualChange }: { showManual: boolean;
       <Panel
         title={
           <span className="flex items-center justify-between gap-2 w-full">
-            IMPORTER UNE SÉANCE CARDIO
+            Importer une séance cardio
             <Button variant="ghost" onClick={() => onManualChange(true)}>
               <Plus className="w-4 h-4" />
-              SANS MONTRE
+              Sans montre
             </Button>
           </span>
         }
@@ -97,7 +99,7 @@ export function CardioTab({ showManual, onManualChange }: { showManual: boolean;
           title={
             <span className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
-              {feedback.source === 'agent' ? 'LE COACH' : 'CALCULÉ À PARTIR DE LA SÉANCE'}
+              {feedback.source === 'agent' ? `Le regard de ${coach}` : 'Calculé à partir de la séance'}
             </span>
           }
           titleTone="text-neon-cyan"

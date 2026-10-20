@@ -31,29 +31,29 @@ test('connect Garmin with MFA, sync and disconnect from Connections', async ({ p
     return route.fulfill({ json: [] });
   });
   await page.goto('/settings?tab=connections');
-  await expect(page.getByRole('heading', { name: 'SERVICES CONNECTÉS' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Services connectés' })).toBeVisible();
   // Strava is retired: its API agreement forbids its data in an AI application.
   await expect(page.getByText('Strava', { exact: false })).toHaveCount(0);
-  await page.getByRole('button', { name: 'CONNECTER GARMIN' }).click();
-  await page.getByLabel('[EMAIL]', { exact: true }).fill('athlete@garmin.test');
-  await page.getByLabel('[MOT DE PASSE]', { exact: true }).fill('test-only-password');
-  await page.getByRole('button', { name: '[CONNECTER]', exact: true }).click();
-  await page.getByLabel('[CODE]', { exact: true }).fill('123456');
-  await page.getByRole('button', { name: '[VÉRIFIER]', exact: true }).click();
+  await page.getByRole('button', { name: 'Connecter Garmin' }).click();
+  await page.getByLabel('E-mail', { exact: true }).fill('athlete@garmin.test');
+  await page.getByLabel('Mot de passe', { exact: true }).fill('test-only-password');
+  await page.getByRole('button', { name: 'Connecter', exact: true }).click();
+  await page.getByLabel('Code', { exact: true }).fill('123456');
+  await page.getByRole('button', { name: 'Vérifier', exact: true }).click();
   await expect(page.getByText('athlete@garmin.test', { exact: true })).toBeVisible();
   expect(loginBodies).toEqual([
     { email: 'athlete@garmin.test', password: 'test-only-password' },
     { email: '', password: '', mfa_code: '123456' },
   ]);
-  await page.getByRole('button', { name: 'SYNCHRONISER', exact: true }).click();
+  await page.getByRole('button', { name: 'Synchroniser', exact: true }).click();
   await expect(page.getByText('1 importées · 0 fusionnées · 0 déjà présentes')).toBeVisible();
-  await page.getByRole('heading', { name: 'SERVICES CONNECTÉS' }).locator('..').screenshot({ path: '../.context/garmin-connected.png' });
+  await page.getByRole('heading', { name: 'Services connectés' }).locator('..').screenshot({ path: '../.context/garmin-connected.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('button', { name: 'Déconnecter Garmin' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.screenshot({ path: '../.context/garmin-connected-mobile.png', fullPage: true });
   await page.getByRole('button', { name: 'Déconnecter Garmin' }).click();
-  await expect(page.getByRole('button', { name: 'CONNECTER GARMIN' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Connecter Garmin' })).toBeVisible();
   await expect(page.getByText('Garmin déconnecté. Tes séances importées sont conservées.')).toBeVisible();
   expect(imported).toBe(1);
 });
@@ -87,13 +87,13 @@ test('one live progress bar follows Garmin work in System, including partial fai
   });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/settings?tab=system');
-  const launch = page.getByRole('button', { name: 'SYNCHRONISER LES ACTIVITÉS' });
+  const launch = page.getByRole('button', { name: 'Synchroniser les activités' });
   await expect(launch).toHaveCount(1);
   await page.getByLabel('Période').selectOption('365');
   await page.getByLabel('Activités maximum').fill('200');
   await launch.click();
   await expect(page.getByRole('progressbar')).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'SYNCHRONISATION EN COURS' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Synchronisation en cours' })).toBeDisabled();
   await expect(page.getByLabel('Période')).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Se déconnecter de Garmin' })).toBeDisabled();
   const emit = (event: Record<string, unknown>) => page.evaluate(event => {
@@ -105,7 +105,7 @@ test('one live progress bar follows Garmin work in System, including partial fai
   await emit({ type: 'progress', stage: 'fit', completed: 12, total: 24, activity_name: 'Sortie longue · 18 km' });
   await expect(page.getByText('12 / 24 activités traitées')).toBeVisible();
   await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '52');
-  const panel = page.getByText('SYNCHRONISATION GARMIN', { exact: true }).locator('..');
+  const panel = page.getByText('Synchronisation Garmin', { exact: true }).locator('..');
   await panel.screenshot({ path: '../.context/garmin-sync-progress.png' });
   await page.setViewportSize({ width: 390, height: 1100 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
@@ -152,9 +152,9 @@ test('complete history runs multiple batches from one click with mobile progress
   await page.goto('/settings?tab=system');
   await page.getByLabel('Période').selectOption('all');
   await expect(page.getByLabel('Activités maximum')).toHaveCount(0);
-  const launch = page.getByRole('button', { name: 'SYNCHRONISER LES ACTIVITÉS' });
+  const launch = page.getByRole('button', { name: 'Synchroniser les activités' });
   await expect(launch).toHaveAttribute('data-strong', 'true');
-  await page.getByRole('button', { name: 'SYNCHRONISER LES ACTIVITÉS' }).click();
+  await page.getByRole('button', { name: 'Synchroniser les activités' }).click();
   await expect.poll(() => requests.length).toBe(2);
   await expect(page.getByText('20 activités traitées · historique complet')).toBeVisible();
   await expect(page.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
@@ -177,18 +177,18 @@ test('complete history runs multiple batches from one click with mobile progress
       await expect(progressPanel).toHaveCSS('border-color', surface.border);
       await expect(page.getByLabel('Période')).toHaveCSS('border-color', surface.border);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-      if (theme.value === 'pierre' || theme.value === 'darker') {
-        await page.getByText('SYNCHRONISATION GARMIN', { exact: true }).locator('..').screenshot({ path: `../.context/garmin-history-${theme.value}-${width}.png` });
+      if (theme.value === 'pierre' || theme.value === 'encre') {
+        await page.getByText('Synchronisation Garmin', { exact: true }).locator('..').screenshot({ path: `../.context/garmin-history-${theme.value}-${width}.png` });
       }
     }
   }
   await page.setViewportSize({ width: 390, height: 1100 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await page.getByText('SYNCHRONISATION GARMIN', { exact: true }).locator('..').screenshot({ path: '../.context/garmin-full-history-mobile.png' });
+  await page.getByText('Synchronisation Garmin', { exact: true }).locator('..').screenshot({ path: '../.context/garmin-full-history-mobile.png' });
   release();
   await expect(page.getByText('1 importées · 0 fusionnées · 20 déjà présentes')).toBeVisible();
   await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
-  await expect(page.getByRole('button', { name: 'SYNCHRONISER LES ACTIVITÉS' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Synchroniser les activités' })).toBeEnabled();
   expect(requests).toEqual([
     { download_fit: true, max_activities: 20, history_offset: 0 },
     { download_fit: true, max_activities: 20, history_offset: 20, history_anchor: 123 },

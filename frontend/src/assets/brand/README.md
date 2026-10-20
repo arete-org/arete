@@ -9,8 +9,10 @@ SSE events own the coach waiting state.
 The wordmark uses Cormorant Garamond SemiBold, locally hosted under the SIL
 Open Font License (see `../fonts/CormorantGaramond-LICENSE.txt`). The WOFF2
 subset covers Latin, Latin Extended, French accents and punctuation.
-Pierre and Prune reuse the existing semantic colors rather than introduce a
-second component or chart theme system. Saved legacy themes remain valid.
+Pierre, Prune, Odyssey and Encre share one set of semantic tokens (`index.css`)
+rather than a second component or chart theme system. Encre is the dark-logo
+palette: the cream laurel `#F2E8DA` on a near-black ink `#0E1413`. Retired themes
+migrate once to Pierre or Encre.
 
 ## GitHub
 

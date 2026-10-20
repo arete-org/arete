@@ -37,7 +37,7 @@ export function ConnectionsTab() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-sans text-text-primary mb-4">SERVICES CONNECTÉS</h2>
+      <h2 className="text-lg font-sans text-text-primary mb-4">Services connectés</h2>
 
       <div className="space-y-3">
         <GoogleCalendarConnection />
@@ -61,11 +61,11 @@ export function ConnectionsTab() {
           {garminConnected ? (
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
               <span className="flex items-center gap-1 text-xs text-success-green"><Check className="w-4 h-4" />Connecté</span>
-              <Button size="sm" disabled={garminSync.isPending || garminLogout.isPending} onClick={() => { setGarminResult(null); garminSync.mutate({ max_activities: 50, download_fit: true }); }}>SYNCHRONISER</Button>
+              <Button size="sm" disabled={garminSync.isPending || garminLogout.isPending} onClick={() => { setGarminResult(null); garminSync.mutate({ max_activities: 50, download_fit: true }); }}>Synchroniser</Button>
               <Button variant="danger" size="sm" aria-label="Déconnecter Garmin" loading={garminLogout.isPending} disabled={garminSync.isPending} onClick={() => garminLogout.mutate()}><LogOut className="w-3 h-3" /></Button>
             </div>
           ) : (
-            <Button size="sm" disabled={garminLoading || garminError} onClick={() => setShowGarminLogin(true)}>CONNECTER GARMIN</Button>
+            <Button size="sm" disabled={garminLoading || garminError} onClick={() => setShowGarminLogin(true)}>Connecter Garmin</Button>
           )}
         </div>
 

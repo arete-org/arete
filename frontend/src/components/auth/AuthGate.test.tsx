@@ -182,10 +182,10 @@ it('exposes local administration only after the server confirms sign-in is off',
 it('offers a retry, never the app, when the config cannot be fetched', async () => {
   server(new Error('réseau'));
   mount();
-  expect(await screen.findByText('SERVEUR INJOIGNABLE')).toBeTruthy();
+  expect(await screen.findByText('Serveur injoignable')).toBeTruthy();
   expect(screen.queryByText('Tableau de bord')).toBeNull();
   server(disabled);
-  fireEvent.click(screen.getByRole('button', { name: 'RÉESSAYER' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
   expect(await screen.findByText('Tableau de bord')).toBeTruthy();
 });
 
@@ -258,7 +258,7 @@ it('blocks a fresh account behind the texts and two unticked boxes until it cons
   const [terms, health] = screen.getAllByRole('checkbox') as HTMLInputElement[];
   expect([terms.checked, health.checked]).toEqual([false, false]);
   expect(health.closest('label')?.textContent).toMatch(/article 9 du RGPD/);
-  const accept = screen.getByRole('button', { name: /ACCEPTER ET CONTINUER/ }) as HTMLButtonElement;
+  const accept = screen.getByRole('button', { name: /Accepter et continuer/ }) as HTMLButtonElement;
   expect(accept.disabled).toBe(true);
   fireEvent.click(terms);
   expect(accept.disabled).toBe(true); // the health data box is a separate, explicit choice
@@ -296,7 +296,7 @@ it('lets an athlete who does not consent erase their account from the consent sc
   const requests = server(enabled, { ...FRESH, consent: NOT_ASKED });
   mount();
   fireEvent.change(await screen.findByLabelText('Tape SUPPRIMER pour confirmer'), { target: { value: 'SUPPRIMER' } });
-  fireEvent.click(screen.getByRole('button', { name: /SUPPRIMER DÉFINITIVEMENT/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Supprimer définitivement/ }));
   await waitFor(() => expect(clerk.signOut).toHaveBeenCalled());
   const deletion = requests.find((r) => r.url === '/api/auth/me/delete');
   expect(deletion?.body).toEqual({ confirmation: 'SUPPRIMER' });
@@ -319,7 +319,7 @@ it('accepts the versions of the texts shown, so a page older than the server is 
   const [terms, health] = (await screen.findAllByRole('checkbox')) as HTMLInputElement[];
   fireEvent.click(terms);
   fireEvent.click(health);
-  fireEvent.click(screen.getByRole('button', { name: /ACCEPTER ET CONTINUER/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Accepter et continuer/ }));
   expect(await screen.findByText(TEXTS_CHANGED)).toBeTruthy();
   expect(screen.queryByText('Tableau de bord')).toBeNull();
   const consent = requests.find((r) => r.url === '/api/auth/consent');
@@ -333,7 +333,7 @@ it('shows the refusal reason with a sign-out when the account is deactivated', a
   expect(await screen.findByText('Ce compte a été désactivé.')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Se déconnecter' })).toBeTruthy();
   expect(screen.queryByText('Tableau de bord')).toBeNull();
-  expect(screen.queryByText('COMPTE INJOIGNABLE')).toBeNull();
+  expect(screen.queryByText('Compte injoignable')).toBeNull();
 });
 
 it('starts Clerk from the build configuration without asking the server', async () => {
@@ -356,7 +356,7 @@ it('reports a build that enables sign-in without its key', async () => {
   built('');
   const requests = server(enabled);
   mount();
-  expect(await screen.findByText('AUTHENTIFICATION MAL CONFIGURÉE')).toBeTruthy();
+  expect(await screen.findByText('Authentification mal configurée')).toBeTruthy();
   expect(screen.queryByText('Tableau de bord')).toBeNull();
   expect(requests).toEqual([]);
 });
@@ -366,7 +366,7 @@ it('shows a misconfiguration, not a sign-out loop, when the server expects anoth
   clerk.signedIn = true;
   const requests = server({ enabled: true, publishable_key: 'pk_test_server' });
   mount();
-  expect(await screen.findByText('AUTHENTIFICATION MAL CONFIGURÉE')).toBeTruthy();
+  expect(await screen.findByText('Authentification mal configurée')).toBeTruthy();
   expect(screen.queryByText('Tableau de bord')).toBeNull();
   expect(clerk.signOut).not.toHaveBeenCalled();
   // The server was asked only after it refused the session.
@@ -382,7 +382,7 @@ it('ends a refused session as before when the server expects the same instance',
   mount();
   await waitFor(() => expect(clerk.signOut).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(reload).toHaveBeenCalled());
-  expect(screen.queryByText('AUTHENTIFICATION MAL CONFIGURÉE')).toBeNull();
+  expect(screen.queryByText('Authentification mal configurée')).toBeNull();
 });
 
 const WITHDRAWN: Consent = {

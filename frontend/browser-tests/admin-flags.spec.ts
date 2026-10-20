@@ -34,7 +34,7 @@ for (const mobile of [false, true]) {
     await expect(toggle).toBeChecked();
     await page.screenshot({ path: `../.context/glm-admin-${mobile ? 'mobile' : 'desktop'}.png`, fullPage: true, animations: 'disabled' });
     if (!mobile) {
-      await page.getByRole('heading', { name: 'FONCTIONNALITÉS EXPÉRIMENTALES' }).locator('..').screenshot({ path: '../.context/glm-admin-panel.png', animations: 'disabled' });
+      await page.getByRole('heading', { name: 'Fonctionnalités expérimentales' }).locator('..').screenshot({ path: '../.context/glm-admin-panel.png', animations: 'disabled' });
     }
     await toggle.click();
     await expect(page.getByText('Option enregistrée.')).toBeVisible();

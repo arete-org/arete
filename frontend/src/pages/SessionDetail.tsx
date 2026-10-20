@@ -29,6 +29,7 @@ import { SameDayLogWarning } from './log/SameDayLogWarning';
 import { useOpenDraft } from './log/useOpenDraft';
 import { RouteTrace } from './session/RouteTrace';
 import { StreamChart } from './session/StreamChart';
+import { useCoachName } from '@/lib/coachName';
 
 const ZONE_NAME = ['Z1 récupération', 'Z2 endurance', 'Z3 tempo', 'Z4 seuil', 'Z5 VO2max'];
 const SOURCE_LABEL: Record<string, string> = {
@@ -67,11 +68,11 @@ export function SessionDetailPage() {
           Journal
         </Link>
         {sessionId === null ? (
-          <EmptyState message="SÉANCE INTROUVABLE" />
+          <EmptyState message="Séance introuvable" />
         ) : query.isLoading ? (
-          <LoadingState message="CHARGEMENT DE LA SÉANCE…" />
+          <LoadingState message="Chargement de la séance…" />
         ) : query.isError || !query.data ? (
-          <ErrorState message="SÉANCE INTROUVABLE OU INDISPONIBLE" onRetry={() => query.refetch()} />
+          <ErrorState message="Séance introuvable ou indisponible" onRetry={() => query.refetch()} />
         ) : (
           <SessionView detail={query.data} />
         )}
@@ -81,6 +82,7 @@ export function SessionDetailPage() {
 }
 
 function SessionView({ detail }: { detail: ActivityDetail }) {
+  const coach = useCoachName();
   const { session } = detail;
   // The post-session notification opens /log/sessions/{id}?rpe=1.
   const [params] = useSearchParams();
@@ -151,7 +153,7 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
           title={
             <span className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
-              {detail.feedback.source === 'agent' ? 'Le regard de Chiron' : 'Calculé à partir de la séance'}
+              {detail.feedback.source === 'agent' ? `Le regard de ${coach}` : 'Calculé à partir de la séance'}
             </span>
           }
           titleTone="text-neon-cyan"
@@ -184,7 +186,7 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
       ) : (
         <Panel animate={false}>
           <EmptyState
-            message="PAS DE FLUX POUR CETTE SÉANCE"
+            message="Pas de flux pour cette séance"
             action="Les courbes viennent du fichier FIT : séances Garmin synchronisées ou importées depuis la conservation des flux."
           />
         </Panel>

@@ -194,8 +194,10 @@ def upsert_user(
             )
             # Fresh accounts start empty; only defaults are shared with the
             # original athlete, never their preferences, files or credentials.
+            # Explicit theme: databases created before ARE-134 default to 'dark'.
             con.execute(
-                "INSERT INTO app.user_settings(user_id,display_name,email) VALUES(?,?,?) ON CONFLICT DO NOTHING",
+                "INSERT INTO app.user_settings(user_id,display_name,email,theme)"
+                " VALUES(?,?,?,'system') ON CONFLICT DO NOTHING",
                 [athlete_id, name or "Athlète", email],
             )
             for statement in (
