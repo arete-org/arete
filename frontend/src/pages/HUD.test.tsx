@@ -274,7 +274,14 @@ it('leads to « Ma semaine » while the week waits for an answer, from the same 
   await mount(false);
   const entry = screen.getByRole('link', { name: /Ta semaine est prête/ });
   expect(entry.getAttribute('href')).toBe('/planning/semaine');
-  expect(within(entry).getByText('Le bilan et 2 propositions du coach pour la semaine qui vient')).toBeTruthy();
+  expect(within(entry).getByText('Bilan de ta semaine · 2 propositions du coach à accepter')).toBeTruthy();
+});
+
+it('names the next week to accept when the review proposes no change', async () => {
+  board.weekly_review = { id: 9, week_start: '2026-10-05', open: 0 };
+  await mount(false);
+  const entry = screen.getByRole('link', { name: /Ta semaine est prête/ });
+  expect(within(entry).getByText('Bilan de ta semaine · semaine suivante à accepter')).toBeTruthy();
 });
 
 it('shows no week entry once answered', async () => {

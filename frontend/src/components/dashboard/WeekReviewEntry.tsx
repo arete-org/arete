@@ -20,8 +20,8 @@ export function WeekReviewEntry({ open }: { open: number }) {
         <span className="block text-sm font-sans font-semibold text-text-primary">Ta semaine est prête</span>
         <span className="block text-xs font-sans text-text-muted">
           {open > 0
-            ? `Le bilan et ${open} proposition${open > 1 ? 's' : ''} du coach pour la semaine qui vient`
-            : 'Le bilan de ta semaine, et la suivante à accepter'}
+            ? `Bilan de ta semaine · ${open} proposition${open > 1 ? 's' : ''} du coach à accepter`
+            : 'Bilan de ta semaine · semaine suivante à accepter'}
         </span>
       </span>
       <span aria-hidden className="text-neon-cyan">→</span>
