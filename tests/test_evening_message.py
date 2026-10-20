@@ -281,14 +281,24 @@ def test_a_failed_scheduled_run_is_not_pushed_nor_replayed(evening):
     sent.assert_not_called()
 
 
-def test_an_unreachable_athlete_spends_no_request(db):
-    settings = {
-        "timezone": "Europe/Paris",
-        "coach_evening_enabled": True,
-        "notification_preferences": {"quiet_hours": None},
-    }
-    # No Web Push keys in tests: the push could not leave.
+def test_unreachable_names_why_the_push_cannot_leave(db, monkeypatch):
+    from arete.services import notifications
+
+    def at(hour: int) -> None:
+        # The default quiet hours (21:30-07:00) read this clock, not the wall's;
+        # only the time of day matters, so the date is fixed.
+        now = datetime(2026, 10, 20, hour, tzinfo=ZoneInfo("Europe/Paris"))
+        monkeypatch.setattr(notifications, "utc_now", lambda: now)
+
+    settings = {"timezone": "Europe/Paris", "coach_evening_enabled": True}
+    at(20)
+    # A developer's environment may hold push keys: without them the push
+    # could not leave.
+    monkeypatch.delenv("WEB_PUSH_VAPID_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("WEB_PUSH_VAPID_PRIVATE_KEY", raising=False)
     assert evening_message.unreachable(settings) == "clés Web Push absentes du serveur"
+    at(23)
+    assert evening_message.unreachable(settings) == "heures calmes"
     settings["notification_preferences"] = {"kinds": {"evening": False}}
     assert evening_message.unreachable(settings) == "type de notification désactivé"
 
