@@ -632,6 +632,55 @@ EXERCISES_CATALOG: list[ExerciseDefinition] = [
         "movement_pattern": "carry",
     },
     # =========================================
+    # HYROX STATIONS
+    # =========================================
+    {
+        "id": "sled_push",
+        "name": "Sled Push",
+        "name_fr": "Poussée de traîneau",
+        "category": "compound",
+        "equipment": ["sled"],
+        "primary_muscles": ["quads", "glutes", "calves"],
+        "secondary_muscles": ["hamstrings", "chest", "triceps", "front_delts", "abs"],
+        "movement_pattern": "compound",
+    },
+    {
+        "id": "sled_pull",
+        "name": "Sled Pull",
+        "name_fr": "Tirage de traîneau",
+        "category": "compound",
+        "equipment": ["sled"],
+        "primary_muscles": ["lats", "biceps", "forearms"],
+        "secondary_muscles": [
+            "rhomboids",
+            "rear_delts",
+            "glutes",
+            "hamstrings",
+            "lower_back",
+        ],
+        "movement_pattern": "compound",
+    },
+    {
+        "id": "burpee_broad_jump",
+        "name": "Burpee Broad Jump",
+        "name_fr": "Burpee saut en longueur",
+        "category": "compound",
+        "equipment": ["bodyweight"],
+        "primary_muscles": ["quads", "glutes", "chest"],
+        "secondary_muscles": ["hamstrings", "calves", "triceps", "front_delts", "abs"],
+        "movement_pattern": "compound",
+    },
+    {
+        "id": "wall_ball",
+        "name": "Wall Ball",
+        "name_fr": "Wall ball",
+        "category": "compound",
+        "equipment": ["medicine_ball"],
+        "primary_muscles": ["quads", "glutes", "front_delts"],
+        "secondary_muscles": ["hamstrings", "triceps", "side_delts", "abs"],
+        "movement_pattern": "squat",
+    },
+    # =========================================
     # OLYMPIC LIFTS
     # =========================================
     {
@@ -688,6 +737,22 @@ EXERCISES_CATALOG: list[ExerciseDefinition] = [
             "lower_back",
             "abs",
             "calves",
+        ],
+        "movement_pattern": "compound",
+    },
+    {
+        "id": "ski_erg",
+        "name": "SkiErg",
+        "name_fr": "SkiErg",
+        "category": "cardio",
+        "equipment": ["machine"],
+        "primary_muscles": ["lats", "triceps", "abs"],
+        "secondary_muscles": [
+            "front_delts",
+            "rear_delts",
+            "glutes",
+            "quads",
+            "obliques",
         ],
         "movement_pattern": "compound",
     },
@@ -810,6 +875,8 @@ EXERCISE_ALIASES = {
     "fentes marchées": "lunges",
     "fentes avant": "lunges",
     "fentes arrière": "lunges",
+    "fentes sandbag": "lunges",
+    "fentes avec sac de sable": "lunges",
     "walking lunges": "lunges",
     "lunge": "lunges",
     "presse cuisses": "leg_press",
@@ -831,6 +898,7 @@ EXERCISE_ALIASES = {
     "farmer walks": "farmer_carry",
     "farmers walk": "farmer_carry",
     "farmer": "farmer_carry",
+    "farmers": "farmer_carry",
     "marche du fermier": "farmer_carry",
     "clean": "power_clean",
     "power cleans": "power_clean",
@@ -956,6 +1024,7 @@ EXERCISE_ALIASES = {
     # Cardio
     "row erg": "row_erg",
     "rowing": "row_erg",
+    "rameur": "row_erg",
     "stairmaster": "stairmaster",
     "run": "running",
     "running": "running",

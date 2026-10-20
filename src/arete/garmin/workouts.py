@@ -20,6 +20,10 @@ _STRENGTH_NAMES = {
     "Lunges": "Lunge",
     "Calf Raises": "Calf Raise",
     "Leg Extension": "Leg Extensions",
+    "Pull Ups": "Pull-up",
+    "Farmer Carry": "Farmer's Carry",
+    "Rowing Ergometer": "Rowing Machine",
+    "Sled Pull": "Sled Backward Drag",
 }
 
 
@@ -123,12 +127,29 @@ def convert(
                 raise ValueError(
                     "Un repos de musculation ne peut pas masquer un exercice ou une charge."
                 )
-            if sport == "strength" and step.kind not in {"rest", "recovery"}:
+            # A station Garmin has no exercise for (SkiErg, burpee broad
+            # jumps): a manual-lap step its notes name, nothing hidden in it.
+            station = (
+                sport == "strength"
+                and step.kind not in {"rest", "recovery"}
+                and step.duration_kind == "lap"
+                and not (step.exercise or step.garmin_exercise)
+                and step.weight_kg is None
+            )
+            if station and not step.notes.strip():
+                raise ValueError(
+                    "Une étape de musculation sans exercice doit nommer sa station dans ses notes."
+                )
+            if (
+                sport == "strength"
+                and step.kind not in {"rest", "recovery"}
+                and not station
+            ):
                 name = step.garmin_exercise or step.exercise
                 entry = resolve(_STRENGTH_NAMES.get(name, name))
-                if not entry or step.duration_kind != "reps":
+                if not entry or step.duration_kind not in {"reps", "seconds"}:
                     raise ValueError(
-                        f"Choisis un exercice Garmin exact et un nombre de répétitions pour « {step.exercise} »."
+                        f"Choisis un exercice Garmin exact et un nombre de répétitions ou une durée pour « {step.exercise} »."
                     )
                 item = w.create_strength_exercise_step(
                     entry["category"],
@@ -137,6 +158,14 @@ def convert(
                     exercise_name=entry["exercise"],
                     weight_kg=step.weight_kg,
                 ).model_dump(exclude_none=True)
+                if step.duration_kind == "seconds":  # time-based station work
+                    item["endCondition"] = {
+                        "conditionTypeId": 2,
+                        "conditionTypeKey": "time",
+                        "displayOrder": 2,
+                        "displayable": True,
+                    }
+                    item["endConditionValue"] = float(step.value or 0)
                 if step.kind != "effort":
                     identifier = 1 if step.kind == "warmup" else 2
                     item["stepType"] = {

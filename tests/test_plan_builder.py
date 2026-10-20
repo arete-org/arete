@@ -188,8 +188,12 @@ def test_a_hyrox_plan_is_written_with_its_sports_and_prescriptions(hyrox):
         "station",
         "race",
     }
-    compromised = [s for s in sessions if s.prescription is not None]
-    assert compromised and all(s.sport == "running" for s in compromised)
+    compromised = [s for s in sessions if s.plan_kind == "compromised"]
+    assert compromised and all(
+        s.sport == "running" and s.prescription for s in compromised
+    )
+    # Strength sessions and circuits carry their steps too (ARE-138).
+    assert all(s.prescription for s in sessions if s.sport == "strength")
     # Its steps own pace and effort; the duration stays for the planned load.
     assert all(
         s.target_hr_zone is None and s.target_intensity is None for s in compromised
@@ -311,6 +315,28 @@ def test_a_hybrid_block_previews_without_a_race(goal):
     last = body["weeks"][-1]
     assert last["recovery"] is True
     assert any("benchmark" in s["tags"] for s in last["sessions"])
+
+
+def test_a_hyrox_preview_fills_strength_and_circuit_steps(hyrox):
+    body = plan_builder.preview(hyrox.id, TODAY)
+    sessions = [s for w in body["weeks"] for s in w["sessions"]]
+    # The payload keeps its shape: the circuits' station ids stay internal.
+    assert all("stations" not in s for s in sessions)
+    strength = [s for s in sessions if s["sport"] == "strength"]
+    assert strength and all(s["prescription"] for s in strength)
+    # Women Open: the official 4 kg wall ball, 10 kg sandbag, 2 × 16 kg carry.
+    official = {"Wall Ball": 4, "Sandbag Lunge": 10, "Farmer Carry": 16}
+    seen = {}
+    for s in strength:
+        if "station" not in s["tags"]:
+            continue
+        for block in s["prescription"]["steps"]:
+            for step in block["steps"] or [block]:
+                if step["garmin_exercise"] in official:
+                    seen[step["garmin_exercise"]] = step["weight_kg"]
+    assert seen and all(official[name] == kg for name, kg in seen.items())
+    # Without a sled, a circuit pushes no sled.
+    assert not any("traîneau" in s["description"] for s in strength)
 
 
 def test_strength_history_counts_logged_days(goal):
