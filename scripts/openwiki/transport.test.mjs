@@ -161,6 +161,59 @@ test('request and elapsed-time budgets fail before the next HTTP request', async
   assert.equal(timed.calls.length, 1);
 });
 
+test('an attempt cut off by the run deadline is reported as the deadline, not the network', async () => {
+  // Run 39406173635: request 67 started seconds before the run budget ended and
+  // was logged as a network failure while the transport stopped on its deadline.
+  let clock = 0;
+  const logs = [];
+  const fetch = createTransport({
+    limits: { ...LIMITS, runTimeoutMs: 60000 },
+    now: () => clock,
+    wait: async (ms) => { clock += ms; },
+    random: () => 0,
+    log: (line) => logs.push(line),
+    fetch: async (_, { signal }) => {
+      if (clock === 0) {
+        clock = 59995;
+        return new Response('ok');
+      }
+      return new Promise((_, reject) => {
+        signal.addEventListener('abort', () => { clock = 60000; reject(signal.reason); }, { once: true });
+      });
+    },
+  });
+  await fetch(URL, INIT);
+  await assert.rejects(fetch(URL, INIT), /run deadline exceeded \(1-minute HTTP budget\)/);
+  assert.deepEqual(logs.slice(1), [
+    `OpenWiki HTTP 2/${LIMITS.requests}: attempt 1/4, cut off by the run deadline`,
+    `OpenWiki transport stopped after 2/${LIMITS.requests} HTTP requests: run deadline exceeded (1-minute HTTP budget)`,
+  ]);
+});
+
+test('attempt logs distinguish request timeouts from network errors', async () => {
+  const stall = ({ signal }) => new Promise((_, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+  const reset = new TypeError('fetch failed', { cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }) });
+  const h = harness([stall, reset, new Response('ok')], { requestTimeoutMs: 5 });
+  await h.fetch(URL, INIT);
+  assert.deepEqual(h.logs, [
+    `OpenWiki HTTP 1/${LIMITS.requests}: attempt 1/4, no response within 0.005 s`,
+    `OpenWiki HTTP 2/${LIMITS.requests}: attempt 2/4, network error (UND_ERR_SOCKET)`,
+    `OpenWiki HTTP 3/${LIMITS.requests}: attempt 3/4, 200`,
+  ]);
+});
+
+test('the stop reason is logged once even when the caller swallows the error', async () => {
+  const h = harness([new Response('ok')], { requests: 1 });
+  await h.fetch(URL, INIT);
+  await h.fetch(URL, INIT).catch(() => {});
+  await h.fetch(URL, INIT).catch(() => {});
+  assert.deepEqual(h.logs.filter((line) => line.includes('stopped')), [
+    'OpenWiki transport stopped after 1/1 HTTP requests: total HTTP request budget exhausted',
+  ]);
+});
+
 test('cancellation interrupts backoff without retrying', async () => {
   const controller = new AbortController();
   const h = harness([() => { controller.abort(); throw controller.signal.reason; }]);

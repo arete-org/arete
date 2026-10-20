@@ -6,12 +6,15 @@ const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_RESPONSE_CHUNKS = 8192;
 
+// A complete update took 103 requests at 9 s each (run 37993606863); later
+// runs averaged 17-22 s per request and stopped with 2-4 of 5-6 pages done at
+// 23 minutes or 120 requests. Keep the run budget under the step timeout.
 export const LIMITS = Object.freeze({
   intervalMs: 6000,
   attempts: 4,
   requestTimeoutMs: 120000,
-  runTimeoutMs: 23 * 60 * 1000,
-  requests: 120,
+  runTimeoutMs: 55 * 60 * 1000,
+  requests: 200,
   pending: 4,
   maxWaitMs: 180000,
   backoffMs: 30000,
@@ -57,6 +60,15 @@ export function retryDelay(headers, now) {
   return Math.max(0, ...hints.filter(Number.isFinite));
 }
 
+// Name what ended an attempt: the run deadline, our timeout or the network.
+function failureLabel(error, timedOut, timeoutMs, requestTimeoutMs) {
+  if (timedOut) {
+    return timeoutMs < requestTimeoutMs
+      ? 'cut off by the run deadline' : `no response within ${timeoutMs / 1000} s`;
+  }
+  return `network error (${error.cause?.code ?? error.message})`;
+}
+
 function transientProvider404(status, body) {
   if (status !== 404) return false;
   let error;
@@ -84,6 +96,7 @@ export function createTransport({
     const value = limits[name];
     assert(Number.isSafeInteger(value) && value > 0, `Invalid limit: ${name}`);
   }
+  const deadlineMessage = `run deadline exceeded (${limits.runTimeoutMs / 60000}-minute HTTP budget)`;
   let tail = Promise.resolve();
   let pending = 0;
   let requests = 0;
@@ -92,10 +105,14 @@ export function createTransport({
   let stopped;
 
   function stop(message, cause) {
-    // AbortError tells the SDK to stop too; its retries must not multiply ours.
-    stopped ??= Object.assign(new Error(`OpenWiki transport: ${message}`, { cause }), {
-      name: 'AbortError',
-    });
+    if (!stopped) {
+      // AbortError tells the SDK to stop too; its retries must not multiply ours.
+      stopped = Object.assign(new Error(`OpenWiki transport: ${message}`, { cause }), {
+        name: 'AbortError',
+      });
+      // OpenWiki page workers swallow fetch errors, so log the cause ourselves.
+      log(`OpenWiki transport stopped after ${requests}/${limits.requests} HTTP requests: ${message}`);
+    }
     return stopped;
   }
 
@@ -128,14 +145,16 @@ export function createTransport({
         if (delay > 0) await wait(delay, signal);
         signal?.throwIfAborted();
         const remaining = deadline - now();
-        if (remaining <= 0) throw stop('run deadline exceeded');
+        if (remaining <= 0) throw stop(deadlineMessage);
+        // Near the end of the run the timeout is the run deadline, not ours.
+        const timeoutMs = Math.min(limits.requestTimeoutMs, remaining);
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), Math.min(limits.requestTimeoutMs, remaining));
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
         const requestSignal = signal
           ? AbortSignal.any([signal, controller.signal]) : controller.signal;
         let response;
         let body;
-        let networkError;
+        let failure;
         requests += 1;
         nextStart = now() + limits.intervalMs;
         try {
@@ -148,24 +167,27 @@ export function createTransport({
           if (!(error instanceof TypeError) && error?.name !== 'AbortError' && error?.name !== 'TimeoutError') {
             throw error;
           }
-          networkError = error;
+          failure = {
+            error,
+            label: failureLabel(error, controller.signal.aborted, timeoutMs, limits.requestTimeoutMs),
+          };
         } finally {
           clearTimeout(timer);
         }
-        log(`OpenWiki HTTP ${requests}/${limits.requests}: attempt ${attempt + 1}/${limits.attempts}, ${networkError ? 'network failure' : response.status}`);
-        if (now() >= deadline) throw stop('run deadline exceeded');
-        if (!networkError && response.ok) {
+        log(`OpenWiki HTTP ${requests}/${limits.requests}: attempt ${attempt + 1}/${limits.attempts}, ${failure ? failure.label : response.status}`);
+        if (now() >= deadline) throw stop(deadlineMessage, failure?.error);
+        if (!failure && response.ok) {
           return new Response(body, { status: response.status, headers: response.headers });
         }
         const dailyQuota = response?.status === 429 &&
           /free-models-per-day|daily[^\n]{0,80}(?:limit|quota)|insufficient_quota|quota[^\n]{0,40}exhausted/i.test(body ?? '');
         if (dailyQuota) throw stop('daily free-model quota exhausted; wait for its reset');
-        if (!networkError && !RETRY_STATUSES.has(response.status) &&
+        if (!failure && !RETRY_STATUSES.has(response.status) &&
             !transientProvider404(response.status, body)) {
           throw stop(`non-retryable HTTP ${response.status}; check credentials, quota or request configuration`);
         }
         if (attempt + 1 === limits.attempts) {
-          throw stop(`transient failure persisted after ${limits.attempts} attempts (${networkError ? 'network' : response.status})`, networkError);
+          throw stop(`transient failure persisted after ${limits.attempts} attempts (${failure ? failure.label : response.status})`, failure?.error);
         }
         const backoff = Math.max(response?.status === 429 ? 60000 : 0,
           limits.backoffMs * 2 ** attempt) + Math.floor(random() * limits.jitterMs);
