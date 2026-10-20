@@ -23,7 +23,8 @@ at most three attempts; ambiguous database errors and import writes are not
 replayed. Cancellation keeps the
 owner until the synchronous worker or import iterator has unwound. Committed
 sessions are returned by exact local IDs, including old sessions and Garmin
-takeovers of Strava rows. FIT parsing, streams, plan matching and strength
+takeovers of legacy Strava rows (Strava was retired as a source in October 2026;
+the takeover writes Garmin's values over the row). FIT parsing, streams, plan matching and strength
 linking retain the existing import implementation.
 
 A lease that expires while still owned becomes `needs_reconciliation`. It is
@@ -105,6 +106,6 @@ operator action, not an automatic retry of an ambiguous write.
 uploads, failed older rows, anchor shifts, expiry/recovery, overlapping callers,
 token-refresh/HTTP budgets, 429, partial health, committed cancellation state and
 coaching preflight. Existing importer tests cover missing FIT, streams, matching,
-strength and Strava takeover. Frontend unit tests and
+strength and the takeover of legacy Strava rows. Frontend unit tests and
 `frontend/browser-tests/garmin-connection.spec.ts` cover waiting, partial status,
 foreground refresh, invalidation and the existing MFA/history flows.

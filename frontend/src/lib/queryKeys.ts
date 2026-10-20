@@ -54,7 +54,6 @@ export const qk = {
   healthDaily: (date: string) => ['garmin-health', 'daily', date] as const,
   healthStatus: ['garminHealthStatus'] as const,
   syncStatus: ['syncStatus'] as const,
-  stravaStatus: ['stravaStatus'] as const,
 
   planToday: ['plan', 'today'] as const,
   /** Last week's review and its proposals. */
@@ -76,6 +75,7 @@ export const qk = {
   /** Every athlete and login of the instance (Settings › Administration). */
   adminAccounts: ['admin', 'accounts'] as const,
   adminFeatureFlags: ['admin', 'feature-flags'] as const,
+  adminKpis: (weeks: number) => ['admin', 'kpis', weeks] as const,
 
   vapidKey: ['vapidPublicKey'] as const,
   /** This device's Web Push state (lib/push.ts), not a server answer. */

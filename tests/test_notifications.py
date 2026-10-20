@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -44,6 +45,24 @@ def test_subscribe_upserts_and_keeps_the_newest_ten():
     assert "https://push.test/3" in endpoints
     notifications.unsubscribe("https://push.test/3")
     assert "https://push.test/3" not in _endpoints()
+
+
+def test_subscribing_again_renews_the_keys_and_keeps_the_first_date():
+    endpoint = "https://push.test/again"
+    notifications.subscribe(endpoint, "p", "a")
+    con = connect()
+    con.execute(
+        "UPDATE app.push_subscriptions SET created_at = TIMESTAMP '2026-09-01 08:00' "
+        "WHERE endpoint = ?",
+        [endpoint],
+    )
+    notifications.subscribe(endpoint, "p2", "a2")
+    stored = con.execute(
+        "SELECT p256dh, auth, created_at FROM app.push_subscriptions WHERE endpoint = ?",
+        [endpoint],
+    ).fetchall()
+    con.close()
+    assert stored == [("p2", "a2", datetime(2026, 9, 1, 8, 0))]
 
 
 def test_nothing_is_sent_without_keys_or_with_notifications_off(keys, monkeypatch):

@@ -22,7 +22,7 @@ from typing import Any, Literal
 import duckdb
 
 from arete.dataio.db import connect, db_connection, transaction
-from arete.dataio.queries import RUNNING_SPORTS, sql_in
+from arete.dataio.queries import EXCLUDED_SOURCES_SQL, RUNNING_SPORTS, sql_in
 from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services.settings import QuietHours, athlete_now, athlete_today, utc_now
@@ -140,7 +140,7 @@ def week_facts(week_start: date, today: date) -> WeekFacts:
             [week_start, end],
         ).fetchone() or (0, 0, 0, 0)
         done = con.execute(
-            f"SELECT COALESCE(SUM(duration_sec), 0) / 60, COUNT(*) FILTER (WHERE sport IN ({sql_in(RUNNING_SPORTS)})) FROM app.visible_actual_sessions WHERE user_id = getvariable('arete_athlete_id') AND date BETWEEN ? AND ?",
+            f"SELECT COALESCE(SUM(duration_sec), 0) / 60, COUNT(*) FILTER (WHERE sport IN ({sql_in(RUNNING_SPORTS)})) FROM app.visible_actual_sessions WHERE user_id = getvariable('arete_athlete_id') AND date BETWEEN ? AND ? AND COALESCE(source, '') NOT IN ({EXCLUDED_SOURCES_SQL})",
             [week_start, end],
         ).fetchone() or (0, 0)
         readiness = con.execute(

@@ -37,7 +37,6 @@ from arete.api.onboarding import router as onboarding_router
 from arete.api.plan import router as plan_router
 from arete.api.settings import router as settings_router
 from arete.api.slack import router as slack_router
-from arete.api.strava import router as strava_router
 from arete.api.strength import router as strength_router
 from arete.api.year_review import router as year_review_router
 from arete.config import config
@@ -267,7 +266,6 @@ for router in (
     garmin_sync_router,
     strength_router,
     ai_tips_router,
-    strava_router,
     google_calendar_router,
     analytics_router,
     agent_router,

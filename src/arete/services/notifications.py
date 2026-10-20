@@ -64,14 +64,18 @@ def public_key() -> str | None:
 def subscribe(
     endpoint: str, p256dh: str, auth: str, user_agent: str | None = None
 ) -> None:
-    """Keep this browser's subscription, and only the newest few."""
+    """Keep this browser's subscription, and only the newest few.
+
+    Subscribing the same browser again renews its keys but keeps the date it
+    first subscribed: the administrators' indicators count from it.
+    """
     con = connect()
     try:
         con.execute(
             "INSERT INTO app.push_subscriptions (endpoint, p256dh, auth, user_agent) "
             "VALUES (?, ?, ?, ?) ON CONFLICT (athlete_id, endpoint) DO UPDATE SET "
             "p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, "
-            "user_agent = EXCLUDED.user_agent, created_at = now() RETURNING endpoint",
+            "user_agent = EXCLUDED.user_agent RETURNING endpoint",
             [endpoint, p256dh, auth, (user_agent or "")[:300] or None],
         )
         con.execute(

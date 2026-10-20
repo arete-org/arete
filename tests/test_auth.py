@@ -10,7 +10,7 @@ import pytest
 
 from arete.api import auth
 from arete.dataio.db import connect
-from arete.services import oauth_state, users
+from arete.services import users
 
 OWNER = "user_owner"
 OTHER = "user_other"
@@ -83,9 +83,6 @@ def test_enforced_mode_requires_a_credential(client, enforced):
         "publishable_key": "pk_test_fake",
     }
     assert client.get("/openapi.json").status_code == 200
-    # The Strava callback arrives from the provider's redirect, with no session:
-    # it keeps its own state check and must not be turned away at the door.
-    assert client.get("/strava/callback").status_code != 401
     # Slack events carry Slack's signature, checked by their own route.
     assert "www-authenticate" not in client.post("/slack/events").headers
 
@@ -311,17 +308,6 @@ class TestUsers:
         con.close()
         assert users.upsert_user("u3", "me@example.com", verified=True).athlete_id == 1
         assert users.upsert_user("u4", "you@example.com", verified=True).athlete_id > 1
-
-
-class TestOAuthState:
-    def test_round_trip_tamper_and_expiry(self):
-        state = oauth_state.issue("secret", now=1_000_000)
-        assert oauth_state.verify("secret", state, now=1_000_100)
-        assert not oauth_state.verify("other", state, now=1_000_100)
-        assert not oauth_state.verify("secret", state + "x", now=1_000_100)
-        assert not oauth_state.verify("secret", state, now=1_000_000 + 601)
-        assert not oauth_state.verify("secret", None)
-        assert not oauth_state.verify("secret", "a.b")
 
 
 def test_http_workers_enforce_private_plans(client, enforced):

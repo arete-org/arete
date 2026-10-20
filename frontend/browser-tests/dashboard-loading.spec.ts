@@ -172,10 +172,13 @@ test('a repeat visit and a focus refresh stay within the budget, the coach card 
 
   // Past the 30 s freshness, the athlete comes back to the tab.
   requests.length = 0;
+  // The reload already reached `networkidle`, which would not wait again. The coach
+  // card reads once the board has answered: its answer closes the refresh.
+  const attention = page.waitForResponse(r => new URL(r.url()).pathname === '/api/coach/attention', { timeout: 10_000 });
   await page.clock.fastForward('00:45');
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-  await expect.poll(() => requests.includes('GET /api/dashboard')).toBe(true);
-  await page.waitForLoadState('networkidle');
+  await attention;
+  expect(requests, requests.join('\n')).toContain('GET /api/dashboard');
   expect(requests.filter(r => r.endsWith('/coach/today') || r.endsWith('/tips/daily') || r === CURVE), requests.join('\n')).toEqual([]);
   // Progress refreshes too: another device may have confirmed the athlete's profile.
   expect(requests.filter(r => r === 'GET /api/onboarding')).toHaveLength(1);

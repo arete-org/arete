@@ -1065,6 +1065,42 @@ def _m61_account_deletions(con) -> None:
 
 DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
 
+
+def _m62_strava_values_off_garmin_rows(con) -> None:
+    """Clear the Strava values copied onto Garmin rows (ARE-126).
+
+    Strava's API agreement (1 June 2026) forbids its data in an AI application,
+    and a Garmin row reaches the coach. In production these columns were set
+    only on the 33 rows linked to Strava, never on another Garmin row: the
+    merge filled them from Strava (laps included, which a FIT reprocess can
+    rebuild). Idempotent; the boot's backup clone precedes it.
+    """
+    # Frozen here, not imported: a migration keeps the columns of its day.
+    columns = (
+        "suffer_score",
+        "best_efforts_json",
+        "splits_json",
+        "avg_watts",
+        "weighted_avg_watts",
+        "workout_type",
+        "laps_json",
+        "device_name",
+        "notes",
+    )
+    if not {"source", "strava_activity_id", *columns} <= _columns(
+        con, "actual_sessions"
+    ):
+        return  # a schema older than the Strava merge holds no Strava value
+    cleared = ", ".join(f"{column} = NULL" for column in columns)
+    con.execute(
+        f"UPDATE app.actual_sessions SET {cleared} "
+        "WHERE strava_activity_id IS NOT NULL AND source IS DISTINCT FROM 'strava'"
+    )
+    # Strava is retired: no route reads or revokes its tokens any more, so
+    # stored credentials go (production holds none).
+    con.execute("DELETE FROM app.strava_tokens")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -1110,6 +1146,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (53, _m53_coaching_coordination),
     (54, _m54_strength_drafts),
     (61, _m61_account_deletions),
+    (62, _m62_strava_values_off_garmin_rows),
 ]
 
 
