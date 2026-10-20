@@ -13,6 +13,7 @@ export const LIMITS = Object.freeze({
   intervalMs: 6000,
   attempts: 4,
   requestTimeoutMs: 120000,
+  minAttemptMs: 30000,
   runTimeoutMs: 55 * 60 * 1000,
   requests: 200,
   pending: 4,
@@ -61,12 +62,13 @@ export function retryDelay(headers, now) {
 }
 
 // Name what ended an attempt: the run deadline, our timeout or the network.
-function failureLabel(error, timedOut, timeoutMs, requestTimeoutMs) {
-  if (timedOut) {
-    return timeoutMs < requestTimeoutMs
-      ? 'cut off by the run deadline' : `no response within ${timeoutMs / 1000} s`;
+function classifyFailure(error, timedOut, timeoutMs, requestTimeoutMs) {
+  if (timedOut && timeoutMs < requestTimeoutMs) {
+    return { error, deadline: true, label: 'cut off by the run deadline' };
   }
-  return `network error (${error.cause?.code ?? error.message})`;
+  const label = timedOut ? `no response within ${timeoutMs / 1000} s`
+    : `network error (${error.cause?.code ?? error.message})`;
+  return { error, deadline: false, label };
 }
 
 function transientProvider404(status, body) {
@@ -97,11 +99,14 @@ export function createTransport({
     assert(Number.isSafeInteger(value) && value > 0, `Invalid limit: ${name}`);
   }
   const deadlineMessage = `run deadline exceeded (${limits.runTimeoutMs / 60000}-minute HTTP budget)`;
+  // The preload creates this at process start: OpenWiki's startup before its
+  // first request runs inside the same step timeout, so it counts too.
+  const startedAt = now();
+  const deadline = startedAt + limits.runTimeoutMs;
   let tail = Promise.resolve();
   let pending = 0;
   let requests = 0;
   let nextStart = 0;
-  let deadline;
   let stopped;
 
   function stop(message, cause) {
@@ -131,7 +136,6 @@ export function createTransport({
     let release;
     tail = new Promise((resolve) => { release = resolve; });
     const signal = init.signal ?? (input instanceof Request ? input.signal : undefined);
-    deadline ??= now() + limits.runTimeoutMs;
     try {
       await previous;
       for (let attempt = 0; attempt < limits.attempts; attempt += 1) {
@@ -139,13 +143,18 @@ export function createTransport({
         signal?.throwIfAborted();
         if (requests >= limits.requests) throw stop('total HTTP request budget exhausted');
         const delay = Math.max(0, nextStart - now());
-        if (delay > limits.maxWaitMs || now() + delay >= deadline) {
+        if (delay > limits.maxWaitMs ||
+            (delay > 0 && now() + delay + limits.minAttemptMs > deadline)) {
           throw stop('provider cooldown exceeds the remaining run budget');
         }
         if (delay > 0) await wait(delay, signal);
         signal?.throwIfAborted();
         const remaining = deadline - now();
-        if (remaining <= 0) throw stop(deadlineMessage);
+        // An attempt with only seconds left would spend quota on a sure abort.
+        if (remaining < limits.minAttemptMs) throw stop(deadlineMessage);
+        if (requests === 0) {
+          log(`OpenWiki transport: first HTTP request ${Math.round((now() - startedAt) / 1000)} s after process start`);
+        }
         // Near the end of the run the timeout is the run deadline, not ours.
         const timeoutMs = Math.min(limits.requestTimeoutMs, remaining);
         const controller = new AbortController();
@@ -167,15 +176,13 @@ export function createTransport({
           if (!(error instanceof TypeError) && error?.name !== 'AbortError' && error?.name !== 'TimeoutError') {
             throw error;
           }
-          failure = {
-            error,
-            label: failureLabel(error, controller.signal.aborted, timeoutMs, limits.requestTimeoutMs),
-          };
+          failure = classifyFailure(error, controller.signal.aborted, timeoutMs, limits.requestTimeoutMs);
         } finally {
           clearTimeout(timer);
         }
         log(`OpenWiki HTTP ${requests}/${limits.requests}: attempt ${attempt + 1}/${limits.attempts}, ${failure ? failure.label : response.status}`);
-        if (now() >= deadline) throw stop(deadlineMessage, failure?.error);
+        // Our deadline timer decides, whatever the clock reads a millisecond later.
+        if (failure?.deadline || now() >= deadline) throw stop(deadlineMessage, failure?.error);
         if (!failure && response.ok) {
           return new Response(body, { status: response.status, headers: response.headers });
         }
@@ -196,6 +203,12 @@ export function createTransport({
       }
       assert.fail('Retry loop must return or throw');
     } catch (error) {
+      if (error === stopped) throw error;
+      // The caller's own cancellation is neither a budget stop nor sticky.
+      if (signal?.aborted) {
+        log(`OpenWiki transport: request cancelled by the caller after ${requests}/${limits.requests} HTTP requests`);
+        throw error;
+      }
       throw stop(error.message, error);
     } finally {
       pending -= 1;

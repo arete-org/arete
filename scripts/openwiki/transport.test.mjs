@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createTransport, LIMITS, retryDelay } from './transport.mjs';
 
@@ -25,8 +26,10 @@ function harness(responses, overrides = {}) {
       return response;
     },
   });
-  return { fetch, calls, waits, logs };
+  return { fetch, calls, waits, logs, advance: (ms) => { clock += ms; } };
 }
+
+const httpLogs = (logs) => logs.filter((line) => !line.includes('first HTTP request'));
 
 test('passes other endpoints through untouched', async () => {
   const response = new Response('other');
@@ -161,33 +164,55 @@ test('request and elapsed-time budgets fail before the next HTTP request', async
   assert.equal(timed.calls.length, 1);
 });
 
-test('an attempt cut off by the run deadline is reported as the deadline, not the network', async () => {
-  // Run 39406173635: request 67 started seconds before the run budget ended and
-  // was logged as a network failure while the transport stopped on its deadline.
-  let clock = 0;
-  const logs = [];
-  const fetch = createTransport({
-    limits: { ...LIMITS, runTimeoutMs: 60000 },
-    now: () => clock,
-    wait: async (ms) => { clock += ms; },
-    random: () => 0,
-    log: (line) => logs.push(line),
-    fetch: async (_, { signal }) => {
-      if (clock === 0) {
-        clock = 59995;
-        return new Response('ok');
-      }
-      return new Promise((_, reject) => {
-        signal.addEventListener('abort', () => { clock = 60000; reject(signal.reason); }, { once: true });
-      });
-    },
+// Run 39406173635: request 67 started seconds before the run budget ended and
+// was logged as a network failure while the transport stopped on its deadline.
+// The abort may also observe a clock a millisecond short of the deadline.
+for (const abortedAt of [59999, 60000]) {
+  test(`an attempt cut off by the run deadline is reported as the deadline (clock ${abortedAt})`, async () => {
+    let clock = 0;
+    const logs = [];
+    const fetch = createTransport({
+      limits: { ...LIMITS, runTimeoutMs: 60000, minAttemptMs: 1 },
+      now: () => clock,
+      wait: async (ms) => { clock += ms; },
+      random: () => 0,
+      log: (line) => logs.push(line),
+      fetch: async (_, { signal }) => {
+        if (clock === 0) {
+          clock = 59995;
+          return new Response('ok');
+        }
+        return new Promise((_, reject) => {
+          signal.addEventListener('abort', () => { clock = abortedAt; reject(signal.reason); }, { once: true });
+        });
+      },
+    });
+    await fetch(URL, INIT);
+    await assert.rejects(fetch(URL, INIT), /run deadline exceeded \(1-minute HTTP budget\)/);
+    assert.deepEqual(httpLogs(logs).slice(1), [
+      `OpenWiki HTTP 2/${LIMITS.requests}: attempt 1/4, cut off by the run deadline`,
+      `OpenWiki transport stopped after 2/${LIMITS.requests} HTTP requests: run deadline exceeded (1-minute HTTP budget)`,
+    ]);
   });
-  await fetch(URL, INIT);
-  await assert.rejects(fetch(URL, INIT), /run deadline exceeded \(1-minute HTTP budget\)/);
-  assert.deepEqual(logs.slice(1), [
-    `OpenWiki HTTP 2/${LIMITS.requests}: attempt 1/4, cut off by the run deadline`,
-    `OpenWiki transport stopped after 2/${LIMITS.requests} HTTP requests: run deadline exceeded (1-minute HTTP budget)`,
-  ]);
+}
+
+test('no attempt is sent when less than its minimum useful time remains', async () => {
+  const h = harness([() => { h.advance(35000); return new Response('ok'); }], { runTimeoutMs: 60000 });
+  await h.fetch(URL, INIT);
+  await assert.rejects(h.fetch(URL, INIT), /run deadline exceeded/);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.logs.at(-1), `OpenWiki transport stopped after 1/${LIMITS.requests} HTTP requests: run deadline exceeded (1-minute HTTP budget)`);
+});
+
+test('the run deadline starts when the transport is created, before OpenWiki starts up', async () => {
+  const h = harness([new Response('ok')]);
+  h.advance(120000);
+  await h.fetch(URL, INIT);
+  assert.equal(h.logs[0], 'OpenWiki transport: first HTTP request 120 s after process start');
+  const late = harness([]);
+  late.advance(LIMITS.runTimeoutMs - 10000);
+  await assert.rejects(late.fetch(URL, INIT), /run deadline exceeded/);
+  assert.equal(late.calls.length, 0);
 });
 
 test('attempt logs distinguish request timeouts from network errors', async () => {
@@ -197,7 +222,7 @@ test('attempt logs distinguish request timeouts from network errors', async () =
   const reset = new TypeError('fetch failed', { cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }) });
   const h = harness([stall, reset, new Response('ok')], { requestTimeoutMs: 5 });
   await h.fetch(URL, INIT);
-  assert.deepEqual(h.logs, [
+  assert.deepEqual(httpLogs(h.logs), [
     `OpenWiki HTTP 1/${LIMITS.requests}: attempt 1/4, no response within 0.005 s`,
     `OpenWiki HTTP 2/${LIMITS.requests}: attempt 2/4, network error (UND_ERR_SOCKET)`,
     `OpenWiki HTTP 3/${LIMITS.requests}: attempt 3/4, 200`,
@@ -212,6 +237,25 @@ test('the stop reason is logged once even when the caller swallows the error', a
   assert.deepEqual(h.logs.filter((line) => line.includes('stopped')), [
     'OpenWiki transport stopped after 1/1 HTTP requests: total HTTP request budget exhausted',
   ]);
+});
+
+test('a caller cancellation is reported as such and does not stop later requests', async () => {
+  const controller = new AbortController();
+  const h = harness([() => { controller.abort(); throw controller.signal.reason; }, new Response('ok')]);
+  await assert.rejects(h.fetch(URL, { ...INIT, signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(await (await h.fetch(URL, INIT)).text(), 'ok');
+  assert(h.logs.includes(`OpenWiki transport: request cancelled by the caller after 1/${LIMITS.requests} HTTP requests`));
+  assert(!h.logs.some((line) => line.includes('stopped')));
+});
+
+test('the workflow lets the transport stop before the runner kills the step', () => {
+  const workflow = readFileSync(new globalThis.URL('../../.github/workflows/openwiki-update.yml', import.meta.url), 'utf8');
+  const minutes = (text) => Number(text.match(/^ *timeout-minutes: (\d+)$/m)?.[1]);
+  const job = minutes(workflow.split('\n    steps:\n')[0]);
+  const step = minutes(workflow.split(/\n {6}- /).find((block) => block.startsWith('name: Update the wiki\n')) ?? '');
+  assert(Number.isSafeInteger(job) && Number.isSafeInteger(step), 'timeouts not found in the workflow');
+  assert(step * 60000 >= LIMITS.runTimeoutMs + 2 * 60000, 'the step timeout needs 2 minutes beyond the HTTP budget');
+  assert(job > step, 'the job timeout must exceed the generation step timeout');
 });
 
 test('cancellation interrupts backoff without retrying', async () => {
