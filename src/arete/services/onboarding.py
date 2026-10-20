@@ -128,7 +128,7 @@ def render_answers(answers: Answers) -> str:
         intro += " Une course exprime une intention, pas un plan."
     if len(given) < len(rows):
         # Skipped answers stay unknown: no default fills them in.
-        intro += " Ce qui n’y figure pas reste à préciser."
+        intro += " Ce qui n’y figure pas reste inconnu : rien n’est supposé à sa place."
     return "\n\n".join([intro, "\n".join(given)]) if given else intro
 
 

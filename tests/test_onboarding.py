@@ -91,6 +91,21 @@ def test_edit_is_visible_on_next_context_and_does_not_keep_a_hidden_copy():
     assert "Mercredi indisponible" not in reference("onboarding:1")["record"]["content"]
 
 
+def test_the_recap_states_a_race_intention_only_for_a_race_goal():
+    text = onboarding.render_answers(onboarding.Answers(goal="progress"))
+    assert "Objectif : Progresser" in text
+    assert "intention" not in text and "Course envisagée" not in text
+    assert (
+        "Ce qui n’y figure pas reste inconnu : rien n’est supposé à sa place." in text
+    )
+
+
+def test_blank_answers_render_the_intro_alone():
+    assert onboarding.render_answers(onboarding.Answers()) == (
+        "Réponses confirmées par l’athlète. Ce qui n’y figure pas reste inconnu : rien n’est supposé à sa place."
+    )
+
+
 def test_scope_isolation_and_blank_answers_do_not_create_defaults_or_plan():
     from arete.services.settings import get_settings
 
@@ -106,7 +121,9 @@ def test_scope_isolation_and_blank_answers_do_not_create_defaults_or_plan():
     assert "Non précisé" not in text and "Course envisagée" not in text
     assert "Séances souhaitées" not in text and "Contraintes" not in text
     assert "Objectif : Préparer une course" in text
-    assert "Ce qui n’y figure pas reste à préciser." in text
+    assert (
+        "Ce qui n’y figure pas reste inconnu : rien n’est supposé à sa place." in text
+    )
     assert "peak" not in text
     with athlete_scope(909001):
         assert onboarding.get_progress()["status"] == "not_started"
