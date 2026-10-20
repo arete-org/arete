@@ -1,6 +1,8 @@
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import { type ZoneKind, zoneLabel } from '@/lib/fr';
+import type { GlossaryId } from '@/lib/glossary';
 import { cn, getZoneColor } from '@/lib/utils';
+import { GlossaryLink } from './GlossaryLink';
 
 interface MetricCardProps {
   title: string;
@@ -9,6 +11,8 @@ interface MetricCardProps {
   zone: string | null | undefined;
   subtitle?: string;
   trend?: 'up' | 'down' | 'stable';
+  /** The glossary entry its "?" opens. */
+  term?: GlossaryId;
 }
 
 // Status stays in the badge; the shared card surface remains visually quiet.
@@ -27,7 +31,7 @@ const zoneColorMap = {
   },
 };
 
-export function MetricCard({ title, value, kind, zone, subtitle, trend }: MetricCardProps) {
+export function MetricCard({ title, value, kind, zone, subtitle, trend, term }: MetricCardProps) {
   const zoneColor = getZoneColor(kind, zone);
   const colors = zoneColorMap[zoneColor];
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
@@ -35,7 +39,10 @@ export function MetricCard({ title, value, kind, zone, subtitle, trend }: Metric
   return (
     <div className="glass-panel p-4 animate-fade-up">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-sans text-text-muted uppercase tracking-wider">{title}</span>
+        <span className="flex items-center gap-1 text-xs font-sans text-text-muted uppercase tracking-wider">
+          {title}
+          {term && <GlossaryLink term={term} />}
+        </span>
         {trend && (
           <TrendIcon
             className={cn(

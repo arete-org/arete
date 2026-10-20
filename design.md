@@ -70,6 +70,7 @@ la typographie, pas une refonte de la disposition de la page Réglages.
 | Navigation active | Fond de sélection, état courant accessible | `--color-selection`, `aria-current` |
 | Focus clavier | Contour de 2 px, décalé de 3 px, couleur d’accent | `:focus-visible` |
 | Mesure de santé | Valeur Inter, chiffres tabulaires ; statut porté par le badge et son texte | `MetricCard` |
+| Aide sur une mesure | « ? » de 20 px à côté du libellé, cible tactile de 44 px, nom « Qu’est-ce que … ? », sans infobulle ; mène à l’entrée du Lexique (`/analytics/lexique#terme`) | `GlossaryLink`, `lib/glossary.ts`, `lib/glossaryEntries.ts` |
 | Connexion et accès refusé | Même signature au laurier ; widget Clerk relié aux tokens | `AreteWordmark`, `ClerkGate` |
 | Sélecteur de thème | Huit aperçus de même taille avec signature, titre et donnée fictive ; sélection cochée et `aria-pressed` | `AppearanceTab`, `THEMES` |
 | Mouvement | Apparition courte, sans cascade retardant la lecture ; respect du mouvement réduit | `index.css` |

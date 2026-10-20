@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 import { Component, type ErrorInfo } from 'react';
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import type { Card, Headline, Tone } from '@/types';
+import type { GlossaryId } from '@/lib/glossary';
 import { cn } from '@/lib/utils';
+import { GlossaryLink } from '@/components/GlossaryLink';
 
 const TONE_CLASS: Record<Tone, string> = {
   good: 'text-success-green',
@@ -72,6 +74,10 @@ export interface StatCardProps {
   card?: Card;
   /** Labels for the secondary headlines, in the order the API sends them. */
   secondaryLabels?: string[];
+  /** The glossary entry the title's "?" opens. */
+  term?: GlossaryId;
+  /** The glossary entry of each secondary label, by position. */
+  secondaryTerms?: (GlossaryId | undefined)[];
   previousLabel: string;
   loading?: boolean;
   error?: boolean;
@@ -88,6 +94,8 @@ export function StatCard({
   question,
   card,
   secondaryLabels = [],
+  term,
+  secondaryTerms = [],
   previousLabel,
   loading,
   error,
@@ -102,7 +110,10 @@ export function StatCard({
       )}
     >
       <header className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1.5">
           <h3 className="text-[15px] font-medium text-text-primary">{title}</h3>
+          {term && <GlossaryLink term={term} />}
+        </div>
         {card && <DeltaBadge headline={card.headline} previousLabel={previousLabel} />}
       </header>
       <p className="text-xs text-text-muted">{question}</p>
@@ -123,8 +134,10 @@ export function StatCard({
             </span>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
             {card.secondary.map((h, i) => (
-              <span key={secondaryLabels[i] ?? i}>
-                {secondaryLabels[i] && `${secondaryLabels[i]} · `}
+              <span key={secondaryLabels[i] ?? i} className="inline-flex items-center gap-1">
+                {secondaryLabels[i]}
+                {secondaryTerms[i] && <GlossaryLink term={secondaryTerms[i]} />}
+                {secondaryLabels[i] && ' · '}
                 <span className="tabular-nums">{h.display}</span>
               </span>
             ))}

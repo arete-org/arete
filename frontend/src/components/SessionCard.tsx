@@ -8,6 +8,7 @@ import type { PlannedState } from '@/lib/sessionMatch';
 import { cn, formatDurationCompact, formatPace } from '@/lib/utils';
 import type { ActualSession, PlanDecision, PlannedSession, StrengthSession } from '@/types';
 import { DecisionBadge } from './DecisionBadge';
+import { GlossaryLink } from './GlossaryLink';
 import { Spinner } from './ui/Spinner';
 
 const INTENSITY_LABEL: Record<string, string> = {
@@ -381,8 +382,9 @@ export function SessionCard({
       )}
 
       {state === 'done' && realised?.adherence_score != null && (
-        <div className="mt-1 text-[11px] font-sans text-success-green/80">
+        <div className="mt-1 flex items-center gap-1 text-[11px] font-sans text-success-green/80">
           Adhérence {Math.round(realised.adherence_score)} %
+          <GlossaryLink term="adherence" />
         </div>
       )}
       {children}

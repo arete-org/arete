@@ -14,9 +14,15 @@
 .analysis-sports { display: flex; flex-direction: column; gap: 16px; }
 .analysis-sport { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; font-size: 12px; }
 .analysis-sport-bar, .analysis-sport-count { grid-column: 1 / -1; }
+/* Lexique: an anchored entry clears the sticky desktop bar; the one a "?" opened is outlined. */
+.glossary-entry { scroll-margin-top: calc(var(--safe-top) + 16px); }
+.glossary-entry[data-current] { border-color: var(--color-neon-cyan); }
+/* The focus a "?" moves here shows as the keyboard ring does, after a tap or click too. */
+.glossary-entry h3:focus { outline: 2px solid var(--color-neon-cyan); outline-offset: 3px; }
 @media (min-width: 768px) {
   .analytics-banner { top: calc(var(--safe-top) + 56px); }
   .analysis-card { padding: 24px; }
+  .glossary-entry { scroll-margin-top: calc(var(--safe-top) + 72px); }
 }
 /* A docked coach must not squeeze two charts into the space for one. */
 @container (min-width: 1000px) { .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

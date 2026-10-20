@@ -29,6 +29,7 @@ export function PaceCard({
   return (
     <StatCard
       title="Allure de course"
+      term="allure"
       question="L'allure progresse-t-elle à mesure des semaines ? Les sorties vallonnées comptent leur allure ajustée à la pente (GAP)."
       card={card}
       secondaryLabels={['Allure médiane']}

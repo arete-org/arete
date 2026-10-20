@@ -6,6 +6,13 @@ from typing import Any
 
 from arete.services.settings import athlete_today
 
+#: What the coach is told on the glossary page (frontend/src/lib/glossaryEntries.ts).
+GLOSSARY_PAGE = (
+    "Lexique : définitions statiques des termes et mesures d'Arete (ACWR, TSS, "
+    "forme de fond, fatigue, fraîcheur, zones, VFC, préparation…) avec leurs "
+    "seuils. Aucune donnée de l'athlète sur cette page."
+)
+
 
 def _strength_sessions(**filters: Any) -> list[dict[str, Any]]:
     """Strength sessions as the Log lists them: no per-exercise detail."""
@@ -99,6 +106,10 @@ def _analytics(params: dict[str, Any] | None = None) -> dict[str, Any]:
     from arete.features.periods import DEFAULT_PERIOD, PERIOD_DAYS
     from arete.services.analytics import get_overview
 
+    if (params or {}).get("path") == "/analytics/lexique":
+        # Static definitions the browser already holds: no athlete data to
+        # read, where the overview below costs ~11.6k tokens.
+        return {"glossary": GLOSSARY_PAGE}
     if (params or {}).get("path") == "/analytics/bilan":
         from arete.services.settings import athlete_today
         from arete.services.year_review import FIRST_YEAR, year_review

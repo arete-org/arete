@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, MessageCircle } from 'lucide-react';
 import { AdherenceBar } from '@/components/AdherenceBar';
+import { GlossaryLink } from '@/components/GlossaryLink';
 import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
 import { Button, Panel, Skeleton } from '@/components/ui';
 import { planApi } from '@/lib/api';
 import { discussWithCoach } from '@/lib/coachToday';
 import { parseLocalDate, toLocalISODate } from '@/lib/dates';
 import { formatDecimal, formatHoursMinutes } from '@/lib/fr';
+import type { GlossaryId } from '@/lib/glossary';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { readableError } from '@/lib/utils';
 import type { ReviewAccepted, ReviewWeek, WeekPushSession, WeekRecap, WeeklyReview } from '@/types';
@@ -47,10 +49,13 @@ const CALENDAR: Record<string, string> = {
   failed: 'Calendrier : échec de la synchronisation (détail dans Réglages › Connexions).',
 };
 
-function Tile({ label, value, detail }: { label: string; value: string; detail?: string }) {
+function Tile({ label, value, detail, term }: { label: string; value: string; detail?: string; term?: GlossaryId }) {
   return (
     <div className="ui-inset min-w-0 p-3">
-      <p className="text-[11px] font-sans uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="flex items-center gap-1 text-[11px] font-sans uppercase tracking-wide text-text-muted">
+        {label}
+        {term && <GlossaryLink term={term} />}
+      </p>
       <p className="mt-1 text-xl font-sans font-semibold tabular-nums text-text-primary">{value}</p>
       {detail && <p className="mt-0.5 text-[11px] font-sans text-text-muted">{detail}</p>}
     </div>
@@ -70,7 +75,10 @@ function Recap({ recap, review }: { recap: WeekRecap; review: WeeklyReview }) {
           detail={`sur ${minutes(recap.minutes_planned)} prévues`}
         />
         <div className="ui-inset min-w-0 p-3">
-          <p className="text-[11px] font-sans uppercase tracking-wide text-text-muted">Régularité</p>
+          <p className="flex items-center gap-1 text-[11px] font-sans uppercase tracking-wide text-text-muted">
+            Régularité
+            <GlossaryLink term="regularite" />
+          </p>
           <p className="mt-1 text-xl font-sans font-semibold tabular-nums text-text-primary">
             {adherence == null ? '—' : `${adherence} %`}
           </p>
@@ -82,6 +90,7 @@ function Recap({ recap, review }: { recap: WeekRecap; review: WeeklyReview }) {
         </div>
         <Tile
           label="Forme"
+          term="tsb"
           value={recap.tsb == null ? '—' : formatDecimal(recap.tsb, 0, true)}
           detail="TSB, forme de fond moins fatigue"
         />

@@ -935,6 +935,16 @@ class TestAnalyticsPageRead:
         get_page_data("analytics", params={"param_period": selected})
         assert calls == [expected]
 
+    def test_the_glossary_page_reads_no_athlete_data(self, monkeypatch):
+        from arete.services.pages import GLOSSARY_PAGE
+
+        def unexpected(**_kwargs):
+            raise AssertionError("the glossary page must not read the overview")
+
+        monkeypatch.setattr("arete.services.analytics.get_overview", unexpected)
+        result = get_page_data("analytics", params={"path": "/analytics/lexique"})
+        assert result == {"glossary": GLOSSARY_PAGE}
+
     def test_the_open_year_uses_its_aggregates_without_raw_records(self, monkeypatch):
         from arete.services.settings import athlete_today
 

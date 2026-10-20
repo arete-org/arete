@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, ChevronDown, Sunrise } from 'lucide-react';
+import { ArrowUpRight, BookOpen, ChevronDown, Sunrise } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { AretePresence } from '@/components/AreteBrand';
 import { PushOffer } from '@/components/PushOffer';
 import { Button } from '@/components/ui';
@@ -75,7 +76,13 @@ export function BriefingCard({ tip, writing, stalled, refresh }: {
       {times && <p className="text-[11px] text-text-muted">{times}</p>}
       <div className="flex flex-wrap items-center justify-between gap-1">
         {ready && <Button variant="ghost" size="sm" className="min-h-11 px-0 text-neon-cyan" onClick={open}>En parler avec Chiron <ArrowUpRight aria-hidden="true" className="size-3.5" /></Button>}
-        <Button variant="ghost" size="sm" className="min-h-11 px-0" aria-expanded={history} onClick={() => setHistory(!history)}>Briefings précédents <ChevronDown aria-hidden="true" className="size-3.5" /></Button>
+        <span className="flex items-center gap-4">
+          {/* The briefing quotes ACWR, TSB, VFC…: their meaning is one tap away. */}
+          <Link to="/analytics/lexique" className="inline-flex min-h-11 items-center gap-1 text-xs text-text-muted hover:text-text-primary">
+            <BookOpen aria-hidden="true" className="size-3.5" />Lexique
+          </Link>
+          <Button variant="ghost" size="sm" className="min-h-11 px-0" aria-expanded={history} onClick={() => setHistory(!history)}>Briefings précédents <ChevronDown aria-hidden="true" className="size-3.5" /></Button>
+        </span>
       </div>
     </>}
     {history && <BriefingHistory onOpen={markRead} />}

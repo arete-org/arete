@@ -1,6 +1,7 @@
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 import type { Bucket, Card } from '@/types';
 import { CHART } from '@/lib/chartTheme';
+import type { GlossaryId } from '@/lib/glossary';
 import { StatCard } from '../StatCard';
 import { ChartGrid, ChartTooltip, bucketAxis, bucketLabel } from '../chartParts';
 import { useId } from 'react';
@@ -9,6 +10,7 @@ import { useId } from 'react';
 export function RecoveryCard({
   title,
   question,
+  term,
   card,
   bucket,
   color,
@@ -20,6 +22,7 @@ export function RecoveryCard({
 }: {
   title: string;
   question: string;
+  term: GlossaryId;
   card?: Card;
   bucket: Bucket;
   color: string;
@@ -40,6 +43,7 @@ export function RecoveryCard({
     <StatCard
       title={title}
       question={question}
+      term={term}
       card={card}
       secondaryLabels={['Dernière mesure']}
       previousLabel={previousLabel}
