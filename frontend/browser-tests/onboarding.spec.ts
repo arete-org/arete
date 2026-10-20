@@ -121,6 +121,9 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     await page.getByRole('button', { name: 'Continuer', exact: true }).click();
     await page.getByRole('button', { name: 'Continuer', exact: true }).click();
     await expect(page.getByText('Strava', { exact: false })).toHaveCount(0);
+    // What Garmin records, then what Arete does with it: no setup jargon.
+    await expect(page.getByRole('heading', { name: 'Garmin mesure, Arete ajuste.' })).toBeVisible();
+    await expect(page.locator('.onboarding-garmin')).not.toContainText(/connexion|import/i);
     if (index % 2) {
       await page.getByRole('button', { name: 'Connecter Garmin', exact: true }).click();
       await page.getByLabel('[EMAIL]', { exact: true }).fill('camille@example.com');
