@@ -138,6 +138,25 @@ test('a fresh browser follows the device before the server answers', async ({ pa
   expect(await page.evaluate(() => localStorage.getItem('arete.theme.v1'))).toBeNull();
 });
 
+// The bundle never runs here: only the inline script in index.html can paint.
+for (const [stored, scheme, expected, color] of [
+  ['encre', 'light', 'encre', '#0E1413'],
+  ['prune', 'light', 'prune', '#291E29'],
+  ['dark', 'light', 'encre', '#0E1413'],
+  [null, 'dark', 'encre', '#0E1413'],
+  ['system', 'light', 'pierre', '#F6F3ED'],
+] as const) {
+  test(`the first paint is already ${expected} for a stored ${stored ?? 'nothing'} on a ${scheme} device`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.addInitScript(value => { if (value !== null) localStorage.setItem('arete.theme.v1', value); }, stored);
+    await page.route('**/src/main.tsx*', route => route.abort());
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', expected);
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', color);
+    expect(await page.locator('#root').innerHTML()).toBe('');
+  });
+}
+
 test('a cached retired theme migrates once on load', async ({ page }) => {
   await page.addInitScript(() => {
     if (!sessionStorage.getItem('seeded')) {

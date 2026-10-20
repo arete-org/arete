@@ -62,6 +62,10 @@ seule fois au chargement : clairs vers Pierre, sombres vers Encre. Le navigateur
 réécrit sa copie locale (`arete.theme.v1`) ; le serveur lit l’ancienne valeur
 comme son remplacement et l’enregistre à la prochaine sauvegarde, sans migration
 de base. Un nouveau compte et un navigateur neuf partent de « Système ».
+Un court script dans `index.html` applique le thème mis en cache (ou « Système »)
+et la couleur `theme-color` avant le premier rendu, pour qu’un thème sombre ne
+s’affiche jamais d’abord en crème ; `theme.test.ts` vérifie qu’il choisit le même
+thème que `initializeTheme()`.
 
 ## Nom du coach
 

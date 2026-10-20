@@ -106,7 +106,7 @@ def candidates(con, settings: dict, now: datetime) -> list[AttentionCandidate]:
               THEN 'plan_change_set:'||coalesce(try_cast(json_extract_string(payload_json,'$.args.preview_id') AS UUID)::VARCHAR,'')
               ELSE coalesce(c.subject_key,'automation_run:'||w.id) END,
             CASE WHEN json_extract_string(payload_json,'$.name')='ask_athlete' THEN 'question' ELSE 'approval' END,
-            CASE WHEN c.subject_key LIKE '%:availability' THEN 'availability' WHEN c.subject_key LIKE '%:missing_context' THEN 'missing_context' ELSE NULL END,w.revision::VARCHAR,w.created_at,w.expires_at,coalesce(json_extract_string(definition_json,'$.title'),'Suivi de Chiron'),'/follow-up?run='||w.id
+            CASE WHEN c.subject_key LIKE '%:availability' THEN 'availability' WHEN c.subject_key LIKE '%:missing_context' THEN 'missing_context' ELSE NULL END,w.revision::VARCHAR,w.created_at,w.expires_at,coalesce(json_extract_string(definition_json,'$.title'),'Suivi du coach'),'/follow-up?run='||w.id
           FROM waiting w LEFT JOIN app.visible_coach_attention_claims c ON c.source_ref='automation_run:'||w.id AND c.question_call_id=w.tool_call_id
           WHERE w.n=1 AND (c.subject_key IS NULL OR (c.state='open' AND c.expires_at>(SELECT now FROM bounds)
             AND (c.subject_key NOT LIKE 'plan:%' OR EXISTS (
@@ -115,7 +115,7 @@ def candidates(con, settings: dict, now: datetime) -> list[AttentionCandidate]:
             ))))
           UNION ALL
           SELECT 'evening:'||e.id,'evening:'||e.date||':availability','question','availability','1',e.created_at AT TIME ZONE 'UTC',
-            CAST(e.date + INTERVAL 2 DAY AS TIMESTAMP) AT TIME ZONE ?, 'Préparer demain avec Chiron','/follow-up?evening='||e.id
+            CAST(e.date + INTERVAL 2 DAY AS TIMESTAMP) AT TIME ZONE ?, 'Préparer demain avec le coach','/follow-up?evening='||e.id
           FROM app.visible_coach_evening_messages e CROSS JOIN bounds b
           WHERE e.status='ok' AND e.answer IS NULL AND e.date BETWEEN b.day-1 AND b.day
           UNION ALL

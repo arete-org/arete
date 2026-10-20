@@ -44,6 +44,9 @@ export const zoneLabel = (kind: ZoneKind, zone: string | null | undefined): stri
 /** A label shown alone (badge, chip, option) in natural case: « inconnu » → « Inconnu ». */
 export const capitalized = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
+/** A backend key with no French label yet, readable on its own: « open_water » → « Open water ». */
+export const readableKey = (key: string): string => capitalized(key.replace(/_/g, ' ').trim());
+
 /** "7h12" from seconds, for sleep durations. */
 export function formatHoursMinutes(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -84,7 +87,7 @@ export const SPORT_LABEL: Record<string, string> = {
 };
 
 export const sportLabel = (sport: string | null | undefined): string =>
-  sport ? (SPORT_LABEL[sport.toLowerCase()] ?? sport.replace(/_/g, ' ')) : 'Autre';
+  sport ? (SPORT_LABEL[sport.toLowerCase()] ?? readableKey(sport)) : 'Autre';
 
 /** The morning adaptation's decisions (services/adaptation.py). */
 export const DECISION_LABEL: Record<string, string> = {

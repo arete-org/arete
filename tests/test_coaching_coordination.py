@@ -488,6 +488,8 @@ def test_announcing_a_typed_question_never_answers_it_and_reuses_its_answer(athl
         is None
     )
     assert attention.projection()["primary_ref"] == f"automation_run:{run}"
+    # An untitled run reads the same in classic and RPG mode: no character name.
+    assert attention.projection()["items"][0]["title"] == "Suivi du coach"
     with db_connection() as con:
         con.execute(
             "UPDATE app.automation_interrupts SET decision_json=? WHERE run_id=?",

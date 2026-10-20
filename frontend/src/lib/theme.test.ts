@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
+import indexHtml from '../../index.html?raw';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { applyTheme, initializeTheme, normalizeThemePreference, resolveTheme } from './theme';
 
 const KEY = 'arete.theme.v1';
+const RETIRED = { light: 'pierre', performance: 'pierre', dark: 'encre', darker: 'encre', abyss: 'encre' };
 
 /** A device whose colour scheme the test can flip, like the OS setting. */
 function device(dark: boolean) {
@@ -81,6 +83,23 @@ it('migrates a cached retired theme once, then keeps the migrated choice', () =>
   initializeTheme();
   expect(shown()).toBe('pierre');
   expect(localStorage.getItem(KEY)).toBe('pierre');
+});
+
+it('paints the same theme before the bundle (index.html) as initializeTheme does', () => {
+  const early = indexHtml.match(/<script>([\s\S]*?)<\/script>/)![1];
+  for (const saved of [null, 'system', 'pierre', 'prune', 'odyssey', 'encre', ...Object.keys(RETIRED), 'unknown']) {
+    for (const dark of [false, true]) {
+      device(dark);
+      localStorage.clear();
+      if (saved !== null) localStorage.setItem(KEY, saved);
+      delete document.documentElement.dataset.theme;
+      new Function(early)();
+      const before = [shown(), document.querySelector('meta[name="theme-color"]')?.getAttribute('content')];
+      initializeTheme();
+      expect(before, `${saved} on a ${dark ? 'dark' : 'light'} device`).toEqual(
+        [shown(), document.querySelector('meta[name="theme-color"]')?.getAttribute('content')]);
+    }
+  }
 });
 
 it('keeps a kept palette untouched and still renders when storage is unavailable', () => {

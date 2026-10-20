@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { FACT_KIND_LABEL, phaseLabel, type ZoneKind, zoneLabel } from './fr';
+import { capitalized, FACT_KIND_LABEL, phaseLabel, readableKey, sportLabel, type ZoneKind, zoneLabel } from './fr';
 import { getZoneColor } from './utils';
+
+it('shows an unlabelled backend key in readable natural case', () => {
+  expect(sportLabel('open_water_swimming')).toBe('Open water swimming');
+  expect(sportLabel('running')).toBe('Course');
+  expect(readableKey('injury_history')).toBe('Injury history');
+  expect(capitalized('inconnu')).toBe('Inconnu');
+});
 
 // Exact enum values of src/arete/features/workload.py and features/fitness.py.
 const BACKEND_ZONES: Record<ZoneKind, string[]> = {

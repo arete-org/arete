@@ -34,7 +34,7 @@ export function GamificationTab() {
       <h2 className="text-lg font-bold">Profil RPG</h2>
       <p className="text-sm text-text-secondary">
         Un personnage, des succès et des Éclats pour collectionner des tenues.
-        Ton coach y devient un personnage, avec les pièces jointes dans le message.
+        Ton coach y devient Chiron, un personnage ; les pièces jointes s’affichent dans le message.
       </p>
       <Button
         role="switch"

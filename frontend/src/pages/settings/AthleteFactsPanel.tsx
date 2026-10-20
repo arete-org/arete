@@ -4,7 +4,7 @@ import { Check, Pencil, Trash2, UserRound, X } from 'lucide-react';
 import { Button, Input, Panel, Select } from '@/components/ui';
 import { athleteFactsApi } from '@/lib/api';
 import { parseLocalDate } from '@/lib/dates';
-import { capitalized, FACT_KIND_LABEL } from '@/lib/fr';
+import { capitalized, FACT_KIND_LABEL, readableKey } from '@/lib/fr';
 import { qk } from '@/lib/queryKeys';
 import { cn, readableError } from '@/lib/utils';
 import type { AthleteFact, FactKind } from '@/types';
@@ -38,7 +38,7 @@ function FactRow({ fact, compact = false, busyId, onSave, onToggle, onDelete, on
       className={cn('rounded border border-text-muted/20 p-3 space-y-2', resolved && 'opacity-50')}
     >
       {!compact && <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans">
-        <span className="text-neon-purple">{capitalized(FACT_KIND_LABEL[fact.kind] ?? fact.kind)}</span>
+        <span className="text-neon-purple">{FACT_KIND_LABEL[fact.kind] ? capitalized(FACT_KIND_LABEL[fact.kind]) : readableKey(fact.kind)}</span>
         <span className="text-text-muted">
           depuis le {parseLocalDate(fact.since).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
         </span>
