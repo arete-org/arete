@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Plus } from 'lucide-react';
 import { Button, Field, Input, Modal, ModalHeader, Select, Textarea } from '@/components/ui';
@@ -35,11 +35,15 @@ export function ManualCardioModal({
 }: {
   open: boolean;
   onClose: () => void;
-  /** Called with the new session's id, e.g. to ask the coach for feedback. */
-  onCreated?: (id: number) => void;
+  /**
+   * Called with the new session's id, in place of onClose: a save closes the
+   * screen where its feedback appears, a dismissal may leave the page.
+   */
+  onCreated: (id: number) => void;
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(empty());
+  const dateId = useId();
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -56,14 +60,16 @@ export function ManualCardioModal({
     onSuccess: (session) => {
       invalidateAfterSession(queryClient);
       setForm(empty());
-      onClose();
-      onCreated?.(session.id);
+      onCreated(session.id);
     },
   });
 
+  // A save in flight keeps the screen: leaving the page would lose its outcome.
+  const dismiss = () => { if (!createMutation.isPending) onClose(); };
+
   return (
-    <Modal mobileSheet open={open} onClose={onClose} className="max-w-md p-4 sm:p-6">
-      <ModalHeader title="SÉANCE SANS MONTRE" icon={<Plus className="w-5 h-5" />} onClose={onClose} className="mb-4" />
+    <Modal mobileSheet open={open} onClose={dismiss} className="max-w-md p-4 sm:p-6">
+      <ModalHeader title="SÉANCE SANS MONTRE" icon={<Plus className="w-5 h-5" />} onClose={dismiss} className="mb-4" />
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -71,10 +77,13 @@ export function ManualCardioModal({
         }}
         className="space-y-4"
       >
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Date">
+        {/* A phone column is too narrow for a full date: stacked, like the planning editor. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Date" htmlFor={dateId}>
             <Input
+              id={dateId}
               type="date"
+              className="session-date-input"
               value={form.date}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
               required

@@ -198,6 +198,9 @@ body {
 
 .ui-inset { border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-void); }
 .ui-input, .ui-button, .navigation-item, .settings-nav button { border-radius: var(--radius-control); }
+/* Session entry dates: iOS draws a date as a centred native button wider than a phone column. */
+.session-date-input { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; }
+.session-date-input::-webkit-date-and-time-value { text-align: left; min-height: 1.5em; }
 .ui-button { font-weight: 500; }
 .ui-button[data-variant='cyan'] { --button-accent: var(--color-neon-cyan); }
 .ui-button[data-variant='purple'] { --button-accent: var(--color-neon-purple); --button-on-accent: var(--color-on-purple); }

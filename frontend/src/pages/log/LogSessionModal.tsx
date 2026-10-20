@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, AlertTriangle, Check, Loader2, Sparkles } from 'lucide-react';
 import { cn, readableError } from '@/lib/utils';
@@ -41,6 +41,7 @@ export function LogSessionModal({ open, onClose, draft = null }: LogSessionModal
   const [heard, setHeard] = useState<WorkoutTranscription | null>(null);
   const [textBeforeDictation, setTextBeforeDictation] = useState<string | null>(null);
   const dictationRef = useRef<VoiceDictationHandle>(null);
+  const dateId = useId();
 
   /** Dictation is incremental: one exercise, then the next. Append, never overwrite. */
   const insertDictation = (result: WorkoutTranscription) => {
@@ -103,7 +104,11 @@ export function LogSessionModal({ open, onClose, draft = null }: LogSessionModal
     retry: false,
   });
 
+  // A save in flight keeps the screen: leaving the page would lose its outcome.
+  const writing = draft ? completeMutation.isPending : parseMutation.isPending && parseMutation.variables?.save === true;
+
   const reset = () => {
+    if (writing) return;
     dictationRef.current?.cancel();
     setHeard(null);
     setTextBeforeDictation(null);
@@ -158,9 +163,11 @@ export function LogSessionModal({ open, onClose, draft = null }: LogSessionModal
           />
 
           {!draft && (
-            <Field label="Date">
+            <Field label="Date" htmlFor={dateId}>
               <Input
+                id={dateId}
                 type="date"
+                className="session-date-input"
                 accent="gold"
                 value={workoutDate}
                 onChange={(e) => setWorkoutDate(e.target.value)}

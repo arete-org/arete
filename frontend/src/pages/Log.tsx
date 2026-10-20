@@ -8,6 +8,7 @@ import { PushOffer } from '@/components/PushOffer';
 import { Button, Modal, ModalHeader, Panel, Skeleton } from '@/components/ui';
 import { settingsApi, strengthApi } from '@/lib/api';
 import { CardioTab, ExerciseProgress, LogSessionModal, SessionDetailModal, SessionRow, StrengthDrafts, WeeklyVolumeTracker } from './log/index';
+import { OPENED_IN_JOURNAL, useEntryClose } from './log/entryClose';
 import { invalidateAfterSession, qk, strengthDraftsQuery, strengthSessionsQuery } from '@/lib/queryKeys';
 import type { StrengthDraft } from '@/types';
 
@@ -32,7 +33,8 @@ export function LogPage() {
     const next = new URLSearchParams(previous);
     if (open) next.set('new', '1'); else next.delete('new');
     return next;
-  }, { replace: true });
+  }, { replace: true, state: open ? OPENED_IN_JOURNAL : undefined });
+  const closeNewSession = useEntryClose(() => setShowNewSession(false));
   const sessionParam = searchParams.get('session');
   const selectedSessionId = sessionParam && /^\d+$/.test(sessionParam) && Number.isSafeInteger(Number(sessionParam)) ? Number(sessionParam) : null;
   const setSelectedSessionId = (id: number | null) => setSearchParams(previous => { const next = new URLSearchParams(previous); if (id === null) next.delete('session'); else next.set('session', String(id)); return next; });
@@ -43,7 +45,8 @@ export function LogPage() {
 
   // A Garmin strength session awaiting its loads opens from the Journal or a link (?draft=).
   const draftParam = searchParams.get('draft');
-  const setDraftId = (id: number | null) => setSearchParams(previous => { const next = new URLSearchParams(previous); if (id === null) next.delete('draft'); else next.set('draft', String(id)); return next; });
+  const setDraftId = (id: number | null) => setSearchParams(previous => { const next = new URLSearchParams(previous); if (id === null) next.delete('draft'); else next.set('draft', String(id)); return next; }, { replace: true, state: id === null ? undefined : OPENED_IN_JOURNAL });
+  const closeDraft = useEntryClose(() => setDraftId(null));
 
   const { data: settings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
   const draftsQuery = useQuery(strengthDraftsQuery);
@@ -151,11 +154,18 @@ export function LogPage() {
           </div>
         )}
 
-        {activeTab === 'cardio' && <CardioTab showManual={showNewSession} onManualChange={setShowNewSession} />}
+        {activeTab === 'cardio' && (
+          <CardioTab
+            showManual={showNewSession}
+            onManualChange={(open) => (open ? setShowNewSession(true) : closeNewSession())}
+            // The coach's word on the saved session appears on this tab: stay.
+            onManualSaved={() => setShowNewSession(false)}
+          />
+        )}
       </div>
 
-      <LogSessionModal open={showNewSession && activeTab === 'force'} onClose={() => setShowNewSession(false)} />
-      {openDraft && <LogSessionModal key={openDraft.id} open draft={openDraft} onClose={() => setDraftId(null)} />}
+      <LogSessionModal open={showNewSession && activeTab === 'force'} onClose={closeNewSession} />
+      {openDraft && <LogSessionModal key={openDraft.id} open draft={openDraft} onClose={closeDraft} />}
       <Modal open={toDelete !== null} onClose={() => setToDelete(null)} className="max-w-sm p-4 sm:p-6">
         <ModalHeader title="SUPPRIMER LA SÉANCE" onClose={() => setToDelete(null)} className="mb-4" />
         <p className="text-sm font-sans text-text-secondary mb-6">

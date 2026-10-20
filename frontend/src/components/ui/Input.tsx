@@ -54,15 +54,18 @@ interface FieldProps {
   children: ReactNode;
   hint?: ReactNode;
   className?: string;
+  /** The id of the control the label names. */
+  htmlFor?: string;
   /** Vertical gap between label and control (default mb-2). */
   gap?: 'sm' | 'md';
 }
 
 /** Label + control wrapper used across every form in the app. */
-export function Field({ label, children, hint, className, gap = 'md' }: FieldProps) {
+export function Field({ label, children, hint, className, htmlFor, gap = 'md' }: FieldProps) {
   return (
     <div className={className}>
       <label
+        htmlFor={htmlFor}
         className={cn(
           'text-xs font-sans text-text-muted uppercase block',
           gap === 'md' ? 'mb-2' : 'mb-1'
