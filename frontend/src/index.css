@@ -203,7 +203,7 @@ body {
 .session-date-input::-webkit-date-and-time-value { text-align: left; min-height: 1.5em; }
 /* WebKit sizes a native select itself, ignoring the field's padding and the 44 px
    touch minimum: the shared field drops the native look and draws its own chevron. */
-select.ui-input {
+select.ui-input:not([multiple], [size]) {
   -webkit-appearance: none; appearance: none;
   padding-right: 36px;
   background-image: linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%), linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
@@ -211,6 +211,8 @@ select.ui-input {
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
+/* Forced colours drop background images: keep the system dropdown there. */
+@media (forced-colors: active) { select.ui-input:not([multiple], [size]) { -webkit-appearance: auto; appearance: auto; background-image: none; } }
 .ui-button { font-weight: 500; }
 .ui-button[data-variant='cyan'] { --button-accent: var(--color-neon-cyan); }
 .ui-button[data-variant='purple'] { --button-accent: var(--color-neon-purple); --button-on-accent: var(--color-on-purple); }
@@ -614,7 +616,7 @@ body:has(.coach-panel) .install-invitation, body:has([aria-modal='true']) .insta
   .ui-input, .coach-panel[data-display] .coach-composer-input,
   .modal-panel input:not([type='checkbox'], [type='radio']), .modal-panel select, .modal-panel textarea { font-size: 16px; }
   .ui-button, .navigation-item, .modal-panel button,
-  .modal-panel :is(input:not([type='checkbox'], [type='radio']), select, textarea) { min-height: 44px; }
+  .modal-panel :is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='range']), select, textarea) { min-height: 44px; }
 }
 
 /* Coach feedback has one visual owner across stored briefings and live answers. */
