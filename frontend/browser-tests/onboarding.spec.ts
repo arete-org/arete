@@ -145,7 +145,8 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     expect(writes).toHaveLength(2);
     expect(writes[0].command_id).toBe(writes[1].command_id);
     const profile = await fetch(`${backend}/onboarding/context`, { headers: { 'x-test-athlete': athlete } }).then(r => r.json());
-    expect(profile.content).toContain('Sports pratiqués : ["course à pied", "renforcement"]');
+    expect(profile.content).toContain('Sports pratiqués : course à pied, renforcement');
+    expect(profile.content).not.toContain('Non précisé');
     expect(profile.revision).toBe(1);
     await expect.poll(() => page.evaluate(() => {
       const store = JSON.parse(localStorage.getItem('arete.coach.threads.v1')!);
