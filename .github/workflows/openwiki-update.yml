@@ -4,7 +4,10 @@ on:
   workflow_dispatch:
   schedule:
     # Batch changes daily to conserve the free router's request quota (UTC).
-    - cron: "23 5 * * *"
+    # The quota (1,000 free requests a day, 20 a minute) is the whole OpenRouter
+    # account's, shared with the app: run at night in Europe, away from the
+    # chat, the morning briefings and the evening messages.
+    - cron: "37 1 * * *"
 
 permissions:
   contents: write
