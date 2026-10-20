@@ -216,9 +216,17 @@ def violations(
                 elif 0 < gap < rule.min_days:
                     out.append(Violation(rule.id, then.date))
     for group in rules.grouping:
-        current = sorted({s.date for s in week.sessions if group.tag in s.tags})
-        if len(current) > group.max_per_week:
-            out.append(Violation(group.id, current[group.max_per_week]))
+        last = week.start + timedelta(days=6)
+        current = sorted(
+            {
+                s.date
+                for s in week.sessions
+                if group.tag in s.tags and week.start <= s.date <= last
+            }
+        )
+        # One violation per day past the cap: a further hard day is one more.
+        for day in current[group.max_per_week :]:
+            out.append(Violation(group.id, day))
         days = sorted({s.date for s, _, _ in items if group.tag in s.tags})
         run = 0
         for k, day in enumerate(days):
@@ -340,37 +348,43 @@ class HybridInputs:
     weeks: int = MAX_WEEKS  # chosen length: 8 or 12
     acwr: float | None = None
     tsb: float | None = None
-    #: Sessions the athlete edited, dated and tagged (``kept_tags``): the
+    #: Sessions the athlete edited, dated and tagged (``kind_tags``): the
     #: rules see them, their days stay theirs and each replaces its kind.
     kept: tuple[DraftSession, ...] = ()
 
 
-def kept_tags(
-    sport: str, session_type: str, intensity: str | None, structured: bool, level: Level
-) -> frozenset[str]:
-    """The tags of a session the athlete edited, read from what it is now.
-    When in doubt, the stricter reading: a hard session, a key run."""
-    tags: set[str]
-    if session_type == "race":
-        tags = {RACE, HARD}
-    elif sport == "running" and session_type in ("tempo", "intervals"):
-        if structured:  # the compromised run carries its steps
-            tags = {RUN, COMPROMISED, HARD} | (
-                {KEY_RUN} if level == "novice" else set()
-            )
-        else:
-            tags = {RUN, KEY_RUN, HARD}
-    elif sport == "running":
-        tags = {RUN, EASY}
-    elif session_type == "cross_training":
-        tags = {STATION, HARD}
-    elif sport == "strength":
-        tags = (
-            {STRENGTH, HEAVY_LOWER, HARD} if intensity == "hard" else {STRENGTH, UPPER}
-        )
-    else:
-        tags = {HARD} if intensity == "hard" else set()
-    return frozenset(tags | {KEPT})
+#: Each kind a plan writes (``planned_sessions.plan_kind``) and its tags.
+_KIND_TAGS: dict[str, frozenset[str]] = {
+    RACE: frozenset({RACE, HARD}),
+    KEY_RUN: frozenset({RUN, KEY_RUN, HARD}),
+    COMPROMISED: frozenset({RUN, COMPROMISED, HARD}),
+    EASY: frozenset({RUN, EASY}),
+    ACTIVATION: frozenset({RUN, ACTIVATION}),
+    HEAVY_LOWER: frozenset({STRENGTH, HEAVY_LOWER, HARD}),
+    UPPER: frozenset({STRENGTH, UPPER}),
+    STATION: frozenset({STATION, HARD}),
+    BENCHMARK: frozenset({STATION, BENCHMARK, HARD}),
+}
+
+
+def kind_of(tags: frozenset[str]) -> str:
+    """The kind a generated session is stored with, from its tags."""
+    for kind in (RACE, BENCHMARK, ACTIVATION, COMPROMISED, KEY_RUN):
+        if kind in tags:
+            return kind
+    return _primary(tags)
+
+
+def kind_tags(kind: str, level: Level) -> frozenset[str] | None:
+    """The tags a session of a stored ``kind`` had when generated, marked
+    kept; None for a kind this module does not write. A novice's compromised
+    run is also the key run."""
+    tags = _KIND_TAGS.get(kind)
+    if tags is None:
+        return None
+    if kind == COMPROMISED and level == "novice":
+        tags = tags | {KEY_RUN}
+    return tags | {KEPT}
 
 
 @dataclass(frozen=True)
@@ -824,6 +838,7 @@ def place_week(
     rules: Rules,
     *,
     fixed: Sequence[DraftSession] = (),
+    ahead: Sequence[DraftSession] = (),
     previous: WeekPlan | None = None,
     race_date: date | None = None,
 ) -> WeekPlan | None:
@@ -831,20 +846,27 @@ def place_week(
 
     ``fixed`` sessions (the athlete's edits) keep their day and count for the
     rules; what they already break themselves is not held against the plan.
+    ``ahead`` are next week's kept sessions: the rules see them (no heavy
+    legs on Sunday before a kept Monday key run), the week does not hold them.
     Slots are placed in rank order, each trying its unused preferred days
     first, then a day it can share (at most two sessions, one of them hard,
     at most ``max_days`` days). None when no assignment exists.
 
     Bound: at most 8 slots, each trying at most 7 days, so at most 7**8
-    leaves; the monotone rules prune a branch at its first violation, and the
-    fuzz over 120,000 plans keeps the slowest plan under a second.
+    leaves per search, and ``_fit`` runs at most 2**8 searches (one per subset
+    of droppable slots). The rules are monotone, so a branch stops at its
+    first violation: real weeks visit a few hundred nodes.
     """
     pinned = [(s.date.weekday(), _slot(s, (s.date.weekday(),))) for s in fixed]
-    baseline = Counter(
-        violations(
-            _as_week(template, pinned), rules, previous=previous, race_date=race_date
-        )
-    )
+    later = [
+        ((s.date - template.start).days, _slot(s, (s.date.weekday(),))) for s in ahead
+    ]
+
+    def broken(placed: list[tuple[int, _Slot]]) -> Counter[Violation]:
+        week = _as_week(template, [*placed, *later])
+        return Counter(violations(week, rules, previous=previous, race_date=race_date))
+
+    baseline = broken(pinned)
     order = sorted(slots, key=lambda s: s.rank)
 
     def search(
@@ -867,13 +889,7 @@ def place_week(
             if same and any(RACE in s.draft.tags for s in [*same, slot]):
                 continue
             candidate = [*placed, (d, slot)]
-            found = violations(
-                _as_week(template, candidate),
-                rules,
-                previous=previous,
-                race_date=race_date,
-            )
-            if Counter(found) - baseline:
+            if broken(candidate) - baseline:
                 continue
             result = search(i + 1, candidate)
             if result is not None:
@@ -894,6 +910,7 @@ def _fit(
     drops: tuple[str, ...],
     keep_strength: bool,
     fixed: Sequence[DraftSession],
+    ahead: Sequence[DraftSession],
     previous: WeekPlan | None,
     race_date: date | None,
 ) -> tuple[WeekPlan, list[_Slot]] | None:
@@ -917,6 +934,7 @@ def _fit(
                 max_days,
                 rules,
                 fixed=fixed,
+                ahead=ahead,
                 previous=previous,
                 race_date=race_date,
             )
@@ -1022,15 +1040,22 @@ def generate_hybrid_plan(inp: HybridInputs, rules: Rules) -> list[WeekPlan]:
         upcoming[0] <= inp.start + timedelta(days=7)
     )
     past = len(mondays) - len(upcoming)
-    if inp.kind == "hyrox":  # it starts now: its 3:1 count follows the deload
+    if past == 0:  # the plan starts now: its 3:1 count follows the deload
         volumes = _volumes(phases, inp, deload_first)
-    else:  # a block keeps its rhythm; the week starting now lightens
+    else:  # a running block keeps its rhythm; the week starting now lightens
         volumes = _volumes(phases, inp, deload_first=False)
         if deload_first and past < len(mondays) - 1 and not volumes[past][2]:
             run_minutes, _, _ = volumes[past]
             volumes[past] = (run_minutes * RECOVERY_SHARE, RECOVERY_SHARE, True)
     race_date = inp.race_date if inp.kind == "hyrox" else None
     race_wd = inp.race_date.weekday()
+    for kept_session in inp.kept:
+        if race_date == kept_session.date and RACE not in kept_session.tags:
+            raise PlanError(
+                f"La séance « {kept_session.description} » du "
+                f"{kept_session.date:%d/%m} tombe le jour de la course : "
+                "déplace-la ou supprime-la avant de générer le plan."
+            )
     usual = len([d for d in range(7) if d not in inp.rest_days])
 
     weeks: list[WeekPlan] = []
@@ -1056,14 +1081,17 @@ def generate_hybrid_plan(inp: HybridInputs, rules: Rules) -> list[WeekPlan]:
                 final,
                 activation_before,
             ),
-            kept,
+            # A kept race, even moved off race day, is the race: never a second.
+            [*kept, *(k for k in inp.kept if RACE in k.tags and k not in kept)],
         )
         open_days = _available(monday, inp)
         kept_days = {k.date.weekday() for k in kept}
         days = [d for d in open_days if d not in kept_days]
         tapering = phase in ("taper", "race")
         partial = len(open_days) < usual
-        drops = _TAPER_DROPS if tapering else _PARTIAL_DROPS if partial else _FULL_DROPS
+        # Kept sessions may leave no room for the usual minimum either.
+        loose = partial or bool(kept)
+        drops = _TAPER_DROPS if tapering else _PARTIAL_DROPS if loose else _FULL_DROPS
         max_days = min(full_days, len(days) + len(kept_days) + (phase == "race"))
         fitted = _fit(
             WeekPlan(start=monday, phase=phase, minutes=0, recovery=recovery),
@@ -1072,8 +1100,13 @@ def generate_hybrid_plan(inp: HybridInputs, rules: Rules) -> list[WeekPlan]:
             max_days,
             rules,
             drops=drops,
-            keep_strength=not (tapering or partial),
+            keep_strength=not (tapering or loose),
             fixed=kept,
+            ahead=[
+                k
+                for k in inp.kept
+                if monday + timedelta(days=7) <= k.date <= monday + timedelta(days=13)
+            ],
             previous=previous,
             race_date=race_date,
         )

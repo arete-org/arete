@@ -711,10 +711,12 @@ def test_m64_adds_the_goal_types_once_and_atomically(tmp_path, monkeypatch):
     monkeypatch.setenv("ARETE_DB", str(path))
     init_duckdb.main()
     with migration_connection(str(path)) as con:
-        # Schema 63: no goal type yet, and a race goal already stored.
+        # Schema 63: no goal type or session kind yet, a race goal stored.
         con.execute("ALTER TABLE app.goals DROP COLUMN goal_type")
         con.execute("ALTER TABLE app.goals DROP COLUMN details_json")
+        con.execute("ALTER TABLE app.planned_sessions DROP COLUMN plan_kind")
         tenant_schema._view(con, "goals")
+        tenant_schema._view(con, "planned_sessions")
         con.execute(
             "INSERT INTO app.goals (name, race_date, distance_km) "
             "VALUES ('Marathon', '2027-04-11', 42.195)"
@@ -739,6 +741,10 @@ def test_m64_adds_the_goal_types_once_and_atomically(tmp_path, monkeypatch):
         # Rolled back together: never a column the private view does not show.
         columns = {r[0] for r in con.execute("DESCRIBE app.goals").fetchall()}
         assert not {"goal_type", "details_json"} & columns
+        planned = {
+            r[0] for r in con.execute("DESCRIBE app.planned_sessions").fetchall()
+        }
+        assert "plan_kind" not in planned
 
     init_duckdb.main()
     init_duckdb.main()  # recorded once, then skipped
@@ -758,6 +764,15 @@ def test_m64_adds_the_goal_types_once_and_atomically(tmp_path, monkeypatch):
         assert con.execute(
             "SELECT goal_type FROM app.visible_goals WHERE name = '10 km'"
         ).fetchone() == ("race",)
+        # Its planned sessions too: written without a kind, read as before.
+        con.execute(
+            "INSERT INTO app.planned_sessions (date, sport, session_type, goal_id)"
+            " VALUES ('2027-04-01', 'running', 'tempo', NULL)"
+        )
+        assert con.execute(
+            "SELECT session_type, revision, goal_id, plan_kind"
+            " FROM app.visible_planned_sessions"
+        ).fetchall() == [("tempo", 1, None, None)]
         assert con.execute(
             "SELECT count(*) FROM app.schema_version WHERE version = 64"
         ).fetchone() == (1,)

@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS app.planned_sessions (
     garmin_workout_id  VARCHAR,                -- copy scheduled on Garmin's calendar
     garmin_schedule_id VARCHAR,
     garmin_pushed_at   TIMESTAMP,
-    goal_id         INTEGER                    -- set on sessions a goal's plan generated
+    goal_id         INTEGER,                   -- set on sessions a goal's plan generated
+    plan_kind       VARCHAR                    -- Hyrox/hybrid plans: the session's kind
 );
 
 -- Actual training sessions (imported from Garmin/FIT files)
@@ -1103,12 +1104,15 @@ def _m63_athlete_consents(con) -> None:
 
 
 def _m64_goal_types(con) -> None:
-    """Hyrox and hybrid goals (ARE-138): a type and its details on ``app.goals``.
+    """Hyrox and hybrid goals (ARE-138): a type and its details on ``app.goals``,
+    and the kind of each session such a plan generates on ``planned_sessions``
+    (what a regeneration keeps reads it instead of guessing).
 
-    Two nullable columns; every existing goal reads as a race through the
-    default. The previous release names the columns it reads and writes, so it
-    runs unchanged on them. ``visible_goals`` froze ``t.*`` when it was made:
-    rebuilt in the same transaction, rolled back together (see migration 52).
+    Nullable columns; every existing goal reads as a race through the default
+    and every existing session has no kind. The previous release names the
+    columns it reads and writes, so it runs unchanged on them. The private
+    views froze ``t.*`` when they were made: rebuilt in the same transaction,
+    rolled back together (see migration 52).
     """
     from arete.dataio.tenant_schema import _view
 
@@ -1116,7 +1120,11 @@ def _m64_goal_types(con) -> None:
     try:
         for column in ("goal_type VARCHAR DEFAULT 'race'", "details_json VARCHAR"):
             con.execute(f"ALTER TABLE app.goals ADD COLUMN IF NOT EXISTS {column}")
+        con.execute(
+            "ALTER TABLE app.planned_sessions ADD COLUMN IF NOT EXISTS plan_kind VARCHAR"
+        )
         _view(con, "goals")
+        _view(con, "planned_sessions")
         con.execute("COMMIT")
     except BaseException:
         con.execute("ROLLBACK")

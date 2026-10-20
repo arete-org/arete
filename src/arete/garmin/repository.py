@@ -23,7 +23,7 @@ PLANNED_COLUMNS = (
     "id, user_id, date, sport, session_type, target_duration_min, "
     "target_distance_km, target_hr_zone, target_intensity, description, source, "
     "status, created_at, structure_json, garmin_workout_id, garmin_schedule_id, "
-    "garmin_pushed_at, prescription, provenance, revision, goal_id"
+    "garmin_pushed_at, prescription, provenance, revision, goal_id, plan_kind"
 )
 
 #: What a plan edit (coach, daily adaptation, Garmin push) may overwrite.
@@ -71,6 +71,7 @@ def _planned_from_row(row: tuple) -> PlannedSession:
         provenance=json.loads(row[18]) if row[18] else None,
         revision=row[19],
         goal_id=row[20],
+        plan_kind=row[21],
     )
 
 
@@ -108,8 +109,9 @@ class GarminRepository:
             INSERT INTO planned_sessions (
                 user_id, date, sport, session_type, target_duration_min,
                 target_distance_km, target_hr_zone, target_intensity,
-                description, source, status, created_at, prescription, provenance, goal_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                description, source, status, created_at, prescription, provenance, goal_id,
+                plan_kind
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             """,
             [
@@ -132,6 +134,7 @@ class GarminRepository:
                 json.dumps(session.prescription) if session.prescription else None,
                 json.dumps(session.provenance) if session.provenance else None,
                 session.goal_id,
+                session.plan_kind,
             ],
         ).fetchone()
         conn.close()

@@ -106,6 +106,18 @@ def hybrid_end_window(weeks: int, today: date) -> tuple[date, date]:
     return earliest, earliest + timedelta(weeks=HYBRID_LEAD_WEEKS)
 
 
+def _check_hybrid_end(end: date, weeks: int, today: date) -> None:
+    """A block ends on a Sunday, so its last week is whole, within its window."""
+    if end.weekday() != 6:
+        raise ValueError("La fin du bloc doit tomber un dimanche.")
+    earliest, latest = hybrid_end_window(weeks, today)
+    if not earliest <= end <= latest:
+        raise ValueError(
+            f"La fin du bloc doit tomber entre le {earliest:%d/%m/%Y} et le "
+            f"{latest:%d/%m/%Y} pour un bloc de {weeks} semaines."
+        )
+
+
 @dataclass(frozen=True)
 class Goal:
     id: int
@@ -221,12 +233,7 @@ def create_goal(
         raise ValueError("La distance de la course est requise.")
     if goal_type == "hybrid":
         weeks = GoalDetails.model_validate(details or {}).weeks
-        earliest, latest = hybrid_end_window(weeks, today or athlete_today())
-        if not earliest <= race_date <= latest:
-            raise ValueError(
-                f"La fin du bloc doit tomber entre le {earliest:%d/%m/%Y} et le "
-                f"{latest:%d/%m/%Y} pour un bloc de {weeks} semaines."
-            )
+        _check_hybrid_end(race_date, weeks, today or athlete_today())
     fields = {
         "name": name.strip(),
         "race_date": race_date,
@@ -260,7 +267,7 @@ def update_goal(goal_id: int, **fields: Any) -> Goal | None:
     if unknown:
         raise ValueError(f"Not editable: {sorted(unknown)}")
     _validate(fields)
-    if "details" in fields or "distance_km" in fields:
+    if {"details", "distance_km", "race_date"} & set(fields):
         current = get_goal(goal_id)
         if current is None:
             return None
@@ -268,10 +275,19 @@ def update_goal(goal_id: int, **fields: Any) -> Goal | None:
             raise ValueError(
                 "La distance d’un objectif Hyrox ou hybride ne se modifie pas."
             )
+        weeks = (current.details or {}).get("weeks")
         if "details" in fields:
-            fields["details_json"] = validate_details(
-                current.goal_type, fields.pop("details")
-            )
+            details_json = validate_details(current.goal_type, fields.pop("details"))
+            fields["details_json"] = details_json
+            if details_json:
+                weeks = json.loads(details_json)["weeks"]
+        end = fields.get("race_date", current.race_date)
+        moved = end != current.race_date
+        resized = weeks != (current.details or {}).get("weeks")
+        # A running block's other edits (name, equipment…) leave its dates be.
+        if current.goal_type == "hybrid" and (moved or resized):
+            assert weeks is not None, "a stored hybrid block has its weeks"
+            _check_hybrid_end(end, int(weeks), athlete_today())
     if fields:
         con = connect()
         try:

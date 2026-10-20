@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
@@ -25,7 +26,8 @@ from arete.features.hybrid_plan import (
     athlete_level,
     default_rules,
     generate_hybrid_plan,
-    kept_tags,
+    kind_of,
+    kind_tags,
     plan_violations,
     violations,
 )
@@ -470,35 +472,38 @@ def test_strength_and_circuits_weigh_more_only_in_a_hybrid_plan():
 # --------------------------------------------------------------------------- #
 # Sessions the athlete edited
 # --------------------------------------------------------------------------- #
-def _kept(
-    day: date, sport: str, session_type: str, intensity: str | None, structured=False
-):
-    return DraftSession(
-        day,
-        session_type,
-        45,
-        None,
-        intensity,
-        "modifiée",
-        sport=sport,
-        tags=kept_tags(sport, session_type, intensity, structured, "intermediate"),
+def _kept(kind: str, day: date, level="intermediate", **changes) -> DraftSession:
+    """A session of ``kind`` as regeneration reads it back: its stored kind,
+    whatever the athlete changed (``changes``)."""
+    tags = kind_tags(kind, level)
+    assert tags is not None
+    plain = DraftSession(day, "other", 45, None, None, "modifiée", tags=tags)
+    return replace(plain, **changes)
+
+
+def _generated(weeks, kind: str):
+    return next(s for w in weeks for s in w.sessions if kind_of(s.tags) == kind)
+
+
+def test_every_generated_kind_reads_back_as_itself():
+    _, hyrox = _plan()
+    _, novice = _plan(level="novice")
+    _, block = _plan(
+        kind="hybrid", race_date=START + timedelta(weeks=7, days=6), weeks=8
     )
-
-
-def test_kept_sessions_are_read_strictly():
-    assert kept_tags("running", "tempo", "hard", False, "intermediate") >= {
-        KEY_RUN,
-        KEPT,
-    }
-    assert COMPROMISED in kept_tags("running", "intervals", None, True, "intermediate")
-    assert HEAVY_LOWER in kept_tags("strength", "strength", "hard", False, "novice")
-    assert UPPER in kept_tags("strength", "strength", "moderate", False, "novice")
-    assert STATION in kept_tags("strength", "cross_training", None, False, "novice")
+    for level, weeks in (
+        ("intermediate", hyrox),
+        ("novice", novice),
+        ("intermediate", block),
+    ):
+        for s in (s for w in weeks for s in w.sessions):
+            assert kind_tags(kind_of(s.tags), level) == s.tags | {KEPT}
+    assert kind_tags("whatever", "novice") is None
 
 
 def test_a_moved_key_run_is_not_planned_twice_and_the_rules_see_it():
     week_two = START + timedelta(weeks=1)
-    moved = _kept(week_two + timedelta(days=3), "running", "tempo", "hard")  # Thursday
+    moved = _kept(KEY_RUN, week_two + timedelta(days=3))  # Thursday
     _, weeks = _plan(kept=(moved,))
     assert plan_violations(weeks, RULES, RACE_DAY) == []
     week = next(w for w in weeks if w.start == week_two)
@@ -508,12 +513,140 @@ def test_a_moved_key_run_is_not_planned_twice_and_the_rules_see_it():
     assert not any(s.date == moved.date and KEPT not in s.tags for s in week.sessions)
 
 
+def test_a_key_run_given_steps_stays_a_key_run():
+    _, plain = _plan()
+    week_two = START + timedelta(weeks=1)
+    key = next(
+        s for w in plain if w.start == week_two for s in w.sessions if KEY_RUN in s.tags
+    )
+    edited = _kept(KEY_RUN, key.date, prescription={"version": 1, "steps": []})
+    _, weeks = _plan(kept=(edited,))
+    week = next(w for w in weeks if w.start == week_two)
+    assert sum(1 for s in week.sessions if KEY_RUN in s.tags) == 1
+    assert sum(1 for s in week.sessions if COMPROMISED in s.tags) == 1
+
+
+def test_a_moved_activation_is_neither_doubled_nor_hard():
+    _, plain = _plan()
+    activation = _generated(plain, ACTIVATION)
+    moved = _kept(ACTIVATION, activation.date - timedelta(days=1))
+    _, weeks = _plan(kept=(moved,))
+    assert plan_violations(weeks, RULES, RACE_DAY) == []
+    activations = [s for w in weeks for s in w.sessions if ACTIVATION in s.tags]
+    assert activations == [moved]
+
+
+def test_a_moved_benchmark_is_not_planned_twice():
+    block_end = START + timedelta(weeks=7, days=6)
+    _, plain = _plan(kind="hybrid", race_date=block_end, weeks=8)
+    benchmark = _generated(plain, BENCHMARK)
+    moved = _kept(BENCHMARK, benchmark.date - timedelta(days=1))
+    _, weeks = _plan(kind="hybrid", race_date=block_end, weeks=8, kept=(moved,))
+    assert [s for s in weeks[-1].sessions if BENCHMARK in s.tags] == [moved]
+
+
+@pytest.mark.parametrize(
+    "kinds_and_days",
+    [
+        ((KEY_RUN, 1), (HEAVY_LOWER, 3), (STATION, 5)),
+        ((HEAVY_LOWER, 0), (STATION, 2), (KEY_RUN, 4)),
+        ((COMPROMISED, 1), (KEY_RUN, 3), (STATION, 5)),
+    ],
+)
+def test_three_kept_hard_days_make_the_week_give_up_a_session(kinds_and_days):
+    week_four = START + timedelta(weeks=3)
+    kept = tuple(_kept(k, week_four + timedelta(days=d)) for k, d in kinds_and_days)
+    _, weeks = _plan(
+        kept=kept, rest_days=frozenset({0}) - {d for _, d in kinds_and_days}
+    )
+    week = next(w for w in weeks if w.start == week_four)
+    hard_days = {s.date for s in week.sessions if HARD in s.tags}
+    assert len(hard_days) <= 3
+    assert week.dropped and all("retirée" in line for line in week.dropped)
+
+
+def test_kept_hard_days_past_the_cap_get_no_new_one():
+    week_four = START + timedelta(weeks=3)
+    kept = tuple(
+        _kept(kind, week_four + timedelta(days=d))
+        for kind, d in ((KEY_RUN, 0), (HEAVY_LOWER, 1), (STATION, 3), (BENCHMARK, 4))
+    )
+    _, weeks = _plan(kept=kept, rest_days=frozenset())
+    week = next(w for w in weeks if w.start == week_four)
+    hard_days = {s.date for s in week.sessions if HARD in s.tags}
+    assert hard_days == {k.date for k in kept}
+
+
 def test_kept_heavy_legs_push_the_key_run_away():
     week_two = START + timedelta(weeks=1)
-    legs = _kept(week_two, "strength", "strength", "hard")  # Monday
+    legs = _kept(HEAVY_LOWER, week_two)  # Monday
     _, weeks = _plan(rest_days=frozenset(), kept=(legs,))
     assert plan_violations(weeks, RULES, RACE_DAY) == []
     week = next(w for w in weeks if w.start == week_two)
     key = next(s for s in week.sessions if KEY_RUN in s.tags)
     assert (key.date - legs.date).days >= 3
     assert sum(1 for s in week.sessions if HEAVY_LOWER in s.tags) == 1
+
+
+def test_a_kept_session_on_race_day_is_named_in_french():
+    on_race_day = _kept(UPPER, RACE_DAY, description="Haut du corps déplacé")
+    with pytest.raises(
+        PlanError, match="« Haut du corps déplacé » du .* jour de la course"
+    ):
+        _plan(kept=(on_race_day,))
+    old_race = _kept(RACE, RACE_DAY)
+    _, weeks = _plan(kept=(old_race,))
+    assert [s for s in weeks[-1].sessions if RACE in s.tags] == [old_race]
+
+
+@pytest.mark.parametrize(("weeks_out", "deload"), [(16, False), (12, True)])
+def test_a_hyrox_deloads_only_when_its_plan_starts_now(weeks_out, deload):
+    race_day = START + timedelta(weeks=weeks_out - 1, days=5)
+    _, weeks = _plan(race_date=race_day, acwr=2.0)
+    assert weeks[0].recovery is deload
+
+
+def test_a_block_not_started_yet_deloads_then_follows_three_one():
+    block_end = START + timedelta(weeks=11, days=6)  # starts this Monday
+    _, weeks = _plan(kind="hybrid", race_date=block_end, acwr=2.0)
+    assert [w.recovery for w in weeks[:9]] == [
+        True,
+        False,
+        False,
+        False,
+        True,
+        False,
+        False,
+        False,
+        True,
+    ]
+
+
+def test_the_week_before_sees_next_week_s_kept_key_run():
+    # A Friday start: the first, partial week ends on the weekend before a
+    # kept Tuesday key run; heavy legs may not take that weekend.
+    key = _kept(KEY_RUN, date(2026, 10, 20), level="advanced")
+    race_day = date(2026, 11, 21)
+    _, weeks = _plan(
+        start=date(2026, 10, 16),
+        race_date=race_day,
+        level="advanced",
+        rest_days=frozenset({0, 2, 4}),
+        training_days=6,
+        weeks=8,
+        acwr=2.0,
+        kept=(key,),
+    )
+    assert plan_violations(weeks, RULES, race_day) == []
+    assert not any(
+        HEAVY_LOWER in s.tags and 0 < (key.date - s.date).days < 3
+        for w in weeks
+        for s in w.sessions
+    )
+
+
+def test_a_race_moved_off_race_day_is_not_doubled():
+    moved = _kept(RACE, RACE_DAY - timedelta(days=1))
+    _, weeks = _plan(kept=(moved,))
+    races = [s for w in weeks for s in w.sessions if RACE in s.tags]
+    assert races == [moved]

@@ -91,6 +91,7 @@ def test_apply_writes_replaces_and_respects_other_sessions(goal):
     sessions = _plan_sessions(goal.id)
     assert first["created"] == len(sessions) > 0
     assert all(s.source == "plan" for s in sessions)
+    assert all(s.plan_kind is None for s in sessions)  # a road plan stores none
     assert all(s.date != busy for s in sessions)
     assert sessions[-1].session_type == SessionType.RACE
     again = plan_builder.apply(goal.id, TODAY)
@@ -178,6 +179,15 @@ def test_a_hyrox_plan_is_written_with_its_sports_and_prescriptions(hyrox):
     sessions = _plan_sessions(hyrox.id)
     assert result["created"] == len(sessions) > 0
     assert {s.sport for s in sessions} == {"running", "strength", "other"}
+    # Each session keeps the kind it was generated as, for regeneration.
+    assert {s.plan_kind for s in sessions} >= {
+        "key_run",
+        "compromised",
+        "heavy_lower",
+        "upper",
+        "station",
+        "race",
+    }
     compromised = [s for s in sessions if s.prescription is not None]
     assert compromised and all(s.sport == "running" for s in compromised)
     # Its steps own pace and effort; the duration stays for the planned load.

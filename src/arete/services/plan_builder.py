@@ -29,7 +29,8 @@ from arete.features.hybrid_plan import (
     athlete_level,
     default_rules,
     generate_hybrid_plan,
-    kept_tags,
+    kind_of,
+    kind_tags,
     loading_sessions,
 )
 from arete.features.plan_generator import (
@@ -136,8 +137,10 @@ def plan_inputs(goal: Goal, today: date | None = None) -> PlanInputs:
 
 
 def _kept(con, goal: Goal, start: date) -> list[PlannedSession]:
-    """The goal's sessions from ``start`` that regeneration keeps: those the
-    athlete edited (``revision > 1``) or the daily adaptation changed."""
+    """The goal's generated sessions from ``start`` that regeneration keeps:
+    those the athlete edited (``revision > 1``) or the daily adaptation
+    changed. Only a Hyrox or hybrid plan stores a session's kind; one without
+    (a road plan's, a manual one) only keeps its day, as before."""
     return [
         s
         for s in GarminRepository().list_planned_sessions(
@@ -149,6 +152,7 @@ def _kept(con, goal: Goal, start: date) -> list[PlannedSession]:
             connection=con,
         )
         if s.goal_id == goal.id
+        and s.plan_kind is not None
         and (
             s.status == SessionStatus.MODIFIED
             or (s.status == SessionStatus.PENDING and s.revision > 1)
@@ -203,15 +207,10 @@ def hybrid_inputs(goal: Goal, today: date | None = None) -> HybridInputs:
                 s.description or "",
                 s.target_distance_km,
                 sport=s.sport,
-                tags=kept_tags(
-                    s.sport,
-                    s.session_type.value,
-                    s.target_intensity,
-                    s.prescription is not None,
-                    level,
-                ),
+                tags=tags,
             )
             for s in kept
+            if (tags := kind_tags(s.plan_kind or "", level)) is not None
         ),
     )
 
@@ -333,7 +332,13 @@ def _delete_future(goal_id: int, start: date, *, untouched_only: bool = False) -
 def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
     """Write the goal's plan, replacing its own future sessions still to do
     that the athlete left untouched; those they edited stay, and a Hyrox or
-    hybrid plan is placed around them."""
+    hybrid plan is placed around them.
+
+    A narrow race remains: a session edited after the plan read the kept
+    sessions and before ``_delete_future`` is kept by the revision guard but
+    was planned around as untouched. Its day is still taken, so no generated
+    session lands on it; only the rules did not see its new content.
+    """
     goal = _goal_or_raise(goal_id)
     plan = _generate(goal, today)
     replaced = _delete_future(goal.id, plan.start, untouched_only=True)
@@ -375,6 +380,7 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
                     source="plan",
                     status=SessionStatus.PENDING,
                     goal_id=goal.id,
+                    plan_kind=kind_of(draft.tags) if draft.tags else None,
                 )
             )
             created += 1
@@ -404,7 +410,9 @@ HYROX_FALLBACK_MIN = 90
 def session_tss(session: PlannedSession, goal: Goal, minutes: float) -> float:
     """A planned session's load: a Hyrox or hybrid goal's own sessions weigh
     strength and station circuits by that plan's RPE, every other one as
-    before (``PLANNED_RPE``)."""
+    before (``PLANNED_RPE``). The table follows the goal being projected, not
+    each session's own goal: another goal's sessions in the window, and
+    manual ones, keep ``PLANNED_RPE`` even when that goal is a Hyrox."""
     hybrid = goal.goal_type != "race" and session.goal_id == goal.id
     table = HYBRID_PLANNED_RPE if hybrid else PLANNED_RPE
     return planned_tss(session.session_type.value, minutes, table)

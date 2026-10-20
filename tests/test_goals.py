@@ -277,7 +277,15 @@ class TestGoalTypes:
                 today=today,
             )
             assert (block.goal_type, block.distance_km) == ("hybrid", 0.0)
-        for end in (earliest - timedelta(days=1), latest + timedelta(days=1)):
+        with pytest.raises(ValueError, match="La fin du bloc doit tomber un dimanche"):
+            goals.create_goal(
+                name="test-block",
+                race_date=earliest + timedelta(days=6),
+                goal_type="hybrid",
+                details={"weeks": 8},
+                today=today,
+            )
+        for end in (earliest - timedelta(weeks=1), latest + timedelta(weeks=1)):
             with pytest.raises(ValueError, match="La fin du bloc doit tomber entre"):
                 goals.create_goal(
                     name="test-block",
@@ -333,3 +341,30 @@ class TestGoalTypes:
         assert (
             resp.status_code == 422 and "moins de 6 semaines" in resp.json()["detail"]
         )
+
+    def test_patching_a_block_s_dates_checks_its_window(self, monkeypatch):
+        today = athlete_today()
+        end = goals.hybrid_end_window(8, today)[0]
+        block = goals.create_goal(
+            name="test-block",
+            race_date=end,
+            goal_type="hybrid",
+            details={"weeks": 8},
+            today=today,
+        )
+        # Three weeks on, the block runs: its end left the creation window.
+        monkeypatch.setattr(goals, "athlete_today", lambda: today + timedelta(weeks=3))
+        renamed = goals.update_goal(
+            block.id,
+            name="test-block-renamed",
+            details={"weeks": 8, "equipment": ["sled"]},
+        )
+        assert renamed is not None and renamed.race_date == end
+        with pytest.raises(ValueError, match="un dimanche"):
+            goals.update_goal(block.id, race_date=end + timedelta(days=1))
+        with pytest.raises(ValueError, match="doit tomber entre"):
+            goals.update_goal(block.id, race_date=end + timedelta(weeks=1))
+        with pytest.raises(ValueError, match="doit tomber entre"):
+            goals.update_goal(block.id, details={"weeks": 12})
+        moved = goals.update_goal(block.id, race_date=end + timedelta(weeks=3))
+        assert moved is not None and moved.race_date == end + timedelta(weeks=3)
