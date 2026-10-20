@@ -77,6 +77,12 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     });
     await page.goto('/onboarding');
     await expect(page.getByRole('heading', { level: 1 })).toHaveCSS('font-family', /Cormorant/);
+    if (width === 390) {
+      // Browser emulation has no notch: exercise the safe-area token explicitly.
+      await page.evaluate(() => document.documentElement.style.setProperty('--safe-top', '47px'));
+      expect((await page.locator('.onboarding-header .arete-wordmark').boundingBox())!.y).toBeGreaterThanOrEqual(47);
+      await page.evaluate(() => document.documentElement.style.removeProperty('--safe-top'));
+    }
     await page.getByLabel('Ton prénom').fill('Camille');
     await page.locator('.onboarding-scroll').evaluate(node => { node.scrollTop = 0; });
     await page.screenshot({ path: `../.context/onboarding/accueil-${theme}-${width}.png` });
@@ -115,6 +121,9 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     await page.getByRole('button', { name: 'Continuer', exact: true }).click();
     await page.getByRole('button', { name: 'Continuer', exact: true }).click();
     await expect(page.getByText('Strava', { exact: false })).toHaveCount(0);
+    // What Garmin records, then what Arete does with it: no setup jargon.
+    await expect(page.getByRole('heading', { name: 'Garmin mesure, Arete ajuste.' })).toBeVisible();
+    await expect(page.locator('.onboarding-garmin')).not.toContainText(/connexion|import/i);
     if (index % 2) {
       await page.getByRole('button', { name: 'Connecter Garmin', exact: true }).click();
       await page.getByLabel('[EMAIL]', { exact: true }).fill('camille@example.com');
@@ -145,7 +154,8 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     expect(writes).toHaveLength(2);
     expect(writes[0].command_id).toBe(writes[1].command_id);
     const profile = await fetch(`${backend}/onboarding/context`, { headers: { 'x-test-athlete': athlete } }).then(r => r.json());
-    expect(profile.content).toContain('Sports pratiqués : ["course à pied", "renforcement"]');
+    expect(profile.content).toContain('Sports pratiqués : course à pied, renforcement');
+    expect(profile.content).not.toContain('Non précisé');
     expect(profile.revision).toBe(1);
     await expect.poll(() => page.evaluate(() => {
       const store = JSON.parse(localStorage.getItem('arete.coach.threads.v1')!);

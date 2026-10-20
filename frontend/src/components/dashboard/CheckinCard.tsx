@@ -150,16 +150,11 @@ export function CheckinCard({
   return (
     <section aria-labelledby={`${id}-title`} className="glass-panel p-3 sm:p-4 animate-fade-up">
       <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <ClipboardCheck aria-hidden className="w-4 h-4 text-neon-cyan" />
-            <h2 id={`${id}-title`} className="text-sm font-sans text-text-muted uppercase tracking-wider">
-              Check-in du matin
-            </h2>
-          </div>
-          <p className="mt-1 text-xs font-sans text-text-muted">
-            Dix secondes : une nuit difficile ou des jambes lourdes peuvent alléger la séance du jour.
-          </p>
+        <div className="flex min-w-0 items-center gap-2">
+          <ClipboardCheck aria-hidden className="w-4 h-4 text-neon-cyan" />
+          <h2 id={`${id}-title`} className="text-sm font-sans text-text-muted uppercase tracking-wider">
+            Check-in du matin
+          </h2>
         </div>
         <button
           type="button"

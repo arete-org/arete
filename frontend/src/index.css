@@ -471,6 +471,8 @@ html[data-theme='pierre'], html[data-theme='prune'] {
   --launcher-space: 68px;
 }
 .app-shell { min-height: 100dvh; padding-top: var(--safe-top); }
+/* The sign-in and account screens replace the shell: they keep clear of the notch too. */
+.gate-screen { padding: max(24px, var(--safe-top)) max(24px, var(--safe-right)) max(24px, var(--safe-bottom)) max(24px, var(--safe-left)); }
 .app-main { padding-bottom: calc(var(--mobile-nav-space) + var(--launcher-space)); }
 .mobile-navigation { padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left); }
 .journal-actions { position: sticky; top: var(--safe-top); z-index: 20; padding-block: 8px; margin-bottom: 16px; background: var(--color-void); }

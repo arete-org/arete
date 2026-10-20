@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date
+from functools import partial
 from typing import Literal
 from uuid import UUID
 
@@ -34,6 +35,15 @@ SPORTS = {
     "strength": "renforcement",
     "cycling": "vélo",
     "other": "autre sport",
+}
+DAYS = {
+    "monday": "lundi",
+    "tuesday": "mardi",
+    "wednesday": "mercredi",
+    "thursday": "jeudi",
+    "friday": "vendredi",
+    "saturday": "samedi",
+    "sunday": "dimanche",
 }
 
 
@@ -83,29 +93,43 @@ def get_progress() -> dict:
 
 
 def render_answers(answers: Answers) -> str:
-    """JSON-quote literal answers inside Markdown; no inferred constraints/phases."""
-    rows: list[tuple[str, object]] = [
-        ("Prénom", answers.display_name),
+    """JSON-quote free-text answers inside Markdown; no inferred constraints/phases.
+
+    The athlete reads this recap too: an unanswered question is left out
+    rather than written as a blank, and a race fits on one line.
+    """
+    quote = partial(json.dumps, ensure_ascii=False)
+    race = [quote(answers.race_name)] if answers.race_name else []
+    if answers.race_date:
+        race.append(answers.race_date.isoformat())
+    rows: list[tuple[str, str | None]] = [
+        ("Prénom", answers.display_name and quote(answers.display_name)),
         ("Objectif", GOALS[answers.goal] if answers.goal else None),
-        ("Précisions", answers.description),
-        ("Course envisagée", answers.race_name),
+        ("Précisions", answers.description and quote(answers.description)),
+        ("Course envisagée", " · ".join(race) or None),
         (
-            "Date envisagée",
-            answers.race_date.isoformat() if answers.race_date else None,
+            "Sports pratiqués",
+            ", ".join(SPORTS[sport] for sport in answers.sports) or None,
         ),
-        ("Sports pratiqués", [SPORTS[sport] for sport in answers.sports] or None),
-        ("Séances souhaitées par semaine", answers.weekly_training_goal),
-        ("Jours de repos préférés", answers.rest_day_preference),
-        ("Contraintes déclarées", answers.constraints),
+        (
+            "Séances souhaitées par semaine",
+            str(answers.weekly_training_goal) if answers.weekly_training_goal else None,
+        ),
+        (
+            "Jours de repos préférés",
+            ", ".join(DAYS[day] for day in answers.rest_day_preference or []) or None,
+        ),
+        ("Contraintes déclarées", answers.constraints and quote(answers.constraints)),
         ("Fuseau horaire confirmé", answers.timezone),
     ]
-    return (
-        "Réponses confirmées par l’athlète. Une course exprime une intention, pas un plan.\n\n"
-        + "\n".join(
-            f"- {label} : {json.dumps(value, ensure_ascii=False) if value is not None else 'Non précisé'}"
-            for label, value in rows
-        )
-    )
+    given = [f"- {label} : {value}" for label, value in rows if value]
+    intro = "Réponses confirmées par l’athlète."
+    if answers.goal == "race":
+        intro += " Une course exprime une intention, pas un plan."
+    if len(given) < len(rows):
+        # Skipped answers stay unknown: no default fills them in.
+        intro += " Ce qui n’y figure pas reste inconnu : rien n’est supposé à sa place."
+    return "\n\n".join([intro, "\n".join(given)]) if given else intro
 
 
 def confirm(command: ConfirmOnboarding) -> dict:

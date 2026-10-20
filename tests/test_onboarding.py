@@ -44,6 +44,7 @@ def test_http_confirmation_is_the_same_md_seen_by_composite_backend_and_context(
         race_date="2027-05-16",
         sports=["running", "strength"],
         weekly_training_goal=3,
+        rest_day_preference=["wednesday", "sunday"],
         constraints="Pas disponible mercredi",
         timezone="Europe/Paris",
     )
@@ -52,7 +53,10 @@ def test_http_confirmation_is_the_same_md_seen_by_composite_backend_and_context(
     assert response.status_code == 200
     assert response.json() == {"revision": 1, "status": "completed"}
     content = client.get("/onboarding/context").json()["content"]
-    assert "Trail des crêtes" in content and "Non précisé" in content
+    assert '- Course envisagée : "Trail des crêtes" · 2027-05-16' in content
+    assert "- Sports pratiqués : course à pied, renforcement" in content
+    assert "- Jours de repos préférés : mercredi, dimanche" in content
+    assert "Non précisé" not in content and "Précisions" not in content
     file = memory.read_file("profile.md")
     assert file.content == content
     assert "/profile.md" in LedgerBackend().files()
@@ -87,6 +91,21 @@ def test_edit_is_visible_on_next_context_and_does_not_keep_a_hidden_copy():
     assert "Mercredi indisponible" not in reference("onboarding:1")["record"]["content"]
 
 
+def test_the_recap_states_a_race_intention_only_for_a_race_goal():
+    text = onboarding.render_answers(onboarding.Answers(goal="progress"))
+    assert "Objectif : Progresser" in text
+    assert "intention" not in text and "Course envisagée" not in text
+    assert (
+        "Ce qui n’y figure pas reste inconnu : rien n’est supposé à sa place." in text
+    )
+
+
+def test_blank_answers_render_the_intro_alone():
+    assert onboarding.render_answers(onboarding.Answers()) == (
+        "Réponses confirmées par l’athlète. Ce qui n’y figure pas reste inconnu : rien n’est supposé à sa place."
+    )
+
+
 def test_scope_isolation_and_blank_answers_do_not_create_defaults_or_plan():
     from arete.services.settings import get_settings
 
@@ -98,8 +117,13 @@ def test_scope_isolation_and_blank_answers_do_not_create_defaults_or_plan():
     onboarding.confirm(command(goal="race"))
     assert get_settings().model_dump() == before
     text = memory.read_file("profile.md").content
-    assert "Séances souhaitées par semaine : Non précisé" in text
-    assert "Contraintes déclarées : Non précisé" in text
+    # Unanswered questions are left out of the recap the athlete reads.
+    assert "Non précisé" not in text and "Course envisagée" not in text
+    assert "Séances souhaitées" not in text and "Contraintes" not in text
+    assert "Objectif : Préparer une course" in text
+    assert (
+        "Ce qui n’y figure pas reste inconnu : rien n’est supposé à sa place." in text
+    )
     assert "peak" not in text
     with athlete_scope(909001):
         assert onboarding.get_progress()["status"] == "not_started"

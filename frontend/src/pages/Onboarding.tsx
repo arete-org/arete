@@ -119,12 +119,12 @@ function OnboardingFlow({ athleteId }: { athleteId: number }) {
             <Field label="Ton fuseau horaire" hint={`Détecté sur cet appareil : ${detectedZone}. Confirme-le ou indique un autre fuseau.`}><input className={FIELD} maxLength={80} value={a.timezone ?? ''} placeholder={detectedZone} onChange={event => update({ timezone: nullable(event.target.value) })} /><Button variant="ghost" onClick={() => update({ timezone: detectedZone })}>{a.timezone === detectedZone ? 'Fuseau confirmé' : `Confirmer ${detectedZone}`}</Button></Field>
           </>}
           {step === 3 && <>
-            <div className="onboarding-garmin"><Watch size={32} /><h2>Une vue plus juste de ton entraînement.</h2><p>Garmin apporte tes activités réalisées : sport, durée, distance et mesures disponibles. La connexion et l’import sont deux étapes distinctes.</p><ul><li>Tes activités au même endroit</li><li>Un historique pour éclairer tes échanges</li><li>Tu gardes la main sur le premier import</li></ul></div>
+            <div className="onboarding-garmin"><Watch size={32} /><h2>Garmin mesure, Arete ajuste.</h2><p>Ta montre enregistre tes séances, ton sommeil et ta récupération.</p><ul><li>Chiron les lit pour ajuster ton plan avec toi</li><li>Tes séances planifiées peuvent partir sur ta montre</li></ul></div>
             <div className="onboarding-data-status" role="status"><strong>{status.isPending ? 'Vérification de Garmin…' : status.isError ? 'Connexion non vérifiée' : status.data?.garmin_authenticated ? 'Garmin connecté' : 'Garmin non connecté'}</strong><p>{dataLabel}</p></div>
             {status.isError ? <Button onClick={() => void status.refetch()}>Vérifier à nouveau Garmin</Button> : status.data?.garmin_authenticated ? <Button disabled={sync.isPending} onClick={() => sync.mutate({ max_activities: 20, download_fit: false })}>{sync.isPending ? 'Import en cours…' : sync.isError || sync.data?.success === false || sync.data?.errors.length ? 'Réessayer l’import' : 'Importer mes activités récentes'}</Button> : <Button disabled={status.isPending} onClick={() => setLogin(true)}>Connecter Garmin</Button>}
             <GarminSyncProgress progress={sync.progress} isPending={sync.isPending} result={sync.data} error={sync.error} />
             {sync.data?.success && !sync.data.errors.length && sync.data.activities_synced + sync.data.activities_merged + sync.data.activities_skipped === 0 && <p>Aucune activité trouvée dans cette période. Tu peux continuer.</p>}
-            <p className="onboarding-help">Tu peux commencer sans connexion. Chiron s’appuiera sur ce que tu lui partages.</p>
+            <p className="onboarding-help">Tu peux commencer sans Garmin. Chiron s’appuiera sur ce que tu lui partages.</p>
           </>}
           {step === 4 && <>
             <h2>Ce que Chiron retiendra de toi</h2>
