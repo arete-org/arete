@@ -352,13 +352,42 @@ async def test_composed_mission_waits_and_resumes_with_cumulative_budgets(monkey
 
 
 @pytest.mark.anyio
+async def test_a_segment_composes_off_the_event_loop(monkeypatch):
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+    from worker_only import worker_only
+
+    from arete import coaching
+    from arete.dataio import db
+    from arete.services.feature_flags import FeatureFlags
+
+    class Model(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+    model = Model(messages=iter([AIMessage(content="Bilan disponible.")]))
+    monkeypatch.setattr(coaching, "build_chat_model", lambda **kwargs: model)
+    monkeypatch.setattr("arete.services.inbox.publish", lambda *args: None)
+    run = started()
+    # The rollout flag, the route record and the compile all block.
+    connect = db.db_connection
+    monkeypatch.setattr(coaching, "get_feature_flags", worker_only(FeatureFlags))
+    monkeypatch.setattr(db, "db_connection", worker_only(connect))
+    monkeypatch.setattr(coaching, "_assemble", worker_only(coaching._assemble))
+    await coaching._run_automation(run)
+    monkeypatch.setattr(db, "db_connection", connect)
+    done = service.run_detail(run["id"])
+    assert done["state"] == "completed", done.get("error")
+
+
+@pytest.mark.anyio
 async def test_a_failed_clock_read_still_finishes_the_run(monkeypatch):
     from arete import coaching
 
-    async def unreadable():
+    def unreadable():
         raise ConnectionError("settings unavailable")
 
-    monkeypatch.setattr(coaching, "read_athlete_clock", unreadable)
+    monkeypatch.setattr("arete.services.settings.athlete_now", unreadable)
     run = started()
     await coaching._run_automation(run)
     failed = service.run_detail(run["id"])

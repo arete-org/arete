@@ -487,6 +487,36 @@ def test_slack_reuses_chat_graph_and_thread_metadata(monkeypatch):
     assert context.slack_visibility == "public"
 
 
+def test_slack_chat_graph_is_composed_off_the_event_loop(monkeypatch):
+    from langchain_core.messages import AIMessage
+    from worker_only import worker_only
+
+    from arete import coaching
+    from arete.agent.runtime import execution
+    from arete.services.feature_flags import FeatureFlags
+
+    graph = object()
+
+    async def stream(*args, **kwargs):
+        assert args[0] is graph
+        yield {
+            "type": "updates",
+            "data": {"model": {"messages": [AIMessage(content="Repos.")]}},
+        }
+
+    monkeypatch.setattr(coaching, "get_feature_flags", worker_only(FeatureFlags))
+    monkeypatch.setattr(coaching, "_assemble", worker_only(lambda *a, **kw: graph))
+    monkeypatch.setattr(execution, "stream_agent", stream)
+    coaching.get_agent.cache_clear()
+    try:
+        answer = asyncio.run(
+            coaching.run_slack_coach([], "slack:T:D:1", "public", AsyncMock())
+        )
+    finally:
+        coaching.get_agent.cache_clear()
+    assert answer == "Repos."
+
+
 @pytest.mark.parametrize("resolved", [7, None])
 def test_background_work_runs_as_the_resolved_athlete(
     message, monkeypatch, tmp_path, resolved

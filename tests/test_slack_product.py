@@ -592,6 +592,49 @@ def test_composition_selects_route_and_keeps_classifier_budget(
     assert captured["context"].slack_decision.surface == route
 
 
+def test_admin_composition_never_runs_on_the_event_loop(setup, monkeypatch, jev_api):
+    from worker_only import worker_only
+
+    from arete import coaching
+    from arete.agent.runtime import execution
+    from arete.services.feature_flags import FeatureFlags
+
+    admin, _, service = setup
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    jev_api.payload["answers"]["surface"]["choice"] = "coach"
+    compiled = []
+    monkeypatch.setattr(coaching, "get_feature_flags", worker_only(FeatureFlags))
+    monkeypatch.setattr(
+        coaching,
+        "_assemble",
+        worker_only(lambda profile, **kw: compiled.append(profile) or object()),
+    )
+
+    async def stream(graph, state, *, context):
+        yield {
+            "type": "updates",
+            "data": {"model": {"messages": [AIMessage(content="Fait.")]}},
+        }
+
+    monkeypatch.setattr(execution, "stream_agent", stream)
+
+    async def run():
+        prepared = await coaching.prepare_slack_agent(
+            [{"role": "user", "content": "question"}], service.message, service.client
+        )
+        assert await prepared.produce([], "thread", "public", AsyncMock()) == "Fait."
+        prepared.finalize()
+
+    coaching._slack_graph.cache_clear()
+    try:
+        with athlete_scope(admin.athlete_id):
+            asyncio.run(run())
+    finally:
+        coaching._slack_graph.cache_clear()
+    assert compiled == ["slack"]
+
+
 def test_nonadmin_has_no_classifier_and_revoked_private_thread_is_denied(
     setup, monkeypatch, jev_api
 ):
