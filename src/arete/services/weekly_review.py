@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -189,6 +190,22 @@ def _decimal(value: float, spec: str) -> str:
     return format(value, spec).replace(".", ",")
 
 
+def _past(value: float, limit: float, decimals: int) -> str:
+    """``value`` with a decimal comma, never shown level with ``limit``.
+
+    The rules compare raw values; rounded, 1.3004 would read « 1,30 (au-dessus
+    de 1,3) ». Then one more decimal, rounded away from the limit, keeps the
+    number shown strictly past it.
+    """
+    above = value > limit
+    shown = float(format(value, f".{decimals}f"))
+    if shown > limit if above else shown < limit:
+        return _decimal(value, f".{decimals}f")
+    scale = 10 ** (decimals + 1)
+    edge = (math.ceil if above else math.floor)(value * scale) / scale
+    return _decimal(edge, f".{decimals + 1}f")
+
+
 def propose(facts: WeekFacts, upcoming: list[PlannedSession]) -> list[Proposal]:
     """Changes for the sessions still to come; pure, at most three."""
     # Imported prescriptions were reviewed step by step: the rules leave them be.
@@ -219,17 +236,20 @@ def propose(facts: WeekFacts, upcoming: list[PlannedSession]) -> list[Proposal]:
     why = []
     if facts.acwr is not None and facts.acwr > ACWR_HIGH:
         why.append(
-            f"équilibre de charge {_decimal(facts.acwr, '.2f')} "
+            f"équilibre de charge {_past(facts.acwr, ACWR_HIGH, 2)} "
             f"(au-dessus de {_decimal(ACWR_HIGH, 'g')})"
         )
     if facts.tsb is not None and facts.tsb < TSB_LOW:
-        why.append(f"fraîcheur {facts.tsb:.0f} (sous {TSB_LOW:g})")
+        why.append(
+            f"fraîcheur {_past(facts.tsb, TSB_LOW, 0)} (sous {_decimal(TSB_LOW, 'g')})"
+        )
     if facts.readiness_avg is not None and facts.readiness_avg < READINESS_LOW:
         why.append(
-            f"préparation moyenne {facts.readiness_avg:.0f}/100 (sous {READINESS_LOW:g})"
+            f"préparation moyenne {_past(facts.readiness_avg, READINESS_LOW, 0)}/100 "
+            f"(sous {_decimal(READINESS_LOW, 'g')})"
         )
     if why:
-        reason = " et ".join(why)
+        reason = why[0] if len(why) == 1 else f"{', '.join(why[:-1])} et {why[-1]}"
         hard = sorted(
             (
                 s

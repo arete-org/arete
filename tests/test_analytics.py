@@ -18,7 +18,9 @@ from arete.services import analytics, settings
 # run crossing the athlete's midnight saw two days (ARE-169). Every test runs at
 # the instant TODAY comes from (``_one_instant``).
 NOW = settings.utc_now()
-TODAY = NOW.astimezone(settings.zone_of(None)).date()  # the default athlete's day
+# The test athlete stores no timezone, so the services read the default one
+# (Europe/Paris): zone_of(None) is that zone.
+TODAY = NOW.astimezone(settings.zone_of(None)).date()
 
 CARD_KEYS = {
     "volume",

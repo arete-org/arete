@@ -71,11 +71,39 @@ def test_overload_eases_the_hardest_session_and_shortens_the_long_run():
     ]
 
 
-def test_low_freshness_and_readiness_read_like_the_dashboard():
-    proposals = wr.propose(_facts(tsb=-23.4, readiness_avg=42.0), UPCOMING)
+@pytest.mark.parametrize(
+    ("facts", "shown"),
+    [
+        ({"acwr": 1.3004}, "Équilibre de charge 1,301 (au-dessus de 1,3)"),
+        ({"tsb": -20.4}, "Fraîcheur -20,4 (sous -20)"),
+        ({"readiness_avg": 49.6}, "Préparation moyenne 49,6/100 (sous 50)"),
+    ],
+)
+def test_a_value_just_past_its_threshold_never_reads_level_with_it(facts, shown):
+    proposals = wr.propose(_facts(**facts), UPCOMING)
     assert proposals[0].reason == (
-        "Fraîcheur -23 (sous -20) et préparation moyenne 42/100 (sous 50) : "
-        "la séance la plus dure passe en endurance Z2."
+        f"{shown} : la séance la plus dure passe en endurance Z2."
+    )
+
+
+@pytest.mark.parametrize(
+    ("facts", "reasons"),
+    [
+        (
+            {"tsb": -23.4, "readiness_avg": 42.0},
+            "Fraîcheur -23 (sous -20) et préparation moyenne 42/100 (sous 50)",
+        ),
+        (
+            {"acwr": 1.45, "tsb": -23.4, "readiness_avg": 42.0},
+            "Équilibre de charge 1,45 (au-dessus de 1,3), fraîcheur -23 (sous -20) "
+            "et préparation moyenne 42/100 (sous 50)",
+        ),
+    ],
+)
+def test_several_reasons_join_with_commas_and_a_final_et(facts, reasons):
+    proposals = wr.propose(_facts(**facts), UPCOMING)
+    assert proposals[0].reason == (
+        f"{reasons} : la séance la plus dure passe en endurance Z2."
     )
 
 
