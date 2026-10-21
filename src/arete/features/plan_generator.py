@@ -11,9 +11,10 @@ athlete's VDOT when it is known. Pure: no I/O, no clock.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from arete.features.running import TrainingPaces, format_pace, race_time_sec
 
@@ -76,6 +77,11 @@ class DraftSession:
     intensity: str | None
     description: str
     distance_km: float | None = None
+    sport: str = "running"
+    #: Structured steps (``services.prescriptions.Prescription`` as a dict).
+    prescription: dict[str, Any] | None = field(default=None, hash=False)
+    #: What the interference rules read (``features.hybrid_plan``).
+    tags: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -85,13 +91,15 @@ class WeekPlan:
     minutes: int
     recovery: bool
     sessions: list[DraftSession] = field(default_factory=list)
+    #: Sessions the week could not hold, and why, in French (hybrid plans).
+    dropped: list[str] = field(default_factory=list)
 
 
 class PlanError(ValueError):
     """The plan cannot be built; the message says why, in French."""
 
 
-def _monday(day: date) -> date:
+def monday_of(day: date) -> date:
     return day - timedelta(days=day.weekday())
 
 
@@ -146,7 +154,7 @@ def _pick(days: tuple[int, ...], free: list[int], count: int) -> list[int]:
     return chosen
 
 
-def _paced(label: str, paces: TrainingPaces | None, attr: str) -> str:
+def paced(label: str, paces: TrainingPaces | None, attr: str) -> str:
     if paces is None:
         return label
     value = getattr(paces, attr)
@@ -170,8 +178,8 @@ def _quality(
     distance_km: float,
 ) -> DraftSession | None:
     """The phase's quality session number ``kind`` (0 or 1), dated later."""
-    t = _paced("au seuil", paces, "threshold")
-    i = _paced("à l'allure VMA", paces, "interval")
+    t = paced("au seuil", paces, "threshold")
+    i = paced("à l'allure VMA", paces, "interval")
     if phase == "base":
         return DraftSession(
             date.min, "tempo", 45, "Z4", "moderate", f"Seuil : 2×8' {t}, récup 2'"
@@ -235,8 +243,8 @@ def generate_plan(inp: PlanInputs) -> list[WeekPlan]:
     """The weeks from ``inp.start`` to race week; raises ``PlanError``."""
     if inp.race_date < inp.start:
         raise PlanError("La course est déjà passée.")
-    first_monday = _monday(inp.start)
-    n_weeks = (_monday(inp.race_date) - first_monday).days // 7 + 1
+    first_monday = monday_of(inp.start)
+    n_weeks = (monday_of(inp.race_date) - first_monday).days // 7 + 1
     if n_weeks > MAX_WEEKS:
         raise PlanError(
             f"Course dans plus de {MAX_WEEKS} semaines : le plan se génère "
@@ -306,7 +314,7 @@ def generate_plan(inp: PlanInputs) -> list[WeekPlan]:
                             30,
                             "Z2",
                             "easy",
-                            _paced("Footing", paces, "easy"),
+                            paced("Footing", paces, "easy"),
                         ),
                     )
                 )
@@ -329,7 +337,7 @@ def generate_plan(inp: PlanInputs) -> list[WeekPlan]:
             long_min = min(
                 LONG_RUN_CAP[cat], max(45, round(minutes * LONG_RUN_SHARE / 5) * 5)
             )
-            long_desc = _paced(
+            long_desc = paced(
                 f"Sortie longue {long_min // 60}h{long_min % 60:02d}", paces, "easy"
             )
             if cat == "marathon" and phase == "specific" and not recovery:
@@ -364,7 +372,7 @@ def generate_plan(inp: PlanInputs) -> list[WeekPlan]:
                                 each,
                                 "Z1" if recovery else "Z2",
                                 "easy",
-                                _paced("Footing", paces, "easy"),
+                                paced("Footing", paces, "easy"),
                             ),
                         )
                     )
@@ -400,7 +408,10 @@ PLANNED_RPE: dict[str, float] = {
 DEFAULT_PLANNED_RPE = 5
 
 
-def planned_tss(session_type: str, minutes: float) -> float:
-    """TSS a planned session should bring, with the RPE formula the history uses."""
-    rpe = PLANNED_RPE.get(session_type, DEFAULT_PLANNED_RPE)
+def planned_tss(
+    session_type: str, minutes: float, rpe_by_type: Mapping[str, float] = PLANNED_RPE
+) -> float:
+    """TSS a planned session should bring, with the RPE formula the history uses.
+    A Hyrox or hybrid goal's sessions pass that plan's table (``hybrid_plan``)."""
+    rpe = rpe_by_type.get(session_type, DEFAULT_PLANNED_RPE)
     return minutes * (rpe / 10) ** 2 / 0.36

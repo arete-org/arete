@@ -156,6 +156,8 @@ class PlannedSession:
     garmin_schedule_id: str | None = None
     garmin_pushed_at: datetime | None = None
     goal_id: int | None = None  # set when a goal's plan generated it
+    #: A Hyrox or hybrid plan's session kind (``features.hybrid_plan``).
+    plan_kind: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for DB insertion."""

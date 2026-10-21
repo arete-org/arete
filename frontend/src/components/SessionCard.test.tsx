@@ -49,6 +49,12 @@ it('shows the decision, its reason and the modified chip', () => {
   expect(screen.getByText('modifiée')).toBeTruthy();
 });
 
+it('names a station circuit in French', () => {
+  const circuit = { ...session, sport: 'strength', session_type: 'cross_training', status: 'pending' as const };
+  render(<SessionCard planned={circuit} realised={null} state="pending" />);
+  expect(screen.getByText('Circuit')).toBeTruthy();
+});
+
 const exported = (state: string, error: string | null = null): GarminExport => ({
   session_id: 7, operation_id: 'op', updated_at: '2026-10-09T05:00:00', state, phase: state,
   error, deleted: false, workout_id: 1, schedule_id: 100,

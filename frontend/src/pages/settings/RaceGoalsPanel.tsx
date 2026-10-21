@@ -151,8 +151,7 @@ function GoalRow({ goal, onPlan, onDelete }: { goal: Goal; onPlan: () => void; o
           </p>
           <p className="text-xs font-sans text-text-muted">
             {parseLocalDate(goal.race_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-            {' · '}
-            {formatKm(goal.distance_km)} km
+            {goal.goal_type !== 'hybrid' && ` · ${formatKm(goal.distance_km)} km`}
             {goal.target_time_sec != null && ` · objectif ${formatRaceTime(goal.target_time_sec)}`}
           </p>
         </div>

@@ -132,7 +132,6 @@ def form_curve() -> dict[str, Any]:
     for the goal card. One connection; reads only.
     """
     from arete.dataio.queries import daily_tss_by_date
-    from arete.features.plan_generator import planned_tss
     from arete.services import plan_builder
 
     with db_connection() as con:
@@ -162,8 +161,8 @@ def form_curve() -> dict[str, Any]:
     # The hardest of the week: the planned load weighs duration and intensity.
     key = max(
         week,
-        key=lambda s: planned_tss(
-            s.session_type.value, float(s.target_duration_min or 0)
+        key=lambda s: plan_builder.session_tss(
+            s, goal, float(s.target_duration_min or 0)
         ),
         default=None,
     )

@@ -35,4 +35,9 @@ describe('race formatting', () => {
     expect(goalCountdown(goal)).toBe('J-65 · Semi de Paris (21,1 km)');
     expect(goalCountdown({ ...goal, days_left: 0 })).toBe('Jour J · Semi de Paris (21,1 km)');
   });
+
+  it('gives a hybrid block no distance', () => {
+    const block = { name: 'Bloc hybride', distance_km: 0, days_left: 55, goal_type: 'hybrid' as const };
+    expect(goalCountdown(block)).toBe('J-55 · Bloc hybride');
+  });
 });

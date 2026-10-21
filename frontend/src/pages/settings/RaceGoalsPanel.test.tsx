@@ -73,6 +73,15 @@ it('lists the goals with their countdown and target time', async () => {
   client.clear();
 });
 
+it('shows no distance for a hybrid block', async () => {
+  const block: Goal = { ...goal, id: 2, name: 'Bloc hybride', distance_km: 0, target_time_sec: null, goal_type: 'hybrid' };
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([block]);
+  const client = renderPanel();
+  expect(await screen.findByText('Bloc hybride')).toBeTruthy();
+  expect(screen.queryByText(/0 km/)).toBeNull();
+  client.clear();
+});
+
 it('creates a goal from a distance chip and an h:mm:ss target', async () => {
   vi.spyOn(goalsApi, 'list').mockResolvedValue([]);
   const create = vi.spyOn(goalsApi, 'create').mockResolvedValue(goal);

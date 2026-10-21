@@ -539,13 +539,13 @@ def moved_once(con, session_id: int) -> bool:
 
 
 def goal_races(today: date) -> set[date]:
-    """The active goal races still ahead."""
+    """The active goal races still ahead (a hybrid block's end is no race)."""
     from arete.services.goals import list_goals
 
     return {
         g.race_date
         for g in list_goals(today=today)
-        if g.status == "active" and g.race_date > today
+        if g.status == "active" and g.race_date > today and g.goal_type != "hybrid"
     }
 
 
