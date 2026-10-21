@@ -81,6 +81,7 @@ const detail: ActivityDetail = {
     start_altitude_m: 1035,
     source: 'open-meteo-archive',
   },
+  summary: { rule_feedback: null, strength: null, next_day: null },
 };
 
 function renderAt(path: string) {
@@ -220,4 +221,69 @@ it('points to the day\'s unlinked Muscu log rather than inviting a second one', 
   expect(screen.getByRole('link', { name: 'Ouvrir la séance saisie' }).getAttribute('href')).toBe('/log?session=5');
   // A genuine second session can still get its loads.
   expect(screen.getByRole('button', { name: 'Ajoute tes charges' })).toBeTruthy();
+});
+
+const planned = {
+  id: 40, date: '2026-10-09', sport: 'running', session_type: 'endurance', description: 'Footing souple',
+  target_duration_min: 45, target_distance_km: null, target_hr_zone: 'Z2', status: 'pending' as const,
+};
+
+it('opens with the summary, the coach in one sentence and tomorrow, before the tiles and the curves', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockClear();
+  vi.mocked(strengthApi.getSession).mockClear();
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail,
+    feedback: {
+      text: 'Fractionné régulier du début à la fin, sans dérive cardiaque. Garde cette allure pour la prochaine séance.',
+      source: 'agent', trigger: 'sync', created_at: null,
+    },
+    summary: { rule_feedback: null, strength: null, next_day: { date: '2026-10-09', relative: 'tomorrow', planned: [planned], proposals: [], next: null } },
+  });
+  renderAt('/log/sessions/12');
+  const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(summary.textContent).toContain('5 × 4 min');
+  expect(summary.textContent).toContain('Le mot du coach');
+  expect(summary.textContent).not.toContain('Chiron');
+  expect(summary.textContent).toContain('Fractionné régulier du début à la fin, sans dérive cardiaque.');
+  expect(summary.textContent).not.toContain('Garde cette allure');
+  expect(summary.textContent).toContain('Demain : Footing souple · 45 min · Z2.');
+  fireEvent.click(screen.getByRole('button', { name: 'Lire la suite' }));
+  expect(summary.textContent).toContain('Garde cette allure pour la prochaine séance.');
+  // Summary, then the tiles, then the curves.
+  const tiles = screen.getByText('Calories');
+  const curves = screen.getByText('Au fil de la séance');
+  expect(summary.compareDocumentPosition(tiles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(tiles.compareDocumentPosition(curves) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Everything came with the detail: no request of the summary's own.
+  expect(analyticsApi.getSessionDetail).toHaveBeenCalledTimes(1);
+  expect(strengthApi.getSession).not.toHaveBeenCalled();
+});
+
+it('shows the rules\' sentence when no feedback is stored, and today\'s proposal the morning after', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail,
+    feedback: null,
+    summary: {
+      rule_feedback: 'Séance de course terminée (49 min). Bon travail de fond, intensité bien maîtrisée.',
+      strength: null,
+      next_day: {
+        date: '2026-10-09', relative: 'today', planned: [{ ...planned, session_type: 'tempo', description: null }],
+        proposals: [{ planned_session_id: 40, decision: 'ease', reason: 'Préparation Garmin 55/100 : séance allégée.', state: 'pending' }],
+        next: null,
+      },
+    },
+  });
+  renderAt('/log/sessions/12');
+  const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(summary.textContent).toContain('Calculé à partir de la séance');
+  expect(summary.textContent).toContain('Séance de course terminée (49 min). Bon travail de fond');
+  expect(summary.textContent).toContain('Aujourd’hui : Seuil · 45 min · Z2, le coach propose : allégée.');
+  expect(summary.textContent).toContain('Préparation Garmin 55/100 : séance allégée.');
+});
+
+it('asks for the RPE inside the summary when it is missing', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({ ...detail, session: { ...session, rpe: null } });
+  renderAt('/log/sessions/12');
+  const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(summary.querySelector('[aria-label="Effort ressenti"]')).toBeTruthy();
 });

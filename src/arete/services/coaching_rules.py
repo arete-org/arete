@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from arete.dataio.queries import training_loads
 from arete.dataio.settings import athlete_zone_model, get_user_settings
+from arete.features.overview import sport_label
 from arete.features.workload import compute_workload_metrics
 from arete.garmin.repository import GarminRepository
 from arete.services.activity_detail import analysis_lines
@@ -33,7 +34,9 @@ from arete.services.settings import athlete_today
 from arete.strength.repository import StrengthRepository
 
 if TYPE_CHECKING:
+    from arete.garmin.models import ActualSession
     from arete.services.checkins import Checkin
+    from arete.strength.models import StrengthSession
 
 logger = logging.getLogger(__name__)
 
@@ -285,6 +288,35 @@ def _pace_str(sec_per_km: float) -> str:
     return f"{minutes}:{seconds:02d}"
 
 
+def _volume_by_muscle(session: StrengthSession) -> dict[str, float]:
+    """Working-set volume (kg) per primary muscle; warm-ups never count."""
+    volume: dict[str, float] = {}
+    for ex in session.exercises:
+        if ex.exercise is None:
+            continue
+        muscle = ex.exercise.primary_muscle.value
+        for s in ex.sets:
+            if s.is_warmup:
+                continue
+            volume[muscle] = volume.get(muscle, 0) + (s.reps or 0) * (s.weight_kg or 0)
+    return volume
+
+
+def strength_rule_feedback(session: StrengthSession) -> str:
+    """The rule sentence on a logged strength session: its floor and the page's."""
+    volume = _volume_by_muscle(session)
+    if not volume:
+        return "Séance enregistrée ! Continue à t'entraîner régulièrement."
+    muscles = ", ".join(_muscle_label(m) for m in volume)
+    text = (
+        f"Séance musculation terminée — {sum(volume.values()):.0f} kg de volume "
+        f"total sur {muscles}."
+    )
+    if session.overall_rpe:
+        text += f" RPE ressenti : {session.overall_rpe}/10."
+    return text
+
+
 def _generate_strength_feedback(
     session_id: int,
 ) -> tuple[PostSessionResponse, SessionEvidence]:
@@ -302,21 +334,10 @@ def _generate_strength_feedback(
         notes=session.notes,
     )
 
-    # Compute volume per muscle for this session
-    session_volume: dict[str, float] = {}
-    for ex in session.exercises:
-        if ex.exercise is None:
-            continue
-        muscle = ex.exercise.primary_muscle.value
-        for s in ex.sets:
-            if s.is_warmup:
-                continue
-            vol = (s.reps or 0) * (s.weight_kg or 0)
-            session_volume[muscle] = session_volume.get(muscle, 0) + vol
-
+    session_volume = _volume_by_muscle(session)
     if not session_volume:
         return PostSessionResponse(
-            feedback="Séance enregistrée ! Continue à t'entraîner régulièrement.",
+            feedback=strength_rule_feedback(session),
             highlights=["Séance complétée"],
         ), evidence
 
@@ -330,8 +351,6 @@ def _generate_strength_feedback(
 
     # Weeks in reference period (4)
     highlights: list[str] = []
-    feedback_parts: list[str] = []
-
     for muscle, vol in sorted(session_volume.items(), key=lambda x: -x[1]):
         label = _muscle_label(muscle)
         ref_weekly = ref_volume.get(muscle, 0) / 4.0 if ref_volume.get(muscle) else 0
@@ -351,61 +370,33 @@ def _generate_strength_feedback(
                 f"{label.capitalize()} travaillé ({vol:.0f} kg de volume)"
             )
 
-    total_vol = sum(session_volume.values())
-    muscles_worked = [_muscle_label(m) for m in session_volume]
-    feedback_parts.append(
-        f"Séance musculation terminée — {total_vol:.0f} kg de volume total "
-        f"sur {', '.join(muscles_worked)}."
-    )
-
-    if session.overall_rpe:
-        feedback_parts.append(f"RPE ressenti : {session.overall_rpe}/10.")
-
     if not highlights:
         highlights.append("Séance complétée avec succès")
 
-    rule_feedback = " ".join(feedback_parts)
     rule_highlights = highlights[:5]
 
     return PostSessionResponse(
-        feedback=rule_feedback,
+        feedback=strength_rule_feedback(session),
         highlights=rule_highlights,
         source="rules",
     ), evidence
 
 
-def _generate_cardio_feedback(
-    session_id: int,
-) -> tuple[PostSessionResponse, SessionEvidence]:
-    repo = GarminRepository()
-    session = repo.get_actual_session(session_id)
-    if session is None:
-        raise LookupError("Cardio session not found")
-    evidence = SessionEvidence(
-        date=session.date,
-        # The start time keeps two same-named sessions of one day apart in the
-        # journal (it files each heading once); the id when there is no time.
-        title=(
-            f"{session.sport or 'activité'} — {session.name or 'sans titre'} "
-            + (
-                f"({session.start_time:%H:%M})"
-                if session.start_time
-                else f"(#{session_id})"
-            )
-        ),
-        session_ref=f"actual:{session_id}",
-        sport=session.sport,
-        rpe=session.rpe,
-        notes=session.notes,
-    )
-
+def _cardio_rules(session: ActualSession) -> tuple[str, list[str]]:
+    """The rule sentence and highlights of a finished session, from its row."""
     highlights: list[str] = []
     feedback_parts: list[str] = []
 
     sport = session.sport or "activité"
     duration_min = (session.duration_sec or 0) // 60
 
-    feedback_parts.append(f"Séance de {sport} terminée ({duration_min} min).")
+    # The athlete reads this sentence: the sport in French, not its Garmin key.
+    label = sport_label(session.sport) if session.sport else None
+    feedback_parts.append(
+        f"Séance de {label} terminée ({duration_min} min)."
+        if label
+        else f"Séance terminée ({duration_min} min)."
+    )
 
     # Imported strength activities often contain only HR, not mechanical load.
     is_strength = sport in {"strength", "strength_training", "musculation"}
@@ -446,7 +437,40 @@ def _generate_cardio_feedback(
         feedback_parts.append("Continue à t'entraîner régulièrement.")
         highlights.append("Séance complétée")
 
-    rule_feedback = " ".join(feedback_parts)
+    return " ".join(feedback_parts), highlights
+
+
+def cardio_rule_feedback(session: ActualSession) -> str:
+    """The rule sentence on an activity: its stored feedback's floor and the page's."""
+    return _cardio_rules(session)[0]
+
+
+def _generate_cardio_feedback(
+    session_id: int,
+) -> tuple[PostSessionResponse, SessionEvidence]:
+    repo = GarminRepository()
+    session = repo.get_actual_session(session_id)
+    if session is None:
+        raise LookupError("Cardio session not found")
+    evidence = SessionEvidence(
+        date=session.date,
+        # The start time keeps two same-named sessions of one day apart in the
+        # journal (it files each heading once); the id when there is no time.
+        title=(
+            f"{session.sport or 'activité'} — {session.name or 'sans titre'} "
+            + (
+                f"({session.start_time:%H:%M})"
+                if session.start_time
+                else f"(#{session_id})"
+            )
+        ),
+        session_ref=f"actual:{session_id}",
+        sport=session.sport,
+        rpe=session.rpe,
+        notes=session.notes,
+    )
+
+    rule_feedback, highlights = _cardio_rules(session)
     # The pace and heart analysis of the kept streams and laps, when there are.
     rule_highlights = highlights[:5] + analysis_lines(session_id, repo=repo)[:3]
 

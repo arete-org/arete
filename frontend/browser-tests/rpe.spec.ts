@@ -12,6 +12,7 @@ const detail = {
   zones: null, laps: [], splits: [], intervals: null, metrics: null, streams: null, route: null,
   feedback: { text: 'Footing bien dosé, le cardio est resté bas.', source: 'agent', trigger: 'sync', created_at: null },
   terrain: null, weather: null,
+  summary: { rule_feedback: null, strength: null, next_day: null },
 };
 
 test('the post-session link opens the RPE picker, one tap saves it', async ({ page }) => {
