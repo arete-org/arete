@@ -63,7 +63,48 @@ def test_overload_eases_the_hardest_session_and_shortens_the_long_run():
     assert [p.planned_session_id for p in proposals] == [2, 4]
     assert proposals[0].change["session_type"] == "endurance"
     assert proposals[1].change == {"target_duration_min": 75}
-    assert "1.45" in proposals[0].reason
+    assert [p.reason for p in proposals] == [
+        "Équilibre de charge 1,45 (au-dessus de 1,3) : "
+        "la séance la plus dure passe en endurance Z2.",
+        "Équilibre de charge 1,45 (au-dessus de 1,3) : "
+        "sortie longue raccourcie à 75 min.",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("facts", "shown"),
+    [
+        ({"acwr": 1.3004}, "Équilibre de charge 1,301 (au-dessus de 1,3)"),
+        ({"tsb": -20.4}, "Fraîcheur -20,4 (sous -20)"),
+        ({"readiness_avg": 49.6}, "Préparation moyenne 49,6/100 (sous 50)"),
+    ],
+)
+def test_a_value_just_past_its_threshold_never_reads_level_with_it(facts, shown):
+    proposals = wr.propose(_facts(**facts), UPCOMING)
+    assert proposals[0].reason == (
+        f"{shown} : la séance la plus dure passe en endurance Z2."
+    )
+
+
+@pytest.mark.parametrize(
+    ("facts", "reasons"),
+    [
+        (
+            {"tsb": -23.4, "readiness_avg": 42.0},
+            "Fraîcheur -23 (sous -20) et préparation moyenne 42/100 (sous 50)",
+        ),
+        (
+            {"acwr": 1.45, "tsb": -23.4, "readiness_avg": 42.0},
+            "Équilibre de charge 1,45 (au-dessus de 1,3), fraîcheur -23 (sous -20) "
+            "et préparation moyenne 42/100 (sous 50)",
+        ),
+    ],
+)
+def test_several_reasons_join_with_commas_and_a_final_et(facts, reasons):
+    proposals = wr.propose(_facts(**facts), UPCOMING)
+    assert proposals[0].reason == (
+        f"{reasons} : la séance la plus dure passe en endurance Z2."
+    )
 
 
 def test_a_missed_week_drops_the_shortest_easy_run():
