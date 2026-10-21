@@ -162,6 +162,16 @@ def effort_pace(row: OverviewRow) -> tuple[int | None, bool]:
     return row.avg_pace_sec_km, False
 
 
+def _paces(runs: Sequence[OverviewRow]) -> list[ov.PaceRow]:
+    """The Allure card's rows: (date, pace, distance, duration, graded)."""
+    return [
+        (r.date, pace, r.distance_m, r.duration_sec, graded)
+        for r in runs
+        for pace, graded in [effort_pace(r)]
+        if pace is not None
+    ]
+
+
 def get_overview(period: str = "30d"):
     """The four answers, every analytics card and the records, for one period.
 
@@ -196,12 +206,7 @@ def get_overview(period: str = "30d"):
         if window.prev_start and window.prev_end
         else []
     )
-    paces = [
-        (r.date, pace, r.distance_m, r.duration_sec, graded)
-        for r in runs
-        for pace, graded in [effort_pace(r)]
-        if pace is not None
-    ]
+    paces = _paces(runs)
     efficiency = [
         (r.date, r.avg_hr, r.avg_pace_sec_km, r.duration_sec)
         for r in runs
@@ -237,10 +242,42 @@ def get_overview(period: str = "30d"):
     ctl = {day.date: fitness for day, fitness, _fatigue in pmc_series}
     atl = {day.date: fatigue for day, _fitness, fatigue in pmc_series}
     readiness = current_readiness(window.end, readiness_rows, None)
+    # Without any load in the history the fraîcheur is 0 by construction,
+    # not a measure: the answer then says there is nothing to judge.
+    has_history = any(day.tss > 0 for day, _fitness, _fatigue in pmc_series)
+    tsb = (
+        ctl[window.end] - atl[window.end] if has_history and window.end in ctl else None
+    )
+    # Progress is never judged on one week: a shorter period reads 30 days.
+    base = (
+        window
+        if window.days >= answers.PROGRESS_MIN_DAYS
+        else resolve_period("30d", window.end, earliest)
+    )
+    base_pace = (
+        pace
+        if base is window
+        else ov.build_pace_card(
+            _paces(
+                [
+                    r
+                    for r in _between(rows, _fetch_start(base), base.end)
+                    if r.sport in RUNNING_SPORTS
+                ]
+            ),
+            base,
+        )
+    )
     active = {r.date for r in rows if r.duration_sec > 0}
     pattern_period, weeks = answers.weeks_of(window, active, ctl)
     has_load = any(load.duration_min > 0 for load in loads)
     week_ago = window.end - timedelta(days=7)
+    monotony = calculate_monotony(loads, window.end) if has_load else None
+    ramp = (
+        ctl[window.end] - ctl.get(week_ago, 0.0)
+        if has_load and window.end in ctl
+        else None
+    )
     return {
         "answers": [
             answers.ready_answer(
@@ -248,22 +285,16 @@ def get_overview(period: str = "30d"):
                 readiness.score if readiness else None,
                 readiness.source if readiness else None,
                 readiness.measured_on if readiness else None,
-                ctl[window.end] - atl[window.end] if window.end in ctl else None,
+                tsb,
             ),
             answers.progress_answer(
-                window,
-                ctl.get(window.start - timedelta(days=1)),
-                ctl.get(window.end),
-                pace["headline"]["value"],
-                records.lift_trend(lifts, window),
+                base,
+                ctl.get(base.start - timedelta(days=1)),
+                ctl.get(base.end),
+                base_pace["headline"]["value"],
+                records.lift_trend(lifts, base),
             ),
-            answers.risk_answer(
-                acwr,
-                calculate_monotony(loads, window.end) if has_load else None,
-                ctl[window.end] - ctl.get(week_ago, 0.0)
-                if has_load and window.end in ctl
-                else None,
-            ),
+            answers.risk_answer(acwr, monotony, ramp),
             answers.works_answer(pattern_period, weeks),
         ],
         "records": records.records_payload(
@@ -287,6 +318,8 @@ def get_overview(period: str = "30d"):
             "cadence": ov.build_cadence_card(cadences, window),
             "vam": ov.build_vam_card(climbs_vam, window, VAM_MINUTES),
             "descent": ov.build_descent_card(descents, window),
+            "risk": answers.risk_card(acwr, monotony, ramp),
+            "weeks": answers.weeks_card(pattern_period, weeks),
             **recovery,
         },
     }

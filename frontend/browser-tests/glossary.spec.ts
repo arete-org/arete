@@ -11,9 +11,9 @@ const headline = (display: string) => ({
   delta_pct: null,
   better: 'neutral',
 });
-const CARDS = ['volume', 'pmc', 'zones', 'sports', 'decoupling', 'pace', 'elevation', 'cadence', 'vam', 'descent', 'readiness', 'hrv', 'sleep', 'resting_hr'];
+const CARDS = ['volume', 'pmc', 'zones', 'sports', 'decoupling', 'pace', 'elevation', 'cadence', 'vam', 'descent', 'risk', 'weeks', 'readiness', 'hrv', 'sleep', 'resting_hr'];
 
-/** Every analytics card without a series; the form card carries its fraîcheur, fatigue and ACWR. */
+/** Every analytics card without a series; the form card carries its fraîcheur and fatigue, the risk card the ACWR. */
 function overview() {
   const cards = Object.fromEntries(
     CARDS.map((name) => [
@@ -21,7 +21,8 @@ function overview() {
       { headline: headline('42'), secondary: [], insight: { text: 'Mesures de la période.', tone: 'neutral' }, series: [] },
     ]),
   );
-  cards.pmc.secondary = [headline('-8'), headline('50'), headline('1,27')];
+  cards.pmc.secondary = [headline('-8'), headline('50')];
+  cards.risk.headline = headline('1,27');
   return {
     period: '30d',
     bucket: 'day',

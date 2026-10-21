@@ -11,7 +11,13 @@ import pytest
 
 from arete.api.analytics import router
 from arete.dataio.db import connect
-from arete.dataio.queries import OverviewRow, daily_loads, daily_tss, overview_rows
+from arete.dataio.queries import (
+    LiftSets,
+    OverviewRow,
+    daily_loads,
+    daily_tss,
+    overview_rows,
+)
 from arete.services import analytics
 from arete.services.settings import today_in
 
@@ -28,6 +34,8 @@ CARD_KEYS = {
     "cadence",
     "vam",
     "descent",
+    "risk",
+    "weeks",
     "readiness",
     "hrv",
     "sleep",
@@ -51,7 +59,7 @@ def stub_queries():
         "terrain_rows": [],
         "fetch_window": [],
         "stream_effort_rows": [],
-        "lift_set_rows": [],
+        "lift_set_rows": LiftSets([], 0, None),
     }
     patches = {
         name: patch(f"arete.services.analytics.{name}", return_value=value)

@@ -20,7 +20,9 @@ from arete.features.fitness import (
     get_readiness_level,
 )
 from arete.features.insights import PACE_TREND_SIGNIFICANT, Tone
+from arete.features.overview import Card, headline
 from arete.features.periods import PeriodWindow
+from arete.strength.progression import E1RM_EPSILON
 
 AnswerId = Literal["ready", "progress", "risk", "works"]
 
@@ -45,6 +47,9 @@ QUESTIONS: dict[AnswerId, str] = {
 
 #: A forme de fond (CTL) change smaller than this is "stable".
 CTL_STABLE_PTS = 2.0
+#: A shorter window is too short to judge progress: the answer reads the
+#: last 30 days instead (and says so), never one week's swing.
+PROGRESS_MIN_DAYS = 28
 #: Forme de fond gained in 7 days above which the ramp is too steep (points of
 #: daily load per week; 5 to 8 is the usual ceiling of a build block).
 RAMP_HIGH_PTS = 8.0
@@ -56,7 +61,8 @@ MONOTONY_HIGH = 2.0
 #: The week pattern reads at least this span, and needs this many weeks per group.
 PATTERN_MIN_WEEKS = 12
 PATTERN_MIN_GROUP = 2
-#: Weekly forme de fond gain by which more training days must win to "pay".
+#: Weekly forme de fond gain by which the weeks with more training days must
+#: differ for the sentence to say they went with a bigger gain.
 PATTERN_MIN_GAP_PTS = 1.0
 
 SESSIONS = "tes séances"
@@ -71,8 +77,14 @@ FORM_WORD: dict[FormZone, str] = {
 
 
 def fr(value: float, digits: int = 0, sign: bool = False) -> str:
-    """French decimal comma: 1,42 ; ``sign`` keeps the + of a gain."""
-    text = f"{value:+.{digits}f}" if sign else f"{value:.{digits}f}"
+    """French decimal comma: 1,42 ; ``sign`` keeps the + of a gain.
+
+    A value that rounds to zero is written 0, never -0 or +0.
+    """
+    rounded = round(value, digits) + 0.0  # -0.0 + 0.0 is 0.0
+    if rounded == 0:
+        return f"{0:.{digits}f}".replace(".", ",")
+    text = f"{rounded:+.{digits}f}" if sign else f"{rounded:.{digits}f}"
     return text.replace(".", ",")
 
 
@@ -182,9 +194,11 @@ def progress_answer(
 ) -> Answer:
     """Forme de fond over the window, with the pace trend (or a lift's e1RM).
 
-    ``pace_slope`` is the Allure card's trend, in s/km per month (negative is
-    faster), None below its minimum number of runs. ``lift`` reads only when
-    there is no pace trend: a strength athlete's progress is a heavier lift.
+    ``window`` spans at least ``PROGRESS_MIN_DAYS`` (the service passes the
+    last 30 days for a shorter period). ``pace_slope`` is the Allure card's
+    trend over that window, in s/km per month (negative is faster), None
+    below its minimum number of runs. ``lift`` reads only when there is no
+    pace trend: a strength athlete's progress is a heavier lift.
     """
     period = period_phrase(window)
     if not ctl_end and not ctl_start and pace_slope is None and lift is None:
@@ -200,6 +214,8 @@ def progress_answer(
     delta = end - start
     parts = [
         f"ta forme de fond passe de {fr(start)} à {fr(end)} ({fr(delta, sign=True)})"
+        if fr(delta) != "0"
+        else f"ta forme de fond reste à {fr(end)}"
     ]
     source = SESSIONS
     improving = worsening = False
@@ -216,7 +232,8 @@ def progress_answer(
     elif lift is not None:
         exercise, previous, best = lift
         source = "tes séances et ton journal de force"
-        improving, worsening = best > previous, best < previous
+        improving = best > previous + E1RM_EPSILON
+        worsening = best < previous - E1RM_EPSILON
         parts.append(
             f"ton meilleur e1RM ({exercise}) passe de {fr(previous)} à {fr(best)} kg"
         )
@@ -269,14 +286,14 @@ def risk_answer(
     if acwr is not None and acwr > ACWR_DANGER:
         tone, main = (
             "bad",
-            "risque de blessure, ta charge aiguë dépasse largement la chronique",
+            "risque de blessure : ta charge aiguë dépasse largement la chronique",
         )
     elif ramp is not None and ramp > RAMP_HIGH_PTS:
-        tone, main = "warn", "ta forme de fond monte trop vite, stabilise la charge"
+        tone, main = "warn", "ta forme de fond monte trop vite : stabilise la charge"
     elif acwr is not None and acwr > ACWR_CAUTION:
-        tone, main = "warn", "ta charge monte vite, n’ajoute rien cette semaine"
+        tone, main = "warn", "ta charge monte vite : n’en rajoute pas cette semaine"
     elif monotony is not None and monotony > MONOTONY_HIGH:
-        tone, main = "warn", "semaine trop monotone, alterne jours durs et faciles"
+        tone, main = "warn", "semaine trop monotone : alterne jours durs et faciles"
     else:
         tone, main = "good", "aucun signal d’alerte"
     return _answer("risk", period, f"{main}{tail}", SESSIONS, tone)
@@ -298,16 +315,17 @@ def weeks_of(
 ) -> tuple[str, list[Week]]:
     """Consecutive 7-day weeks ending on the window's last day, oldest first.
 
-    The window when it spans at least ``PATTERN_MIN_WEEKS`` weeks, else that
-    many weeks: a short period has too few weeks to compare.
+    The window's whole weeks when it spans at least ``PATTERN_MIN_WEEKS``
+    weeks, else that many weeks: a short period has too few weeks to compare.
+    The phrase names the weeks read (« les 12 dernières semaines » on 90
+    days, which hold 12 whole weeks).
     """
-    if window.days >= PATTERN_MIN_WEEKS * 7:
-        period, count = period_phrase(window), window.days // 7
-    else:
-        period, count = (
-            f"sur les {PATTERN_MIN_WEEKS} dernières semaines",
-            PATTERN_MIN_WEEKS,
-        )
+    count = max(window.days // 7, PATTERN_MIN_WEEKS)
+    period = (
+        period_phrase(window)
+        if count * 7 == window.days
+        else f"sur les {count} dernières semaines"
+    )
     weeks: list[Week] = []
     for back in range(count - 1, -1, -1):
         end = window.end - timedelta(days=7 * back)
@@ -318,6 +336,11 @@ def weeks_of(
         )
         weeks.append({"end": end, "active_days": days, "ctl_gain": gain})
     return period, weeks
+
+
+def trained_weeks(weeks: Sequence[Week]) -> list[Week]:
+    """The weeks with at least one session: an illness or a holiday is no pattern."""
+    return [w for w in weeks if w["active_days"] > 0]
 
 
 def _split_weeks(weeks: Sequence[Week]) -> tuple[int, list[Week], list[Week]] | None:
@@ -333,36 +356,128 @@ def _split_weeks(weeks: Sequence[Week]) -> tuple[int, list[Week], list[Week]] | 
     return best
 
 
-def works_answer(period: str, weeks: Sequence[Week]) -> Answer:
-    """Which week pattern builds the forme de fond: more training days, or not.
+def _weeks(n: int) -> str:
+    return "ta semaine" if n == 1 else f"tes {n} semaines"
 
-    Weeks are split on the number of training days that divides them most
-    evenly; the answer compares the mean forme de fond gained by each group.
+
+def works_answer(period: str, weeks: Sequence[Week]) -> Answer:
+    """Which weeks went with a rising forme de fond: a description, not a cause.
+
+    The weeks with a session are split on the number of training days that
+    divides them most evenly, and the mean forme de fond gained by each group
+    is reported. The forme de fond follows the load, so more training days
+    raise it by construction: the sentence says what coincided, never that
+    a pattern « pays ».
     """
-    split = _split_weeks([w for w in weeks if w["active_days"] or w["ctl_gain"]])
+    split = _split_weeks(trained_weeks(weeks))
     if split is None:
         return _answer(
             "works",
             period,
-            "pas encore assez de semaines comparables pour dire ce qui marche",
+            "pas encore assez de semaines d’entraînement différentes à comparer",
             SESSIONS,
             "neutral",
         )
     k, high, low = split
     hi = sum(w["ctl_gain"] for w in high) / len(high)
     lo = sum(w["ctl_gain"] for w in low) / len(low)
-    days = f"tes semaines à {k} jours d’entraînement ou plus"
+    more = f"{_weeks(len(high))} à {k} jours d’entraînement ou plus"
+    fewer = f"{_weeks(len(low))} à moins de {k} jours"
     if hi - lo >= PATTERN_MIN_GAP_PTS:
         body = (
-            f"{days} font monter ta forme de fond de {fr(hi, 1, sign=True)} en moyenne, "
-            f"contre {fr(lo, 1, sign=True)} pour les autres : la régularité paie"
+            f"{more} ont vu ta forme de fond monter de {fr(hi, 1, sign=True)} "
+            f"en moyenne, contre {fr(lo, 1, sign=True)} pour {fewer} "
+            "(semaines sans séance exclues)"
         )
-        return _answer("works", period, body, SESSIONS, "good")
-    body = (
-        f"{days} ne font pas plus monter ta forme de fond ({fr(hi, 1, sign=True)} contre "
-        f"{fr(lo, 1, sign=True)}) : le nombre de jours ne fait pas la différence"
-    )
+    else:
+        body = (
+            f"{more} et {fewer} ont vu ta forme de fond évoluer de la même façon "
+            f"({fr(hi, 1, sign=True)} contre {fr(lo, 1, sign=True)} en moyenne, "
+            "semaines sans séance exclues)"
+        )
     return _answer("works", period, body, SESSIONS, "neutral")
+
+
+# --------------------------------------------------------------------------- #
+# The cards that carry the risk and week-pattern numbers
+# --------------------------------------------------------------------------- #
+def risk_card(acwr: float | None, monotony: float | None, ramp: float | None) -> Card:
+    """The three numbers « Où est le risque ? » reads, and the thresholds it applies."""
+    return {
+        "headline": headline(
+            round(acwr, 2) if acwr is not None else None,
+            "",
+            fr(acwr, 2) if acwr is not None else "—",
+            None,
+            "neutral",
+        ),
+        "secondary": [
+            headline(
+                round(monotony, 2) if monotony is not None else None,
+                "",
+                fr(monotony, 1) if monotony is not None else "—",
+                None,
+                "down",
+            ),
+            headline(
+                round(ramp, 1) if ramp is not None else None,
+                "pts",
+                f"{fr(ramp, 1, sign=True)} pts" if ramp is not None else "—",
+                None,
+                "neutral",
+            ),
+        ],
+        "insight": {
+            "text": (
+                f"Seuils : ACWR au-delà de {fr(ACWR_CAUTION, 1)} (prudence) et "
+                f"{fr(ACWR_DANGER, 1)} (danger), monotonie au-delà de "
+                f"{fr(MONOTONY_HIGH, 1)}, forme de fond au-delà de "
+                f"+{fr(RAMP_HIGH_PTS)} en 7 jours."
+            ),
+            "tone": "neutral",
+        },
+        "series": [],
+    }
+
+
+def weeks_card(period: str, weeks: Sequence[Week]) -> Card:
+    """« Qu’est-ce qui marche ? »: the weeks grouped by training days.
+
+    One row per number of training days: how many weeks, and the forme de
+    fond they gained on average. Weeks without a session are left out.
+    """
+    trained = trained_weeks(weeks)
+    by_days: dict[int, list[float]] = {}
+    for week in trained:
+        by_days.setdefault(week["active_days"], []).append(week["ctl_gain"])
+    count = len(trained)
+    return {
+        "headline": headline(
+            count,
+            "semaines",
+            f"{count} semaine{'s' if count > 1 else ''}",
+            None,
+            "neutral",
+        ),
+        "secondary": [],
+        "insight": {
+            "text": (
+                f"{period[0].upper()}{period[1:]}, semaines sans séance exclues. "
+                "La forme de fond suit la charge : ce tableau décrit tes semaines, "
+                "il ne prouve pas ce qui marche."
+            ),
+            "tone": "neutral",
+        },
+        "series": [
+            {
+                "bucket": str(days),
+                "days": days,
+                "weeks": len(gains),
+                "ctl_gain": round(sum(gains) / len(gains), 1),
+            }
+            for days, gains in sorted(by_days.items())
+        ],
+    }
 
 
 __all__ = [
@@ -373,6 +488,9 @@ __all__ = [
     "progress_answer",
     "ready_answer",
     "risk_answer",
+    "risk_card",
+    "trained_weeks",
+    "weeks_card",
     "weeks_of",
     "works_answer",
 ]

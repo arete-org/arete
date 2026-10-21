@@ -7,7 +7,7 @@ import { RecordsCard } from './RecordsCard';
 
 afterEach(cleanup);
 
-const empty: Records = { runs: [], lifts: [], runs_scanned: 0, runs_limit: 100, sessions_limit: 100 };
+const empty: Records = { runs: [], lifts: [], runs_scanned: 0, runs_limit: 100, sessions_scanned: 0, sessions_limit: 100 };
 
 function show(records?: Records, state: { loading?: boolean; error?: boolean } = {}) {
   render(
@@ -21,7 +21,7 @@ it('says what is missing when there is no Garmin run or logged lift', () => {
   show(empty);
   expect(screen.getByText(/il faut une course d’au moins 1 km enregistrée avec la montre/)).toBeTruthy();
   expect(screen.getByText(/enregistre une séance de force avec ses séries/)).toBeTruthy();
-  expect(screen.getByText(/sur tes 100 dernières courses/)).toBeTruthy();
+  expect(screen.getByText('Records récents.')).toBeTruthy();
 });
 
 it('links each running record to its session and shows the best lift', () => {
@@ -32,12 +32,22 @@ it('links each running record to its session and shows the best lift', () => {
     ],
     lifts: [{ exercise: 'Squat', e1rm_kg: 116.7, weight_kg: 100, reps: 5, date: '2026-10-10', session_id: 30, sessions: 14 }],
     runs_scanned: 1,
+    sessions_scanned: 14,
   });
   const link = screen.getByRole('link', { name: '5 km en 22:10, voir la séance « Tempo »' });
   expect(link.getAttribute('href')).toBe('/log/sessions/9');
   expect(screen.getByRole('rowheader', { name: 'Squat' })).toBeTruthy();
   expect(screen.getByText('116,7 kg')).toBeTruthy();
   expect(screen.getByText('5 × 100 kg')).toBeTruthy();
+  // The runs actually scanned, not the bound.
+  expect(screen.getByText(/sur ta seule course, charges sur tes 14 séances de force/)).toBeTruthy();
+  expect(screen.queryByText(/plus ancienne/)).toBeNull();
+});
+
+it('says when the bound left older runs out', () => {
+  show({ ...empty, runs_scanned: 100, sessions_scanned: 3 });
+  expect(screen.getByText(/sur tes 100 dernières courses seulement/)).toBeTruthy();
+  expect(screen.getByText(/Une performance plus ancienne n’y figure pas\./)).toBeTruthy();
 });
 
 it('keeps the loading and failure states of the other cards', () => {

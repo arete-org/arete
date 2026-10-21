@@ -669,16 +669,19 @@ GAP, climbing bests and weather.
 `GET /analytics/overview` stays one request (eight statements on one cursor).
 It opens on four rule-based answers (`features/answers.py`, no model call):
 « Suis-je prêt ? » (today's readiness, the one every surface shows, and the
-fraîcheur zone), « Est-ce que je progresse ? » (forme de fond over the window,
-the pace trend or else a lift's e1RM), « Où est le risque ? » (ACWR, monotony
-and the forme de fond gained over 7 days) and « Qu’est-ce qui marche ? »
-(weeks with more training days against the others, over at least 12 weeks).
-Each sentence names its period and source. The records (`features/records.py`)
-come from Garmin data only: the fastest 1 km, 5 km, 10 km, half and marathon,
-computed in the database by a window over the capped cumulative distance of
-the streams of the 100 latest runs (`queries.stream_effort_rows`), and the best
-e1RM of the 100 latest strength sessions. No table stores them. The coach's
-page read gets the answers and records without session names.
+fraîcheur zone, none without any load), « Est-ce que je progresse ? » (forme
+de fond over the window, the pace trend or else a lift's e1RM; a window under
+28 days reads the last 30 instead), « Où est le risque ? » (ACWR, monotony and
+the forme de fond gained over 7 days, shown by the `risk` card) and « Qu’est-ce
+qui marche ? » (the weeks with a session, split on training days, and the
+forme de fond each group gained, shown by the `weeks` card: a description,
+since that gain follows the load). Each sentence names its period and source.
+The records (`features/records.py`) come from Garmin data only: the fastest
+1 km, 5 km, 10 km, half and marathon, computed in the database by a window over
+the cumulative distance of the streams of the 100 latest runs, where a step
+faster than 6.5 m/s counts for nothing (`queries.stream_effort_rows`), and the
+best e1RM of the 100 latest strength sessions. No table stores them. The
+coach's page read gets the answers and records without session names.
 
 The daily sync hands the sessions Garmin imported to
 `coaching.write_sync_feedback`: one feedback request for up to five sessions,

@@ -14,10 +14,10 @@ export interface SectionDef {
 }
 
 export const SECTIONS: SectionDef[] = [
-  { id: 'pret', title: 'Suis-je prêt ?', short: 'Prêt ?', answer: 'ready', intro: 'La forme de fond, la fatigue et la fraîcheur, puis les mesures de récupération de ta montre.' },
-  { id: 'progres', title: 'Est-ce que je progresse ?', short: 'Progrès', answer: 'progress', intro: 'L’allure, le coût cardiaque, la vitesse en montée et tes records.' },
-  { id: 'risque', title: 'Où est le risque ?', short: 'Risque', answer: 'risk', intro: 'Le volume, la répartition de l’intensité et le dénivelé, qui font monter la charge.' },
-  { id: 'marche', title: 'Qu’est-ce qui marche ?', short: 'Ce qui marche', answer: 'works', intro: 'La place de chaque sport, ta foulée et ta descente.' },
+  { id: 'pret', title: 'Suis-je prêt ?', short: 'Prêt ?', answer: 'ready', intro: 'La fraîcheur et la préparation de ta montre, puis tes mesures de récupération.' },
+  { id: 'progres', title: 'Est-ce que je progresse ?', short: 'Progrès', answer: 'progress', intro: 'L’allure, le coût cardiaque, la vitesse en montée, la foulée et tes records ; la forme de fond est tracée sur la première carte de la page.' },
+  { id: 'risque', title: 'Où est le risque ?', short: 'Risque', answer: 'risk', intro: 'L’ACWR, la monotonie et la montée de la forme de fond sur 7 jours, puis l’intensité, le dénivelé et la descente.' },
+  { id: 'marche', title: 'Qu’est-ce qui marche ?', short: 'Ce qui marche', answer: 'works', intro: 'Tes semaines selon leurs jours d’entraînement, ton volume et la place de chaque sport.' },
 ];
 
 /** Sticky jump bar: one click per question. */

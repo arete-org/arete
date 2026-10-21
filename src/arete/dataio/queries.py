@@ -422,12 +422,14 @@ def stream_effort_rows(
     """Fastest time over each record distance in the ``limit`` latest runs with streams.
 
     Computed in the database from the kept watch streams, so only one row per
-    run crosses the wire. Each step of the cumulative distance is first capped
-    at ``MAX_EFFORT_MPS`` (a GPS jump cannot make a record) and floored at
-    zero. Then, for each sample, a window over that distance finds the latest
+    run crosses the wire. A step of the cumulative distance faster than
+    ``MAX_EFFORT_MPS`` counts for nothing (a GPS jump, or the watch left on in
+    a car: capping it would still credit 6.5 m/s), nor does a negative one.
+    Then, for each sample, a window over that distance finds the latest
     earlier sample at least the distance behind it: the time between them
     covers the distance, and the smallest such time is the run's best effort,
-    to the second of the 1 Hz recording. Pauses count, as on a race clock.
+    at the stream's sampling interval (1 s, longer with smart recording).
+    Pauses count, as on a race clock.
     """
     user_id = resolve_athlete_id(user_id)
     frames = ", ".join(
@@ -463,7 +465,7 @@ def stream_effort_rows(
         ),
         clean AS (
           SELECT id, t,
-                 SUM(COALESCE(LEAST(GREATEST(dd, 0), {MAX_EFFORT_MPS} * dt), 0))
+                 SUM(CASE WHEN dd > 0 AND dd <= {MAX_EFFORT_MPS} * dt THEN dd ELSE 0 END)
                    OVER (PARTITION BY id ORDER BY t ROWS UNBOUNDED PRECEDING) AS d
           FROM steps
         ),
@@ -495,33 +497,56 @@ class LiftSetRow(NamedTuple):
     weight_kg: float
 
 
+class LiftSets(NamedTuple):
+    rows: list[LiftSetRow]
+    #: Strength sessions read (at most the limit), with or without loaded sets.
+    sessions: int
+    #: The day from which ``rows`` hold every session: None when the limit
+    #: was not reached (the whole log), else the day after the oldest one read.
+    complete_from: date | None
+
+
 def lift_set_rows(
     con: duckdb.DuckDBPyConnection, limit: int, user_id: int | None = None
-) -> list[LiftSetRow]:
+) -> LiftSets:
     """Loaded working sets (never warm-ups) of the ``limit`` latest strength sessions.
 
-    Oldest first, as ``strength.progression`` reads them.
+    Oldest first, as ``strength.progression`` reads them; one statement, which
+    also says how far back the bound reaches.
     """
     user_id = resolve_athlete_id(user_id)
-    rows = con.execute(
+    result = con.execute(
         """
         WITH recent AS (
           SELECT id, date FROM app.visible_strength_sessions
           WHERE user_id = ?
           ORDER BY date DESC, id DESC
           LIMIT ?
+        ),
+        sets AS (
+          SELECT e.id AS exercise_id, e.name, r.id AS session_id, r.date,
+                 es.reps, es.weight_kg, se.id AS entry_id, es.set_number
+          FROM recent r
+          JOIN app.visible_session_exercises se ON se.session_id = r.id
+          JOIN app.visible_exercise_sets es ON es.session_exercise_id = se.id
+          JOIN app.visible_exercises e ON e.id = se.exercise_id
+          WHERE NOT COALESCE(es.is_warmup, FALSE) AND es.reps > 0
+            AND es.weight_kg > 0
         )
-        SELECT e.id, e.name, r.id, r.date, es.reps, es.weight_kg
-        FROM recent r
-        JOIN app.visible_session_exercises se ON se.session_id = r.id
-        JOIN app.visible_exercise_sets es ON es.session_exercise_id = se.id
-        JOIN app.visible_exercises e ON e.id = se.exercise_id
-        WHERE NOT COALESCE(es.is_warmup, FALSE) AND es.reps > 0 AND es.weight_kg > 0
-        ORDER BY r.date, r.id, se.id, es.set_number
+        SELECT stats.n, stats.oldest, s.exercise_id, s.name, s.session_id,
+               s.date, s.reps, s.weight_kg
+        FROM (SELECT COUNT(*) AS n, MIN(date) AS oldest FROM recent) stats
+        LEFT JOIN sets s ON TRUE
+        ORDER BY s.date, s.session_id, s.entry_id, s.set_number
         """,
         [user_id, limit],
     ).fetchall()
-    return [LiftSetRow(*row) for row in rows]
+    sessions, oldest = (result[0][0], result[0][1]) if result else (0, None)
+    return LiftSets(
+        [LiftSetRow(*row[2:]) for row in result if row[2] is not None],
+        sessions,
+        oldest + timedelta(days=1) if sessions >= limit and oldest else None,
+    )
 
 
 def best_effort_rows(

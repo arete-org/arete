@@ -18,12 +18,12 @@ from arete.features.periods import PeriodWindow
 from arete.strength.progression import E1RM_EPSILON, WorkSet
 
 if TYPE_CHECKING:
-    from arete.dataio.queries import LiftSetRow, StreamEffortRow
+    from arete.dataio.queries import LiftSetRow, LiftSets, StreamEffortRow
 
 #: Distances of the running records, in metres (half and marathon included).
 EFFORT_DISTANCES_M: tuple[float, ...] = (1000.0, 5000.0, 10000.0, 21097.5, 42195.0)
-#: A stream step faster than this is a GPS jump, not running: it is capped
-#: there (the 1 km world record is run at 6.3 m/s).
+#: A stream step faster than this is a GPS jump or a vehicle, not running: it
+#: counts for no distance (the 1 km world record is run at 6.3 m/s).
 MAX_EFFORT_MPS = 6.5
 #: Runs and strength sessions the records read: the latest ones, so the
 #: overview's cost does not grow with the history.
@@ -144,12 +144,19 @@ def lift_records(rows: Sequence[LiftSetRow]) -> list[LiftRecord]:
 
 
 def lift_trend(
-    rows: Sequence[LiftSetRow], window: PeriodWindow
+    lifts: LiftSets, window: PeriodWindow
 ) -> tuple[str, float, float] | None:
     """(exercise, previous window's best e1RM, this window's) for the most
-    practised exercise of the window that the previous window also has."""
+    practised exercise of the window that the previous window also has.
+
+    None when the session bound cut into the previous window: its best would
+    be read from part of it only.
+    """
     if window.prev_start is None or window.prev_end is None:
         return None
+    if lifts.complete_from is not None and window.prev_start < lifts.complete_from:
+        return None
+    rows = lifts.rows
 
     def bests(start: date, end: date) -> dict[int, tuple[str, float, set[int]]]:
         out: dict[int, tuple[str, float, set[int]]] = {}
@@ -173,15 +180,16 @@ def lift_trend(
 
 def records_payload(
     efforts: Sequence[StreamEffortRow],
-    lifts: Sequence[LiftSetRow],
+    lifts: LiftSets,
     runs_limit: int,
     sessions_limit: int,
 ) -> dict[str, Any]:
     """The Records card: both tables and the bounds they were read within."""
     return {
         "runs": run_records(efforts),
-        "lifts": lift_records(lifts),
+        "lifts": lift_records(lifts.rows),
         "runs_scanned": len(efforts),
         "runs_limit": runs_limit,
+        "sessions_scanned": lifts.sessions,
         "sessions_limit": sessions_limit,
     }

@@ -248,15 +248,25 @@ progresse ? », « Où est le risque ? », « Qu’est-ce qui marche ? ». Chaqu
 est une surface `--surface-card` dont le liseré gauche reprend le ton
 (`--signal-success|warning|danger`, discret sinon) ; le verdict est dans la
 phrase, la couleur ne fait que le répéter. « Voir les cartes » mène à la section
-de la question, où se rangent les cartes existantes ; la barre de saut utilise
-des libellés courts (« Prêt ? », « Progrès », « Risque », « Ce qui marche »)
-pour tenir sur un téléphone. Le sélecteur de période ne change pas. Deux
-colonnes à partir de 640 px de contenu, une seule en dessous.
+de la question, dont la première carte porte les chiffres de la réponse : la
+fraîcheur, puis la préparation ; l’allure et les records ; « Charge des 7
+derniers jours » (ACWR, monotonie, forme de fond gagnée en 7 jours, sans
+graphique) ; « Semaines comparées » (un tableau des semaines par nombre de
+jours d’entraînement). La barre de saut utilise des libellés courts (« Prêt ? »,
+« Progrès », « Risque », « Ce qui marche ») pour tenir sur un téléphone. Le
+sélecteur de période garde ses six choix, en casse naturelle (« 7 j », « 30 j »,
+« 90 j », « 6 mois », « 1 an », « Tout »). Deux colonnes à partir de 640 px de
+contenu, une seule en dessous.
+
+« Qu’est-ce qui marche ? » décrit ce qui a coïncidé avec la hausse de la forme
+de fond, sans verdict : la forme de fond suit la charge, donc plus de jours
+d’entraînement la font monter par construction.
 
 La carte Records (sous « Est-ce que je progresse ? ») liste les meilleurs
-chronos mesurés par la montre et le meilleur 1RM estimé par exercice ; chaque
-chrono mène à sa séance. `analytics.spec.ts` vérifie à 390 et 1440 px que les
-quatre réponses précèdent les cartes et que la première tient sur le premier écran.
+chronos mesurés par la montre et le meilleur 1RM estimé par exercice, sur les
+séances récentes seulement, et dit combien elle en a lues ; chaque chrono mène à
+sa séance. `analytics.spec.ts` vérifie à 390 et 1440 px que les quatre réponses
+précèdent les cartes et que la première tient sur le premier écran.
 
 ## Planning — proposition A
 

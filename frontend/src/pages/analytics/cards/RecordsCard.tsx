@@ -4,6 +4,23 @@ import type { Records } from '@/types';
 const day = (iso: string) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' });
 
+/** What the records were read from: the recent runs and sessions only, as many as were scanned. */
+function scope(records: Records): string {
+  const read = (n: number, limit: number, one: string, many: string) =>
+    n >= limit ? `tes ${limit} dernières ${many} seulement` : n === 1 ? `ta seule ${one}` : `tes ${n} ${many}`;
+  const parts = [
+    records.runs_scanned > 0 &&
+      `chronos mesurés par la montre sur ${read(records.runs_scanned, records.runs_limit, 'course', 'courses')}`,
+    records.sessions_scanned > 0 &&
+      `charges sur ${read(records.sessions_scanned, records.sessions_limit, 'séance de force', 'séances de force')} (séries d’échauffement exclues)`,
+  ].filter(Boolean);
+  const cut = records.runs_scanned >= records.runs_limit || records.sessions_scanned >= records.sessions_limit;
+  return [
+    `Records récents${parts.length ? ` : ${parts.join(', ')}` : ''}.`,
+    cut ? 'Une performance plus ancienne n’y figure pas.' : '',
+  ].join(' ').trim();
+}
+
 /** Fastest runs and heaviest lifts, from the watch streams and the strength log. */
 export function RecordsCard({ records, loading, error }: { records?: Records; loading?: boolean; error?: boolean }) {
   return (
@@ -11,7 +28,7 @@ export function RecordsCard({ records, loading, error }: { records?: Records; lo
       <header>
         <h3 className="text-[15px] font-medium text-text-primary">Records</h3>
       </header>
-      <p className="text-xs text-text-muted">Tes meilleurs chronos et tes charges les plus lourdes.</p>
+      <p className="text-xs text-text-muted">Tes meilleurs chronos et tes charges les plus lourdes, sur tes séances récentes.</p>
 
       {loading ? (
         <p className="text-sm text-text-muted animate-pulse py-6 text-center">Chargement…</p>
@@ -85,10 +102,7 @@ export function RecordsCard({ records, loading, error }: { records?: Records; lo
             )}
           </div>
 
-          <p className="text-xs text-text-muted">
-            Chronos mesurés par ta montre sur tes {records.runs_limit} dernières courses, charges sur
-            tes {records.sessions_limit} dernières séances de force (séries d’échauffement exclues).
-          </p>
+          <p className="text-xs text-text-muted">{scope(records)}</p>
         </>
       )}
     </section>

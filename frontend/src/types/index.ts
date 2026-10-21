@@ -499,6 +499,8 @@ export type CardKey =
   | 'cadence'
   | 'vam'
   | 'descent'
+  | 'risk'
+  | 'weeks'
   | 'readiness'
   | 'hrv'
   | 'sleep'
@@ -558,6 +560,7 @@ export interface Records {
   runs: RunRecord[];
   lifts: LiftRecord[];
   runs_scanned: number;
+  sessions_scanned: number;
   /** The latest runs and strength sessions the records read. */
   runs_limit: number;
   sessions_limit: number;

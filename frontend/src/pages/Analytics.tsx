@@ -19,12 +19,14 @@ import {
   PREVIOUS_LABEL,
   RecordsCard,
   RecoveryCard,
+  RiskCard,
   SECTIONS,
   Section,
   SectionNav,
   SportsCard,
   VamCard,
   VolumeCard,
+  WeeksCard,
   ZonesCard,
 } from './analytics/index';
 
@@ -180,19 +182,21 @@ export function AnalyticsPage() {
         <PaceCard card={cards?.pace} {...state} />
         <EfficiencyCard card={cards?.decoupling} {...state} />
         <VamCard card={cards?.vam} previousLabel={previousLabel} loading={isLoading} error={isError} />
+        <CadenceCard card={cards?.cadence} {...state} />
         <RecordsCard records={data?.records} loading={isLoading} error={isError} />
       </Section>
 
       <Section def={SECTIONS[2]}>
-        <VolumeCard card={cards?.volume} {...state} />
+        <RiskCard card={cards?.risk} loading={isLoading} error={isError} />
         <ZonesCard card={cards?.zones} model={data?.hr_zone_model} {...state} />
         <ElevationCard card={cards?.elevation} {...state} />
+        <DescentCard card={cards?.descent} previousLabel={previousLabel} loading={isLoading} error={isError} />
       </Section>
 
       <Section def={SECTIONS[3]}>
+        <WeeksCard card={cards?.weeks} loading={isLoading} error={isError} />
+        <VolumeCard card={cards?.volume} {...state} />
         <SportsCard card={cards?.sports} previousLabel={previousLabel} loading={isLoading} error={isError} />
-        <CadenceCard card={cards?.cadence} {...state} />
-        <DescentCard card={cards?.descent} previousLabel={previousLabel} loading={isLoading} error={isError} />
       </Section>
 
       <Link
