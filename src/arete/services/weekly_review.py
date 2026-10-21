@@ -185,6 +185,10 @@ def _before(s: PlannedSession) -> dict[str, Any]:
     }
 
 
+def _decimal(value: float, spec: str) -> str:
+    return format(value, spec).replace(".", ",")
+
+
 def propose(facts: WeekFacts, upcoming: list[PlannedSession]) -> list[Proposal]:
     """Changes for the sessions still to come; pure, at most three."""
     # Imported prescriptions were reviewed step by step: the rules leave them be.
@@ -211,13 +215,19 @@ def propose(facts: WeekFacts, upcoming: list[PlannedSession]) -> list[Proposal]:
             )
         )
 
+    # « Ma semaine » shows these reasons: the dashboard's words, a decimal comma.
     why = []
     if facts.acwr is not None and facts.acwr > ACWR_HIGH:
-        why.append(f"charge aiguë/chronique à {facts.acwr:.2f}")
+        why.append(
+            f"équilibre de charge {_decimal(facts.acwr, '.2f')} "
+            f"(au-dessus de {_decimal(ACWR_HIGH, 'g')})"
+        )
     if facts.tsb is not None and facts.tsb < TSB_LOW:
-        why.append(f"fraîcheur à {facts.tsb:.0f}")
+        why.append(f"fraîcheur {facts.tsb:.0f} (sous {TSB_LOW:g})")
     if facts.readiness_avg is not None and facts.readiness_avg < READINESS_LOW:
-        why.append(f"préparation moyenne {facts.readiness_avg:.0f}/100")
+        why.append(
+            f"préparation moyenne {facts.readiness_avg:.0f}/100 (sous {READINESS_LOW:g})"
+        )
     if why:
         reason = " et ".join(why)
         hard = sorted(

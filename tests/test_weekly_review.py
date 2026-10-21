@@ -63,7 +63,20 @@ def test_overload_eases_the_hardest_session_and_shortens_the_long_run():
     assert [p.planned_session_id for p in proposals] == [2, 4]
     assert proposals[0].change["session_type"] == "endurance"
     assert proposals[1].change == {"target_duration_min": 75}
-    assert "1.45" in proposals[0].reason
+    assert [p.reason for p in proposals] == [
+        "Équilibre de charge 1,45 (au-dessus de 1,3) : "
+        "la séance la plus dure passe en endurance Z2.",
+        "Équilibre de charge 1,45 (au-dessus de 1,3) : "
+        "sortie longue raccourcie à 75 min.",
+    ]
+
+
+def test_low_freshness_and_readiness_read_like_the_dashboard():
+    proposals = wr.propose(_facts(tsb=-23.4, readiness_avg=42.0), UPCOMING)
+    assert proposals[0].reason == (
+        "Fraîcheur -23 (sous -20) et préparation moyenne 42/100 (sous 50) : "
+        "la séance la plus dure passe en endurance Z2."
+    )
 
 
 def test_a_missed_week_drops_the_shortest_easy_run():
