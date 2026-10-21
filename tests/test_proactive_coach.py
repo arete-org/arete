@@ -4,6 +4,7 @@ import json
 from datetime import timedelta
 from unittest.mock import patch
 
+import duckdb
 import pytest
 
 from arete.dataio.db import db_connection
@@ -418,10 +419,23 @@ def test_two_concurrent_imports_both_succeed_with_one_set_of_rows(athlete, monke
     root = memory.memory_root()
     root.mkdir(parents=True)
     (root / "notes.md").write_text("old")
+    imports, outcomes = memory._import_once, []
+
+    def import_once():
+        try:
+            imports()
+        except Exception as exc:
+            outcomes.append(type(exc))
+            raise
+        outcomes.append("imported")
+
+    monkeypatch.setattr(memory, "_import_once", import_once)
     with race(
         monkeypatch, r"INSERT INTO app.coach_memory_imports", memory.ensure_imported
     ):
         memory.ensure_imported()
+    # The rival imported inside this claim; this one lost and read its marker.
+    assert outcomes == ["imported", duckdb.ConstraintException]
     with db_connection() as con:
         assert con.execute(
             "SELECT count(*) FROM app.coach_memory_imports WHERE athlete_id=8123"
@@ -431,15 +445,89 @@ def test_two_concurrent_imports_both_succeed_with_one_set_of_rows(athlete, monke
         ).fetchall() == [("notes.md", "old")]
 
 
-def test_a_hidden_import_marker_is_not_claimed_again():
+@pytest.mark.parametrize("winner_commits", [True, False])
+def test_a_losing_import_waits_a_bounded_time_for_the_winner(
+    athlete, monkeypatch, winner_commits
+):
+    """ARE-81: across processes the winner may still be committing its claim."""
+    lost, waits = [], []
+
+    def import_once():
+        lost.append(1)
+        raise duckdb.TransactionException("Failed to commit: duplicate key")
+
+    def wait(seconds):
+        waits.append(seconds)
+        if winner_commits and len(waits) == 1:
+            with db_connection() as con:
+                con.execute(
+                    "INSERT INTO app.coach_memory_imports (athlete_id) VALUES (8123)"
+                )
+
+    monkeypatch.setattr(memory, "_import_once", import_once)
+    monkeypatch.setattr(memory.time, "sleep", wait)
+    if winner_commits:
+        memory.ensure_imported()
+        assert waits == [memory.IMPORT_CLAIM_READ_DELAY_SECONDS]
+    else:
+        with pytest.raises(duckdb.TransactionException):
+            memory.ensure_imported()
+        assert len(waits) == memory.IMPORT_CLAIM_READS - 1
+    assert lost == [1]  # the import itself is never replayed
+
+
+def test_a_hidden_import_marker_is_not_claimed_again(monkeypatch, tmp_path):
     """ARE-81: an unprovisioned athlete's marker is invisible, yet it exists."""
-    with athlete_scope(8124):
-        memory.ensure_imported()
-        memory.ensure_imported()
+    monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path))
+    try:
+        with athlete_scope(8124):
+            memory.ensure_imported()
+            with db_connection() as con:
+                first = con.execute(
+                    "SELECT imported_at FROM app.coach_memory_imports WHERE athlete_id=8124"
+                ).fetchall()
+            memory.ensure_imported()
+            with db_connection() as con:
+                assert con.execute(
+                    "SELECT count(*) FROM app.visible_coach_memory_imports"
+                ).fetchone() == (0,)
+        with db_connection() as con:
+            assert len(first) == 1
+            assert (
+                con.execute(
+                    "SELECT imported_at FROM app.coach_memory_imports WHERE athlete_id=8124"
+                ).fetchall()
+                == first
+            )
+            assert con.execute(
+                "SELECT count(*) FROM app.coach_memory_files WHERE athlete_id=8124"
+            ).fetchone() == (0,)
+    finally:
+        with db_connection() as con:
+            for table in ("coach_memory_files", "coach_memory_imports"):
+                con.execute(f"DELETE FROM app.{table} WHERE athlete_id=8124")
+
+
+def test_a_deleted_athlete_s_journal_refuses_new_files(monkeypatch, tmp_path):
+    """ARE-81: an import that stops at a hidden marker must not open writes."""
+    monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path))
     with db_connection() as con:
-        assert con.execute(
-            "DELETE FROM app.coach_memory_imports WHERE athlete_id=8124 RETURNING 1"
-        ).fetchall() == [(1,)]
+        con.execute("INSERT INTO app.athletes(id, deleted_at) VALUES (8125, now())")
+    try:
+        with athlete_scope(8125):
+            with pytest.raises(memory.MemoryConflict):
+                memory.append_entry("notes.md", "Titre", "Corps")
+            with pytest.raises(memory.MemoryConflict):
+                memory.replace_file("profile.md", "Profil", 0)
+        with db_connection() as con:
+            assert con.execute(
+                "SELECT count(*) FROM app.coach_memory_files WHERE athlete_id=8125"
+            ).fetchone() == (0,)
+    finally:
+        with db_connection() as con:
+            for table in ("coach_memory_files", "coach_memory_imports"):
+                con.execute(f"DELETE FROM app.{table} WHERE athlete_id=8125")
+            con.execute("DELETE FROM app.athletes WHERE id=8125")
 
 
 def test_forget_fact_cannot_delete_a_newer_revision(athlete):

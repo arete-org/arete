@@ -7,6 +7,7 @@ resurrect forgotten content. No failed or ambiguous write is replayed.
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -32,6 +33,10 @@ MAX_MEMORY_FILES = 1_000
 MAX_MEMORY_BYTES = 20 * 1024 * 1024
 MAX_FILE_BYTES = 5 * 1024 * 1024
 LEDGER_LOCK_TIMEOUT_SECONDS = 10
+# A losing import reads the winner's marker; across processes it may still be
+# committing. Reads only: the losing import itself is never replayed.
+IMPORT_CLAIM_READS = 3
+IMPORT_CLAIM_READ_DELAY_SECONDS = 0.1
 _ledger_lock = RLock()
 _OWNER = "athlete_id=getvariable('arete_athlete_id')"
 _LIVE = (
@@ -86,11 +91,15 @@ def ensure_imported() -> None:
     try:
         _import_once()
     except (duckdb.ConstraintException, duckdb.TransactionException):
-        with db_connection() as con:
-            if not con.execute(
-                f"SELECT 1 FROM app.visible_coach_memory_imports WHERE {_OWNER}"
-            ).fetchone():
-                raise
+        for attempt in range(IMPORT_CLAIM_READS):
+            if attempt:
+                time.sleep(IMPORT_CLAIM_READ_DELAY_SECONDS)
+            with db_connection() as con:
+                if con.execute(
+                    f"SELECT 1 FROM app.visible_coach_memory_imports WHERE {_OWNER}"
+                ).fetchone():
+                    return
+        raise
 
 
 def _import_once() -> None:
@@ -178,10 +187,12 @@ def _write(con, old: MemoryFile, content: str, *, forgotten: bool = False) -> No
     if len(content.encode()) > MAX_FILE_BYTES:
         raise ValueError("Journal file exceeds its byte budget")
     if old.revision == 0:
-        con.execute(
-            "INSERT INTO app.coach_memory_files (path,content,forgotten) VALUES (?,?,?)",
+        # The update below has the same guard: a deleted athlete writes nothing.
+        if not con.execute(
+            "INSERT INTO app.coach_memory_files (path,content,forgotten) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM app.athletes a WHERE a.id=getvariable('arete_athlete_id') AND a.deleted_at IS NULL) RETURNING path",
             [old.name, content, forgotten],
-        )
+        ).fetchone():
+            raise MemoryConflict("Le journal a changé. Relis-le avant de le modifier.")
     else:
         row = con.execute(
             f"UPDATE app.coach_memory_files SET content=?, forgotten=?, revision=revision+1, updated_at=now() WHERE {_LIVE} AND path=? AND revision=? RETURNING revision",
