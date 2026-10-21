@@ -3,7 +3,7 @@ import { Flag } from 'lucide-react';
 import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
 import { parseLocalDate } from '@/lib/dates';
 import { formBand, plannedUntil, planReachesRaceWeek, useFormCurve, useInView } from '@/lib/formCurve';
-import { formatKm } from '@/lib/race';
+import { goalKind, longDate } from '@/lib/race';
 import type { Goal } from '@/types';
 
 const shortDay = (iso: string) =>
@@ -43,7 +43,10 @@ export function GoalCard({ goal, day, ready }: { goal: Goal | null; day: string 
         <Flag className="w-4 h-4 text-neon-gold shrink-0 self-center" aria-hidden />
         <span className="font-semibold">{goal.name}</span>
         <span className="text-neon-gold">{goal.days_left > 0 ? `J-${goal.days_left}` : 'Jour J'}</span>
-        <span className="text-xs text-text-muted">{formatKm(goal.distance_km)} km</span>
+        <span className="text-xs text-text-muted">
+          {/* A race's distance; a Hyrox's division and date; a block's end (goalKind). */}
+          {goal.goal_type === 'hyrox' ? `${goalKind(goal)} · ${longDate(goal.race_date)}` : goalKind(goal)}
+        </span>
       </h2>
       {curve.isError ? (
         <p className="text-xs text-text-muted">

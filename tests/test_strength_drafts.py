@@ -96,7 +96,8 @@ def test_garmin_names_go_through_the_table_and_open_as_notation():
     [
         # Near but wrong under fuzzy matching: now right, or free text.
         ("HYPEREXTENSION", "BACK_EXTENSION", None),
-        ("SLED", "PUSH", None),
+        ("SLED", "PUSH", "sled_push"),  # the catalog's Hyrox station since ARE-138
+        ("SLED", "FORWARD_DRAG", None),
         ("INDOOR_ROW", None, None),
         ("ROW", "ONE_ARM_BENT_OVER_ROW", "dumbbell_row"),
         ("CURL", "DUMBBELL_BICEPS_CURL", None),
@@ -126,12 +127,20 @@ def test_wrong_near_matches_stay_free_text(category, sub, expected):
 
 def test_every_mapped_garmin_name_reads_back_as_its_catalog_exercise():
     from arete.data.exercises_catalog import EXERCISES_BY_ID, EXERCISES_CATALOG
-    from arete.data.garmin_exercises import GARMIN_CATEGORIES, GARMIN_EXERCISES
+    from arete.data.garmin_exercises import (
+        GARMIN_CATEGORIES,
+        GARMIN_EXERCISES,
+        GARMIN_QUALIFIED,
+    )
     from arete.llm.workout_parser import parse_workout_text
 
     french = [e["name_fr"].lower() for e in EXERCISES_CATALOG]
     assert len(french) == len(set(french)), "two catalog exercises share a French name"
-    for catalog_id in {*GARMIN_EXERCISES.values(), *GARMIN_CATEGORIES.values()}:
+    for catalog_id in {
+        *GARMIN_EXERCISES.values(),
+        *GARMIN_CATEGORIES.values(),
+        *GARMIN_QUALIFIED.values(),
+    }:
         line = draft_notation(
             [DraftExercise(EXERCISES_BY_ID[catalog_id]["name_fr"], catalog_id, 3, 10)]
         )

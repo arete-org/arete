@@ -762,14 +762,47 @@ export interface Goal {
   /** Days until race day, from the server's today. */
   days_left: number;
   created_at: string | null;
+  /** A hybrid block has no race and no distance; its race_date is its end. */
+  goal_type?: GoalType;
+  /** Hyrox and hybrid goals only. */
+  details?: GoalDetails | null;
+}
+
+export type GoalType = 'race' | 'hyrox' | 'hybrid';
+export type HyroxEquipment = 'sled' | 'ski_erg' | 'rower' | 'wall_ball';
+
+/** A Hyrox goal's or hybrid block's details (services/goals.py GoalDetails). */
+export interface GoalDetails {
+  division: 'open' | 'pro';
+  /** Mixed is run in doubles only. */
+  format: 'solo' | 'doubles';
+  /** Required for a Hyrox. */
+  category: 'men' | 'women' | 'mixed' | null;
+  /** The equipment available, or ['none']. */
+  equipment: (HyroxEquipment | 'none')[];
+  /** A hybrid block's length; its end is a Sunday. */
+  weeks: 8 | 12;
 }
 
 export interface GoalCreate {
   name: string;
   race_date: string;
-  distance_km: number;
+  /** Required for a race; the server sets a Hyrox's and a block's. */
+  distance_km?: number;
   target_time_sec?: number | null;
-  priority: GoalPriority;
+  /** The server defaults to A; a hybrid block, never the next race, sends none. */
+  priority?: GoalPriority;
+  goal_type?: GoalType;
+  details?: Partial<GoalDetails>;
+}
+
+/** PATCH /goals/{id}: a goal's type never changes, a block's details are sent whole. */
+export interface GoalUpdate {
+  name?: string;
+  race_date?: string;
+  target_time_sec?: number | null;
+  priority?: GoalPriority;
+  details?: Partial<GoalDetails>;
 }
 
 export type PlanPhase = "base" | "build" | "specific" | "taper" | "race";
@@ -782,6 +815,10 @@ export interface PlanSessionDraft {
   intensity: string | null;
   description: string;
   distance_km: number | null;
+  /** Hyrox and hybrid plans: what the rules read; 'kept' marks the athlete's edit. */
+  tags?: string[];
+  /** Hyrox and hybrid plans: key_run, compromised, easy, heavy_lower… (null on a road plan). */
+  kind?: string | null;
 }
 
 export interface PlanWeek {
@@ -791,7 +828,11 @@ export interface PlanWeek {
   minutes: number;
   recovery: boolean;
   sessions: PlanSessionDraft[];
+  /** Sessions the week gave up, and why, in French (Hyrox and hybrid plans). */
+  dropped?: string[];
 }
+
+export type AthleteLevel = 'novice' | 'intermediate' | 'advanced';
 
 /** POST /goals/{id}/plan/preview: the plan as it would be written. */
 export interface PlanPreview {
@@ -802,7 +843,16 @@ export interface PlanPreview {
     /** Monday is 0. */
     rest_days: number[];
     vdot: number | null;
+    /** Hyrox and hybrid plans only, from here on. */
+    level?: AthleteLevel;
+    training_days?: number;
+    /** The plan starts with a lighter week: the recent load is too high. */
+    deload?: boolean;
+    /** Sessions the athlete edited, kept as they are. */
+    kept?: { date: string; description: string }[];
   };
+  /** Hyrox and hybrid plans: the weekly structure per phase, in French; empty for a race. */
+  summary?: string[];
   weeks: PlanWeek[];
 }
 

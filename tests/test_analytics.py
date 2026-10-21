@@ -18,10 +18,15 @@ from arete.dataio.queries import (
     daily_tss,
     overview_rows,
 )
-from arete.services import analytics
-from arete.services.settings import today_in
+from arete.services import analytics, settings
 
-TODAY = today_in(None)  # the default athlete's day, which the services read
+# TODAY is read at collection, the services read the clock when a test runs: a
+# run crossing the athlete's midnight saw two days (ARE-169). Every test runs at
+# the instant TODAY comes from (``_one_instant``).
+NOW = settings.utc_now()
+# The test athlete stores no timezone, so the services read the default one
+# (Europe/Paris): zone_of(None) is that zone.
+TODAY = NOW.astimezone(settings.zone_of(None)).date()
 
 CARD_KEYS = {
     "volume",
@@ -41,6 +46,11 @@ CARD_KEYS = {
     "sleep",
     "resting_hr",
 }
+
+
+@pytest.fixture(autouse=True)
+def _one_instant(monkeypatch):
+    monkeypatch.setattr(settings, "utc_now", lambda: NOW)
 
 
 @pytest.fixture

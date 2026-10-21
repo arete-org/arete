@@ -702,3 +702,84 @@ def test_m54_creates_the_strength_drafts_once_and_atomically(tmp_path, monkeypat
         assert con.execute(
             "SELECT count(*) FROM app.schema_version WHERE version = 54"
         ).fetchone() == (1,)
+
+
+def test_m64_adds_the_goal_types_once_and_atomically(tmp_path, monkeypatch):
+    from arete.dataio import tenant_schema
+
+    path = tmp_path / "goal-types.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    with migration_connection(str(path)) as con:
+        # Schema 63: no goal type or session kind yet, a race goal stored.
+        con.execute("ALTER TABLE app.goals DROP COLUMN goal_type")
+        con.execute("ALTER TABLE app.goals DROP COLUMN details_json")
+        con.execute("ALTER TABLE app.planned_sessions DROP COLUMN plan_kind")
+        tenant_schema._view(con, "goals")
+        tenant_schema._view(con, "planned_sessions")
+        con.execute(
+            "INSERT INTO app.goals (name, race_date, distance_km) "
+            "VALUES ('Marathon', '2027-04-11', 42.195)"
+        )
+        con.execute("DELETE FROM app.schema_version WHERE version = 64")
+        assert init_duckdb.pending_migrations(con) == [64]
+        with monkeypatch.context() as previous:
+            previous.setattr(
+                init_duckdb,
+                "MIGRATIONS",
+                [m for m in init_duckdb.MIGRATIONS if m[0] != 64],
+            )
+            assert init_duckdb.pending_migrations(con) == []
+
+        real_view = tenant_schema._view
+
+        def broken_view(connection, table):
+            # The goals view is rebuilt, then the sessions' fails.
+            if table == "planned_sessions":
+                raise RuntimeError("view refresh failed")
+            real_view(connection, table)
+
+        with monkeypatch.context() as broken:
+            broken.setattr(tenant_schema, "_view", broken_view)
+            with pytest.raises(RuntimeError):
+                init_duckdb._m64_goal_types(con)
+        # Rolled back together: never a column the private view does not show.
+        columns = {r[0] for r in con.execute("DESCRIBE app.goals").fetchall()}
+        assert not {"goal_type", "details_json"} & columns
+        shown = {r[0] for r in con.execute("DESCRIBE app.visible_goals").fetchall()}
+        assert "goal_type" not in shown
+        planned = {
+            r[0] for r in con.execute("DESCRIBE app.planned_sessions").fetchall()
+        }
+        assert "plan_kind" not in planned
+
+    init_duckdb.main()
+    init_duckdb.main()  # recorded once, then skipped
+    with migration_connection(str(path)) as con:
+        assert con.execute(
+            "SELECT name, goal_type, details_json FROM app.visible_goals"
+        ).fetchall() == [("Marathon", "race", None)]
+        # The previous release names its columns: its writes and reads still work.
+        con.execute(
+            "INSERT INTO app.goals (name, race_date, distance_km, target_time_sec, priority)"
+            " VALUES ('10 km', '2027-05-01', 10, NULL, 'B')"
+        )
+        assert con.execute(
+            "SELECT name, distance_km, priority, status FROM app.visible_goals"
+            " WHERE name = '10 km'"
+        ).fetchone() == ("10 km", 10.0, "B", "active")
+        assert con.execute(
+            "SELECT goal_type FROM app.visible_goals WHERE name = '10 km'"
+        ).fetchone() == ("race",)
+        # Its planned sessions too: written without a kind, read as before.
+        con.execute(
+            "INSERT INTO app.planned_sessions (date, sport, session_type, goal_id)"
+            " VALUES ('2027-04-01', 'running', 'tempo', NULL)"
+        )
+        assert con.execute(
+            "SELECT session_type, revision, goal_id, plan_kind"
+            " FROM app.visible_planned_sessions"
+        ).fetchall() == [("tempo", 1, None, None)]
+        assert con.execute(
+            "SELECT count(*) FROM app.schema_version WHERE version = 64"
+        ).fetchone() == (1,)

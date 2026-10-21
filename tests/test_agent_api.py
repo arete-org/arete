@@ -1128,6 +1128,88 @@ def test_the_athlete_clock_is_never_read_on_the_event_loop(client, endpoint):
     assert '"type": "error"' not in response.text
 
 
+class _ChatGraph:
+    async def ainvoke(self, state, *, context=None, config=None):
+        from langchain_core.messages import AIMessage
+
+        return {"messages": [*state["messages"], AIMessage(content="ok")]}
+
+    async def astream(self, state, *, context, config, **kwargs):
+        result = await self.ainvoke(state, context=context, config=config)
+        yield {"type": "updates", "data": {"model": result}}
+
+
+@pytest.fixture
+def cold_chat_graph(monkeypatch):
+    """The real ``get_agent`` over an empty cache: flag read and compile."""
+    from worker_only import worker_only
+
+    from arete import coaching
+    from arete.services.feature_flags import FeatureFlags
+
+    reads = []
+
+    def flags():
+        reads.append(True)
+        return FeatureFlags()
+
+    monkeypatch.setattr(coaching, "get_feature_flags", worker_only(flags))
+    monkeypatch.setattr(
+        coaching, "_assemble", worker_only(lambda profile, **kw: _ChatGraph())
+    )
+    coaching.get_agent.cache_clear()
+    yield reads
+    coaching.get_agent.cache_clear()
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_chat_composition_never_runs_on_the_event_loop(
+    client, cold_chat_graph, endpoint
+):
+    response = client.post(
+        endpoint, json={"messages": [{"role": "user", "content": "salut"}]}
+    )
+    assert response.status_code == 200
+    assert '"type": "error"' not in response.text
+    assert cold_chat_graph == [True]
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_a_slow_graph_compile_leaves_the_event_loop_serving(
+    client, cold_chat_graph, monkeypatch, endpoint
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from arete import coaching
+    from arete.services.feature_flags import FeatureFlags
+
+    compiling, release = Event(), Event()
+
+    def slow_compile(profile, **kw):
+        compiling.set()
+        assert release.wait(10), "the compile was never released"
+        return _ChatGraph()
+
+    # Unguarded here: the probe below, not a patched read, detects the stall.
+    monkeypatch.setattr(coaching, "get_feature_flags", FeatureFlags)
+    monkeypatch.setattr(coaching, "_assemble", slow_compile)
+    body = {"messages": [{"role": "user", "content": "salut"}]}
+    with ThreadPoolExecutor(2) as pool:
+        try:
+            pending = pool.submit(client.post, endpoint, json=body)
+            assert compiling.wait(5)
+            # The compile holds the graph lock in a worker; the loop still
+            # validates and answers another request meanwhile.
+            probe = pool.submit(client.post, "/agent/chat", json={"messages": []})
+            assert probe.result(timeout=5).status_code == 422
+        finally:
+            release.set()
+        response = pending.result(timeout=10)
+    assert response.status_code == 200
+    assert '"type": "error"' not in response.text
+
+
 def test_a_context_built_on_the_event_loop_without_its_clock_is_refused():
     import asyncio
 

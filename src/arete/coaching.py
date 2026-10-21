@@ -4,6 +4,7 @@ Only this composition root imports the agent factory. Domain producers receive
 plain callbacks, so they remain usable and testable without an agent framework.
 """
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import aclosing
 from dataclasses import replace
@@ -68,12 +69,30 @@ MAX_CACHED_ATHLETES = 32
 _graph_lock = Lock()
 
 
+def _off_loop() -> None:
+    """Composition reads the rollout flag (a database query), takes a thread
+    lock and may compile a graph: run it in a worker, never on the event loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    raise RuntimeError(
+        "Agent composition on the event loop: resolve it in an AnyIO worker"
+    )
+
+
+def _glm_flash() -> bool:
+    return get_feature_flags().glm_flash and glm_flash_available()
+
+
 def _serialized(factory):
     # lru_cache allows duplicate construction during concurrent first access.
     @wraps(factory)
     def get():
+        _off_loop()
+        # The flag read needs no lock: only construction is serialized.
+        glm_flash = _glm_flash()
         with _graph_lock:
-            glm_flash = get_feature_flags().glm_flash and glm_flash_available()
             return factory(current_athlete_id(), glm_flash=glm_flash)
 
     get.cache_clear = factory.cache_clear
@@ -112,6 +131,7 @@ def _assemble(
     calendar_enabled: bool = True,
     checkpointer=None,
 ):
+    _off_loop()
     profile = get_profile(profile_id)
     calendar = None
     if profile_id == "chat" and calendar_enabled and config.google_calendar_configured:
@@ -274,23 +294,25 @@ async def run_slack_coach(
     context: AgentContext | None = None,
 ) -> str:
     """Slack supplies its own history; reuse the chat graph and runtime limits."""
+    from anyio import to_thread
     from langchain_core.messages import AIMessage
 
     from arete.agent.runtime.execution import stream_agent
     from arete.agent.runtime.streaming import MAX_STREAM_EVENTS, StreamProjection
 
-    context = context or AgentContext(
-        thread_id=thread_id,
-        slack_visibility=visibility,
-        current_datetime=await read_athlete_clock(),
-    )
+    if context is None or graph is None:
+        # One worker hop: the athlete clock, the rollout flag and a compile.
+        context, graph = await to_thread.run_sync(
+            _slack_coach_setup, context, graph, thread_id
+        )
+    assert context is not None
     context.slack_visibility = visibility
     projection = StreamProjection()
     answer = ""
     count = 0
     async with aclosing(
         stream_agent(
-            graph if graph is not None else get_agent(),
+            graph,
             {"messages": messages},
             context=context,
         )
@@ -310,6 +332,15 @@ async def run_slack_coach(
     if not answer.strip():
         raise RuntimeError("Agent returned an empty Slack answer")
     return answer
+
+
+def _slack_coach_setup(
+    context: AgentContext | None, graph, thread_id: str
+) -> tuple[AgentContext, Any]:
+    return (
+        context or AgentContext(thread_id=thread_id),
+        graph if graph is not None else get_agent(),
+    )
 
 
 @_serialized
@@ -572,13 +603,19 @@ async def prepare_slack_agent(messages, message, client):
                 error="NoGraphCompletion",
             )
 
-    try:
-        glm_flash = await to_thread.run_sync(
-            lambda: get_feature_flags().glm_flash and glm_flash_available()
-        )
+    def compose():
+        # All intents share one graph. Its policy is resolved per invocation;
+        # neither classification nor the Slack client enters the graph cache.
+        _off_loop()
+        glm_flash = _glm_flash()
         route = resolve_route(glm_flash=glm_flash)
         if route.base_url != "https://openrouter.ai/api/v1":
             raise ValueError("Le classement Slack administrateur exige OpenRouter.")
+        with _graph_lock:
+            return route, _slack_graph(current_athlete_id(), glm_flash)
+
+    try:
+        route, graph = await to_thread.run_sync(compose)
         classifier = JevService(
             api_key=route.api_key, model=JEV_MODEL, timeout=JEV_TIMEOUT
         )
@@ -597,10 +634,6 @@ async def prepare_slack_agent(messages, message, client):
             valid_timezone(identity[1]),
             private=private,
         )
-        # All intents share one graph. Its policy is resolved per invocation;
-        # neither classification nor the Slack client enters the graph cache.
-        with _graph_lock:
-            graph = _slack_graph(current_athlete_id(), glm_flash)
 
         async def produce(history, thread_id, visibility, emit):
             await to_thread.run_sync(
@@ -636,15 +669,41 @@ def run_automation(run: dict) -> None:
     from_thread.run(_run_automation, run)
 
 
-async def _run_automation(run: dict) -> None:
-    import asyncio
+def _automation_setup(run: dict) -> tuple[AgentContext, Any]:
+    """One segment's synchronous composition, run in a worker: the athlete
+    clock and rollout flag are reads, the route record a write, and the graph
+    compile blocks. The server loop keeps serving browser streams meanwhile."""
     import json
+
+    from arete.agent.runtime.checkpoints import AutomationSaver
+    from arete.dataio.db import db_connection
+    from arete.services.automations import OWNER
+
+    context = AgentContext(profile="automation", thread_id=run["id"])
+    # Persist only the non-secret route identity; credentials and clients
+    # are resolved at composition and never serialized in graph state.
+    glm = _glm_flash()
+    route = resolve_route(glm_flash=glm)
+    policy = json.dumps(
+        {"model": route.model, "policy": route.openrouter_policy}, sort_keys=True
+    )
+    if run["model_policy"] and run["model_policy"] != policy:
+        raise RuntimeError("La configuration du modèle a changé ; reprise annulée.")
+    with db_connection() as con:
+        con.execute(
+            f"UPDATE app.automation_runs SET model_policy=? WHERE {OWNER} AND id=? RETURNING id",
+            [policy, run["id"]],
+        )
+    graph = _assemble("automation", glm_flash=glm, checkpointer=AutomationSaver())
+    return context, graph
+
+
+async def _run_automation(run: dict) -> None:
     from time import monotonic
 
     from anyio import to_thread
     from langgraph.types import Command
 
-    from arete.agent.runtime.checkpoints import AutomationSaver
     from arete.agent.runtime.execution import invoke_agent, run_config
     from arete.services import automation_execution as execution
     from arete.services.automation_schedule import MAX_ACTIVE_SECONDS, SEGMENT_SECONDS
@@ -654,33 +713,11 @@ async def _run_automation(run: dict) -> None:
     result, interrupts, error = None, [], None
     try:
         # Inside the try: a failed settings read still finishes the run.
-        context = AgentContext(
-            profile="automation",
-            thread_id=identifier,
-            current_datetime=await read_athlete_clock(),
-        )
+        context, graph = await to_thread.run_sync(_automation_setup, run)
         context.tool_slots = asyncio.Semaphore(1)
         context.deadline = started + min(
             SEGMENT_SECONDS, MAX_ACTIVE_SECONDS - run["active_seconds"]
         )
-        # Persist only the non-secret route identity; credentials and clients
-        # are resolved at composition and never serialized in graph state.
-        from arete.dataio.db import db_connection
-        from arete.services.automations import OWNER
-
-        glm = get_feature_flags().glm_flash and glm_flash_available()
-        route = resolve_route(glm_flash=glm)
-        policy = json.dumps(
-            {"model": route.model, "policy": route.openrouter_policy}, sort_keys=True
-        )
-        if run["model_policy"] and run["model_policy"] != policy:
-            raise RuntimeError("La configuration du modèle a changé ; reprise annulée.")
-        with db_connection() as con:
-            con.execute(
-                f"UPDATE app.automation_runs SET model_policy=? WHERE {OWNER} AND id=? RETURNING id",
-                [policy, identifier],
-            )
-        graph = _assemble("automation", glm_flash=glm, checkpointer=AutomationSaver())
         cfg = run_config(context=context, graph=graph)
         snapshot = await graph.aget_state(cfg)
         state: Any

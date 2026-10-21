@@ -42,7 +42,11 @@ the lower date. An import error keeps the failed page reachable; already
 committed Garmin IDs deduplicate on the next check.
 
 Undated manual imports use the same continuation and at most 20 new activities;
-smaller requested limits and `download_fit` are honored. Explicit date-range
+smaller requested limits and `download_fit` are honored. Their stream reports
+the refresh's own progress: a fetching event per page, the importer's per-activity
+events, then finalizing for health and enrichment. As with explicit imports,
+closing the stream stops the refresh before its next step and keeps committed
+sessions; it does not read the imported sessions back. Explicit date-range
 and history requests keep their existing interface and the same durable owner
 and request deadline. They do not claim current-window freshness. Older history
 still uses the explicit history importer.

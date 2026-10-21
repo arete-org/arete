@@ -32,6 +32,7 @@ export const SESSION_TYPE_LABEL: Record<string, string> = {
   hypertrophy: 'Muscu',
   power: 'Muscu',
   deload: 'Décharge',
+  cross_training: 'Circuit',
   race: 'Course',
 };
 

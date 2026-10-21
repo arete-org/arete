@@ -46,6 +46,10 @@ def fund(shards=390):
         )
 
 
+def purchase():
+    return game.Purchase(key=str(uuid4()), skin="eclipse", expected_price=300)
+
+
 def test_all_level_boundaries():
     assert game.level_for(0) == 1
     for n in range(2, 21):
@@ -160,6 +164,50 @@ def test_concurrent_purchase_never_double_debits(game_db):
         results = list(executor.map(lambda _: buy(), range(2)))
     assert any(isinstance(r, dict) for r in results)
     assert game.snapshot()["shards"] == 90
+
+
+@pytest.mark.parametrize(
+    ("before", "buyer_wins"),
+    [(r"SET version=version WHERE", False), (r"INSERT INTO app\.game_owned", True)],
+    ids=["rival-commits-before-the-lock", "buyer-lock-rejects-the-rival"],
+)
+def test_a_racing_purchase_is_a_conflict_never_a_second_charge(
+    game_db, monkeypatch, router_client, before, buyer_wins
+):
+    """ARE-82: a rival purchase runs inside the buyer's snapshot window.
+
+    Raced before the buyer's lock, the rival commits and the buyer's lock
+    conflicts with it. Raced before the buyer's insert, the buyer's uncommitted
+    lock rejects the rival's lock, so the rival never commits the skin. That is
+    the CI failure's interleaving: while the lock was an in-place update the
+    rival committed and the buyer's insert hit a duplicate key.
+    """
+    from write_race import race
+
+    from arete.api.gamification import router
+
+    enable()
+    fund()
+    rival: list[object] = []
+
+    def rival_buys():
+        try:
+            rival.append(game.purchase(purchase()))
+        except duckdb.TransactionException as exc:
+            rival.append(exc)
+
+    with race(monkeypatch, before, rival_buys):
+        response = router_client(router).post(
+            "/gamification/purchases", json=purchase().model_dump()
+        )
+    assert response.status_code == (200 if buyer_wins else 409), response.text
+    assert buyer_wins or "Une autre écriture" in response.json()["detail"]
+    assert isinstance(rival[0], duckdb.TransactionException) == buyer_wins
+    assert game.snapshot()["shards"] == 90
+    with db_connection() as con:
+        assert con.execute(
+            "SELECT count(*) FROM app.game_owned WHERE skin='eclipse'"
+        ).fetchone() == (1,)
 
 
 def test_kill_switch_preserves_queue(game_db, monkeypatch):

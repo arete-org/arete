@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Generator
 from contextlib import closing, contextmanager
 from datetime import UTC, date, datetime, timedelta
 from time import monotonic, sleep
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import duckdb
@@ -19,6 +20,9 @@ import duckdb
 from arete.dataio.db import db_connection, transaction
 from arete.services.athlete_scope import current_athlete_id
 from arete.services.settings import athlete_today
+
+if TYPE_CHECKING:
+    from arete.garmin.sync import SyncProgress
 
 logger = logging.getLogger(__name__)
 MAX_ACTIVITIES = 20
@@ -152,6 +156,37 @@ def ensure_fresh(
     max_activities: int = MAX_ACTIVITIES,
     download_fit: bool = True,
 ) -> dict:
+    with closing(
+        _iter_fresh(
+            deadline=deadline,
+            force=force,
+            daily=daily,
+            max_activities=max_activities,
+            download_fit=download_fit,
+        )
+    ) as work:
+        while True:
+            try:
+                next(work)
+            except StopIteration as done:
+                result: dict = done.value
+                return result
+
+
+def _iter_fresh(
+    *,
+    deadline: float | None = None,
+    force: bool = False,
+    daily: bool = False,
+    max_activities: int = MAX_ACTIVITIES,
+    download_fit: bool = True,
+    sessions: bool = True,
+) -> Generator[SyncProgress, None, dict]:
+    """The bounded refresh, yielding its progress; returns ``ensure_fresh``'s result.
+
+    ``sessions=False`` skips reading back the imported sessions for a caller
+    that only reports counts.
+    """
     from arete.garmin import token_store
 
     if not 1 <= max_activities <= MAX_ACTIVITIES:
@@ -172,7 +207,8 @@ def ensure_fresh(
             continue
         if observed_owner or state["state"] == "needs_reconciliation":
             # Even explicit refreshes share the result of the run they observed.
-            return {**state, "sessions": _sessions(state.get("session_ids", []))}
+            ids = state.get("session_ids", []) if sessions else []
+            return {**state, "sessions": _sessions(ids)}
         if (
             state.get("cooldown_until")
             and datetime.fromisoformat(state["cooldown_until"]) > _now()
@@ -188,22 +224,25 @@ def ensure_fresh(
                     state, "activities_checked_at", ACTIVITY_TTL
                 )
                 health = force or not _fresh(state, "health_checked_at", HEALTH_TTL)
-                return _refresh(
-                    owner,
-                    state,
-                    stop,
-                    activities=activities,
-                    health=health,
-                    daily=daily,
-                    max_activities=max_activities,
-                    download_fit=download_fit,
+                return (
+                    yield from _iter_refresh(
+                        owner,
+                        state,
+                        stop,
+                        activities=activities,
+                        health=health,
+                        daily=daily,
+                        max_activities=max_activities,
+                        download_fit=download_fit,
+                        sessions=sessions,
+                    )
                 )
         except SyncBusy:
             observed_owner = True
     return status()
 
 
-def _refresh(
+def _iter_refresh(
     owner: str,
     state: dict,
     stop: float,
@@ -213,11 +252,18 @@ def _refresh(
     daily: bool = False,
     max_activities: int = MAX_ACTIVITIES,
     download_fit: bool = True,
-) -> dict:
+    sessions: bool = True,
+) -> Generator[SyncProgress, None, dict]:
+    """Yields only between steps: closing it stops before the next one."""
     from arete.garmin.client import GarminClient
     from arete.garmin.health_sync import sync_day
     from arete.garmin.readiness import update_readiness_range
-    from arete.garmin.sync import GarminActivity, GarminSyncClient, SyncResult
+    from arete.garmin.sync import (
+        GarminActivity,
+        GarminSyncClient,
+        SyncProgress,
+        SyncResult,
+    )
     from arete.garmin.sync_budget import SyncBudget
     from arete.services.session_conditions import enrich_sessions
 
@@ -256,6 +302,7 @@ def _refresh(
             anchor = state.get("anchor")
             importer.refresh_threshold()
             for _ in range(MAX_PAGES):
+                yield SyncProgress("fetching")
                 checkpoint()
                 overlap = int(offset > 0)
                 raw = client.activity_page(offset - overlap, PAGE_SIZE + overlap)
@@ -294,6 +341,9 @@ def _refresh(
                         if isinstance(event, SyncResult):
                             break
                         state["stage"] = event.stage
+                        # Page-level stages are reported above, once per page.
+                        if event.stage in ("processing", "fit", "saving"):
+                            yield event
                 if len(result.errors) > before_errors:
                     # Re-read this page next time; committed IDs deduplicate, failed IDs remain reachable.
                     break
@@ -317,6 +367,7 @@ def _refresh(
                     "Limite de pages atteinte ; couverture incomplète."
                 )
         if health:
+            yield SyncProgress("finalizing")
             state["stage"] = "health"
             state["health_complete"] = False
             failures = []
@@ -347,6 +398,7 @@ def _refresh(
             else:
                 state["health_checked_at"] = _now().isoformat()
                 state["health_complete"] = True
+        yield SyncProgress("finalizing")
         checkpoint()
         state["stage"] = "enrichment"
         conditions = enrich_sessions(
@@ -406,7 +458,7 @@ def _refresh(
         not bool(state.get("coverage_start")),
         state["failure_category"],
     )
-    return {**state, "sessions": _sessions(result.session_ids)}
+    return {**state, "sessions": _sessions(result.session_ids if sessions else [])}
 
 
 def sync_recent(deadline: float | None = None) -> dict:
@@ -429,12 +481,15 @@ def iter_manual(**options):
         options.get(key) is None for key in ("start_date", "end_date", "history_offset")
     ):
         yield SyncProgress("preparing")
-        refreshed = ensure_fresh(
+        # Stream the refresh's own progress: a blocking call left the browser
+        # at "preparing" (0 %) for the whole import (ARE-149).
+        refreshed = yield from _iter_fresh(
             force=True,
             max_activities=min(
                 options.get("max_activities") or MAX_ACTIVITIES, MAX_ACTIVITIES
             ),
             download_fit=options.get("download_fit", True),
+            sessions=False,
         )
         errors = list(refreshed.get("errors", []))
         if not refreshed.get("complete") and not errors:

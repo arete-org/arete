@@ -50,6 +50,11 @@ semaphores and credentials do not enter conversation state.
 Production sync entrypoints run in AnyIO workers and bridge model execution onto
 the server event loop. This avoids sharing the SDK's cached async HTTP connections
 across short-lived event loops. Async callers use `invoke_agent` directly.
+Composition never runs on that loop: the rollout-flag read, the graph lock and a
+compile would stall every other request and stream, and `coaching.py` refuses
+them there. Browser chat resolves the athlete clock, attachments and cached graph
+in one worker hop per request; Slack and each automation segment likewise compose
+(the latter also records its route) in a worker before streaming on the loop.
 
 The execution envelope is five minutes, 24 main graph model turns (the last binds
 no tools and asks for an answer stating any incomplete work), 96 tool calls,

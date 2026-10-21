@@ -85,6 +85,11 @@ GARMIN_EXERCISES: dict[str, str] = {
     "PLANK": "plank",
     "SIDE_PLANK": "side_plank",
     "FARMERS_WALK": "farmer_carry",
+    "FARMERS_CARRY": "farmer_carry",
+    # Hyrox stations. Garmin has no SkiErg and no burpee broad jump.
+    "BACKWARD_DRAG": "sled_pull",
+    "WALL_BALL": "wall_ball",
+    "INDOOR_ROW": "row_erg",
     # Olympic lifts
     "POWER_CLEAN": "power_clean",
     "CLEAN_AND_JERK": "clean_and_jerk",
@@ -102,13 +107,25 @@ GARMIN_CATEGORIES: dict[str, str] = {
 }
 
 
+#: A finer name too generic alone, with its category: ``PUSH`` is Garmin's
+#: sled push, ``LUNGE`` names lunges in several categories (banded,
+#: suspension ones stay free text).
+GARMIN_QUALIFIED: dict[tuple[str, str], str] = {
+    ("SLED", "PUSH"): "sled_push",
+    ("SANDBAG", "LUNGE"): "sandbag_lunges",
+    ("LUNGE", "LUNGE"): "lunges",
+}
+
+
 def garmin_catalog_id(category: str | None, sub_category: str | None) -> str | None:
     """The catalog id of a Garmin exercise, or None when it is not listed.
 
-    The finer name decides when Garmin gave one; the category alone only when
-    it gave none (missing or ``UNKNOWN``) and the category is listed.
+    The finer name decides when Garmin gave one, with its category when it is
+    too generic alone (``GARMIN_QUALIFIED``); the category alone only when it
+    gave none (missing or ``UNKNOWN``) and the category is listed.
     """
     sub = (sub_category or "").strip().upper()
     if sub and sub != "UNKNOWN":
-        return GARMIN_EXERCISES.get(sub)
+        qualified = GARMIN_QUALIFIED.get(((category or "").strip().upper(), sub))
+        return qualified or GARMIN_EXERCISES.get(sub)
     return GARMIN_CATEGORIES.get((category or "").strip().upper())
