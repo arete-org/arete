@@ -48,6 +48,21 @@ export function blockStart(end: string, weeks: number): string {
   return addDays(end, 1 - weeks * 7);
 }
 
+/** Weeks a block may wait before it starts (services/goals.py HYBRID_LEAD_WEEKS). */
+const HYBRID_LEAD_WEEKS = 2;
+
+/**
+ * The end of a block not started yet once resized to `weeks`: it keeps its
+ * Monday `start`, within the window the server accepts for that length.
+ */
+export function resizedBlockEnd(start: string, weeks: number, today: string = toLocalISODate()): string {
+  const earliest = hybridEnd(weeks, today);
+  const latest = addDays(earliest, HYBRID_LEAD_WEEKS * 7);
+  const end = addDays(start, weeks * 7 - 1);
+  if (end < earliest) return earliest;
+  return end > latest ? latest : end;
+}
+
 /** "17 janvier", or "17 janvier 2027" with the year. */
 export function longDate(iso: string, withYear = false): string {
   return parseLocalDate(iso).toLocaleDateString('fr-FR', {

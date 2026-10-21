@@ -108,11 +108,12 @@ GARMIN_CATEGORIES: dict[str, str] = {
 
 
 #: A finer name too generic alone, with its category: ``PUSH`` is Garmin's
-#: sled push, ``LUNGE`` names lunges in several categories.
+#: sled push, ``LUNGE`` names lunges in several categories (banded,
+#: suspension ones stay free text).
 GARMIN_QUALIFIED: dict[tuple[str, str], str] = {
     ("SLED", "PUSH"): "sled_push",
-    # The station's sandbag lunges are the catalog's lunges (« fentes sandbag »).
-    ("SANDBAG", "LUNGE"): "lunges",
+    ("SANDBAG", "LUNGE"): "sandbag_lunges",
+    ("LUNGE", "LUNGE"): "lunges",
 }
 
 

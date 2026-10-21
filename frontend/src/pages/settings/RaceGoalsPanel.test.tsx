@@ -99,13 +99,13 @@ it('shows a Hyrox with its division and a hybrid block with its end, never a dis
     distance_km: 8,
     target_time_sec: 4500,
     goal_type: 'hyrox',
-    details: { division: 'pro', format: 'doubles', category: 'mixed', equipment: ['sled'], weeks: 12 },
+    details: { division: 'open', format: 'doubles', category: 'mixed', equipment: ['sled'], weeks: 12 },
   };
   vi.spyOn(goalsApi, 'list').mockResolvedValue([block, hyrox]);
   const client = renderPanel();
   expect(await screen.findByText('Bloc hiver')).toBeTruthy();
   expect(screen.getByText('Bloc hybride · 12 semaines · fin le 17 janvier 2027')).toBeTruthy();
-  expect(screen.getByText('20 mars 2027 · Hyrox Pro · Duo · Mixte · objectif 1:15:00')).toBeTruthy();
+  expect(screen.getByText('20 mars 2027 · Hyrox Open · Duo · Mixte · objectif 1:15:00')).toBeTruthy();
   expect(screen.queryByText(/ km/)).toBeNull();
   client.clear();
 });
@@ -235,7 +235,7 @@ it('creates a Hyrox goal with its division, format, category and equipment', asy
   client.clear();
 });
 
-it('offers the mixed category in doubles only', async () => {
+it('offers the mixed category in Open doubles only', async () => {
   vi.spyOn(goalsApi, 'list').mockResolvedValue([]);
   const client = renderPanel();
   fireEvent.click(await screen.findByRole('button', { name: /Ajouter un objectif/ }));
@@ -245,6 +245,14 @@ it('offers the mixed category in doubles only', async () => {
   expect(screen.getByText('Mixte se court en duo.')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Duo' }));
   expect(mixed.disabled).toBe(false);
+  fireEvent.click(mixed);
+  expect(mixed.getAttribute('aria-pressed')).toBe('true');
+  // Pro: no mixed category either, the choice goes.
+  fireEvent.click(screen.getByRole('button', { name: 'Pro' }));
+  expect(mixed.disabled).toBe(true);
+  expect(mixed.getAttribute('aria-pressed')).toBe('false');
+  expect(screen.getByText('Mixte se court en Open.')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Open' }));
   fireEvent.click(mixed);
   expect(mixed.getAttribute('aria-pressed')).toBe('true');
   // Back to solo: the mixed choice goes, it would be refused.
@@ -268,13 +276,16 @@ it('creates a hybrid block ending on the Sunday of its last week from next Monda
   expect(screen.getByText('Du lundi 26 octobre au dimanche 20 décembre 2026')).toBeTruthy();
   fireEvent.change(screen.getByPlaceholderText('Bloc hybride d’hiver'), { target: { value: 'Bloc hiver' } });
   fireEvent.click(screen.getByRole('button', { name: 'Wall ball' }));
+  // Its category sets the stations' Open loads; a block has no mixed one.
+  expect(screen.queryByRole('button', { name: 'Mixte' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Femmes' }));
   fireEvent.click(screen.getByRole('button', { name: 'Créer le bloc' }));
   await waitFor(() =>
     expect(create.mock.calls[0][0]).toEqual({
       name: 'Bloc hiver',
       race_date: '2026-12-20',
       goal_type: 'hybrid',
-      details: { weeks: 8, equipment: ['wall_ball'] },
+      details: { weeks: 8, equipment: ['wall_ball'], category: 'women' },
     })
   );
   // The server's French refusal shows under the form.
@@ -319,6 +330,32 @@ it('edits a started block: its length stays, its end moves up to two weeks later
   fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
   expect(update.mock.calls[1][1]).toMatchObject({ race_date: '2026-12-13' });
+  client.clear();
+});
+
+it('resizes a block not started yet from its own first Monday', async () => {
+  freezeToday();
+  const block: Goal = {
+    ...goal,
+    id: 5,
+    name: 'Bloc hiver',
+    race_date: '2027-01-31', // 12 weeks from Monday 9 November
+    distance_km: 0,
+    target_time_sec: null,
+    goal_type: 'hybrid',
+    details: { division: 'open', format: 'solo', category: 'men', equipment: ['none'], weeks: 12 },
+  };
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([block]);
+  const update = vi.spyOn(goalsApi, 'update').mockResolvedValue(block);
+  const client = renderPanel();
+  fireEvent.click(await screen.findByRole('button', { name: 'Modifier Bloc hiver' }));
+  expect((screen.getByRole('button', { name: 'Hommes' }) as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(screen.getByRole('button', { name: '8 semaines' }));
+  // Still from 9 November, not re-anchored on next Monday.
+  expect(screen.getByText('Du lundi 9 novembre au dimanche 3 janvier 2027')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+  expect(update.mock.calls[0][1]).toMatchObject({ race_date: '2027-01-03', details: { weeks: 8, category: 'men' } });
   client.clear();
 });
 

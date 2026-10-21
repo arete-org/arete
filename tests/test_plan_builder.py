@@ -337,6 +337,36 @@ def test_a_hybrid_block_previews_without_a_race(goal):
     assert any("benchmark" in s["tags"] for s in last["sessions"])
 
 
+@pytest.mark.parametrize("category,wall_ball", [("women", 4), ("men", 6), (None, None)])
+def test_a_hybrid_blocks_category_sets_its_station_loads(goal, category, wall_ball):
+    details = {"weeks": 8, "equipment": ["wall_ball"], "category": category}
+    block = goals.create_goal(
+        name="test-hybrid",
+        race_date=goals.hybrid_end_window(8, TODAY)[0],
+        goal_type="hybrid",
+        details=details,
+        today=TODAY,
+    )
+    facts = SimpleNamespace(acwr=None, tsb=None)
+    with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
+        body = plan_builder.preview(block.id, TODAY)
+    circuits = [
+        s for w in body["weeks"] for s in w["sessions"] if "station" in s["tags"]
+    ]
+    assert any("benchmark" in s["tags"] for s in circuits)
+    loads = {
+        step["weight_kg"]
+        for s in circuits
+        for block_step in s["prescription"]["steps"]
+        for step in block_step["steps"] or [block_step]
+        if step["garmin_exercise"] == "Wall Ball"
+    }
+    assert loads == {wall_ball}
+    # The note asking for the category's load only without a category.
+    unloaded = [s for s in circuits if "charge de ta catégorie" in s["description"]]
+    assert bool(unloaded) == (category is None)
+
+
 def test_a_hyrox_preview_fills_strength_and_circuit_steps(hyrox):
     body = plan_builder.preview(hyrox.id, TODAY)
     sessions = [s for w in body["weeks"] for s in w["sessions"]]
@@ -345,7 +375,7 @@ def test_a_hyrox_preview_fills_strength_and_circuit_steps(hyrox):
     strength = [s for s in sessions if s["sport"] == "strength"]
     assert strength and all(s["prescription"] for s in strength)
     # Women Open: the official 4 kg wall ball, 10 kg sandbag, 2 × 16 kg carry.
-    official = {"Wall Ball": 4, "Sandbag Lunge": 10, "Farmer Carry": 16}
+    official = {"Wall Ball": 4, "Sandbag Lunges": 10, "Farmer Carry": 16}
     seen = {}
     for s in strength:
         if "station" not in s["tags"]:

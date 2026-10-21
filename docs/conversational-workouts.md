@@ -102,4 +102,12 @@ SkiErg nor burpee broad jump, and a distance (25 m of sled push in a timed
 test) stays in the notes rather than becoming a guessed duration. Hyrox and
 hybrid plans (`services/hybrid_strength.py`) write their strength sessions and
 station circuits this way, with loads from the strength history and the
-official HYROX station loads of the goal's division and category.
+official HYROX station loads of the goal's division and category. A lap step
+whose notes name an exercise Garmin has (« Squat 5x5 ») is refused: that
+exercise is chosen with its reps or duration instead.
+
+Known limit: the coach edits a strength session's steps through
+`strength_text`, whose grammar check (`strength_sets`) reads reps only. A
+generated circuit or upper-body session (timed planks and stations, lap
+steps) cannot have its steps rewritten from chat; moving its date or status
+still works, and Planning's step editor edits it directly.

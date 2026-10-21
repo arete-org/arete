@@ -13,7 +13,7 @@ const hyrox = {
   days_left: 70,
   created_at: null,
   goal_type: 'hyrox',
-  details: { division: 'pro', format: 'doubles', category: 'mixed', equipment: ['sled', 'wall_ball'], weeks: 12 },
+  details: { division: 'open', format: 'doubles', category: 'mixed', equipment: ['sled', 'wall_ball'], weeks: 12 },
 };
 
 const session = (day: number, kind: string, description: string, tags: string[]) => ({
@@ -111,6 +111,9 @@ for (const width of [1440, 390]) {
     const mixed = page.getByRole('button', { name: 'Mixte', exact: true });
     await expect(mixed).toBeDisabled();
     await page.getByRole('button', { name: 'Duo', exact: true }).click();
+    // Mixed races in Open doubles only.
+    await expect(mixed).toBeDisabled();
+    await page.getByRole('button', { name: 'Open', exact: true }).click();
     await mixed.click();
     await page.getByRole('button', { name: 'Traîneau (poussée et tirage)', exact: true }).click();
     await page.getByRole('button', { name: 'Wall ball', exact: true }).click();
@@ -119,7 +122,7 @@ for (const width of [1440, 390]) {
     await page.screenshot({ path: `../.context/hybrid-goal-form-${width}.png`, fullPage: true, animations: 'disabled' });
     await page.getByRole('button', { name: 'Ajouter le Hyrox', exact: true }).click();
 
-    await expect(page.getByText(/Hyrox Pro · Duo · Mixte · objectif 1:15:00/)).toBeVisible();
+    await expect(page.getByText(/Hyrox Open · Duo · Mixte · objectif 1:15:00/)).toBeVisible();
     expect(created).toEqual([
       {
         name: 'Hyrox Paris',
@@ -127,7 +130,7 @@ for (const width of [1440, 390]) {
         target_time_sec: 4500,
         priority: 'A',
         goal_type: 'hyrox',
-        details: { division: 'pro', format: 'doubles', category: 'mixed', equipment: ['sled', 'wall_ball'] },
+        details: { division: 'open', format: 'doubles', category: 'mixed', equipment: ['sled', 'wall_ball'] },
       },
     ]);
 

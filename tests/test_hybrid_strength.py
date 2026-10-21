@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 from itertools import combinations
 
@@ -152,9 +153,9 @@ def test_no_history_leaves_the_load_to_the_athlete():
             assert ("charge à choisir" in step["notes"]) == loaded
 
 
-def test_loads_rise_by_loading_week_and_never_on_deload_or_taper():
-    weeks = _prescribed()
-    history = [
+def _week_loads(weeks):
+    """(week, catalog id -> load) of every week's strength sessions."""
+    return [
         (
             w,
             {
@@ -166,34 +167,82 @@ def test_loads_rise_by_loading_week_and_never_on_deload_or_taper():
         )
         for w in weeks
     ]
-    loaded: dict[str, float] = {}  # each exercise's last loading-week load
-    lighter = rose = 0
+
+
+def _light(week):
+    return week.recovery or week.phase in ("taper", "race")
+
+
+def _check_progression(history, starts):
+    """One rise per loading block at most, within 15 % of the start; a light
+    week strictly under the block before it."""
+    current: dict[str, float] = {}
+    after_light = False
     for week, loads in history:
-        light = week.recovery or week.phase in ("taper", "race")
         for cid, kg in loads.items():
-            if cid not in loaded:
-                if not light:
-                    loaded[cid] = kg
-                continue
-            if light:
-                assert kg < loaded[cid], (week.start, cid)
-                lighter += 1
-            else:
-                assert kg >= loaded[cid], (week.start, cid)
-                rose += kg > loaded[cid]
-                loaded[cid] = kg
-    assert lighter and rose
+            assert kg <= round(starts[cid].weight_kg * 1.15, 6), (week.start, cid)
+            if cid not in current:
+                current[cid] = kg
+            elif _light(week):
+                assert kg < current[cid], (week.start, cid)
+            elif after_light:
+                assert kg >= current[cid], (week.start, cid)
+                current[cid] = kg
+            else:  # same block, same load
+                assert kg == current[cid], (week.start, cid)
+        after_light = _light(week) and bool(loads)
+
+
+def test_a_12_week_novice_plan_rises_once_per_block():
+    weeks = _prescribed(level="novice")
+    history = _week_loads(weeks)
+    _check_progression(history, STARTS)
+    squat = [(_light(w), x["back_squat"]) for w, x in history if "back_squat" in x]
+    # Three loading blocks: 100, then 105, then 110; lighter weeks below.
+    loading = [kg for light, kg in squat if not light]
+    assert sorted(set(loading)) == [100.0, 105.0, 110.0]
+    assert loading == sorted(loading)
+    assert [kg for light, kg in squat if light][0] == 90.0  # 100 kg × 0.9
     # The first loading week starts from the history's next load.
-    first = next(loads for week, loads in history if not week.recovery)
+    first = next(x for w, x in history if "back_squat" in x and not _light(w))
     assert first["back_squat"] == 100.0 and first["bench_press"] == 60.0
 
 
-def test_a_deload_week_lifts_about_ninety_percent():
-    lower = _sessions(_prescribed(), HEAVY_LOWER)
-    k = next(i for i, (week, _) in enumerate(lower) if week.recovery)
-    before, deload = _loads(lower[k - 1][1]), _loads(lower[k][1])
-    # 110 kg × 0.9 = 99 kg, on the 2.5 kg plates.
-    assert (before["back_squat"], deload["back_squat"]) == (110.0, 100.0)
+def test_a_16_week_pro_cycle_caps_the_rise_at_15_percent():
+    template = next(w for w in _weeks(division="pro") if not _light(w))
+    weeks = [
+        replace(
+            template,
+            start=template.start + timedelta(weeks=k),
+            recovery=k % 4 == 3,
+            phase="build",
+        )
+        for k in range(16)
+    ]
+    out = hs.prescribe(
+        weeks,
+        level="intermediate",
+        division="pro",
+        category="men",
+        equipment=frozenset(EQUIPMENT),
+        starts=STARTS,
+    )
+    history = _week_loads(out)
+    _check_progression(history, STARTS)
+    blocks = [loads for w, loads in history if not w.recovery][::3]
+    # Squat 100 → 115 (+15 %, reached); lunges 16 → 18 (19 would pass 18.4).
+    assert [b["back_squat"] for b in blocks] == [100.0, 105.0, 110.0, 115.0]
+    assert [b["lunges"] for b in blocks] == [16.0, 17.0, 18.0, 18.0]
+    assert [b["bench_press"] for b in blocks] == [60.0, 62.5, 65.0, 67.5]
+    deloads = [loads["back_squat"] for w, loads in history if w.recovery]
+    assert deloads == [90.0, 95.0, 100.0, 102.5]
+    # Pro circuits: four rounds on loading weeks, two on deloads.
+    for week in out:
+        for circuit in week.sessions:
+            if STATION in circuit.tags:
+                rounds = circuit.prescription["steps"][1]["repeat"]
+                assert rounds == (2 if week.recovery else 4)
+                assert f"{rounds} tours" in circuit.description
 
 
 @pytest.mark.parametrize(
@@ -220,7 +269,7 @@ def test_station_loads_are_the_official_ones(division, category, expected):
         "Sled Push": expected[0],
         "Sled Pull": expected[1],
         "Farmer Carry": expected[2],
-        "Sandbag Lunge": expected[3],
+        "Sandbag Lunges": expected[3],
         "Wall Ball": expected[4],
     }
     weeks = _prescribed(division=division, category=category)
@@ -304,8 +353,6 @@ def test_kept_sessions_keep_their_content():
     weeks = _weeks()
     week = weeks[2]
     lower = next(s for s in week.sessions if HEAVY_LOWER in s.tags)
-    from dataclasses import replace
-
     kept = replace(lower, tags=lower.tags | {KEPT}, description="Ma séance")
     week.sessions[week.sessions.index(lower)] = kept
     out = hs.prescribe(
@@ -344,8 +391,11 @@ def test_starting_loads_read_the_next_suggested_load():
 @pytest.mark.parametrize(
     "name,catalog_id",
     [
-        ("fentes sandbag", "lunges"),
-        ("Fentes avec sac de sable", "lunges"),
+        ("fentes sandbag", "sandbag_lunges"),
+        ("Fentes avec sac de sable", "sandbag_lunges"),
+        ("sandbag lunges", "sandbag_lunges"),
+        ("Fentes", "lunges"),
+        ("fentes marchées", "lunges"),
         ("rameur", "row_erg"),
         ("farmers", "farmer_carry"),
         ("SkiErg", "ski_erg"),
@@ -368,10 +418,42 @@ def test_catalog_names_and_aliases_resolve(name, catalog_id):
         ("SQUAT", "WALL_BALL", "wall_ball"),
         ("ROW", "INDOOR_ROW", "row_erg"),
         ("CARRY", "FARMERS_CARRY", "farmer_carry"),
-        ("SANDBAG", "LUNGE", "lunges"),
+        ("SANDBAG", "LUNGE", "sandbag_lunges"),
+        ("LUNGE", "LUNGE", "lunges"),
+        ("BENCH_PRESS", "BARBELL_BENCH_PRESS", "bench_press"),
         ("BANDED_EXERCISES", "LUNGE", None),  # too generic without its category
         ("SLED", "FORWARD_DRAG", None),
     ],
 )
 def test_garmin_station_names_map_back_to_the_catalog(category, sub, catalog_id):
     assert garmin_catalog_id(category, sub) == catalog_id
+
+
+def _exported():
+    """(name the step sends, catalog id) of every generated exercise."""
+    for table in (hs.LOWER, hs.UPPER_BODY):
+        for lifts in table.values():
+            for lift in lifts:
+                yield EXERCISES_BY_ID[lift.exercise]["name"], lift.exercise
+    for dose in (*hs.CIRCUIT.values(), *hs.FALLBACKS.values()):
+        if dose.catalog:
+            yield dose.garmin, dose.catalog
+
+
+@pytest.mark.parametrize("name,catalog_id", sorted(set(_exported())))
+def test_every_generated_exercise_round_trips_through_garmin(name, catalog_id):
+    """What a plan exports comes back on import as the same catalog exercise,
+    so the strength draft keeps it."""
+    from garminconnect.exercises import resolve
+
+    from arete.garmin.workouts import _STRENGTH_NAMES
+
+    entry = resolve(_STRENGTH_NAMES.get(name, name))
+    assert entry is not None, name
+    assert garmin_catalog_id(entry["category"], entry["exercise"]) == catalog_id
+
+
+def test_every_named_station_dose_says_its_catalog_exercise():
+    for dose in (*hs.CIRCUIT.values(), *hs.FALLBACKS.values()):
+        if dose.catalog:
+            assert match_exercise(dose.exercise).exercise_id == dose.catalog, dose

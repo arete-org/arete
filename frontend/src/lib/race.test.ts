@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseLocalDate } from './dates';
-import { blockStart, formatKm, formatRaceTime, goalCountdown, hybridEnd, parseRaceTime } from './race';
+import { blockStart, formatKm, formatRaceTime, goalCountdown, hybridEnd, parseRaceTime, resizedBlockEnd } from './race';
 
 describe('race formatting', () => {
   it('writes distances with French decimals and no trailing zeros', () => {
@@ -58,5 +58,15 @@ describe('hybrid block dates', () => {
     expect(hybridEnd(8, '2026-10-26')).toBe('2026-12-27');
     expect(parseLocalDate(hybridEnd(12, '2026-10-20')).getDay()).toBe(0);
     expect(blockStart('2027-01-17', 12)).toBe('2026-10-26');
+  });
+
+  it('keeps a resized block on its start, within the server window', () => {
+    // A 12-week block starting 9 Nov, two weeks out, shortened to 8 weeks.
+    expect(resizedBlockEnd('2026-11-09', 8, '2026-10-20')).toBe('2027-01-03');
+    // Lengthened back: the same Monday, 12 weeks on.
+    expect(resizedBlockEnd('2026-11-09', 12, '2026-10-20')).toBe('2027-01-31');
+    // A start the window no longer allows is clamped to its nearest end.
+    expect(resizedBlockEnd('2026-10-26', 8, '2026-11-03')).toBe('2027-01-03');
+    expect(resizedBlockEnd('2027-01-04', 8, '2026-10-20')).toBe('2027-01-03');
   });
 });

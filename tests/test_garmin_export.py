@@ -1151,7 +1151,11 @@ def _flat(steps):
 def test_a_generated_lower_body_session_exports_its_lifts(planned):
     from arete.features.hybrid_plan import HEAVY_LOWER
 
-    week = _hybrid_week()[1]
+    weeks = _hybrid_week()
+    # The second loading block's first week.
+    week = next(
+        w for k, w in enumerate(weeks) if k and weeks[k - 1].recovery and not w.recovery
+    )
     lower = next(s for s in week.sessions if HEAVY_LOWER in s.tags)
     workout, steps = _export_draft(lower)
     assert workout["sportType"]["sportTypeKey"] == "strength_training"
@@ -1162,7 +1166,7 @@ def test_a_generated_lower_body_session_exports_its_lifts(planned):
         + [("LUNGE", "LUNGE")] * 3
     )
     assert [s["endConditionValue"] for s in efforts] == [6] * 4 + [8] * 3 + [10] * 3
-    # One increment above the history's 100 kg in the second loading week.
+    # One increment above the history's 100 kg in the second loading block.
     assert {s["weightValue"] for s in efforts[:4]} == {105_000}
     assert all("weightValue" not in s for s in efforts[4:])  # never logged
     assert "RIR 2" in efforts[0]["description"]
@@ -1224,6 +1228,10 @@ def test_a_compromised_run_still_exports_as_running(planned):
             "exercice Garmin",
         ),
         (Step(kind="effort", duration_kind="seconds", value=60), "exercice Garmin"),
+        # Notes cannot hide an exercise Garmin has: it must be chosen as such.
+        (Step(kind="effort", duration_kind="lap", notes="Squat 5x5"), "en notes"),
+        (Step(kind="effort", duration_kind="lap", notes="Wall Ball"), "en notes"),
+        (Step(kind="warmup", duration_kind="lap", notes="Fentes 3x10"), "en notes"),
     ],
 )
 def test_strength_steps_without_an_exact_end_or_name_are_rejected(step, message):
@@ -1243,10 +1251,19 @@ def test_strength_timed_and_lap_steps_convert():
                 ),
                 Step(kind="effort", duration_kind="lap", notes="SkiErg 500 m"),
                 Step(kind="rest", duration_kind="lap"),  # a rest needs no name
+                # A distance Garmin cannot end on stays in the notes.
+                Step(
+                    kind="effort",
+                    duration_kind="lap",
+                    notes="25 m de poussée de traîneau à 152 kg",
+                ),
+                Step(
+                    kind="effort", duration_kind="lap", notes="20 burpees broad jumps"
+                ),
             ]
         ),
     )
-    plank, ski, rest = payload["workoutSegments"][0]["workoutSteps"]
+    plank, ski, rest, *_ = payload["workoutSegments"][0]["workoutSteps"]
     assert rest["stepType"]["stepTypeKey"] == "rest"
     assert (plank["category"], plank["endCondition"]["conditionTypeKey"]) == (
         "PLANK",

@@ -6,10 +6,11 @@ like any structured strength session: catalog exercises with sets, reps (or
 seconds), rests and reps in reserve, and station work with its official load.
 
 Loads come from the athlete's own history (``strength.progression``): the
-next session's load, then one increment per loading week; a deload or taper
-week keeps about 90 % of it and never more. An exercise never logged has no
-load: the athlete fills it in. Station loads follow the goal's division and
-category; without a category, the notes ask for the category's load.
+next session's load, then one increment per loading block, at most 15 %
+above it; a deload, taper or race week lifts about 90 %, always less. An
+exercise never logged has no load: the athlete fills it in. Station loads
+follow the goal's division and category; without a category, the notes ask
+for the category's load.
 
 Garmin strength steps end on reps, time or the lap button, never on a
 distance: a station Garmin has no exercise for (SkiErg, burpee broad jumps),
@@ -37,6 +38,7 @@ from arete.features.hybrid_plan import (
 )
 from arete.features.plan_generator import DraftSession, WeekPlan
 from arete.services.prescriptions import Prescription
+from arete.strength.progression import _lighter as lighter
 from arete.strength.progression import increment, round_load
 
 if TYPE_CHECKING:
@@ -47,6 +49,8 @@ Category = Literal["men", "women", "mixed"]
 
 #: Share of the current load a deload or taper week lifts.
 LIGHT_SHARE = 0.9
+#: How far above its starting load an exercise may rise over a plan.
+MAX_RISE = 0.15
 STATION_REST_SEC = 60
 ROUND_REST_SEC = 120
 
@@ -118,16 +122,15 @@ _MEN_PRO = StationLoads(202, 153, 32, 30, 9)
 #: 9 "Movement standards, distances and weights": sled push 102 / 152 / 202 kg
 #: and sled pull 78 / 103 / 153 kg, sled included; farmers carry 2 × 16 / 24 /
 #: 32 kg; sandbag lunges 10 / 20 / 30 kg; wall balls 4 / 6 / 9 kg, for Women /
-#: Women Pro and Men / Men Pro. Mixed doubles race the Men (Open) loads and
-#: have no Pro division (published division guides; the singles rulebook
-#: does not state it).
+#: Women Pro and Men / Men Pro. Mixed doubles race the Men (Open) loads
+#: (published division guides; the singles rulebook does not state it).
+#: Mixed is Open only: ``services.goals`` refuses Pro + Mixed.
 OFFICIAL_LOADS: dict[tuple[Division, Category], StationLoads] = {
     ("open", "women"): _WOMEN,
     ("open", "men"): _MEN,
     ("pro", "women"): _MEN,
     ("pro", "men"): _MEN_PRO,
     ("open", "mixed"): _MEN,
-    ("pro", "mixed"): _MEN,
 }
 
 
@@ -147,6 +150,8 @@ class Dose:
     reps: int | None = None
     seconds: int | None = None
     load: str | None = None  # a ``StationLoads`` field
+    #: The catalog exercise a Garmin import of it maps back to, if any.
+    catalog: str | None = None
 
 
 _BURPEES = Dose("20 burpees", "Burpees", "Burpee", reps=20)
@@ -162,6 +167,7 @@ CIRCUIT: dict[str, Dose] = {
         "Sled Push",
         seconds=60,
         load="sled_push",
+        catalog="sled_push",
     ),
     "sled_pull": Dose(
         "tirage de traîneau 1'",
@@ -169,32 +175,46 @@ CIRCUIT: dict[str, Dose] = {
         "Sled Pull",
         seconds=60,
         load="sled_pull",
+        catalog="sled_pull",
     ),
     "burpee_broad_jump": Dose("20 burpees broad jumps"),
-    "rower": Dose("rameur 2'", "Rameur", "Rowing Ergometer", seconds=120),
+    "rower": Dose(
+        "rameur 2'", "Rameur", "Rowing Ergometer", seconds=120, catalog="row_erg"
+    ),
     "farmers_carry": Dose(
         "farmers carry 1'",
         "Marche du fermier",
         "Farmer Carry",
         seconds=60,
         load="farmers_carry",
+        catalog="farmer_carry",
     ),
     "sandbag_lunges": Dose(
         "20 fentes avec sac de sable",
         "Fentes avec sac de sable",
-        "Sandbag Lunge",
+        "Sandbag Lunges",
         reps=20,
         load="sandbag_lunges",
+        catalog="sandbag_lunges",
     ),
     "wall_ball": Dose(
-        "20 wall balls", "Wall ball", "Wall Ball", reps=20, load="wall_ball"
+        "20 wall balls",
+        "Wall ball",
+        "Wall Ball",
+        reps=20,
+        load="wall_ball",
+        catalog="wall_ball",
     ),
 }
 #: The same work without the station's equipment (``Station.equipment``).
 FALLBACKS: dict[str, Dose] = {
     "ski_erg": _BURPEES,
     "sled_push": Dose(
-        "20 fentes marchées", "Fentes marchées", "Walking Lunge", reps=20
+        "20 fentes marchées",
+        "Fentes marchées",
+        "Walking Lunge",
+        reps=20,
+        catalog="lunges",
     ),
     "sled_pull": _JUMP_SQUATS,
     "rower": _BURPEES,
@@ -244,8 +264,11 @@ def starting_loads(repo: StrengthRepository | None = None) -> dict[str, Start]:
     return out
 
 
-def _lighter(load: float) -> float:
-    return min(round_load(load * LIGHT_SHARE), load)
+def _raised(load: float, start: Start) -> float:
+    """One increment more, unless it passes ``MAX_RISE`` above the start."""
+    heavier = round_load(load + increment(load, start.lower_body))
+    ceiling = round(start.weight_kg * (1 + MAX_RISE), 6)  # 115.0, not 114.999…
+    return heavier if heavier <= ceiling else load
 
 
 def _plural(n: int, word: str) -> str:
@@ -424,22 +447,25 @@ def prescribe(
 ) -> list[WeekPlan]:
     """The weeks with their strength sessions' and circuits' steps; the
     athlete's kept sessions stay as they are. Loads rise one increment per
-    loading week after the first; a deload or taper week lifts
-    ``LIGHT_SHARE`` of the current load."""
+    loading block (the loading weeks between two lighter ones), at most
+    ``MAX_RISE`` above the start; a deload, taper or race week lifts
+    strictly less than the current load."""
     current = {cid: s.weight_kg for cid, s in starts.items()}
     stations = station_loads(division, category)
-    loading = 0
+    loaded = after_light = False
     out: list[WeekPlan] = []
     for week in weeks:
         light = week.recovery or week.phase in ("taper", "race")
         if not light:
-            if loading:
-                current = {
-                    cid: round_load(kg + increment(kg, starts[cid].lower_body))
-                    for cid, kg in current.items()
-                }
-            loading += 1
-        loads = {cid: _lighter(kg) for cid, kg in current.items()} if light else current
+            if loaded and after_light:  # a new loading block
+                current = {cid: _raised(kg, starts[cid]) for cid, kg in current.items()}
+            loaded = True
+        after_light = light
+        loads = (
+            {cid: lighter(kg, LIGHT_SHARE) for cid, kg in current.items()}
+            if light
+            else current
+        )
         rounds = 2 if light else 3 + (division == "pro")
         sessions = []
         for draft in week.sessions:

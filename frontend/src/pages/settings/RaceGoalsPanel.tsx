@@ -15,6 +15,7 @@ import {
   hyroxLabel,
   longDate,
   parseRaceTime,
+  resizedBlockEnd,
 } from '@/lib/race';
 import { cn, readableError } from '@/lib/utils';
 import type { Goal, GoalDetails, GoalPriority, GoalStatus, GoalType, HyroxEquipment } from '@/types';
@@ -191,10 +192,14 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
   const [invalid, setInvalid] = useState<string | null>(null);
 
   const started = goal?.goal_type === 'hybrid' && blockStarted(goal, today);
-  // A block keeps its dates unless its length changes or, once started, its end is postponed.
+  // A block keeps its dates unless its length changes or, once started, its
+  // end is postponed; resized before it starts, it keeps its first Monday.
   let blockEnd = hybridEnd(weeks, today);
   if (goal && started) blockEnd = addDays(goal.race_date, postpone * 7);
   else if (goal && weeks === storedWeeks) blockEnd = goal.race_date;
+  else if (goal && storedWeeks) blockEnd = resizedBlockEnd(blockStart(goal.race_date, storedWeeks), weeks, today);
+  // A block has no mixed category: its loads are an athlete's own (Open).
+  const blockCategory = category === 'mixed' ? null : category;
 
   const done = () => {
     invalidateWithDashboard(queryClient, qk.goals, qk.formCurve());
@@ -208,9 +213,15 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
   const saving = create.isPending || update.isPending;
   const failure = create.error ?? update.error;
 
+  // Mixed races in doubles and in Open only (services/goals.py): a choice that
+  // rules it out drops it rather than sending what the server refuses.
   const chooseFormat = (next: GoalDetails['format']) => {
     setFormat(next);
     if (next === 'solo' && category === 'mixed') setCategory(null);
+  };
+  const chooseDivision = (next: GoalDetails['division']) => {
+    setDivision(next);
+    if (next === 'pro' && category === 'mixed') setCategory(null);
   };
 
   const submit = () => {
@@ -235,7 +246,7 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
     }
     if (!label) return setInvalid('Nom du bloc requis.');
     setInvalid(null);
-    const details = { ...goal?.details, weeks, equipment };
+    const details = { ...goal?.details, weeks, equipment, category: blockCategory };
     if (!goal) return create.mutate({ name: label, race_date: blockEnd, goal_type: 'hybrid', details });
     // Only a moved end is sent: an equipment edit leaves the block's dates be.
     return update.mutate({ name: label, details, ...(blockEnd !== goal.race_date && { race_date: blockEnd }) });
@@ -298,19 +309,23 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Division" gap="sm">
-            <Chips label="Division" options={DIVISIONS} value={division} onChange={setDivision} />
+            <Chips label="Division" options={DIVISIONS} value={division} onChange={chooseDivision} />
           </Field>
           <Field label="Format" gap="sm">
             <Chips label="Format" options={FORMATS} value={format} onChange={chooseFormat} />
           </Field>
         </div>
-        <Field label="Catégorie" hint={format === 'solo' ? 'Mixte se court en duo.' : undefined} gap="sm">
+        <Field
+          label="Catégorie"
+          hint={format === 'solo' ? 'Mixte se court en duo.' : division === 'pro' ? 'Mixte se court en Open.' : undefined}
+          gap="sm"
+        >
           <Chips
             label="Catégorie"
-            options={CATEGORIES.map((c) => (c.value === 'mixed' ? { ...c, title: 'En duo uniquement' } : c))}
+            options={CATEGORIES.map((c) => (c.value === 'mixed' ? { ...c, title: 'En duo et en Open uniquement' } : c))}
             value={category}
             onChange={setCategory}
-            disabled={(c) => c === 'mixed' && format !== 'doubles'}
+            disabled={(c) => c === 'mixed' && (format !== 'doubles' || division === 'pro')}
           />
         </Field>
         <EquipmentChips value={equipment} onChange={setEquipment} />
@@ -359,6 +374,18 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
             ? `Fin le dimanche ${longDate(blockEnd, true)}`
             : `Du lundi ${longDate(blockStart(blockEnd, weeks))} au dimanche ${longDate(blockEnd, true)}`}
         </p>
+        <Field
+          label="Catégorie"
+          hint="Fixe les charges des stations (Open). Sans catégorie, tu choisis toi-même tes charges."
+          gap="sm"
+        >
+          <Chips
+            label="Catégorie"
+            options={CATEGORIES.filter((c) => c.value !== 'mixed')}
+            value={blockCategory}
+            onChange={setCategory}
+          />
+        </Field>
         <EquipmentChips value={equipment} onChange={setEquipment} />
       </>
     );
