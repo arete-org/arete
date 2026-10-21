@@ -449,3 +449,71 @@ def test_explicit_history_observes_active_sync_without_claiming_its_coverage(
     assert not result.success and result.session_ids == [42]
     assert "autre synchronisation" in result.errors[0]
     observed.assert_called_once()
+
+
+def progressing_import(monkeypatch):
+    """The importer's own event sequence, around scripted commits."""
+    from arete.garmin.sync import SyncProgress
+
+    imported = set()
+    monkeypatch.setattr(
+        GarminSyncClient, "_is_already_synced", lambda self, sid: sid in imported
+    )
+
+    def work(self, *, activity_batch, sync_result, checkpoint, download_fit=True):
+        yield SyncProgress("preparing")
+        yield SyncProgress("fetching")
+        yield SyncProgress("processing", total=len(activity_batch))
+        for index, item in enumerate(activity_batch):
+            checkpoint()
+            if item.activity_id in imported:
+                sync_result.activities_skipped += 1
+            else:
+                imported.add(item.activity_id)
+                sync_result.session_ids.append(item.activity_id)
+                sync_result.activities_synced += 1
+            yield SyncProgress("processing", index + 1, len(activity_batch))
+        yield sync_result
+
+    monkeypatch.setattr(GarminSyncClient, "iter_sync_activities", work)
+    return imported
+
+
+def test_undated_manual_import_streams_the_refresh_progress(provider, monkeypatch):
+    from arete.garmin.sync import SyncResult
+
+    progressing_import(monkeypatch)
+    provider.return_value = [activity(2), activity(1)]
+    events = list(service.iter_manual(max_activities=20, download_fit=False))
+    # Onboarding stayed at "preparing" (0 %) while the whole refresh ran (ARE-149).
+    assert [(e.stage, e.completed, e.total) for e in events[:-1]] == [
+        ("preparing", 0, None),
+        ("fetching", 0, None),
+        ("processing", 0, 2),
+        ("processing", 1, 2),
+        ("processing", 2, 2),
+        ("finalizing", 0, None),  # health
+        ("finalizing", 0, None),  # enrichment
+    ]
+    result = events[-1]
+    assert isinstance(result, SyncResult) and result.success
+    assert result.activities_synced == 2 and result.session_ids == [2, 1]
+
+
+def test_closing_the_manual_stream_keeps_commits_for_the_next_refresh(
+    provider, monkeypatch
+):
+    imported = progressing_import(monkeypatch)
+    provider.return_value = [activity(2), activity(1)]
+    work = service.iter_manual(max_activities=20)
+    for event in work:
+        if event.stage == "processing" and event.completed == 1:
+            assert service.status()["state"] == "running"
+            break
+    work.close()
+    state = service.status()
+    assert state["state"] == "interrupted" and "operation_id" not in state
+    assert state["session_ids"] == [2] and not state["activities_checked_at"]
+    resumed = service.ensure_fresh()
+    assert resumed["complete"] and resumed["already_present"] == 1
+    assert imported == {2, 1} and resumed["session_ids"] == [1]
