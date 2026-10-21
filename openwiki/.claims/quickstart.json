@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:9caea9b0d75a7e0579a51f5254237ce9c5e6f3c0417a2ebde3d162a297731783",
+  "claims": [
+    {
+      "id": "claim_b698a11ebfa14bfaaa375b1c0d4b3dfb",
+      "statement": "The `make install` target creates a `.env` file from `.env.example`, installs Python dependencies via `uv sync --extra dev`, installs npm dependencies in the frontend directory, and prepares OCR data.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L28-L43",
+          "version": "repo-lines-v1:sha256:e62051c17ed2644970bce048276a5a03bf155fdc8e2365b9cc2ebf07868b93aa:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFjYWQ4ZTg2ZjBhYTg4MjBlNDFiNGVjNWVmZGU0NzZiOGFmOGEwZWU4NjU0M2M2YTliNjEwMGFjZTFjOTczZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5NWViODdjOTE5YzU0ODdmM2Q1ODBlOTk1NzdmMjQ0MTcwODFmMTE4OTgxMTM0MWU1MTZhMTMzM2U3YWUwYTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5NWViMDAzNWNkZTVkMTNlZmM1YzZmYmQ1NzczNDY5NzczMjRkM2YxODMxYzRmNmUxOGU4MDVhNGMyN2RhM2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1MDlkNzhhN2U4ZjA3ZWZmOTZkYmJkYzhkZTgyZTU0MzNhNmJmMjY5MWVkOGJlNjBlMGQ5MGMxOWQyMTJjYWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0c1edd02eb584536a991a231c75700e8",
+      "statement": "The `make dev` target starts the backend API on port 8000 with auto-reload and the frontend on port 5173 with Vite HMR simultaneously; Ctrl-C stops both servers.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L49-L55",
+          "version": "repo-lines-v1:sha256:8baa6032eb7c96bf1d13e4de34c88964fd197271130292b278dcad3709f322c5:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTNjODJiYzdiZmM2MzYxOTBhYWFhOGJiYjBlYTE5Njg2YWFjOTRkNjNiNTA0ZDEzYzlkZjY5YzhlMDcxODlkYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2FiMGRkYzU0NzdlOGYzNTE2NjY2YzIwN2I4ZGUxNzNhZGM3MzVmZmY5OTVhNTMzNDUwNzRkZDNjMGEzNDBkOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDE4NGY0MmIyMDE5NDNkN2I0OGE4MTMyYjBmNjcyMjQ3ZTUzOWMzNDhhNTNlNzdhMGNmNTk3MDE4MTk4NDU0ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWNhNjc3ZmFhMGM5NDFkYTUyN2IxOGQ2OGI1NTQ2MjIzMzMxMjFiOTczNjQ3N2M2YjM3OTZjNmMzODg3Y2I0YyJ9"
+        },
+        {
+          "resource": "repo://Makefile#L6-L10",
+          "version": "repo-lines-v1:sha256:7de677b544ab88a540a3788b69d46e0a3111094704ad90d1327d443f361a72ee:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWJkNjhkNGY1MGIyZmI1YmU0NWM3NmI2ZTU3MDVhNjFmMWJjMGNjMGM2MmMxMzQ1NzFhODk0YmU1YWFhYjE3MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzg5YTNlOGI2YmFjMjRmYzI5NGRhMTlkNWU3NTY4NjE0ZDZkOWQ1NmQ2M2FiZjMwYWQ3MmFjNzYwNzQwOWM4NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzdmMjkzY2ZkYTRjODEyZTVmYjI0NTg1OTgyOTFiZDQ2MmU5YWJjZGJmY2I3YmM5OGNkM2RiYjE4YmQxMzg2MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmU5MTk1MTNmYTIyNGM4MjU5MTZhM2M0ZTkzMTk0ZmZkOGVhNDQwNmM0MGUzYzQ1ZjdiMDlkYjM3YmExY2YxMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_a5ccee1a3ae7436ea22df0da352cd8d3",
+      "statement": "The `make docker` target builds and runs a production-like stack using Docker Compose, exposing the backend on port 8001 and the frontend on port 3080, with health checks ensuring the backend is responsive before the stack is considered healthy.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L86-L87",
+          "version": "repo-lines-v1:sha256:8cdea4fdb5c0086fbfd9462bd7228cdbd5aa3cb1320ce66e3633418b97953f9c:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2EyOTRjODRlNjhiMTY1ODJhMzU0YWYwNThiNDdlM2RjMjAyYzQ2MTY4MTllOTUxMTU0NmJhYjNlYTZlMGQxNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzI0MTZhMTM5MWJmOWY0NGJhZjk2ZjY0NjJlNDJlNzU2ODQwODFhZTlkYTQwY2IwMjI2MTdiODRiZGQ1ZjNkOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQ4MWY4NDIzOGUyYTc4ZDhhZTc5OWUxZDQwZDE3NGJiN2MyNDVhZTc5ZmJhYzU0MDQ5YmZjYTQzZjc3MmE0MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjUxZDhiNmQwOTMyN2IzYTY0NmJkMTExZmUzNDY1Njg5YjhiMDgwOGI5YmZlNzE2YjdkYzhiNWVmYzFhNDUwZSJ9"
+        },
+        {
+          "resource": "repo://docker-compose.yml#L1-L58",
+          "version": "repo-lines-v1:sha256:cddd1ba74918d8673525341945cc16513c7ae4a0693df33511662d8a6b4f4d02:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhNzNmY2NkYzk5ZWE4MzU5NjdjN2RlZTdlZmJlZDFmM2NhODcyNjBkOTI5MzE4NTBmZGQ2NmRhOGNiMTJmMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYyYjdkMWFlYTA1NDQ0N2YxYmI3N2RmYzhhZWU2YjY0NzliMmM3YjhhMDc3NWZhMzVmYWY0MTlmNmU1MDQzYTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkyNTY0ZGJiMDkyZDVlYmFjMmNiMTNiZmE5NWVkM2ZmY2Y2OWIyZjc4NWU4YzFiYjJlMzZjNjQxNjhhM2M2MTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_819fb132271b420fb570be88d970fc16",
+      "statement": "The `make check` target runs linting (ruff), formatting checks, mypy type checking, backend tests (pytest), frontend tests, and the frontend build.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L74-L78",
+          "version": "repo-lines-v1:sha256:719626a9c2720a55022232dd8749cb8500f8419123fdd526c4a07567081eaaf8:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjAyZDI0MWQzYzM4Yjk4NjlhMjcxM2Y1ZWE3MmFiMzM2Y2ZjMjNlOTM1ZmFlYjNkYjE0NzRjNjYwYWZhYjBhNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWUxNGZmMmRmY2Q0ZDUwZGQxMDc5YTBlMTBkODE1NGQ4NGY4YTgwZmMwY2FlYzkwNjM4MGM1MDVjODUwMDljZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDc1MjU4YjNlMDdmMGM4N2YxNGE4MDcyZjIxNzlkMWYyY2QyZDdlMzQzNGFhMjNlZjUzM2EyNGU0NWY1NDhlYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWE0NThjOTYxM2QzYjIxYjIyNzcwOTZkMTM3NTFhYWEzZjA1NDZhZWJlMjI2NGY4MGVhZmQ5MWM2MzY2NjUyNCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_01ecd7e966e5498fa4eba7f6d72126b4",
+      "statement": "Configuration is centralized in the `Config` class in `src/arete/config.py`, which reads environment variables on every access without caching, allowing tests to patch `os.environ` freely.",
+      "evidence": [
+        {
+          "resource": "repo://src/arete/config.py#L1-L19",
+          "version": "repo-lines-v1:sha256:5499c811b1feb77e4e4dbedcba71fc47e1dc3e4edd845949810b81337fb8aeb9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYwMTFmY2NlMWU1ZmJmMThlZDQ3ZDE2MmQzMzFjYjFkOWU5MTNiOTFmNzczNjNiMzM0NzUyZWE3NGRiNDA3ODgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2OTE1NmY3YjVkN2UwNDAxNzNhNmJkNzk3ZDVmYTc4NDJlZmM1MWRhZDdjZWRlYWYwMjgxODUzOTdhMTA5MzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllNjI3YWY5YzVkY2E0M2JmYjI5ZjI0ZTJiNjYyNTNhM2M1NjA3Mjc4OGQwNmQ4YTJjMDljYzZlMTQxMjYwZjEifQ"
+        },
+        {
+          "resource": "repo://src/arete/config.py#L22-L26",
+          "version": "repo-lines-v1:sha256:c2676d32e2bc56be312c8ebbbc30b78e352a8072424bead23bc90ff9bfe31443:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjkxOGY3MDJjYjU0ODRmMGExMjk4YzE3MmViNTZhYWYwZGVkNDA0NGYzMzI5NDJmMTRlNjZhMmJhZjVmZTRkMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzZhZWI1NTkyMDVjMDE5N2ZmNzQwZTZmYTk3YmFjYzQ3NjM3ODc2MThiNjJlNzAyYzQzYmRjN2RiMmU5ZjY5NiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjYxNDFiNzAxYTAzMmEyOWViYmNiNmIwOGM4NzBkOWRlMDU2MmE0MDcxNWE5NWU5NmRhYzE5ZjM1NGFjN2YwNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTYyN2YwZDA0NmM0ZTJlNjUyZjgxNWUyYTA4MWI2ZWVkMzQ1ZTQ1NTk5YTg5NWUyMDhmYTI2YjdlNGE0MTUwYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_67c5618d414547e9bb422f6ad1ee58ee",
+      "statement": "The backend is a FastAPI application served by uvicorn, with the app defined in `src/arete/api/main.py`.",
+      "evidence": [
+        {
+          "resource": "repo://pyproject.toml#L14-L14",
+          "version": "repo-lines-v1:sha256:25859788f403e8d95cc1376987df25ea2cb32ab5e9b8c627a82d29258d4c6d70:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjU4NTk3ODhmNDAzZThkOTVjYzEzNzY5ODdkZjI1ZWEyY2IzMmFiNWU5YjhjNjI3YTgyZDI5MjU4ZDRjNmQ3MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjU4NTk3ODhmNDAzZThkOTVjYzEzNzY5ODdkZjI1ZWEyY2IzMmFiNWU5YjhjNjI3YTgyZDI5MjU4ZDRjNmQ3MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTY2NDBkZGU5ZTRkZmJjYTExZTBkZTBkMmVjNTc3YWNjNmYzMzhhOTliYjMzMThiNDBjNTBiMDA5YjY3ODhmZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWU1OWUyODM4YjRhNDFiODI2MDRhOWFhYzhhZjY0MGVlMzFjZTk4NDg3OWNhYmQ4OTMyMDFiYTExMTVhOTAwNyJ9"
+        },
+        {
+          "resource": "repo://src/arete/api/main.py#L9-L9",
+          "version": "repo-lines-v1:sha256:4ff67d5aef0a516dc0860cc17d14ca49d5f98b4a3440e226cd138ea3cc01adab:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGZmNjdkNWFlZjBhNTE2ZGMwODYwY2MxN2QxNGNhNDlkNWY5OGI0YTM0NDBlMjI2Y2QxMzhlYTNjYzAxYWRhYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGZmNjdkNWFlZjBhNTE2ZGMwODYwY2MxN2QxNGNhNDlkNWY5OGI0YTM0NDBlMjI2Y2QxMzhlYTNjYzAxYWRhYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODA0ZTIwMzUzYjJiZTgxNTMwMTc4YTZiNTk1NWViNjYwNTk3NWNkZjU0YzYyN2RmMDc4ZjI4ZDMxM2E2OWViNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGRjMGE1MjE4MjMxNTI3NDYxZmM3NTE4NTlhOWQ5YzczYTM4ZTQ4ZjNkYTlmZWMwZTdiYzQ3MzczNDkyYzg3NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_0abbc389cab640deb993e10a4cd62d98",
+      "statement": "The frontend is a React + Vite single-page application built with TypeScript and Tailwind CSS, using React Router for client-side routing.",
+      "evidence": [
+        {
+          "resource": "repo://frontend/package.json#L16-L33",
+          "version": "repo-lines-v1:sha256:f7ef77828f11f2d4ea401e778f7cdf5ccdff43060d9d648252e4b29d3a8a592f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhM2I0NjlkOWUwOTc1NzIyNDY2NjczNGM5ZWY3YjI1NGQ4ODUzNGY1ZDViYjcwOTg5NjA4MDVjNTUzZGMzMDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRhOGQ0MTE2M2YzNWViMDRjNWE2YzY3ZjhiZjdiMzY0N2YwMDk1NTNkOGE1MWQzODU0MzgyNDBhNTFkNzA5MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5YjBmOTQxODRkMmI4MTg1ZDZiM2RlZWUzNGNiZmM5MzkwMGFhY2E1MjNmYjk4MDY5YzA3ZmNmOWFkNjA5MWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg0MmQ5YTNkNjNiZGUxY2RlNzU0OGVjNWY2NzcwY2QwOTZiMzliMjkxMjc1MTZiZmFmNmFkMTFiOGFiNmFkMTkifQ"
+        },
+        {
+          "resource": "repo://frontend/package.json#L50-L52",
+          "version": "repo-lines-v1:sha256:60881fea256063fbde6b8dd8db823e60e57510020eeacfb7a2eb293cb51d71c8:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ3MzI2ZTVhYmM2OTZjMjBlNTJlNDUwOGJlZTBlMzEzNGRmZWYzZjc2YWU2MjBjZTk2Y2IxYTIxM2Q0YWQ1NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmJiNTg2ZWEwOTZmNThkY2Y5NmNiY2MzOTYwNDZlYmE1NjgzOTcyZmY1OTcxZGNlYmI4ZTg0ZTk2MjdjNGFlYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTRiMWZjNDE0YmNjYmQ2NmE2NjFhNDA3M2ZhOWM3NThhYjcxYTc0MTc3NWQ2YTU3OWQ0ODI2NmM3YzUxODFhYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmZjZGQ2NjBlYTQ2M2E0OWExYTMzYzNiY2U3YmY2NDFhNjVkNWMwOWFiZDgxYWI5NDYwMGQ3OThhNzBmMTMxMiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_9ea95c50d4ba4e0fb3054a302557ae2d",
+      "statement": "Three LLM providers are supported: Ollama (default), OpenRouter, and GitHub Models, selected via the `LLM_PROVIDER` environment variable.",
+      "evidence": [
+        {
+          "resource": "repo://.env.example#L10-L16",
+          "version": "repo-lines-v1:sha256:eca581cb593a8672a9479a98d99793db1238b40a9624747d1d64d2a7fc7ee865:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGM5YzM2NTE2ZGQwYzQxYjU2N2NmYzgyZTllNDc4YzY5YWY1YzEwMjZmNDU2NzYxY2QxNDNjMjFkYmM1YmY2MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmY0NjRlZDMzNzc3NDczYjM2NzY2ZjM0MjJhMGFjNWZmZTc5NzYzM2U0NDhlZDVmMDVhNzhkZTJkNGNjMGQ1MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmQ2MmQwYzNjNTI1YmRiMWUyMDI1ZDRiN2UxNjc5YjVlNWUxOTAxODY2YWY3ZDRhZjgzNzdkMTA4NDIxM2IwZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWZmZmY3MTUzZDdlMjBmOTMyNmNlZDFlZGQ1MmJiNjk1NTljMzk0OThlZmNjYzBkMTRlODRlNzRjZWYxZTFjZCJ9"
+        },
+        {
+          "resource": "repo://src/arete/config.py#L100-L106",
+          "version": "repo-lines-v1:sha256:592cfc79b01ec87239c151b58ede455efc3774faa2ca2001a8ca9baa539aa1f9:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmMzN2U5ZDNiOWZlNGE0NzlhMmZiOGVmZTU2MjdmYTExM2IyMjYzYzQzYjYwNmNjNWIyODI4NDJiM2Q2ODE4NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjRhZmJkYjI2ZWMyNTFlMzRlYjBlMDgxYzQ2NmQ4ZTgyNDZmYWJhNTNhZmIwZjY0OGI1MGQ2NTU5MGI0MjBmYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjg5ZWI1MDllMDg3MzcyMTU5YzhkODVlN2FjZTdkODI5ZDZhMDE4ZTc1OTRlODE1NThlMzAwZTc5MTVkZTNiNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d164d4ea03ce4bea9afae00f26dd62cf",
+      "statement": "The database is DuckDB, with support for both local file storage (default `data/arete.duckdb`) and remote MotherDuck databases (via `md:` prefix).",
+      "evidence": [
+        {
+          "resource": "repo://pyproject.toml#L13-L13",
+          "version": "repo-lines-v1:sha256:811bb7ff2b2c997dde044d0760e4f08c861a788d7b080a6d78f9431c8d048fcf:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODExYmI3ZmYyYjJjOTk3ZGRlMDQ0ZDA3NjBlNGYwOGM4NjFhNzg4ZDdiMDgwYTZkNzhmOTQzMWM4ZDA0OGZjZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODExYmI3ZmYyYjJjOTk3ZGRlMDQ0ZDA3NjBlNGYwOGM4NjFhNzg4ZDdiMDgwYTZkNzhmOTQzMWM4ZDA0OGZjZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDY1MjY1ZWYyMjRmNWUxMmQ0NWIwZmQ2NzkxZDQ2YzQ2NjZiYzM3MTJjMTg2YmVlZTkyOTdlYWNiMDVjYmNkYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDllNTBlZDE4ZDIyOGMxODE3MmM3YTQzMmI2MDY1ZDc4M2E3NmI3MzFhYTk1YjQ1NjA3MDczZmEwNjY4NjliNiJ9"
+        },
+        {
+          "resource": "repo://src/arete/config.py#L44-L52",
+          "version": "repo-lines-v1:sha256:64de849e7a5107a3822cdc3bf9e9d6dfa66c576c759988dd5ee4e8f72d1cc45d:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjNkMDBjZjI3MDk2NGQ0NGExM2RmYWM4NzUyYjA5ZmNjNDM1YjBmMTliMzE2YWJjZjgxYTdhYTY0YmIxMjJkNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2Q0YTEwMzg0NTMzNTE0YTM2OWNlZWMxMDA3M2M2OTRkNzY4MzU1NmRlMDg4Nzg5MWYwYjIxMTA5NjU2Mzk5OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjJhNzc1MzBkMjk0ZmMyZWEwMjgxZmRjMWUyYTJkMWY0OTY3ZTNhMzBlODY1ODlmOTZmMjI1ODZkMmFkMzQxNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWU1NjY2ZjU3YjZkMDdkN2IwZTNkOTc3OGUzMzUzYTYwMzhhNWVjYzg3OGNjNGY5ZTkzYjEyZDRiNzJmMmNjMCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.7.1",
+    "at": "2026-10-21T06:33:32.768Z"
+  }
+}

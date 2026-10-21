@@ -5,7 +5,7 @@ description: High-level overview of Arete's system design, component interaction
 tags: [architecture, arete, system-design]
 verified:
   - by: openwiki/0.7.1
-    at: 2026-10-09T21:28:29.291Z
+    at: 2026-10-21T06:33:32.768Z
 sources:
   - id: openwiki-source-115b2dad781e2a2c5b5a980d
     resource: repo://docs/architecture.md

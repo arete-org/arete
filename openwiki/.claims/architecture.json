@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:62f575ac681b29b66d9bc050c253b8452c6749582db82f9c229121bdb5a0baff",
+  "pageVersion": "sha256:f2cbd98f72701ff1220cd89ca9a214b5f3f8b733adfb058dc14f896555853218",
   "claims": [
     {
       "id": "claim_92ae68808ae449539af1ab7209e032b6",
       "statement": "The coaching.py module serves as the composition root for the Arete application, responsible for resolving configuration and supplying the concrete model and memory adapter to the agent factory.",
       "evidence": [
         {
-          "resource": "repo://docs/architecture.md#L33-L36",
-          "version": "repo-lines-v1:sha256:e88ddbd9c455f28c38705ae34aca1698f717b4ed04ee84bdfd623464a4712f31:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjhiZDEzMWUwZDg2ODBiZTMxOGI0YTIzNjE4MDJlOTAxY2Q5ODgzNWEzMmFjZjgwMzdlM2ExNTc1YWJhNzY0YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmEzMzk2NWQ5ZjdjZWNiMmZlODc5NzZkOGUwNWFkOWUyOTI0NDNiZTkxOTU5YzcyZTQ5OWVmNmUwMjVhMWRmYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmUxYjM4NmNjNDRmNWU2OWQ1ODc3NWNjY2M5MTUyNTFiMzVhYzVmNTZlMGM1NWUzNGI0ZTE0OGRjOTQ5NmM0OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDk4YWYxM2RhOTZmNGI2MGU2ZGZiZGJkMDZhODllNDJkNGY5YTk3YjFiZGU4NzNkZDNmMjNlZmFmZWJiNzk5OCJ9"
+          "resource": "repo://docs/architecture.md#L34-L41",
+          "version": "repo-lines-v1:sha256:e5262d9db3277cfaa680be6e02a1cf518a475e57242b7aa46e98f0205d50c7b1:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjhiZDEzMWUwZDg2ODBiZTMxOGI0YTIzNjE4MDJlOTAxY2Q5ODgzNWEzMmFjZjgwMzdlM2ExNTc1YWJhNzY0YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmEzMzk2NWQ5ZjdjZWNiMmZlODc5NzZkOGUwNWFkOWUyOTI0NDNiZTkxOTU5YzcyZTQ5OWVmNmUwMjVhMWRmYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmUxYjM4NmNjNDRmNWU2OWQ1ODc3NWNjY2M5MTUyNTFiMzVhYzVmNTZlMGM1NWUzNGI0ZTE0OGRjOTQ5NmM0OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDk4YWYxM2RhOTZmNGI2MGU2ZGZiZGJkMDZhODllNDJkNGY5YTk3YjFiZGU4NzNkZDNmMjNlZmFmZWJiNzk5OCJ9"
         },
         {
           "resource": "repo://src/arete/coaching.py#L3-L5",
@@ -19,6 +19,6 @@
   ],
   "verification": {
     "by": "openwiki/0.7.1",
-    "at": "2026-10-09T21:28:29.291Z"
+    "at": "2026-10-21T06:33:32.768Z"
   }
 }

@@ -5,19 +5,17 @@ description: High-level overview of Arete's services layer, covering domain serv
 tags: [services, architecture, coaching, planning, scheduling]
 verified:
   - by: openwiki/0.7.1
-    at: 2026-10-09T21:28:29.291Z
+    at: 2026-10-21T06:33:32.768Z
 sources:
   - id: openwiki-source-1fc9f4b4543906f59c69ccde
     resource: repo://src/arete/services/__init__.py
-  - id: openwiki-source-cbae2827977d9586f2e7c9d2
-    resource: repo://src/arete/services/briefing.py
   - id: openwiki-source-84df6ee46c1c3148230bed62
     resource: repo://src/arete/services/memory.py
   - id: openwiki-source-45282bb90ae1925ce08e7ffb
     resource: repo://src/arete/services/planning.py
   - id: openwiki-source-4f5f650f1c198578e6fe2f0f
     resource: repo://src/arete/services/session_feedback.py
-generated: { by: "openwiki/0.7.1", at: "2026-10-09T21:28:29.291Z" }
+generated: { by: "openwiki/0.7.1", at: "2026-10-21T06:33:32.768Z" }
 ---
 
 # Services Layer
@@ -38,7 +36,9 @@ Key responsibilities:
 - Generate daily coaching tips based on rule-based logic
 - Load and format session data (load, form, recovery, today's plan)
 - Combine model outputs with rule floors to guarantee a meaningful briefing
-- Persist briefing summaries to the journal for later reference
+- Persist briefing summaries to the `coach_briefings` database table for later reference
+- Run synchronously; the scheduler offloads blocking work via AnyIO workers, and the API route is a plain `def`
+- Never raises: a failed run is stored with `status='failed'` so it stays visible, and the rule text is stored alongside so the dashboard always has something concrete to show
 
 ### Planning Service
 
@@ -49,24 +49,27 @@ Key responsibilities:
 - Generate periodized plans using recent running data and target paces
 - Support goal-based planning (races, endurance targets)
 - Provide APIs for retrieving and modifying planned sessions
+- Sessions created by the agent are stamped `source="coach"` so the Planning page can distinguish them from manually-created sessions
 
 ### Feedback Service
 
-The `session_feedback` service handles post-session feedback. After a session is completed, coaches can write feedback that is recorded in the journal and linked to the session entry. This feedback informs future adaptations and helps close the loop between practice and performance.
+The `session_feedback` service handles post-session feedback. After a session is completed, coaches can write feedback that is recorded in the journal ledger (`sessions.md`) and linked to the session entry. This feedback informs future adaptations and helps close the loop between practice and performance.
 
 Key responsibilities:
 - Accept coach-written feedback for completed sessions
-- Store feedback in the journal ledger with proper attribution
+- Store feedback in the journal ledger (`sessions.md`) with server-dated headings, written by the server once regardless of model success/failure — the model only produces the answer text
 - Associate feedback with specific sessions for traceability
+- Support batch feedback for multiple sessions in a single model request
 
 ### Memory & Ledger Service
 
-The `memory` service manages long-term state through a ledger system. It maintains session journals, notes, and archived entries, ensuring that historical data remains accessible while keeping the active ledger bounded in size.
+The `memory` service manages long-term state through a ledger system backed by DuckDB. It maintains session journals, notes, and archived entries, ensuring that historical data remains accessible while keeping the active ledger bounded in size.
 
 Key responsibilities:
-- Append dated entries to session and notes ledgers
-- Rotate old entries to monthly archives when the ledger exceeds size limits
+- Append dated entries to session and notes ledgers with server-stamped headings
+- Rotate old entries to monthly archives (`sessions-YYYY-MM.md`) when `sessions.md` exceeds 40,000 characters
 - Maintain bounded growth of historical records
+- Provide transactional read/write with optimistic locking via revision numbers
 
 ### Calendar Service
 
@@ -104,11 +107,11 @@ graph TD
 ```
 
 1. **API Layer** (`arete/api`) prepares context and dispatches requests to the services.
-2. **Coaching Repository** (`briefing.py`, `session_feedback.py`) coordinates briefings and feedback.
-3. **Planning Repository** (`planning.py`, `goals.py`) manages session schedules and goal progress.
+2. **Coaching Repository** (`briefing.py`, `session_feedback.py`, `coaching_repository.py`) coordinates briefings and feedback.
+3. **Planning Repository** (`planning.py`, `goals.py`, `plan_repository.py`, `plan_builder.py`) manages session schedules and goal progress.
 4. **Memory/Ledger** (`memory.py`) persists session history and rotates old entries.
-5. **Calendar Service** (`calendar.py`) syncs training sessions with external calendars.
-6. **Adaptation Service** (`plan_adaptation.py`) applies daily decisions to the plan.
+5. **Calendar Service** (`calendar.py`, `calendar_repository.py`, `calendar_provider.py`) syncs training sessions with external calendars.
+6. **Adaptation Service** (`plan_adaptation.py`, `adaptation.py`) applies daily decisions to the plan.
 7. **Deep Agents Backend** (`backends/`) provides low-level memory file system access.
 
 ## Data Flow
@@ -116,7 +119,7 @@ graph TD
 1. **Daily Cycle**:
    - Scheduler triggers briefing generation → `briefing.py` computes and stores the briefing
    - Planner builds or updates the training plan → `planning.py` interacts with `goals.py` and `garmin_repository.py`
-   - After session completion, feedback is submitted → `session_feedback.py` appends to the journal
+   - After session completion, feedback is submitted → `session_feedback.py` appends to the journal ledger (`sessions.md`)
    - Adaptation service evaluates decisions and updates the plan → `plan_adaptation.py`
    - All changes are persisted through the memory ledger → `memory.py`
 
@@ -127,10 +130,10 @@ graph TD
 
 ## Lifecycle and Invariants
 
-- **Briefing**: Always succeeds; falls back to rule-based tips if model calls fail
-- **Planning**: Plans are periodic (weekly/monthly) and updated based on recent performance
-- **Feedback**: Must be written by a coach; stored in the journal ledger
-- **Memory**: Ledger grows continuously but is rotated to archives when exceeding size limits
+- **Briefing**: Always succeeds; falls back to rule-based tips if model calls fail; stored in `coach_briefings` database table (not the journal ledger)
+- **Planning**: Plans are periodic (weekly/monthly) and updated based on recent performance; agent-created sessions carry `source="coach"`
+- **Feedback**: Must be written by a coach; stored in the journal ledger (`sessions.md`) with server-dated headings; server writes once regardless of model outcome
+- **Memory**: Ledger grows continuously but is rotated to monthly archives when exceeding 40,000 chars (keeps 20,000 chars in active ledger)
 - **Adaptation**: Decisions are applied immediately; athletes can override with a single click
 
 ## Configuration
@@ -148,7 +151,7 @@ New services can be added by implementing the `CoachingRepository` interface and
 ## Claims
 
 - The `services/` package holds domain operations shared by HTTP routes, coaching tools and scheduled work, and is imported by the agent framework and the composition root without circular coupling.
-- The briefing service is synchronous, writes its result to the journal ledger itself, and degrades to a deterministic rule-based tip floor when the model run fails.
+- The briefing service is synchronous and degrades to a deterministic rule-based tip floor when the model run fails; it stores results in the `coach_briefings` database table, not the journal ledger.
 - Post-session feedback is filed by the server in `sessions.md` (once, with server-dated headings) so the model cannot mutate training data or omit the write; the model only writes the feedback answer.
 - The memory ledger appends dated entries, server-stamps headings, and rotates to a monthly archive when `sessions.md` exceeds 40,000 chars.
 - Planning sessions created by the agent are stamped `source="coach"` so the Planning page can distinguish them.

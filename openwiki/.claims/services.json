@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:6b15164a9506eb38c50bd216ae42f8d2388046f45698ea9c77b0fab30fbf7358",
+  "pageVersion": "sha256:c6e2ddf47c8696a896044fb3e2f3476fada63c1ad8d542746b63604c9496e4b2",
   "claims": [
     {
       "id": "claim_d514cf69c15541278383c8ce8ff29ced",
@@ -13,26 +13,12 @@
       ]
     },
     {
-      "id": "claim_95132b9f48e14f1ab8ec893e2f774609",
-      "statement": "The briefing service is synchronous, writes its result to the journal ledger itself, and degrades to a deterministic rule-based tip floor when the model run fails.",
-      "evidence": [
-        {
-          "resource": "repo://src/arete/services/briefing.py#L1-L15",
-          "version": "repo-lines-v1:sha256:16fc73c2bd622c7c4ff377bf4347802758dde76cecf291580220e2d85bfb88ef:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjN2M3MDVjZjg3NmU4ODA4M2NhM2FkNTlkMWMwYjgyOWYyNTA3NDhkMTViMmFiMzI4N2FiMTg4MDU4ODFjYzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMDNlY2RkNGE0ZDEwZjE5YzczZmQ0MmZkMTI0MzdmZDMzNTRhODI2ODE2MDVkYTUyNTVhOTdhMzkwNjhkYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU1YjZlODcwNmI0MzA0N2YyYTZkYjY3ZjEzMjYzODU5NTYwNGU2N2YzNjk2Njg3NmNlMDE1OGYwMDUzZTZiZDEifQ"
-        },
-        {
-          "resource": "repo://src/arete/services/briefing.py#L39-L53",
-          "version": "repo-lines-v1:sha256:c2d23b97838b40ce5d391301714535b22afa3f93c438071f2d6b3eddc05fc902:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MDlhNTNhNjE4ZDAyOGUxZDMwMDBjMGE3YWJjZWVjYmU1ZmIzN2Y0ZTUxMWVmZTQ2NjQzZmFkNmU2Njg3MmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY4MzgzODk3N2ViMTgwY2RmMjgxM2E0MTAwMjRjNjdiOTlkMTAxMjJmZWIxODdiNmMxZWRhODU0YTBlMmNhMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliNjdlMDc3ZWUyOTM5NzhiODg5Zjg2NTEyYTFkMzg5MTQ4ZTEzYWZjMGE0YmJmYWY2ZjdlZWEzZWU2MmQ5MDIifQ"
-        }
-      ]
-    },
-    {
       "id": "claim_5c3c2e296931438a96f842faf37fd1b7",
       "statement": "Post-session feedback is filed by the server in `sessions.md` (once, with server-dated headings) so the model cannot mutate training data or omit the write; the model only writes the feedback answer.",
       "evidence": [
         {
-          "resource": "repo://src/arete/services/session_feedback.py#L58-L85",
-          "version": "repo-lines-v1:sha256:a68b1d4243fe92678a7483ed19de1e208fd2f9d342ebedfe5ac232baff74465c:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhOTFkMDlmZjM0NzZkMTE3YzBiNDM0N2MzYjRjYjBjMTYzN2Q2YmI3OTE2MGQ1MjAxOTI2ZGJiMzYxMjM1MmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2ZTVlNTlkZjY0OGIxMmUzYTJhMDA1MjBhZjYwMmM2MmI2YzcxMDU0YWI3NmJhZWE5YzliZmJkOTljMjIxZjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA0MGFkMTg4MzI5ZWM2YTRiZTU3Zjk1ZjZkYWI5YTM3NDQ2YTliZjhmMDg2MGExNDI3NjhlYWQ2OGZkMWUwZTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://src/arete/services/session_feedback.py",
+          "version": "repo-file-v1:sha256:69d09e04a806296468533c8ff93be823e24dbfebfb1a4217e3087bab93f7983f"
         }
       ]
     },
@@ -41,12 +27,8 @@
       "statement": "The memory ledger appends dated entries, server-stamps headings, and rotates to a monthly archive when `sessions.md` exceeds 40,000 chars.",
       "evidence": [
         {
-          "resource": "repo://src/arete/services/memory.py#L22-L71",
-          "version": "repo-lines-v1:sha256:d3a8104e00a1985b6591e6a8c6ea93e92d8b0d39e5a683d18f855f22c5faee8c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkNjcxNjdmMTdkZGVmYmQxNDY3ZGY3OGQ4OWI1YWVmZjA5NjFkZmRhZDdjNGUzMzFkOWEyYWIyNDY0NzVmMDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzMTA4M2RlYTk3NTE5MjQwOGMzNDFmMzZhYzYzNjIxOWM2NDUyYmQxYTMyOTFlZmM4ZjJlNGRhYzY0MzNkZDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlNjVhNzJmYzIzZmFhMWRkMWM3MDVjNDI0YmM4NjAzMGY4MTRlOTZiYjY5NmY5ZmU1MzcyYjA4MDUxZWU3ZTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3ZWI0ODI2ZGI1MjUxZThkNTYwNmMzY2MyYWU1MzAxMGQ5YmRiZjI0MmFjZjFiZjA4ZTUxZWJkMWM4MzRiNGIifQ"
-        },
-        {
-          "resource": "repo://src/arete/services/memory.py#L74-L107",
-          "version": "repo-lines-v1:sha256:b30da102e2149b49ac2e24d849034f145ed004e4805066a72f76cca222b44d37:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE4NDdjMGUwOWVjNjA2NjExZWM3MDQ5NDU2NWVjOGNjYzViZTBhODYzYmZlYTk1NjVmODY2NzA5ZjM2ZTk1NjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwZTJhNDY1MDA5NWZhOTVkMGUyYmI0MWIyZGIyOTA5NGQzNDA0ZDI4Y2UxMjMzOWVjODhiYjRiNWM1YmU4ZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUxMzMyOWJjZjRiZDdlYTE0ZjA1MmMwMWIyYjQ3YTdmNWUxNzQ3ZTJiMjM1OGJhYTI1YWZkMzRlMDFhMjMwYmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://src/arete/services/memory.py",
+          "version": "repo-file-v1:sha256:9e8a1324fc3315f0725e94d1389cd6efa568e0592fb884ca086fff0a0dba62e6"
         }
       ]
     },
@@ -55,14 +37,14 @@
       "statement": "Planning sessions created by the agent are stamped `source=\"coach\"` so the Planning page can distinguish them.",
       "evidence": [
         {
-          "resource": "repo://src/arete/services/planning.py#L111-L178",
-          "version": "repo-lines-v1:sha256:12dd09825286ee490f4b5d2fb6d2e0747d228a53c911126be696177f23328a81:eyJzZWxlY3RlZExpbmVDb3VudCI6NjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4Mzc3OTVhNzQ3Nzc5OTVkMDEzNmExODViNGQ2YzExZjdjODNmMzc3Y2IyZjM5Y2M2OTAyMzQ3NDkyM2VlMzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYzRhN2QxY2M3OTZhYmEzZTQ2NzIzMzI3ZjUxN2U5ZjgxMTk4MmQyNTBmMDcwMjk4NmU0YjU3NjRhZDk1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljYTIxYWQ0NTVmNmU5ZTExOGZlYmNhMWJkZjk0ODAxYTBlN2IzYjc4YjA1YmQyMWRmZGMwN2EwYjAwMGU3OTIifQ"
+          "resource": "repo://src/arete/services/planning.py",
+          "version": "repo-file-v1:sha256:a5663a9d06093fed0b230fddf5b7cf2398b5ed2f1bffbfc735dfdf8e239d741f"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.1",
-    "at": "2026-10-09T21:28:29.291Z"
+    "at": "2026-10-21T06:33:32.768Z"
   }
 }

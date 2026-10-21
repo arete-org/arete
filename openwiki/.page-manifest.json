@@ -2,39 +2,46 @@
   "schemaVersion": 1,
   "pages": {
     "/openwiki/architecture.md": {
-      "pageVersion": "sha256:62f575ac681b29b66d9bc050c253b8452c6749582db82f9c229121bdb5a0baff",
+      "pageVersion": "sha256:f2cbd98f72701ff1220cd89ca9a214b5f3f8b733adfb058dc14f896555853218",
       "completedBy": "openwiki/0.7.1",
-      "completedRunId": "2b7f2f57-ff0e-4a4b-8e77-1e253bf2df05",
-      "gitHead": "0f50671f846ece9e5f898b685009dfbddf4a2908",
-      "sourceFingerprint": "sha256:112b0a4c6e37ee4d5f4ff7859db0d495334c48c2c6b06daa629fb4679e99efaf"
+      "completedRunId": "763d7711-f936-43bb-8613-1f865cfa4472",
+      "gitHead": "dbbde81404facc854c18f5bf22d256f2bff325ea",
+      "sourceFingerprint": "sha256:8b737e87fcadd9244a4393704e4fa59f2fcd53bf370d223b4caa467c303c73fa"
     },
     "/openwiki/coaching.md": {
-      "pageVersion": "sha256:59f0c03de77f5b75de5182ab242682b5a02e4e974d8f788ae0e240e3075ce56f",
+      "pageVersion": "sha256:9d56f507eadb86806718165419ab0147faf0172ee034b9dd7a6d5862c1244630",
       "completedBy": "openwiki/0.7.1",
-      "completedRunId": "2b7f2f57-ff0e-4a4b-8e77-1e253bf2df05",
-      "gitHead": "0f50671f846ece9e5f898b685009dfbddf4a2908",
-      "sourceFingerprint": "sha256:112b0a4c6e37ee4d5f4ff7859db0d495334c48c2c6b06daa629fb4679e99efaf"
+      "completedRunId": "763d7711-f936-43bb-8613-1f865cfa4472",
+      "gitHead": "dbbde81404facc854c18f5bf22d256f2bff325ea",
+      "sourceFingerprint": "sha256:8b737e87fcadd9244a4393704e4fa59f2fcd53bf370d223b4caa467c303c73fa"
     },
     "/openwiki/configuration.md": {
-      "pageVersion": "sha256:19c965a19b7f83c19c72b19242879f5a6ccbc8a77bf4a11c1002a2b640675aaa",
+      "pageVersion": "sha256:984aa85a9ea124c0208107a4fc15ecf94efe12f576017c5cf2c192d75a00d24c",
       "completedBy": "openwiki/0.7.1",
-      "completedRunId": "2b7f2f57-ff0e-4a4b-8e77-1e253bf2df05",
-      "gitHead": "0f50671f846ece9e5f898b685009dfbddf4a2908",
-      "sourceFingerprint": "sha256:112b0a4c6e37ee4d5f4ff7859db0d495334c48c2c6b06daa629fb4679e99efaf"
+      "completedRunId": "763d7711-f936-43bb-8613-1f865cfa4472",
+      "gitHead": "dbbde81404facc854c18f5bf22d256f2bff325ea",
+      "sourceFingerprint": "sha256:8b737e87fcadd9244a4393704e4fa59f2fcd53bf370d223b4caa467c303c73fa"
     },
     "/openwiki/operations.md": {
-      "pageVersion": "sha256:b0c7b711d054b61930017d5ebc7ff531d796e1b39e2e00adf82017f421a9b1f5",
+      "pageVersion": "sha256:3049fb4ef84085c29d49c31e08ec43fb7d3db17d3467a0bda4761d4c75455571",
       "completedBy": "openwiki/0.7.1",
-      "completedRunId": "2b7f2f57-ff0e-4a4b-8e77-1e253bf2df05",
-      "gitHead": "0f50671f846ece9e5f898b685009dfbddf4a2908",
-      "sourceFingerprint": "sha256:112b0a4c6e37ee4d5f4ff7859db0d495334c48c2c6b06daa629fb4679e99efaf"
+      "completedRunId": "763d7711-f936-43bb-8613-1f865cfa4472",
+      "gitHead": "dbbde81404facc854c18f5bf22d256f2bff325ea",
+      "sourceFingerprint": "sha256:8b737e87fcadd9244a4393704e4fa59f2fcd53bf370d223b4caa467c303c73fa"
+    },
+    "/openwiki/quickstart.md": {
+      "pageVersion": "sha256:9caea9b0d75a7e0579a51f5254237ce9c5e6f3c0417a2ebde3d162a297731783",
+      "completedBy": "openwiki/0.7.1",
+      "completedRunId": "763d7711-f936-43bb-8613-1f865cfa4472",
+      "gitHead": "dbbde81404facc854c18f5bf22d256f2bff325ea",
+      "sourceFingerprint": "sha256:8b737e87fcadd9244a4393704e4fa59f2fcd53bf370d223b4caa467c303c73fa"
     },
     "/openwiki/services.md": {
-      "pageVersion": "sha256:6b15164a9506eb38c50bd216ae42f8d2388046f45698ea9c77b0fab30fbf7358",
+      "pageVersion": "sha256:c6e2ddf47c8696a896044fb3e2f3476fada63c1ad8d542746b63604c9496e4b2",
       "completedBy": "openwiki/0.7.1",
-      "completedRunId": "2b7f2f57-ff0e-4a4b-8e77-1e253bf2df05",
-      "gitHead": "0f50671f846ece9e5f898b685009dfbddf4a2908",
-      "sourceFingerprint": "sha256:112b0a4c6e37ee4d5f4ff7859db0d495334c48c2c6b06daa629fb4679e99efaf"
+      "completedRunId": "763d7711-f936-43bb-8613-1f865cfa4472",
+      "gitHead": "dbbde81404facc854c18f5bf22d256f2bff325ea",
+      "sourceFingerprint": "sha256:8b737e87fcadd9244a4393704e4fa59f2fcd53bf370d223b4caa467c303c73fa"
     }
   }
 }

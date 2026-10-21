@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:19c965a19b7f83c19c72b19242879f5a6ccbc8a77bf4a11c1002a2b640675aaa",
+  "pageVersion": "sha256:984aa85a9ea124c0208107a4fc15ecf94efe12f576017c5cf2c192d75a00d24c",
   "claims": [
     {
       "id": "claim_798edbfb27154cd894b15920e1b3635a",
-      "statement": "The central Config class in src/arete/config.py reads all configuration from environment variables, using python-dotenv loaded values as fallback, and explicit defaults for every property.",
+      "statement": "The central Config class in src/arete/config.py reads all configuration from environment variables, using python-dotenv loaded values as fallback, and explicit defaults for most properties.",
       "evidence": [
         {
           "resource": "repo://src/arete/config.py#L14-L14",
@@ -32,59 +32,31 @@
     },
     {
       "id": "claim_688377ed72e347c8941ba63e1cc2062c",
-      "statement": "Every configuration property has an explicit default value that is used when the corresponding environment variable is not set or is empty.",
+      "statement": "Most configuration properties in the Config class have an explicit default value used when the environment variable is not set or empty; a few properties intentionally return None when unset (e.g., auto_sync_hour, llm_model, stt_api_key).",
       "evidence": [
         {
-          "resource": "repo://src/arete/config.py#L121-L121",
+          "resource": "repo://src/arete/config.py#L101-L101",
+          "version": "repo-lines-v1:sha256:9dc22965e08878ba01014cfc7c748df48f91e278b805014d67f20259db707bc2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWRjMjI5NjVlMDg4NzhiYTAxMDE0Y2ZjN2M3NDhkZjQ4ZjkxZTI3OGI4MDUwMTRkNjdmMjAyNTlkYjcwN2JjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWRjMjI5NjVlMDg4NzhiYTAxMDE0Y2ZjN2M3NDhkZjQ4ZjkxZTI3OGI4MDUwMTRkNjdmMjAyNTlkYjcwN2JjMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDM4YTkyODc4MWM1NWZlNmIyM2FhMjg2ZDgwZjA4NTdhZDczMzRlMTk2NTRkZDM0ZDM5ZDA0OGNkNzYzY2Q4MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjg1YzY0Y2EyZjRiNjA5OTk3M2RjYzE4MGM5YmY3OWFiMjkyOGYxZWUzYmI4MjRkMDMzYmI4Y2M4MGM2NjJiNCJ9"
+        },
+        {
+          "resource": "repo://src/arete/config.py#L117-L117",
+          "version": "repo-lines-v1:sha256:d41e41d73d04ea244fc72abf9f6ee3e53f71a2fcb6e92d167498b87adb87ca42:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQxZTQxZDczZDA0ZWEyNDRmYzcyYWJmOWY2ZWUzZTUzZjcxYTJmY2I2ZTkyZDE2NzQ5OGI4N2FkYjg3Y2E0MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQxZTQxZDczZDA0ZWEyNDRmYzcyYWJmOWY2ZWUzZTUzZjcxYTJmY2I2ZTkyZDE2NzQ5OGI4N2FkYjg3Y2E0MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODhhOTYwM2VkYzhhMzA1MDI3NmViNzYzZDU0MjEzMzA4NTY2MjgzZDY4MzJiMDE2NjI5Y2ZmZjAzZTgwOWZiYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDQ2MzZjMzgzZWY0ZjQwNzY2YmVkY2RlOWZlZmRlYWMwZTBjODY4OTU1NmY0YTkyZGRkMDk4YmM4MzA3MjVkYSJ9"
+        },
+        {
+          "resource": "repo://src/arete/config.py#L124-L124",
           "version": "repo-lines-v1:sha256:3035ae26b094ab3338b82e59d72bb3c0ba582cea52c9d095b01652209efbea41:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzAzNWFlMjZiMDk0YWIzMzM4YjgyZTU5ZDcyYmIzYzBiYTU4MmNlYTUyYzlkMDk1YjAxNjUyMjA5ZWZiZWE0MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzAzNWFlMjZiMDk0YWIzMzM4YjgyZTU5ZDcyYmIzYzBiYTU4MmNlYTUyYzlkMDk1YjAxNjUyMjA5ZWZiZWE0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzZjYmE2MjY3YTAwMWJhYTVkN2M0OTY2M2NiYzA4YTk0MWIwYTk1MzU3YzM0NjU1MDQ0MWZjM2ZmOGQwYTc5NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzk5MzJiOTZjNGMxNTM3YTUyMTk4YjQ0ZGJiMDEzMWVmZDM0YmZmOGFiMzM0YTNmYjFhNTA4NjNmYTkxNjUxOSJ9"
         },
         {
-          "resource": "repo://src/arete/config.py#L125-L125",
-          "version": "repo-lines-v1:sha256:29de653f2978b8fd4b330966ac80d532b55bb19ca3a79fa7a833517209ac7fa1:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjlkZTY1M2YyOTc4YjhmZDRiMzMwOTY2YWM4MGQ1MzJiNTViYjE5Y2EzYTc5ZmE3YTgzMzUxNzIwOWFjN2ZhMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjlkZTY1M2YyOTc4YjhmZDRiMzMwOTY2YWM4MGQ1MzJiNTViYjE5Y2EzYTc5ZmE3YTgzMzUxNzIwOWFjN2ZhMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzk5MzJiOTZjNGMxNTM3YTUyMTk4YjQ0ZGJiMDEzMWVmZDM0YmZmOGFiMzM0YTNmYjFhNTA4NjNmYTkxNjUxOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDRlMjc4YmFlM2JhMmJiOTBhN2QyODJmZjRjZTMyNGI3ZTkzNzgzNzFkOWUxYTQwMmU5ZGIzZmUyYjBkZTRjMCJ9"
+          "resource": "repo://src/arete/config.py#L206-L216",
+          "version": "repo-lines-v1:sha256:88f347fb3cc63057c66f75a7ab2b7bcea25b66821fd58943a1c7c3cfb9830760:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY0NjMyNTQ4OThiYWE4YjFhZWI1NjRiM2QyODU3ZDViZGM5ZjUxZjc3ZDUzYmM0MmFhYWNkMGY2MjZkNWZmOWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyMDc4MzkyZmZlOTM1MTNhNGNlYzA2MjQ2ODZhOTcyM2Y4MzgxYjM4YTNjNjBmYWQ0NmYzYjEwYTc2NjVlN2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3ZWNhYjdlNmY4ZWZiNWEwNGM3ZjQ3NmYzNDI5ZGNiYWQyYzBkMGI4YzYxYzBiYTA0NjRmZmNmNGZhYTk0ODUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiYzc4MzVjYTNiZjE1ZmQ4YTI4YWYzNmJjYjEzMDhjODBjYTA0MWM3NTdlNGMyYmQ3Yzc2NTY2NzA5OGQ4MTIifQ"
         },
         {
-          "resource": "repo://src/arete/config.py#L129-L129",
-          "version": "repo-lines-v1:sha256:1419b56d7bca0a976df7be04f73ed31ee316ecc61992714114a31c69e36635a4:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTQxOWI1NmQ3YmNhMGE5NzZkZjdiZTA0ZjczZWQzMWVlMzE2ZWNjNjE5OTI3MTQxMTRhMzFjNjllMzY2MzVhNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTQxOWI1NmQ3YmNhMGE5NzZkZjdiZTA0ZjczZWQzMWVlMzE2ZWNjNjE5OTI3MTQxMTRhMzFjNjllMzY2MzVhNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDRlMjc4YmFlM2JhMmJiOTBhN2QyODJmZjRjZTMyNGI3ZTkzNzgzNzFkOWUxYTQwMmU5ZGIzZmUyYjBkZTRjMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODk1Y2Q4ZDc4M2M3MTZmNTJlNjU3ZjM0NWZlNzg5MWEyNTc3MWU1OTk2YjRhMjVlZDM5N2U4NWM5Nzk2YmYwOSJ9"
+          "resource": "repo://src/arete/config.py#L250-L252",
+          "version": "repo-lines-v1:sha256:43114584035270a8cd3ffc1e318646ac3b554130249f34ad8e6944d631fc6f01:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzBjNmNhNzQzYTFiMmE3NWQyOGM3OGNiMDAwOWZjMzQ3N2Q3ZTFmODU4ZWIyYmYxMGEzZjEzMDNjNDdmZjg2OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2QxMmIxNDg5YTFkMDM1MjNiZGM2N2Y1ZTkwOTQyYzk4MjM5NTlmMzczYTRiMGUwNTY1MDE5YjQ0MjA5ZDJlZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTJhYzViNDYwMzdiZWJlNjAxODU2MWQzZDZlYTliNzQ3YzA0NDM0ODMzYTM4YWQ2YjczYjMyMmJiZDA3Nzk2OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODcxMzM4YzljODc1ZjQ0YjY2NWNjNTI2Y2ZiOGZlODRmY2JjNmQ5ODFkNGJhYTg4NGI0MTQwNjZlOTQ0M2NmOCJ9"
         },
         {
-          "resource": "repo://src/arete/config.py#L161-L161",
-          "version": "repo-lines-v1:sha256:b547e895bb575f21e4c17a625c240e4ee7b2c6f517b645adcafbcaee23d12c17:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjU0N2U4OTViYjU3NWYyMWU0YzE3YTYyNWMyNDBlNGVlN2IyYzZmNTE3YjY0NWFkY2FmYmNhZWUyM2QxMmMxNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjU0N2U4OTViYjU3NWYyMWU0YzE3YTYyNWMyNDBlNGVlN2IyYzZmNTE3YjY0NWFkY2FmYmNhZWUyM2QxMmMxNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWFjNDU2NDA5YWJmODIxZjQ5ZGQ2NmJkNThmOTU1YWQ3ZTRiYWVlMTEyY2RiMDE0NGI4YzRmMDlhZWExODExYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzk4YWVhZjkxODMxYWE4YTI4MjRjMjYzMjRjMDUzYjQ2YzlhNmFmNDc0OTI1Zjc3Nzg3MWRlYjUyZWY0Njk1NSJ9"
-        },
-        {
-          "resource": "repo://src/arete/config.py#L165-L165",
-          "version": "repo-lines-v1:sha256:3318cc8216da6d7adca0aaad77b232a9f2e7d0e4c13189679bfd53742b55bf70:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzMxOGNjODIxNmRhNmQ3YWRjYTBhYWFkNzdiMjMyYTlmMmU3ZDBlNGMxMzE4OTY3OWJmZDUzNzQyYjU1YmY3MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzMxOGNjODIxNmRhNmQ3YWRjYTBhYWFkNzdiMjMyYTlmMmU3ZDBlNGMxMzE4OTY3OWJmZDUzNzQyYjU1YmY3MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzk4YWVhZjkxODMxYWE4YTI4MjRjMjYzMjRjMDUzYjQ2YzlhNmFmNDc0OTI1Zjc3Nzg3MWRlYjUyZWY0Njk1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzg0YTBhYWIyODEyMjAyYTNiYWMzMGM4ZTM1NmIyMjZjYjZhZjA3ZGNmZWRkMmEzNDFlOTEwODZkMmZhNjgwYSJ9"
-        },
-        {
-          "resource": "repo://src/arete/config.py#L179-L179",
-          "version": "repo-lines-v1:sha256:509e9e09283d96fdf81d202ffa1828d770b9348c8bfe9753b05c7ddb3eb6a048:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTA5ZTllMDkyODNkOTZmZGY4MWQyMDJmZmExODI4ZDc3MGI5MzQ4YzhiZmU5NzUzYjA1YzdkZGIzZWI2YTA0OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTA5ZTllMDkyODNkOTZmZGY4MWQyMDJmZmExODI4ZDc3MGI5MzQ4YzhiZmU5NzUzYjA1YzdkZGIzZWI2YTA0OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTFkNWQ5NDZlNjY0ZGIzYjc1NTdkNWUzNmY0Mjg5NmIyMmYyYzI5ZmFiMGY0MzFiZmM3MTQ3OWM4NjVjZmU0ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzYyMjk4YmNmMmIxNzliOWRhNDJmNzY5YzlkYzJhNDdhN2JmYWMyMTE2ZDMzZTYyODMxYzc3NGJlNTdjYTBmYyJ9"
-        },
-        {
-          "resource": "repo://src/arete/config.py#L183-L183",
-          "version": "repo-lines-v1:sha256:9a09fbdd5bc8fc0d8b92ddc9a0da82b78c9cdc6d0349cf6f644b9c0c884cc270:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWEwOWZiZGQ1YmM4ZmMwZDhiOTJkZGM5YTBkYTgyYjc4YzljZGM2ZDAzNDljZjZmNjQ0YjljMGM4ODRjYzI3MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWEwOWZiZGQ1YmM4ZmMwZDhiOTJkZGM5YTBkYTgyYjc4YzljZGM2ZDAzNDljZjZmNjQ0YjljMGM4ODRjYzI3MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzYyMjk4YmNmMmIxNzliOWRhNDJmNzY5YzlkYzJhNDdhN2JmYWMyMTE2ZDMzZTYyODMxYzc3NGJlNTdjYTBmYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2RjN2Y0NGJiNjI4Zjc5MzZiYmU5YzA5YTQwYTU4OGU0NjNhOGI0YTY0ZDliYjlhZGUyYTg1MWNmMzAwN2ExNSJ9"
-        },
-        {
-          "resource": "repo://src/arete/config.py#L206-L206",
-          "version": "repo-lines-v1:sha256:7a2d720456abe974f13be842c3bfdc6bcd75fef419ff3a60e86f5fdedd34370d:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2EyZDcyMDQ1NmFiZTk3NGYxM2JlODQyYzNiZmRjNmJjZDc1ZmVmNDE5ZmYzYTYwZTg2ZjVmZGVkZDM0MzcwZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2EyZDcyMDQ1NmFiZTk3NGYxM2JlODQyYzNiZmRjNmJjZDc1ZmVmNDE5ZmYzYTYwZTg2ZjVmZGVkZDM0MzcwZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzk5YmVkMzdjYmFiNzE2YTM5NDc0OTVmYjZiMWRmMzVmNWZlMGU2NzcwOGVmZWZhNDU5NjE5ZTdjYTE0NWFjZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDBjZGQ1MWU1MWZkMDBjOTM1N2E2ZGE4ODIyY2U5NjRiNzI0MmVkNjRmZGJjOWZmZmZkMDNhYjU0NWFmY2M0ZiJ9"
-        },
-        {
-          "resource": "repo://src/arete/config.py#L211-L211",
-          "version": "repo-lines-v1:sha256:da02a0906ad063ab064099397bf7e111217d591fc4669fe1fe3da9414c188388:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGEwMmEwOTA2YWQwNjNhYjA2NDA5OTM5N2JmN2UxMTEyMTdkNTkxZmM0NjY5ZmUxZmUzZGE5NDE0YzE4ODM4OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGEwMmEwOTA2YWQwNjNhYjA2NDA5OTM5N2JmN2UxMTEyMTdkNTkxZmM0NjY5ZmUxZmUzZGE5NDE0YzE4ODM4OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWRjMGQwNjI1OWU0MGEwM2U0ZTFjMWYxYWYwZmZkY2M5NzQwZjljYmU4NTM4NTc1OTI4NjkwODk0NGIxMjA3NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzBjY2Q1NzkxYTZjNGFkNzdjYTFlZWQwNzBlNzhlZjA0ZjE5OTMwMDU1MWYzNzc2MjI5NTM0M2Q5NzA0YmUzNSJ9"
-        },
-        {
-          "resource": "repo://src/arete/config.py#L232-L237",
-          "version": "repo-lines-v1:sha256:e28181e084508f7ab6c89cf46e5bd20e2b825070a327de4b717a5a8cb521e46b:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmQzYjg4N2ZkZWE3ZGY1N2JmOTEzMTZmYTlhNmU5MDcwZWViOWYyMGE0OWZjMGQ4ZTZhMTczNmZmNjVhNDMwMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjYwMDkxMGY4YTQ2MjBkZGQxMDVmMTQ2ZmFhNGEyM2M2ZjY0MGVlZWYxMWM3MjcyNzZkOTI4Njc4MTU3M2ZmYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTA3Njc3NmM4ODQ0NDc3YjI2NjM5NzUwMjNkZjc1MjVhZmFhNDM0ZGVhYzgwY2RjNDE4Y2Y3YzBmNmExMzE2YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWU3NTNiOTMwZDU5NzUyNGY5Y2QyN2U1NTM4NDlhOGNjYWI3MTlmMmI4Y2RmY2VjZGM5ZDc5Yzc1ZmY2OTgzNCJ9"
-        },
-        {
-          "resource": "repo://src/arete/config.py#L250-L250",
-          "version": "repo-lines-v1:sha256:2d7420d0b4f07d5cd2da5dcd5ff63fda99cbd59a5f88ccf45da3ac3d9f9686b4:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmQ3NDIwZDBiNGYwN2Q1Y2QyZGE1ZGNkNWZmNjNmZGE5OWNiZDU5YTVmODhjY2Y0NWRhM2FjM2Q5Zjk2ODZiNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmQ3NDIwZDBiNGYwN2Q1Y2QyZGE1ZGNkNWZmNjNmZGE5OWNiZDU5YTVmODhjY2Y0NWRhM2FjM2Q5Zjk2ODZiNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGUwN2NjNDVlMTY5YTlmYTdhMTI4YzUxYTVhZDg5MGRkYjRlMGFjZjNiZDg2YWMzYWUyNjYxNWY3N2NlMmJlZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjkxNjAwMWMxZGUzMDMwZmEyM2Q0YjMzM2QwNjc3Mzg2YmQzYTlmMTNmZjg0NmM1ODkwYTUzMWNhOTc1YjA3NyJ9"
-        },
-        {
-          "resource": "repo://src/arete/config.py#L56-L56",
-          "version": "repo-lines-v1:sha256:1f5e15de35b1c357128d14ae8667186c062e143303af143ed700009ccd8e07c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWY1ZTE1ZGUzNWIxYzM1NzEyOGQxNGFlODY2NzE4NmMwNjJlMTQzMzAzYWYxNDNlZDcwMDAwOWNjZDhlMDdjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWY1ZTE1ZGUzNWIxYzM1NzEyOGQxNGFlODY2NzE4NmMwNjJlMTQzMzAzYWYxNDNlZDcwMDAwOWNjZDhlMDdjMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDI0NGY5MGY4NWMwMDhiODcxNTY5ZDI0OWJhZmM4OWI3ZDczYjI1NjJkYTQxZGQ4M2E2MDQyZWM2MmVjMjgxOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWUyYjJmYzg1ZTY0YmE0NjY1NjRhOGVjZjY3MzVlNGY0MjBkOWJlYjJjOGVmZmY5MDQ4YTNlZjhlYWYzODJhMSJ9"
-        },
-        {
-          "resource": "repo://src/arete/config.py#L98-L98",
-          "version": "repo-lines-v1:sha256:9dc22965e08878ba01014cfc7c748df48f91e278b805014d67f20259db707bc2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWRjMjI5NjVlMDg4NzhiYTAxMDE0Y2ZjN2M3NDhkZjQ4ZjkxZTI3OGI4MDUwMTRkNjdmMjAyNTlkYjcwN2JjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWRjMjI5NjVlMDg4NzhiYTAxMDE0Y2ZjN2M3NDhkZjQ4ZjkxZTI3OGI4MDUwMTRkNjdmMjAyNTlkYjcwN2JjMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDM4YTkyODc4MWM1NWZlNmIyM2FhMjg2ZDgwZjA4NTdhZDczMzRlMTk2NTRkZDM0ZDM5ZDA0OGNkNzYzY2Q4MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjg1YzY0Y2EyZjRiNjA5OTk3M2RjYzE4MGM5YmY3OWFiMjkyOGYxZWUzYmI4MjRkMDMzYmI4Y2M4MGM2NjJiNCJ9"
+          "resource": "repo://src/arete/config.py#L301-L301",
+          "version": "repo-lines-v1:sha256:02426ad98ef35b7cf2b5015a012268ed2735069e7c6ca783a06d67af1b676b6d:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDI0MjZhZDk4ZWYzNWI3Y2YyYjUwMTVhMDEyMjY4ZWQyNzM1MDY5ZTdjNmNhNzgzYTA2ZDY3YWYxYjY3NmI2ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDI0MjZhZDk4ZWYzNWI3Y2YyYjUwMTVhMDEyMjY4ZWQyNzM1MDY5ZTdjNmNhNzgzYTA2ZDY3YWYxYjY3NmI2ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNhMWZhNGNmZDM4MzIxZjNhNWEwYzhhYThiOTdmNjgxNDVhZGVlZjZlZWJiNjkyODY2ZTM5NTM4Y2M4MjE2NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmFiOTU2MjcyMWJmMWVhZWZiODE5ZmJhOTUyMDcwY2Q2NjIxZWMwODc3YzhiYmQwZTJhNDQ2NjNmOTdmNDA5NCJ9"
         }
       ]
     },
@@ -93,11 +65,11 @@
       "statement": "Some configuration properties include runtime validation and raise ValueError when input is invalid (e.g., numeric range checks, allowed strings).",
       "evidence": [
         {
-          "resource": "repo://src/arete/config.py#L115-L116",
+          "resource": "repo://src/arete/config.py#L118-L119",
           "version": "repo-lines-v1:sha256:af0013e238050b6e690d90a4d438d78d2172e56d4916901fb84230e75d964c3d:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjg2NjRmMzIyZTZjNDUwYzU4MzZiZGZmMzdiNTBiOTJmZDU4N2FjMDhhMzg1NTI4YTViYTc1NzI2MGU3MWIyZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDU0YTlkNDgyYjExNGYwZjQ0MWM4ZjhmNDIwYjliMjIxNGE0YzI2YTI2OTY5MjEzNmQ5NTA2N2I0ZDczYzc4MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzczYjZjMGI0Y2JmOTZlMmQ2MDRjZDJhZTMwMzIyMGEyZWVjMmNkOWFmODVmZGNiMWIxYzkzMTE1OTdhY2I1MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTk2ZTY5M2VmMmY2MjJmMzM4YTQxMTA3MGVmNGI1MDQ0MTliNmY4ODY2YjBhYmFjOTU4MDgyYmNhODUxODkwMCJ9"
         },
         {
-          "resource": "repo://src/arete/config.py#L225-L226",
+          "resource": "repo://src/arete/config.py#L218-L219",
           "version": "repo-lines-v1:sha256:e0ea7e728f13ebe805aa929688818a84c53034378c5bd37de7556d0e4e84cc7f:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODQ4ZDY0MzNiNGY0ZGQzZmZlZDYyMWMzNTJiOGVkMDRlZDExMmI3MjdhZTBiOTY0NzljMjY5ZTAyZDAzN2Q2ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTc5Nzg5NTUwY2MzY2YyNTMzOGEzZWYyNDczNDNkYTcyNDNkNWJiNDgxYjA1YjdjNmU5ZmIxZjFlNTIwNzM0YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjY4NDM2ZmE1MzljNTAwMzMyOGZjNzQzZDkyNTk1MDk2MTc1MjA2NTBmOTg2MjQ2YjVkOWFlNmZlN2FiMTI0NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjI3ZGJhOWY0MzljN2EyZWY3NmYxZGY4NjkzNDc1OWY0MjdhYmE0MWNhOTRiNzZmOWJkNTMyOTA4OWZmNmFiZiJ9"
         }
       ]
@@ -107,24 +79,28 @@
       "statement": "The is_remote_db property distinguishes between local DuckDB databases and remote MotherDuck databases by checking if ATRE_DB starts with md:.",
       "evidence": [
         {
-          "resource": "repo://src/arete/config.py#L54-L61",
+          "resource": "repo://src/arete/config.py#L45-L52",
           "version": "repo-lines-v1:sha256:3a9fe843b3e92f5c4bad683d738ff5bbac51eacc496d11fd5bdbe9f2d6f95e94:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIxMzZlY2Y4OTA1ZDQ4ZTkwMzE0YzQ0NDhhNGFhNGJhZWMwOTZiNmZlNjEzZTU5ZjcyYzQ4YmUyNjgzOWIxZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2Q0YTEwMzg0NTMzNTE0YTM2OWNlZWMxMDA3M2M2OTRkNzY4MzU1NmRlMDg4Nzg5MWYwYjIxMTA5NjU2Mzk5OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzk1ODYzNDY0M2ZiZTk3NTJjNzE3NzQ4NWFkMjlkNzFkZTI0MjdhODkwNTBkZjA2MGQwYjhhZjExYWJmYzM0ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWU1NjY2ZjU3YjZkMDdkN2IwZTNkOTc3OGUzMzUzYTYwMzhhNWVjYzg3OGNjNGY5ZTkzYjEyZDRiNzJmMmNjMCJ9"
         }
       ]
     },
     {
       "id": "claim_275d5406698641afbe46702d534b3886",
-      "statement": "The data_dir property adapts based on database mode: locally it uses the database file's parent directory, while remotely it defaults to /tmp/arete-data.",
+      "statement": "The storage_root property adapts its base path depending on whether the database is local or remote: locally it uses the database file's parent directory, while remotely it defaults to /tmp/arete-data. The data_dir property further scopes this by athlete ID.",
       "evidence": [
         {
-          "resource": "repo://src/arete/config.py#L69-L81",
-          "version": "repo-lines-v1:sha256:3b348d069eaca041d13cddb97dce476d8951a024df0d35f9b27600579e46f228:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmNGZkMGNhMTY1Y2EwNGJiZmRkOGM5Y2Y4OTZkYmFlZjY1ZjJmNTdmYzQwYzg3MmQ0NjU5MWMyYTQzYTdmNWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE3ZjFlNTEyZDliNmQyMTFlMjllNGMxYTllMWRmYzRiYWFkNjhmMjU0OGQwMGJhYzE4NzQxMDhhOTRkMjUwMDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmODQ2NjM0YjZkYTQzYjgyOGNhZmU5NzdmMjBhNTRkMjMyMDQxOTgzNGIxMTM4ZTUwNmQ2NGIyNmI0YTg0MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNjOTY5OTc3ZTAzZWQ2NTY5MTdmZGJiMGJkZTc2ZWFlNWY5ZmJjNTkzZmNkNDY3MzMyZjEzNzczOTYzZTBhNWUifQ"
+          "resource": "repo://src/arete/config.py#L60-L72",
+          "version": "repo-lines-v1:sha256:0c4af19cf5d49ea8bbcbcab7ce30a99f989770670b42942a9e0a1b3c764d38da:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzODk1YTU0Y2Q2YjIwOTVmYWQ4YzY3YzkyYzFlMGQ3ODkzMmVkYThhZGQwMGYxMzdmNjUwMGIzNTk4YmIxODciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE3ZjFlNTEyZDliNmQyMTFlMjllNGMxYTllMWRmYzRiYWFkNjhmMjU0OGQwMGJhYzE4NzQxMDhhOTRkMjUwMDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmODQ2NjM0YjZkYTQzYjgyOGNhZmU5NzdmMjBhNTRkMjMyMDQxOTgzNGIxMTM4ZTUwNmQ2NGIyNmI0YTg0MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAyMjFmZjRiZGUzY2RiNGMwZTk2MGYwZTJmZGJmMmJhNTA1YTkzYTJlYzM4YzA5MTZmOGJhYjcxYjg4ZjMzYTEifQ"
+        },
+        {
+          "resource": "repo://src/arete/config.py#L75-L80",
+          "version": "repo-lines-v1:sha256:87f63f461ffb9a577ad943cabead949bed80e5b7ffbe11edb560961bd39488c4:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmY0ZmQwY2ExNjVjYTA0YmJmZGQ4YzljZjg5NmRiYWVmNjVmMmY1N2ZjNDBjODcyZDQ2NTkxYzJhNDNhN2Y1YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWZkOTc1NjAzYjE1NjQ1MzA1ZDJjYzNmZmU2ZDc5Zjc0N2UxNTNhNjJmY2M0ODVmZjhmNmRmMTI2NjEwMjhmNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2Q1YzY2MWE1Zjc2MmMyODFhY2QxOWI1NGYzZDhhNTgxNTY4ZTg1YmI0MTIyNWJlNzdmZmQyOWVkN2FjNmIxOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2M5Njk5NzdlMDNlZDY1NjkxN2ZkYmIwYmRlNzZlYWU1ZjlmYmM1OTNmY2Q0NjczMzJmMTM3NzM5NjNlMGE1ZSJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.1",
-    "at": "2026-10-09T21:28:29.291Z"
+    "at": "2026-10-21T06:33:32.768Z"
   }
 }

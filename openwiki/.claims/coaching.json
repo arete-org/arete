@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:59f0c03de77f5b75de5182ab242682b5a02e4e974d8f788ae0e240e3075ce56f",
+  "pageVersion": "sha256:9d56f507eadb86806718165419ab0147faf0172ee034b9dd7a6d5862c1244630",
   "claims": [
     {
       "id": "claim_69ecfc24203c4a0b8cddd285919acd25",
@@ -8,19 +8,19 @@
       "evidence": [
         {
           "resource": "repo://src/arete/agent/capabilities/registry.py",
-          "version": "repo-file-v1:sha256:38fc4de94ac012a4de86018dcf8916fd92f51b72fac5e21a7c955bd281c4c105"
+          "version": "repo-file-v1:sha256:be625de1d6dfdd8f62e87f36b9c59606dc2990385a4259ffa54c272f9bc9cc5b"
         },
         {
           "resource": "repo://src/arete/agent/factory.py",
-          "version": "repo-file-v1:sha256:273ee4375f041376961514dc93446f5073ccee3a92187a7e7a56ab5f9aa21e09"
+          "version": "repo-file-v1:sha256:db0434396fc8ceb4f3bb19e084c7d11669aca594f812855d66cfb25b83eae5bb"
         },
         {
           "resource": "repo://src/arete/agent/profiles/catalog.py",
-          "version": "repo-file-v1:sha256:76156bd4724302bbf54d002d3c6ca2543f3f1b20d46b2839a5369c628f3d4ffc"
+          "version": "repo-file-v1:sha256:8b11357ea21cc34dfb00bcebd669bb870f67f1cd8e612c83b06b0a87f26b6366"
         },
         {
           "resource": "repo://src/arete/agent/runtime/context.py",
-          "version": "repo-file-v1:sha256:7ec9aada23ed8c6d6307220c50c84d2384bcd3001e4ec29c64b5f2c20f99ac5e"
+          "version": "repo-file-v1:sha256:13d2fec81adf1494d0f70d3cb30f93cd57fbf4ccff56db382b04230b784a8bf8"
         }
       ]
     },
@@ -30,7 +30,7 @@
       "evidence": [
         {
           "resource": "repo://src/arete/agent/factory.py",
-          "version": "repo-file-v1:sha256:273ee4375f041376961514dc93446f5073ccee3a92187a7e7a56ab5f9aa21e09"
+          "version": "repo-file-v1:sha256:db0434396fc8ceb4f3bb19e084c7d11669aca594f812855d66cfb25b83eae5bb"
         }
       ]
     },
@@ -40,7 +40,7 @@
       "evidence": [
         {
           "resource": "repo://src/arete/agent/profiles/catalog.py",
-          "version": "repo-file-v1:sha256:76156bd4724302bbf54d002d3c6ca2543f3f1b20d46b2839a5369c628f3d4ffc"
+          "version": "repo-file-v1:sha256:8b11357ea21cc34dfb00bcebd669bb870f67f1cd8e612c83b06b0a87f26b6366"
         }
       ]
     },
@@ -50,7 +50,7 @@
       "evidence": [
         {
           "resource": "repo://src/arete/agent/capabilities/registry.py",
-          "version": "repo-file-v1:sha256:38fc4de94ac012a4de86018dcf8916fd92f51b72fac5e21a7c955bd281c4c105"
+          "version": "repo-file-v1:sha256:be625de1d6dfdd8f62e87f36b9c59606dc2990385a4259ffa54c272f9bc9cc5b"
         }
       ]
     },
@@ -60,13 +60,13 @@
       "evidence": [
         {
           "resource": "repo://src/arete/agent/runtime/context.py",
-          "version": "repo-file-v1:sha256:7ec9aada23ed8c6d6307220c50c84d2384bcd3001e4ec29c64b5f2c20f99ac5e"
+          "version": "repo-file-v1:sha256:13d2fec81adf1494d0f70d3cb30f93cd57fbf4ccff56db382b04230b784a8bf8"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.7.1",
-    "at": "2026-10-09T21:28:29.291Z"
+    "at": "2026-10-21T06:33:32.768Z"
   }
 }

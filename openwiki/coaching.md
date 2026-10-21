@@ -3,9 +3,6 @@ type: concept
 title: Coaching Runtime & Agent System
 description: Overview of the agent framework, profiling, capabilities, and runtime execution model for the Arete coaching system.
 tags: [agent, runtime, coaching, capabilities, profiles]
-verified:
-  - by: openwiki/0.7.1
-    at: 2026-10-09T21:28:29.291Z
 sources:
   - id: openwiki-source-fd27222adde3627c129401e9
     resource: repo://src/arete/agent/capabilities/registry.py
@@ -16,6 +13,9 @@ sources:
   - id: openwiki-source-1a0749b69bd4f1dda488e120
     resource: repo://src/arete/agent/runtime/context.py
 generated: { by: "openwiki/0.7.1", at: "2026-10-09T21:28:29.291Z" }
+verified:
+  - by: openwiki/0.7.1
+    at: 2026-10-21T06:33:32.768Z
 ---
 
 ## Overview
