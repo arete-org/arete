@@ -411,6 +411,37 @@ def test_memory_import_is_once_and_scope_isolated(athlete):
     assert "resurrected" not in memory.read_file("notes.md").content
 
 
+def test_two_concurrent_imports_both_succeed_with_one_set_of_rows(athlete, monkeypatch):
+    """ARE-81: another run's import commits inside this one's snapshot."""
+    from write_race import race
+
+    root = memory.memory_root()
+    root.mkdir(parents=True)
+    (root / "notes.md").write_text("old")
+    with race(
+        monkeypatch, r"INSERT INTO app.coach_memory_imports", memory.ensure_imported
+    ):
+        memory.ensure_imported()
+    with db_connection() as con:
+        assert con.execute(
+            "SELECT count(*) FROM app.coach_memory_imports WHERE athlete_id=8123"
+        ).fetchone() == (1,)
+        assert con.execute(
+            "SELECT path, content FROM app.coach_memory_files WHERE athlete_id=8123"
+        ).fetchall() == [("notes.md", "old")]
+
+
+def test_a_hidden_import_marker_is_not_claimed_again():
+    """ARE-81: an unprovisioned athlete's marker is invisible, yet it exists."""
+    with athlete_scope(8124):
+        memory.ensure_imported()
+        memory.ensure_imported()
+    with db_connection() as con:
+        assert con.execute(
+            "DELETE FROM app.coach_memory_imports WHERE athlete_id=8124 RETURNING 1"
+        ).fetchall() == [(1,)]
+
+
 def test_forget_fact_cannot_delete_a_newer_revision(athlete):
     from arete.agent.tools.fact_memory import forget_fact
     from arete.services import athlete_facts

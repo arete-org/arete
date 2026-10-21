@@ -78,10 +78,30 @@ def _name(name: str, *, writable: bool = False) -> str:
 
 
 def ensure_imported() -> None:
-    """Claim and import once, including an empty source; deletion never reimports."""
+    """Claim and import once, including an empty source; deletion never reimports.
+
+    The marker's primary key is the claim. A run that loses it to a concurrent
+    one rolls back whole, and the winner's import stands (ARE-81).
+    """
+    try:
+        _import_once()
+    except (duckdb.ConstraintException, duckdb.TransactionException):
+        with db_connection() as con:
+            if not con.execute(
+                f"SELECT 1 FROM app.visible_coach_memory_imports WHERE {_OWNER}"
+            ).fetchone():
+                raise
+
+
+def _import_once() -> None:
     with ledger_lock(), transaction() as con:
         if con.execute(
             f"SELECT 1 FROM app.visible_coach_memory_imports WHERE {_OWNER}"
+        ).fetchone():
+            return
+        # A marker hidden from the view (deleted, or its athlete) still claims.
+        if not con.execute(
+            "INSERT INTO app.coach_memory_imports (athlete_id) VALUES (getvariable('arete_athlete_id')) ON CONFLICT DO NOTHING RETURNING athlete_id"
         ).fetchone():
             return
         files: list[tuple[str, str]] = []
@@ -109,9 +129,6 @@ def ensure_imported() -> None:
                     raise ValueError("Invalid legacy journal file")
                 files.append((path.name, path.read_text(encoding="utf-8")))
         _validate_files(files)
-        con.execute(
-            "INSERT INTO app.coach_memory_imports (athlete_id) VALUES (getvariable('arete_athlete_id'))"
-        )
         if files:
             con.executemany(
                 "INSERT INTO app.coach_memory_files (path,content) VALUES (?,?)", files
