@@ -31,9 +31,9 @@ export function LoadCard({
       title="Forme de fond et fatigue"
       question="Où en sont la forme de fond, la fatigue et la fraîcheur ?"
       card={card}
-      secondaryLabels={['Fraîcheur', 'Fatigue', 'ACWR']}
+      secondaryLabels={['Fraîcheur', 'Fatigue']}
       term="ctl"
-      secondaryTerms={['tsb', 'atl', 'acwr']}
+      secondaryTerms={['tsb', 'atl']}
       previousLabel={previousLabel}
       loading={loading}
       error={error}

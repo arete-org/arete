@@ -12,12 +12,12 @@ export const PERIOD_LABEL: Record<Period, string> = {
 };
 
 export const PERIOD_SHORT: Record<Period, string> = {
-  '7d': '7 J',
-  '30d': '30 J',
-  '90d': '90 J',
-  '6m': '6 M',
-  '1y': '1 AN',
-  all: 'TOUT',
+  '7d': '7 j',
+  '30d': '30 j',
+  '90d': '90 j',
+  '6m': '6 mois',
+  '1y': '1 an',
+  all: 'Tout',
 };
 
 /** Names the previous window, article already contracted for "à". */

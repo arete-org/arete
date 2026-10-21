@@ -147,8 +147,19 @@ def _analytics(params: dict[str, Any] | None = None) -> dict[str, Any]:
         name: {k: v for k, v in card.items() if k != "series"}
         for name, card in overview.get("cards", {}).items()
     }
+    read = {**overview, "cards": cards}
+    if "records" in overview:
+        # Session names stay on the browser page, as for the year review.
+        records = overview["records"]
+        read["records"] = {
+            **records,
+            "runs": [
+                {k: v for k, v in run.items() if k != "session_name"}
+                for run in records["runs"]
+            ],
+        }
     return {
-        "overview": {**overview, "cards": cards},
+        "overview": read,
         "trends": "analytics toolkit: get_workload(days), get_fitness(days)",
     }
 

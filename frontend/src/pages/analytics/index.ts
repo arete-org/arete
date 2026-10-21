@@ -13,3 +13,7 @@ export { CadenceCard } from './cards/CadenceCard';
 export { VamCard } from './cards/VamCard';
 export { DescentCard } from './cards/DescentCard';
 export { RecoveryCard } from './cards/RecoveryCard';
+export { RecordsCard } from './cards/RecordsCard';
+export { RiskCard } from './cards/RiskCard';
+export { WeeksCard } from './cards/WeeksCard';
+export { Answers } from './Answers';

@@ -7,6 +7,7 @@
 /** Each term with its article, for « Qu’est-ce que … ? ». */
 export const GLOSSARY_TERMS = {
   acwr: 'le ratio charge aiguë / chronique (ACWR)',
+  monotonie: 'la monotonie',
   tss: 'la charge d’entraînement (TSS)',
   ctl: 'la forme de fond (CTL)',
   atl: 'la fatigue (ATL)',
