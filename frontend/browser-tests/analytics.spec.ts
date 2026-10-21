@@ -26,6 +26,54 @@ const names = [
   'sleep',
   'resting_hr',
 ];
+const ANSWERS = [
+  {
+    id: 'ready',
+    question: 'Suis-je prêt ?',
+    text: 'Aujourd’hui, préparation à 78/100 et fraîcheur à +6 (neutre) : feu vert pour une séance dure ou un test, d’après ta montre Garmin et tes séances.',
+    tone: 'good',
+    period: 'aujourd’hui',
+    source: 'ta montre Garmin et tes séances',
+  },
+  {
+    id: 'progress',
+    question: 'Est-ce que je progresse ?',
+    text: 'Sur les 30 derniers jours, ta forme de fond passe de 38 à 44 (+6) et ton allure gagne 4 s/km par mois : tu progresses, d’après tes séances et tes courses.',
+    tone: 'good',
+    period: 'sur les 30 derniers jours',
+    source: 'tes séances et tes courses',
+  },
+  {
+    id: 'risk',
+    question: 'Où est le risque ?',
+    text: 'Sur les 7 derniers jours, ta charge monte vite, n’ajoute rien cette semaine (ACWR 1,38, monotonie 1,4, forme de fond +4,2 en 7 jours), d’après tes séances.',
+    tone: 'warn',
+    period: 'sur les 7 derniers jours',
+    source: 'tes séances',
+  },
+  {
+    id: 'works',
+    question: 'Qu’est-ce qui marche ?',
+    text: 'Sur les 12 dernières semaines, tes semaines à 4 jours d’entraînement ou plus font monter ta forme de fond de +2,1 en moyenne, contre -0,6 pour les autres : la régularité paie, d’après tes séances.',
+    tone: 'good',
+    period: 'sur les 12 dernières semaines',
+    source: 'tes séances',
+  },
+];
+const RECORDS = {
+  runs: [
+    { name: '1 km', distance_m: 1000, time_sec: 226, time_display: '3:46', pace_display: '3:46 /km', date: '2026-10-08', session_id: 12, session_name: 'Fractionné 5×1000' },
+    { name: '5 km', distance_m: 5000, time_sec: 1330, time_display: '22:10', pace_display: '4:26 /km', date: '2026-09-20', session_id: 9, session_name: 'Tempo' },
+    { name: 'Semi-marathon', distance_m: 21097.5, time_sec: 5880, time_display: '1:38:00', pace_display: '4:39 /km', date: '2026-04-12', session_id: 4, session_name: 'Semi de Paris' },
+  ],
+  lifts: [
+    { exercise: 'Squat', e1rm_kg: 116.7, weight_kg: 100, reps: 5, date: '2026-10-10', session_id: 30, sessions: 14 },
+  ],
+  runs_scanned: 64,
+  runs_limit: 100,
+  sessions_limit: 100,
+};
+
 function overview(period: string) {
   const cards = Object.fromEntries(
     names.map((name) => [
@@ -93,6 +141,8 @@ function overview(period: string) {
   });
   Object.assign(cards.descent, { series: [{ min: -5, max: -2, pace_sec_km: 300, minutes: 34 }] });
   return {
+    answers: ANSWERS,
+    records: RECORDS,
     period,
     bucket: 'day',
     start: '2026-10-12',
@@ -137,9 +187,34 @@ for (const width of [1440, 390]) {
     });
     await page.goto('/analytics?period=7d');
     await expect(page.getByText('42 km', { exact: true })).toBeVisible();
-    // No Records card since Strava's retirement (ARE-126; ARE-139 brings it back).
-    await expect(page.locator('.analysis-card')).toHaveCount(14);
+    // The four answers open the page, before any card, and fit on the first screen.
+    const answers = page.locator('.analysis-answer');
+    await expect(answers).toHaveCount(4);
+    for (const [index, answer] of ANSWERS.entries()) {
+      await expect(answers.nth(index).getByRole('heading', { level: 3 })).toHaveText(answer.question);
+      await expect(answers.nth(index)).toContainText(answer.text);
+    }
+    expect(
+      await page.evaluate(() => {
+        const first = document.querySelector('.analysis-answers');
+        const card = document.querySelector('.analysis-section');
+        return !!first && !!card && !!(first.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }),
+    ).toBe(true);
+    const firstAnswer = await answers.first().boundingBox();
+    expect(firstAnswer && firstAnswer.y + firstAnswer.height).toBeLessThanOrEqual(1000);
+    await expect(
+      page.getByRole('heading', { level: 2 }).filter({ hasText: /\?$/ }),
+    ).toHaveText(['Suis-je prêt ?', 'Est-ce que je progresse ?', 'Où est le risque ?', 'Qu’est-ce qui marche ?']);
+    // Records came back from the Garmin streams (ARE-139): fifteen cards, one without a chart.
+    await expect(page.locator('.analysis-card')).toHaveCount(15);
     await expect(page.locator('.recharts-wrapper')).toHaveCount(13);
+    const records = page
+      .locator('.analysis-card')
+      .filter({ has: page.getByRole('heading', { name: 'Records', exact: true }) });
+    await expect(records.getByRole('link', { name: /^1 km en 3:46/ })).toHaveAttribute('href', '/log/sessions/12');
+    await expect(records).toContainText('116,7 kg');
+    await expect(page.getByText(/Chiron/)).toHaveCount(0);
     const selector = page.getByRole('group', { name: 'Période analysée' });
     for (const [label, value] of [
       ['30 J', '30d'],
@@ -171,7 +246,7 @@ for (const width of [1440, 390]) {
     expect((path?.match(/M/g) ?? []).length).toBe(2); // A real gap, not a line across the absent sample.
     await page
       .getByRole('navigation', { name: 'Sections des analyses' })
-      .getByRole('button', { name: 'Charge', exact: true })
+      .getByRole('button', { name: 'Prêt ?', exact: true })
       .click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,

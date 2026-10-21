@@ -1,21 +1,26 @@
 import type { ReactNode } from 'react';
+import type { AnswerId } from '@/types';
 
 export interface SectionDef {
   id: string;
+  /** The question the section's cards serve. */
   title: string;
-  /** What this section is for, in one sentence. */
+  /** Its label in the sticky jump bar, short enough for a phone. */
+  short: string;
+  /** The server answer that opens the page for this question. */
+  answer: AnswerId;
+  /** What the cards below show, in one sentence. */
   intro: string;
 }
 
 export const SECTIONS: SectionDef[] = [
-  { id: 'charge', title: 'Charge', intro: 'Le volume réalisé et l’équilibre entre forme de fond, fatigue et fraîcheur.' },
-  { id: 'intensite', title: 'Intensité', intro: 'Le temps passé dans chaque zone et la place de chaque sport.' },
-  { id: 'efficacite', title: 'Efficacité', intro: 'La relation entre l’allure et l’effort cardiaque, avec tes meilleurs chronos.' },
-  { id: 'terrain', title: 'Terrain & foulée', intro: 'La montée, la descente et les caractéristiques de ta foulée.' },
-  { id: 'recuperation', title: 'Récupération', intro: 'Les mesures Garmin disponibles, leur tendance et leur couverture.' },
+  { id: 'pret', title: 'Suis-je prêt ?', short: 'Prêt ?', answer: 'ready', intro: 'La forme de fond, la fatigue et la fraîcheur, puis les mesures de récupération de ta montre.' },
+  { id: 'progres', title: 'Est-ce que je progresse ?', short: 'Progrès', answer: 'progress', intro: 'L’allure, le coût cardiaque, la vitesse en montée et tes records.' },
+  { id: 'risque', title: 'Où est le risque ?', short: 'Risque', answer: 'risk', intro: 'Le volume, la répartition de l’intensité et le dénivelé, qui font monter la charge.' },
+  { id: 'marche', title: 'Qu’est-ce qui marche ?', short: 'Ce qui marche', answer: 'works', intro: 'La place de chaque sport, ta foulée et ta descente.' },
 ];
 
-/** Sticky jump bar: one click per section. */
+/** Sticky jump bar: one click per question. */
 export function SectionNav({ active, onJump }: { active: string; onJump: (id: string) => void }) {
   return (
     <nav aria-label="Sections des analyses">
@@ -26,9 +31,10 @@ export function SectionNav({ active, onJump }: { active: string; onJump: (id: st
               type="button"
               onClick={() => onJump(s.id)}
               aria-current={active === s.id ? 'true' : undefined}
+              title={s.title}
               className="analysis-tab"
             >
-              {s.title}
+              {s.short}
             </button>
           </li>
         ))}

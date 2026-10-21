@@ -1,8 +1,9 @@
 """Analytics API: one overview per period, and session reads and edits.
 
-``/analytics/overview`` answers four questions in one round-trip — how much did
-I train, how hard, how efficiently, how well did I recover — so the page can
-render every card without fanning out to a dozen endpoints.
+``/analytics/overview`` answers four questions in one round-trip — am I ready,
+am I progressing, where is the risk, what works (``features/answers.py``) —
+with the cards under each and the Garmin records (``features/records.py``), so
+the page renders without fanning out to a dozen endpoints.
 """
 
 from __future__ import annotations
@@ -21,12 +22,14 @@ from arete.dataio.queries import (
     daily_metrics_range,
     drift_rows,
     earliest_session_date,
+    lift_set_rows,
     overview_rows,
     sql_in,
+    stream_effort_rows,
     terrain_rows,
 )
 from arete.dataio.settings import athlete_zone_model
-from arete.features import insights
+from arete.features import answers, insights, records
 from arete.features import overview as ov
 from arete.features.fitness import DailyTSS
 from arete.features.periods import PeriodWindow, resolve_period
@@ -36,9 +39,11 @@ from arete.features.workload import (
     calculate_acute_load,
     calculate_acwr,
     calculate_chronic_load,
+    calculate_monotony,
     get_acwr_zone,
 )
-from arete.services.metrics import fitness_series
+from arete.garmin.readiness import fetch_window
+from arete.services.metrics import current_readiness, fitness_series
 from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
@@ -158,12 +163,14 @@ def effort_pace(row: OverviewRow) -> tuple[int | None, bool]:
 
 
 def get_overview(period: str = "30d"):
-    """Every analytics card for one period, with the previous one as reference.
+    """The four answers, every analytics card and the records, for one period.
 
-    Five statements on one cursor (the zone model reads the settings on its
+    Eight statements on one cursor (the zone model reads the settings on its
     own): the first session date, every session from the CTL warm-up on, the
-    long runs with laps, the health metrics, and the stored terrain of every
-    session on foot (the climbing records are all-time). The cards slice them.
+    long runs with laps, the health metrics, the stored terrain of every
+    session on foot (the climbing records are all-time), the readiness
+    window, and the records' best efforts and lifts, each over a bounded
+    number of the latest sessions. The cards and answers slice them.
     """
     with db_connection() as con:
         earliest = earliest_session_date(con)
@@ -175,6 +182,9 @@ def get_overview(period: str = "30d"):
         drifts = drift_rows(con, start, window.end, MIN_DRIFT_DURATION_SEC)
         health = daily_metrics_range(con, start, window.end)
         terrain = terrain_rows(con)
+        readiness_rows = fetch_window(con, window.end)
+        efforts = stream_effort_rows(con, records.RECORD_RUNS)
+        lifts = lift_set_rows(con, records.RECORD_STRENGTH_SESSIONS)
 
     shown = _between(rows, start, window.end)
     runs = [r for r in shown if r.sport in RUNNING_SPORTS]
@@ -219,10 +229,46 @@ def get_overview(period: str = "30d"):
         {t.date: t.tss for t in _daily_tss(rows, tss_start, window.end)}, window.end
     )
     loads_start = window.end - timedelta(days=ACWR_HISTORY_DAYS)
-    acwr, acwr_zone = _acwr(_daily_loads(rows, loads_start, window.end), window.end)
+    loads = _daily_loads(rows, loads_start, window.end)
+    acwr, acwr_zone = _acwr(loads, window.end)
 
     recovery = ov.build_recovery_cards(health, window)
+    pace = ov.build_pace_card(paces, window)
+    ctl = {day.date: fitness for day, fitness, _fatigue in pmc_series}
+    atl = {day.date: fatigue for day, _fitness, fatigue in pmc_series}
+    readiness = current_readiness(window.end, readiness_rows, None)
+    active = {r.date for r in rows if r.duration_sec > 0}
+    pattern_period, weeks = answers.weeks_of(window, active, ctl)
+    has_load = any(load.duration_min > 0 for load in loads)
+    week_ago = window.end - timedelta(days=7)
     return {
+        "answers": [
+            answers.ready_answer(
+                window.end,
+                readiness.score if readiness else None,
+                readiness.source if readiness else None,
+                readiness.measured_on if readiness else None,
+                ctl[window.end] - atl[window.end] if window.end in ctl else None,
+            ),
+            answers.progress_answer(
+                window,
+                ctl.get(window.start - timedelta(days=1)),
+                ctl.get(window.end),
+                pace["headline"]["value"],
+                records.lift_trend(lifts, window),
+            ),
+            answers.risk_answer(
+                acwr,
+                calculate_monotony(loads, window.end) if has_load else None,
+                ctl[window.end] - ctl.get(week_ago, 0.0)
+                if has_load and window.end in ctl
+                else None,
+            ),
+            answers.works_answer(pattern_period, weeks),
+        ],
+        "records": records.records_payload(
+            efforts, lifts, records.RECORD_RUNS, records.RECORD_STRENGTH_SESSIONS
+        ),
         "hr_zone_model": athlete_zone_model().as_dict(),
         "period": window.period,
         "bucket": window.bucket,
@@ -236,7 +282,7 @@ def get_overview(period: str = "30d"):
             "zones": ov.build_zones_card(zones, window),
             "sports": ov.build_sports_card(sports_cur, sports_prev),
             "decoupling": ov.build_decoupling_card(drifts, efficiency, window),
-            "pace": ov.build_pace_card(paces, window),
+            "pace": pace,
             "elevation": ov.build_elevation_card(climbs, window, RUNNING_SPORTS),
             "cadence": ov.build_cadence_card(cadences, window),
             "vam": ov.build_vam_card(climbs_vam, window, VAM_MINUTES),

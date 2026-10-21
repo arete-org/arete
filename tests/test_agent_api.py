@@ -911,6 +911,25 @@ class TestAnalyticsPageRead:
         for card in out["overview"]["cards"].values():
             assert "headline" in card
 
+    def test_the_answers_and_records_reach_the_coach_without_session_names(
+        self, monkeypatch
+    ):
+        run = {"name": "5 km", "time_sec": 1400, "session_id": 3, "session_name": "Lac"}
+        monkeypatch.setattr(
+            "arete.services.analytics.get_overview",
+            lambda *, period: {
+                "cards": {},
+                "answers": [{"id": "ready", "text": "Aujourd’hui, …"}],
+                "records": {"runs": [run], "lifts": [], "runs_scanned": 1},
+            },
+        )
+        out = get_page_data("analytics")["overview"]
+        assert out["answers"] == [{"id": "ready", "text": "Aujourd’hui, …"}]
+        assert out["records"]["runs"] == [
+            {"name": "5 km", "time_sec": 1400, "session_id": 3}
+        ]
+        assert run["session_name"] == "Lac"  # the page's own payload is untouched
+
     def test_the_read_points_at_the_toolkit_for_trends(self):
         out = get_page_data("analytics")
         assert "get_workload" in out["trends"]

@@ -75,6 +75,23 @@ export const GLOSSARY = [
     ],
     source: 'Calculé par Arete à partir de tes séances.',
   },
+  // features/workload.calculate_monotony and get_monotony_zone (1.5, 2.0),
+  // features/answers.risk_answer (MONOTONY_HIGH 2.0).
+  {
+    id: 'monotonie',
+    term: 'Monotonie',
+    aliases: ['Monotonie'],
+    category: 'charge',
+    definition:
+      'Ta charge quotidienne moyenne des 7 derniers jours divisée par son écart type, jours de repos compris (charge nulle). Des journées toutes semblables la font monter ; alterner jours durs, faciles et repos la fait baisser.',
+    scale: 'Ratio sans unité, à une décimale.',
+    reading: [
+      { tone: 'good', text: 'Sous 1,5 : semaine variée.' },
+      { tone: 'neutral', text: 'De 1,5 à 2 : acceptable.' },
+      { tone: 'caution', text: 'Au-dessus de 2 : semaine trop monotone. « Où est le risque ? » le signale dans les analyses quand ni l’ACWR ni la forme de fond ne s’emballent.' },
+    ],
+    source: 'Calculé par Arete à partir de tes séances.',
+  },
   // dataio/queries.TSS_EXPR; services/metrics (TSS_PER_SESSION 50, weekly goal).
   {
     id: 'tss',
@@ -92,7 +109,8 @@ export const GLOSSARY = [
     ],
     source: 'Calculé par Arete à partir de tes séances.',
   },
-  // features/fitness.calculate_ctl (42-day time constant).
+  // features/fitness.calculate_ctl (42-day time constant),
+  // features/answers (RAMP_HIGH_PTS 8 in 7 days).
   {
     id: 'ctl',
     term: 'Forme de fond (CTL)',
@@ -105,6 +123,7 @@ export const GLOSSARY = [
     reading: [
       { tone: 'good', text: 'En hausse régulière : la base s’élargit.' },
       { tone: 'neutral', text: 'Stable ou en légère baisse : entretien, affûtage ou récupération.' },
+      { tone: 'caution', text: 'Plus de 8 points gagnés en 7 jours : montée trop rapide, signalée par « Où est le risque ? » dans les analyses.' },
     ],
     source: 'Calculé par Arete (modèle de Banister).',
   },

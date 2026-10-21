@@ -8,6 +8,7 @@ import { CHART, COLORS } from '@/lib/chartTheme';
 import { Button } from '@/components/ui';
 import { PERIODS } from './analytics/types';
 import {
+  Answers,
   CadenceCard,
   DescentCard,
   EfficiencyCard,
@@ -16,6 +17,7 @@ import {
   PaceCard,
   PeriodSelector,
   PREVIOUS_LABEL,
+  RecordsCard,
   RecoveryCard,
   SECTIONS,
   Section,
@@ -131,29 +133,10 @@ export function AnalyticsPage() {
         <Button onClick={() => void refetch()}>Réessayer</Button>
       </div>}
 
+      <Answers answers={data?.answers} loading={isLoading} onJump={jump} />
+
       <Section def={SECTIONS[0]}>
-        <VolumeCard card={cards?.volume} {...state} />
         <LoadCard card={cards?.pmc} {...state} />
-      </Section>
-
-      <Section def={SECTIONS[1]}>
-        <ZonesCard card={cards?.zones} model={data?.hr_zone_model} {...state} />
-        <SportsCard card={cards?.sports} previousLabel={previousLabel} loading={isLoading} error={isError} />
-      </Section>
-
-      <Section def={SECTIONS[2]}>
-        <EfficiencyCard card={cards?.decoupling} {...state} />
-        <PaceCard card={cards?.pace} {...state} />
-      </Section>
-
-      <Section def={SECTIONS[3]}>
-        <ElevationCard card={cards?.elevation} {...state} />
-        <CadenceCard card={cards?.cadence} {...state} />
-        <VamCard card={cards?.vam} previousLabel={previousLabel} loading={isLoading} error={isError} />
-        <DescentCard card={cards?.descent} previousLabel={previousLabel} loading={isLoading} error={isError} />
-      </Section>
-
-      <Section def={SECTIONS[4]}>
         <RecoveryCard
           title="Préparation"
           term="preparation"
@@ -191,6 +174,25 @@ export function AnalyticsPage() {
           unit="bpm"
           {...state}
         />
+      </Section>
+
+      <Section def={SECTIONS[1]}>
+        <PaceCard card={cards?.pace} {...state} />
+        <EfficiencyCard card={cards?.decoupling} {...state} />
+        <VamCard card={cards?.vam} previousLabel={previousLabel} loading={isLoading} error={isError} />
+        <RecordsCard records={data?.records} loading={isLoading} error={isError} />
+      </Section>
+
+      <Section def={SECTIONS[2]}>
+        <VolumeCard card={cards?.volume} {...state} />
+        <ZonesCard card={cards?.zones} model={data?.hr_zone_model} {...state} />
+        <ElevationCard card={cards?.elevation} {...state} />
+      </Section>
+
+      <Section def={SECTIONS[3]}>
+        <SportsCard card={cards?.sports} previousLabel={previousLabel} loading={isLoading} error={isError} />
+        <CadenceCard card={cards?.cadence} {...state} />
+        <DescentCard card={cards?.descent} previousLabel={previousLabel} loading={isLoading} error={isError} />
       </Section>
 
       <Link

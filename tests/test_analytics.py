@@ -49,6 +49,9 @@ def stub_queries():
         "daily_metrics_range": [],
         "earliest_session_date": None,
         "terrain_rows": [],
+        "fetch_window": [],
+        "stream_effort_rows": [],
+        "lift_set_rows": [],
     }
     patches = {
         name: patch(f"arete.services.analytics.{name}", return_value=value)
@@ -200,7 +203,7 @@ class TestOverview:
             if key != "vam"  # one point per climbing duration
         )
 
-    def test_overview_costs_five_statements_on_one_cursor(
+    def test_overview_costs_eight_statements_on_one_cursor(
         self, client, monkeypatch, statement_log
     ):
         real = analytics.db_connection
@@ -212,7 +215,8 @@ class TestOverview:
 
         monkeypatch.setattr(analytics, "db_connection", counting_connection)
         assert client.get("/analytics/overview?period=30d").status_code == 200
-        assert len(statement_log) == 5
+        # The cards' five, the readiness window, the best efforts and the lifts.
+        assert len(statement_log) == 8
 
 
 class TestOverviewSeries:
@@ -341,8 +345,8 @@ class TestBestEfforts:
         assert bests["Half-Marathon"]["time_display"] == "1:32:15"
 
     def test_the_records_endpoint_is_gone(self, client):
-        # Its best efforts all came from Strava (ARE-126); ARE-139 rebuilds
-        # records from Garmin streams.
+        # Its best efforts all came from Strava (ARE-126); the records now come
+        # from Garmin streams, inside the overview (ARE-139).
         assert client.get("/analytics/records").status_code == 404
 
 

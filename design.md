@@ -240,6 +240,24 @@ aucun comptage ni appel réseau : il lit les événements du fil courant.
 `context-gauge.spec.ts` vérifie le flux SSE, l’arrêt, le rechargement sans
 compaction bloquée, les brouillons et les thèmes Pierre/Prune à 390 px.
 
+## Analyses — quatre questions
+
+La page s’ouvre sur quatre réponses calculées par le serveur, une phrase chacune
+qui nomme sa période et sa source : « Suis-je prêt ? », « Est-ce que je
+progresse ? », « Où est le risque ? », « Qu’est-ce qui marche ? ». Chaque bloc
+est une surface `--surface-card` dont le liseré gauche reprend le ton
+(`--signal-success|warning|danger`, discret sinon) ; le verdict est dans la
+phrase, la couleur ne fait que le répéter. « Voir les cartes » mène à la section
+de la question, où se rangent les cartes existantes ; la barre de saut utilise
+des libellés courts (« Prêt ? », « Progrès », « Risque », « Ce qui marche »)
+pour tenir sur un téléphone. Le sélecteur de période ne change pas. Deux
+colonnes à partir de 640 px de contenu, une seule en dessous.
+
+La carte Records (sous « Est-ce que je progresse ? ») liste les meilleurs
+chronos mesurés par la montre et le meilleur 1RM estimé par exercice ; chaque
+chrono mène à sa séance. `analytics.spec.ts` vérifie à 390 et 1440 px que les
+quatre réponses précèdent les cartes et que la première tient sur le premier écran.
+
 ## Planning — proposition A
 
 [Référence Figma retenue](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=110-81).

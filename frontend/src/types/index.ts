@@ -518,7 +518,54 @@ export interface HrZoneModel {
   ranges: HrZoneRange[];
 }
 
+/** The four questions the Analyses page opens on (`features/answers.py`). */
+export type AnswerId = 'ready' | 'progress' | 'risk' | 'works';
+
+export interface Answer {
+  id: AnswerId;
+  question: string;
+  /** One sentence naming its period and its source. */
+  text: string;
+  tone: Tone;
+  period: string;
+  source: string;
+}
+
+/** Fastest run over a standard distance, measured on the watch streams. */
+export interface RunRecord {
+  name: string;
+  distance_m: number;
+  time_sec: number;
+  time_display: string;
+  pace_display: string;
+  date: string;
+  session_id: number;
+  session_name: string | null;
+}
+
+/** Best estimated 1RM of a logged exercise. */
+export interface LiftRecord {
+  exercise: string;
+  e1rm_kg: number;
+  weight_kg: number;
+  reps: number;
+  date: string;
+  session_id: number;
+  sessions: number;
+}
+
+export interface Records {
+  runs: RunRecord[];
+  lifts: LiftRecord[];
+  runs_scanned: number;
+  /** The latest runs and strength sessions the records read. */
+  runs_limit: number;
+  sessions_limit: number;
+}
+
 export interface OverviewResponse {
+  answers: Answer[];
+  records: Records;
   hr_zone_model: HrZoneModel;
   period: Period;
   bucket: Bucket;

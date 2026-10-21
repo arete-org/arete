@@ -14,6 +14,25 @@
 .analysis-sports { display: flex; flex-direction: column; gap: 16px; }
 .analysis-sport { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; font-size: 12px; }
 .analysis-sport-bar, .analysis-sport-count { grid-column: 1 / -1; }
+/* The four answers the page opens on; the tone's colour repeats the verdict the sentence says. */
+.analysis-answers-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.analysis-answer { --answer-tone: var(--ink-muted); min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 16px; background: var(--surface-card); border: 1px solid var(--surface-border); border-left: 4px solid var(--answer-tone); border-radius: var(--radius-panel); }
+.analysis-answer[data-tone='good'] { --answer-tone: var(--signal-success); }
+.analysis-answer[data-tone='warn'] { --answer-tone: var(--signal-warning); }
+.analysis-answer[data-tone='bad'] { --answer-tone: var(--signal-danger); }
+.analysis-answer-question { font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--ink-primary); }
+.analysis-answer-text { font-size: 14px; line-height: 1.55; color: var(--ink-secondary); }
+.analysis-answer-link { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 44px; margin-top: auto; padding: 0 4px; border-radius: var(--radius-control); color: var(--accent); font-size: 13px; }
+.analysis-answer-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+/* Records: two small tables, numbers aligned. */
+.analysis-records { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.analysis-records-title { font-size: 13px; font-weight: 600; color: var(--ink-primary); }
+.analysis-records-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.analysis-records-table th, .analysis-records-table td { padding: 2px 4px; text-align: right; font-weight: 400; color: var(--ink-primary); }
+.analysis-records-table thead th { font-size: 11px; color: var(--ink-muted); }
+.analysis-records-table th:first-child { text-align: left; color: var(--ink-secondary); }
+.analysis-records-table tbody tr { border-top: 1px solid var(--surface-border); }
+.analysis-records-link { display: inline-flex; align-items: center; justify-content: flex-end; min-height: 44px; color: var(--accent); text-decoration: underline; text-underline-offset: 4px; }
 /* Lexique: an anchored entry clears the sticky desktop bar; the one a "?" opened is outlined. */
 .glossary-entry { scroll-margin-top: calc(var(--safe-top) + 16px); }
 .glossary-entry[data-current] { border-color: var(--color-neon-cyan); }
@@ -26,4 +45,5 @@
 }
 /* A docked coach must not squeeze two charts into the space for one. */
 @container (min-width: 1000px) { .analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 640px) { .analysis-answers-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { .analysis-tab { transition: none; } }

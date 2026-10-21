@@ -15,6 +15,7 @@ import duckdb
 from arete.dataio.db import db_connection
 from arete.features.fitness import DailyTSS
 from arete.features.hr_zones import DEFAULT_MAX_HR, LTHR_FROM_MAX_HR
+from arete.features.records import EFFORT_DISTANCES_M, MAX_EFFORT_MPS
 from arete.features.terrain import VAM_MINUTES
 from arete.features.workload import DailyLoad
 from arete.services.athlete_scope import resolve_athlete_id
@@ -406,6 +407,121 @@ def terrain_rows(
         )
         for row in rows
     ]
+
+
+class StreamEffortRow(NamedTuple):
+    session_id: int
+    date: date
+    name: str | None
+    best_sec: tuple[int | None, ...]  # per ``EFFORT_DISTANCES_M``, None when shorter
+
+
+def stream_effort_rows(
+    con: duckdb.DuckDBPyConnection, limit: int, user_id: int | None = None
+) -> list[StreamEffortRow]:
+    """Fastest time over each record distance in the ``limit`` latest runs with streams.
+
+    Computed in the database from the kept watch streams, so only one row per
+    run crosses the wire. Each step of the cumulative distance is first capped
+    at ``MAX_EFFORT_MPS`` (a GPS jump cannot make a record) and floored at
+    zero. Then, for each sample, a window over that distance finds the latest
+    earlier sample at least the distance behind it: the time between them
+    covers the distance, and the smallest such time is the run's best effort,
+    to the second of the 1 Hz recording. Pauses count, as on a race clock.
+    """
+    user_id = resolve_athlete_id(user_id)
+    frames = ", ".join(
+        f"t - MAX(t) OVER (PARTITION BY id ORDER BY d RANGE BETWEEN UNBOUNDED "
+        f"PRECEDING AND {metres} PRECEDING) AS e{i}"
+        for i, metres in enumerate(EFFORT_DISTANCES_M)
+    )
+    bests = ", ".join(f"MIN(e{i})" for i in range(len(EFFORT_DISTANCES_M)))
+    rows = con.execute(
+        f"""
+        WITH recent AS (
+          SELECT s.id, s.date, s.name
+          FROM app.visible_actual_sessions s
+          JOIN app.visible_activity_streams st ON st.actual_session_id = s.id
+          WHERE s.user_id = ? AND s.sport IN ({sql_in(RUNNING_SPORTS)})
+            AND COALESCE(s.source, '') NOT IN ({EXCLUDED_SOURCES_SQL})
+            AND s.distance_m >= {EFFORT_DISTANCES_M[0]}
+            AND st.distance_m IS NOT NULL
+          ORDER BY s.date DESC, s.id DESC
+          LIMIT ?
+        ),
+        samples AS (
+          SELECT st.actual_session_id AS id, UNNEST(st.t_sec) AS t,
+                 CAST(UNNEST(st.distance_m) AS DOUBLE) AS d
+          FROM app.visible_activity_streams st
+          WHERE st.actual_session_id IN (SELECT id FROM recent)
+        ),
+        steps AS (
+          SELECT id, t, d - LAG(d) OVER w AS dd, t - LAG(t) OVER w AS dt
+          FROM samples
+          WHERE t IS NOT NULL AND d IS NOT NULL
+          WINDOW w AS (PARTITION BY id ORDER BY t)
+        ),
+        clean AS (
+          SELECT id, t,
+                 SUM(COALESCE(LEAST(GREATEST(dd, 0), {MAX_EFFORT_MPS} * dt), 0))
+                   OVER (PARTITION BY id ORDER BY t ROWS UNBOUNDED PRECEDING) AS d
+          FROM steps
+        ),
+        efforts AS (SELECT id, {frames} FROM clean)
+        SELECT r.id, r.date, r.name, {bests}
+        FROM efforts JOIN recent r USING (id)
+        GROUP BY r.id, r.date, r.name
+        ORDER BY r.date DESC, r.id DESC
+        """,
+        [user_id, limit],
+    ).fetchall()
+    return [
+        StreamEffortRow(
+            row[0],
+            row[1],
+            row[2],
+            tuple(None if v is None else int(v) for v in row[3:]),
+        )
+        for row in rows
+    ]
+
+
+class LiftSetRow(NamedTuple):
+    exercise_id: int
+    exercise: str
+    session_id: int
+    date: date
+    reps: int
+    weight_kg: float
+
+
+def lift_set_rows(
+    con: duckdb.DuckDBPyConnection, limit: int, user_id: int | None = None
+) -> list[LiftSetRow]:
+    """Loaded working sets (never warm-ups) of the ``limit`` latest strength sessions.
+
+    Oldest first, as ``strength.progression`` reads them.
+    """
+    user_id = resolve_athlete_id(user_id)
+    rows = con.execute(
+        """
+        WITH recent AS (
+          SELECT id, date FROM app.visible_strength_sessions
+          WHERE user_id = ?
+          ORDER BY date DESC, id DESC
+          LIMIT ?
+        )
+        SELECT e.id, e.name, r.id, r.date, es.reps, es.weight_kg
+        FROM recent r
+        JOIN app.visible_session_exercises se ON se.session_id = r.id
+        JOIN app.visible_exercise_sets es ON es.session_exercise_id = se.id
+        JOIN app.visible_exercises e ON e.id = se.exercise_id
+        WHERE NOT COALESCE(es.is_warmup, FALSE) AND es.reps > 0 AND es.weight_kg > 0
+        ORDER BY r.date, r.id, se.id, es.set_number
+        """,
+        [user_id, limit],
+    ).fetchall()
+    return [LiftSetRow(*row) for row in rows]
 
 
 def best_effort_rows(
