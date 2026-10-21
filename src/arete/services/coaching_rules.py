@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from arete.dataio.queries import training_loads
 from arete.dataio.settings import athlete_zone_model, get_user_settings
+from arete.features.overview import sport_label
 from arete.features.workload import compute_workload_metrics
 from arete.garmin.repository import GarminRepository
 from arete.services.activity_detail import analysis_lines
@@ -389,7 +390,13 @@ def _cardio_rules(session: ActualSession) -> tuple[str, list[str]]:
     sport = session.sport or "activité"
     duration_min = (session.duration_sec or 0) // 60
 
-    feedback_parts.append(f"Séance de {sport} terminée ({duration_min} min).")
+    # The athlete reads this sentence: the sport in French, not its Garmin key.
+    label = sport_label(session.sport) if session.sport else None
+    feedback_parts.append(
+        f"Séance de {label} terminée ({duration_min} min)."
+        if label
+        else f"Séance terminée ({duration_min} min)."
+    )
 
     # Imported strength activities often contain only HR, not mechanical load.
     is_strength = sport in {"strength", "strength_training", "musculation"}

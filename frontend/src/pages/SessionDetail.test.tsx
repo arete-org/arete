@@ -264,7 +264,7 @@ it('shows the rules\' sentence when no feedback is stored, and today\'s proposal
     ...detail,
     feedback: null,
     summary: {
-      rule_feedback: 'Séance de running terminée (49 min). Bon travail de fond, intensité bien maîtrisée.',
+      rule_feedback: 'Séance de course terminée (49 min). Bon travail de fond, intensité bien maîtrisée.',
       strength: null,
       next_day: {
         date: '2026-10-09', relative: 'today', planned: [{ ...planned, session_type: 'tempo', description: null }],
@@ -276,7 +276,7 @@ it('shows the rules\' sentence when no feedback is stored, and today\'s proposal
   renderAt('/log/sessions/12');
   const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
   expect(summary.textContent).toContain('Calculé à partir de la séance');
-  expect(summary.textContent).toContain('Séance de running terminée (49 min). Bon travail de fond');
+  expect(summary.textContent).toContain('Séance de course terminée (49 min). Bon travail de fond');
   expect(summary.textContent).toContain('Aujourd’hui : Seuil · 45 min · Z2, le coach propose : allégée.');
   expect(summary.textContent).toContain('Préparation Garmin 55/100 : séance allégée.');
 });

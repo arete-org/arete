@@ -370,7 +370,7 @@ class TestSummary:
         assert detail is not None
         assert detail["feedback"] is None
         assert detail["summary"]["rule_feedback"].startswith(
-            "Séance de running terminée (60 min)."
+            "Séance de course terminée (60 min)."
         )
         SessionFeedbackRepository().save(
             session_id, text="Bien dosé.", source="agent", trigger="sync"
