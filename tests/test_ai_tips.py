@@ -147,7 +147,7 @@ class TestPostSessionCardio:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert "running" in data["feedback"].lower()
+        assert "séance de course terminée" in data["feedback"].lower()
         assert any("bpm" in h for h in data["highlights"])
         assert any("/km" in h for h in data["highlights"])
 
