@@ -1,16 +1,15 @@
 import { createElement, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Dumbbell, Sparkles } from 'lucide-react';
+import { ArrowLeft, Dumbbell } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
 import { GlossaryLink } from '@/components/GlossaryLink';
-import { RpePicker } from '@/components/RpePicker';
 import { Button, Modal, ModalHeader, Panel, RpeBadge } from '@/components/ui';
 import { analyticsApi, strengthApi } from '@/lib/api';
 import { chartRows, formatElapsed, intensityLabel, isFootSport } from '@/lib/activity';
 import { CHART, COLORS, HR_ZONE_COLORS } from '@/lib/chartTheme';
 import { parseLocalDate } from '@/lib/dates';
-import { sportLabel } from '@/lib/fr';
+import { formatDecimal, sportLabel } from '@/lib/fr';
 import { glossaryHref, type GlossaryId } from '@/lib/glossary';
 import { qk } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
@@ -28,8 +27,8 @@ import { StrengthExercises } from './log/StrengthExercises';
 import { SameDayLogWarning } from './log/SameDayLogWarning';
 import { useOpenDraft } from './log/useOpenDraft';
 import { RouteTrace } from './session/RouteTrace';
+import { SessionSummary } from './session/SessionSummary';
 import { StreamChart } from './session/StreamChart';
-import { useCoachWords } from '@/lib/coachName';
 
 const ZONE_NAME = ['Z1 récupération', 'Z2 endurance', 'Z3 tempo', 'Z4 seuil', 'Z5 VO2max'];
 const SOURCE_LABEL: Record<string, string> = {
@@ -39,7 +38,7 @@ const SOURCE_LABEL: Record<string, string> = {
   manual: 'Saisie manuelle',
 };
 
-const km = (m: number | null | undefined) => (m ? `${(m / 1000).toFixed(2)} km` : '—');
+const km = (m: number | null | undefined) => (m ? `${formatDecimal(m / 1000, 2)} km` : '—');
 const pace = (sec: number | null | undefined) => (sec ? `${formatPace(sec)} /km` : '—');
 const pct = (v: number) => `${v > 0 ? '+' : ''}${v.toLocaleString('fr-FR')} %`;
 const VAM_MINUTES = ['5', '10', '20', '30', '60'];
@@ -47,7 +46,7 @@ const VAM_MINUTES = ['5', '10', '20', '30', '60'];
 const HOT_C = 25;
 const HIGH_M = 1500;
 
-/** A cardio session's page: summary, coach, charts, analysis, laps, zones, route. */
+/** A session's page: its summary and the coach's word first, then tiles, charts, analysis, laps, zones, route. */
 export function SessionDetailPage() {
   const { id } = useParams();
   const sessionId = id && /^\d+$/.test(id) ? Number(id) : null;
@@ -82,7 +81,6 @@ export function SessionDetailPage() {
 }
 
 function SessionView({ detail }: { detail: ActivityDetail }) {
-  const coach = useCoachWords();
   const { session } = detail;
   // The post-session notification opens /log/sessions/{id}?rpe=1.
   const [params] = useSearchParams();
@@ -122,7 +120,7 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
         )}
       </header>
 
-      {session.rpe == null && <RpePicker sessionId={session.id} autoFocus={params.get('rpe') === '1'} />}
+      <SessionSummary detail={detail} focusRpe={params.get('rpe') === '1'} />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         <Stat label="Durée" value={formatDurationCompact(session.moving_time_sec ?? session.duration_sec)} />
@@ -146,20 +144,6 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
           unlinkedLogId={detail.strength_unlinked_log_id ?? null}
           source={session.source}
         />
-      )}
-
-      {detail.feedback && (
-        <Panel
-          title={
-            <span className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              {detail.feedback.source === 'agent' ? `Le regard ${coach.of}` : 'Calculé à partir de la séance'}
-            </span>
-          }
-          titleTone="text-neon-cyan"
-        >
-          <p className="text-sm font-sans text-text-secondary whitespace-pre-line">{detail.feedback.text}</p>
-        </Panel>
       )}
 
       {session.notes && (

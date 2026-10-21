@@ -691,6 +691,43 @@ export interface ActivityDetail {
   feedback: { text: string; source: 'agent' | 'rules'; trigger: string; created_at: string | null } | null;
   terrain: ActivityTerrain | null;
   weather: ActivityWeather | null;
+  /** What the page opens with (services/activity_detail.SessionSummary). */
+  summary: ActivitySummary;
+}
+
+/** A planned session as the session page's « Demain » line names it. */
+export interface PlannedBrief {
+  id: number;
+  date: string;
+  sport: string;
+  session_type: string;
+  description: string | null;
+  target_duration_min: number | null;
+  target_distance_km: number | null;
+  target_hr_zone: string | null;
+  status: 'pending' | 'modified' | 'completed' | 'skipped';
+}
+
+export interface ActivitySummary {
+  /** The rules' sentence, only when no feedback is stored. */
+  rule_feedback: string | null;
+  /** A linked Muscu log's working sets. */
+  strength: {
+    tonnage_kg: number;
+    sets: number;
+    /** The session's best 1RM estimate and that exercise's previous session. */
+    top_e1rm: { exercise: string; e1rm_kg: number; previous_kg: number | null; previous_date: string | null } | null;
+  } | null;
+  /** The day after the session, while it is today or tomorrow. */
+  next_day: {
+    date: string;
+    relative: 'today' | 'tomorrow';
+    planned: PlannedBrief[];
+    /** That day's standing plan decisions (only today has any). */
+    proposals: { planned_session_id: number; decision: string; reason: string; state: string }[];
+    /** The first open session after that day, when that day has none. */
+    next: PlannedBrief | null;
+  } | null;
 }
 
 // ========================= //

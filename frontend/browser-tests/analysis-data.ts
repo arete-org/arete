@@ -184,4 +184,5 @@ export const detail: ActivityDetail = {
     start_altitude_m: 1035,
     source: 'open-meteo-archive',
   },
+  summary: { rule_feedback: null, strength: null, next_day: null },
 };
