@@ -169,16 +169,18 @@ def test_concurrent_purchase_never_double_debits(game_db):
 @pytest.mark.parametrize(
     ("before", "buyer_wins"),
     [(r"SET version=version WHERE", False), (r"INSERT INTO app\.game_owned", True)],
-    ids=["rival-commits-before-the-lock", "rival-commits-before-the-insert"],
+    ids=["rival-commits-before-the-lock", "buyer-lock-rejects-the-rival"],
 )
 def test_a_racing_purchase_is_a_conflict_never_a_second_charge(
     game_db, monkeypatch, router_client, before, buyer_wins
 ):
-    """ARE-82: a rival purchase commits inside the buyer's snapshot window.
+    """ARE-82: a rival purchase runs inside the buyer's snapshot window.
 
-    Before the lock, the rival wins and the buyer's lock conflicts. Before the
-    insert (the CI failure, a duplicate key while the lock was an in-place
-    update), the buyer's lock already makes the rival conflict.
+    Raced before the buyer's lock, the rival commits and the buyer's lock
+    conflicts with it. Raced before the buyer's insert, the buyer's uncommitted
+    lock rejects the rival's lock, so the rival never commits the skin. That is
+    the CI failure's interleaving: while the lock was an in-place update the
+    rival committed and the buyer's insert hit a duplicate key.
     """
     from write_race import race
 
