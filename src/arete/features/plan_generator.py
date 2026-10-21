@@ -82,6 +82,9 @@ class DraftSession:
     prescription: dict[str, Any] | None = field(default=None, hash=False)
     #: What the interference rules read (``features.hybrid_plan``).
     tags: frozenset[str] = frozenset()
+    #: A station circuit's stations in order (``hybrid_plan.STATIONS`` ids),
+    #: which ``services.hybrid_strength`` prescribes; not stored.
+    stations: tuple[str, ...] = ()
 
 
 @dataclass

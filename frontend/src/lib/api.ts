@@ -97,6 +97,12 @@ export const goalsApi = {
       body: JSON.stringify(goal),
     }),
 
+  update: (id: number, fields: import("@/types").GoalUpdate) =>
+    fetchAPI<import("@/types").Goal>(`/goals/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(fields),
+    }),
+
   /** Also deletes the goal's future generated sessions. */
   remove: (id: number) => fetchAPI<void>(`/goals/${id}`, { method: "DELETE" }),
 

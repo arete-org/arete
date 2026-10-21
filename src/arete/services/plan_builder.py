@@ -44,8 +44,10 @@ from arete.features.plan_generator import (
 from arete.features.running import training_paces
 from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
+from arete.services import hybrid_strength
 from arete.services.adaptation import ACWR_REST_AT, TSB_EASE_AT
 from arete.services.goals import Goal, GoalDetails, get_goal
+from arete.services.plan_summary import weekly_summary
 from arete.services.prescriptions import Prescription
 from arete.services.settings import athlete_today
 
@@ -242,7 +244,14 @@ def _generate(goal: Goal, today: date | None) -> _Plan:
             },
         )
     hybrid = hybrid_inputs(goal, today)
-    weeks = generate_hybrid_plan(hybrid, HYBRID_RULES)
+    weeks = hybrid_strength.prescribe(
+        generate_hybrid_plan(hybrid, HYBRID_RULES),
+        level=hybrid.level,
+        division=hybrid.division,
+        category=GoalDetails.model_validate(goal.details or {}).category,
+        equipment=hybrid.equipment,
+        starts=hybrid_strength.starting_loads(),
+    )
     return _Plan(
         hybrid.start,
         weeks,
@@ -273,7 +282,13 @@ def _weeks_to_dict(weeks: list[WeekPlan]) -> list[dict[str, Any]]:
             "minutes": w.minutes,
             "recovery": w.recovery,
             "sessions": [
-                {**asdict(s), "date": s.date.isoformat(), "tags": sorted(s.tags)}
+                {
+                    **{k: v for k, v in asdict(s).items() if k != "stations"},
+                    "date": s.date.isoformat(),
+                    "tags": sorted(s.tags),
+                    # What the preview names it; a road plan's sessions have no tags.
+                    "kind": kind_of(s.tags) if s.tags else None,
+                }
                 for s in w.sessions
             ],
             "dropped": w.dropped,
@@ -296,6 +311,8 @@ def preview(goal_id: int, today: date | None = None) -> dict[str, Any]:
     return {
         "goal": goal.to_dict(today),
         "inputs": plan.inputs,
+        # A Hyrox or hybrid plan's weekly structure, one French line per phase.
+        "summary": [] if goal.goal_type == "race" else weekly_summary(plan.weeks),
         "weeks": _weeks_to_dict(plan.weeks),
     }
 

@@ -64,14 +64,16 @@ class GoalDetails(BaseModel):
         return value
 
 
+#: What the goals panel's labels say: Open/Pro, Solo/Duo, Hommes/Femmes/Mixte.
 _DETAIL_ERRORS = {
-    "division": "La division doit être open ou pro.",
-    "format": "Le format doit être solo ou doubles.",
-    "category": "La catégorie doit être men, women ou mixed.",
-    "equipment": "Le matériel est une liste parmi sled, ski_erg, rower et "
-    'wall_ball, ou ["none"] sans matériel.',
+    "division": "La division doit être Open ou Pro.",
+    "format": "Le format doit être Solo ou Duo.",
+    "category": "La catégorie doit être Hommes, Femmes ou Mixte.",
+    "equipment": "Le matériel se choisit parmi traîneau, SkiErg, rameur et "
+    "wall ball, ou aucun.",
     "weeks": "Le bloc dure 8 ou 12 semaines.",
 }
+_BLOCK_CATEGORY = "La catégorie d’un bloc hybride est Hommes ou Femmes."
 
 
 def validate_details(goal_type: str, details: dict[str, Any] | None) -> str | None:
@@ -88,13 +90,20 @@ def validate_details(goal_type: str, details: dict[str, Any] | None) -> str | No
         parsed = GoalDetails.model_validate(details or {})
     except ValidationError as e:
         field_name = str(e.errors()[0]["loc"][0]) if e.errors()[0]["loc"] else ""
+        if goal_type == "hybrid" and field_name == "category":
+            raise ValueError(_BLOCK_CATEGORY) from None
         raise ValueError(
             _DETAIL_ERRORS.get(field_name, f"Détail inconnu : {field_name}.")
         ) from None
+    # A block's category only sets an athlete's own (Open) station loads.
+    if goal_type == "hybrid" and parsed.category == "mixed":
+        raise ValueError(_BLOCK_CATEGORY)
     if goal_type == "hyrox" and parsed.category is None:
-        raise ValueError("Indique la catégorie Hyrox : men, women ou mixed.")
+        raise ValueError("Indique la catégorie Hyrox : Hommes, Femmes ou Mixte.")
     if parsed.category == "mixed" and parsed.format != "doubles":
-        raise ValueError("La catégorie mixte se court en doubles.")
+        raise ValueError("La catégorie Mixte se court en Duo.")
+    if parsed.category == "mixed" and parsed.division == "pro":
+        raise ValueError("La catégorie Mixte se court en Open, pas en Pro.")
     return parsed.model_dump_json()
 
 

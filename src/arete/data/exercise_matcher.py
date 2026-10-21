@@ -97,19 +97,25 @@ _LABELS = _candidates()
 _LABEL_LIST = list(_LABELS)
 
 
+def exact_exercise(raw_name: str) -> str | None:
+    """The catalog id a name, French name or alias spells exactly, or None."""
+    for key in (raw_name.lower().strip(), normalize_name(raw_name)):
+        if key in _LABELS:
+            return _LABELS[key]
+    return None
+
+
 def match_exercise(raw_name: str) -> ExerciseMatch:
     """Best catalog match for a free-text exercise name."""
     if not raw_name or not raw_name.strip():
         return ExerciseMatch(None, 0)
 
-    lowered = raw_name.lower().strip()
     normalized = normalize_name(raw_name)
 
     # 1. exact alias / name (either spelling)
-    for key in (lowered, normalized):
-        if key in _LABELS:
-            ex_id = _LABELS[key]
-            return ExerciseMatch(ex_id, 100, [_suggestion(ex_id, 100)])
+    ex_id = exact_exercise(raw_name)
+    if ex_id is not None:
+        return ExerciseMatch(ex_id, 100, [_suggestion(ex_id, 100)])
 
     # 2. fuzzy: token-based so word order and extra qualifiers matter little
     results = process.extract(

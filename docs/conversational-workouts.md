@@ -94,3 +94,26 @@ exact Garmin exercise names. Only explicit catalog equivalents are mapped; unkno
 exercises fail conversion without a remote write. `export_garmin_sessions` uses the
 same durable reservation, scheduling, verification and optional device-transfer
 workflow as other sports. No automatic retry of an ambiguous write is added.
+
+A strength exercise step ends on reps or, for timed work (a plank, a station
+worked for a minute), on seconds; never on a distance. A step with no exercise
+ends on the lap button and must name its station in its notes: Garmin has no
+SkiErg nor burpee broad jump, and a distance (25 m of sled push in a timed
+test) stays in the notes rather than becoming a guessed duration. Hyrox and
+hybrid plans (`services/hybrid_strength.py`) write their strength sessions and
+station circuits this way, with loads from the strength history and the
+official HYROX station loads of the goal's division and category. An effort
+lap step whose notes name an exercise Garmin has (« Squat 5x5 », « Wall
+Ball ») is refused: that exercise is chosen with its reps or duration
+instead. Notes starting with a distance, and warm-up or cool-down notes,
+are not checked.
+
+Sandbag lunges (« Fentes avec sac de sable ») became their own catalog
+exercise without a data migration: sandbag lunges logged earlier stay under
+lunges, with their records and trend; new ones count separately.
+
+Known limit: the coach edits a strength session's steps through
+`strength_text`, whose grammar check (`strength_sets`) reads reps only. A
+generated circuit or upper-body session (timed planks and stations, lap
+steps) cannot have its steps rewritten from chat; moving its date or status
+still works, and Planning's step editor edits it directly.

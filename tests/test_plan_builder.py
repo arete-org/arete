@@ -188,8 +188,12 @@ def test_a_hyrox_plan_is_written_with_its_sports_and_prescriptions(hyrox):
         "station",
         "race",
     }
-    compromised = [s for s in sessions if s.prescription is not None]
-    assert compromised and all(s.sport == "running" for s in compromised)
+    compromised = [s for s in sessions if s.plan_kind == "compromised"]
+    assert compromised and all(
+        s.sport == "running" and s.prescription for s in compromised
+    )
+    # Strength sessions and circuits carry their steps too (ARE-138).
+    assert all(s.prescription for s in sessions if s.sport == "strength")
     # Its steps own pace and effort; the duration stays for the planned load.
     assert all(
         s.target_hr_zone is None and s.target_intensity is None for s in compromised
@@ -216,6 +220,26 @@ def test_a_hyrox_plan_is_written_with_its_sports_and_prescriptions(hyrox):
         ),
         1,
     )
+
+
+def test_the_preview_route_sums_up_a_hyrox_week_by_phase(hyrox, goal, router_client):
+    from arete.api.goals import router
+
+    client = router_client(router)
+    with patch("arete.services.plan_builder.athlete_today", return_value=TODAY):
+        body = client.post(f"/goals/{hyrox.id}/plan/preview").json()
+        road = client.post(f"/goals/{goal.id}/plan/preview").json()
+    summary = body["summary"]
+    assert summary[0].startswith("Semaine type (base) : ")
+    assert summary[-1].startswith("Semaine de course : ")
+    assert "course clé" in summary[0]
+    rest = summary[0].split(" · ")[-1]  # Monday is the athlete's rest day
+    assert rest.startswith("lun.") and rest.endswith(" repos")
+    kinds = {s["kind"] for w in body["weeks"] for s in w["sessions"]}
+    assert {"key_run", "compromised", "heavy_lower", "race"} <= kinds
+    # A road plan keeps its preview: no summary, no kinds.
+    assert road["summary"] == []
+    assert {s["kind"] for w in road["weeks"] for s in w["sessions"]} == {None}
 
 
 def test_a_running_athletes_projection_keeps_the_usual_rpe(goal):
@@ -311,6 +335,58 @@ def test_a_hybrid_block_previews_without_a_race(goal):
     last = body["weeks"][-1]
     assert last["recovery"] is True
     assert any("benchmark" in s["tags"] for s in last["sessions"])
+
+
+@pytest.mark.parametrize("category,wall_ball", [("women", 4), ("men", 6), (None, None)])
+def test_a_hybrid_blocks_category_sets_its_station_loads(goal, category, wall_ball):
+    details = {"weeks": 8, "equipment": ["wall_ball"], "category": category}
+    block = goals.create_goal(
+        name="test-hybrid",
+        race_date=goals.hybrid_end_window(8, TODAY)[0],
+        goal_type="hybrid",
+        details=details,
+        today=TODAY,
+    )
+    facts = SimpleNamespace(acwr=None, tsb=None)
+    with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
+        body = plan_builder.preview(block.id, TODAY)
+    circuits = [
+        s for w in body["weeks"] for s in w["sessions"] if "station" in s["tags"]
+    ]
+    assert any("benchmark" in s["tags"] for s in circuits)
+    loads = {
+        step["weight_kg"]
+        for s in circuits
+        for block_step in s["prescription"]["steps"]
+        for step in block_step["steps"] or [block_step]
+        if step["garmin_exercise"] == "Wall Ball"
+    }
+    assert loads == {wall_ball}
+    # The note asking for the category's load only without a category.
+    unloaded = [s for s in circuits if "charge de ta catégorie" in s["description"]]
+    assert bool(unloaded) == (category is None)
+
+
+def test_a_hyrox_preview_fills_strength_and_circuit_steps(hyrox):
+    body = plan_builder.preview(hyrox.id, TODAY)
+    sessions = [s for w in body["weeks"] for s in w["sessions"]]
+    # The payload keeps its shape: the circuits' station ids stay internal.
+    assert all("stations" not in s for s in sessions)
+    strength = [s for s in sessions if s["sport"] == "strength"]
+    assert strength and all(s["prescription"] for s in strength)
+    # Women Open: the official 4 kg wall ball, 10 kg sandbag, 2 × 16 kg carry.
+    official = {"Wall Ball": 4, "Sandbag Lunges": 10, "Farmer Carry": 16}
+    seen = {}
+    for s in strength:
+        if "station" not in s["tags"]:
+            continue
+        for block in s["prescription"]["steps"]:
+            for step in block["steps"] or [block]:
+                if step["garmin_exercise"] in official:
+                    seen[step["garmin_exercise"]] = step["weight_kg"]
+    assert seen and all(official[name] == kg for name, kg in seen.items())
+    # Without a sled, a circuit pushes no sled.
+    assert not any("traîneau" in s["description"] for s in strength)
 
 
 def test_strength_history_counts_logged_days(goal):

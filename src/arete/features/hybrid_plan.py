@@ -293,12 +293,14 @@ class Station:
 #: The eight Hyrox stations in race order, with their fallbacks.
 STATIONS: tuple[Station, ...] = (
     Station("ski_erg", "500 m de SkiErg", "ski_erg", "20 burpees"),
-    Station("sled_push", "25 m de sled push", "sled", "30 m de fentes marchées"),
-    Station("sled_pull", "25 m de sled pull", "sled", "20 squats sautés"),
+    Station(
+        "sled_push", "25 m de poussée de traîneau", "sled", "30 m de fentes marchées"
+    ),
+    Station("sled_pull", "25 m de tirage de traîneau", "sled", "20 squats sautés"),
     Station("burpee_broad_jump", "20 burpees broad jumps", None, ""),
     Station("rower", "500 m de rameur", "rower", "20 burpees"),
     Station("farmers_carry", "100 m de farmers carry", None, ""),
-    Station("sandbag_lunges", "20 fentes lestées", None, ""),
+    Station("sandbag_lunges", "20 fentes avec sac de sable", None, ""),
     Station("wall_ball", "20 wall balls", "wall_ball", "20 squats sautés"),
 )
 
@@ -635,6 +637,11 @@ def _stations(inp: HybridInputs, first: int, count: int) -> list[str]:
     ]
 
 
+def _station_ids(first: int, count: int) -> tuple[str, ...]:
+    """The ids of the stations ``_stations`` describes."""
+    return tuple(STATIONS[(first + k) % len(STATIONS)].id for k in range(count))
+
+
 def _circuit(inp: HybridInputs, factor: float, week: int) -> DraftSession:
     minutes = CIRCUIT_MIN * factor * DIVISION_VOLUME[inp.division]
     return DraftSession(
@@ -646,6 +653,7 @@ def _circuit(inp: HybridInputs, factor: float, week: int) -> DraftSession:
         "Circuit stations : " + ", ".join(_stations(inp, 2 * week, 4)),
         sport="strength",
         tags=frozenset({STATION, HARD}),
+        stations=_station_ids(2 * week, 4),
     )
 
 
@@ -661,6 +669,7 @@ def _benchmark(inp: HybridInputs) -> DraftSession:
         + ")",
         sport="strength",
         tags=frozenset({STATION, BENCHMARK, HARD}),
+        stations=_station_ids(0, 4),
     )
 
 

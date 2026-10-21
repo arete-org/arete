@@ -114,6 +114,26 @@ export const PHASE_LABEL: Record<string, string> = {
 
 export const phaseLabel = (phase: string): string => PHASE_LABEL[phase] ?? phase;
 
+/** Session kinds of a Hyrox or hybrid plan (features/hybrid_plan.py, services/plan_summary.py). */
+export const PLAN_KIND_LABEL: Record<string, string> = {
+  race: 'course',
+  key_run: 'course clé',
+  compromised: 'course compromise',
+  easy: 'footing',
+  heavy_lower: 'bas du corps',
+  upper: 'haut du corps',
+  station: 'circuit stations',
+  activation: 'activation',
+  benchmark: 'test de fin de bloc',
+};
+
+/** The athlete's level a Hyrox or hybrid plan is sized for. */
+export const LEVEL_LABEL: Record<string, string> = {
+  novice: 'débutant',
+  intermediate: 'intermédiaire',
+  advanced: 'confirmé',
+};
+
 /** Kinds of durable athlete facts (services/athlete_facts.py). */
 export const FACT_KIND_LABEL: Record<string, string> = {
   injury: 'blessure',

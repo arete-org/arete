@@ -178,7 +178,9 @@ class TestGoalTypes:
             "weeks": 12,
         }
         assert goals.get_goal(g.id) == g
-        updated = goals.update_goal(g.id, details={**g.details, "division": "pro"})
+        updated = goals.update_goal(
+            g.id, details={**g.details, "division": "pro", "category": "women"}
+        )
         assert updated is not None and updated.details["division"] == "pro"
 
     def test_a_road_race_is_unchanged(self):
@@ -190,8 +192,23 @@ class TestGoalTypes:
         ("goal_type", "details", "message"),
         [
             ("hyrox", {}, "catégorie Hyrox"),
-            ("hyrox", {"category": "mixed"}, "mixte se court en doubles"),
-            ("hyrox", {"category": "men", "division": "elite"}, "open ou pro"),
+            ("hyrox", {"category": "mixed"}, "Mixte se court en Duo"),
+            (
+                "hyrox",
+                {"category": "mixed", "format": "doubles", "division": "pro"},
+                "Mixte se court en Open, pas en Pro",
+            ),
+            ("hyrox", {"category": "men", "division": "elite"}, "Open ou Pro"),
+            ("hyrox", {"category": "kids"}, "Hommes, Femmes ou Mixte"),
+            ("hyrox", {"category": "men", "format": "trio"}, "Solo ou Duo"),
+            # A hybrid block takes a category too, for its station loads.
+            ("hybrid", {"category": "unknown"}, "bloc hybride est Hommes ou Femmes"),
+            ("hybrid", {"category": "mixed"}, "bloc hybride est Hommes ou Femmes"),
+            (
+                "hybrid",
+                {"category": "mixed", "format": "doubles"},
+                "bloc hybride est Hommes ou Femmes",
+            ),
             ("hyrox", {"category": "men", "equipment": ["none", "sled"]}, "matériel"),
             ("hybrid", {"weeks": 10}, "8 ou 12 semaines"),
             ("hybrid", {"color": "red"}, "Détail inconnu"),
