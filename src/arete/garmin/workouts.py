@@ -36,29 +36,40 @@ _STRENGTH_NAMES = {
 }
 
 
-#: A distance in a lap step's notes: Garmin strength steps cannot end on one.
-_DISTANCE = re.compile(r"\b\d+(?:[.,]\d+)?\s*k?m\b")
+#: Notes starting with a distance (« 25 m de poussée de traîneau »): Garmin
+#: strength steps cannot end on one, so the lap step describes it.
+_LEADING_DISTANCE = re.compile(
+    r"^\s*\d+(?:[.,]\d+)?\s*(?:m|mètres?|km|kilomètres?)\b", re.IGNORECASE
+)
+#: Sets × reps (« 5x5 »): the strength log's notation.
+_SETS_REPS = re.compile(r"\d+\s*[x×]\s*\d+", re.IGNORECASE)
 
 
 def _names_an_exercise(notes: str) -> bool:
-    """Whether a lap step's notes describe an exercise Garmin could hold as
-    such (« Squat 5x5 », « Wall Ball »): an exact Garmin name, or a catalog
-    exercise with a Garmin equivalent, by name or read by the strength
-    grammar. A distance is the lap step's to describe."""
+    """Whether an effort lap step's notes stand for an exercise Garmin could
+    hold as such: an exact Garmin name, a catalog name or alias with a Garmin
+    equivalent (« Wall Ball », « planche »), or sets × reps the strength
+    grammar reads as one (« Squat 5x5 »). Notes starting with a distance
+    describe what no strength step can end on, and stay."""
     from garminconnect.exercises import resolve
 
-    from arete.data.exercise_matcher import match_exercise
+    from arete.data.exercise_matcher import exact_exercise
     from arete.data.exercises_catalog import EXERCISES_BY_ID
-    from arete.llm.workout_parser import parse_workout_text
 
     text = notes.strip()
-    if _DISTANCE.search(text):
+    if _LEADING_DISTANCE.match(text):
         return False
     if resolve(text):
         return True
-    found = {match_exercise(text).exercise_id}
-    with contextlib.suppress(ValueError):  # raised when it holds no exercise
-        found |= {e.exercise_id for e in parse_workout_text(text).exercises}
+    found = {exact_exercise(text)}
+    notation = _SETS_REPS.search(text)
+    if notation:
+        from arete.llm.workout_parser import parse_workout_text
+
+        # The whole notes, and up to the notation: « Squat 5x5 (10 m) ».
+        for part in (text, text[: notation.end()]):
+            with contextlib.suppress(ValueError):  # raised when it holds none
+                found |= {e.exercise_id for e in parse_workout_text(part).exercises}
     names = [EXERCISES_BY_ID[i]["name"] for i in found if i is not None]
     return any(resolve(_STRENGTH_NAMES.get(n, n)) is not None for n in names)
 
@@ -176,7 +187,7 @@ def convert(
                 raise ValueError(
                     "Une étape de musculation sans exercice doit nommer sa station dans ses notes."
                 )
-            if station and _names_an_exercise(step.notes):
+            if station and step.kind == "effort" and _names_an_exercise(step.notes):
                 raise ValueError(
                     f"« {step.notes} » est un exercice Garmin : choisis-le avec ses "
                     "répétitions ou sa durée plutôt que de le décrire en notes."

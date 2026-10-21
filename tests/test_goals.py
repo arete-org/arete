@@ -202,7 +202,13 @@ class TestGoalTypes:
             ("hyrox", {"category": "kids"}, "Hommes, Femmes ou Mixte"),
             ("hyrox", {"category": "men", "format": "trio"}, "Solo ou Duo"),
             # A hybrid block takes a category too, for its station loads.
-            ("hybrid", {"category": "unknown"}, "Hommes, Femmes ou Mixte"),
+            ("hybrid", {"category": "unknown"}, "bloc hybride est Hommes ou Femmes"),
+            ("hybrid", {"category": "mixed"}, "bloc hybride est Hommes ou Femmes"),
+            (
+                "hybrid",
+                {"category": "mixed", "format": "doubles"},
+                "bloc hybride est Hommes ou Femmes",
+            ),
             ("hyrox", {"category": "men", "equipment": ["none", "sled"]}, "matériel"),
             ("hybrid", {"weeks": 10}, "8 ou 12 semaines"),
             ("hybrid", {"color": "red"}, "Détail inconnu"),

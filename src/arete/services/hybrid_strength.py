@@ -38,8 +38,7 @@ from arete.features.hybrid_plan import (
 )
 from arete.features.plan_generator import DraftSession, WeekPlan
 from arete.services.prescriptions import Prescription
-from arete.strength.progression import _lighter as lighter
-from arete.strength.progression import increment, round_load
+from arete.strength.progression import increment, lighter, round_load
 
 if TYPE_CHECKING:
     from arete.strength.models import Exercise
@@ -135,8 +134,12 @@ OFFICIAL_LOADS: dict[tuple[Division, Category], StationLoads] = {
 
 
 def station_loads(division: Division, category: Category | None) -> StationLoads | None:
-    """The race's station loads; None when the goal has no category."""
-    return OFFICIAL_LOADS[(division, category)] if category else None
+    """The race's station loads; None when the goal has no category. A Pro
+    mixed goal stored before ``services.goals`` refused it races the mixed
+    (Open) loads: its plan still builds."""
+    if category is None:
+        return None
+    return OFFICIAL_LOADS[("open" if category == "mixed" else division, category)]
 
 
 @dataclass(frozen=True)
@@ -265,7 +268,9 @@ def starting_loads(repo: StrengthRepository | None = None) -> dict[str, Start]:
 
 
 def _raised(load: float, start: Start) -> float:
-    """One increment more, unless it passes ``MAX_RISE`` above the start."""
+    """One increment more, unless it passes ``MAX_RISE`` above the start.
+    The cap is exact: a start too light for one increment to fit (under
+    about 6.7 kg with 1 kg increments) never rises."""
     heavier = round_load(load + increment(load, start.lower_body))
     ceiling = round(start.weight_kg * (1 + MAX_RISE), 6)  # 115.0, not 114.999…
     return heavier if heavier <= ceiling else load

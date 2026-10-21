@@ -670,6 +670,9 @@ EXERCISES_CATALOG: list[ExerciseDefinition] = [
         "secondary_muscles": ["hamstrings", "calves", "triceps", "front_delts", "abs"],
         "movement_pattern": "compound",
     },
+    # Its own exercise since ARE-138, with no data migration: sandbag lunges
+    # logged before stay under ``lunges`` (and their records and trend there);
+    # new ones, and Garmin's SANDBAG/LUNGE, count here.
     {
         "id": "sandbag_lunges",
         "name": "Sandbag Lunges",

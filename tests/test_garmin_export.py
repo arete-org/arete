@@ -1230,8 +1230,12 @@ def test_a_compromised_run_still_exports_as_running(planned):
         (Step(kind="effort", duration_kind="seconds", value=60), "exercice Garmin"),
         # Notes cannot hide an exercise Garmin has: it must be chosen as such.
         (Step(kind="effort", duration_kind="lap", notes="Squat 5x5"), "en notes"),
+        (
+            Step(kind="effort", duration_kind="lap", notes="Squat 5x5 (10 m)"),
+            "en notes",
+        ),
         (Step(kind="effort", duration_kind="lap", notes="Wall Ball"), "en notes"),
-        (Step(kind="warmup", duration_kind="lap", notes="Fentes 3x10"), "en notes"),
+        (Step(kind="effort", duration_kind="lap", notes="planche"), "en notes"),
     ],
 )
 def test_strength_steps_without_an_exact_end_or_name_are_rejected(step, message):
@@ -1272,6 +1276,34 @@ def test_strength_timed_and_lap_steps_convert():
     assert plank["endConditionValue"] == 45
     assert ski["endCondition"]["conditionTypeKey"] == "lap.button"
     assert ski["description"] == "SkiErg 500 m" and "category" not in ski
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        # The benchmark's distances, however the unit is written.
+        Step(kind="effort", duration_kind="lap", notes="25 m de poussée de traîneau"),
+        Step(
+            kind="effort", duration_kind="lap", notes="25 mètres de tirage de traîneau"
+        ),
+        Step(kind="effort", duration_kind="lap", notes="1 km de course"),
+        Step(kind="effort", duration_kind="lap", notes="100 m de farmers carry"),
+        # Stations Garmin has no exercise for.
+        Step(kind="effort", duration_kind="lap", notes="SkiErg 500 m"),
+        Step(kind="effort", duration_kind="lap", notes="20 burpees broad jumps"),
+        # A warm-up or cool-down may name exercises: only efforts are checked.
+        Step(kind="warmup", duration_kind="lap", notes="Échauffement : 5' de rameur"),
+        Step(kind="warmup", duration_kind="lap", notes="Fentes 3x10"),
+        Step(kind="cooldown", duration_kind="lap", notes="Gainage et étirements"),
+        # Prose that only contains an exercise word is not that exercise.
+        Step(kind="effort", duration_kind="lap", notes="Clean technique au bâton"),
+    ],
+)
+def test_strength_lap_steps_describing_what_garmin_cannot_hold_convert(step):
+    payload = convert(1, "Circuit", "strength", Prescription(steps=[step]))
+    (converted,) = payload["workoutSegments"][0]["workoutSteps"]
+    assert converted["endCondition"]["conditionTypeKey"] == "lap.button"
+    assert converted["description"] == step.notes and "category" not in converted
 
 
 def test_unstructured_strength_explains_missing_steps_not_unsupported_sport(planned):

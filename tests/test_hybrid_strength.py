@@ -26,7 +26,12 @@ from arete.services import hybrid_strength as hs
 from arete.services.adaptation import ACWR_REST_AT, TSB_EASE_AT
 from arete.services.prescriptions import Prescription
 from arete.strength.models import Exercise, ExerciseCategory, MuscleGroup
-from arete.strength.progression import ExerciseSession, WorkSet
+from arete.strength.progression import (
+    ExerciseSession,
+    WorkSet,
+    increment,
+    round_load,
+)
 
 RULES = default_rules(acwr_above=ACWR_REST_AT, tsb_below=TSB_EASE_AT)
 START = date(2026, 10, 12)  # a Monday
@@ -174,8 +179,8 @@ def _light(week):
 
 
 def _check_progression(history, starts):
-    """One rise per loading block at most, within 15 % of the start; a light
-    week strictly under the block before it."""
+    """At most one increment per loading block, within 15 % of the start; a
+    light week strictly under the block before it."""
     current: dict[str, float] = {}
     after_light = False
     for week, loads in history:
@@ -185,8 +190,10 @@ def _check_progression(history, starts):
                 current[cid] = kg
             elif _light(week):
                 assert kg < current[cid], (week.start, cid)
-            elif after_light:
-                assert kg >= current[cid], (week.start, cid)
+            elif after_light:  # a new block: the same load or one increment more
+                was = current[cid]
+                once = round_load(was + increment(was, starts[cid].lower_body))
+                assert kg in (was, once), (week.start, cid)
                 current[cid] = kg
             else:  # same block, same load
                 assert kg == current[cid], (week.start, cid)
@@ -253,6 +260,8 @@ def test_a_16_week_pro_cycle_caps_the_rise_at_15_percent():
         ("pro", "women", (152, 103, 24, 20, 6)),
         ("pro", "men", (202, 153, 32, 30, 9)),
         ("open", "mixed", (152, 103, 24, 20, 6)),
+        # Refused since, a stored Pro mixed goal still builds, at mixed loads.
+        ("pro", "mixed", (152, 103, 24, 20, 6)),
     ],
 )
 def test_station_loads_are_the_official_ones(division, category, expected):
@@ -347,6 +356,19 @@ def test_the_benchmark_is_fixed_work_with_laps_for_distances():
     assert "25 m de tirage de traîneau à 103 kg" in notes
     assert all(s["duration_kind"] in ("lap", "reps") for s in steps)
     assert "luge" not in test.description + notes
+
+
+def test_a_start_too_light_for_one_increment_never_rises():
+    # 6 kg + 1 kg = 7 kg passes 6.9 kg (+15 %): the cap is exact.
+    weeks = _prescribed(starts={"lunges": hs.Start(6.0, True)})
+    loads = {
+        _loads(s)["lunges"]
+        for w in weeks
+        if not _light(w)
+        for s in w.sessions
+        if HEAVY_LOWER in s.tags
+    }
+    assert loads == {6.0}
 
 
 def test_kept_sessions_keep_their_content():

@@ -333,6 +333,31 @@ it('edits a started block: its length stays, its end moves up to two weeks later
   client.clear();
 });
 
+it('clears a stored Pro mixed category on edit instead of showing it disabled', async () => {
+  const stored: Goal = {
+    ...goal,
+    id: 6,
+    name: 'Hyrox Lyon',
+    race_date: '2027-03-20',
+    distance_km: 8,
+    goal_type: 'hyrox',
+    details: { division: 'pro', format: 'doubles', category: 'mixed', equipment: ['sled'], weeks: 12 },
+  };
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([stored]);
+  const update = vi.spyOn(goalsApi, 'update').mockResolvedValue(stored);
+  const client = renderPanel();
+  fireEvent.click(await screen.findByRole('button', { name: 'Modifier Hyrox Lyon' }));
+  const mixed = screen.getByRole('button', { name: 'Mixte' }) as HTMLButtonElement;
+  expect(mixed.disabled).toBe(true);
+  expect(mixed.getAttribute('aria-pressed')).toBe('false');
+  expect(screen.getByText('Mixte se court en Open.')).toBeTruthy();
+  // Saving asks for a category the server accepts.
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(screen.getByRole('alert').textContent).toBe('Choisis la catégorie : Hommes, Femmes ou Mixte.');
+  expect(update).not.toHaveBeenCalled();
+  client.clear();
+});
+
 it('resizes a block not started yet from its own first Monday', async () => {
   freezeToday();
   const block: Goal = {

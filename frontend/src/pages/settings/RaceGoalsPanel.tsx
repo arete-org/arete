@@ -184,7 +184,13 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
   const [priority, setPriority] = useState<GoalPriority>(goal?.priority ?? 'A');
   const [division, setDivision] = useState<GoalDetails['division']>(goal?.details?.division ?? 'open');
   const [format, setFormat] = useState<GoalDetails['format']>(goal?.details?.format ?? 'solo');
-  const [category, setCategory] = useState<GoalDetails['category']>(goal?.details?.category ?? null);
+  // A stored mixed category the form no longer allows (Pro, Solo) is not
+  // shown selected but disabled: it is cleared, and the hint says why.
+  const [category, setCategory] = useState<GoalDetails['category']>(() => {
+    const stored = goal?.details?.category ?? null;
+    const mixedAllowed = goal?.details?.division !== 'pro' && goal?.details?.format === 'doubles';
+    return stored === 'mixed' && !mixedAllowed ? null : stored;
+  });
   const [equipment, setEquipment] = useState<Equipment>(goal?.details?.equipment ?? ['none']);
   const storedWeeks = goal?.details?.weeks;
   const [weeks, setWeeks] = useState<8 | 12>(storedWeeks ?? 12);
