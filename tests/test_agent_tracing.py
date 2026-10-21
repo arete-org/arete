@@ -42,8 +42,16 @@ def invoke(state, *, context):
     )
 
 
-def stream_run(state, *, context):
-    return execution.stream_agent(graph_for(context), state, context=context)
+async def stream_run(state, *, context):
+    from contextlib import aclosing
+
+    from anyio import to_thread
+
+    # Composition reads the rollout flag: never on the event loop.
+    graph = await to_thread.run_sync(graph_for, context)
+    async with aclosing(execution.stream_agent(graph, state, context=context)) as run:
+        async for part in run:
+            yield part
 
 
 class FakeCoach(GenericFakeChatModel):
