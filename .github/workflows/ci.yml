@@ -85,6 +85,32 @@ jobs:
       - run: node --test scripts/openwiki/transport.test.mjs
         if: steps.select.outputs.transport == 'true'
 
+  # Linear links a PR on its own when its branch or body names `ARE-<n>`. A job
+  # of its own, needed by none: a missing identifier fails only this check,
+  # which branch protection does not require (yet). `merge_group` has no PR
+  # body, so the merge queue skips it. The body is read live, so editing it
+  # and re-running this job is enough.
+  linear:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/ci
+      - name: Require a Linear identifier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BRANCH: ${{ github.head_ref }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          body=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+          BODY="$body" python3 scripts/ci/linear_reference.py
+
   # The full suite took 14m49s in one job on 2026-10-17 (2 vCPU, 2 workers):
   # three shards of whole files, balanced on scripts/ci/test_durations.json.
   test-shard:
