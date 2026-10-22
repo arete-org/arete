@@ -26,7 +26,7 @@ from arete.dataio.db import db_connection
 from arete.dataio.ownership import require_owned
 from arete.dataio.queries import FOOT_SPORTS, VAM_COLUMNS, sql_in
 from arete.features import terrain as tr
-from arete.garmin.models import ActivitySource, ActualSession
+from arete.garmin.models import ActualSession
 from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import ActivityStreams
 from arete.services.weather import Weather, fetch_weather
@@ -199,9 +199,11 @@ def weather_of(
     point = start_point(session, streams)
     if point is None or session.start_time is None:
         return None
-    # A FIT file's timestamps are UTC; Garmin's and Strava's starts are local.
-    utc = session.source == ActivitySource.FIT_FILE
-    weather = (fetch or fetch_weather)(point[0], point[1], session.start_time, utc=utc)
+    # Every source stores its start on the athlete's clock (file imports too,
+    # see services/activity_import.py).
+    weather = (fetch or fetch_weather)(
+        point[0], point[1], session.start_time, utc=False
+    )
     if weather is None:
         return None
     # The watch's barometric altitude beats the model's grid cell.

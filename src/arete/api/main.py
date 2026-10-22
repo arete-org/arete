@@ -10,6 +10,7 @@ from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from arete import scheduler
+from arete.api.activities import router as activities_router
 from arete.api.admin import router as admin_router
 from arete.api.agent import router as agent_router
 from arete.api.ai_tips import router as ai_tips_router
@@ -261,6 +262,7 @@ for router in (
     settings_router,
     metrics_router,
     garmin_router,
+    activities_router,
     garmin_export_router,
     garmin_health_router,
     garmin_sync_router,

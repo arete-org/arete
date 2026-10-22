@@ -16,9 +16,18 @@ import { useOpenDraft } from './useOpenDraft';
 const SOURCE_BADGE: Record<string, string> = {
   strava: 'bg-strava/20 text-strava',
   garmin: 'bg-info-blue/20 text-info-blue',
+  garmin_connect: 'bg-info-blue/20 text-info-blue',
   manual: 'bg-text-muted/20 text-text-muted',
 };
-const SOURCE_LABEL: Record<string, string> = { strava: 'Strava', garmin: 'Garmin', manual: 'Manuel' };
+const SOURCE_LABEL: Record<string, string> = {
+  strava: 'Strava',
+  garmin: 'Garmin',
+  garmin_connect: 'Garmin',
+  fit_file: 'FIT',
+  tcx_file: 'TCX',
+  gpx_file: 'GPX',
+  manual: 'Manuel',
+};
 
 /** Recent cardio sessions with inline RPE/notes editing. */
 export function RecentSessions() {
@@ -76,7 +85,7 @@ export function RecentSessions() {
   if (sessions.length === 0) {
     return (
       <Panel animate={false}>
-        <EmptyState message="Aucune séance cardio" action="Importe un fichier FIT, saisis-la sans montre ou synchronise Garmin" />
+        <EmptyState message="Aucune séance cardio" action="Importe un fichier d’activité (FIT, TCX, GPX), saisis-la sans montre ou synchronise Garmin" />
       </Panel>
     );
   }

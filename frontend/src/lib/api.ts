@@ -252,22 +252,6 @@ export const garminApi = {
     return fetchAPI<import("@/types").MatchSummary>(`/garmin/summary?${params}`);
   },
 
-  uploadFit: async (file: File, autoMatch = true) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const response = await authFetch(
-      `${API_BASE}/garmin/upload-fit?auto_match=${autoMatch}`,
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
-    if (!response.ok) {
-      throw new ApiError(response.status, await response.text());
-    }
-    return response.json();
-  },
-
   // Sync endpoints
   getSyncStatus: () =>
     fetchAPI<import("@/types").SyncStatus>("/garmin/sync/status"),

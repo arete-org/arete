@@ -55,9 +55,17 @@ class ActivitySource(str, Enum):
     """Source of activity data."""
 
     FIT_FILE = "fit_file"
+    TCX_FILE = "tcx_file"
+    GPX_FILE = "gpx_file"
     GARMIN_CONNECT = "garmin_connect"
     STRAVA = "strava"
     MANUAL = "manual"
+
+
+#: Activities the athlete imported as a file, from any watch or app.
+FILE_SOURCES = frozenset(
+    {ActivitySource.FIT_FILE, ActivitySource.TCX_FILE, ActivitySource.GPX_FILE}
+)
 
 
 #: The sport names Arete stores. Garmin, Strava, FIT files, the planning page
@@ -98,6 +106,7 @@ SPORT_ALIASES: dict[str, str] = {
     "gravel_cycling": "cycling",
     "gravelride": "cycling",
     "ebikeride": "cycling",
+    "biking": "cycling",  # TCX's Sport="Biking"
     # Swimming
     "swim": "swimming",
     "lap_swimming": "swimming",

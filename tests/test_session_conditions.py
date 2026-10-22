@@ -193,13 +193,14 @@ class TestEnrich:
         conditions.enrich_sessions([session_id], fetch=fetch)
         assert len(fetch.calls) == 1  # the weather is fetched once
 
-    def test_a_fit_upload_is_read_in_utc(self, make_session):
+    def test_a_file_import_is_read_on_the_local_clock(self, make_session):
+        # The import stores its start on the athlete's clock, as Garmin does.
         session_id = make_session(
-            _climb(), source=ActivitySource.FIT_FILE, start_lat=45.0, start_lon=6.0
+            _climb(), source=ActivitySource.GPX_FILE, start_lat=45.0, start_lon=6.0
         )
         fetch = Recorder()
         conditions.enrich_sessions([session_id], fetch=fetch)
-        assert fetch.calls == [(45.0, 6.0, START, True)]
+        assert fetch.calls == [(45.0, 6.0, START, False)]
 
     def test_a_failing_fetch_never_fails_the_caller(self, make_session):
         session_id = make_session(_climb())

@@ -38,6 +38,7 @@ GATED = [
     ("post", "/garmin/sync/activities"),
     ("post", "/garmin/health/sync"),
     ("post", "/garmin/upload-fit"),
+    ("post", "/activities/import"),
     ("post", "/agent/chat"),
     ("post", "/agent/chat/stream"),
     ("post", "/tips/daily"),

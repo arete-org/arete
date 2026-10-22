@@ -296,7 +296,7 @@ def _weather_lines(day: date) -> list[str]:
         row = con.execute(
             "SELECT start_lat, start_lon, start_time FROM app.visible_actual_sessions "
             "WHERE start_lat IS NOT NULL AND start_lon IS NOT NULL "
-            "AND start_time IS NOT NULL AND source NOT IN ('strava', 'fit_file') "
+            "AND start_time IS NOT NULL AND source <> 'strava' "
             "ORDER BY date DESC, start_time DESC LIMIT 1"
         ).fetchone()
     if row is None:

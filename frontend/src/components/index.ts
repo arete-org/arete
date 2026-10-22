@@ -6,7 +6,7 @@ export { CalendarWeek } from "./CalendarWeek";
 export { SessionCard, OffPlanRow, SessionFacts, strengthAsActual, withStrengthLogs, SESSION_TYPE_LABEL } from "./SessionCard";
 export { AdherenceBar } from "./AdherenceBar";
 export { DecisionBadge } from "./DecisionBadge";
-export { FitDropzone } from "./FitDropzone";
+export { ActivityDropzone } from "./ActivityDropzone";
 export { StrengthIcon } from "./SportIcons";
 export { MuscleMap } from "./muscle-map";
 export { GarminLoginModal } from "./GarminLoginModal";

@@ -34,6 +34,8 @@ const ZONE_NAME = ['Z1 récupération', 'Z2 endurance', 'Z3 tempo', 'Z4 seuil', 
 const SOURCE_LABEL: Record<string, string> = {
   garmin_connect: 'Garmin',
   fit_file: 'Fichier FIT',
+  tcx_file: 'Fichier TCX',
+  gpx_file: 'Fichier GPX',
   strava: 'Strava',
   manual: 'Saisie manuelle',
 };
@@ -227,7 +229,7 @@ function LinkedStrengthLog({
   const openDraft = useOpenDraft();
   const exercises = log.data?.exercises ?? [];
   if (logId === null) {
-    const watch = source === 'garmin_connect' || source === 'fit_file';
+    const watch = ['garmin_connect', 'fit_file', 'tcx_file', 'gpx_file'].includes(source ?? '');
     return (
       <Panel title="Charges">
         <p className="text-sm font-sans text-text-secondary mb-3">
