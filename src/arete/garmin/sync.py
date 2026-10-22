@@ -22,7 +22,7 @@ from arete.dataio.game_events import CaptureContext
 from arete.dataio.settings import athlete_zone_model
 from arete.features.hr_zones import ZoneModel, samples_from_laps
 from arete.garmin.client import GarminAuthError, GarminClient
-from arete.garmin.duplicates import find_duplicate
+from arete.garmin.duplicates import find_takeover
 from arete.garmin.fit_parser import FITParser, laps_to_json
 from arete.garmin.matcher import SessionMatcher
 from arete.garmin.models import (
@@ -105,6 +105,8 @@ class GarminActivity:
     avg_cadence: int | None
     max_cadence: int | None
     moving_duration_sec: int | None = None
+    #: Wall-clock time, pauses included (``duration`` is the timer's).
+    elapsed_duration_sec: int | None = None
     #: False when Garmin sent no start time and the sync time stands in for it.
     start_time_known: bool = True
     #: What a strength activity's watch recognised: exercises, sets, reps.
@@ -145,6 +147,9 @@ class GarminActivity:
             or data.get("maxBikingCadenceInRevPerMinute"),
             moving_duration_sec=int(data["movingDuration"])
             if data.get("movingDuration")
+            else None,
+            elapsed_duration_sec=int(data["elapsedDuration"])
+            if data.get("elapsedDuration")
             else None,
             start_time_known="startTimeLocal" in data,
             exercise_summaries=exercise_summaries(data.get("summarizedExerciseSets")),
@@ -390,6 +395,8 @@ def file_takeover(garmin: ActualSession) -> dict[str, Any]:
     return {
         "source": garmin.source.value,
         **{column: value for column, value in measured.items() if value is not None},
+        # Garmin's own file name or none: never the imported file's.
+        "source_file": garmin.source_file,
         **dict.fromkeys(DERIVED_FROM_STRAVA),
     }
 
@@ -679,7 +686,10 @@ class GarminSyncClient:
                         twin = None
                     # Or on a row imported from a file (ARE-181)?
                     if twin is None and activity.start_time_known:
-                        twin = self._file_twin(session)
+                        twin = self._file_twin(
+                            session,
+                            activity.elapsed_duration_sec or session.duration_sec,
+                        )
                     if twin is not None and twin.id is not None:
                         if twin.source == ActivitySource.STRAVA:
                             self.repository.update_actual_session_fields(
@@ -696,17 +706,21 @@ class GarminSyncClient:
                         actual_id = twin.id
                         result.activities_merged += 1
                         result.session_ids.append(actual_id)
-                        if twin.planned_session_id is None:
+                        # Scored as merged: values kept from the file count.
+                        merged = self.repository.get_actual_session(actual_id)
+                        if merged is None:
+                            pass  # deleted since: nothing left to score
+                        elif merged.planned_session_id is None:
                             if auto_match(
-                                self.repository, twin.id, session, self.zones
+                                self.repository, actual_id, merged, self.zones
                             ):
                                 result.activities_matched += 1
                         else:
                             rescore(
                                 self.repository,
-                                twin.id,
-                                session,
-                                twin.planned_session_id,
+                                actual_id,
+                                merged,
+                                merged.planned_session_id,
                                 self.zones,
                             )
                     else:
@@ -768,15 +782,15 @@ class GarminSyncClient:
 
         yield result
 
-    def _file_twin(self, session: ActualSession) -> ActualSession | None:
-        """The file-imported row of this workout, by the import's own rule."""
+    def _file_twin(
+        self, session: ActualSession, elapsed_sec: int
+    ) -> ActualSession | None:
+        """The file-imported row of this workout (``garmin/duplicates``)."""
         if self._file_imports is None:
             self._file_imports = self.repository.has_file_imports()
         if not self._file_imports:
             return None
-        return find_duplicate(
-            self.repository, session, session.duration_sec, FILE_SOURCES
-        )
+        return find_takeover(self.repository, session, elapsed_sec, FILE_SOURCES)
 
     def _is_already_synced(self, activity_id: int) -> bool:
         """Check if activity is already in database.

@@ -87,6 +87,7 @@ def _activity(
     start: datetime = datetime(2026, 10, 14, 8, 30, 20),
     sport: str = "running",
     duration: int = 610,
+    elapsed: int | None = None,
 ) -> GarminActivity:
     return GarminActivity(
         activity_id=activity_id,
@@ -104,6 +105,7 @@ def _activity(
         descent_m=None,
         avg_cadence=None,
         max_cadence=None,
+        elapsed_duration_sec=elapsed,
     )
 
 
@@ -119,11 +121,14 @@ def _sync(*activities: GarminActivity, streams: ActivityStreams | None = None):
     client = GarminSyncClient(
         client=MagicMock(), repository=GarminRepository(), zones=ZONES
     )
+
+    def enrich(session: ActualSession, path: Path):
+        session.source_file = path.name
+        return session, streams
+
     with (
         patch.object(client, "download_fit_file", return_value=Path("777.fit")),
-        patch.object(
-            client, "_enrich_from_fit", side_effect=lambda s, _p: (s, streams)
-        ),
+        patch.object(client, "_enrich_from_fit", side_effect=enrich),
     ):
         events = list(
             client.iter_sync_activities(
@@ -168,6 +173,7 @@ def test_the_garmin_sync_takes_over_the_imported_file(db):
     assert session.start_time == datetime(2026, 10, 14, 8, 30, 20)
     # A value Garmin lacks keeps the file's (the same workout).
     assert session.hr_zones_json is not None
+    assert session.source_file == "777.fit"  # Garmin's file, not the GPX's
     # Garmin's streams replaced the file's, and the records follow them.
     stored = repo.get_activity_streams(file_id)
     assert stored is not None and stored.heart_rate == GARMIN_STREAMS.heart_rate
@@ -199,6 +205,8 @@ def test_a_takeover_without_garmin_streams_keeps_the_files(db):
 
     assert result.session_ids == [file_id] and result.activities_merged == 1
     assert GarminRepository().get_activity_streams(file_id) == file_streams
+    taken = GarminRepository().get_actual_session(file_id)
+    assert taken is not None and taken.source_file is None
     # Garmin's 2 km over the same streams: the records are recomputed.
     assert _scalar(
         "SELECT count(*) FROM app.best_efforts WHERE session_id = ?", [file_id]
@@ -255,6 +263,87 @@ def test_a_legacy_fit_row_is_taken_over_by_its_end(db):
     session = repo.get_actual_session(legacy_id)
     assert session is not None
     assert session.start_time == FILE_START and session.rpe == 4
+
+
+def test_a_legacy_fit_row_with_a_long_pause_is_taken_over(db):
+    # 10 minutes of timer over 17 of wall clock: the stored end is 08:47.
+    repo = GarminRepository()
+    legacy_id = repo.create_actual_session(
+        ActualSession(
+            date=DAY,
+            sport="running",
+            duration_sec=600,
+            source=ActivitySource.FIT_FILE,
+            source_file="run.fit",
+            start_time=datetime(2026, 10, 14, 8, 47),
+        )
+    )
+
+    result = _sync(_activity(start=FILE_START, duration=600, elapsed=1020))
+
+    assert result.session_ids == [legacy_id] and result.activities_merged == 1
+
+
+def test_the_elapsed_duration_is_read_from_garmin():
+    activity = GarminActivity.from_api_response(
+        {
+            "activityId": 1,
+            "startTimeLocal": "2026-10-14T08:30:00",
+            "duration": 600.0,
+            "elapsedDuration": 1020.4,
+        }
+    )
+    assert (activity.duration_sec, activity.elapsed_duration_sec) == (600, 1020)
+
+
+def _file_row(start: datetime, duration: int, sport: str = "running") -> int:
+    return GarminRepository().create_actual_session(
+        ActualSession(
+            date=start.date(),
+            sport=sport,
+            duration_sec=duration,
+            source=ActivitySource.TCX_FILE,
+            source_file=f"{sport}.tcx@{start:%Y-%m-%dT%H:%M:%S}",
+            start_time=start,
+        )
+    )
+
+
+def test_of_two_file_rows_the_closest_start_is_taken_over(db):
+    closest = _file_row(datetime(2026, 10, 14, 8, 30, 30), 600)
+    # Listed first (newer id), within the tolerance, but further away.
+    _file_row(datetime(2026, 10, 14, 8, 34), 600)
+
+    result = _sync(_activity())
+
+    assert result.session_ids == [closest]
+
+
+def test_a_short_file_run_ended_before_the_garmin_run_is_not_taken_over(db):
+    # 07:00 to 07:03, then Garmin's run from 07:04: no shared time.
+    file_id = _file_row(datetime(2026, 10, 14, 7, 0), 180)
+
+    result = _sync(_activity(start=datetime(2026, 10, 14, 7, 4)))
+
+    assert (result.activities_synced, result.activities_merged) == (1, 0)
+    assert file_id not in result.session_ids and len(_rows()) == 2
+
+
+def test_a_file_run_inside_a_long_garmin_session_of_another_sport_stays(db):
+    # A 20-minute run from 07:02 inside a 60-minute strength session.
+    _file_row(datetime(2026, 10, 14, 7, 2), 1200)
+    strength = _activity(
+        start=datetime(2026, 10, 14, 7, 0), sport="strength_training", duration=3600
+    )
+
+    with (
+        patch("arete.garmin.sync.link_garmin_strength"),
+        patch("arete.garmin.sync.open_garmin_draft"),
+    ):
+        result = _sync(strength)
+
+    assert (result.activities_synced, result.activities_merged) == (1, 0)
+    assert [row[1] for row in _rows()] == ["tcx_file", "garmin_connect"]
 
 
 def test_only_a_file_row_is_taken_over(db):

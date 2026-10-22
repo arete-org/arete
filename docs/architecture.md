@@ -680,12 +680,15 @@ and runs terrain and weather. Sources are `fit_file`, `tcx_file` and
 `gpx_file`; the daily feedback catch-up reads those dated within two days, so
 a history import announces nothing.
 
-The Garmin sync takes over a file-imported row of the same workout, by that
-same rule, instead of adding a second one (ARE-181,
-`garmin/sync.file_takeover`): the row becomes Garmin's, every value Garmin
-measured replaces the file's (one it lacks, such as zones without its FIT
-file, keeps the file's), and the athlete's notes and RPE and the plan link
-stay; the adherence is rescored on Garmin's values. The update is one
+The Garmin sync takes over a file-imported row of the same workout instead
+of adding a second one (ARE-181, `duplicates.find_takeover`,
+`garmin/sync.file_takeover`): the same tolerances, compared over Garmin's
+elapsed time, with stricter guards since the row is rewritten (shared time
+required, another sport must share half of the longer session, the closest
+start wins). The row becomes Garmin's: every value Garmin measured replaces
+the file's (one it lacks, such as zones without its FIT file, keeps the
+file's; the file name never stays), and the athlete's notes and RPE and the
+plan link stay; the adherence is rescored on the merged row. The update is one
 `UPDATE … RETURNING` that requires the row to still be a file import and
 recomputes the run's best efforts in its transaction; Garmin's streams then
 replace the file's through `save_activity_streams`. A concurrent edit or
