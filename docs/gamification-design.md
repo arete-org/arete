@@ -70,7 +70,7 @@ A source must be valid, saved while opted in, dated no more than 14 days ago and
 
 Source IDs prevent replay credits; canonical IDs consolidate repeated external activity identities. Existing strength-to-actual links are resolved before projection. Unlinking does not recreate a previously consolidated reward. A late merge or deletion produces compensating ledger entries rather than editing old receipts. This can reduce XP or make the Éclat balance negative after spending; owned skins remain, and future earnings repay the deficit. An ordinary pause never subtracts XP.
 
-Each projection acknowledges at most 100 pending source events. It recomputes their affected weeks and the active current week, including already captured events in each week. Each week is bounded to 1,000 canonical activities/receipts; overflow fails explicitly. Remaining pending evidence stays visible. Thus the 100-event bound is an acknowledgement batch, not a promise of only 100 ledger operations.
+Each projection acknowledges at most 100 pending source events. It recomputes their affected weeks, the active current week and every week sharing an activity with them (its home week, the earliest one that holds receipts, and each week holding its receipts), including already captured events in each week. Each week is bounded to 1,000 canonical activities/receipts; overflow fails explicitly. Remaining pending evidence stays visible. Thus the 100-event bound is an acknowledgement batch, not a promise of only 100 ledger operations.
 
 ### Concurrency and failure
 

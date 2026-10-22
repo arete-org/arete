@@ -404,6 +404,67 @@ def test_duplicate_in_an_earlier_week_moves_the_credit_there(game_db):
     assert _ledger() == expected
 
 
+def test_a_ledger_credited_in_the_old_week_is_not_paid_twice(game_db):
+    """Written before ARE-93: credited only where the activity no longer lives."""
+    enable()
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.game_periods SET started_at=started_at - INTERVAL 30 DAY"
+        )
+    today = athlete_today()
+    old_day, home_day = today - timedelta(days=7), today - timedelta(days=14)
+    evidence("run", old_day)
+    assert game.sync()["xp"] == 50
+    # The former projection processed the earlier duplicate and wrote nothing.
+    with transaction() as con:
+        capture(con, "dup", home_day, "Doublon", True, canonical="run")
+        con.execute("UPDATE app.game_events SET processed=true RETURNING source_key")
+    # Later, another activity settles the home week only.
+    evidence("other", home_day)
+    state = game.sync()
+    old, home = (str(d - timedelta(days=d.weekday())) for d in (old_day, home_day))
+    assert (state["xp"], state["shards"]) == (100, 20)
+    assert _ledger() == sorted(
+        [
+            ("activity:run", old, 50, 10, "Course"),
+            ("activity:run", home, 50, 10, "Course"),
+            (
+                "activity:run",
+                old,
+                -50,
+                -10,
+                "Correction de doublon · Séance rapprochée",
+            ),
+            ("activity:other", home, 50, 10, "Course"),
+        ]
+    )
+
+
+def test_a_duplicate_in_a_week_the_game_never_opened_keeps_the_credit(game_db):
+    """An ineligible earlier duplicate cannot move the credit where none can go."""
+    enable()
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.game_periods SET started_at=started_at - INTERVAL 20 DAY"
+        )
+    today = athlete_today()
+    day = today - timedelta(days=7)
+    evidence("run", day)
+    assert game.sync()["xp"] == 50
+    with transaction() as con:
+        capture(
+            con, "dup", today - timedelta(days=14), "Doublon", False, canonical="run"
+        )
+        assert not con.execute(
+            "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?",
+            [day - timedelta(days=day.weekday() + 7)],
+        ).fetchone()
+    state = game.sync()
+    week = str(day - timedelta(days=day.weekday()))
+    assert (state["xp"], state["shards"]) == (50, 10)
+    assert _ledger() == [("activity:run", week, 50, 10, "Course")]
+
+
 WRITES = ("INSERT", "UPDATE", "DELETE", "BEGIN")
 
 

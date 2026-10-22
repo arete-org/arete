@@ -1428,8 +1428,10 @@ def _keep_settled_rewards(conn, session_id: int, actual_id: int) -> None:
             [kept, activity if kept == log else log],
         )
     else:
-        # A merged group settles in its first week: a later week's credit would
-        # be reversed. Both sides counted, or weeks apart: keep both keys.
+        # A merged group settles in its home week (gamification._HOMES): a later
+        # week's credit would move there, changing both weeks' counts and
+        # possibly their weekly bonus. Both sides counted, or weeks apart:
+        # keep both keys.
         conn.execute(
             "UPDATE app.game_events SET reason=reason || ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? AND NOT ends_with(reason, ?)) RETURNING source_key",
             [KEPT_AT_LINK, keys[0], KEPT_AT_LINK],

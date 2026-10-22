@@ -17,6 +17,8 @@ from arete.services.plan_repository import ATHLETE_CHOICE
 
 MAX_EVENTS = 100
 MAX_WEEK_ACTIVITIES = 1000
+#: Weeks one projection settles together, linked weeks included (ten years).
+MAX_SETTLED_WEEKS = 520
 RANKS = (
     (1, "Novice"),
     (3, "Initié"),
@@ -167,6 +169,44 @@ _UNRESOLVED_LINK = f"""SELECT 1 FROM app.visible_game_events e, app.visible_stre
     AND NOT ends_with(e.reason, '{KEPT_AT_LINK}') LIMIT 1"""
 
 
+#: Each activity's home week, where it is credited: its earliest evidence in a
+#: week that holds receipts (a ``game_weeks`` row), else its earliest one. An
+#: ineligible duplicate dated in a week the game never opened therefore cannot
+#: take the credit away from the week holding it (ARE-93).
+_HOMES = """SELECT e.canonical_key, coalesce(min(e.week_start) FILTER (WHERE w.week_start IS NOT NULL),
+    min(e.week_start)) AS home, bool_or(e.eligible) AS eligible, min(e.name) AS name,
+    min(e.created_at) AS created_at
+    FROM app.visible_game_events e LEFT JOIN app.visible_game_weeks w ON w.week_start=e.week_start
+    GROUP BY e.canonical_key"""
+
+#: The weeks sharing an activity with the given ones: its home week and every
+#: week holding its receipts.
+_LINKED_WEEKS = f"""WITH links AS (
+    SELECT 'activity:'||canonical_key AS cause, home AS week FROM ({_HOMES})
+    UNION SELECT cause, week_start FROM app.visible_game_ledger
+    WHERE starts_with(cause, 'activity:') AND week_start IS NOT NULL)
+    SELECT DISTINCT week FROM links WHERE cause IN
+    (SELECT cause FROM links WHERE week IN (SELECT unnest(?)))"""
+
+
+def _linked_weeks(con, weeks: set[date]) -> set[date]:
+    """``weeks`` and every week linked to them, transitively. Reads only.
+
+    An activity's credit and its reversal must settle in one projection:
+    settling only one side would lose the credit or pay it twice, ledgers
+    written before ARE-93 (credited where the activity no longer lives)
+    included. The closure grows until stable, bounded by ``MAX_SETTLED_WEEKS``.
+    """
+    linked = set(weeks)
+    while True:
+        found = {w for (w,) in con.execute(_LINKED_WEEKS, [list(linked)]).fetchall()}
+        if found <= linked:
+            return linked
+        linked |= found
+        if len(linked) > MAX_SETTLED_WEEKS:
+            raise GameError("Trop de semaines liées : projection suspendue.")
+
+
 def _receipts(con, week: date, targets: list[tuple[str, int, int, str]]) -> list[list]:
     """Ledger rows that bring each cause's total in this week to its target.
 
@@ -207,7 +247,7 @@ def _week(con, week: date, today: date) -> tuple[dict, list[list]]:
         "SELECT goal,timezone FROM app.visible_game_weeks WHERE week_start=?", [week]
     ).fetchone()
     rows = con.execute(
-        "SELECT canonical_key,bool_or(eligible),min(name),epoch(min(created_at)) FROM app.visible_game_events GROUP BY canonical_key HAVING min(week_start)=? ORDER BY min(created_at),canonical_key LIMIT ?",
+        f"SELECT canonical_key,eligible,name,epoch(created_at) FROM ({_HOMES}) WHERE home=? ORDER BY created_at,canonical_key LIMIT ?",
         [week, MAX_WEEK_ACTIVITIES + 1],
     ).fetchall()
     if len(rows) > MAX_WEEK_ACTIVITIES:
@@ -344,22 +384,17 @@ def sync() -> dict:
                 AND e.canonical_key<>a.canonical_key AND NOT ends_with(e.reason, ?)) RETURNING e.source_key""",
                 [KEPT_AT_LINK],
             )
-        # A duplicate imported with another date must settle its original week
-        # too, and every week already holding its receipts: one dated earlier
-        # moves the activity, whose old week must then reverse its credit.
+        # A duplicate imported with another date settles its activity's home
+        # week too, and every week linked to them: one dated earlier moves the
+        # activity, whose old week must then reverse its credit.
         if pending:
-            keys = [key for key, _ in pending]
-            original_weeks = con.execute(
-                """WITH moved AS (SELECT DISTINCT canonical_key FROM app.visible_game_events
-                WHERE source_key IN (SELECT unnest(?)))
-                SELECT min(week_start) FROM app.visible_game_events
-                WHERE canonical_key IN (SELECT canonical_key FROM moved) GROUP BY canonical_key
-                UNION SELECT week_start FROM app.visible_game_ledger
-                WHERE cause IN (SELECT 'activity:'||canonical_key FROM moved)""",
-                [keys],
+            homes = con.execute(
+                f"""SELECT home FROM ({_HOMES}) WHERE canonical_key IN (SELECT canonical_key
+                FROM app.visible_game_events WHERE source_key IN (SELECT unnest(?)))""",
+                [[key for key, _ in pending]],
             ).fetchall()
-            weeks.update(w for (w,) in original_weeks)
-        for week in sorted(weeks):
+            weeks.update(w for (w,) in homes)
+        for week in sorted(_linked_weeks(con, weeks)):
             if con.execute(
                 "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?", [week]
             ).fetchone():
@@ -399,7 +434,7 @@ def _snapshot(con, offset: int = 0) -> dict:
         "SELECT goal FROM app.visible_game_weeks WHERE week_start=?", [week]
     ).fetchone()
     counts = con.execute(
-        "SELECT count(*),count(*) FILTER(WHERE week_start=?) FROM (SELECT canonical_key,min(week_start) AS week_start FROM app.visible_game_events GROUP BY canonical_key HAVING bool_or(eligible))",
+        f"SELECT count(*),count(*) FILTER(WHERE home=?) FROM ({_HOMES}) WHERE eligible",
         [week],
     ).fetchone()
     owned = {
