@@ -273,6 +273,47 @@ def test_a_review_being_written_is_not_exported():
     assert [r["week_start"] for r in body["tables"]["weekly_reviews"]] == ["2001-01-01"]
 
 
+def test_briefings_leave_with_the_athlete_s_reactions_and_no_one_else_s(
+    tmp_path, monkeypatch
+):
+    """GDPR portability: what the athlete wrote on a briefing is theirs (ARE-106)."""
+    from arete.dataio.init_duckdb import main as init_schema
+    from arete.services.athlete_scope import athlete_scope
+    from arete.services.coaching_repository import BriefingRepository
+    from arete.services.users import upsert_user
+
+    # A database of its own: a second athlete must not outlive this test.
+    monkeypatch.setenv("ARETE_DB", str(tmp_path / "export.duckdb"))
+    monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path / "files"))
+    init_schema()
+    repo = BriefingRepository()
+    mine = repo.create(text="Footing facile.", briefing_date=date(2001, 1, 10))
+    repo.react(mine, "down", "Trop prudent.")
+    other = upsert_user("other", "other@example.com", "Other", verified=True)
+    with athlete_scope(other.athlete_id):
+        theirs = repo.create(text="Leur briefing.", briefing_date=date(2001, 1, 10))
+        repo.react(theirs, "up", "Leur avis.")
+
+    body = json.loads(
+        data_export.build("json", names=["coach_briefings"]).content.decode()
+    )
+    [row] = body["tables"]["coach_briefings"]
+    assert (row["date"], row["text"], row["source"]) == (
+        "2001-01-10",
+        "Footing facile.",
+        "rules",
+    )
+    assert (row["reaction"], row["reaction_comment"]) == ("down", "Trop prudent.")
+    assert row["created_at"] and row["reacted_at"]
+    # Same table, same columns as a CSV: the format of every other table.
+    csv_text = _zip(data_export.build("zip", names=["coach_briefings"]).content)[
+        "coach_briefings.csv"
+    ]
+    [header, line] = list(csv.reader(io.StringIO(csv_text)))
+    assert dict(zip(header, line, strict=True))["reaction_comment"] == "Trop prudent."
+    assert "Leur" not in csv_text
+
+
 def test_a_timestamp_late_on_the_end_day_is_inside_the_range():
     con = connect()
     con.execute(
