@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Literal
 
 from .fitness import FormZone, ReadinessLevel
-from .workload import ACWRZone, MonotonyZone, StrainZone
+from .workload import ACWRZone, MonotonyZone, StrainZone, format_acwr
 
 
 class Priority(Enum):
@@ -113,7 +113,7 @@ def _recommendations_acwr(
                 priority=Priority.CRITICAL,
                 category=Category.VOLUME,
                 title="⚠️ ALERTE : Risque de blessure élevé",
-                message=f"Votre ACWR ({acwr:.2f}) est dangereusement élevé",
+                message=f"Votre ACWR ({format_acwr(acwr)}) est dangereusement élevé",
                 reason="Un ACWR > 1.5 multiplie le risque de blessure par 2-4",
                 actions=[
                     "Réduisez immédiatement le volume de 30-40%",
@@ -130,7 +130,7 @@ def _recommendations_acwr(
                 priority=Priority.HIGH,
                 category=Category.VOLUME,
                 title="Zone de vigilance",
-                message=f"Votre ACWR ({acwr:.2f}) indique une charge élevée",
+                message=f"Votre ACWR ({format_acwr(acwr)}) indique une charge élevée",
                 reason="ACWR entre 1.3 et 1.5 : progression rapide mais risquée",
                 actions=[
                     "Stabilisez le volume cette semaine",
@@ -146,7 +146,7 @@ def _recommendations_acwr(
                 priority=Priority.LOW,
                 category=Category.PROGRESSION,
                 title="✅ Zone optimale",
-                message=f"Votre ACWR ({acwr:.2f}) est dans la zone idéale",
+                message=f"Votre ACWR ({format_acwr(acwr)}) est dans la zone idéale",
                 reason="ACWR 0.8-1.3 : équilibre parfait charge/récupération",
                 actions=[
                     "Continuez sur cette lancée",
@@ -161,7 +161,7 @@ def _recommendations_acwr(
                 priority=Priority.MEDIUM,
                 category=Category.PROGRESSION,
                 title="Sous-entraînement détecté",
-                message=f"Votre ACWR ({acwr:.2f}) est faible",
+                message=f"Votre ACWR ({format_acwr(acwr)}) est faible",
                 reason="ACWR < 0.8 : risque de désentraînement",
                 actions=[
                     "Augmentez progressivement le volume (+10-15%/semaine)",

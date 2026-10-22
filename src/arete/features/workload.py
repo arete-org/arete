@@ -258,6 +258,12 @@ def calculate_acwr(acute: float, chronic: float) -> float | None:
     return acute / chronic
 
 
+def format_acwr(acwr: float) -> str:
+    """« 1,45 »: an ACWR as the athlete's French texts write it (and as the
+    facts the models copy into theirs give it), two decimals after a comma."""
+    return f"{acwr:.2f}".replace(".", ",")
+
+
 def get_acwr_zone(acwr: float | None) -> ACWRZone:
     """Get risk zone for ACWR value.
 

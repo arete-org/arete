@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from arete.dataio.queries import training_loads
 from arete.dataio.settings import athlete_zone_model, get_user_settings
 from arete.features.overview import sport_label
-from arete.features.workload import compute_workload_metrics
+from arete.features.workload import compute_workload_metrics, format_acwr
 from arete.garmin.repository import GarminRepository
 from arete.services.activity_detail import analysis_lines
 from arete.services.analytics import MODEL_EXCLUDED_SOURCES
@@ -78,7 +78,7 @@ def generate_daily_tip(
     goal_advice = GOAL_ADVICE.get(fitness_goal, GOAL_ADVICE["build"])
     if acwr is not None and acwr > 1.5:
         return (
-            f"Ta charge aiguë dépasse largement la chronique (ACWR {acwr:.2f}). "
+            f"Ta charge aiguë dépasse largement la chronique (ACWR {format_acwr(acwr)}). "
             "Réduis le volume dès aujourd'hui pour éviter la blessure.",
             "alert",
         )
@@ -92,7 +92,7 @@ def generate_daily_tip(
 
     if acwr is not None and acwr > 1.3:
         return (
-            f"Ta charge monte vite (ACWR {acwr:.2f}). "
+            f"Ta charge monte vite (ACWR {format_acwr(acwr)}). "
             "Stabilise cette semaine et alterne séances dures et légères.",
             "warning",
         )
@@ -114,13 +114,13 @@ def generate_daily_tip(
 
     if acwr is not None and 0.8 <= acwr <= 1.3:
         return (
-            f"Charge équilibrée (ACWR {acwr:.2f}). {goal_advice}",
+            f"Charge équilibrée (ACWR {format_acwr(acwr)}). {goal_advice}",
             "info",
         )
 
     if acwr is not None and acwr < 0.8:
         return (
-            f"Charge basse par rapport à tes 4 dernières semaines (ACWR {acwr:.2f}). "
+            f"Charge basse par rapport à tes 4 dernières semaines (ACWR {format_acwr(acwr)}). "
             f"{goal_advice}",
             "info",
         )

@@ -25,6 +25,7 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
 from arete.dataio.settings import get_user_settings
+from arete.features.workload import format_acwr
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.coaching_repository import Briefing, BriefingRepository
 from arete.services.plan_repository import MISSED_REPLAN
@@ -80,11 +81,7 @@ _GOALS = {
 
 
 def _fmt(value: float | None, pattern: str) -> str:
-    """A fact's number as the athlete reads it: the model copies the facts'
-    numbers, so a decimal comma here is one in the French text it writes."""
-    if value is None:
-        return "indisponible"
-    return pattern.format(value).replace(".", ",")
+    return pattern.format(value) if value is not None else "indisponible"
 
 
 def _clock(seconds: int) -> str:
@@ -131,7 +128,9 @@ def load_lines(facts: RuleFacts, day: date) -> list[str]:
             f"{facts.readiness_score:.0f}/100"
         )
     return [
-        f"Charge aiguë/chronique (ACWR, sur 28 jours) : {_fmt(facts.acwr, '{:.2f}')}",
+        # A decimal comma: the model copies it into the French briefing.
+        "Charge aiguë/chronique (ACWR, sur 28 jours) : "
+        + (format_acwr(facts.acwr) if facts.acwr is not None else "indisponible"),
         f"Fraîcheur (TSB) : {_fmt(facts.tsb, '{:+.0f}')}",
         readiness,
         f"Objectif de la période : {_GOALS.get(facts.fitness_goal, facts.fitness_goal)}",

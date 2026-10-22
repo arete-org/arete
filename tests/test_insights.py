@@ -26,7 +26,8 @@ class TestVolume:
 
 class TestPmc:
     def test_high_acwr_is_bad(self):
-        assert insights.pmc_insight(90, -5, 1.6, "danger")["tone"] == "bad"
+        r = insights.pmc_insight(90, -5, 1.6, "danger")
+        assert r["tone"] == "bad" and "(ACWR 1,60)" in r["text"]  # decimal comma
 
     def test_deep_fatigue_is_bad(self):
         assert insights.pmc_insight(90, -30, 1.0, "optimal")["tone"] == "bad"

@@ -75,7 +75,7 @@ def test_an_easy_session_is_kept_at_a_middling_readiness():
 def test_acwr_overrides_a_high_readiness():
     result = evaluate(_input(readiness=90.0, acwr=1.6))
     assert result is not None and result.decision == Decision.REST
-    assert "1.60" in result.reason
+    assert "ACWR 1,60" in result.reason  # a decimal comma: the athlete reads it
 
 
 def test_deep_fatigue_or_a_recovery_goal_eases_a_tempo_at_90():
