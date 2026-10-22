@@ -123,7 +123,7 @@ function EveningPanel({ settings, updateSetting }: SettingsTabProps) {
         <label className="flex flex-wrap items-center gap-2 pl-6 text-sm text-text-secondary">
           À partir de
           <select
-            className="min-h-11 rounded border border-text-muted/30 bg-abyss px-2 text-sm"
+            className="ui-input min-h-11 border border-text-muted/30 bg-abyss px-2 text-sm"
             value={settings.coach_evening_hour}
             disabled={!enabled}
             onChange={(e) => updateSetting('coach_evening_hour', Number(e.target.value))}
@@ -233,7 +233,7 @@ function NotificationsPanel({ settings, updateSetting }: SettingsTabProps) {
         <fieldset className="space-y-2 pl-6" disabled={!settings.notifications_enabled}>
           <legend className="sr-only">Notifications reçues</legend>
           <label className="grid gap-2 text-sm text-text-secondary">Notifications de coaching par jour
-            <select className="min-h-11 rounded border border-border bg-void px-3" value={prefs.daily_limit ?? 2} onChange={event => updateSetting('notification_preferences', { ...prefs, daily_limit: Number(event.target.value) })}>
+            <select className="ui-input min-h-11 border border-border bg-void px-3" value={prefs.daily_limit ?? 2} onChange={event => updateSetting('notification_preferences', { ...prefs, daily_limit: Number(event.target.value) })}>
               {[0, 1, 2, 3].map(value => <option key={value} value={value}>{value === 0 ? 'Aucune notification proactive' : `${value} maximum`}</option>)}
             </select>
           </label>

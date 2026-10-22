@@ -23,6 +23,8 @@
 .suivi-page label { display: grid; gap: 8px; }
 .suivi-page input:not([type='checkbox']), .suivi-page textarea, .suivi-page select { border: 1px solid var(--color-border); background: var(--color-void); color: var(--color-text-primary); padding: 12px; width: 100%; min-width: 0; border-radius: var(--radius-control, 9px); }
 .suivi-page textarea { min-height: 100px; }
+/* Its selects are shared `.ui-input` fields (no native look, drawn chevron): a 44 px touch target here too. */
+.suivi-page select { min-height: 44px; }
 .suivi-page pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .suivi-page [role='alert'] { color: var(--color-danger-red); }
 .suivi-page .suivi-link { justify-self: start; color: var(--color-neon-cyan); padding-left: 0; }

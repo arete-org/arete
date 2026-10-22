@@ -84,7 +84,7 @@ export function WorkoutSelection({ sessions, children, onResult, locked = false,
         </button>
       </div>
       <label className="mt-2 flex min-h-9 items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={watch} disabled={actions.busy || locked} onChange={e => { setWatch(e.target.checked); setDeviceId(null); }} /><Watch className="size-3.5" /> Demander aussi le transfert vers une montre</label>
-      {watch && <><select aria-label="Montre Garmin" className="mt-1 w-full rounded-lg border border-text-muted/25 bg-void p-2 text-sm" value={deviceId ?? ''} disabled={actions.busy} onChange={e => setDeviceId(Number(e.target.value) || null)}>
+      {watch && <><select aria-label="Montre Garmin" className="ui-input mt-1 min-h-11 w-full border border-text-muted/25 bg-void p-2 text-sm" value={deviceId ?? ''} disabled={actions.busy} onChange={e => setDeviceId(Number(e.target.value) || null)}>
         <option value="">Choisir une montre compatible</option>{devices.data?.map(d => <option key={d.id} value={d.id} disabled={!effective.every(s => d.sports.includes(s.sport))}>{d.name}{!d.sports.length ? ' · compatibilité inconnue' : ''}</option>)}
       </select><p className="mt-1 text-xs text-text-muted">La réception se vérifie sur la montre après synchronisation.</p></>}
       {selectionBlocked && !actions.busy && <p className="mt-2 text-xs text-warning-orange">Une séance a changé ou nécessite une vérification Garmin. Vérifie son état, puis sélectionne-la à nouveau.</p>}
