@@ -1,0 +1,31 @@
+tests/test_agent_run_telemetry.py
+  s_0b04ac756915ef::t_9fcdc3bfb67ed7 124-146,150-154
+  s_0b04ac756915ef::t_5f134d343e5c8a 147-149
+src/arete/coaching.py
+  s_0b04ac756915ef::t_7a9513d85b0444 7-12
+  s_0b04ac756915ef::t_89242e06d761e5 146
+  s_0b04ac756915ef::t_d9e0b8db724cef 58
+  s_0b04ac756915ef::t_6b26517cfcc5e8 252-256
+  s_0b04ac756915ef::t_3e29e9f9503c16 71-74
+tests/test_api.py
+  s_0b04ac756915ef::t_95e8d89afb7fb0 3,217-234
+  s_0b04ac756915ef::t_c85dce43b47e83 235-236
+src/arete/observability/agent.py
+  s_0b04ac756915ef::t_d405a55ff026f3 62-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f21f2be11c59f7728e904a75aba73b59db42764c",
+  "prompts": {},
+  "sessions": {
+    "s_0b04ac756915ef": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "40a2bd9e-4a60-4e73-ae29-25ac3b47c34b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nicolas Edmond <nicolas@mac-1.home>"
+    }
+  }
+}
