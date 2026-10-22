@@ -307,8 +307,14 @@ def propose(facts: WeekFacts, upcoming: list[PlannedSession]) -> list[Proposal]:
 
 
 def facts_text(facts: WeekFacts, proposals: list[Proposal]) -> str:
+    # A decimal comma, as in the briefing's facts and the reasons below: the
+    # model copies these numbers into the review the athlete reads.
     def fmt(value: float | None, pattern: str) -> str:
-        return pattern.format(value) if value is not None else "indisponible"
+        return (
+            pattern.format(value).replace(".", ",")
+            if value is not None
+            else "indisponible"
+        )
 
     lines = [
         f"Semaine du {facts.week_start.isoformat()} au "

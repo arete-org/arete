@@ -80,7 +80,11 @@ _GOALS = {
 
 
 def _fmt(value: float | None, pattern: str) -> str:
-    return pattern.format(value) if value is not None else "indisponible"
+    """A fact's number as the athlete reads it: the model copies the facts'
+    numbers, so a decimal comma here is one in the French text it writes."""
+    if value is None:
+        return "indisponible"
+    return pattern.format(value).replace(".", ",")
 
 
 def _clock(seconds: int) -> str:
