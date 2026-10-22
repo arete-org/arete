@@ -249,7 +249,10 @@ Domain actions invalidate this invocation-local cache for the next model call; r
 reuse it. There is no page-context tool. A
 question about the screen therefore needs no tool call. The journal is read again
 for each model call, so writes within a turn are visible on the next call; older
-entries remain accessible through filesystem tools. Contributions do not mutate
+entries remain accessible through filesystem tools. Sections marked unstable (Garmin
+freshness, the open page, the Slack surface and its clock, the last-call budget
+notice) follow every stable one, in declaration order, so provider prompt caches
+keep the stable prefix. Contributions do not mutate
 stored message content. `RuntimeContextMiddleware` owns the clock: once before
 each chat run, it stamps the new human message's `additional_kwargs.arete_sent_at`
 from the invocation's athlete-local instant. It renders date, time, UTC offset

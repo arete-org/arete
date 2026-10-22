@@ -24,8 +24,7 @@ the monthly archives — is still one `read_file` away, and the block says so.
 
 Read from disk on each model call rather than once per turn: two small files,
 and an entry the agent writes mid-turn shows up in its next call instead of
-contradicting what it just did. The block goes at the end of the system
-prompt so the stable part before it keeps the same prefix from call to call.
+contradicting what it just did.
 """
 
 from __future__ import annotations

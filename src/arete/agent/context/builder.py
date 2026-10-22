@@ -101,17 +101,6 @@ def build_context(
             "server",
         ),
         ContextSection(
-            "execution_budget",
-            "Dernier appel du budget : réponds maintenant sans outil à la demande "
-            "en utilisant les résultats déjà reçus. Si le travail est incomplet, "
-            "dis-le explicitement : distingue les actions confirmées, les échecs "
-            "et ce qui reste à faire. Ne prétends pas avoir vérifié des données "
-            "non lues ni effectué une action sans résultat confirmé."
-            if final_call
-            else "",
-            "server",
-        ),
-        ContextSection(
             "capabilities", tool_instructions_suffix(profile_id), "registry"
         ),
         ContextSection(
@@ -165,8 +154,22 @@ def build_context(
             "server",
             stable=False,
         ),
-        ContextSection("surface", surface_section(context), "server"),
+        ContextSection("surface", surface_section(context), "server", stable=False),
+        ContextSection(
+            "execution_budget",
+            "Dernier appel du budget : réponds maintenant sans outil à la demande "
+            "en utilisant les résultats déjà reçus. Si le travail est incomplet, "
+            "dis-le explicitement : distingue les actions confirmées, les échecs "
+            "et ce qui reste à faire. Ne prétends pas avoir vérifié des données "
+            "non lues ni effectué une action sans résultat confirmé."
+            if final_call
+            else "",
+            "server",
+            stable=False,
+        ),
     ]
+    # Provider prompt caches match from the first byte: keep the stable prefix intact.
+    sections.sort(key=lambda section: not section.stable)
     base = request.override(
         tools=[] if final_call else tools,
         system_message=SystemMessage("\n\n".join(s.text for s in sections if s.text)),
