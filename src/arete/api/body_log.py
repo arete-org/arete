@@ -100,7 +100,6 @@ class ReportSession(BaseModel):
     date: date_type
     kind: Literal["cardio", "strength"]
     sport: str
-    name: str | None
     duration_min: int
     distance_km: float | None
     avg_hr: int | None

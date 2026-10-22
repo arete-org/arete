@@ -30,7 +30,7 @@ const REPORT = {
   })),
   sessions: Array.from({ length: 12 }, (_, i) => ({
     date: localDay(-50 + i * 4), kind: i % 4 ? 'cardio' : 'strength', sport: i % 4 ? 'running' : 'strength',
-    name: i % 4 ? 'Footing vallonné avec quelques accélérations' : 'Jambes', duration_min: 45, distance_km: i % 4 ? 9.4 : null,
+    duration_min: 45, distance_km: i % 4 ? 9.4 : null,
     avg_hr: i % 4 ? 142 : null, rpe: 5, tss: 52,
   })),
   pain: [...TREND.pain].reverse(),

@@ -140,7 +140,7 @@ export function DataTab() {
             Huit semaines sur une page : charge, séances, douleurs, poids, préparation et check-ins. À imprimer ou
             enregistrer en PDF depuis ton navigateur.
           </p>
-          <Link to="/sante/rapport" className="shrink-0 text-sm font-sans text-neon-cyan hover:underline">
+          <Link to="/sante/rapport" className="inline-flex min-h-11 shrink-0 items-center text-sm font-sans text-neon-cyan hover:underline">
             Ouvrir le rapport →
           </Link>
         </div>

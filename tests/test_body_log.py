@@ -85,6 +85,32 @@ def test_a_pain_is_recorded_corrected_and_erased(db, client):
     assert client.put(f"/body/pain/{entry['id']}", json=_pain(today)).status_code == 404
 
 
+def test_an_old_entry_stays_correctable_on_its_day(db, client, monkeypatch):
+    today = athlete_today()
+    entry = body_log.add_pain(
+        today - timedelta(days=body_log.MAX_PAST_DAYS), area="hip", intensity=6
+    )
+    # A week later, the entry is past the window: its day can stay, not move back in.
+    later = today + timedelta(days=7)
+    monkeypatch.setattr(body_log, "athlete_today", lambda: later)
+    kept = client.put(
+        f"/body/pain/{entry.id}", json=_pain(entry.date, area="hip", intensity=3)
+    )
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["intensity"] == 3
+    moved = client.put(
+        f"/body/pain/{entry.id}",
+        json=_pain(entry.date - timedelta(days=1), area="hip", intensity=3),
+    )
+    assert moved.status_code == 422
+    assert (
+        client.put(
+            f"/body/pain/{entry.id}", json=_pain(later + timedelta(days=1))
+        ).status_code
+        == 422
+    )
+
+
 def test_a_day_has_one_weight_corrected_by_entering_it_again(db, client):
     day = athlete_today().isoformat()
     first = client.put(f"/body/weight/{day}", json={"weight_kg": 71.46})
@@ -362,6 +388,19 @@ def test_the_health_page_gives_the_coach_its_trend_without_timestamps(db):
     assert data["weight"]["latest"] == data["weights"][0]
 
 
+def test_the_health_page_lists_the_newest_entries_only(db, monkeypatch):
+    from arete.services import pages
+
+    monkeypatch.setattr(pages, "HEALTH_PAGE_ENTRIES", 2)
+    for back in range(3):
+        body_log.add_pain(
+            athlete_today() - timedelta(days=back), area="neck", intensity=back + 1
+        )
+    data = pages.get_page_data("health")["body_log"]
+    assert [p["intensity"] for p in data["pain"]] == [1, 2]
+    assert data["areas"][0]["entries"] == 3  # the summary still counts them all
+
+
 # --------------------------------------------------------------------------- #
 # Pain under a high load: the day's decision and the briefing
 # --------------------------------------------------------------------------- #
@@ -407,36 +446,43 @@ def test_pain_under_a_high_load_eases_the_day_and_says_why(tempo_today):
     from arete.services.plan_adaptation import adapt_today
 
     body_log.add_pain(
-        athlete_today() - timedelta(days=2), area="knee", side="left", intensity=5
+        athlete_today() - timedelta(days=2), area="knee", side="left", intensity=4
     )
     adapt_today()
     [(decision, reason)] = _decisions()
     assert decision == "ease"
-    assert "douleur déclarée à 5/10 (genou, côté gauche)" in reason
-    assert "ACWR 1.42" in reason
+    assert (
+        "douleur déclarée à 4/10 avec une charge au-dessus de la zone sûre "
+        "(ACWR 1,42)" in reason
+    )
+    # The decision is stored: its reason keeps the area out.
+    assert "genou" not in reason
 
 
 @pytest.mark.parametrize(
-    ("back", "intensity", "acwr"),
+    ("back", "area", "intensity", "acwr"),
     [
-        (0, 3, 1.42),  # under 4/10
-        (3, 7, 1.42),  # four days ago: outside the three days
-        (0, 7, 1.2),  # a load in its safe zone
+        (0, "calf", 3, 1.42),  # under 4/10
+        (3, "calf", 7, 1.42),  # four days ago: outside the three days
+        (0, "calf", 7, 1.3),  # the top of the safe zone is still safe
+        (0, "shoulder", 7, 1.42),  # a run spares the shoulder
     ],
 )
-def test_other_pain_leaves_the_decision_as_it_was(tempo_today, back, intensity, acwr):
+def test_other_pain_leaves_the_decision_as_it_was(
+    tempo_today, back, area, intensity, acwr
+):
     from arete.services.plan_adaptation import adapt_today
 
     tempo_today["value"] = acwr
     body_log.add_pain(
-        athlete_today() - timedelta(days=back), area="calf", intensity=intensity
+        athlete_today() - timedelta(days=back), area=area, intensity=intensity
     )
     adapt_today()
     assert _decisions() == []  # 85 keeps the tempo
 
 
-def test_without_a_readiness_pain_under_a_high_load_still_eases_a_hard_session():
-    from arete.services.adaptation import AdaptationInput, Decision, evaluate
+def _session(**fields):
+    from arete.services.adaptation import AdaptationInput
 
     base = dict(
         session_type="intervals",
@@ -447,24 +493,88 @@ def test_without_a_readiness_pain_under_a_high_load_still_eases_a_hard_session()
         target_intensity=None,
         description=None,
         readiness=None,
-        readiness_source="model",
+        readiness_source="garmin_training",
+        acwr=1.42,
         tsb=None,
         fitness_goal="build",
     )
-    assert evaluate(AdaptationInput(**base, acwr=1.4)) is None
-    outcome = evaluate(
-        AdaptationInput(**base, acwr=1.4, pain="douleur déclarée à 6/10 (tibia)")
+    return AdaptationInput(**{**base, **fields})
+
+
+def _shin(intensity: int = 6):
+    from arete.services.adaptation import DeclaredPain
+
+    return (DeclaredPain("shin", intensity),)
+
+
+def test_pain_counts_only_on_an_area_the_sport_loads():
+    from arete.services.adaptation import LOADED_AREAS, Decision, DeclaredPain, evaluate
+
+    # Every mapped area is one the athlete can choose.
+    assert set().union(*LOADED_AREAS.values()) <= set(body_log.PAIN_AREAS)
+    shoulder = (DeclaredPain("shoulder", 8),)
+    assert evaluate(_session(readiness=85, pain=shoulder)).decision == Decision.KEEP
+    swim = evaluate(_session(readiness=85, sport="swimming", pain=shoulder))
+    assert swim.decision == Decision.EASE
+    # « Autre » has no known place: it counts for every sport.
+    other = evaluate(_session(readiness=85, pain=(DeclaredPain("other", 5),)))
+    assert other.decision == Decision.EASE
+
+
+def test_pain_and_a_low_check_in_share_one_band():
+    from arete.services.adaptation import Decision, evaluate
+
+    # 85 keeps; either signal alone, or both, eases: one band, never two.
+    for fields in (
+        {"pain": _shin()},
+        {"legs": 1},
+        {"pain": _shin(), "legs": 1, "sleep": 1},
+    ):
+        outcome = evaluate(_session(readiness=85, **fields))
+        assert outcome.decision == Decision.EASE, fields
+    both = evaluate(_session(readiness=85, pain=_shin(), legs=1))
+    assert both.reason.startswith(
+        "Préparation Garmin 85/100, jambes lourdes déclarées, douleur déclarée à 6/10"
     )
+    # Readiness 65 (ease band): both together reach the recovery, not rest.
+    assert (
+        evaluate(_session(readiness=65, pain=_shin(), legs=1)).decision
+        == Decision.REPLACE_EASY
+    )
+
+
+def test_pain_alone_never_turns_a_session_into_rest():
+    from arete.services.adaptation import Decision, evaluate
+
+    # Readiness 50 (recovery band): the pain keeps the 30 min Z1.
+    alone = evaluate(_session(readiness=50, pain=_shin()))
+    assert alone.decision == Decision.REPLACE_EASY
+    # A low check-in alone still lowers it to rest, with or without pain.
+    assert evaluate(_session(readiness=50, legs=1)).decision == Decision.REST
+    assert (
+        evaluate(_session(readiness=50, legs=1, pain=_shin())).decision == Decision.REST
+    )
+    # A readiness already in the rest band rests, pain or not.
+    assert evaluate(_session(readiness=30, pain=_shin())).decision == Decision.REST
+
+
+def test_without_a_readiness_pain_under_a_high_load_still_eases_a_hard_session():
+    from arete.services.adaptation import Decision, evaluate
+
+    assert evaluate(_session()) is None
+    # The check-in alone decides nothing without a readiness.
+    assert evaluate(_session(legs=1)) is None
+    outcome = evaluate(_session(pain=_shin()))
     assert outcome is not None and outcome.decision == Decision.EASE
-    assert outcome.reason.startswith("Douleur déclarée à 6/10 (tibia) avec une charge")
-    # An easy session is already the lighter option.
-    easy = evaluate(
-        AdaptationInput(
-            **{**base, "session_type": "endurance"},
-            acwr=1.4,
-            pain="douleur déclarée à 6/10 (tibia)",
-        )
+    assert outcome.reason.startswith(
+        "Douleur déclarée à 6/10 avec une charge au-dessus de la zone sûre (ACWR 1,42)"
     )
+    # With a low check-in too: still one band, the session is eased.
+    both = evaluate(_session(pain=_shin(), legs=1))
+    assert both.decision == Decision.EASE
+    assert both.reason.startswith("Jambes lourdes déclarées, douleur déclarée")
+    # An easy session is already the lighter option.
+    easy = evaluate(_session(session_type="endurance", pain=_shin()))
     assert easy is not None and easy.decision == Decision.KEEP
 
 
@@ -479,10 +589,12 @@ def test_the_briefing_s_facts_name_the_pain_and_the_rule(tempo_today):
     rule_text, _, facts = _rule_floor(today)
     text = briefing_facts(today, rule_text, facts)
     assert "Douleurs déclarées (3 derniers jours) :" in text
-    assert '- hier : hanche 5/10 ; note de l\'athlète : "raide"' in text
+    assert "- hier : hanche 5/10\n" in text
+    # The notes reach the briefing through the coach's context section only.
+    assert "raide" not in text
     assert (
-        "- Signal pour la décision du jour : douleur déclarée à 5/10 (hanche) avec "
-        "une charge au-dessus de la zone sûre (ACWR 1.42)" in text
+        "- Signal pour la décision du jour : douleur déclarée à 5/10 avec une "
+        "charge au-dessus de la zone sûre (ACWR 1,42)" in text
     )
 
     tempo_today["value"] = 1.1
@@ -531,7 +643,7 @@ def test_the_report_covers_eight_calendar_weeks_ending_today(db):
     assert len(report["weeks"]) == 8
     assert report["weeks"][0]["week_start"] == start.isoformat()
     assert report["weeks"][-1]["week_end"] == today.isoformat()
-    assert [s["name"] for s in report["sessions"]] == ["Jambes", "Footing"]
+    assert [s["sport"] for s in report["sessions"]] == ["strength", "running"]
     footing = report["sessions"][-1]
     assert (footing["kind"], footing["sport"], footing["duration_min"]) == (
         "cardio",
@@ -567,6 +679,8 @@ def test_the_report_covers_eight_calendar_weeks_ending_today(db):
     # Only the pain notes, written for this purpose, are printed.
     printed = json.dumps(report, ensure_ascii=False)
     assert "note privée" not in printed
+    # Nor the titles the athlete may have edited.
+    assert "Footing" not in printed and "Jambes" not in printed
 
 
 def test_the_report_renders_with_no_data(db, client):

@@ -162,7 +162,8 @@ def briefing_facts(
     computed the same numbers. It never saw today's plan either. ``facts``
     are the floor's; without them the load section reads its own. The
     morning check-in (today's and yesterday's) appears only once answered,
-    the pain declared within three days only once declared.
+    the pain declared within three days only once declared, without its notes:
+    the coach's context section already carries them.
     """
     from arete.garmin.repository import GarminRepository
     from arete.services.analytics import list_sessions
@@ -279,20 +280,22 @@ def briefing_facts(
         declared = ["indisponible"]
     try:
         from arete.services import body_log
-        from arete.services.adaptation import pain_under_load
+        from arete.services.adaptation import DeclaredPain, pain_under_load
 
         days = {0: "aujourd'hui", 1: "hier", 2: "avant-hier"}
         start = target_date - timedelta(days=body_log.PAIN_RECENT_DAYS - 1)
         hurts = [
             f"{days.get((target_date - p.date).days, p.date.isoformat())} : "
-            f"{p.describe()}"
+            f"{p.label} {p.intensity}/10"
             for p in body_log.list_pain(start, target_date)
         ]
         if hurts:
             if facts is None:
                 facts = rule_facts(target_date)
             # The fact only: the day's decision, listed below, says what it did.
-            signal = pain_under_load(body_log.pain_phrase(list(facts.pain)), facts.acwr)
+            signal = pain_under_load(
+                [DeclaredPain(p.area, p.intensity) for p in facts.pain], facts.acwr
+            )
             if signal:
                 hurts.append(f"Signal pour la décision du jour : {signal}")
     except Exception:

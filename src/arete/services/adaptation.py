@@ -16,16 +16,22 @@ Good answers never raise a band, and no answer changes nothing. The athlete
 knows how the legs feel; the watch does not, so a bad morning counts, but a
 good one never overrides a low measure.
 
-Declared pain weighs one more band, downwards only, when the load is high:
-pain at 4/10 or more on an area within three days (``body_log.recent_pain``)
-with an ACWR above its safe zone (``ACWR_SAFE_MAX``) lowers the band once,
-whatever the number of painful areas, and the reason names the pain. Without
-a readiness, that pain still decides from the top band: a hard session is
-eased, an easy one kept (a keep is never stored). Pain under a safe load changes nothing here; the coach reads it.
+Declared pain counts when the load is high and the session loads its area:
+pain at 4/10 or more within three days (``body_log.recent_pain``), with an
+ACWR above its safe zone (``ACWR_SAFE_MAX``), on an area the sport loads
+(``LOADED_AREAS``). It shares the check-in's penalty: a low check-in, such a
+pain or both lower the band once, never twice. Pain alone never turns a
+session into rest: its band stops at the recovery replacement (a readiness
+already in the rest band still rests). The reason gives the intensity and the
+ACWR, not the area. Without a readiness the check-in decides nothing, but
+such a pain does, from the top band: a hard session is eased, an easy one
+kept (a keep is never stored). Pain under a safe load, or on an area the
+session spares, changes nothing here; the coach reads it.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -45,6 +51,32 @@ CHECKIN_LOW_AT = 2
 ACWR_SAFE_MAX = 1.3
 
 ADAPTABLE_SPORTS = frozenset({"running", "cycling", "swimming"})
+
+#: The body areas (``body_log.PAIN_AREAS``) each adaptable sport loads. An
+#: « autre » pain has no known place: it counts for every sport. Strength is
+#: absent because the bands never adapt it.
+_LOWER_LIMBS = frozenset(
+    {
+        "foot",
+        "ankle",
+        "achilles",
+        "calf",
+        "shin",
+        "knee",
+        "quadriceps",
+        "hamstring",
+        "hip",
+        "groin",
+        "glute",
+    }
+)
+_BACK = frozenset({"lower_back", "upper_back"})
+_UPPER_LIMBS = frozenset({"shoulder", "elbow", "wrist_hand", "neck"})
+LOADED_AREAS: dict[str, frozenset[str]] = {
+    "running": _LOWER_LIMBS | _BACK | {"other"},
+    "cycling": _LOWER_LIMBS | _BACK | {"other"},
+    "swimming": _UPPER_LIMBS | _BACK | {"other"},
+}
 HARD_TYPES = frozenset({"tempo", "intervals"})
 EASY_TYPES = frozenset({"recovery", "endurance", "long_run"})
 
@@ -71,6 +103,12 @@ class Decision(StrEnum):
 
 
 @dataclass(frozen=True)
+class DeclaredPain:
+    area: str
+    intensity: int
+
+
+@dataclass(frozen=True)
 class AdaptationInput:
     session_type: str
     sport: str
@@ -87,9 +125,9 @@ class AdaptationInput:
     #: The morning check-in (1-5), None when the day has no answer.
     sleep: int | None = None
     legs: int | None = None
-    #: The strongest recent pain at 4/10 or more (``body_log.pain_phrase``),
-    #: None without one.
-    pain: str | None = None
+    #: Pain at 4/10 or more declared in the last three days
+    #: (``body_log.recent_pain``), empty without one.
+    pain: tuple[DeclaredPain, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -130,18 +168,31 @@ def _band(score: float) -> int:
     return (score >= KEEP_AT) + (score >= EASE_AT) + (score >= REPLACE_AT)
 
 
-def pain_under_load(pain: str | None, acwr: float | None) -> str | None:
+def pain_under_load(
+    pain: Sequence[DeclaredPain], acwr: float | None, sport: str | None = None
+) -> str | None:
     """Declared pain under a load above its safe zone, said; None otherwise.
 
-    The rule's one condition: the decision and the briefing's facts read it.
+    The rule's one condition, read by the decision (for ``sport``: only the
+    areas it loads) and by the briefing's facts (any area). The area stays
+    out: the reason is stored with the decision.
     """
-    if pain is None or acwr is None or acwr <= ACWR_SAFE_MAX:
+    if acwr is None or acwr <= ACWR_SAFE_MAX:
         return None
-    return f"{pain} avec une charge au-dessus de la zone sûre (ACWR {acwr:.2f})"
+    loaded = LOADED_AREAS.get(sport, frozenset()) if sport is not None else None
+    counted = [p for p in pain if loaded is None or p.area in loaded]
+    if not counted:
+        return None
+    worst = max(p.intensity for p in counted)
+    ratio = f"{acwr:.2f}".replace(".", ",")
+    return (
+        f"douleur déclarée à {worst}/10 avec une charge au-dessus de la zone sûre "
+        f"(ACWR {ratio})"
+    )
 
 
 def pain_with_load(inp: AdaptationInput) -> str | None:
-    return pain_under_load(inp.pain, inp.acwr)
+    return pain_under_load(inp.pain, inp.acwr, inp.sport)
 
 
 def _said(inp: AdaptationInput) -> str:
@@ -189,11 +240,12 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
 
     said = _said(inp)
     planned = describe(inp.session_type, inp.target_duration_min, inp.target_hr_zone)
-    band = _band(inp.readiness) if inp.readiness is not None else 3
-    if declared_fatigue(inp.sleep, inp.legs):
-        band = max(0, band - 1)
-    if hurt:
-        band = max(0, band - 1)
+    measured = _band(inp.readiness) if inp.readiness is not None else 3
+    band = measured
+    tired_morning = declared_fatigue(inp.sleep, inp.legs) is not None
+    if tired_morning or hurt:
+        # One penalty for both; pain alone stops at the recovery replacement.
+        band = max(0 if tired_morning else min(1, measured), measured - 1)
 
     if inp.acwr is not None and inp.acwr > ACWR_REST_AT:
         return Adaptation(

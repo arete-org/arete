@@ -20,6 +20,7 @@ from arete.garmin.repository import GarminRepository
 from arete.services.adaptation import (
     AdaptationInput,
     Decision,
+    DeclaredPain,
     describe,
     evaluate,
     one_recovery_per_day,
@@ -96,7 +97,6 @@ def adapt_today(
     ``respect_setting`` is the daily run's: with the switch off it writes
     nothing. An explicit request from the athlete ignores it.
     """
-    from arete.services.body_log import pain_phrase
     from arete.services.coaching_rules import rule_facts
 
     day = target_date or athlete_today()
@@ -142,7 +142,7 @@ def adapt_today(
             fitness_goal=facts.fitness_goal,
             sleep=facts.checkin.sleep if facts.checkin else None,
             legs=facts.checkin.legs if facts.checkin else None,
-            pain=pain_phrase(list(facts.pain)),
+            pain=tuple(DeclaredPain(p.area, p.intensity) for p in facts.pain),
         )
         for session in pending
     ]

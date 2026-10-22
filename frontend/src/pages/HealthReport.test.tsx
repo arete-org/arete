@@ -23,10 +23,10 @@ const empty: BodyReport = {
 const section = (name: string) => screen.getByRole('heading', { name }).closest('section') as HTMLElement;
 
 it('renders eight weeks and says what is missing when there is no data', () => {
-  render(<Report report={empty} />);
+  render(<Report report={empty} today="2026-10-22" />);
   expect(screen.getByRole('heading', { level: 1, name: 'Rapport d’entraînement et de santé' })).toBeTruthy();
   expect(screen.getByText(/Du 31 août 2026 au 22 octobre 2026 · 8 semaines/)).toBeTruthy();
-  expect(screen.getByText(/n’est pas un avis médical/)).toBeTruthy();
+  expect(screen.getByText(/Établi par Arete le 22 octobre 2026.+n’est pas un avis médical/)).toBeTruthy();
   expect(within(section('Charge hebdomadaire')).getAllByRole('row')).toHaveLength(9);
   expect(within(section('Douleurs')).getByText('Aucune douleur notée sur la période.')).toBeTruthy();
   expect(within(section('Poids')).getByText('Aucun poids noté sur la période.')).toBeTruthy();
@@ -43,10 +43,11 @@ it('prints the pain with its notes, the weight, the readiness, the check-ins and
   render(
     <Report
       athlete="Greg"
+      today="2026-10-22"
       report={{
         ...empty,
         weeks: weeks.map((w, i) => (i === 7 ? { ...w, sessions: 1, duration_min: 50, distance_km: 10, tss: 48, acwr: 1.38 } : w)),
-        sessions: [{ date: '2026-10-20', kind: 'cardio', sport: 'running', name: 'Footing', duration_min: 50, distance_km: 10, avg_hr: 140, rpe: 4, tss: 48 }],
+        sessions: [{ date: '2026-10-20', kind: 'cardio', sport: 'running', duration_min: 50, distance_km: 10, avg_hr: 140, rpe: 4, tss: 48 }],
         pain: [pain],
         pain_areas: [{ area: 'knee', side: 'left', label: 'genou, côté gauche', last_date: '2026-10-20', last_intensity: 6, max_intensity: 6, entries: 1 }],
         weights: [
@@ -70,6 +71,5 @@ it('prints the pain with its notes, the weight, the readiness, the check-ins and
   expect(within(section('Poids')).getByText('71,4 kg le 20 oct. (−0,8 kg depuis le 1 oct.)')).toBeTruthy();
   expect(within(section('Préparation et sommeil')).getByText('62/100')).toBeTruthy();
   expect(within(section('Check-ins du matin')).getByText('2/5')).toBeTruthy();
-  expect(within(section('Séances')).getByText('Footing')).toBeTruthy();
   expect(within(section('Séances')).getByText('Course')).toBeTruthy();
 });

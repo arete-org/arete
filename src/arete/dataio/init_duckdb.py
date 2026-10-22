@@ -1236,9 +1236,11 @@ def _m65_best_efforts(con) -> None:
 def _m66_body_log(con) -> None:
     """Pain and body weight (ARE-62): a sequence, two tables, their views.
 
-    New relations only, so the previous release runs unchanged on them. One
-    transaction, rolled back together (see migration 49): no table is left
-    without its private view.
+    New relations only, so the previous release runs unchanged on them. On a
+    boot the DDL (``IF NOT EXISTS``) has already created the sequence and the
+    tables outside any transaction, so the transaction protects the views:
+    both or neither (see migration 49). Called on its own, the tables and
+    views are created and rolled back together.
     """
     from arete.dataio.tenant_schema import _view
 

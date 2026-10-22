@@ -8,7 +8,8 @@ calendar weeks, Monday to Sunday, the current one ending today.
 
 The browser prints it (``/sante/rapport``): no PDF library, nothing heavy at
 boot. Free text stays out but for the pain notes, written for this purpose:
-session and check-in notes may say anything. Strava rows count, as on the
+session titles and notes, and check-in notes, may say anything, so a session
+is its sport and numbers only. Strava rows count, as on the
 year review: the report is the athlete's own and never reaches the coach.
 """
 
@@ -27,13 +28,13 @@ REPORT_WEEKS = 8
 
 #: Strength logs recorded with a Garmin activity are that activity: counted once.
 _SESSIONS_SQL = f"""
-    SELECT id, date, sport, name, COALESCE(duration_sec, 0), distance_m, avg_hr,
+    SELECT id, date, sport, COALESCE(duration_sec, 0), distance_m, avg_hr,
            rpe, {TSS_EXPR}
     FROM (
-      SELECT id, user_id, date, sport, name, duration_sec, rpe, avg_hr, distance_m
+      SELECT id, user_id, date, sport, duration_sec, rpe, avg_hr, distance_m
       FROM app.visible_actual_sessions
       UNION ALL
-      SELECT -id, user_id, date, 'strength', name, duration_min * 60,
+      SELECT -id, user_id, date, 'strength', duration_min * 60,
              CAST(ROUND(overall_rpe) AS INTEGER), NULL, NULL
       FROM app.visible_strength_sessions
       WHERE actual_session_id IS NULL
@@ -85,12 +86,11 @@ def report(weeks: int = REPORT_WEEKS, today: date | None = None) -> dict[str, An
             "date": row[1].isoformat(),
             "kind": "strength" if row[0] < 0 else "cardio",
             "sport": row[2],
-            "name": row[3],
-            "duration_min": round(row[4] / 60),
-            "distance_km": round(row[5] / 1000, 1) if row[5] else None,
-            "avg_hr": row[6],
-            "rpe": row[7],
-            "tss": round(row[8]),
+            "duration_min": round(row[3] / 60),
+            "distance_km": round(row[4] / 1000, 1) if row[4] else None,
+            "avg_hr": row[5],
+            "rpe": row[6],
+            "tss": round(row[7]),
         }
         for row in rows
     ]

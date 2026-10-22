@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { ApiError } from '@/lib/api';
+import { ApiError, settingsApi } from '@/lib/api';
 import { bodyApi, bodyKeys, shiftDay, todayIn, type PainEntry } from '@/lib/bodyLog';
 import { qk } from '@/lib/queryKeys';
 import { BodyLogEntry } from './BodyLogEntry';
 import { PainForm } from './PainForm';
+import { WeightForm } from './WeightForm';
 
 /** UTC+14: on another calendar day than most browsers, as the athlete's clock may be. */
 const ZONE = 'Pacific/Kiritimati';
@@ -64,7 +65,7 @@ it('corrects an entry in place, starting from what it says', async () => {
   expect(screen.getByRole<HTMLInputElement>('radio', { name: '5 sur 10' }).checked).toBe(true);
   expect(screen.getByRole<HTMLInputElement>('radio', { name: 'Gauche' }).checked).toBe(true);
   fireEvent.click(screen.getByRole('radio', { name: '2 sur 10' }));
-  fireEvent.click(screen.getByRole('radio', { name: 'Sans côté' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Aucun côté' }));
   fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
   await waitFor(() =>
     expect(update).toHaveBeenCalledWith(7, { date: TODAY, area: 'knee', side: null, intensity: 2, note: 'raide' }),
@@ -121,4 +122,21 @@ it('dates on the athlete’s day, and a session older than the log accepts on to
   expect(day.value).toBe(TODAY);
   expect(day.max).toBe(TODAY);
   expect(day.min).toBe(shiftDay(TODAY, -90));
+});
+
+it('follows the athlete’s day once Settings load, unless the athlete chose one', async () => {
+  client.removeQueries({ queryKey: qk.settings });
+  vi.spyOn(settingsApi, 'get').mockReturnValue(new Promise(() => {}));
+  mount(<WeightForm />);
+  const day = screen.getByLabelText<HTMLInputElement>('Jour');
+  expect(day.value).toBe(todayIn(null)); // the browser's day until Settings answer
+  act(() => {
+    client.setQueryData(qk.settings, { timezone: ZONE });
+  });
+  await waitFor(() => expect(day.value).toBe(TODAY));
+  fireEvent.change(day, { target: { value: shiftDay(TODAY, -3) } });
+  act(() => {
+    client.setQueryData(qk.settings, { timezone: 'Pacific/Pago_Pago' });
+  });
+  expect(day.value).toBe(shiftDay(TODAY, -3));
 });

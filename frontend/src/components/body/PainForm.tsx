@@ -49,10 +49,11 @@ export function PainForm({
   const client = useQueryClient();
   const today = useAthleteToday();
   const earliest = shiftDay(today, -MAX_PAST_DAYS);
-  // A session older than the log accepts dates its pain today.
-  const [date, setDate] = useState(
-    entry?.date ?? (defaultDate && defaultDate >= earliest && defaultDate <= today ? defaultDate : today),
-  );
+  // Untouched, the day follows the athlete's clock once Settings have loaded;
+  // a session older than the log accepts dates its pain today.
+  const [chosen, setDate] = useState<string | null>(null);
+  const date =
+    chosen ?? entry?.date ?? (defaultDate && defaultDate >= earliest && defaultDate <= today ? defaultDate : today);
   const [area, setArea] = useState<PainAreaId | ''>(entry?.area ?? '');
   const [side, setSide] = useState<Side | null>(entry?.side ?? null);
   const [intensity, setIntensity] = useState<number | null>(entry?.intensity ?? null);
@@ -104,9 +105,9 @@ export function PainForm({
 
       <div>
         <p id={`${id}-side`} className="mb-1 text-xs font-sans text-text-muted">Côté <span>(facultatif)</span></p>
-        <div role="radiogroup" aria-labelledby={`${id}-side`} className="grid grid-cols-4 gap-1.5">
-          <Chip name={`${id}-side`} label="Sans côté" checked={side === null} disabled={save.isPending} onChange={() => setSide(null)}>
-            Aucun
+        <div role="radiogroup" aria-labelledby={`${id}-side`} className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          <Chip name={`${id}-side`} label="Aucun côté" checked={side === null} disabled={save.isPending} onChange={() => setSide(null)}>
+            Aucun côté
           </Chip>
           {SIDES.map((s) => (
             <Chip key={s.id} name={`${id}-side`} label={s.label} checked={side === s.id} disabled={save.isPending} onChange={() => setSide(s.id)}>

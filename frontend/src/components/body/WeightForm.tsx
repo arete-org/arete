@@ -12,7 +12,9 @@ export function WeightForm({ onSaved, onCancel }: { onSaved?: (saved: WeightEntr
   const id = useId();
   const client = useQueryClient();
   const today = useAthleteToday();
-  const [date, setDate] = useState(today);
+  // Untouched, the day follows the athlete's clock once Settings have loaded.
+  const [chosen, setDate] = useState<string | null>(null);
+  const date = chosen ?? today;
   const [text, setText] = useState('');
   const weight = parseWeight(text);
   const save = useMutation({

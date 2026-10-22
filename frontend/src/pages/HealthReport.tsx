@@ -6,8 +6,8 @@ import { ErrorState, LoadingState } from '@/components';
 import { Intensity, WeightLine } from '@/components/body/BodyMarks';
 import { Button } from '@/components/ui';
 import { settingsApi } from '@/lib/api';
-import { bodyApi, bodyKeys, formatKg, shortDate, weightSentence, type BodyReport } from '@/lib/bodyLog';
-import { parseLocalDate, toLocalISODate } from '@/lib/dates';
+import { bodyApi, bodyKeys, formatKg, shortDate, useAthleteToday, weightSentence, type BodyReport } from '@/lib/bodyLog';
+import { parseLocalDate } from '@/lib/dates';
 import { capitalized, formatDecimal, sportLabel } from '@/lib/fr';
 import { qk } from '@/lib/queryKeys';
 
@@ -61,7 +61,7 @@ function Table({ caption, head, rows }: { caption: string; head: string[]; rows:
 const Empty = ({ children }: { children: string }) => <p className="text-sm font-sans text-text-muted">{children}</p>;
 
 /** The printed document: nothing in it depends on the screen's theme or width. */
-export function Report({ report, athlete }: { report: BodyReport; athlete?: string | null }) {
+export function Report({ report, today, athlete }: { report: BodyReport; today: string; athlete?: string | null }) {
   const maxTss = Math.max(1, ...report.weeks.map((w) => w.tss));
   return (
     <article className="health-report space-y-6" aria-labelledby="report-title">
@@ -72,7 +72,7 @@ export function Report({ report, athlete }: { report: BodyReport; athlete?: stri
           {athlete ? ` · ${athlete}` : ''}
         </p>
         <p className="text-xs font-sans text-text-muted">
-          Établi par Arete le {longDate(toLocalISODate())}, à partir des séances de la montre et des saisies de
+          Établi par Arete le {longDate(today)}, à partir des séances de la montre et des saisies de
           l’athlète. Ce document n’est pas un avis médical.
         </p>
       </header>
@@ -200,11 +200,10 @@ export function Report({ report, athlete }: { report: BodyReport; athlete?: stri
         {report.sessions.length ? (
           <Table
             caption="Séances réalisées"
-            head={['Jour', 'Sport', 'Séance', 'Durée', 'Distance', 'FC moy.', 'RPE', 'TSS']}
+            head={['Jour', 'Sport', 'Durée', 'Distance', 'FC moy.', 'RPE', 'TSS']}
             rows={report.sessions.map((s) => [
               shortDate(s.date, true),
               sportLabel(s.sport),
-              <span key="n" className="whitespace-normal break-words">{s.name ?? '—'}</span>,
               minutes(s.duration_min),
               s.distance_km ? `${formatDecimal(s.distance_km, 1)} km` : '—',
               dash(s.avg_hr),
@@ -225,6 +224,7 @@ export function HealthReportPage() {
   const query = useQuery({ queryKey: bodyKeys.report, queryFn: bodyApi.report });
   const settings = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
   const name = settings.data?.display_name;
+  const today = useAthleteToday();
 
   return (
     <div className="page-shell space-y-5">
@@ -243,7 +243,7 @@ export function HealthReportPage() {
       ) : query.isError || !query.data ? (
         <ErrorState message="Rapport indisponible" onRetry={() => query.refetch()} />
       ) : (
-        <Report report={query.data} athlete={name && name !== 'Athlète' ? name : null} />
+        <Report report={query.data} today={today} athlete={name && name !== 'Athlète' ? name : null} />
       )}
     </div>
   );

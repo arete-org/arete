@@ -115,7 +115,6 @@ export interface ReportSession {
   date: string;
   kind: 'cardio' | 'strength';
   sport: string;
-  name: string | null;
   duration_min: number;
   distance_km: number | null;
   avg_hr: number | null;

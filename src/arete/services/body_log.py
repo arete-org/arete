@@ -3,15 +3,18 @@
 Two private relations (migration 66): ``app.pain_entries`` (a day, a body
 area from a fixed list, an optional side, an intensity from 0 to 10 and a
 short note, several a day) and ``app.weight_entries`` (one weight a day,
-entered again to correct it). Deleting an entry erases its row: no tombstone
-keeps health data the athlete withdrew. Reads go through the private views
-and no log line carries a value or a note.
+entered again to correct it). Deleting an entry erases its row, with no
+tombstone; text written from it before keeps its own copy: a decision's
+reason (intensity and ACWR, never the area), a briefing, a conversation or
+the coach's journal. Reads go through the private views and no log line
+carries a value or a note.
 
 Who reads them: the coach's context (``context_block``: the last two weeks of
 pain and the latest weight), the morning decision and the briefing
 (``recent_pain``: 4/10 or more within three days lowers the day's band when
-the load is above its safe zone, ``adaptation``), the trend page (``trend``)
-and the physio report (``services/body_report.py``). Weight is shown, never
+the load is above its safe zone and the session loads the area,
+``adaptation``), the trend page (``trend``) and the physio report
+(``services/body_report.py``). Weight is shown, never
 used to normalise a pace or a power: Arete has no such normalisation yet.
 """
 
@@ -226,11 +229,20 @@ def update_pain(
     side: str | None = None,
     note: str | None = None,
 ) -> PainEntry:
-    """Correct an entry of the athlete's; ``LookupError`` for any other id."""
-    _check_day(day, athlete_today())
+    """Correct an entry of the athlete's; ``LookupError`` for any other id.
+
+    The day's bounds apply only to a new day: an entry kept on its day stays
+    correctable after the window has moved past it.
+    """
+    today = athlete_today()
     note = _check_pain(area, side, intensity, note)
     now = utc_now().replace(tzinfo=None)
     with db_connection() as con:
+        current = _get_pain(con, entry_id)
+        if current is None:
+            raise LookupError(entry_id)
+        if day != current.date:
+            _check_day(day, today)
         row = con.execute(
             "UPDATE app.pain_entries SET date = ?, area = ?, side = ?, "
             "intensity = ?, note = ?, updated_at = ? "
@@ -272,14 +284,6 @@ def recent_pain(today: date | None = None) -> list[PainEntry]:
     today = today or athlete_today()
     start = today - timedelta(days=PAIN_RECENT_DAYS - 1)
     return [p for p in list_pain(start, today) if p.intensity >= PAIN_FLAG_AT]
-
-
-def pain_phrase(entries: list[PainEntry]) -> str | None:
-    """The strongest recent pain, said in French, or None without one."""
-    if not entries:
-        return None
-    worst = max(entries, key=lambda p: (p.intensity, p.date))
-    return f"douleur déclarée à {worst.intensity}/10 ({worst.label})"
 
 
 # --------------------------------------------------------------------------- #
