@@ -173,7 +173,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     if: needs.lint.outputs.frontend == 'true'
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: frontend
