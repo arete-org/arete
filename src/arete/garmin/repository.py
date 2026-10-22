@@ -8,6 +8,7 @@ import duckdb
 
 from arete.dataio import plan_changes
 from arete.dataio.db import connect
+from arete.dataio.game_events import CaptureContext
 from arete.dataio.ownership import require_owned
 from arete.garmin.models import (
     ActivitySource,
@@ -364,11 +365,14 @@ class GarminRepository:
     # Actual Sessions
     # ─────────────────────────────────────────────────────────────────────
 
-    def create_actual_session(self, session: ActualSession) -> int:
+    def create_actual_session(
+        self, session: ActualSession, game: CaptureContext | None = None
+    ) -> int:
         """Create a new actual session from parsed FIT file.
 
         Args:
             session: ActualSession to create
+            game: the ``capture_context`` a batch import already read
 
         Returns:
             ID of created session
@@ -456,6 +460,7 @@ class GarminRepository:
                 if session.garmin_activity_id
                 else (f"file:{session.source_file}" if session.source_file else None),
                 manual=str(session.source) in {"manual", "ActivitySource.MANUAL"},
+                context=game,
             )
             conn.execute("COMMIT")
             return int(result[0])
@@ -685,6 +690,30 @@ class GarminRepository:
         finally:
             conn.close()
         return self.get_actual_session(int(row[0])) if row else None
+
+    def game_context(self) -> CaptureContext:
+        """Gamification settings ``capture`` reads, once for a batch import."""
+        from arete.dataio.game_events import capture_context
+
+        conn = self._get_connection()
+        try:
+            return capture_context(conn)
+        finally:
+            conn.close()
+
+    def has_legacy_strava(self) -> bool:
+        """Whether any Strava-created row remains for Garmin to take over."""
+        conn = self._get_connection()
+        try:
+            return (
+                conn.execute(
+                    "SELECT 1 FROM visible_actual_sessions WHERE source = ? LIMIT 1",
+                    [ActivitySource.STRAVA.value],
+                ).fetchone()
+                is not None
+            )
+        finally:
+            conn.close()
 
     def has_garmin_activity(self, activity_id: int) -> bool:
         """Check the athlete's entire archive without loading their sessions."""

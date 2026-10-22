@@ -25,7 +25,11 @@ owner until the synchronous worker or import iterator has unwound. Committed
 sessions are returned by exact local IDs, including old sessions and Garmin
 takeovers of legacy Strava rows (Strava was retired as a source in October 2026;
 the takeover writes Garmin's values over the row). FIT parsing, streams, plan matching and strength
-linking retain the existing import implementation.
+linking retain the existing import implementation. Within one refresh, the
+presence answers read while selecting a page's batch are reused by the import
+(only Garmin imports write Garmin IDs, under the lease), the legacy Strava
+lookup is skipped when no Strava row remains, and gamification settings are
+read once.
 
 A lease that expires while still owned becomes `needs_reconciliation`. It is
 never automatically stolen: a deadline cannot prove that a thread has stopped
@@ -122,7 +126,9 @@ operator action, not an automatic retry of an ambiguous write.
 `tests/test_garmin_freshness.py` exercises empty checks, capped backlogs, delayed
 uploads, failed older rows, anchor shifts, expiry/recovery, overlapping callers,
 token-refresh/HTTP budgets, 429, partial health, committed cancellation state and
-coaching preflight. Existing importer tests cover missing FIT, streams, matching,
+coaching preflight. `tests/test_garmin_sync_cost.py` runs the real importer
+against a mocked Garmin session and bounds a first onboarding import's Garmin
+requests and database statements per activity. Existing importer tests cover missing FIT, streams, matching,
 strength and the takeover of legacy Strava rows. Frontend unit tests and
 `frontend/browser-tests/garmin-connection.spec.ts` cover waiting, partial status,
 foreground refresh, invalidation and the existing MFA/history flows.

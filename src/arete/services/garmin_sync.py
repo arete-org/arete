@@ -330,13 +330,17 @@ def _iter_refresh(
                 relevant = [a for a in parsed if lower <= a.start_time.date() <= today]
                 remaining = max_activities - len(result.session_ids)
                 batch = []
+                importer.presence.clear()
                 for activity in relevant:
-                    if not importer._is_already_synced(activity.activity_id):
+                    present = importer._is_already_synced(activity.activity_id)
+                    if not present:
                         if remaining == 0:
                             reached_end = False
                             state["more_pending"] = True
                             break
                         remaining -= 1
+                    # Proven under this lease: the import does not query it again.
+                    importer.presence[activity.activity_id] = present
                     batch.append(activity)
                 before_errors = len(result.errors)
                 with closing(
