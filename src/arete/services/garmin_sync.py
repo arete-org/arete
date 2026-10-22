@@ -181,11 +181,13 @@ def _iter_fresh(
     max_activities: int = MAX_ACTIVITIES,
     download_fit: bool = True,
     sessions: bool = True,
+    read_health: bool = True,
 ) -> Generator[SyncProgress, None, dict]:
     """The bounded refresh, yielding its progress; returns ``ensure_fresh``'s result.
 
     ``sessions=False`` skips reading back the imported sessions for a caller
-    that only reports counts.
+    that only reports counts. ``read_health=False`` leaves health to the next
+    on-use refresh: an activity import does not wait for seven reads a day.
     """
     from arete.garmin import token_store
 
@@ -215,7 +217,9 @@ def _iter_fresh(
         ):
             return {**state, "state": "cooldown"}
         activities = force or not _fresh(state, "activities_checked_at", ACTIVITY_TTL)
-        health = force or not _fresh(state, "health_checked_at", HEALTH_TTL)
+        health = read_health and (
+            force or not _fresh(state, "health_checked_at", HEALTH_TTL)
+        )
         if not activities and not health:
             return {**state, "state": "fresh" if state.get("complete") else "partial"}
         try:
@@ -223,7 +227,9 @@ def _iter_fresh(
                 activities = force or not _fresh(
                     state, "activities_checked_at", ACTIVITY_TTL
                 )
-                health = force or not _fresh(state, "health_checked_at", HEALTH_TTL)
+                health = read_health and (
+                    force or not _fresh(state, "health_checked_at", HEALTH_TTL)
+                )
                 return (
                     yield from _iter_refresh(
                         owner,
@@ -376,12 +382,26 @@ def _iter_refresh(
             state["stage"] = "health"
             state["health_complete"] = False
             failures = []
-            state["health_days"] = {}
+            previous = state.get("health_days") or {}
+            yesterday = (today - timedelta(days=1)).isoformat()
             # The scheduled catch-up retains its four-day health window and
-            # slow-moving Garmin metrics; interactive refresh only reads two days.
-            health_start = today - timedelta(days=3 if daily else 1)
-            for offset in range(4 if daily else 2):
-                day = today - timedelta(days=offset)
+            # slow-moving Garmin metrics. Interactive refresh reads today, and
+            # yesterday only until one read of it succeeded: seven paced
+            # requests a day, which the daily catch-up completes later.
+            reread = previous.get(yesterday, {}).get("state") not in (
+                "available",
+                "unavailable",
+            )
+            if daily:
+                days = [today - timedelta(days=offset) for offset in range(4)]
+            else:
+                days = [today, today - timedelta(days=1)] if reread else [today]
+            # Yesterday's kept outcome stops the next refresh from rereading it.
+            state["health_days"] = (
+                {} if daily or reread else {yesterday: previous[yesterday]}
+            )
+            health_start = days[-1]
+            for day in days:
                 checkpoint()
                 item = sync_day(day, client, performance=daily and day == today)
                 fields = getattr(item, "fields_synced", 0)
@@ -495,18 +515,25 @@ def iter_manual(**options):
             ),
             download_fit=options.get("download_fit", True),
             sessions=False,
+            # Health is not this import's subject; the next on-use refresh reads it.
+            read_health=False,
         )
         errors = list(refreshed.get("errors", []))
         # The cap is not a failure: the batch was imported and the next refresh
-        # continues from the retained coverage (ARE-177).
+        # continues from the retained coverage (ARE-177). An earlier health
+        # failure, which this import did not retry, is not one either.
         more_pending = bool(refreshed.get("more_pending"))
-        capped = more_pending and not errors and refreshed.get("state") == "partial"
-        if not refreshed.get("complete") and not errors and not capped:
+        imported = (
+            not errors
+            and refreshed.get("state") in ("complete", "partial")
+            and (more_pending or not refreshed.get("coverage_start"))
+        )
+        if not imported and not errors:
             errors.append(
                 "Couverture Garmin incomplète ; les séances importées sont conservées."
             )
         yield SyncResult(
-            success=bool(refreshed.get("complete")) or capped,
+            success=imported,
             more_pending=more_pending,
             activities_synced=refreshed.get("imported", 0),
             activities_merged=refreshed.get("merged_into_strava", 0),

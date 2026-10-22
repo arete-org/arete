@@ -56,8 +56,13 @@ and history requests keep their existing interface and the same durable owner
 and request deadline. They do not claim current-window freshness. Older history
 still uses the explicit history importer.
 
-Health refresh reads today and yesterday in the athlete's timezone. The daily
-catch-up retains its four-day window and current performance metrics. Each day
+Health refresh reads today in the athlete's timezone, plus yesterday until one
+read of it succeeded (its outcome is kept in `health_days`). The undated
+activity import (onboarding, manual) reads no health: the next on-use refresh
+does. The Garmin profile handle that health URLs need is cached with the
+account record, so a sync makes no profile lookup once it is known; a new
+login replaces it. The daily catch-up retains its four-day window and current
+performance metrics. Each day
 reports available, unavailable or failed measurements. Failed requests preserve
 previously stored values and do not advance `health_checked_at`. Missing values
 are not converted into zeros. Terrain/weather work shares the refresh deadline;

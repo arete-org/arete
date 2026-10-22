@@ -95,6 +95,8 @@ class GarminClient:
             api.client.load(str(self.token_dir))
             api.client._run_request = self._sync_request
             api._load_social_profile = self._sync_load_profile
+            # The SDK looks the profile up (one paced request) only when unset.
+            api.display_name = token_store.display_name(self.token_file)
             self._api = api
             if api.client.di_refresh_token and api.client._token_expires_soon():
                 # One proactive refresh is counted too; never replay a refused GET.
@@ -139,6 +141,15 @@ class GarminClient:
         self._api.full_name = profile.get("fullName", "")
         profile_id = profile.get("profileId")
         self._api.profile_id = profile_id if isinstance(profile_id, int) else None
+        try:
+            # Tokens saved before the handle was kept: the next sync reuses it.
+            token_store.save_display_name(
+                self.token_file,
+                name,
+                remote=self._durable_auth and config.is_remote_db,
+            )
+        except Exception:
+            logger.warning("Could not cache the Garmin profile handle", exc_info=True)
 
     def _sync_refresh_token(self, url: str, **kwargs: Any) -> Any:
         from arete.garmin.sync_budget import SyncRateLimited, SyncStopped
@@ -289,6 +300,7 @@ class GarminClient:
                 self.token_file,
                 name if isinstance(name, str) else None,
                 remote=self._durable_auth and config.is_remote_db,
+                display_name=api.display_name,
             )
         except Exception:
             logger.warning("Could not record the Garmin account", exc_info=True)

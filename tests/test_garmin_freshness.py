@@ -507,7 +507,7 @@ def test_undated_manual_import_streams_the_refresh_progress(provider, monkeypatc
         ("processing", 0, 2),
         ("processing", 1, 2),
         ("processing", 2, 2),
-        ("finalizing", 0, None),  # health
+        # Health is left to the next on-use refresh (ARE-177).
         ("finalizing", 0, None),  # enrichment
     ]
     result = events[-1]
@@ -532,3 +532,111 @@ def test_closing_the_manual_stream_keeps_commits_for_the_next_refresh(
     resumed = service.ensure_fresh()
     assert resumed["complete"] and resumed["already_present"] == 1
     assert imported == {2, 1} and resumed["session_ids"] == [1]
+
+
+def test_activity_import_reads_no_health_even_when_stale(provider, monkeypatch):
+    health = Mock(return_value=Mock(success=True))
+    monkeypatch.setattr("arete.garmin.health_sync.sync_day", health)
+    progressing_import(monkeypatch)
+    provider.return_value = [activity(1)]
+    result = list(service.iter_manual(max_activities=20, download_fit=False))[-1]
+    assert result.success and result.activities_synced == 1
+    health.assert_not_called()
+    assert service.status()["health_checked_at"] is None
+    # The next on-use refresh reads it.
+    assert service.ensure_fresh()["health_checked_at"]
+    assert health.call_count == 2
+
+
+def test_earlier_health_failure_does_not_fail_an_activity_import(provider, monkeypatch):
+    monkeypatch.setattr(
+        "arete.garmin.health_sync.sync_day",
+        lambda *a, **k: Mock(success=False, error="sleep unavailable"),
+    )
+    assert not service.ensure_fresh()["health_complete"]
+    progressing_import(monkeypatch)
+    provider.return_value = [activity(1)]
+    result = list(service.iter_manual(max_activities=20, download_fit=False))[-1]
+    assert result.success and not result.errors
+
+
+def test_interactive_health_rereads_yesterday_only_until_it_succeeds(
+    provider, monkeypatch
+):
+    import json
+
+    days = []
+    outcomes = {date(2026, 10, 12): [False, True]}
+
+    def health(day, client, *, performance):
+        days.append(day)
+        ok = outcomes[day].pop(0) if outcomes.get(day) else True
+        return Mock(success=ok, error=None if ok else "HTTP 503", fields_synced=3)
+
+    def stale_health():
+        state = service.status()
+        state["health_checked_at"] = (service._now() - timedelta(hours=2)).isoformat()
+        with db_connection() as con:
+            con.execute(
+                "UPDATE app.garmin_sync_state SET payload=?", [json.dumps(state)]
+            )
+
+    monkeypatch.setattr("arete.garmin.health_sync.sync_day", health)
+    today, yesterday = date(2026, 10, 13), date(2026, 10, 12)
+    first = service.ensure_fresh()
+    assert days == [today, yesterday] and first["health_checked_at"] is None
+    second = service.ensure_fresh()  # yesterday failed: read again
+    assert days[2:] == [today, yesterday] and second["health_checked_at"]
+    stale_health()
+    third = service.ensure_fresh()
+    assert days[4:] == [today]  # seven requests, not fourteen
+    assert third["health_days"][yesterday.isoformat()]["state"] == "available"
+    stale_health()
+    service.ensure_fresh()
+    assert days[5:] == [today]
+
+
+def test_cached_profile_handle_saves_the_lookup(tmp_path, monkeypatch):
+    from garminconnect.client import Client
+
+    from arete.garmin import token_store
+
+    monkeypatch.setattr(Client, "load", lambda self, path: None)
+    token = tmp_path / "garmin_tokens.json"
+    token.write_text("{}")
+    budgeted = GarminClient(tmp_path, sync_budget=SyncBudget(monotonic() + 60))
+    assert budgeted.connect().display_name is None  # the SDK looks it up lazily
+    token_store.save_account(
+        token, "me@garmin.test", remote=False, display_name="pierre"
+    )
+    cached = GarminClient(tmp_path, sync_budget=SyncBudget(monotonic() + 60))
+    assert cached.connect().display_name == "pierre"
+    assert cached.sync_budget.calls == 0
+    # A new login records its own account, without the previous handle.
+    token_store.save_account(token, "other@garmin.test", remote=False)
+    assert token_store.display_name(token) is None
+
+
+def test_profile_lookup_caches_the_handle_for_the_next_sync(tmp_path):
+    from garminconnect import Garmin
+
+    from arete.garmin import token_store
+
+    token = tmp_path / "garmin_tokens.json"
+    token_store.save_account(token, "me@garmin.test", remote=False)
+    client = GarminClient(tmp_path, sync_budget=SyncBudget(monotonic() + 60))
+    api = Garmin(retry_attempts=0)
+    client._api = api
+    api.client._run_request = client._sync_request
+    api._load_social_profile = client._sync_load_profile
+    request = Mock()
+    request.return_value.status_code = 200
+    request.return_value.json.return_value = {"displayName": "pierre"}
+    api.client._api_session.request = request
+    api.client.get_api_headers = lambda: {}
+    assert api._require_display_name() == "pierre"
+    assert token_store.display_name(token) == "pierre"
+    assert token_store._record(token.with_name("account.json").read_bytes()) == {
+        "account": "me@garmin.test",
+        "display_name": "pierre",
+    }
