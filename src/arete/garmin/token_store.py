@@ -146,12 +146,33 @@ def display_name(token_file: Path) -> str | None:
     return name if isinstance(name, str) and name.strip() else None
 
 
-def save_display_name(token_file: Path, name: str, *, remote: bool) -> None:
-    """Add the profile handle to the record of tokens saved before it was kept."""
+def save_display_name(token_file: Path, name: str | None, *, remote: bool) -> bool:
+    """Add (or, with None, drop) the profile handle in the existing record.
+
+    Compare-and-set against the record read with the tokens: a login or a
+    refusal recorded since by another worker wins, and a missing record is not
+    created (the next restore records the account). Returns whether it wrote.
+    """
     account = token_file.with_name(ACCOUNT_FILE)
-    record = _record(account.read_bytes() if account.exists() else None)
-    record["display_name"] = name
-    _store_record(token_file, record, remote=remote)
+    if not account.exists():
+        return False
+    previous = account.read_bytes()
+    record = _record(previous)
+    if name is None:
+        record.pop("display_name", None)
+    else:
+        record["display_name"] = name
+    data = json.dumps(record).encode()
+    if remote:
+        with db_connection() as con:
+            changed = con.execute(
+                "UPDATE app.files SET content=?, updated_at=now() WHERE athlete_id=getvariable('arete_athlete_id') AND deleted_at IS NULL AND path=? AND content=? RETURNING path",
+                [data, ACCOUNT_PATH, previous],
+            ).fetchone()
+        if changed is None:
+            return False
+    _write(account, data)
+    return True
 
 
 def refused(token_file: Path, *, remote: bool) -> None:

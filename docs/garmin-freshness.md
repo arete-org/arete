@@ -63,11 +63,13 @@ and request deadline. They do not claim current-window freshness. Older history
 still uses the explicit history importer.
 
 Health refresh reads today in the athlete's timezone, plus yesterday until one
-read of it succeeded (its outcome is kept in `health_days`). The undated
+read of it returned measurements (its outcome is kept in `health_days`). The undated
 activity import (onboarding, manual) reads no health: the next on-use refresh
 does. The Garmin profile handle that health URLs need is cached with the
 account record, so a sync makes no profile lookup once it is known; a new
-login replaces it. The daily catch-up retains its four-day window and current
+login replaces it, and a 4xx on a URL built from the cached handle forgets it
+and fails that read so the next one looks the profile up again. The record is
+amended by compare-and-set, never over a login or refusal recorded since. The daily catch-up retains its four-day window and current
 performance metrics. Each day
 reports available, unavailable or failed measurements. A 4xx answer to one
 signal (other than 401, 403 and 429) means Garmin has no such measurement:

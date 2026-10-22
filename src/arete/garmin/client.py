@@ -18,7 +18,7 @@ from datetime import date
 from pathlib import Path
 from threading import Lock
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, quote, urlsplit
 
 from garminconnect import Garmin, GarminConnectAuthenticationError
 
@@ -67,6 +67,8 @@ class GarminClient:
         self.token_dir = Path(token_dir) if token_dir else default_token_dir()
         self._api: Garmin | None = None
         self.sync_budget = sync_budget
+        #: The profile handle came from the account record, not this session.
+        self._handle_cached = False
         # Explicit directories support standalone CLI clients; application logins
         # use a durable continuation so the next request may land on any worker.
         self._durable_auth = token_dir is None
@@ -105,6 +107,7 @@ class GarminClient:
             api._load_social_profile = self._sync_load_profile
             # The SDK looks the profile up (one paced request) only when unset.
             api.display_name = token_store.display_name(self.token_file)
+            self._handle_cached = api.display_name is not None
             self._api = api
             if api.client.di_refresh_token and api.client._token_expires_soon():
                 # One proactive refresh is counted too; never replay a refused GET.
@@ -218,12 +221,35 @@ class GarminClient:
             )
             self._record_refusal()
             raise SyncStopped(budget.stopped)
-        if 400 <= response.status_code < 500:
+        if 400 <= response.status_code < 500 and response.status_code not in {408, 425}:
+            if self._refused_cached_handle(path):
+                # Fail this read, not "unavailable": the day is retried, and
+                # the next handle URL looks the profile up again.
+                budget.errors.append(f"Garmin HTTP {response.status_code}")
+                raise ConnectionError(budget.errors[-1])
             raise GarminUnavailable(f"Garmin HTTP {response.status_code}")
         if not 200 <= response.status_code < 300:
             budget.errors.append(f"Garmin HTTP {response.status_code}")
             raise ConnectionError(budget.errors[-1])
         return response
+
+    def _refused_cached_handle(self, path: str) -> bool:
+        """Garmin refused a URL built on the cached handle: forget the handle."""
+        assert self._api is not None
+        name = self._api.display_name
+        if not (self._handle_cached and name and quote(name, safe="") in path):
+            return False
+        self._handle_cached = False
+        self._api.display_name = None
+        try:
+            token_store.save_display_name(
+                self.token_file,
+                None,
+                remote=self._durable_auth and config.is_remote_db,
+            )
+        except Exception:
+            logger.warning("Could not drop the Garmin profile handle", exc_info=True)
+        return True
 
     def is_authenticated(self) -> bool:
         try:

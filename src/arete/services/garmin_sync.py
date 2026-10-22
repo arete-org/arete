@@ -121,7 +121,13 @@ def claim(seconds: float = MAX_SECONDS):
     state = json.loads(row[0])
     state.setdefault("activities_checked_at", None)
     state.setdefault("health_checked_at", None)
-    state.update(state="running", started_at=now.isoformat(), errors=[], session_ids=[])
+    state.update(
+        state="running",
+        started_at=now.isoformat(),
+        errors=[],
+        session_ids=[],
+        more_pending=False,
+    )
     _store(owner, state)
     try:
         yield owner, state
@@ -313,9 +319,8 @@ def _iter_refresh(
                 importer.refresh_threshold()
                 if not budget.stopped and len(budget.errors) == transport_errors:
                     state["threshold_checked_on"] = today.isoformat()
-            # Only the activity cap left Garmin activities to import: the next
-            # refresh continues from the retained coverage, nothing failed.
-            state["more_pending"] = False
+            # ``more_pending`` (reset by claim) marks a stop at the activity cap:
+            # the next refresh continues from the retained coverage.
             for _ in range(MAX_PAGES):
                 yield SyncProgress("fetching")
                 checkpoint()
@@ -396,12 +401,10 @@ def _iter_refresh(
             yesterday = (today - timedelta(days=1)).isoformat()
             # The scheduled catch-up retains its four-day health window and
             # slow-moving Garmin metrics. Interactive refresh reads today, and
-            # yesterday only until one read of it succeeded: seven paced
-            # requests a day, which the daily catch-up completes later.
-            reread = previous.get(yesterday, {}).get("state") not in (
-                "available",
-                "unavailable",
-            )
+            # yesterday only until one read of it returned measurements (an
+            # empty read just after midnight is still missing): seven paced
+            # requests an hour, and the daily catch-up completes late values.
+            reread = previous.get(yesterday, {}).get("state") != "available"
             if daily:
                 days = [today - timedelta(days=offset) for offset in range(4)]
             else:
