@@ -586,7 +586,9 @@ def test_fit_upload_parses_off_the_event_loop(router_client):
             asyncio.get_running_loop()  # a worker thread has none
         raise ValueError("not a FIT file")
 
-    with patch("arete.api.garmin.FITParser.parse_stream", side_effect=no_running_loop):
+    with patch(
+        "arete.garmin.fit_parser.FITParser.parse_stream", side_effect=no_running_loop
+    ):
         resp = router_client(router).post(
             "/garmin/upload-fit",
             files={"file": ("a.fit", b"x", "application/octet-stream")},

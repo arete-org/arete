@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, LogOut, Watch } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Check, FileUp, LogOut, Watch } from 'lucide-react';
 import { cn, readableError } from '@/lib/utils';
 import { garminApi } from '@/lib/api';
 import { Button } from '@/components/ui';
@@ -70,6 +71,20 @@ export function ConnectionsTab() {
         </div>
 
         <GarminSyncProgress progress={garminSync.progress} isPending={garminSync.isPending} result={garminSync.data} error={garminSync.error} />
+
+        {/* Any other watch: its exported files, imported in the Journal. */}
+        <div className="flex flex-wrap items-center gap-4 p-4 rounded bg-abyss/50 border border-text-muted/20">
+          <FileUp className="w-6 h-6 text-text-muted" aria-hidden />
+          <div className="flex-1 min-w-0">
+            <div className="font-sans text-sm text-text-primary">Autres montres</div>
+            <p className="text-xs text-text-muted">
+              Coros, Polar, Suunto, Wahoo, Apple Watch… Exporte tes séances en FIT, TCX ou GPX et importe-les dans le Journal.
+            </p>
+          </div>
+          <Link to="/log?tab=cardio" className="shrink-0 text-sm font-sans text-neon-cyan hover:underline">
+            Importer une activité →
+          </Link>
+        </div>
       </div>
       <GarminLoginModal isOpen={showGarminLogin} onClose={() => setShowGarminLogin(false)} onSuccess={() => {
         setGarminResult('Garmin connecté. Lance la synchronisation pour importer tes activités.');

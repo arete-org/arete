@@ -1,21 +1,14 @@
-import { readableError } from '@/lib/utils';
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plus, Sparkles } from 'lucide-react';
-import { FitDropzone } from '@/components';
+import { ActivityDropzone } from '@/components';
 import { Button, Panel } from '@/components/ui';
 import { ManualCardioModal } from './ManualCardioModal';
-import { garminApi, tipsApi, type PostSessionFeedback } from '@/lib/api';
+import { tipsApi, type PostSessionFeedback } from '@/lib/api';
+import type { ImportResult } from '@/lib/activityImport';
 import { RecentSessions } from './RecentSessions';
 import { invalidateAfterSession } from '@/lib/queryKeys';
 import { useCoachWords } from '@/lib/coachName';
-
-interface Upload {
-  filename: string;
-  status: 'success' | 'error' | 'uploading';
-  message?: string;
-}
-
 
 export function CardioTab({ showManual, onManualChange, onManualSaved }: {
   showManual: boolean;
@@ -26,14 +19,13 @@ export function CardioTab({ showManual, onManualChange, onManualSaved }: {
 }) {
   const coach = useCoachWords();
   const queryClient = useQueryClient();
-  const [recentUploads, setRecentUploads] = useState<Upload[]>([]);
   const [feedback, setFeedback] = useState<PostSessionFeedback | null>(null);
   const [feedbackError, setFeedbackError] = useState(false);
   // The coach reads the session before answering, which takes seconds, not
   // milliseconds. Say so rather than leaving the page looking finished.
   const [feedbackPending, setFeedbackPending] = useState(false);
 
-  // Shared by the FIT upload and the manual entry.
+  // Shared by the file import and the manual entry.
   const requestFeedback = async (id: number) => {
     setFeedback(null);
     setFeedbackError(false);
@@ -47,37 +39,20 @@ export function CardioTab({ showManual, onManualChange, onManualSaved }: {
     }
   };
 
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      setRecentUploads((prev) => [{ filename: file.name, status: 'uploading' }, ...prev]);
-      try {
-        return await garminApi.uploadFit(file);
-      } finally {
-        setRecentUploads((prev) => prev.filter((u) => u.status !== 'uploading'));
-      }
-    },
-    onSuccess: async (result) => {
-      setRecentUploads((prev) => [
-        { filename: result.filename || 'activite.fit', status: 'success', message: 'Importé' },
-        ...prev,
-      ]);
-      invalidateAfterSession(queryClient);
-      if (result.activity_id) await requestFeedback(result.activity_id);
-    },
-    onError: (error) => {
-      setRecentUploads((prev) => [
-        { filename: 'import', status: 'error', message: readableError(error) },
-        ...prev,
-      ]);
-    },
-  });
+  const onImported = (results: ImportResult[]) => {
+    const imported = results.filter((r) => r.status === 'imported' && r.session_id);
+    if (imported.length === 0) return;
+    invalidateAfterSession(queryClient);
+    // One session gets the coach's word now; a batch waits for the daily feedback.
+    if (imported.length === 1) void requestFeedback(imported[0].session_id!);
+  };
 
   return (
     <div className="space-y-4 sm:space-y-8">
       <Panel
         title={
           <span className="flex items-center justify-between gap-2 w-full">
-            Importer une séance cardio
+            Importer une activité
             <Button variant="ghost" onClick={() => onManualChange(true)}>
               <Plus className="w-4 h-4" />
               Sans montre
@@ -86,11 +61,7 @@ export function CardioTab({ showManual, onManualChange, onManualSaved }: {
         }
         animate={false}
       >
-        <FitDropzone
-          onUpload={async (file) => uploadMutation.mutate(file)}
-          isUploading={uploadMutation.isPending}
-          recentUploads={recentUploads}
-        />
+        <ActivityDropzone onImported={onImported} />
       </Panel>
 
       {feedbackPending && (

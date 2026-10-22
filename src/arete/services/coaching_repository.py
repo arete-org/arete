@@ -16,6 +16,8 @@ import duckdb
 
 from arete.dataio.db import connect, db_connection, transaction
 from arete.dataio.ownership import require_owned
+from arete.dataio.queries import sql_in
+from arete.garmin.models import FILE_SOURCES, ActivitySource
 from arete.services import settings
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.settings import athlete_today
@@ -368,6 +370,11 @@ class StoredFeedback:
 
 
 MAX_PENDING_GARMIN_FEEDBACK = 20
+#: Activities the daily feedback reads: Garmin's and imported files.
+FEEDBACK_SOURCES = (
+    ActivitySource.GARMIN_CONNECT.value,
+    *sorted(source.value for source in FILE_SOURCES),
+)
 FEEDBACK_IMPORT_LOOKBACK_DAYS = 30
 
 
@@ -377,15 +384,17 @@ class SessionFeedbackRepository:
     def pending_garmin(self) -> tuple[list[int], int]:
         """Daily catch-up: 20 recent imports, independent of the activity date.
 
-        On-use refresh deliberately does not write feedback. Missing feedback
-        is its durable queue; a 30-day import window avoids announcing ancient
-        historical rows when this behavior is first enabled.
+        Garmin's and imported files' (any watch). On-use refresh deliberately
+        does not write feedback. Missing feedback is its durable queue; a
+        30-day import window avoids announcing ancient historical rows when
+        this behavior is first enabled.
         """
         with db_connection() as conn:
             rows = conn.execute(
                 "SELECT a.id, COUNT(*) OVER () FROM app.visible_actual_sessions a "
                 "LEFT JOIN app.visible_session_feedback f ON f.actual_session_id=a.id "
-                "WHERE a.source='garmin_connect' AND f.actual_session_id IS NULL "
+                f"WHERE a.source IN ({sql_in(FEEDBACK_SOURCES)}) "
+                "AND f.actual_session_id IS NULL "
                 "AND a.created_at >= current_timestamp - ? * INTERVAL '1 day' "
                 "ORDER BY a.created_at, a.id LIMIT ?",
                 [FEEDBACK_IMPORT_LOOKBACK_DAYS, MAX_PENDING_GARMIN_FEEDBACK],

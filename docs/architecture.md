@@ -639,7 +639,7 @@ activities. This is not a detached job and requires keeping the page open.
 Migration 31 keeps each FIT activity's per-second streams in
 `app.activity_streams` (one row per session, one LIST column per channel,
 `garmin/streams.py`) and the coach's word on a cardio session in
-`app.session_feedback`. Garmin sync, FIT upload and `POST /garmin/sync/reprocess`
+`app.session_feedback`. Garmin sync, the file import and `POST /garmin/sync/reprocess`
 fill the streams. `services/activity_detail.py` reads one session for
 `GET /analytics/sessions/{id}/detail` (the `/log/sessions/:id` page) and, as a
 compact digest without any stream, for the chat's read-only
@@ -652,8 +652,26 @@ source (October 2026): no connection, sync or OAuth route remains, and
 `tests/test_architecture.py` keeps any module from importing one again. The rows
 it created stay readable and marked Strava on the athlete's pages; Garmin
 importing the same workout takes such a row over with its own values and clears
-the Strava-only ones (`garmin/sync.garmin_takeover`). Garmin sync and FIT
-upload are the activity sources. Analytics come from
+the Strava-only ones (`garmin/sync.garmin_takeover`). Garmin sync and the
+file import are the activity sources.
+
+The file import is the watch-agnostic path (ARE-143): the Journal's
+« Importer une activité » sends FIT, TCX or GPX files, or a ZIP of them,
+one request per file (`POST /activities/import`, gzip-compressed by the
+browser to stay under the hosting's body limit; `POST /garmin/upload-fit`
+is the same import with its older answer). `garmin/activity_files.py`
+reads every format into the FIT parser's shape; TCX and GPX go through
+expat with DOCTYPE and entities refused and an element bound, and any
+member or decompressed file is read to 10 MB at most.
+`services/activity_import.py` parses a file fully before writing (a
+corrupt one leaves no row), stores its start on the athlete's clock like
+Garmin's (the device's offset when the FIT file states it, else the
+athlete's timezone), refuses a session starting within five minutes of a
+stored one of any source (or matching a start-less manual entry's sport
+and duration) with a French message, and commits in one function, then
+matches the plan, links and drafts strength, keeps the streams and runs
+terrain and weather. Sources are `fit_file`, `tcx_file` and `gpx_file`;
+the daily feedback catch-up reads them with Garmin's. Analytics come from
 `garmin/time_series.py`: decoupling, pace fade, cadence variability, power and
 the work intervals of a structured workout (FIT lap intensity).
 
@@ -674,7 +692,7 @@ conditions, once, so no page or card rescans a stream: `app.activity_terrain`
 climbing speed over 5 to 60 min, time per descent grade band;
 `features/terrain.py`) and `app.activity_weather` (Open-Meteo at the start's
 hour and place, `services/weather.py`). `services/session_conditions.py` fills
-both after a Garmin sync (scheduled or HTTP) and a FIT upload: the weather
+both after a Garmin sync (scheduled or HTTP) and a file import: the weather
 requests share a 20 s budget and nothing there can fail the import. Sessions
 kept before migration 32 get their terrain from `POST /analytics/terrain/backfill`,
 50 at most per call, from the stored streams and without network. The pace
