@@ -763,6 +763,26 @@ def test_sync_stream_protocol_and_enrichment(router_client):
     assert enrich.call_args.kwargs["budget_sec"] <= 20
 
 
+def test_capped_import_streams_more_pending_in_its_done_event(router_client):
+    import json
+
+    from arete.api.garmin_sync import router
+
+    capped = SyncResult(success=True, activities_synced=20, more_pending=True)
+    with (
+        patch("arete.garmin.token_store.session_status", return_value=(True, None)),
+        patch(
+            "arete.services.garmin_sync.iter_manual",
+            return_value=(event for event in [capped]),
+        ),
+    ):
+        response = router_client(router).post(
+            "/garmin/sync/activities/stream", json={"max_activities": 20}
+        )
+    done = json.loads(response.text.strip().split("\n\n")[-1].removeprefix("data: "))
+    assert done["type"] == "done" and done["success"] and done["more_pending"]
+
+
 def test_sync_stream_auth_and_validation_happen_before_work(router_client):
     from arete.api.garmin_sync import router
 

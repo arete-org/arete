@@ -8,6 +8,7 @@ import pytest
 
 from arete.dataio.db import db_connection
 from arete.garmin.client import GarminClient
+from arete.garmin.health_sync import sync_day as real_sync_day
 from arete.garmin.sync import GarminSyncClient
 from arete.garmin.sync_budget import SyncBudget, SyncStopped
 from arete.services import garmin_sync as service
@@ -89,10 +90,13 @@ def test_backlog_continues_and_exact_ids_are_returned(provider, monkeypatch):
     first = service.ensure_fresh()
     assert first["imported"] == 20 and not first["complete"]
     assert not first["activities_checked_at"]
+    # Only the cap stopped it: the browser shows a catch-up, not a failure.
+    assert first["more_pending"] and not first["errors"]
     second = service.ensure_fresh()
     assert second["imported"] == 20 and not second["complete"]
     third = service.ensure_fresh()
     assert third["complete"] and len(imported) == 45
+    assert not third["more_pending"]
     assert third["sessions"] == [{"id": i} for i in range(5, 0, -1)]
 
 
@@ -343,10 +347,22 @@ def test_undated_manual_import_resumes_the_same_capped_backlog(provider, monkeyp
     rows = [activity(i) for i in range(25, 0, -1)]
     provider.side_effect = lambda offset, limit: rows[offset : offset + limit]
     first = list(service.iter_manual(max_activities=50))[-1]
-    assert isinstance(first, SyncResult) and not first.success
-    assert len(first.session_ids) == 20
+    # The capped batch succeeded; the rest is pending, not failed (ARE-177).
+    assert isinstance(first, SyncResult) and first.success and first.more_pending
+    assert len(first.session_ids) == 20 and not first.errors
     second = service.ensure_fresh()
     assert second["complete"] and len(imported) == 25
+
+
+def test_capped_manual_import_with_a_failure_is_not_a_catch_up(provider, monkeypatch):
+    from arete.garmin.sync import SyncResult
+
+    scripted_import(monkeypatch, fail=25)
+    rows = [activity(i) for i in range(25, 0, -1)]
+    provider.side_effect = lambda offset, limit: rows[offset : offset + limit]
+    result = list(service.iter_manual(max_activities=20))[-1]
+    assert isinstance(result, SyncResult) and not result.success
+    assert result.errors == ["failed activity"]
 
 
 def test_token_refresh_counts_one_request_and_does_not_retry_429():
@@ -492,7 +508,7 @@ def test_undated_manual_import_streams_the_refresh_progress(provider, monkeypatc
         ("processing", 0, 2),
         ("processing", 1, 2),
         ("processing", 2, 2),
-        ("finalizing", 0, None),  # health
+        # Health is left to the next on-use refresh (ARE-177).
         ("finalizing", 0, None),  # enrichment
     ]
     result = events[-1]
@@ -517,3 +533,294 @@ def test_closing_the_manual_stream_keeps_commits_for_the_next_refresh(
     resumed = service.ensure_fresh()
     assert resumed["complete"] and resumed["already_present"] == 1
     assert imported == {2, 1} and resumed["session_ids"] == [1]
+
+
+def test_activity_import_reads_no_health_even_when_stale(provider, monkeypatch):
+    health = Mock(return_value=Mock(success=True))
+    monkeypatch.setattr("arete.garmin.health_sync.sync_day", health)
+    progressing_import(monkeypatch)
+    provider.return_value = [activity(1)]
+    result = list(service.iter_manual(max_activities=20, download_fit=False))[-1]
+    assert result.success and result.activities_synced == 1
+    health.assert_not_called()
+    assert service.status()["health_checked_at"] is None
+    # The next on-use refresh reads it.
+    assert service.ensure_fresh()["health_checked_at"]
+    assert health.call_count == 2
+
+
+def test_earlier_health_failure_does_not_fail_an_activity_import(provider, monkeypatch):
+    monkeypatch.setattr(
+        "arete.garmin.health_sync.sync_day",
+        lambda *a, **k: Mock(success=False, error="sleep unavailable"),
+    )
+    assert not service.ensure_fresh()["health_complete"]
+    progressing_import(monkeypatch)
+    provider.return_value = [activity(1)]
+    result = list(service.iter_manual(max_activities=20, download_fit=False))[-1]
+    assert result.success and not result.errors
+
+
+def test_interactive_health_rereads_yesterday_only_until_it_succeeds(
+    provider, monkeypatch
+):
+    import json
+
+    days = []
+    outcomes = {date(2026, 10, 12): [False, True]}
+
+    def health(day, client, *, performance):
+        days.append(day)
+        ok = outcomes[day].pop(0) if outcomes.get(day) else True
+        return Mock(success=ok, error=None if ok else "HTTP 503", fields_synced=3)
+
+    def stale_health():
+        state = service.status()
+        state["health_checked_at"] = (service._now() - timedelta(hours=2)).isoformat()
+        with db_connection() as con:
+            con.execute(
+                "UPDATE app.garmin_sync_state SET payload=?", [json.dumps(state)]
+            )
+
+    monkeypatch.setattr("arete.garmin.health_sync.sync_day", health)
+    today, yesterday = date(2026, 10, 13), date(2026, 10, 12)
+    first = service.ensure_fresh()
+    assert days == [today, yesterday] and first["health_checked_at"] is None
+    second = service.ensure_fresh()  # yesterday failed: read again
+    assert days[2:] == [today, yesterday] and second["health_checked_at"]
+    stale_health()
+    third = service.ensure_fresh()
+    assert days[4:] == [today]  # seven requests, not fourteen
+    assert third["health_days"][yesterday.isoformat()]["state"] == "available"
+    stale_health()
+    service.ensure_fresh()
+    assert days[5:] == [today]
+
+
+def test_cached_profile_handle_saves_the_lookup(tmp_path, monkeypatch):
+    from garminconnect.client import Client
+
+    from arete.garmin import token_store
+
+    monkeypatch.setattr(Client, "load", lambda self, path: None)
+    token = tmp_path / "garmin_tokens.json"
+    token.write_text("{}")
+    budgeted = GarminClient(tmp_path, sync_budget=SyncBudget(monotonic() + 60))
+    assert budgeted.connect().display_name is None  # the SDK looks it up lazily
+    token_store.save_account(
+        token, "me@garmin.test", remote=False, display_name="pierre"
+    )
+    cached = GarminClient(tmp_path, sync_budget=SyncBudget(monotonic() + 60))
+    assert cached.connect().display_name == "pierre"
+    assert cached.sync_budget.calls == 0
+    # A new login records its own account, without the previous handle.
+    token_store.save_account(token, "other@garmin.test", remote=False)
+    assert token_store.display_name(token) is None
+
+
+def test_profile_lookup_caches_the_handle_for_the_next_sync(tmp_path):
+    from garminconnect import Garmin
+
+    from arete.garmin import token_store
+
+    token = tmp_path / "garmin_tokens.json"
+    token_store.save_account(token, "me@garmin.test", remote=False)
+    client = GarminClient(tmp_path, sync_budget=SyncBudget(monotonic() + 60))
+    api = Garmin(retry_attempts=0)
+    client._api = api
+    api.client._run_request = client._sync_request
+    api._load_social_profile = client._sync_load_profile
+    request = Mock()
+    request.return_value.status_code = 200
+    request.return_value.json.return_value = {"displayName": "pierre"}
+    api.client._api_session.request = request
+    api.client.get_api_headers = lambda: {}
+    assert api._require_display_name() == "pierre"
+    assert token_store.display_name(token) == "pierre"
+    assert token_store._record(token.with_name("account.json").read_bytes()) == {
+        "account": "me@garmin.test",
+        "display_name": "pierre",
+    }
+
+
+def test_a_4xx_signal_is_unavailable_and_the_others_still_advance(
+    provider, monkeypatch
+):
+    """One signal Garmin does not serve must not fail the day (ARE-177)."""
+    from garminconnect import Garmin
+
+    def request(method, url, **kwargs):
+        response = Mock(status_code=200)
+        if "dailySleepData" in url:
+            response.status_code = 404
+        elif "hrv-service" in url:
+            response.json.return_value = {"hrvSummary": {"lastNightAvg": 61}}
+        elif "dailyStress" in url:
+            response.json.return_value = {"avgStressLevel": 27}
+        else:
+            response.json.return_value = []
+        return response
+
+    def connect(self):
+        if self._api is None:
+            api = Garmin(retry_attempts=0)
+            api.display_name = "pierre"
+            api.client._run_request = self._sync_request
+            api.client.get_api_headers = lambda: {}
+            api.client._api_session.request = request
+            self._api = api
+        return self._api
+
+    monkeypatch.setattr(GarminClient, "connect", connect)
+    monkeypatch.setattr("arete.garmin.sync_budget.sleep", lambda _seconds: None)
+    monkeypatch.setattr("arete.garmin.health_sync.sync_day", real_sync_day)
+    result = service.ensure_fresh()
+    assert result["complete"] and result["health_checked_at"]
+    assert not result["errors"]
+    assert result["health_days"]["2026-10-13"]["state"] == "available"
+    with db_connection() as con:
+        hrv, stress = con.execute(
+            "SELECT hrv_last_night, stress_avg FROM app.visible_daily_metrics WHERE date=?",
+            [date(2026, 10, 13)],
+        ).fetchone()
+    assert hrv == 61 and stress == 27
+
+
+def test_only_a_4xx_read_is_unavailable_a_5xx_still_fails(monkeypatch):
+    from arete.garmin.client import GarminUnavailable
+
+    monkeypatch.setattr("arete.garmin.sync_budget.sleep", lambda _seconds: None)
+    budget = SyncBudget(monotonic() + 60)
+    client = GarminClient(sync_budget=budget)
+    api = Mock()
+    api.client._connectapi = "https://example.invalid"
+    api.client.get_api_headers.return_value = {}
+    client._api = api
+    api.client._api_session.request.return_value.status_code = 503
+    with pytest.raises(ConnectionError):
+        client._sync_request("GET", "/wellness-service/x")
+    api.client._api_session.request.return_value.status_code = 404
+    with pytest.raises(GarminUnavailable):
+        client._sync_request("GET", "/wellness-service/x")
+    assert budget.errors == ["Garmin HTTP 503"] and budget.calls == 2
+
+
+def test_threshold_is_read_once_a_day_and_retried_after_a_transport_error(
+    provider, monkeypatch
+):
+    reads = []
+
+    def threshold(self):
+        reads.append(service.athlete_today())
+        if len(reads) == 1:
+            self.client.sync_budget.errors.append("Garmin HTTP 503")
+        return {}
+
+    monkeypatch.setattr(GarminSyncClient, "refresh_threshold", threshold)
+    service.ensure_fresh(force=True)  # failed: the next refresh reads it again
+    service.ensure_fresh(force=True)
+    service.ensure_fresh(force=True)
+    assert len(reads) == 2
+    monkeypatch.setattr(service, "athlete_today", lambda: date(2026, 10, 14))
+    service.ensure_fresh(force=True)
+    assert reads[-1] == date(2026, 10, 14) and len(reads) == 3
+
+
+def test_a_day_read_empty_just_after_midnight_is_read_again(provider, monkeypatch):
+    days = []
+
+    def health(day, client, *, performance):
+        days.append(day)
+        # Just after midnight Garmin has nothing for the new day yet.
+        return Mock(success=True, error=None, fields_synced=0 if not days[1:] else 4)
+
+    monkeypatch.setattr("arete.garmin.health_sync.sync_day", health)
+    monkeypatch.setattr(service, "athlete_today", lambda: date(2026, 10, 12))
+    service.ensure_fresh()
+    monkeypatch.setattr(service, "athlete_today", lambda: date(2026, 10, 13))
+    service.ensure_fresh(force=True)
+    assert days[-2:] == [date(2026, 10, 13), date(2026, 10, 12)]
+
+
+def test_an_import_that_did_not_run_is_not_a_success(provider, monkeypatch):
+    import json
+
+    from arete.garmin.sync import SyncResult
+
+    service.ensure_fresh()
+    state = service.status()
+    state.update(
+        state="cooldown",
+        more_pending=True,
+        cooldown_until=(service._now() + timedelta(minutes=5)).isoformat(),
+    )
+    with db_connection() as con:
+        con.execute("UPDATE app.garmin_sync_state SET payload=?", [json.dumps(state)])
+    cooled = list(service.iter_manual(max_activities=20))[-1]
+    assert isinstance(cooled, SyncResult) and not cooled.success and cooled.errors
+    state.pop("cooldown_until")
+    with db_connection() as con:
+        con.execute("UPDATE app.garmin_sync_state SET payload=?", [json.dumps(state)])
+    with service.claim(-1):  # a lost worker, awaiting reconciliation
+        lost = list(service.iter_manual(max_activities=20))[-1]
+    assert not lost.success and lost.errors
+
+
+def test_a_new_run_does_not_inherit_an_earlier_catch_up(provider, monkeypatch):
+    scripted_import(monkeypatch)
+    rows = [activity(i) for i in range(25, 0, -1)]
+    provider.side_effect = lambda offset, limit: rows[offset : offset + limit]
+    assert service.ensure_fresh()["more_pending"]
+    with service.claim() as (_owner, state):
+        assert state["more_pending"] is False
+
+
+def test_handle_write_is_a_compare_and_set_on_the_existing_record(tmp_path):
+    import json
+
+    from arete.garmin import token_store
+
+    token = tmp_path / "garmin_tokens.json"
+    # No record: the handle alone would hide the account name from the next restore.
+    assert not token_store.save_display_name(token, "pierre", remote=False)
+    assert token_store.needs_account(token)
+    token_store.save_account(token, "me@garmin.test", remote=True)
+    # Another worker records a refusal after this one read the record.
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.files SET content=? WHERE path=? RETURNING path",
+            [
+                json.dumps(
+                    {"account": "me@garmin.test", "auth_failed_at": "x"}
+                ).encode(),
+                token_store.ACCOUNT_PATH,
+            ],
+        )
+    assert not token_store.save_display_name(token, "pierre", remote=True)
+    assert token_store.display_name(token) is None
+    with db_connection() as con:
+        con.execute("DELETE FROM app.files WHERE path=?", [token_store.ACCOUNT_PATH])
+
+
+def test_a_refused_cached_handle_is_forgotten_and_fails_the_read(tmp_path, monkeypatch):
+    from arete.garmin import token_store
+
+    monkeypatch.setattr("arete.garmin.sync_budget.sleep", lambda _seconds: None)
+    token = tmp_path / "garmin_tokens.json"
+    token_store.save_account(token, "me@garmin.test", remote=False, display_name="old")
+    budget = SyncBudget(monotonic() + 60)
+    client = GarminClient(tmp_path, sync_budget=budget)
+    api = Mock(display_name="old")
+    api.client._connectapi = "https://example.invalid"
+    api.client.get_api_headers.return_value = {}
+    api.client._api_session.request.return_value.status_code = 404
+    client._api, client._handle_cached = api, True
+    with pytest.raises(ConnectionError):
+        client._sync_request("GET", "/wellness-service/wellness/dailySleepData/old")
+    assert api.display_name is None and token_store.display_name(token) is None
+    assert budget.errors == ["Garmin HTTP 404"]
+    # A 4xx on a URL without the handle is only an unavailable signal.
+    from arete.garmin.client import GarminUnavailable
+
+    with pytest.raises(GarminUnavailable):
+        client._sync_request("GET", "/hrv-service/hrv/2026-10-13")

@@ -330,6 +330,8 @@ export interface SyncResult {
   last_activity_date: string | null;
   next_history_offset?: number | null;
   history_anchor?: number | null;
+  /** Only the activity cap stopped this import; the next refresh continues it. */
+  more_pending?: boolean;
 }
 
 // ========================= //

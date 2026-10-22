@@ -121,7 +121,13 @@ def claim(seconds: float = MAX_SECONDS):
     state = json.loads(row[0])
     state.setdefault("activities_checked_at", None)
     state.setdefault("health_checked_at", None)
-    state.update(state="running", started_at=now.isoformat(), errors=[], session_ids=[])
+    state.update(
+        state="running",
+        started_at=now.isoformat(),
+        errors=[],
+        session_ids=[],
+        more_pending=False,
+    )
     _store(owner, state)
     try:
         yield owner, state
@@ -181,11 +187,13 @@ def _iter_fresh(
     max_activities: int = MAX_ACTIVITIES,
     download_fit: bool = True,
     sessions: bool = True,
+    read_health: bool = True,
 ) -> Generator[SyncProgress, None, dict]:
     """The bounded refresh, yielding its progress; returns ``ensure_fresh``'s result.
 
     ``sessions=False`` skips reading back the imported sessions for a caller
-    that only reports counts.
+    that only reports counts. ``read_health=False`` leaves health to the next
+    on-use refresh: an activity import does not wait for seven reads a day.
     """
     from arete.garmin import token_store
 
@@ -215,7 +223,9 @@ def _iter_fresh(
         ):
             return {**state, "state": "cooldown"}
         activities = force or not _fresh(state, "activities_checked_at", ACTIVITY_TTL)
-        health = force or not _fresh(state, "health_checked_at", HEALTH_TTL)
+        health = read_health and (
+            force or not _fresh(state, "health_checked_at", HEALTH_TTL)
+        )
         if not activities and not health:
             return {**state, "state": "fresh" if state.get("complete") else "partial"}
         try:
@@ -223,7 +233,9 @@ def _iter_fresh(
                 activities = force or not _fresh(
                     state, "activities_checked_at", ACTIVITY_TTL
                 )
-                health = force or not _fresh(state, "health_checked_at", HEALTH_TTL)
+                health = read_health and (
+                    force or not _fresh(state, "health_checked_at", HEALTH_TTL)
+                )
                 return (
                     yield from _iter_refresh(
                         owner,
@@ -300,7 +312,15 @@ def _iter_refresh(
             state["coverage_start"] = lower.isoformat()
             offset = state.get("next_offset", 0)
             anchor = state.get("anchor")
-            importer.refresh_threshold()
+            # Garmin retests the threshold rarely: two paced reads once a day,
+            # retried on the next refresh only when the transport failed.
+            if state.get("threshold_checked_on") != today.isoformat():
+                transport_errors = len(budget.errors)
+                importer.refresh_threshold()
+                if not budget.stopped and len(budget.errors) == transport_errors:
+                    state["threshold_checked_on"] = today.isoformat()
+            # ``more_pending`` (reset by claim) marks a stop at the activity cap:
+            # the next refresh continues from the retained coverage.
             for _ in range(MAX_PAGES):
                 yield SyncProgress("fetching")
                 checkpoint()
@@ -321,12 +341,17 @@ def _iter_refresh(
                 relevant = [a for a in parsed if lower <= a.start_time.date() <= today]
                 remaining = max_activities - len(result.session_ids)
                 batch = []
+                importer.presence.clear()
                 for activity in relevant:
-                    if not importer._is_already_synced(activity.activity_id):
+                    present = importer._is_already_synced(activity.activity_id)
+                    if not present:
                         if remaining == 0:
                             reached_end = False
+                            state["more_pending"] = True
                             break
                         remaining -= 1
+                    # Proven under this lease: the import does not query it again.
+                    importer.presence[activity.activity_id] = present
                     batch.append(activity)
                 before_errors = len(result.errors)
                 with closing(
@@ -361,6 +386,7 @@ def _iter_refresh(
                     )
                     break
                 if len(result.session_ids) >= max_activities:
+                    state["more_pending"] = True
                     break
             else:
                 result.errors.append(
@@ -371,12 +397,24 @@ def _iter_refresh(
             state["stage"] = "health"
             state["health_complete"] = False
             failures = []
-            state["health_days"] = {}
+            previous = state.get("health_days") or {}
+            yesterday = (today - timedelta(days=1)).isoformat()
             # The scheduled catch-up retains its four-day health window and
-            # slow-moving Garmin metrics; interactive refresh only reads two days.
-            health_start = today - timedelta(days=3 if daily else 1)
-            for offset in range(4 if daily else 2):
-                day = today - timedelta(days=offset)
+            # slow-moving Garmin metrics. Interactive refresh reads today, and
+            # yesterday only until one read of it returned measurements (an
+            # empty read just after midnight is still missing): seven paced
+            # requests an hour, and the daily catch-up completes late values.
+            reread = previous.get(yesterday, {}).get("state") != "available"
+            if daily:
+                days = [today - timedelta(days=offset) for offset in range(4)]
+            else:
+                days = [today, today - timedelta(days=1)] if reread else [today]
+            # Yesterday's kept outcome stops the next refresh from rereading it.
+            state["health_days"] = (
+                {} if daily or reread else {yesterday: previous[yesterday]}
+            )
+            health_start = days[-1]
+            for day in days:
                 checkpoint()
                 item = sync_day(day, client, performance=daily and day == today)
                 fields = getattr(item, "fields_synced", 0)
@@ -490,14 +528,26 @@ def iter_manual(**options):
             ),
             download_fit=options.get("download_fit", True),
             sessions=False,
+            # Health is not this import's subject; the next on-use refresh reads it.
+            read_health=False,
         )
         errors = list(refreshed.get("errors", []))
-        if not refreshed.get("complete") and not errors:
+        # The cap is not a failure: the batch was imported and the next refresh
+        # continues from the retained coverage (ARE-177). An earlier health
+        # failure, which this import did not retry, is not one either.
+        more_pending = bool(refreshed.get("more_pending"))
+        imported = (
+            not errors
+            and refreshed.get("state") in ("complete", "partial")
+            and (more_pending or not refreshed.get("coverage_start"))
+        )
+        if not imported and not errors:
             errors.append(
                 "Couverture Garmin incomplète ; les séances importées sont conservées."
             )
         yield SyncResult(
-            success=bool(refreshed.get("complete")),
+            success=imported,
+            more_pending=more_pending,
             activities_synced=refreshed.get("imported", 0),
             activities_merged=refreshed.get("merged_into_strava", 0),
             activities_matched=refreshed.get("matched_to_plan", 0),

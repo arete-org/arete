@@ -19,12 +19,15 @@ export function GarminFreshness() {
       setChecking(true);
       setMessage('');
       try {
-        const result = await fetchAPI<{ state: string; complete?: boolean }>('/garmin/sync/ensure', {
+        const result = await fetchAPI<{ state: string; complete?: boolean; more_pending?: boolean; errors?: string[] }>('/garmin/sync/ensure', {
           method: 'POST', signal: controller.signal,
         });
         state = result.state;
-        if (!disposed) setMessage(['fresh', 'complete', 'disconnected'].includes(result.state)
-          ? '' : 'Garmin : synchronisation incomplète. Les données enregistrées restent disponibles.');
+        // Only the activity cap stopped the refresh: the next one continues, nothing failed.
+        const catchingUp = result.state === 'partial' && result.more_pending && !result.errors?.length;
+        if (!disposed) setMessage(['fresh', 'complete', 'disconnected'].includes(result.state) ? ''
+          : catchingUp ? 'Import Garmin en cours de rattrapage. La suite arrive automatiquement.'
+            : 'Garmin : synchronisation incomplète. Les données enregistrées restent disponibles.');
       } catch {
         if (!disposed) setMessage('Vérification Garmin indisponible. Les données enregistrées restent disponibles.');
       } finally {

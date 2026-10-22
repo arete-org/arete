@@ -24,6 +24,11 @@ describe('Garmin progress transport', () => {
       expect(received).toHaveBeenCalledExactlyOnceWith(progress);
     }
   });
+  it('keeps a capped batch flag and rejects a malformed one', async () => {
+    const capped = { ...result, activities_synced: 20, more_pending: true };
+    expect(await consumeGarminSync(body(frame(capped)), vi.fn())).toEqual(capped);
+    await expect(consumeGarminSync(body(frame({ ...result, more_pending: 'yes' })), vi.fn())).rejects.toThrow('Progression Garmin invalide');
+  });
   it('requires a terminal result even after all activities are processed', async () => {
     await expect(consumeGarminSync(body(frame({ ...progress, completed: 3 })), vi.fn())).rejects.toThrow('Suivi interrompu');
   });

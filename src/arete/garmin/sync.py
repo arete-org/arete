@@ -18,6 +18,7 @@ from typing import Any, Literal
 from garminconnect import GarminConnectTooManyRequestsError
 
 from arete.config import config
+from arete.dataio.game_events import CaptureContext
 from arete.dataio.settings import athlete_zone_model
 from arete.features.hr_zones import ZoneModel, samples_from_laps
 from arete.garmin.client import GarminAuthError, GarminClient
@@ -68,6 +69,8 @@ class SyncResult:
     session_ids: list[int] = field(default_factory=list)
     next_history_offset: int | None = None
     history_anchor: int | None = None
+    #: The undated refresh stopped at its activity cap; the next one continues.
+    more_pending: bool = False
 
 
 @dataclass(frozen=True)
@@ -385,6 +388,12 @@ class GarminSyncClient:
         self._last_request_time = 0.0
         self._zones = zones
         self.scan_incomplete = False
+        #: Garmin IDs a batch caller already looked up under the sync lease:
+        #: the import consumes each answer once instead of querying again.
+        self.presence: dict[int, bool] = {}
+        # Read once per import, on its first new activity.
+        self._legacy_strava: bool | None = None
+        self._game: CaptureContext | None = None
 
     @property
     def zones(self) -> ZoneModel:
@@ -632,11 +641,18 @@ class GarminSyncClient:
                             )
 
                     yield SyncProgress("saving", index, total, activity.activity_name)
-                    if checkpoint is not None:
+                    # Without a FIT download nothing ran since the checkpoint above.
+                    if checkpoint is not None and download_fit:
                         checkpoint()
+                    if self._legacy_strava is None:
+                        self._legacy_strava = self.repository.has_legacy_strava()
                     # Same workout on a legacy Strava row? Garmin takes it over.
-                    twin = self.repository.find_overlapping_session(
-                        session.start_time, session.duration_sec
+                    twin = (
+                        self.repository.find_overlapping_session(
+                            session.start_time, session.duration_sec
+                        )
+                        if self._legacy_strava
+                        else None
                     )
                     if (
                         twin is not None
@@ -663,7 +679,11 @@ class GarminSyncClient:
                                 self.zones,
                             )
                     else:
-                        actual_id = self.repository.create_actual_session(session)
+                        if self._game is None:
+                            self._game = self.repository.game_context()
+                        actual_id = self.repository.create_actual_session(
+                            session, self._game
+                        )
                         result.activities_synced += 1
                         result.session_ids.append(actual_id)
                         if auto_match(self.repository, actual_id, session, self.zones):
@@ -718,7 +738,13 @@ class GarminSyncClient:
         yield result
 
     def _is_already_synced(self, activity_id: int) -> bool:
-        """Check if activity is already in database."""
+        """Check if activity is already in database.
+
+        Only Garmin imports write Garmin IDs, under the sync lease: an answer a
+        batch caller recorded in ``presence`` under that lease still holds.
+        """
+        if activity_id in self.presence:
+            return self.presence.pop(activity_id)
         return self.repository.has_garmin_activity(activity_id)
 
     def _enrich_from_fit(

@@ -25,7 +25,11 @@ owner until the synchronous worker or import iterator has unwound. Committed
 sessions are returned by exact local IDs, including old sessions and Garmin
 takeovers of legacy Strava rows (Strava was retired as a source in October 2026;
 the takeover writes Garmin's values over the row). FIT parsing, streams, plan matching and strength
-linking retain the existing import implementation.
+linking retain the existing import implementation. Within one refresh, the
+presence answers read while selecting a page's batch are reused by the import
+(only Garmin imports write Garmin IDs, under the lease), the legacy Strava
+lookup is skipped when no Strava row remains, and gamification settings are
+read once.
 
 A lease that expires while still owned becomes `needs_reconciliation`. It is
 never automatically stolen: a deadline cannot prove that a thread has stopped
@@ -37,7 +41,14 @@ The latest imported session is not the sync watermark. `activities_checked_at`
 advances only when the bounded scan reaches its coverage boundary, including an
 empty successful scan. Initial coverage is 30 days; subsequent checks revisit
 seven days for delayed uploads. A capped scan retains its lower date, offset
-and preceding Garmin ID. A changed anchor resets continuation without moving
+and preceding Garmin ID, and reports `more_pending` in the ensure result and in
+the stream's `done` event: the batch succeeded and the next refresh (app entry,
+foreground, scheduler) continues it. Onboarding then reads « N activités
+importées, la suite arrive automatiquement » and the app banner « Import Garmin
+en cours de rattrapage »; any error keeps the incomplete/interrupted wording.
+Onboarding does not chain batches itself. The activity check reads Garmin's
+threshold (two requests) at most once a day, again on the next check only when
+the transport failed. A changed anchor resets continuation without moving
 the lower date. An import error keeps the failed page reachable; already
 committed Garmin IDs deduplicate on the next check.
 
@@ -51,10 +62,20 @@ and history requests keep their existing interface and the same durable owner
 and request deadline. They do not claim current-window freshness. Older history
 still uses the explicit history importer.
 
-Health refresh reads today and yesterday in the athlete's timezone. The daily
-catch-up retains its four-day window and current performance metrics. Each day
-reports available, unavailable or failed measurements. Failed requests preserve
-previously stored values and do not advance `health_checked_at`. Missing values
+Health refresh reads today in the athlete's timezone, plus yesterday until one
+read of it returned measurements (its outcome is kept in `health_days`). The undated
+activity import (onboarding, manual) reads no health: the next on-use refresh
+does. The Garmin profile handle that health URLs need is cached with the
+account record, so a sync makes no profile lookup once it is known; a new
+login replaces it, and a 4xx on a URL built from the cached handle forgets it
+and fails that read so the next one looks the profile up again. The record is
+amended by compare-and-set, never over a login or refusal recorded since. The daily catch-up retains its four-day window and current
+performance metrics. Each day
+reports available, unavailable or failed measurements. A 4xx answer to one
+signal (other than 401, 403 and 429) means Garmin has no such measurement:
+that signal is unavailable and the other signals and `health_checked_at` still
+advance. Failed requests (timeouts, 5xx) preserve previously stored values and
+do not advance `health_checked_at`. Missing values
 are not converted into zeros. Terrain/weather work shares the refresh deadline;
 unfinished enrichment is reported separately from committed imports.
 
@@ -109,7 +130,9 @@ operator action, not an automatic retry of an ambiguous write.
 `tests/test_garmin_freshness.py` exercises empty checks, capped backlogs, delayed
 uploads, failed older rows, anchor shifts, expiry/recovery, overlapping callers,
 token-refresh/HTTP budgets, 429, partial health, committed cancellation state and
-coaching preflight. Existing importer tests cover missing FIT, streams, matching,
+coaching preflight. `tests/test_garmin_sync_cost.py` runs the real importer
+against a mocked Garmin session and bounds a first onboarding import's Garmin
+requests and database statements per activity. Existing importer tests cover missing FIT, streams, matching,
 strength and the takeover of legacy Strava rows. Frontend unit tests and
 `frontend/browser-tests/garmin-connection.spec.ts` cover waiting, partial status,
 foreground refresh, invalidation and the existing MFA/history flows.

@@ -114,12 +114,65 @@ def _store_record(token_file: Path, record: dict, *, remote: bool) -> None:
             )
 
 
-def save_account(token_file: Path, name: str | None, *, remote: bool) -> None:
+def save_account(
+    token_file: Path,
+    name: str | None,
+    *,
+    remote: bool,
+    display_name: str | None = None,
+) -> None:
     """Record whose account ``token_file`` opens, next to it (and remotely).
 
-    A working session: it also clears a refusal recorded earlier.
+    A working session: it also clears a refusal recorded earlier, and replaces
+    the cached profile handle with this login's (``display_name``).
     """
-    _store_record(token_file, {"account": name}, remote=remote)
+    record: dict = {"account": name}
+    if isinstance(display_name, str) and display_name.strip():
+        record["display_name"] = display_name
+    _store_record(token_file, record, remote=remote)
+
+
+def display_name(token_file: Path) -> str | None:
+    """The Garmin profile handle recorded with these tokens, if any.
+
+    Health URLs embed it; reusing it saves the paced profile lookup each sync
+    would otherwise make. A new login rewrites the record, so it never outlives
+    the account it was read for.
+    """
+    account = token_file.with_name(ACCOUNT_FILE)
+    name = _record(account.read_bytes() if account.exists() else None).get(
+        "display_name"
+    )
+    return name if isinstance(name, str) and name.strip() else None
+
+
+def save_display_name(token_file: Path, name: str | None, *, remote: bool) -> bool:
+    """Add (or, with None, drop) the profile handle in the existing record.
+
+    Compare-and-set against the record read with the tokens: a login or a
+    refusal recorded since by another worker wins, and a missing record is not
+    created (the next restore records the account). Returns whether it wrote.
+    """
+    account = token_file.with_name(ACCOUNT_FILE)
+    if not account.exists():
+        return False
+    previous = account.read_bytes()
+    record = _record(previous)
+    if name is None:
+        record.pop("display_name", None)
+    else:
+        record["display_name"] = name
+    data = json.dumps(record).encode()
+    if remote:
+        with db_connection() as con:
+            changed = con.execute(
+                "UPDATE app.files SET content=?, updated_at=now() WHERE athlete_id=getvariable('arete_athlete_id') AND deleted_at IS NULL AND path=? AND content=? RETURNING path",
+                [data, ACCOUNT_PATH, previous],
+            ).fetchone()
+        if changed is None:
+            return False
+    _write(account, data)
+    return True
 
 
 def refused(token_file: Path, *, remote: bool) -> None:

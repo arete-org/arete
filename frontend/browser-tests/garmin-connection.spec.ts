@@ -1,5 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { THEMES } from '../src/lib/theme';
+import { DEFAULT_SETTINGS } from '../src/pages/settings/types';
+import { dashboardAnswer } from './dashboardAnswer';
 
 test('connect Garmin with MFA, sync and disconnect from Connections', async ({ page }) => {
   let connected = false;
@@ -221,4 +223,56 @@ test('opening the app refreshes Garmin once and reports a partial result', async
   expect(imports).toBe(1);
   release();
   await expect(page.getByText('Garmin : synchronisation incomplète. Les données enregistrées restent disponibles.')).toBeVisible();
+});
+
+/** Pierre at phone width, every API answered here; screenshots go to ../.context/garmin-catch-up/. */
+async function capped(page: Page, ensure: Record<string, unknown>) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => {
+    localStorage.setItem('arete.install.dismissed', '1');
+    localStorage.setItem('arete.notifications.offered', '1');
+  });
+  let imported = 0;
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
+    if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
+    if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, theme: 'pierre', user_id: 1 } });
+    if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false } });
+    if (path === '/api/dashboard') return route.fulfill({ json: dashboardAnswer() });
+    if (path === '/api/onboarding') return route.fulfill({ json: { revision: 0, status: 'not_started' } });
+    if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: ensure });
+    if (path === '/api/garmin/sync/status') return route.fulfill({ json: { garmin_authenticated: true, activities_synced: imported, last_sync: null, user_email: null } });
+    if (path === '/api/garmin/sync/activities/stream') {
+      imported = 20;
+      // The first batch reached the 20-activity cap; the rest is not a failure.
+      return route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ type: 'done', success: true, activities_synced: 20, activities_merged: 0, activities_matched: 0, activities_skipped: 0, errors: [], last_activity_date: '2026-10-21', more_pending: true })}\n\n` });
+    }
+    return route.fulfill({ json: [] });
+  });
+}
+
+test('onboarding shows a capped first import as catching up, not interrupted', async ({ page }) => {
+  await capped(page, { state: 'disconnected' });
+  await page.addInitScript(() => {
+    localStorage.setItem('arete.onboarding.v1.athlete.1', JSON.stringify({ version: 1, step: 3, deferred: false, command_id: 'capped-import', answers: { display_name: 'Camille', goal: 'progress', description: null, race_name: null, race_date: null, sports: ['running'], weekly_training_goal: 3, rest_day_preference: null, constraints: null, timezone: null } }));
+  });
+  await page.goto('/onboarding');
+  await page.getByRole('button', { name: 'Importer mes activités récentes' }).click();
+  await expect(page.getByText('20 activités importées, la suite arrive automatiquement')).toBeVisible();
+  await expect(page.getByText(/Import interrompu/)).toHaveCount(0);
+  await expect(page.getByText('Synchronisation terminée', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.locator('.onboarding-data-status').evaluate(node => node.scrollIntoView({ block: 'start' }));
+  await page.screenshot({ path: '../.context/garmin-catch-up/onboarding-pierre-390.png' });
+});
+
+test('the app banner tells a capped refresh apart from a failed one', async ({ page }) => {
+  await capped(page, { state: 'partial', complete: false, more_pending: true, errors: [] });
+  await page.goto('/');
+  await expect(page.getByText('Import Garmin en cours de rattrapage. La suite arrive automatiquement.')).toBeVisible();
+  await expect(page.getByText(/synchronisation incomplète/)).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '../.context/garmin-catch-up/dashboard-pierre-390.png' });
 });

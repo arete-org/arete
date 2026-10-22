@@ -54,7 +54,8 @@ function parseEvent(data: string): SyncEvent {
     && typeof event.success === 'boolean'
     && ['activities_synced', 'activities_merged', 'activities_matched', 'activities_skipped'].every(key => count(event[key]))
     && Array.isArray(event.errors) && event.errors.every(error => typeof error === 'string')
-    && (event.last_activity_date === null || typeof event.last_activity_date === 'string')) return event as SyncEvent;
+    && (event.last_activity_date === null || typeof event.last_activity_date === 'string')
+    && (event.more_pending === undefined || typeof event.more_pending === 'boolean')) return event as SyncEvent;
   throw new Error('Progression Garmin invalide.');
 }
 

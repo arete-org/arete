@@ -9,6 +9,23 @@ from zoneinfo import ZoneInfo
 KEPT_AT_LINK = "+kept_at_link"
 
 
+#: Whether gamification is enabled, the athlete's timezone and weekly goal.
+CaptureContext = tuple[bool, str, int]
+
+
+def capture_context(con) -> CaptureContext:
+    """What ``capture`` reads before each event; a batch import reads it once."""
+    profile = con.execute(
+        "SELECT enabled FROM app.visible_game_profile WHERE id=1"
+    ).fetchone()
+    assert profile is not None
+    settings = con.execute(
+        "SELECT timezone, weekly_training_goal FROM app.visible_user_settings WHERE user_id = getvariable('arete_athlete_id')"
+    ).fetchone()
+    zone, goal = settings or ("Europe/Paris", 6)
+    return bool(profile[0]), zone, goal
+
+
 def capture(
     con,
     key: str,
@@ -19,19 +36,13 @@ def capture(
     started: datetime | None = None,
     manual: bool = True,
     canonical: str | None = None,
+    context: CaptureContext | None = None,
 ) -> None:
-    profile = con.execute(
-        "SELECT enabled FROM app.visible_game_profile WHERE id=1"
-    ).fetchone()
-    assert profile is not None
-    settings = con.execute(
-        "SELECT timezone, weekly_training_goal FROM app.visible_user_settings WHERE user_id = getvariable('arete_athlete_id')"
-    ).fetchone()
-    zone, goal = settings or ("Europe/Paris", 6)
+    enabled, zone, goal = context or capture_context(con)
     now = datetime.now(UTC)
     local_today = now.astimezone(ZoneInfo(zone)).date()
     week = day - timedelta(days=day.weekday())
-    eligible = bool(profile[0] and valid and 0 <= (local_today - day).days <= 14)
+    eligible = bool(enabled and valid and 0 <= (local_today - day).days <= 14)
     reason = "pending" if eligible else "disabled_or_invalid"
     # Date-only imports on a toggle day are ambiguous; manual logging today is explicit.
     if eligible:
