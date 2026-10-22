@@ -41,7 +41,7 @@ from arete.api.slack import router as slack_router
 from arete.api.strength import router as strength_router
 from arete.api.year_review import router as year_review_router
 from arete.config import config
-from arete.dataio.db import db_connection
+from arete.dataio.db import db_connection, warn_production_database
 from arete.dataio.init_duckdb import SchemaInitializationError, pending_migrations
 from arete.dataio.init_duckdb import main as init_schema
 from arete.dataio.mirror import MirrorMiddleware
@@ -80,6 +80,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         from arete.observability.tracing import get_tracing_client
 
         get_tracing_client()
+    warn_production_database()
     try:
         init_schema()
         _app.state.schema_initialization = {"status": "ready"}

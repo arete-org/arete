@@ -10,7 +10,7 @@ collaborator needs. The README stays about the product; this is the runbook.
 | Production | https://arete-arete15.vercel.app (also `arete-two-woad`) | MotherDuck `md:arete_v2` | **Deploy production** workflow, run by hand by anyone with write access | Clerk sign-in (`ARETE_AUTH=clerk`); the Vercel protection is off on production |
 | Preview of `main` | https://arete-main-arete15.vercel.app | MotherDuck `md:arete_preview_v2` | **Deploy preview** workflow, after green CI on `main` when deployable inputs changed | Vercel Authentication: a Vercel login, or the bypass key |
 | PR preview | `https://arete-<hash>-arete15.vercel.app`, linked in a PR comment | `md:arete_preview_v2` (shared with the main preview) | CI `preview` job, for a PR labelled `preview` once its checks pass | Vercel Authentication, same key |
-| Local | `make dev`, `make docker` | a DuckDB file under `data/`, or what `ARETE_DB` says | — | nothing |
+| Local | `make dev`, `make docker` | `make dev`: a DuckDB file under `data/`; `make docker`: `md:arete_preview_v2`; either: what `ARETE_DB` says | — | nothing |
 
 One Vercel project, two services (`vercel.json`): the FastAPI backend behind
 `/api/*` and the Vite frontend. Vercel's Git integration deploys nothing
@@ -339,8 +339,12 @@ abandoned run is never replayed automatically, and human decisions remain durabl
 ## Local stack
 
 `make dev` runs the API and Vite on a local DuckDB file. `make docker` builds
-the production-like stack from `docker-compose.yml`, which shares production's
-`md:arete_v2`: build it from `main` only, after Deploy production. On any other
-branch, point its `ARETE_DB` at a local file or at `md:arete_preview_v2`: a
-branch's boot would migrate the production database from a laptop. The retired
-`md:arete` and `md:arete_preview` are refused everywhere.
+the production-like stack from `docker-compose.yml`, on `md:arete_preview_v2`
+unless the shell or `.env` sets `ARETE_DB` (Compose reads both). A `.env` copied
+from an older `.env.example` sets `data/arete.duckdb`: Docker then shares the
+`make dev` file, so run one backend at a time or remove that line. Production's
+`md:arete_v2` is an explicit opt-in, from `main` only and after Deploy
+production: a branch's boot would migrate the production database from a
+laptop, and the stack's scheduler would run the daily jobs against it. Outside
+Vercel, the boot logs a warning on any MotherDuck database not named for
+previews. The retired `md:arete` and `md:arete_preview` are refused everywhere.

@@ -10,9 +10,10 @@ services:
       - path: .env.local
         required: false
     environment:
-      # Same MotherDuck database as the Vercel deployment: one source of truth.
-      # The daily sync runs there (Vercel Cron), so none is scheduled here.
-      - ARETE_DB=md:arete_v2
+      # The preview database unless the shell or .env sets ARETE_DB: a local
+      # trial must not write real athletes' data. Production (md:arete_v2) is
+      # an explicit opt-in, and the boot logs a warning when it is chosen.
+      - ARETE_DB=${ARETE_DB:-md:arete_preview_v2}
       # Atomically share automation claims with the Vercel cron windows.
       - ARETE_AUTOMATION_WORKER=true
       # Files beside the database stay on the host and are mirrored into it.
