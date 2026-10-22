@@ -157,6 +157,25 @@ def flush() -> int:
         return len(changed) + len(deleted)
 
 
+def remember(relative: str, data: bytes | None) -> None:
+    """Record a file its owner just read from or wrote to ``app.files`` itself.
+
+    The Garmin token store does so on every request: without it, the next
+    flush would find the file changed and write back a copy that another
+    instance has replaced or deleted meanwhile (a logout undone). None: the
+    row is gone.
+    """
+    with _lock:
+        athlete_id = current_athlete_id()
+        if athlete_id not in _known and len(_known) >= MAX_MIRRORED_ATHLETES:
+            raise RuntimeError("Mirror athlete capacity exceeded")
+        known = _known.setdefault(athlete_id, {})
+        if data is None:
+            known.pop(relative, None)
+        else:
+            known[relative] = _digest(data)
+
+
 def reset() -> None:
     """Forget what this process knows (tests)."""
     with _lock:

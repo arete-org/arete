@@ -388,6 +388,27 @@ class TestSessionUpdate:
         assert "rpe = ?" in sql and "notes" not in sql
         assert params == [None, 42]
 
+    def test_out_of_range_rpe_and_unknown_session_are_refused(self, client):
+        from arete.garmin.models import ActualSession
+        from arete.garmin.repository import GarminRepository
+
+        repo = GarminRepository()
+        own = repo.create_actual_session(
+            ActualSession(date=date(2031, 5, 6), sport="running", duration_sec=60)
+        )
+        try:
+            path = f"/analytics/sessions/{own}"
+            for rpe in (0, 11):
+                assert client.patch(path, json={"rpe": rpe}).status_code == 422
+            # Not this athlete's session (or none): nothing written, not a success.
+            missing = client.patch(
+                f"/analytics/sessions/{own + 10_000}", json={"rpe": 6}
+            )
+            assert missing.status_code == 404
+            assert client.patch(path, json={"rpe": 10}).json() == {"success": True}
+        finally:
+            repo.delete_actual_session(own)
+
     @patch("arete.services.analytics.connect")
     def test_update_empty_body(self, mock_connect, client):
         mock_conn = mock_connect.return_value

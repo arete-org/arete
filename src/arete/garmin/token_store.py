@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from arete.config import config
+from arete.dataio import mirror
 from arete.dataio.db import db_connection
 
 TOKEN_PATH = "garmin_tokens/garmin_tokens.json"
@@ -29,6 +30,11 @@ def _write(path: Path, data: bytes) -> None:
 
 
 def hydrate(path: Path) -> bool:
+    """Rewrite the local token files from the database, the source of truth.
+
+    The mirror records what was read: its flush then writes back only what the
+    SDK changes since, never these copies over another instance's logout.
+    """
     with db_connection() as con:
         rows = dict(
             con.execute(
@@ -40,14 +46,20 @@ def hydrate(path: Path) -> bool:
     if TOKEN_PATH not in rows:
         path.unlink(missing_ok=True)
         account.unlink(missing_ok=True)
+        mirror.remember(TOKEN_PATH, None)
+        mirror.remember(ACCOUNT_PATH, None)
         return False
     data = bytes(rows[TOKEN_PATH])
     assert len(data) <= MAX_TOKEN_BYTES
     _write(path, data)
+    mirror.remember(TOKEN_PATH, data)
     if ACCOUNT_PATH in rows:
-        _write(account, bytes(rows[ACCOUNT_PATH]))
+        record = bytes(rows[ACCOUNT_PATH])
+        _write(account, record)
+        mirror.remember(ACCOUNT_PATH, record)
     else:
         account.unlink(missing_ok=True)
+        mirror.remember(ACCOUNT_PATH, None)
     return True
 
 
@@ -112,6 +124,7 @@ def _store_record(token_file: Path, record: dict, *, remote: bool) -> None:
                 "INSERT OR REPLACE INTO app.files(path,content,updated_at) VALUES(?,?,now()) RETURNING path",
                 [ACCOUNT_PATH, data],
             )
+        mirror.remember(ACCOUNT_PATH, data)
 
 
 def save_account(token_file: Path, name: str | None, *, remote: bool) -> None:
@@ -138,6 +151,7 @@ def save(path: Path) -> None:
             "INSERT OR REPLACE INTO app.files(path,content,updated_at) VALUES(?,?,now()) RETURNING path",
             [TOKEN_PATH, data],
         )
+    mirror.remember(TOKEN_PATH, data)
 
 
 def delete() -> None:
@@ -146,3 +160,5 @@ def delete() -> None:
             "DELETE FROM app.files WHERE athlete_id=getvariable('arete_athlete_id') AND path IN (?, ?)",
             [TOKEN_PATH, ACCOUNT_PATH],
         )
+    mirror.remember(TOKEN_PATH, None)
+    mirror.remember(ACCOUNT_PATH, None)

@@ -1,7 +1,7 @@
 """HTTP contracts for analytics; services own queries and calculations."""
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from arete.services import activity_detail
 from arete.services import analytics as service
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 class SessionUpdate(BaseModel):
-    rpe: int | None = None
+    rpe: int | None = Field(default=None, ge=1, le=10)
     notes: str | None = None
 
 
@@ -34,7 +34,10 @@ def backfill_terrain(limit: int = Query(50, ge=1, le=50)):
 @router.patch("/sessions/{session_id}")
 def update_session(session_id: int, body: SessionUpdate):
     # Only the keys the client sent: an explicit null clears the value.
-    return service.update_session(session_id, body.model_dump(exclude_unset=True))
+    result = service.update_session(session_id, body.model_dump(exclude_unset=True))
+    if result is None:
+        raise HTTPException(404, "Séance introuvable.")
+    return result
 
 
 @router.get("/sessions")

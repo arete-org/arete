@@ -129,6 +129,16 @@ def withheld(settings: dict, kind: NotificationKind) -> str | None:
     return None
 
 
+def kind_allowed(kind: NotificationKind) -> bool:
+    """Whether the athlete's per-kind choice lets this kind out; never raises."""
+    try:
+        settings = get_user_settings() or {}
+    except Exception as e:  # noqa: BLE001 - the send path reports it
+        logger.warning("Notification preferences unreadable: %s", e)
+        return True
+    return stored_preferences(settings.get("notification_preferences")).allows(kind)
+
+
 def _send(
     title: str,
     body: str,

@@ -417,6 +417,24 @@ class TestPostSessionPush:
         assert notify_calls[1] == []
         run.assert_not_called()  # nor is the feedback paid for twice
 
+    def test_post_session_pushes_off_fall_back_to_the_imports_count(self):
+        written = [{"session_id": 4, "date": date(2031, 5, 6), "text": "Bien."}]
+        with patch(
+            "arete.services.notifications.kind_allowed",
+            side_effect=lambda kind: kind != "post_session",
+        ):
+            notify, _ = self._run([4, 5], written)
+        notify.assert_called_once_with(
+            "Arete", "2 séance(s) importée(s)", "/log?tab=cardio", kind="imports"
+        )
+
+    def test_a_session_whose_feedback_was_not_stored_is_counted(self):
+        # The feedback run succeeded but stored nothing for session 4.
+        notify, _ = self._run([4], [])
+        notify.assert_called_once_with(
+            "Arete", "1 séance(s) importée(s)", "/log?tab=cardio", kind="imports"
+        )
+
     def test_the_athlete_rpe_reaches_the_coach_facts(self, memory, synced):
         from arete.services.coaching_rules import sync_feedback
 

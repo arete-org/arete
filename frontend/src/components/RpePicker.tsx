@@ -33,8 +33,16 @@ function dismissed(): number[] {
  * One-tap RPE for a cardio session that has none, saved through the existing
  * session PATCH. Hidden once saved, once dismissed (remembered per session),
  * and while the coach's own follow-up already asks about this session.
+ * Keyed by session: a card that switches session never inherits the previous
+ * one's saved or dismissed state.
  */
-export function RpePicker({ sessionId, autoFocus = false, className }: { sessionId: number; autoFocus?: boolean; className?: string }) {
+export function RpePicker(props: Props) {
+  return <SessionRpePicker key={props.sessionId} {...props} />;
+}
+
+type Props = { sessionId: number; autoFocus?: boolean; className?: string };
+
+function SessionRpePicker({ sessionId, autoFocus = false, className }: Props) {
   const queryClient = useQueryClient();
   const firstChip = useRef<HTMLButtonElement>(null);
   const [hidden, setHidden] = useState(() => dismissed().includes(sessionId));

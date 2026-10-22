@@ -231,10 +231,8 @@ function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGat
       <GateScreen>
         <ErrorState
           message="Authentification mal configurée"
-          onRetry={() => {
-            setLeaving('yes');
-            leave().catch(() => setLeaving('failed'));
-          }}
+          // Signing out would only lead back here: a reload picks up a fixed deployment.
+          onRetry={() => window.location.reload()}
         />
       </GateScreen>
     );

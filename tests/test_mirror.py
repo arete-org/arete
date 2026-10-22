@@ -129,6 +129,27 @@ def test_hydrate_leaves_foreign_rows_on_the_server(store, tmp_path, monkeypatch)
     assert set(_stored(store)) == {"arete.duckdb", "garmin_tokens/garmin_tokens.json"}
 
 
+def test_a_status_read_does_not_undo_another_instance_logout(
+    store, tmp_path, monkeypatch
+):
+    """Instance A reads the tokens while instance B logs out: they stay out."""
+    from arete.garmin import token_store
+
+    root = _use_data_dir(monkeypatch, tmp_path / "data")
+    mirror.hydrate()  # A started before any login
+    with store() as con:  # B logs in
+        con.execute(
+            "INSERT INTO app.files (path, content) VALUES (?, '{\"t\": 1}'), (?, '{}')",
+            [token_store.TOKEN_PATH, token_store.ACCOUNT_PATH],
+        )
+    # A's GET /garmin/status: has_tokens rewrites the local copies.
+    assert token_store.hydrate(root / token_store.TOKEN_PATH)
+    with store() as con:  # B logs out meanwhile
+        con.execute("DELETE FROM app.files")
+    assert mirror.flush() == 0  # A's request ends: nothing written back
+    assert _stored(store) == {}
+
+
 def test_middleware_is_inert_on_a_local_database(monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))
