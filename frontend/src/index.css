@@ -603,3 +603,28 @@ body:has(.coach-panel) .install-invitation, body:has([aria-modal='true']) .insta
 .briefing-entry, .briefing-history-link { border-radius: var(--radius-control); }
 .briefing-entry:enabled:hover, .briefing-history-link:hover { background: var(--color-selection); }
 .briefing-history-link { padding: 8px; min-height: 44px; }
+
+/* The physio report (/sante/rapport) prints alone, on Pierre's light ink
+   whatever the screen's theme: browsers drop dark backgrounds on paper. */
+@media print {
+  @page { size: A4; margin: 14mm; }
+  html:has(.health-report) {
+    color-scheme: light;
+    --surface-page: #FFFFFF; --surface-card: #FFFFFF; --surface-raised: #F2EFE9;
+    --surface-border: #CFC8BA;
+    --ink-primary: #1C2927; --ink-secondary: #3F4943; --ink-muted: #565A51;
+    --accent: #285349;
+    --signal-warning: #8A5C35; --signal-danger: #AA3E3E;
+  }
+  html:has(.health-report) body { background: #FFFFFF; }
+  html:has(.health-report) .app-shell > :not(.app-main),
+  html:has(.health-report) .report-toolbar { display: none !important; }
+  html:has(.health-report) .app-main { margin: 0 !important; padding: 0 !important; }
+  html:has(.health-report) .page-shell { padding: 0; }
+  .health-report .page-title { font-size: 24px; }
+  .health-report .report-section { break-inside: auto; }
+  .health-report .report-section > h2 { break-after: avoid; }
+  .health-report tr { break-inside: avoid; }
+  .health-report .report-table { overflow: visible; }
+  .health-report .report-bar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}

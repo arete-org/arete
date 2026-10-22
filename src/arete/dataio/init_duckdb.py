@@ -374,6 +374,34 @@ CREATE TABLE IF NOT EXISTS app.daily_checkins (
     PRIMARY KEY (athlete_id, date)
 );
 
+-- Pain and body weight (ARE-62): health data (GDPR art. 9), private per
+-- athlete. Deleting an entry erases its row (services/body_log.py): the
+-- deleted_at column only serves the private views. Times are naive UTC.
+CREATE SEQUENCE IF NOT EXISTS app.pain_entries_seq START 1;
+CREATE TABLE IF NOT EXISTS app.pain_entries (
+    id          INTEGER PRIMARY KEY DEFAULT nextval('app.pain_entries_seq'),
+    athlete_id  INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    date        DATE NOT NULL,
+    area        VARCHAR NOT NULL,            -- body_log.PAIN_AREAS
+    side        VARCHAR,                     -- 'left', 'right', 'both', or NULL
+    intensity   INTEGER NOT NULL,            -- 0 (none) to 10 (worst imaginable)
+    note        VARCHAR,
+    created_at  TIMESTAMP NOT NULL,
+    updated_at  TIMESTAMP NOT NULL,
+    deleted_at  TIMESTAMP
+);
+-- One weight a day: entering it again corrects it.
+CREATE TABLE IF NOT EXISTS app.weight_entries (
+    athlete_id  INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    date        DATE NOT NULL,
+    weight_kg   DOUBLE NOT NULL,
+    source      VARCHAR NOT NULL DEFAULT 'manual',  -- only 'manual' so far
+    created_at  TIMESTAMP NOT NULL,
+    updated_at  TIMESTAMP NOT NULL,
+    deleted_at  TIMESTAMP,
+    PRIMARY KEY (athlete_id, date)
+);
+
 -- The evening message (ARE-64): at most one per athlete and evening, written
 -- by the coach about tomorrow and ending with one question. The row is
 -- claimed ('pending') before the model request, so overlapping dispatches pay
@@ -1205,6 +1233,30 @@ def _m65_best_efforts(con) -> None:
         raise
 
 
+def _m66_body_log(con) -> None:
+    """Pain and body weight (ARE-62): a sequence, two tables, their views.
+
+    New relations only, so the previous release runs unchanged on them. One
+    transaction, rolled back together (see migration 49): no table is left
+    without its private view.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE SEQUENCE IF NOT EXISTS app.pain_entries_seq")
+    table = DDL.index("CREATE TABLE IF NOT EXISTS app.weight_entries")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for statement in DDL[start : DDL.index(");", table) + 2].split(";"):
+            if statement.strip():
+                con.execute(statement)
+        _view(con, "pain_entries")
+        _view(con, "weight_entries")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
 DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
 
 
@@ -1292,6 +1344,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (63, _m63_athlete_consents),
     (64, _m64_goal_types),
     (65, _m65_best_efforts),
+    (66, _m66_body_log),
 ]
 
 

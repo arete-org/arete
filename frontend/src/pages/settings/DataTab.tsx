@@ -134,6 +134,18 @@ export function DataTab() {
         </div>
       </Panel>
 
+      <Panel level={3} variant="inset" title="Rapport pour ton kiné ou ton médecin">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-xs text-text-muted font-sans">
+            Huit semaines sur une page : charge, séances, douleurs, poids, préparation et check-ins. À imprimer ou
+            enregistrer en PDF depuis ton navigateur.
+          </p>
+          <Link to="/sante/rapport" className="shrink-0 text-sm font-sans text-neon-cyan hover:underline">
+            Ouvrir le rapport →
+          </Link>
+        </div>
+      </Panel>
+
       <Panel level={3} variant="inset" title="Bilan annuel">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p className="text-xs text-text-muted font-sans">

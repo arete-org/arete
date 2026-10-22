@@ -15,6 +15,13 @@ at ``CHECKIN_LOW_AT`` or less out of 5 move the readiness to the band below
 Good answers never raise a band, and no answer changes nothing. The athlete
 knows how the legs feel; the watch does not, so a bad morning counts, but a
 good one never overrides a low measure.
+
+Declared pain weighs one more band, downwards only, when the load is high:
+pain at 4/10 or more on an area within three days (``body_log.recent_pain``)
+with an ACWR above its safe zone (``ACWR_SAFE_MAX``) lowers the band once,
+whatever the number of painful areas, and the reason names the pain. Without
+a readiness, that pain still decides from the top band: a hard session is
+eased, an easy one kept (a keep is never stored). Pain under a safe load changes nothing here; the coach reads it.
 """
 
 from __future__ import annotations
@@ -33,6 +40,9 @@ TSB_EASE_AT = -25.0
 RECOVERY_MIN = 30
 #: A check-in answer at or below this (out of 5) lowers the readiness band.
 CHECKIN_LOW_AT = 2
+#: The top of the ACWR's optimal zone (``features.workload.get_acwr_zone``):
+#: above it, declared pain lowers the band.
+ACWR_SAFE_MAX = 1.3
 
 ADAPTABLE_SPORTS = frozenset({"running", "cycling", "swimming"})
 HARD_TYPES = frozenset({"tempo", "intervals"})
@@ -77,6 +87,9 @@ class AdaptationInput:
     #: The morning check-in (1-5), None when the day has no answer.
     sleep: int | None = None
     legs: int | None = None
+    #: The strongest recent pain at 4/10 or more (``body_log.pain_phrase``),
+    #: None without one.
+    pain: str | None = None
 
 
 @dataclass(frozen=True)
@@ -117,12 +130,33 @@ def _band(score: float) -> int:
     return (score >= KEEP_AT) + (score >= EASE_AT) + (score >= REPLACE_AT)
 
 
+def pain_under_load(pain: str | None, acwr: float | None) -> str | None:
+    """Declared pain under a load above its safe zone, said; None otherwise.
+
+    The rule's one condition: the decision and the briefing's facts read it.
+    """
+    if pain is None or acwr is None or acwr <= ACWR_SAFE_MAX:
+        return None
+    return f"{pain} avec une charge au-dessus de la zone sûre (ACWR {acwr:.2f})"
+
+
+def pain_with_load(inp: AdaptationInput) -> str | None:
+    return pain_under_load(inp.pain, inp.acwr)
+
+
 def _said(inp: AdaptationInput) -> str:
-    """The readiness and, when it weighs, the check-in (starts a sentence)."""
-    assert inp.readiness is not None
-    said = readiness_phrase(inp.readiness, inp.readiness_source)
-    declared = declared_fatigue(inp.sleep, inp.legs)
-    return f"{said}, {declared}" if declared else said
+    """The readiness and, when they weigh, the check-in and the pain (starts a
+    sentence). Without a readiness, only pain under a high load decides."""
+    parts = [
+        readiness_phrase(inp.readiness, inp.readiness_source)
+        if inp.readiness is not None
+        else None,
+        declared_fatigue(inp.sleep, inp.legs),
+        pain_with_load(inp),
+    ]
+    said = ", ".join(part for part in parts if part)
+    assert said, "a decision needs a readiness or a pain under a high load"
+    return said[0].upper() + said[1:]
 
 
 def describe(session_type: str, duration_min: int | None, zone: str | None) -> str:
@@ -139,7 +173,7 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
 
     None means "not this function's business": a session already done or
     skipped, a sport or a type the bands do not apply to (strength), or no
-    readiness at all. Nothing is stored then.
+    readiness and no pain under a high load. Nothing is stored then.
     """
     if inp.status != "pending" or inp.sport not in ADAPTABLE_SPORTS:
         return None
@@ -149,13 +183,16 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
         )
     if inp.session_type not in HARD_TYPES | EASY_TYPES:
         return None
-    if inp.readiness is None:
+    hurt = pain_with_load(inp) is not None
+    if inp.readiness is None and not hurt:
         return None
 
     said = _said(inp)
     planned = describe(inp.session_type, inp.target_duration_min, inp.target_hr_zone)
-    band = _band(inp.readiness)
+    band = _band(inp.readiness) if inp.readiness is not None else 3
     if declared_fatigue(inp.sleep, inp.legs):
+        band = max(0, band - 1)
+    if hurt:
         band = max(0, band - 1)
 
     if inp.acwr is not None and inp.acwr > ACWR_REST_AT:
@@ -250,7 +287,6 @@ def one_recovery_per_day(
         key = replaced.pop(0)[0]
         kept = describe(key.session_type, key.target_duration_min, key.target_hr_zone)
     for inp, i in replaced:
-        assert inp.readiness is not None  # REPLACE_EASY needs a readiness
         planned = describe(
             inp.session_type, inp.target_duration_min, inp.target_hr_zone
         )

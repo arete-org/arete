@@ -1,4 +1,8 @@
-"""Own the final request ordering: harness, profile, capabilities, history, page data."""
+"""Own the final request ordering: harness, profile, capabilities, history, page data.
+
+Personal profiles always carry the athlete's facts, declared pain and weight
+(``services/body_log.context_block``), journal and follow-ups.
+"""
 
 import json
 import logging
@@ -20,13 +24,14 @@ from arete.agent.runtime.budget import MAX_MODEL_CALLS
 from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.policy import resolve_policy
 from arete.services.athlete_facts import facts_block
+from arete.services.body_log import context_block as body_block
 from arete.services.coach_followup import context_block as followup_block
 from arete.services.journal import journal_block
 from arete.services.personal_context import search_personal_context
 from arete.services.system_skills import MAX_SYSTEM_SKILLS
 
 MAX_RETRIEVED_TOKENS = 2_048
-LEDGER_SECTIONS = frozenset({"facts", "journal", "followups"})
+LEDGER_SECTIONS = frozenset({"facts", "body", "journal", "followups"})
 logger = logging.getLogger(__name__)
 
 
@@ -143,6 +148,19 @@ def build_context(
                 context,
                 "facts",
                 lambda: facts_block(
+                    context.current_date if isinstance(context, AgentContext) else None
+                ),
+            )
+            if profile.personal_context
+            else "",
+            "ledger",
+        ),
+        ContextSection(
+            "body",
+            build_context_ledger(
+                context,
+                "body",
+                lambda: body_block(
                     context.current_date if isinstance(context, AgentContext) else None
                 ),
             )

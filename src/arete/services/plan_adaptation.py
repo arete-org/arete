@@ -96,6 +96,7 @@ def adapt_today(
     ``respect_setting`` is the daily run's: with the switch off it writes
     nothing. An explicit request from the athlete ignores it.
     """
+    from arete.services.body_log import pain_phrase
     from arete.services.coaching_rules import rule_facts
 
     day = target_date or athlete_today()
@@ -141,6 +142,7 @@ def adapt_today(
             fitness_goal=facts.fitness_goal,
             sleep=facts.checkin.sleep if facts.checkin else None,
             legs=facts.checkin.legs if facts.checkin else None,
+            pain=pain_phrase(list(facts.pain)),
         )
         for session in pending
     ]

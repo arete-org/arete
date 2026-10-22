@@ -1300,6 +1300,38 @@ and fitness series, and its records from `app.best_efforts`, with no model
 request. Both are plain HTTP reads
 (`api/data_export.py`, `api/year_review.py`); the coach never receives them.
 
+### Pain, body weight and the physio report
+
+`services/body_log.py` owns the pain and body weight the athlete records
+(ARE-62, migration 66): `app.pain_entries` (a day, an area from a fixed list,
+an optional side, 0 to 10 and a short note, several a day) and
+`app.weight_entries` (one weight a day, entered again to correct it). Both are
+health data (GDPR art. 9): private relations behind the consent gate, in the
+default export, erased with the account, physically deleted entry by entry
+and never logged with a value. The routes are `/body` (the trend),
+`/body/pain`, `/body/weight/{day}` and `/body/report`; the browser offers a
+quick entry on the dashboard and on a session page, and the **Santé** page
+(`/sante`).
+
+The coach reads them through the existing owners only: the context builder
+adds the last two weeks of pain and the latest weight to every personal
+profile (`body_log.context_block`, empty when nothing is recorded), the
+**Santé** page is a page-data read (`health`), and the rule facts carry pain at
+4/10 or more within three days. With an ACWR above its safe zone (1.3), that
+pain lowers the day's readiness band once (`adaptation.pain_with_load`), so the
+morning proposes the lighter option and its reason names the pain; without a
+readiness it still eases a hard session. The briefing's facts list the pain of
+the last three days and the rule when it applies. Weight is shown, never used
+to normalise a pace or a power, and no Garmin weigh-in is imported yet.
+
+`services/body_report.py` builds the report for a physio or a sports doctor
+from stored data, without a model: eight calendar weeks ending today, weekly
+sessions, time, distance, the shared TSS estimate and the ACWR at each week's
+end, the sessions, the pain with its notes, the weight, Garmin's readiness and
+the check-ins' answers (never their notes nor the sessions'). `/sante/rapport`
+renders it and the browser prints it or saves it as PDF on light ink whatever
+the theme; no PDF library is added.
+
 ## Slack product and private administration
 
 Slack administrators have a measured, bounded Jev classification step before

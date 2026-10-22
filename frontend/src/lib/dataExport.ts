@@ -17,6 +17,8 @@ const TABLES = [
   { id: 'goals', label: 'Objectifs' },
   { id: 'athlete_facts', label: 'Ce que le coach sait' },
   { id: 'daily_checkins', label: 'Check-ins du matin' },
+  { id: 'pain_entries', label: 'Douleurs déclarées' },
+  { id: 'weight_entries', label: 'Poids' },
   { id: 'evening_messages', label: 'Messages du soir' },
   { id: 'weekly_reviews', label: 'Bilans hebdomadaires' },
   { id: 'session_feedback', label: 'Retours sur les séances' },

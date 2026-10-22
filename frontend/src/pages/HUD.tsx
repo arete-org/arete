@@ -6,9 +6,10 @@ import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Calendar, Dumbbell, TrendingUp, Zap } from 'lucide-react';
+import { Calendar, Dumbbell, HeartPulse, TrendingUp, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
 import { CheckinCard } from '@/components/dashboard/CheckinCard';
+import { BodyLogEntry } from '@/components/body/BodyLogEntry';
 import { PushOffer } from '@/components/PushOffer';
 import { MovedSession, RenegotiationOutcome } from '@/components/dashboard/RenegotiationOutcome';
 import { RenegotiateMenu } from '@/components/dashboard/RenegotiateMenu';
@@ -662,6 +663,16 @@ export function DashboardPage() {
                   )}
                 </p>
               )}
+            </Panel>
+
+            {/* Pain and weight in a few taps, after the day's form (which stays above
+                the fold): no read until the athlete opens a form. */}
+            <Panel className="p-4">
+              <SectionHeader icon={<HeartPulse className="w-4 h-4 text-neon-cyan" />} title="Douleur ou poids" />
+              <p className="mb-3 text-xs font-sans text-text-muted">
+                Une gêne, une douleur, ton poids du jour : le coach en tient compte.
+              </p>
+              <BodyLogEntry />
             </Panel>
 
           </div>
