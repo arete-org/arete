@@ -6,7 +6,7 @@ from typing import Any
 
 import duckdb
 
-from arete.dataio import plan_changes
+from arete.dataio import best_efforts, plan_changes
 from arete.dataio.db import connect
 from arete.dataio.ownership import require_owned
 from arete.garmin.models import (
@@ -760,6 +760,7 @@ class GarminRepository:
                 "UPDATE app.strength_sessions SET actual_session_id = NULL WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (actual_session_id = ?) RETURNING id",
                 [session_id],
             )
+            best_efforts.forget(conn, best_efforts.RUN, [session_id])
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
@@ -781,7 +782,7 @@ class GarminRepository:
     def save_activity_streams(
         self, actual_session_id: int, streams: ActivityStreams
     ) -> None:
-        """Store (or replace) a session's streams."""
+        """Store (or replace) a session's streams, and its best efforts with them."""
         columns = streams.channels()
         placeholders = ", ".join(["?"] * (3 + len(CHANNELS)))
         conn = self._get_connection()
@@ -802,6 +803,8 @@ class GarminRepository:
                     *(columns.get(name) for name in CHANNELS),
                 ],
             )
+            # The run's best efforts derive from these streams alone.
+            best_efforts.refresh_runs(conn, [actual_session_id])
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")

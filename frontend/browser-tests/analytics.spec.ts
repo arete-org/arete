@@ -69,12 +69,8 @@ const RECORDS = {
     { name: 'Semi-marathon', distance_m: 21097.5, time_sec: 5880, time_display: '1:38:00', pace_display: '4:39 /km', date: '2026-04-12', session_id: 4, session_name: 'Semi de Paris' },
   ],
   lifts: [
-    { exercise: 'Squat', e1rm_kg: 116.7, weight_kg: 100, reps: 5, date: '2026-10-10', session_id: 30, sessions: 14 },
+    { exercise_id: 3, exercise: 'Squat', e1rm_kg: 116.7, weight_kg: 100, reps: 5, date: '2026-10-10', session_id: 30, sessions: 14 },
   ],
-  runs_scanned: 64,
-  runs_limit: 100,
-  sessions_scanned: 31,
-  sessions_limit: 100,
 };
 
 const DAYS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '6m': 180, '1y': 365, all: 940 };
@@ -250,7 +246,8 @@ for (const width of [1440, 390]) {
       .locator('.analysis-card')
       .filter({ has: page.getByRole('heading', { name: 'Records', exact: true }) });
     await expect(records.getByRole('link', { name: /^1 km en 3:46/ })).toHaveAttribute('href', '/log/sessions/12');
-    await expect(records).toContainText('116,7 kg');
+    await expect(records.getByRole('link', { name: /^Squat : 1RM estimé 116,7 kg/ })).toHaveAttribute('href', '/log?session=30');
+    await expect(records).toContainText('Records de tous les temps');
     await expect(page.getByText(/Chiron/)).toHaveCount(0);
     const selector = page.getByRole('group', { name: 'Période analysée' });
     for (const [label, value] of [

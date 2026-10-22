@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from datetime import date
 
 import pytest
 
 from arete.api.year_review import router
-from arete.dataio.db import connect
+from arete.dataio import best_efforts
+from arete.dataio.db import connect, transaction
+from arete.garmin.repository import GarminRepository
+from arete.garmin.streams import ActivityStreams
 from arete.services import year_review as yr
 
 # Years no other test writes to: the shared test database keeps their rows.
@@ -16,8 +18,10 @@ YEAR = 2003
 TODAY = date(2026, 10, 10)
 
 
-def _efforts(**times: int) -> str:
-    return json.dumps([{"name": n, "elapsed_time": t} for n, t in times.items()])
+def _steady(seconds: int, mps: float) -> ActivityStreams:
+    return ActivityStreams(
+        t=list(range(seconds)), distance_m=[round(i * mps, 1) for i in range(seconds)]
+    )
 
 
 @pytest.fixture
@@ -27,22 +31,23 @@ def history():
         """
         INSERT INTO app.actual_sessions
             (user_id, date, sport, name, duration_sec, distance_m, ascent_m,
-             source, rpe, best_efforts_json)
+             source, rpe)
         VALUES
             (1, '2002-06-01', 'running', 'Ancien 5K', 1800, 6000, 20,
-             'garmin_connect', 8, ?),
+             'garmin_connect', 8),
             (1, '2003-01-04', 'running', 'Footing', 3600, 10000, 100,
-             'garmin_connect', 5, ?),
+             'garmin_connect', 5),
             (1, '2003-01-05', 'running', 'Sortie longue', 7200, 21100, 250,
-             'strava', 6, ?),
+             'strava', 6),
             (1, '2003-03-10', 'cycling', 'Col', 12000, 60000, 1500,
-             'garmin_connect', 8, NULL)
-        """,
-        [
-            _efforts(**{"5K": 1500, "10K": 3000}),
-            _efforts(**{"5k": 1450, "10K": 3100}),
-            _efforts(**{"Half-Marathon": 6000}),
-        ],
+             'garmin_connect', 8)
+        """
+    )
+    runs = dict(
+        con.execute(
+            "SELECT name, id FROM app.actual_sessions "
+            "WHERE date BETWEEN '2002-01-01' AND '2003-12-31' AND sport = 'running'"
+        ).fetchall()
     )
     linked = con.execute(
         "SELECT id FROM app.actual_sessions WHERE date = '2003-03-10'"
@@ -52,7 +57,11 @@ def history():
         "VALUES ('test-yr squat', 'squat', 'quads') RETURNING id"
     ).fetchone()[0]
     strength = []
-    for day, link in (("2003-01-06", None), ("2003-03-10", linked)):
+    for day, link in (
+        ("2002-09-01", None),
+        ("2003-01-06", None),
+        ("2003-03-10", linked),
+    ):
         strength.append(
             con.execute(
                 "INSERT INTO app.strength_sessions "
@@ -61,7 +70,7 @@ def history():
                 [day, link],
             ).fetchone()[0]
         )
-    for session_id in strength:
+    for session_id, kg in zip(strength, (110, 100, 100), strict=True):
         se = con.execute(
             "INSERT INTO app.session_exercises (session_id, exercise_id) "
             "VALUES (?, ?) RETURNING id",
@@ -70,12 +79,27 @@ def history():
         con.execute(
             "INSERT INTO app.exercise_sets "
             "(session_exercise_id, set_number, reps, weight_kg, is_warmup) "
-            "VALUES (?, 1, 10, 40, TRUE), (?, 2, 5, 100, FALSE), (?, 3, 5, 100, FALSE)",
-            [se, se, se],
+            "VALUES (?, 1, 10, 40, TRUE), (?, 2, 5, ?, FALSE), (?, 3, 5, ?, FALSE)",
+            [se, se, kg, se, kg],
         )
     con.close()
-    yield
+    # Streams on every run: the Garmin ones hold records, the Strava one never.
+    repo = GarminRepository()
+    repo.save_activity_streams(runs["Ancien 5K"], _steady(2001, 3.0))
+    repo.save_activity_streams(runs["Footing"], _steady(2860, 3.5))
+    repo.save_activity_streams(runs["Sortie longue"], _steady(5300, 4.0))
+    with transaction() as con:
+        best_efforts.refresh_lifts(con, strength)
+    yield runs
     con = connect()
+    con.execute(
+        "DELETE FROM app.best_efforts WHERE list_contains(?, session_id)",
+        [[*runs.values(), *strength]],
+    )
+    con.execute(
+        "DELETE FROM app.activity_streams WHERE list_contains(?, actual_session_id)",
+        [list(runs.values())],
+    )
     con.execute(
         "DELETE FROM app.exercise_sets WHERE session_exercise_id IN "
         "(SELECT id FROM app.session_exercises WHERE exercise_id = ?)",
@@ -117,17 +141,28 @@ def test_highlights_name_the_standout_sessions(history):
     assert highlights["longest_duration"]["duration_sec"] == 12000
 
 
-def test_best_efforts_are_records_only_against_earlier_years(history):
+def test_records_are_garmin_bests_against_earlier_years(history):
     review = yr.year_review(YEAR, today=TODAY)
-    efforts = {e["name"]: e for e in review["best_efforts"]}
-    assert efforts["5K"]["time_sec"] == 1450
-    assert efforts["5K"]["previous_best_sec"] == 1500
-    assert efforts["5K"]["is_pr"] is True
-    assert efforts["10K"]["is_pr"] is False
-    assert efforts["Half-Marathon"]["previous_best_sec"] is None
-    assert efforts["Half-Marathon"]["is_pr"] is True
-    assert review["pr_count"] == 2
-    assert efforts["Half-Marathon"]["activity_name"] == "Sortie longue"
+    runs = {r["name"]: r for r in review["records"]["runs"]}
+    # The Strava run's faster streams count for nothing: Strava is retired.
+    assert list(runs) == ["1 km", "5 km", "10 km"]
+    assert runs["5 km"]["time_sec"] == 1429
+    assert runs["5 km"]["previous_best"] == 1667
+    assert runs["5 km"]["is_pr"] is True
+    assert runs["5 km"]["session_id"] == history["Footing"]
+    assert runs["5 km"]["session_name"] == "Footing"
+    assert runs["10 km"]["previous_best"] is None
+    assert runs["10 km"]["is_pr"] is True
+    # The year's best lift, short of the year before's.
+    (lift,) = review["records"]["lifts"]
+    assert (lift["exercise"], lift["e1rm_kg"], lift["date"]) == (
+        "test-yr squat",
+        116.7,
+        "2003-01-06",
+    )
+    assert lift["previous_best"] == 128.3
+    assert lift["is_pr"] is False
+    assert review["pr_count"] == 3
 
 
 def test_strength_volume_counts_working_sets_of_every_session(history):
@@ -155,7 +190,7 @@ def test_an_empty_year_answers_zeros():
     review = yr.year_review(2001, today=TODAY)
     assert review["totals"]["sessions"] == 0
     assert review["highlights"]["hardest"] is None
-    assert review["best_efforts"] == []
+    assert review["records"] == {"runs": [], "lifts": []}
     assert review["fitness"]["series"] == []
     assert review["consistency"]["longest_day_streak"] == 0
 

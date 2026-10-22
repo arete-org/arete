@@ -131,6 +131,20 @@ for (const width of [1440, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
+    // The year's records come from Garmin streams and the strength log (ARE-178).
+    const records = page
+      .locator('.analysis-card')
+      .filter({ has: page.getByRole('heading', { name: 'Records', exact: true }) });
+    await expect(records.getByRole('link', { name: /^Footing ·/ }).first()).toHaveAttribute(
+      'href',
+      '/log/sessions/2',
+    );
+    await expect(records.getByRole('link', { name: /^5 × 110 kg/ })).toHaveAttribute(
+      'href',
+      '/log?session=7',
+    );
+    await expect(records).toContainText('Record −50 s');
+    await expect(records).toContainText('Record +8,3 kg');
     await page.screenshot({ path: `../.context/arete-year-${width}.png`, fullPage: true });
     await page.getByRole('link', { name: /Col ·/ }).first().click();
     await expect(page).toHaveURL(/\/log\/sessions\/1$/);

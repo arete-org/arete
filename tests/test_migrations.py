@@ -783,3 +783,106 @@ def test_m64_adds_the_goal_types_once_and_atomically(tmp_path, monkeypatch):
         assert con.execute(
             "SELECT count(*) FROM app.schema_version WHERE version = 64"
         ).fetchone() == (1,)
+
+
+def test_m65_backfills_every_athlete_s_best_efforts_once_and_atomically(
+    tmp_path, monkeypatch
+):
+    from arete.dataio import tenant_schema
+
+    path = tmp_path / "best-efforts.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    with migration_connection(str(path)) as con:
+        # Schema 64, with history the previous release stored: two athletes'
+        # runs with streams, a deleted run, a Strava run and a strength log.
+        con.execute("DROP VIEW app.visible_best_efforts")
+        con.execute("DROP TABLE app.best_efforts")
+        con.execute("DELETE FROM app.schema_version WHERE version = 65")
+        con.execute("INSERT INTO app.athletes(id) VALUES (2) ON CONFLICT DO NOTHING")
+        runs = {}
+        for name, athlete, source, deleted in (
+            ("owner", 1, "garmin_connect", None),
+            ("second", 2, "fit_file", None),
+            ("deleted", 1, "garmin_connect", "2026-01-01"),
+            ("strava", 1, "strava", None),
+        ):
+            runs[name] = con.execute(
+                "INSERT INTO app.actual_sessions (user_id, date, sport, name,"
+                " duration_sec, distance_m, source, deleted_at)"
+                " VALUES (?, '2020-05-01', 'running', ?, 1900, 5700, ?, ?) RETURNING id",
+                [athlete, name, source, deleted],
+            ).fetchone()[0]
+            con.execute(
+                "INSERT INTO app.activity_streams (actual_session_id, sample_count,"
+                " t_sec, distance_m, athlete_id) VALUES (?, 1900, ?, ?, ?)",
+                [
+                    runs[name],
+                    list(range(1900)),
+                    [i * 3.0 for i in range(1900)],
+                    athlete,
+                ],
+            )
+        log = con.execute(
+            "INSERT INTO app.strength_sessions (user_id, date, name)"
+            " VALUES (1, '2020-05-02', 'Force') RETURNING id"
+        ).fetchone()[0]
+        exercise = con.execute(
+            "INSERT INTO app.exercises (name, category, primary_muscle)"
+            " VALUES ('Squat', 'squat', 'quads') RETURNING id"
+        ).fetchone()[0]
+        entry = con.execute(
+            "INSERT INTO app.session_exercises (session_id, exercise_id)"
+            " VALUES (?, ?) RETURNING id",
+            [log, exercise],
+        ).fetchone()[0]
+        con.execute(
+            "INSERT INTO app.exercise_sets (session_exercise_id, set_number, reps,"
+            " weight_kg, is_warmup) VALUES (?, 1, 5, 100, FALSE), (?, 2, 3, 100, FALSE)",
+            [entry, entry],
+        )
+        assert init_duckdb.pending_migrations(con) == [65]
+
+        def broken_view(*_args):
+            raise RuntimeError("view refresh failed")
+
+        with monkeypatch.context() as broken:
+            broken.setattr(tenant_schema, "_view", broken_view)
+            with pytest.raises(RuntimeError):
+                init_duckdb._m65_best_efforts(con)
+        # Rolled back together: never a table without its private view.
+        assert con.execute(
+            "SELECT count(*) FROM information_schema.tables"
+            " WHERE table_schema = 'app' AND table_name = 'best_efforts'"
+        ).fetchone() == (0,)
+
+    init_duckdb.main()
+    init_duckdb.main()  # recorded once, then skipped
+    query = (
+        "SELECT athlete_id, kind, session_id, effort_key, round(value, 1)"
+        " FROM app.best_efforts ORDER BY ALL"
+    )
+    with migration_connection(str(path)) as con:
+        stored = con.execute(query).fetchall()
+        assert stored == sorted(
+            [
+                (1, "lift", log, str(exercise), 116.7),
+                (1, "run", runs["owner"], "1000", 334.0),
+                (1, "run", runs["owner"], "5000", 1667.0),
+                (2, "run", runs["second"], "1000", 334.0),
+                (2, "run", runs["second"], "5000", 1667.0),
+            ]
+        )
+        assert con.execute(
+            "SELECT count(*) FROM app.schema_version WHERE version = 65"
+        ).fetchone() == (1,)
+        # A rerun (a record interrupted after the commit) recomputes the same rows.
+        init_duckdb._m65_best_efforts(con)
+        assert con.execute(query).fetchall() == stored
+        # The private view shows the athlete its own rows only.
+        assert {
+            row[0]
+            for row in con.execute(
+                "SELECT athlete_id FROM app.visible_best_efforts"
+            ).fetchall()
+        } == {1}

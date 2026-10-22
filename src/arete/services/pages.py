@@ -124,13 +124,22 @@ def _analytics(params: dict[str, Any] | None = None) -> dict[str, Any]:
             else current
         )
         data = year_review(year)
-        # Aggregates match the open year. Session names and Strava best efforts
-        # stay on the browser page, just as on the ordinary Analytics page.
+        # Aggregates match the open year. Session names stay on the browser
+        # page, just as on the ordinary Analytics page.
         return {
             "year_review": {
-                key: value
-                for key, value in data.items()
-                if key not in {"highlights", "best_efforts", "fitness"}
+                **{
+                    key: value
+                    for key, value in data.items()
+                    if key not in {"highlights", "fitness"}
+                },
+                "records": {
+                    kind: [
+                        {k: v for k, v in record.items() if k != "session_name"}
+                        for record in rows
+                    ]
+                    for kind, rows in data["records"].items()
+                },
             },
             "fitness": {
                 key: value for key, value in data["fitness"].items() if key != "series"

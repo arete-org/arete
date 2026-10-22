@@ -556,6 +556,21 @@ CREATE TABLE IF NOT EXISTS app.activity_weather (
     created_at         TIMESTAMP DEFAULT now()
 );
 
+-- Each session's best efforts, the records' source (dataio/best_efforts.py)
+CREATE TABLE IF NOT EXISTS app.best_efforts (
+    athlete_id   INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    kind         VARCHAR NOT NULL,   -- 'run' or 'lift'
+    session_id   INTEGER NOT NULL,   -- run: app.actual_sessions.id, lift: app.strength_sessions.id
+    effort_key   VARCHAR NOT NULL,   -- run: the distance in metres ('1000' … '42195'), lift: the exercise id
+    value        DOUBLE NOT NULL,    -- run: seconds, lift: estimated 1RM in kg
+    weight_kg    DOUBLE,             -- lift: the set that reached it
+    reps         INTEGER,
+    date         DATE NOT NULL,      -- the session's day
+    computed_at  TIMESTAMP NOT NULL DEFAULT now(),
+    deleted_at   TIMESTAMP,
+    PRIMARY KEY (kind, session_id, effort_key)
+);
+
 -- Slack owns conversation text. These rows prevent write replay.
 CREATE TABLE IF NOT EXISTS app.slack_deliveries (
     event_key VARCHAR PRIMARY KEY,
@@ -1131,6 +1146,65 @@ def _m64_goal_types(con) -> None:
         raise
 
 
+#: Sessions one backfill statement of migration 65 reads: a run's streams
+#: unnest to thousands of samples, a log to a few sets.
+BACKFILL_RUNS = 100
+BACKFILL_LOGS = 1000
+
+
+def _m65_best_efforts(con) -> None:
+    """Each session's best efforts, the records' source (ARE-178), backfilled.
+
+    A new relation and its private view, then every athlete's rows computed
+    from the kept streams and logs with the statements the app writes them
+    with, on the base tables (the boot has no athlete scope), in bounded
+    chunks. One transaction: a failure leaves no view and no row (the boot's
+    DDL may already have created the empty table), and a rerun after an
+    interrupted record starts from an empty table. The previous release never
+    reads it; a session it imports meanwhile has no row until its streams are
+    saved again or its log is corrected, or until this migration reruns.
+    A legacy schema without the columns read holds nothing to backfill.
+    """
+    from arete.dataio import best_efforts as be
+    from arete.dataio.queries import EXCLUDED_SOURCES_SQL, RUNNING_SPORTS, sql_in
+    from arete.dataio.tenant_schema import _view
+
+    live = {
+        name: f"(SELECT * FROM app.{name} WHERE deleted_at IS NULL)"
+        for name in be.SCOPED
+    }
+    runs = f"""
+        SELECT s.id FROM app.actual_sessions s
+        JOIN app.activity_streams st ON st.actual_session_id = s.id
+        WHERE s.deleted_at IS NULL AND st.deleted_at IS NULL
+          AND s.sport IN ({sql_in(RUNNING_SPORTS)})
+          AND COALESCE(s.source, '') NOT IN ({EXCLUDED_SOURCES_SQL})
+          AND st.distance_m IS NOT NULL
+        ORDER BY s.id
+    """
+    logs = "SELECT id FROM app.strength_sessions WHERE deleted_at IS NULL ORDER BY id"
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.best_efforts (")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        con.execute(DDL[start : DDL.index(");", start) + 2])
+        _view(con, "best_efforts")
+        con.execute("DELETE FROM app.best_efforts")
+        for kind, ids_sql, chunk, table, read in (
+            (be.RUN, runs, BACKFILL_RUNS, "actual_sessions", {"sport", "source"}),
+            (be.LIFT, logs, BACKFILL_LOGS, "strength_sessions", {"date"}),
+        ):
+            if not {"user_id", "deleted_at", *read} <= _columns(con, table):
+                continue
+            ids = [int(row[0]) for row in con.execute(ids_sql).fetchall()]
+            insert = be.insert_sql(kind, live)
+            for first in range(0, len(ids), chunk):
+                con.execute(insert, [ids[first : first + chunk]])
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
 DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
 
 
@@ -1217,6 +1291,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (62, _m62_strava_values_off_garmin_rows),
     (63, _m63_athlete_consents),
     (64, _m64_goal_types),
+    (65, _m65_best_efforts),
 ]
 
 

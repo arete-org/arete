@@ -692,12 +692,21 @@ the forme de fond gained over 7 days, shown by the `risk` card) and « Qu’est-
 qui marche ? » (the weeks with a session, split on training days, and the
 forme de fond each group gained, shown by the `weeks` card: a description,
 since that gain follows the load). Each sentence names its period and source.
-The records (`features/records.py`) come from Garmin data only: the fastest
-1 km, 5 km, 10 km, half and marathon, computed in the database by a window over
-the cumulative distance of the streams of the 100 latest runs, where a step
-faster than 6.5 m/s counts for nothing (`queries.stream_effort_rows`), and the
-best e1RM of the 100 latest strength sessions. No table stores them. The
-coach's page read gets the answers and records without session names.
+The records (`features/records.py`) are all time, from the watch streams and
+the strength log, never Strava: the fastest 1 km, 5 km, 10 km, half and marathon and the best e1RM per
+exercise. Migration 65's `app.best_efforts` keeps each session's bests, one row
+per run and distance (a window over the cumulative distance of its streams,
+where a step faster than 6.5 m/s counts for nothing) or per log and exercise
+(working sets, Epley up to 12 reps), written in the transaction that changes
+their source (`dataio/best_efforts.py`): `GarminRepository.save_activity_streams`
+(sync, FIT upload, reprocess) and `delete_actual_session`, and the strength
+log's save, correction and deletion. **A path that writes or deletes
+activities by other means calls `best_efforts.refresh_activity_records(ids)`
+once after its commit.** The reads rank the rows (`record_rows`) and join the
+live session, so a deleted one drops out; the migration backfilled every
+athlete in chunks of 100 runs (0.4 s locally for 500 runs of 3,000 samples).
+The year review reads the same rows for its year, against earlier years. The
+coach's page reads get the answers and records without session names.
 
 The daily sync hands the sessions Garmin imported to
 `coaching.write_sync_feedback`: one feedback request for up to five sessions,
@@ -1239,7 +1248,8 @@ and saved conversations are therefore exported only on request.
 `services/account_deletion.py` erases the signed-in athlete for good
 (`POST /auth/me/delete`, [multi-athlete](multi-athlete.md#erasing-an-account)).
 `services/year_review.py` derives a calendar year from the shared TSS estimate
-and fitness series, with no model request. Both are plain HTTP reads
+and fitness series, and its records from `app.best_efforts`, with no model
+request. Both are plain HTTP reads
 (`api/data_export.py`, `api/year_review.py`); the coach never receives them.
 
 ## Slack product and private administration

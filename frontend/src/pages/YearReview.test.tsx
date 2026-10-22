@@ -21,11 +21,16 @@ function review(overrides: Partial<YearReview> = {}): YearReview {
     months: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, sessions: 3, duration_sec: 15000, distance_m: 40000, ascent_m: 700, tss: 250, strength_volume_kg: 0 })),
     consistency: { active_days: 40, days: 90, active_weeks: 12, weeks: 13, longest_day_streak: 5, longest_week_streak: 9 },
     highlights: { longest_distance: session, longest_duration: session, hardest: session, biggest_climb: session },
-    best_efforts: [
-      { name: '5K', time_sec: 1450, time_display: '24:10', date: `${year}-01-04`, activity_name: 'Footing', activity_id: 2, previous_best_sec: 1500, is_pr: true },
-      { name: '10K', time_sec: 3100, time_display: '51:40', date: `${year}-01-04`, activity_name: 'Footing', activity_id: 2, previous_best_sec: 3000, is_pr: false },
-    ],
-    pr_count: 1,
+    records: {
+      runs: [
+        { name: '5 km', distance_m: 5000, time_sec: 1450, time_display: '24:10', pace_display: '4:50 /km', date: `${year}-01-04`, session_id: 2, session_name: 'Footing', previous_best: 1500, is_pr: true },
+        { name: '10 km', distance_m: 10000, time_sec: 3100, time_display: '51:40', pace_display: '5:10 /km', date: `${year}-01-04`, session_id: 2, session_name: 'Footing', previous_best: 3000, is_pr: false },
+      ],
+      lifts: [
+        { exercise_id: 3, exercise: 'Squat', e1rm_kg: 128.3, weight_kg: 110, reps: 5, date: `${year}-02-01`, session_id: 7, sessions: 9, previous_best: null, is_pr: true },
+      ],
+    },
+    pr_count: 2,
     fitness: { series: [{ date: `${year}-01-07`, ctl: 30 }], peak: { date: `${year}-03-10`, ctl: 52.4 }, start_ctl: 28, end_ctl: 45 },
     strength: { sessions: 0, working_sets: 0, volume_kg: 0, top_exercises: [] },
     ...overrides,
@@ -61,7 +66,11 @@ it('shows the current year by default, its totals and its records', async () => 
   expect(get).toHaveBeenCalledWith(year);
   expect(screen.getByRole('heading', { name: `Bilan ${year}` })).toBeTruthy();
   expect(screen.getByText('Record −50 s')).toBeTruthy();
-  expect(screen.getByText(/1 record$/)).toBeTruthy();
+  expect(screen.getByText('Première charge')).toBeTruthy();
+  expect(screen.getByText(/^2 nouveaux records cette année/)).toBeTruthy();
+  // Each record links to its session: a run's page, a log in the Journal.
+  expect(screen.getAllByRole('link', { name: /Footing/ })[0].getAttribute('href')).toBe('/log/sessions/2');
+  expect(screen.getByRole('link', { name: /5 × 110 kg/ }).getAttribute('href')).toBe('/log?session=7');
   expect(screen.getByText('12 / 13')).toBeTruthy();
   expect(screen.getByText('Aucune séance de force enregistrée.')).toBeTruthy();
 });

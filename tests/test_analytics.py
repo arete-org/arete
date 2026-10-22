@@ -1,4 +1,4 @@
-"""Analytics API: the overview bundle, best efforts, session CRUD."""
+"""Analytics API: the overview bundle, session CRUD."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ import pytest
 from arete.api.analytics import router
 from arete.dataio.db import connect
 from arete.dataio.queries import (
-    LiftSets,
     OverviewRow,
     daily_loads,
     daily_tss,
@@ -68,8 +67,8 @@ def stub_queries():
         "earliest_session_date": None,
         "terrain_rows": [],
         "fetch_window": [],
-        "stream_effort_rows": [],
-        "lift_set_rows": LiftSets([], 0, None),
+        "record_rows": [],
+        "lift_effort_rows": [],
     }
     patches = {
         name: patch(f"arete.services.analytics.{name}", return_value=value)
@@ -293,75 +292,7 @@ class TestOverviewSeries:
         assert analytics._daily_loads(rows, start, end) == daily_loads(con, start, end)
 
 
-class TestBestEfforts:
-    """The fastest effort per distance, which the year review reads."""
-
-    def test_keeps_the_fastest_per_distance(self):
-        bests = analytics.best_efforts(
-            [
-                (
-                    '[{"name": "1K", "elapsed_time": 240}, '
-                    '{"name": "5K", "elapsed_time": 1250}]',
-                    date(2026, 5, 1),
-                    "Morning Run",
-                    101,
-                ),
-                (
-                    '[{"name": "1K", "elapsed_time": 234}]',
-                    date(2026, 4, 20),
-                    "Fast Run",
-                    101,
-                ),
-            ]
-        )
-        assert bests["1K"]["time_sec"] == 234
-        assert bests["1K"]["activity_name"] == "Fast Run"
-        assert bests["1K"]["time_display"] == "3:54"
-
-    def test_distance_names_match_whatever_case_the_source_wrote(self):
-        # "1K"/"5K"/"10K" but "1 mile" and "50k": comparing spellings dropped
-        # every K distance; the canonical name is what comes back.
-        bests = analytics.best_efforts(
-            [
-                (
-                    '[{"name": "10k", "elapsed_time": 2926}, '
-                    '{"name": "50K", "elapsed_time": 16852}, '
-                    '{"name": "marathon", "elapsed_time": 13769}]',
-                    date(2026, 5, 1),
-                    "Ultra",
-                    101,
-                )
-            ]
-        )
-        assert set(bests) == {"10K", "Marathon", "50K"}
-
-    def test_unknown_distance_is_ignored(self):
-        bests = analytics.best_efforts(
-            [
-                (
-                    '[{"name": "100m", "elapsed_time": 14}, '
-                    '{"name": "5K", "elapsed_time": 1272}]',
-                    date(2026, 5, 1),
-                    "Track",
-                    101,
-                )
-            ]
-        )
-        assert set(bests) == {"5K"}
-
-    def test_long_efforts_display_hours(self):
-        bests = analytics.best_efforts(
-            [
-                (
-                    '[{"name": "Half-Marathon", "elapsed_time": 5535}]',
-                    date(2026, 5, 1),
-                    "Semi",
-                    101,
-                )
-            ]
-        )
-        assert bests["Half-Marathon"]["time_display"] == "1:32:15"
-
+class TestRecordsEndpoint:
     def test_the_records_endpoint_is_gone(self, client):
         # Its best efforts all came from Strava (ARE-126); the records now come
         # from Garmin streams, inside the overview (ARE-139).

@@ -547,6 +547,7 @@ export interface RunRecord {
 
 /** Best estimated 1RM of a logged exercise. */
 export interface LiftRecord {
+  exercise_id: number;
   exercise: string;
   e1rm_kg: number;
   weight_kg: number;
@@ -556,14 +557,10 @@ export interface LiftRecord {
   sessions: number;
 }
 
+/** All-time records, from every run's streams and every strength log (app.best_efforts). */
 export interface Records {
   runs: RunRecord[];
   lifts: LiftRecord[];
-  runs_scanned: number;
-  sessions_scanned: number;
-  /** The latest runs and strength sessions the records read. */
-  runs_limit: number;
-  sessions_limit: number;
 }
 
 export interface OverviewResponse {
