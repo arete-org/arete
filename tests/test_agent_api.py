@@ -920,7 +920,7 @@ class TestAnalyticsPageRead:
             lambda *, period: {
                 "cards": {},
                 "answers": [{"id": "ready", "text": "Aujourd’hui, …"}],
-                "records": {"runs": [run], "lifts": [], "runs_scanned": 1},
+                "records": {"runs": [run], "lifts": []},
             },
         )
         out = get_page_data("analytics")["overview"]
@@ -964,7 +964,9 @@ class TestAnalyticsPageRead:
         result = get_page_data("analytics", params={"path": "/analytics/lexique"})
         assert result == {"glossary": GLOSSARY_PAGE}
 
-    def test_the_open_year_uses_its_aggregates_without_raw_records(self, monkeypatch):
+    def test_the_open_year_uses_its_aggregates_and_records_without_names(
+        self, monkeypatch
+    ):
         from arete.services.settings import athlete_today
 
         calls = []
@@ -975,7 +977,10 @@ class TestAnalyticsPageRead:
                 "year": year,
                 "totals": {"sessions": 42},
                 "highlights": {"name": "private"},
-                "best_efforts": [{"activity_name": "private"}],
+                "records": {
+                    "runs": [{"name": "5 km", "session_name": "private"}],
+                    "lifts": [{"exercise": "Squat", "e1rm_kg": 120.0}],
+                },
                 "fitness": {"series": [1, 2], "peak": 45},
             },
         )
@@ -983,7 +988,14 @@ class TestAnalyticsPageRead:
             "analytics", params={"path": "/analytics/bilan", "param_year": "2025"}
         )
         assert calls == [2025]
-        assert result["year_review"] == {"year": 2025, "totals": {"sessions": 42}}
+        assert result["year_review"] == {
+            "year": 2025,
+            "totals": {"sessions": 42},
+            "records": {
+                "runs": [{"name": "5 km"}],
+                "lifts": [{"exercise": "Squat", "e1rm_kg": 120.0}],
+            },
+        }
         assert result["fitness"] == {"peak": 45}
         get_page_data(
             "analytics", params={"path": "/analytics/bilan", "param_year": "9999"}

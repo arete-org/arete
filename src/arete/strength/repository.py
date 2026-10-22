@@ -14,6 +14,7 @@ from datetime import date, datetime
 import duckdb
 
 from arete.data.exercises_catalog import EXERCISES_CATALOG
+from arete.dataio import best_efforts
 from arete.dataio.db import configure_athlete, connect, get_db_path
 from arete.dataio.game_events import KEPT_AT_LINK
 from arete.dataio.ownership import require_owned
@@ -387,6 +388,7 @@ class StrengthRepository:
             session.name or "Force",
             any(s.reps > 0 for e in session.exercises for s in e.sets),
         )
+        best_efforts.refresh_lifts(conn, [session_id])
         return session_id
 
     def _create_session_exercise(
@@ -652,6 +654,7 @@ class StrengthRepository:
                 "UPDATE app.game_events SET eligible=false,reason='removed',processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) RETURNING source_key",
                 [f"strength:{session_id}"],
             )
+            best_efforts.forget(conn, best_efforts.LIFT, [session_id])
             conn.execute("COMMIT")
             return result is not None
         except BaseException:
@@ -690,6 +693,7 @@ class StrengthRepository:
                 self._create_session_exercise(conn, ex)
             # No capture: a correction never grants or revokes game credit, even
             # for a legacy session without an event or one whose sets are now empty.
+            best_efforts.refresh_lifts(conn, [session_id])
             conn.execute("COMMIT")
             return True
         except BaseException:

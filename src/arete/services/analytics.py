@@ -13,6 +13,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from datetime import date, timedelta
 
+from arete.dataio.best_efforts import lift_effort_rows, record_rows
 from arete.dataio.db import connect, db_connection
 from arete.dataio.queries import (
     FOOT_SPORTS,
@@ -22,10 +23,8 @@ from arete.dataio.queries import (
     daily_metrics_range,
     drift_rows,
     earliest_session_date,
-    lift_set_rows,
     overview_rows,
     sql_in,
-    stream_effort_rows,
     terrain_rows,
 )
 from arete.dataio.settings import athlete_zone_model
@@ -48,31 +47,6 @@ from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
-
-#: Best-effort buckets, ascending by distance. These are the names Strava
-#: wrote into ``best_efforts_json`` (the year review reads them) — matching is
-#: case-insensitive because it is not consistent about it ("1K" and "5K" but
-#: "1 mile", "50k"), and comparing spellings dropped every K distance from the
-#: records.
-EFFORT_NAMES = (
-    "400m",
-    "1/2 mile",
-    "1K",
-    "1 mile",
-    "2 mile",
-    "5K",
-    "10K",
-    "15K",
-    "10 mile",
-    "20K",
-    "Half-Marathon",
-    "30K",
-    "Marathon",
-    "50K",
-)
-
-#: Lookup from whatever spelling the data carries to the canonical name above.
-_EFFORT_BY_KEY = {name.casefold(): name for name in EFFORT_NAMES}
 
 ACWR_ZONE_FR = {
     "undertrained": "charge basse",
@@ -179,8 +153,8 @@ def get_overview(period: str = "30d"):
     own): the first session date, every session from the CTL warm-up on, the
     long runs with laps, the health metrics, the stored terrain of every
     session on foot (the climbing records are all-time), the readiness
-    window, and the records' best efforts and lifts, each over a bounded
-    number of the latest sessions. The cards and answers slice them.
+    window, the all-time records and each log's best lifts from the previous
+    window on (``app.best_efforts``). The cards and answers slice them.
     """
     with db_connection() as con:
         earliest = earliest_session_date(con)
@@ -193,8 +167,14 @@ def get_overview(period: str = "30d"):
         health = daily_metrics_range(con, start, window.end)
         terrain = terrain_rows(con)
         readiness_rows = fetch_window(con, window.end)
-        efforts = stream_effort_rows(con, records.RECORD_RUNS)
-        lifts = lift_set_rows(con, records.RECORD_STRENGTH_SESSIONS)
+        # Progress is never judged on one week: a shorter period reads 30 days.
+        base = (
+            window
+            if window.days >= answers.PROGRESS_MIN_DAYS
+            else resolve_period("30d", window.end, earliest)
+        )
+        bests = record_rows(con)
+        lifts = lift_effort_rows(con, _fetch_start(base), base.end)
 
     shown = _between(rows, start, window.end)
     runs = [r for r in shown if r.sport in RUNNING_SPORTS]
@@ -248,12 +228,6 @@ def get_overview(period: str = "30d"):
     tsb = (
         ctl[window.end] - atl[window.end] if has_history and window.end in ctl else None
     )
-    # Progress is never judged on one week: a shorter period reads 30 days.
-    base = (
-        window
-        if window.days >= answers.PROGRESS_MIN_DAYS
-        else resolve_period("30d", window.end, earliest)
-    )
     base_pace = (
         pace
         if base is window
@@ -297,9 +271,7 @@ def get_overview(period: str = "30d"):
             answers.risk_answer(acwr, monotony, ramp),
             answers.works_answer(pattern_period, weeks),
         ],
-        "records": records.records_payload(
-            efforts, lifts, records.RECORD_RUNS, records.RECORD_STRENGTH_SESSIONS
-        ),
+        "records": records.records_payload(bests),
         "hr_zone_model": athlete_zone_model().as_dict(),
         "period": window.period,
         "bucket": window.bucket,
@@ -323,32 +295,6 @@ def get_overview(period: str = "30d"):
             **recovery,
         },
     }
-
-
-def best_efforts(rows: Sequence[tuple]) -> dict[str, dict]:
-    """Fastest effort per canonical distance over ``best_effort_rows`` rows."""
-    bests: dict[str, dict] = {}
-    for efforts_json, row_date, activity_name, activity_id in rows:
-        efforts = (
-            json.loads(efforts_json) if isinstance(efforts_json, str) else efforts_json
-        )
-        if not isinstance(efforts, list):
-            continue
-        for effort in efforts:
-            name = _EFFORT_BY_KEY.get(str(effort.get("name", "")).casefold())
-            elapsed = effort.get("elapsed_time", 0)
-            if name is None or elapsed <= 0:
-                continue
-            if name not in bests or elapsed < bests[name]["time_sec"]:
-                bests[name] = {
-                    "name": name,
-                    "time_sec": elapsed,
-                    "time_display": ov.format_hms(elapsed),
-                    "date": str(row_date),
-                    "activity_name": activity_name or "",
-                    "activity_id": activity_id,
-                }
-    return bests
 
 
 # ---------- Session CRUD ----------

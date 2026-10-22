@@ -1,11 +1,12 @@
-"""Personal records of the Analyses page, from the athlete's own data.
+"""Personal records of the Analyses page and the year review, all time.
 
-Running: the fastest time over each standard distance, which
-``queries.stream_effort_rows`` measures on the watch streams of the latest
-runs. Strength: the best estimated 1RM per exercise of the latest logged
-sessions, read with the rules of ``strength.progression`` (working sets only,
-Epley up to 12 reps). No Strava value: Strava is retired as a data source.
-Pure: the service hands the rows over.
+Running: the fastest time over each standard distance, measured on the watch
+streams of every run. Strength: the best estimated 1RM per exercise of every
+logged session, read with the rules of ``strength.progression`` (working sets
+only, Epley up to 12 reps). Each session's bests are kept in
+``app.best_efforts`` (``dataio/best_efforts.py``), which ranks them; no
+Strava value, Strava being retired as a data source. Pure: the services hand
+the rows over.
 """
 
 from __future__ import annotations
@@ -15,22 +16,17 @@ from datetime import date
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from arete.features.periods import PeriodWindow
-from arete.strength.progression import E1RM_EPSILON, WorkSet
 
 if TYPE_CHECKING:
-    from arete.dataio.queries import LiftSetRow, LiftSets, StreamEffortRow
+    from arete.dataio.best_efforts import EffortRecord, LiftEffort
 
 #: Distances of the running records, in metres (half and marathon included).
 EFFORT_DISTANCES_M: tuple[float, ...] = (1000.0, 5000.0, 10000.0, 21097.5, 42195.0)
 #: A stream step faster than this is a GPS jump or a vehicle, not running: it
 #: counts for no distance (the 1 km world record is run at 6.3 m/s).
 MAX_EFFORT_MPS = 6.5
-#: Runs and strength sessions the records read: the latest ones, so the
-#: overview's cost does not grow with the history.
-RECORD_RUNS = 100
-RECORD_STRENGTH_SESSIONS = 100
 
-#: How the record table names each distance.
+#: How the record tables name each distance.
 EFFORT_LABELS: dict[float, str] = {
     1000.0: "1 km",
     5000.0: "5 km",
@@ -38,7 +34,7 @@ EFFORT_LABELS: dict[float, str] = {
     21097.5: "Semi-marathon",
     42195.0: "Marathon",
 }
-#: Exercises the record table lists: the most practised.
+#: Exercises the record tables list: the most practised.
 LIFTS_SHOWN = 5
 
 
@@ -54,6 +50,7 @@ class RunRecord(TypedDict):
 
 
 class LiftRecord(TypedDict):
+    exercise_id: int
     exercise: str
     e1rm_kg: float
     weight_kg: float
@@ -74,98 +71,93 @@ def _pace(seconds: int, metres: float) -> str:
     return f"{minutes}:{secs:02d} /km"
 
 
-def run_records(rows: Sequence[StreamEffortRow]) -> list[RunRecord]:
-    """The fastest run per distance, shortest distance first; the earliest on a tie."""
-    best: dict[int, StreamEffortRow] = {}
+def _metres(key: str) -> float | None:
+    """The record distance a ``best_efforts`` key names, None for another."""
+    try:
+        metres = float(key)
+    except ValueError:
+        return None
+    return metres if metres in EFFORT_LABELS else None
+
+
+def run_records(rows: Sequence[EffortRecord]) -> list[RunRecord]:
+    """The fastest run per distance, shortest distance first."""
+    records: list[tuple[float, RunRecord]] = []
     for row in rows:
-        for i, seconds in enumerate(row.best_sec):
-            if seconds is None:
-                continue
-            held = best.get(i)
-            if (
-                held is None
-                or seconds < (held.best_sec[i] or 0)
-                or (seconds == held.best_sec[i] and row.date < held.date)
-            ):
-                best[i] = row
-    records: list[RunRecord] = []
-    for i, metres in enumerate(EFFORT_DISTANCES_M):
-        holder = best.get(i)
-        if holder is None:
+        metres = _metres(row.key) if row.kind == "run" else None
+        if metres is None:
             continue
-        seconds = holder.best_sec[i]
-        assert seconds is not None
+        seconds = int(row.value)
         records.append(
-            {
-                "name": EFFORT_LABELS[metres],
-                "distance_m": metres,
-                "time_sec": seconds,
-                "time_display": _hms(seconds),
-                "pace_display": _pace(seconds, metres),
-                "date": holder.date.isoformat(),
-                "session_id": holder.session_id,
-                "session_name": holder.name,
-            }
+            (
+                metres,
+                {
+                    "name": EFFORT_LABELS[metres],
+                    "distance_m": metres,
+                    "time_sec": seconds,
+                    "time_display": _hms(seconds),
+                    "pace_display": _pace(seconds, metres),
+                    "date": row.date.isoformat(),
+                    "session_id": row.session_id,
+                    "session_name": row.session_name,
+                },
+            )
         )
-    return records
+    return [record for _, record in sorted(records, key=lambda item: item[0])]
 
 
-def _e1rm(row: LiftSetRow) -> float | None:
-    return WorkSet(reps=row.reps, weight_kg=row.weight_kg).e1rm
-
-
-def lift_records(rows: Sequence[LiftSetRow]) -> list[LiftRecord]:
-    """Best e1RM of the most practised exercises; the first set to reach it keeps it."""
-    best: dict[int, LiftSetRow] = {}
-    sessions: dict[int, set[int]] = {}
-    for row in rows:  # oldest first
-        sessions.setdefault(row.exercise_id, set()).add(row.session_id)
-        e1rm = _e1rm(row)
-        held = best.get(row.exercise_id)
-        if e1rm is not None and (
-            held is None or e1rm > (_e1rm(held) or 0) + E1RM_EPSILON
-        ):
-            best[row.exercise_id] = row
-    ranked = sorted(
-        best.values(), key=lambda r: (-len(sessions[r.exercise_id]), r.exercise)
+def lift_records(rows: Sequence[EffortRecord]) -> list[LiftRecord]:
+    """Best e1RM of the most practised exercises."""
+    lifts = sorted(
+        (row for row in rows if row.kind == "lift" and row.exercise is not None),
+        key=lambda row: (-row.sessions, row.exercise),
     )
     return [
         {
-            "exercise": row.exercise,
-            "e1rm_kg": round(_e1rm(row) or 0.0, 1),
-            "weight_kg": row.weight_kg,
-            "reps": row.reps,
+            "exercise_id": int(row.key),
+            "exercise": row.exercise or "",
+            "e1rm_kg": round(row.value, 1),
+            "weight_kg": row.weight_kg or 0.0,
+            "reps": row.reps or 0,
             "date": row.date.isoformat(),
             "session_id": row.session_id,
-            "sessions": len(sessions[row.exercise_id]),
+            "sessions": row.sessions,
         }
-        for row in ranked[:LIFTS_SHOWN]
+        for row in lifts[:LIFTS_SHOWN]
     ]
 
 
+def is_record(row: EffortRecord) -> bool:
+    """Whether a range's best beats every earlier one (or is the first)."""
+    if row.previous is None:
+        return True
+    if row.kind == "run":
+        return row.value < row.previous
+    return round(row.value, 1) > round(row.previous, 1)
+
+
 def lift_trend(
-    lifts: LiftSets, window: PeriodWindow
+    rows: Sequence[LiftEffort], window: PeriodWindow
 ) -> tuple[str, float, float] | None:
     """(exercise, previous window's best e1RM, this window's) for the most
     practised exercise of the window that the previous window also has.
 
-    None when the session bound cut into the previous window: its best would
-    be read from part of it only.
+    ``rows`` hold every log's best per exercise from the previous window on.
     """
     if window.prev_start is None or window.prev_end is None:
         return None
-    if lifts.complete_from is not None and window.prev_start < lifts.complete_from:
-        return None
-    rows = lifts.rows
 
     def bests(start: date, end: date) -> dict[int, tuple[str, float, set[int]]]:
         out: dict[int, tuple[str, float, set[int]]] = {}
         for row in rows:
-            e1rm = _e1rm(row)
-            if not start <= row.date <= end or e1rm is None:
+            if not start <= row.date <= end:
                 continue
             name, top, seen = out.get(row.exercise_id, (row.exercise, 0.0, set()))
-            out[row.exercise_id] = (name, max(top, e1rm), seen | {row.session_id})
+            out[row.exercise_id] = (
+                name,
+                max(top, row.e1rm_kg),
+                seen | {row.session_id},
+            )
         return out
 
     current = bests(window.start, window.end)
@@ -178,18 +170,6 @@ def lift_trend(
     return name, round(previous[key][1], 1), round(best, 1)
 
 
-def records_payload(
-    efforts: Sequence[StreamEffortRow],
-    lifts: LiftSets,
-    runs_limit: int,
-    sessions_limit: int,
-) -> dict[str, Any]:
-    """The Records card: both tables and the bounds they were read within."""
-    return {
-        "runs": run_records(efforts),
-        "lifts": lift_records(lifts.rows),
-        "runs_scanned": len(efforts),
-        "runs_limit": runs_limit,
-        "sessions_scanned": lifts.sessions,
-        "sessions_limit": sessions_limit,
-    }
+def records_payload(rows: Sequence[EffortRecord]) -> dict[str, Any]:
+    """The Records card: both all-time tables."""
+    return {"runs": run_records(rows), "lifts": lift_records(rows)}

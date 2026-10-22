@@ -2,28 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
-from arete.dataio.db import db_connection
-from arete.dataio.queries import LiftSetRow, LiftSets, OverviewRow
+from arete.dataio.best_efforts import LiftEffort
+from arete.dataio.queries import OverviewRow
 from arete.features import answers, records
 from arete.features.periods import resolve_period
-from arete.garmin.models import ActivitySource, ActualSession
-from arete.garmin.repository import GarminRepository
-from arete.garmin.streams import ActivityStreams
 from arete.services import analytics
-from arete.services.athlete_scope import athlete_scope
-from arete.strength.models import (
-    Exercise,
-    ExerciseCategory,
-    ExerciseSet,
-    MuscleGroup,
-    SessionExercise,
-    StrengthSession,
-)
-from arete.strength.repository import StrengthRepository
 
 TODAY = date(2031, 3, 31)
 MONTH = resolve_period("30d", TODAY)
@@ -253,8 +240,8 @@ def _overview(router_client, period: str, rows: list, **stubs) -> dict:
         "earliest_session_date": today - timedelta(days=120) if rows else None,
         "terrain_rows": [],
         "fetch_window": [],
-        "stream_effort_rows": [],
-        "lift_set_rows": LiftSets([], 0, None),
+        "record_rows": [],
+        "lift_effort_rows": [],
     } | stubs
     patches = [
         patch(f"arete.services.analytics.{name}", return_value=value)
@@ -297,14 +284,7 @@ def test_the_overview_opens_on_the_four_answers(router_client):
     assert [a["id"] for a in data["answers"]] == ["ready", "progress", "risk", "works"]
     for answer in data["answers"]:
         names_period_and_source(answer)
-    assert data["records"] == {
-        "runs": [],
-        "lifts": [],
-        "runs_scanned": 0,
-        "runs_limit": records.RECORD_RUNS,
-        "sessions_scanned": 0,
-        "sessions_limit": records.RECORD_STRENGTH_SESSIONS,
-    }
+    assert data["records"] == {"runs": [], "lifts": []}
     # The cards behind the risk and week-pattern answers carry their numbers.
     risk = data["cards"]["risk"]
     assert risk["headline"]["value"] is not None
@@ -328,190 +308,12 @@ def test_progress_is_not_judged_on_one_week(router_client):
     assert data["answers"][2]["period"] == "sur les 7 derniers jours"
 
 
-def test_a_lift_trend_is_not_read_from_a_cut_previous_window():
+def test_a_lift_trend_compares_the_two_windows():
     year = resolve_period("1y", TODAY)
     rows = [
-        LiftSetRow(1, "Squat", 1, year.prev_start + timedelta(days=200), 5, 100.0),
-        LiftSetRow(1, "Squat", 2, year.end - timedelta(days=10), 5, 110.0),
+        LiftEffort(1, "Squat", 1, year.prev_start + timedelta(days=200), 116.7),
+        LiftEffort(1, "Squat", 2, year.end - timedelta(days=10), 128.3),
     ]
-    assert records.lift_trend(LiftSets(rows, 2, None), year) == (
-        "Squat",
-        116.7,
-        128.3,
-    )
-    cut = LiftSets(rows, 100, year.prev_start + timedelta(days=150))
-    assert records.lift_trend(cut, year) is None
-
-
-# --------------------------------------------------------------------------- #
-# Records from a Garmin-only database
-# --------------------------------------------------------------------------- #
-ATHLETE = 8139
-
-
-def _steady(seconds: int, mps: float, jump_at: int | None = None) -> ActivityStreams:
-    distance, total = [], 0.0
-    for i in range(seconds):
-        total += mps if i else 0.0
-        if i == jump_at:
-            total += 1500.0  # a GPS jump: never a record
-        distance.append(round(total, 1))
-    return ActivityStreams(t=list(range(seconds)), distance_m=distance)
-
-
-@pytest.fixture
-def garmin_athlete():
-    """An athlete whose only data is Garmin runs with streams and logged lifts."""
-    with db_connection() as con:
-        con.execute(
-            "INSERT INTO app.athletes(id) VALUES (?) ON CONFLICT DO NOTHING", [ATHLETE]
-        )
-    with athlete_scope(ATHLETE):
-        with db_connection() as con:
-            con.execute(
-                "INSERT INTO app.game_profile(id, athlete_id) VALUES (1, ?) "
-                "ON CONFLICT DO NOTHING",
-                [ATHLETE],
-            )
-        yield
-    with db_connection() as con:
-        for table in (
-            "exercise_sets",
-            "session_exercises",
-            "exercises",
-            "activity_streams",
-            "game_events",
-            "game_profile",
-        ):
-            con.execute(f"DELETE FROM app.{table} WHERE athlete_id = ?", [ATHLETE])
-        for table in ("strength_sessions", "actual_sessions"):
-            con.execute(f"DELETE FROM app.{table} WHERE user_id = ?", [ATHLETE])
-
-
-def _run(
-    day: date, streams: ActivityStreams, sport: str = "running", name: str = "Footing"
-) -> int:
-    repo = GarminRepository()
-    distance = streams.distance_m[-1] if streams.distance_m else 0.0
-    session_id = repo.create_actual_session(
-        ActualSession(
-            date=day,
-            sport=sport,
-            name=name,
-            duration_sec=len(streams),
-            distance_m=distance,
-            source=ActivitySource.GARMIN_CONNECT,
-            start_time=datetime(day.year, day.month, day.day, 7, 0),
-        )
-    )
-    repo.save_activity_streams(session_id, streams)
-    return session_id
-
-
-def _lift(day: date, exercise_id: int, sets: list[tuple[int, float]]) -> int:
-    return StrengthRepository().create_session(
-        StrengthSession(
-            date=day,
-            name="Force",
-            exercises=[
-                SessionExercise(
-                    exercise_id=exercise_id,
-                    sets=[
-                        ExerciseSet(set_number=i + 1, reps=reps, weight_kg=kg)
-                        for i, (reps, kg) in enumerate(sets)
-                    ]
-                    + [
-                        ExerciseSet(
-                            set_number=9, reps=10, weight_kg=200.0, is_warmup=True
-                        )
-                    ],
-                )
-            ],
-        )
-    )
-
-
-def test_records_populate_from_garmin_streams_and_lifts(garmin_athlete):
-    today = analytics.athlete_today()
-    slow = _run(today - timedelta(days=20), _steady(1900, 3.0), name="Footing lent")
-    fast = _run(today - timedelta(days=10), _steady(3100, 3.5), name="Tempo")
-    _run(today - timedelta(days=5), _steady(1200, 3.0, jump_at=300), name="GPS fou")
-    _run(today - timedelta(days=3), _steady(3600, 8.0), sport="cycling", name="Vélo")
-    squat = StrengthRepository().create_exercise(
-        Exercise(
-            name="Squat",
-            category=ExerciseCategory.SQUAT,
-            primary_muscle=MuscleGroup.QUADS,
-        )
-    )
-    first = _lift(today - timedelta(days=12), squat, [(5, 100.0), (5, 100.0)])
-    _lift(today - timedelta(days=4), squat, [(3, 100.0)])  # a lower e1RM
-
-    overview = analytics.get_overview("30d")
-
-    found = overview["records"]
-    assert found["runs_scanned"] == 3  # the ride is not a run
-    by_name = {r["name"]: r for r in found["runs"]}
-    assert list(by_name) == ["1 km", "5 km", "10 km"]
-    # 1000 m at 3.5 m/s needs 286 samples; the GPS jump counts for nothing.
-    assert by_name["1 km"]["time_sec"] == 286
-    assert by_name["1 km"]["session_id"] == fast
-    assert by_name["1 km"]["session_name"] == "Tempo"
-    assert by_name["5 km"]["time_display"] == "23:49"
-    assert by_name["10 km"]["pace_display"] == "4:46 /km"
-    assert slow not in {r["session_id"] for r in found["runs"]}
-    (lift,) = found["lifts"]
-    assert lift["exercise"] == "Squat" and lift["sessions"] == 2
-    assert (lift["e1rm_kg"], lift["weight_kg"], lift["reps"]) == (116.7, 100.0, 5)
-    assert lift["session_id"] == first
-
-
-def test_records_read_only_the_latest_runs(garmin_athlete, monkeypatch):
-    today = analytics.athlete_today()
-    _run(today - timedelta(days=30), _steady(1200, 5.0), name="Vieille piste")
-    recent = _run(today - timedelta(days=2), _steady(1200, 3.0), name="Récente")
-    monkeypatch.setattr(records, "RECORD_RUNS", 1)
-    found = analytics.get_overview("7d")["records"]
-    assert found["runs_scanned"] == 1 and found["runs_limit"] == 1
-    assert [r["session_id"] for r in found["runs"]] == [recent]
-
-
-def _segments(*parts: tuple[int, float]) -> ActivityStreams:
-    """Consecutive (seconds, metres per second) segments of one recording."""
-    distance, total = [0.0], 0.0
-    for seconds, mps in parts:
-        for _ in range(seconds):
-            total += mps
-            distance.append(round(total, 1))
-    return ActivityStreams(t=list(range(len(distance))), distance_m=distance)
-
-
-def test_a_car_ride_with_the_watch_on_holds_no_record(garmin_athlete):
-    # 30 min of running at 3 m/s, then 15 min in a car at 12 m/s: capping the
-    # car at 6.5 m/s would give 1 km in 2:34 and 5 km in 12:50.
-    _run(analytics.athlete_today(), _segments((1800, 3.0), (900, 12.0)))
-    with db_connection() as con:
-        from arete.dataio.queries import stream_effort_rows
-
-        (row,) = stream_effort_rows(con, 10)
-    assert row.best_sec == (334, 1667, None, None, None)
-
-
-def test_a_burst_of_gps_jumps_holds_no_record(garmin_athlete):
-    # Twenty samples 30 m apart in the middle of an easy run.
-    _run(analytics.athlete_today(), _segments((300, 3.0), (20, 30.0), (900, 3.0)))
-    with db_connection() as con:
-        from arete.dataio.queries import stream_effort_rows
-
-        (row,) = stream_effort_rows(con, 10)
-    # 1 km at 3 m/s, plus the 20 s of the burst inside the best window at most.
-    assert row.best_sec[0] == 334
-
-
-def test_a_shorter_run_holds_no_longer_record(garmin_athlete):
-    with db_connection() as con:
-        from arete.dataio.queries import stream_effort_rows
-
-        _run(analytics.athlete_today(), _steady(400, 3.0))
-        (row,) = stream_effort_rows(con, 10)
-    assert row.best_sec == (334, None, None, None, None)
+    assert records.lift_trend(rows, year) == ("Squat", 116.7, 128.3)
+    # Only in this window: nothing to compare with.
+    assert records.lift_trend(rows[1:], year) is None

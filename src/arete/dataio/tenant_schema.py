@@ -69,6 +69,7 @@ PRIVATE_TABLES = (
     "daily_checkins",
     "coach_evening_messages",
     "strength_drafts",
+    "best_efforts",
 )
 # Natural keys must be unique within an athlete, not across the deployment.
 SCOPED_KEYS = {

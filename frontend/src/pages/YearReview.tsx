@@ -32,8 +32,95 @@ function duration(sec: number): string {
 
 /** "−12 s" / "−1:05" improvement on the previous best. */
 function gain(previous: number, now: number): string {
-  const s = previous - now;
+  const s = Math.round(previous - now);
   return s >= 60 ? `−${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `−${s} s`;
+}
+
+function PrBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-sans text-neon-gold">
+      <Award className="w-3 h-3" aria-hidden />
+      {label}
+    </span>
+  );
+}
+
+function RecordRow({ name, detail, to, value, badge }: { name: string; detail: string; to: string; value: string; badge: string | null }) {
+  return (
+    <li className="py-2 flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-sm font-sans text-text-primary">{name}</div>
+        <Link to={to} className="inline-flex min-h-11 items-center text-xs text-text-muted underline underline-offset-4 hover:text-neon-cyan truncate max-w-full">
+          {detail}
+        </Link>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="text-sm font-sans text-text-primary tabular-nums">{value}</div>
+        {badge && <PrBadge label={badge} />}
+      </div>
+    </li>
+  );
+}
+
+/** The year's best run per distance and lift per exercise, from Garmin streams and the strength log. */
+function YearRecords({ records, count }: { records: YearReview['records']; count: number }) {
+  if (!records.runs.length && !records.lifts.length) {
+    return (
+      <p className="text-sm text-text-muted">
+        Aucun record cette année : il faut une course d’au moins 1 km enregistrée avec la montre, ou une séance de force
+        avec ses séries.
+      </p>
+    );
+  }
+  return (
+    <>
+      <p className="text-xs text-text-muted">
+        {count === 0
+          ? 'Aucun nouveau record cette année.'
+          : `${count} nouveau${count > 1 ? 'x' : ''} record${count > 1 ? 's' : ''} cette année, premiers chronos et premières charges compris.`}
+      </p>
+      {records.runs.length > 0 && (
+        <div className="space-y-1">
+          <h3 className="analysis-records-title">Course</h3>
+          <ul className="divide-y divide-text-muted/10">
+            {records.runs.map((r) => (
+              <RecordRow
+                key={r.name}
+                name={r.name}
+                detail={`${r.session_name || 'Course'} · ${longDate(r.date)}`}
+                to={`/log/sessions/${r.session_id}`}
+                value={r.time_display}
+                badge={r.is_pr ? (r.previous_best === null ? 'Premier chrono' : `Record ${gain(r.previous_best, r.time_sec)}`) : null}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+      {records.lifts.length > 0 && (
+        <div className="space-y-1">
+          <h3 className="analysis-records-title">Force</h3>
+          <ul className="divide-y divide-text-muted/10">
+            {records.lifts.map((l) => (
+              <RecordRow
+                key={l.exercise_id}
+                name={l.exercise}
+                detail={`${l.reps} × ${DECIMAL.format(l.weight_kg)} kg · ${longDate(l.date)}`}
+                to={`/log?session=${l.session_id}`}
+                value={`${DECIMAL.format(l.e1rm_kg)} kg`}
+                badge={
+                  l.is_pr
+                    ? l.previous_best === null
+                      ? 'Première charge'
+                      : `Record +${DECIMAL.format(l.e1rm_kg - l.previous_best)} kg`
+                    : null
+                }
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  );
 }
 
 const METRICS = [
@@ -219,32 +306,8 @@ function Review({ data }: { data: YearReview }) {
       </Block>
 
       <div className="analysis-grid">
-        <Block title={`Meilleurs efforts · ${data.pr_count} record${data.pr_count > 1 ? 's' : ''}`}>
-          {data.best_efforts.length === 0 ? (
-            <p className="text-sm text-text-muted">Aucun effort chronométré en course.</p>
-          ) : (
-            <ul className="divide-y divide-text-muted/10">
-              {data.best_efforts.map((e) => (
-                <li key={e.name} className="py-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-sans text-text-primary">{e.name}</div>
-                    <div className="text-xs text-text-muted truncate">
-                      {e.activity_name || 'Course'} · {longDate(e.date)}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-sm font-sans text-text-primary tabular-nums">{e.time_display}</div>
-                    {e.is_pr && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-sans text-neon-gold">
-                        <Award className="w-3 h-3" aria-hidden />
-                        {e.previous_best_sec === null ? 'Premier chrono' : `Record ${gain(e.previous_best_sec, e.time_sec)}`}
-                      </span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+        <Block title="Records">
+          <YearRecords records={data.records} count={data.pr_count} />
         </Block>
 
         <Block title="Force">
