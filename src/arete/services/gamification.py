@@ -168,15 +168,17 @@ _UNRESOLVED_LINK = f"""SELECT 1 FROM app.visible_game_events e, app.visible_stre
 
 
 def _receipts(con, week: date, targets: list[tuple[str, int, int, str]]) -> list[list]:
-    """Ledger rows that bring each cause's total to its target, in order.
+    """Ledger rows that bring each cause's total in this week to its target.
 
     One query for the week's causes; a cause appears at most once per week.
+    Summed per week, not across weeks: an activity a duplicate moves to an
+    earlier week is credited there and reversed where it was (ARE-93).
     """
     sums = {
         cause: (xp, shards)
         for cause, xp, shards in con.execute(
-            "SELECT cause,coalesce(sum(xp),0),coalesce(sum(shards),0) FROM app.visible_game_ledger WHERE cause IN (SELECT unnest(?)) GROUP BY cause",
-            [[cause for cause, *_ in targets]],
+            "SELECT cause,coalesce(sum(xp),0),coalesce(sum(shards),0) FROM app.visible_game_ledger WHERE week_start=? AND cause IN (SELECT unnest(?)) GROUP BY cause",
+            [week, [cause for cause, *_ in targets]],
         ).fetchall()
     }
     rows = []
@@ -342,11 +344,18 @@ def sync() -> dict:
                 AND e.canonical_key<>a.canonical_key AND NOT ends_with(e.reason, ?)) RETURNING e.source_key""",
                 [KEPT_AT_LINK],
             )
-        # A duplicate imported with another date must settle its original week too.
+        # A duplicate imported with another date must settle its original week
+        # too, and every week already holding its receipts: one dated earlier
+        # moves the activity, whose old week must then reverse its credit.
         if pending:
             keys = [key for key, _ in pending]
             original_weeks = con.execute(
-                "SELECT min(week_start) FROM app.visible_game_events WHERE canonical_key IN (SELECT canonical_key FROM app.visible_game_events WHERE source_key IN (SELECT unnest(?))) GROUP BY canonical_key",
+                """WITH moved AS (SELECT DISTINCT canonical_key FROM app.visible_game_events
+                WHERE source_key IN (SELECT unnest(?)))
+                SELECT min(week_start) FROM app.visible_game_events
+                WHERE canonical_key IN (SELECT canonical_key FROM moved) GROUP BY canonical_key
+                UNION SELECT week_start FROM app.visible_game_ledger
+                WHERE cause IN (SELECT 'activity:'||canonical_key FROM moved)""",
                 [keys],
             ).fetchall()
             weeks.update(w for (w,) in original_weeks)
