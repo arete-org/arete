@@ -37,7 +37,12 @@ The latest imported session is not the sync watermark. `activities_checked_at`
 advances only when the bounded scan reaches its coverage boundary, including an
 empty successful scan. Initial coverage is 30 days; subsequent checks revisit
 seven days for delayed uploads. A capped scan retains its lower date, offset
-and preceding Garmin ID. A changed anchor resets continuation without moving
+and preceding Garmin ID, and reports `more_pending` in the ensure result and in
+the stream's `done` event: the batch succeeded and the next refresh (app entry,
+foreground, scheduler) continues it. Onboarding then reads « N activités
+importées, la suite arrive automatiquement » and the app banner « Import Garmin
+en cours de rattrapage »; any error keeps the incomplete/interrupted wording.
+Onboarding does not chain batches itself. A changed anchor resets continuation without moving
 the lower date. An import error keeps the failed page reachable; already
 committed Garmin IDs deduplicate on the next check.
 

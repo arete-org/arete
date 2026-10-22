@@ -28,6 +28,16 @@ it('shows progress outside the live region and announces only the outcome', asyn
   expect(syncGame).not.toHaveBeenCalled();
 });
 
+it.each([
+  [{ state: 'partial', more_pending: true, errors: [] }, 'Import Garmin en cours de rattrapage'],
+  [{ state: 'partial', more_pending: true, errors: ['Santé Garmin incomplète.'] }, 'synchronisation incomplète'],
+  [{ state: 'partial', more_pending: false, errors: [] }, 'synchronisation incomplète'],
+])('tells a capped catch-up apart from a real failure (%o)', async (result, message) => {
+  vi.mocked(fetchAPI).mockResolvedValue(result);
+  render(<QueryClientProvider client={new QueryClient()}><GarminFreshness /></QueryClientProvider>);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toContain(message));
+});
+
 it.each(['fresh', 'disconnected'])('does not invalidate or settle the game after a %s check', async state => {
   vi.mocked(fetchAPI).mockResolvedValue({ state });
   const client = new QueryClient();

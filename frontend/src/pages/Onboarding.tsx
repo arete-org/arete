@@ -22,6 +22,9 @@ const ICONS = { restart: Mountain, progress: TrendingUp, race: Target, consisten
 const FIELD = inputClasses('cyan', 'w-full');
 const nullable = (value: string) => value.trim() ? value : null;
 
+/** A capped first import: the rest arrives with the next automatic refresh, nothing failed. */
+const cappedLabel = (count: number) => `${count} activité${count > 1 ? 's' : ''} importée${count > 1 ? 's' : ''}, la suite arrive automatiquement`;
+
 function initial(athlete: number) {
   try { return { draft: readDraft(athlete), error: '' }; }
   catch (error) { return { draft: newDraft(), error: readableError(error) }; }
@@ -86,7 +89,7 @@ function OnboardingFlow({ athleteId }: { athleteId: number }) {
     } catch (error) { setSaveError(`Enregistrement non confirmé. Tes réponses sont conservées. ${readableError(error)}`); }
     finally { lock.current = false; setSaving(false); }
   };
-  const dataLabel = sync.isPending ? 'Import en cours — résultat non confirmé' : sync.error || sync.data?.success === false ? 'Import interrompu — des activités peuvent avoir été enregistrées' : sync.data?.errors.length ? 'Import partiel — certaines activités n’ont pas été importées' : status.isPending ? 'Vérification des données…' : status.isError ? 'État des données indisponible' : !status.data?.garmin_authenticated ? 'Sans connexion Garmin' : `${status.data.activities_synced} activité(s) enregistrée(s) · ${status.data.last_sync ? 'dernière synchronisation disponible' : 'aucun import confirmé'}`;
+  const dataLabel = sync.isPending ? 'Import en cours — résultat non confirmé' : sync.error || sync.data?.success === false ? 'Import interrompu — des activités peuvent avoir été enregistrées' : sync.data?.more_pending && !sync.data.errors.length ? cappedLabel(sync.data.activities_synced + sync.data.activities_merged) : sync.data?.errors.length ? 'Import partiel — certaines activités n’ont pas été importées' : status.isPending ? 'Vérification des données…' : status.isError ? 'État des données indisponible' : !status.data?.garmin_authenticated ? 'Sans connexion Garmin' : `${status.data.activities_synced} activité(s) enregistrée(s) · ${status.data.last_sync ? 'dernière synchronisation disponible' : 'aucun import confirmé'}`;
 
   if (query.data?.status === 'completed') return <div className="onboarding-finished glass-panel"><AreteWordmark /><h1 className="page-title">Ton Arete est prêt.</h1><p>Tu as déjà terminé cette configuration. Retrouve ta mémoire actuelle avec {coach.the}, pour la compléter, la corriger ou l’oublier.</p><Button strong onClick={() => { navigate('/'); discussWithCoach({ kind: 'onboarding', id: 1 }); }}>Ouvrir {coach.the}</Button><Link to="/">Explorer Arete</Link></div>;
 

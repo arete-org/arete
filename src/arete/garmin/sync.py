@@ -68,6 +68,8 @@ class SyncResult:
     session_ids: list[int] = field(default_factory=list)
     next_history_offset: int | None = None
     history_anchor: int | None = None
+    #: The undated refresh stopped at its activity cap; the next one continues.
+    more_pending: bool = False
 
 
 @dataclass(frozen=True)

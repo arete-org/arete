@@ -89,10 +89,13 @@ def test_backlog_continues_and_exact_ids_are_returned(provider, monkeypatch):
     first = service.ensure_fresh()
     assert first["imported"] == 20 and not first["complete"]
     assert not first["activities_checked_at"]
+    # Only the cap stopped it: the browser shows a catch-up, not a failure.
+    assert first["more_pending"] and not first["errors"]
     second = service.ensure_fresh()
     assert second["imported"] == 20 and not second["complete"]
     third = service.ensure_fresh()
     assert third["complete"] and len(imported) == 45
+    assert not third["more_pending"]
     assert third["sessions"] == [{"id": i} for i in range(5, 0, -1)]
 
 
@@ -343,10 +346,22 @@ def test_undated_manual_import_resumes_the_same_capped_backlog(provider, monkeyp
     rows = [activity(i) for i in range(25, 0, -1)]
     provider.side_effect = lambda offset, limit: rows[offset : offset + limit]
     first = list(service.iter_manual(max_activities=50))[-1]
-    assert isinstance(first, SyncResult) and not first.success
-    assert len(first.session_ids) == 20
+    # The capped batch succeeded; the rest is pending, not failed (ARE-177).
+    assert isinstance(first, SyncResult) and first.success and first.more_pending
+    assert len(first.session_ids) == 20 and not first.errors
     second = service.ensure_fresh()
     assert second["complete"] and len(imported) == 25
+
+
+def test_capped_manual_import_with_a_failure_is_not_a_catch_up(provider, monkeypatch):
+    from arete.garmin.sync import SyncResult
+
+    scripted_import(monkeypatch, fail=25)
+    rows = [activity(i) for i in range(25, 0, -1)]
+    provider.side_effect = lambda offset, limit: rows[offset : offset + limit]
+    result = list(service.iter_manual(max_activities=20))[-1]
+    assert isinstance(result, SyncResult) and not result.success
+    assert result.errors == ["failed activity"]
 
 
 def test_token_refresh_counts_one_request_and_does_not_retry_429():

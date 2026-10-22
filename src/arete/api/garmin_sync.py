@@ -85,6 +85,8 @@ class SyncResponse(BaseModel):
     last_activity_date: str | None = None
     next_history_offset: int | None = None
     history_anchor: int | None = None
+    #: Only the activity cap stopped this import; the next refresh continues.
+    more_pending: bool = False
 
 
 class GarminLoginRequest(BaseModel):
@@ -225,6 +227,7 @@ def sync_activities(request: SyncRequest):
         else None,
         next_history_offset=result.next_history_offset,
         history_anchor=result.history_anchor,
+        more_pending=result.more_pending,
     )
 
 

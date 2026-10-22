@@ -301,6 +301,9 @@ def _iter_refresh(
             offset = state.get("next_offset", 0)
             anchor = state.get("anchor")
             importer.refresh_threshold()
+            # Only the activity cap left Garmin activities to import: the next
+            # refresh continues from the retained coverage, nothing failed.
+            state["more_pending"] = False
             for _ in range(MAX_PAGES):
                 yield SyncProgress("fetching")
                 checkpoint()
@@ -325,6 +328,7 @@ def _iter_refresh(
                     if not importer._is_already_synced(activity.activity_id):
                         if remaining == 0:
                             reached_end = False
+                            state["more_pending"] = True
                             break
                         remaining -= 1
                     batch.append(activity)
@@ -361,6 +365,7 @@ def _iter_refresh(
                     )
                     break
                 if len(result.session_ids) >= max_activities:
+                    state["more_pending"] = True
                     break
             else:
                 result.errors.append(
@@ -492,12 +497,17 @@ def iter_manual(**options):
             sessions=False,
         )
         errors = list(refreshed.get("errors", []))
-        if not refreshed.get("complete") and not errors:
+        # The cap is not a failure: the batch was imported and the next refresh
+        # continues from the retained coverage (ARE-177).
+        more_pending = bool(refreshed.get("more_pending"))
+        capped = more_pending and not errors and refreshed.get("state") == "partial"
+        if not refreshed.get("complete") and not errors and not capped:
             errors.append(
                 "Couverture Garmin incomplète ; les séances importées sont conservées."
             )
         yield SyncResult(
-            success=bool(refreshed.get("complete")),
+            success=bool(refreshed.get("complete")) or capped,
+            more_pending=more_pending,
             activities_synced=refreshed.get("imported", 0),
             activities_merged=refreshed.get("merged_into_strava", 0),
             activities_matched=refreshed.get("matched_to_plan", 0),
