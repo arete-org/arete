@@ -3,31 +3,40 @@ name: Linear
 # Linear links a PR on its own when its branch or body names `ARE-<n>`. Its
 # own workflow, apart from CI: editing the body (`edited`) checks again
 # without rerunning the suites, and a new commit (`synchronize`) carries the
-# check. Pull requests only: a merge queue entry has no body. Branch
-# protection does not require this check until the rule is announced.
+# check. A merge queue entry has no body: there the job passes at once, so
+# requiring `linear` later never stalls the queue. Branch protection does not
+# require this check until the rule is announced.
 on:
   pull_request:
     branches: [main]
     types: [opened, edited, reopened, synchronize]
+  merge_group:
 
 permissions:
   contents: read
   pull-requests: read
 
+# Queued, never cancelled: a cancelled run leaves its check CANCELLED on the
+# commit, which can block the PR once the check is required (see ci.yml).
 concurrency:
-  group: linear-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: linear-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   linear:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      - name: Already checked on the pull request
+        if: github.event_name == 'merge_group'
+        run: echo "The pull request carried its Linear identifier."
       - uses: actions/checkout@v5
+        if: github.event_name == 'pull_request'
         with:
           sparse-checkout: scripts/ci
       # The body is read live: an edit made while this run waited counts.
       - name: Require a Linear identifier
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
