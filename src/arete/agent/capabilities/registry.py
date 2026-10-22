@@ -204,6 +204,10 @@ JOURNAL_TOOL_NAMES = frozenset({"append_journal"})
 FILESYSTEM_TOOL_NAMES = frozenset(
     {"read_file", "edit_file", "delete", "ls", "glob", "grep"}
 )
+# Any tool outside this set may write, so it invalidates cached ledger reads.
+READ_TOOL_NAMES = frozenset({"read_file", "ls", "glob", "grep"}).union(
+    *(tk.read_tools for tk in CAPABILITIES.values())
+)
 
 
 def validate_registry() -> None:

@@ -247,9 +247,12 @@ The Log selection includes the selected strength session or the cardio detail di
 The Planning read adds the sessions done since its window's start (at most 15).
 Domain actions invalidate this invocation-local cache for the next model call; reads
 reuse it. There is no page-context tool. A
-question about the screen therefore needs no tool call. The journal is read again
-for each model call, so writes within a turn are visible on the next call; older
-entries remain accessible through filesystem tools. Contributions do not mutate
+question about the screen therefore needs no tool call. Facts, the journal excerpt,
+recent follow-ups and retrieval are read once per message and cached on the
+invocation's context, like the page. Every tool outside the read set (`READ_TOOL_NAMES`)
+clears that cache, even when it raises, so the coach's own writes are visible on the
+next model call; writes from elsewhere during an invocation are seen at the next
+message. Older entries remain accessible through filesystem tools. Contributions do not mutate
 stored message content. `RuntimeContextMiddleware` owns the clock: once before
 each chat run, it stamps the new human message's `additional_kwargs.arete_sent_at`
 from the invocation's athlete-local instant. It renders date, time, UTC offset
@@ -1199,7 +1202,8 @@ coach use optimistic revisions, and deleting a fact removes its history.
 Chat adds bounded BM25 retrieval of existing facts, journals and session text
 through the central context builder. Document blocks remain accessible through
 filesystem tools rather than being injected again as retrieved system context. Reads run in
-workers, with a fresh corpus at each model boundary and no extra model request.
+workers, once per question and invocation (again after a write tool), with no
+extra model request.
 Optional traversal follows only authoritative source links and remains disabled
 in production. See [personal memory](personal-memory.md) for contracts, bounds
 and migration compatibility.
