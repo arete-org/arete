@@ -169,9 +169,9 @@ function PriorityChips({ value, onChange }: { value: GoalPriority; onChange: (va
 }
 
 /**
- * Adds a goal, or edits a Hyrox or a hybrid block (`goal`). A race's fields
- * and payload are those it always had. The server checks every rule again
- * and its French error shows under the form.
+ * Adds a goal, or edits one (`goal`): a race's name, date, distance, target
+ * time and priority, a Hyrox's or a hybrid block's own fields. The server
+ * checks every rule again and its French error shows under the form.
  */
 function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
   const queryClient = useQueryClient();
@@ -179,8 +179,9 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
   const editing = goal != null;
   const [type, setType] = useState<GoalType>(goal?.goal_type ?? 'race');
   const [name, setName] = useState(goal?.name ?? '');
-  const [raceDate, setRaceDate] = useState(goal?.goal_type === 'hyrox' ? goal.race_date : '');
-  const [distance, setDistance] = useState('');
+  const [raceDate, setRaceDate] = useState(goal && goal.goal_type !== 'hybrid' ? goal.race_date : '');
+  const storedDistance = goal && type === 'race' ? formatKm(goal.distance_km) : '';
+  const [distance, setDistance] = useState(storedDistance);
   const [target, setTarget] = useState(goal?.target_time_sec != null ? formatRaceTime(goal.target_time_sec) : '');
   const [priority, setPriority] = useState<GoalPriority>(goal?.priority ?? 'A');
   const [division, setDivision] = useState<GoalDetails['division']>(goal?.details?.division ?? 'open');
@@ -235,12 +236,14 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
     const targetSec = target.trim() ? parseRaceTime(target) : null;
     const label = name.trim();
     if (type === 'race') {
-      const km = parseKm(distance);
+      // An untouched distance keeps its stored value, not its rounded text.
+      const km = goal && distance === storedDistance ? goal.distance_km : parseKm(distance);
       if (!label || !raceDate) return setInvalid('Nom et date de course requis.');
       if (km == null) return setInvalid('Distance entre 1 et 250 km.');
       if (target.trim() && targetSec == null) return setInvalid('Temps visé au format h:mm:ss.');
       setInvalid(null);
-      return create.mutate({ name: label, race_date: raceDate, distance_km: km, target_time_sec: targetSec, priority });
+      const fields = { name: label, race_date: raceDate, distance_km: km, target_time_sec: targetSec, priority };
+      return editing ? update.mutate(fields) : create.mutate(fields);
     }
     if (type === 'hyrox') {
       if (!label || !raceDate) return setInvalid('Nom et date du Hyrox requis.');
@@ -465,7 +468,6 @@ function GoalRow({
   onDelete: () => void;
 }) {
   const block = goal.goal_type === 'hybrid';
-  const editable = goal.goal_type === 'hyrox' || block;
   return (
     <li className={cn('rounded border border-text-muted/20 p-3 space-y-2', goal.status !== 'active' && 'opacity-60')}>
       <div className="flex items-start justify-between gap-3">
@@ -491,11 +493,9 @@ function GoalRow({
         <Button variant="purple" size="sm" onClick={onPlan} disabled={goal.status !== 'active'}>
           <CalendarRange className="size-3.5" /> Générer le plan
         </Button>
-        {editable && (
-          <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Modifier ${goal.name}`}>
-            <Pencil className="size-3.5" />
-          </Button>
-        )}
+        <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Modifier ${goal.name}`}>
+          <Pencil className="size-3.5" />
+        </Button>
         <Button variant="ghost" size="sm" onClick={onDelete} aria-label={`Supprimer ${goal.name}`}>
           <Trash2 className="size-3.5" />
         </Button>

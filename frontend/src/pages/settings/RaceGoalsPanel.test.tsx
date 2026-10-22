@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { goalsApi } from '@/lib/api';
+import { ApiError, goalsApi } from '@/lib/api';
 import type { Goal, PlanPreview, PlanWeek } from '@/types';
 import { HybridPlanOverview, PlanPreviewModal, PlanWeekList } from './PlanPreviewModal';
 import { RaceGoalsPanel } from './RaceGoalsPanel';
@@ -409,6 +409,67 @@ it('creates a goal from a distance chip and an h:mm:ss target', async () => {
       priority: 'B',
     })
   );
+  client.clear();
+});
+
+it('edits a race: its fields come prefilled and the PATCH carries them', async () => {
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([goal]);
+  const update = vi.spyOn(goalsApi, 'update').mockResolvedValue(goal);
+  const client = renderPanel();
+  fireEvent.click(await screen.findByRole('button', { name: 'Modifier Semi de Paris' }));
+  expect((screen.getByPlaceholderText('Semi de Paris') as HTMLInputElement).value).toBe('Semi de Paris');
+  expect((document.querySelector('input[type="date"]') as HTMLInputElement).value).toBe('2027-03-07');
+  expect(screen.getByRole('button', { name: '21,1' }).getAttribute('aria-pressed')).toBe('true');
+  expect((screen.getByPlaceholderText('1:45:00') as HTMLInputElement).value).toBe('1:45:00');
+  expect(screen.getByRole('button', { name: 'A' }).getAttribute('aria-pressed')).toBe('true');
+  // The type is fixed on edit.
+  expect(screen.queryByRole('group', { name: 'Type d’objectif' })).toBeNull();
+  // An unchanged form sends the stored values back.
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+  expect(update.mock.calls[0]).toEqual([
+    1,
+    { name: 'Semi de Paris', race_date: '2027-03-07', distance_km: 21.1, target_time_sec: 6300, priority: 'A' },
+  ]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Modifier Semi de Paris' }));
+  fireEvent.change(screen.getByPlaceholderText('Semi de Paris'), { target: { value: 'Marathon de Paris' } });
+  fireEvent.change(document.querySelector('input[type="date"]')!, { target: { value: '2027-04-11' } });
+  fireEvent.click(screen.getByRole('button', { name: '42,195' }));
+  fireEvent.change(screen.getByPlaceholderText('1:45:00'), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'C' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+  expect(update.mock.calls[1][1]).toEqual({
+    name: 'Marathon de Paris',
+    race_date: '2027-04-11',
+    distance_km: 42.195,
+    target_time_sec: null,
+    priority: 'C',
+  });
+  client.clear();
+});
+
+it('shows a race edit’s errors in French under the form', async () => {
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([goal]);
+  const update = vi
+    .spyOn(goalsApi, 'update')
+    .mockRejectedValue(new ApiError(422, JSON.stringify({ detail: 'Un objectif garde toujours la date.' })));
+  const client = renderPanel();
+  fireEvent.click(await screen.findByRole('button', { name: 'Modifier Semi de Paris' }));
+  fireEvent.change(screen.getByLabelText('Distance libre en km'), { target: { value: '300' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(screen.getByRole('alert').textContent).toBe('Distance entre 1 et 250 km.');
+  fireEvent.change(screen.getByLabelText('Distance libre en km'), { target: { value: '15' } });
+  fireEvent.change(screen.getByPlaceholderText('1:45:00'), { target: { value: '1:4' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(screen.getByRole('alert').textContent).toBe('Temps visé au format h:mm:ss.');
+  expect(update).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByPlaceholderText('1:45:00'), { target: { value: '1:20:00' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Un objectif garde toujours la date.'));
+  expect(update.mock.calls[0][1]).toMatchObject({ distance_km: 15, target_time_sec: 4800 });
+  // The form stays open on a refusal.
+  expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeTruthy();
   client.clear();
 });
 
