@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from arete.features.workload import format_acwr
+
 KEEP_AT = 80
 EASE_AT = 60
 REPLACE_AT = 40
@@ -159,7 +161,7 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
     if inp.acwr is not None and inp.acwr > ACWR_REST_AT:
         return Adaptation(
             Decision.REST,
-            f"Charge aiguë très au-dessus de la chronique (ACWR {inp.acwr:.2f}) : "
+            f"Charge aiguë très au-dessus de la chronique (ACWR {format_acwr(inp.acwr)}) : "
             f"repos à la place de la séance {planned}.",
         )
     if band == 0:

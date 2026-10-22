@@ -256,7 +256,7 @@ class TestTipUsesSettings:
         from arete.services.coaching_rules import generate_daily_tip
 
         tip, _ = generate_daily_tip(1.0, 0.0, 82.0, fatigue_threshold=90)
-        assert "ACWR 1.00" in tip
+        assert "ACWR 1,00" in tip  # a decimal comma, as the French tip reads
 
     def test_goal_closes_the_balanced_load_tip(self):
         from arete.services.coaching_rules import GOAL_ADVICE, generate_daily_tip
@@ -493,7 +493,7 @@ class TestLowLoadIsNotSilence:
         from arete.services.coaching_rules import generate_daily_tip
 
         tip, priority = generate_daily_tip(0.41, -8.2, 65.5)
-        assert "ACWR 0.41" in tip
+        assert "ACWR 0,41" in tip
         assert priority == "info"
 
     def test_generic_tip_only_without_any_metric(self):

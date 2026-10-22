@@ -5,17 +5,17 @@
 supplies what they need (recent running volume and frequency, strength
 sessions, rest days, VDOT paces, the load's ACWR and TSB) and owns the write
 rules: generated sessions are ``source='plan'`` and linked to the goal;
-regenerating replaces only the goal's future pending sessions the athlete
-never touched (``revision = 1``: every edit goes through the repository,
-which increments it); a day that already holds another planned session is
-left alone.
+regenerating, removing the plan or deleting its goal takes back only the
+goal's future pending sessions the athlete never touched (``revision = 1``:
+every edit goes through the repository, which increments it); a day that
+already holds another planned session is left alone.
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 import duckdb
 
@@ -317,23 +317,30 @@ def preview(goal_id: int, today: date | None = None) -> dict[str, Any]:
     }
 
 
-def _delete_future(goal_id: int, start: date, *, untouched_only: bool = False) -> int:
-    """Delete the goal's sessions still to do from ``start``, through the
-    repository so a Garmin export follows the deletion; one it refuses (an
-    export still in progress) stays. ``untouched_only`` keeps the sessions
-    the athlete edited (moved, adjusted, re-statused: ``revision > 1``), an
+class Removal(NamedTuple):
+    """Sessions taken back, and the goal's other sessions still to come that stayed."""
+
+    deleted: int
+    kept: int
+
+
+def _delete_future(goal_id: int, start: date) -> Removal:
+    """Delete the goal's sessions still to do from ``start`` that the athlete
+    never edited, through the repository so a Garmin export follows the
+    deletion; one it refuses (an export still in progress) stays. Those the
+    athlete edited (moved, adjusted, re-statused: ``revision > 1``) stay, an
     edit committed meanwhile included: each deletion expects revision 1, and
     a concurrent edit makes it conflict instead of being lost (ARE-150)."""
-    edited = " AND revision = 1" if untouched_only else ""
+    pending = (
+        "FROM app.visible_planned_sessions"
+        " WHERE goal_id = ? AND status = 'pending' AND date >= ?"
+    )
     con = connect()
     try:
         ids = [
             r[0]
             for r in con.execute(
-                "SELECT id FROM app.visible_planned_sessions WHERE goal_id = ? AND status = 'pending' AND date >= ?"
-                + edited
-                + " ORDER BY id",
-                [goal_id, start],
+                f"SELECT id {pending} AND revision = 1 ORDER BY id", [goal_id, start]
             ).fetchall()
         ]
     finally:
@@ -342,13 +349,22 @@ def _delete_future(goal_id: int, start: date, *, untouched_only: bool = False) -
     for session_id in ids:
         try:
             deleted += bool(
-                repo.delete_planned_session(
-                    session_id, expected_revision=1 if untouched_only else None
-                )
+                repo.delete_planned_session(session_id, expected_revision=1)
             )
         except (ValueError, duckdb.TransactionException):
             continue  # an export in progress, or the athlete's edit won
-    return deleted
+    # What stays still to come: edited, changed by the coach (``modified``),
+    # re-statused (``skipped``), or refused for an export in progress.
+    con = connect()
+    try:
+        row = con.execute(
+            "SELECT count(*) FROM app.visible_planned_sessions"
+            " WHERE goal_id = ? AND date >= ? AND status <> 'completed'",
+            [goal_id, start],
+        ).fetchone()
+    finally:
+        con.close()
+    return Removal(deleted, row[0] if row else 0)
 
 
 def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
@@ -363,7 +379,7 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
     """
     goal = _goal_or_raise(goal_id)
     plan = _generate(goal, today)
-    replaced = _delete_future(goal.id, plan.start, untouched_only=True)
+    replaced = _delete_future(goal.id, plan.start).deleted
     con = connect()
     try:
         taken = {
@@ -414,8 +430,9 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
     }
 
 
-def remove(goal_id: int, today: date | None = None) -> int:
-    """Delete the goal's generated sessions still to come; how many."""
+def remove(goal_id: int, today: date | None = None) -> Removal:
+    """Delete the goal's sessions still to come that nobody changed: how
+    many went, and how many others stayed (``Removal``)."""
     _goal_or_raise(goal_id)
     return _delete_future(goal_id, (today or athlete_today()) + timedelta(days=1))
 

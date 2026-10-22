@@ -121,6 +121,16 @@ def test_facts_text_lists_the_proposals_or_says_none():
     assert "endurance Z2" in text
 
 
+def test_facts_text_writes_decimals_with_a_comma_like_the_reasons():
+    """ARE-180: the model copies the facts' numbers into the French review."""
+    facts = _facts(acwr=1.45)
+    text = wr.facts_text(facts, wr.propose(facts, UPCOMING))
+    assert "Charge aiguë/chronique (ACWR, 28 jours) : 1,45." in text
+    assert "Équilibre de charge 1,45" in text  # the proposal's reason, unchanged
+    assert "1.45" not in text
+    assert "(ACWR, 28 jours) : indisponible." in wr.facts_text(_facts(acwr=None), [])
+
+
 @pytest.fixture
 def week():
     repo = GarminRepository()

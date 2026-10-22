@@ -24,6 +24,7 @@ import duckdb
 
 from arete.dataio.db import connect, db_connection, transaction
 from arete.dataio.queries import EXCLUDED_SOURCES_SQL, RUNNING_SPORTS, sql_in
+from arete.features.workload import format_acwr
 from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services.settings import QuietHours, athlete_now, athlete_today, utc_now
@@ -310,6 +311,10 @@ def facts_text(facts: WeekFacts, proposals: list[Proposal]) -> str:
     def fmt(value: float | None, pattern: str) -> str:
         return pattern.format(value) if value is not None else "indisponible"
 
+    # A decimal comma, as in the reasons below: the model copies it into the
+    # review the athlete reads.
+    acwr = format_acwr(facts.acwr) if facts.acwr is not None else "indisponible"
+
     lines = [
         f"Semaine du {facts.week_start.isoformat()} au "
         f"{(facts.week_start + timedelta(days=6)).isoformat()}.",
@@ -317,7 +322,7 @@ def facts_text(facts: WeekFacts, proposals: list[Proposal]) -> str:
         f"non faites : {facts.missed}.",
         f"Volume : {facts.minutes_done} min réalisées pour {facts.minutes_planned} min prévues, "
         f"{facts.runs_done} sorties de course.",
-        f"Charge aiguë/chronique (ACWR, 28 jours) : {fmt(facts.acwr, '{:.2f}')}.",
+        f"Charge aiguë/chronique (ACWR, 28 jours) : {acwr}.",
         f"Fraîcheur (TSB) : {fmt(facts.tsb, '{:+.0f}')}.",
         f"Préparation moyenne de la semaine : {fmt(facts.readiness_avg, '{:.0f}/100')}.",
         "Propositions des règles pour les jours qui viennent :",

@@ -844,6 +844,8 @@ export interface GoalCreate {
 export interface GoalUpdate {
   name?: string;
   race_date?: string;
+  /** A race's only: a Hyrox or hybrid goal's distance is refused. */
+  distance_km?: number;
   target_time_sec?: number | null;
   priority?: GoalPriority;
   details?: Partial<GoalDetails>;

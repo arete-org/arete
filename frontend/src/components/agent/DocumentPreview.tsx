@@ -94,7 +94,7 @@ function PreviewContent({ threadId, document: doc }: { threadId: string; documen
   return <>
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-white/[0.02] px-5 py-3 sm:px-6">
       <div className="flex flex-wrap items-center gap-3">
-        {groups.size > 1 ? <select aria-label="Page ou feuille du document" value={activeGroup} onChange={e => { setGroup(e.target.value); setOffset(0); setSelected(null); }} className="max-w-48 rounded-md border border-white/10 bg-abyss px-3 py-1.5 text-xs">{Array.from(groups.keys(), name => <option key={name}>{name}</option>)}</select> : <span className="text-xs text-text-muted">{activeGroup}</span>}
+        {groups.size > 1 ? <select aria-label="Page ou feuille du document" value={activeGroup} onChange={e => { setGroup(e.target.value); setOffset(0); setSelected(null); }} className="ui-input max-w-48 border border-white/10 bg-abyss px-3 py-1.5 text-xs">{Array.from(groups.keys(), name => <option key={name}>{name}</option>)}</select> : <span className="text-xs text-text-muted">{activeGroup}</span>}
         <span className="h-3 w-px bg-white/10" />
         <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary"><ScanText size={14} />{hasOcr ? 'Texte reconnu par OCR' : 'Texte extrait'}</span>
         <span className="text-xs text-text-muted">{all.length} passage{all.length > 1 ? 's' : ''}</span>

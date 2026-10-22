@@ -206,6 +206,79 @@ for (const [width, height] of [[375, 812], [844, 390]] as const) {
   });
 }
 
+/** A touch select: 44 px tall, the native look dropped for the shared drawn chevron. */
+async function touchSelect(select: ReturnType<Page['locator']>) {
+  await expect(select).toBeVisible();
+  expect((await select.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  const look = await select.evaluate(element => {
+    const style = getComputedStyle(element);
+    return { appearance: style.appearance || style.webkitAppearance, chevron: style.backgroundImage, fontSize: style.fontSize };
+  });
+  expect(look.appearance).toBe('none');
+  expect(look.chevron).toContain('linear-gradient');
+  // 16 px on a phone: iOS does not zoom into the field.
+  expect(look.fontSize).toBe('16px');
+}
+
+test('375x812: settings, routine, watch and document selects are 44 px touch targets with the shared chevron', async ({ page }, info) => {
+  const { createHash } = await import('node:crypto');
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fixture(page);
+  const session = { id: 42, revision: 1, date: '2026-10-20', sport: 'running', session_type: 'endurance', description: 'Footing de référence', source: 'coach', status: 'pending', prescription: { version: 1, steps: [{ kind: 'effort', duration_kind: 'seconds', value: 1800, steps: [] }] } };
+  const original = Buffer.from('plan');
+  const doc = { id: '11111111-1111-4111-8111-111111111111', name: 'Plan.xlsx', size: original.length, sha256: createHash('sha256').update(original).digest('hex'), status: 'ready' };
+  // Registered after the fixture, so these answers come first; anything else falls back to it.
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/automations') return route.fulfill({ json: { items: [], next_offset: null } });
+    if (path === '/api/coach/today') return route.fulfill({ json: { items: [], remaining: 0, briefing: null } });
+    if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'disconnected' } });
+    if (path.endsWith('/garmin/planned')) return route.fulfill({ json: [session] });
+    if (path.endsWith('/42/workout')) return route.fulfill({ json: { session: { ...session, exportable: true, summary: '30 min' }, export: null } });
+    if (path.endsWith('/workout-devices')) return route.fulfill({ json: [{ id: 10, name: 'fēnix 8', sports: ['running'], compatibility: 'documented' }] });
+    if (path.endsWith('/documents')) return route.fulfill({ json: [doc] });
+    if (path.endsWith('/extraction')) return route.fulfill({ json: { warnings: [], blocks: [{ locator: 'Semaine 1!A1', text: 'Footing 30 min', method: 'text', confidence: null }, { locator: 'Semaine 2!A1', text: 'Fractionné 6 × 400 m', method: 'text', confidence: null }] } });
+    if (path.endsWith('/chunks/0')) return route.fulfill({ body: original, contentType: 'application/octet-stream' });
+    return route.fallback();
+  });
+
+  await page.goto('/settings?tab=coach');
+  await touchSelect(page.getByRole('combobox', { name: /À partir de/ }));
+  await touchSelect(page.getByRole('combobox', { name: /Notifications de coaching par jour/ }));
+  await page.getByRole('combobox', { name: /À partir de/ }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `../.context/are-180/settings-${info.project.name}.png` });
+
+  await page.goto('/follow-up');
+  await page.getByRole('button', { name: 'Routines', exact: true }).tap();
+  await page.getByRole('button', { name: 'Créer une routine' }).tap();
+  await touchSelect(page.getByLabel('Déclencheur', { exact: true }));
+  await page.getByLabel('Déclencheur', { exact: true }).selectOption('session');
+  await touchSelect(page.getByLabel('Séance', { exact: true }));
+  // Their wrapping label names them with the chosen option: « Sport Tous ».
+  for (const name of [/^Sport/, /^Type/]) await touchSelect(page.getByRole('combobox', { name }));
+  await noOverflow(page);
+  await page.screenshot({ path: `../.context/are-180/routine-${info.project.name}.png` });
+
+  await page.clock.setFixedTime(new Date('2026-10-20T09:00:00'));
+  await page.goto('/planning?date=2026-10-20');
+  await page.getByRole('button', { name: 'Options du planning' }).tap();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).tap();
+  const planning = page.getByRole('region', { name: 'Planning hebdomadaire' });
+  await planning.getByLabel('Sélectionner Footing de référence').check();
+  await planning.getByLabel('Demander aussi le transfert vers une montre').check();
+  await touchSelect(planning.getByLabel('Montre Garmin'));
+  await page.screenshot({ path: `../.context/are-180/watch-${info.project.name}.png` });
+
+  await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().tap();
+  await page.getByRole('button', { name: 'Fichiers du fil (1)' }).tap();
+  await page.getByRole('button', { name: `Consulter ${doc.name}` }).tap();
+  const preview = page.getByRole('dialog', { name: `Aperçu de ${doc.name}` });
+  await touchSelect(preview.getByRole('combobox', { name: 'Page ou feuille du document' }));
+  await preview.getByRole('combobox', { name: 'Page ou feuille du document' }).selectOption('Semaine 2');
+  await expect(preview.getByText('Fractionné 6 × 400 m', { exact: true })).toBeVisible();
+  await page.screenshot({ path: `../.context/are-180/document-${info.project.name}.png` });
+});
+
 test('touch navigation and display changes preserve a live response and manual draft', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const stream = await coachStream(page, false, 'floating');

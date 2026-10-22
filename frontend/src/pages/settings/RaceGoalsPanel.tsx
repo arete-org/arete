@@ -5,6 +5,7 @@ import { CalendarRange, Flag, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button, Field, Input, Modal, ModalHeader, Panel } from '@/components/ui';
 import { goalsApi } from '@/lib/api';
 import { toLocalISODate } from '@/lib/dates';
+import { keptEditsText } from '@/lib/fr';
 import { invalidateAfterSession, invalidateWithDashboard, qk } from '@/lib/queryKeys';
 import {
   addDays,
@@ -168,9 +169,9 @@ function PriorityChips({ value, onChange }: { value: GoalPriority; onChange: (va
 }
 
 /**
- * Adds a goal, or edits a Hyrox or a hybrid block (`goal`). A race's fields
- * and payload are those it always had. The server checks every rule again
- * and its French error shows under the form.
+ * Adds a goal, or edits one (`goal`): a race's name, date, distance, target
+ * time and priority, a Hyrox's or a hybrid block's own fields. The server
+ * checks every rule again and its French error shows under the form.
  */
 function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
   const queryClient = useQueryClient();
@@ -178,8 +179,9 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
   const editing = goal != null;
   const [type, setType] = useState<GoalType>(goal?.goal_type ?? 'race');
   const [name, setName] = useState(goal?.name ?? '');
-  const [raceDate, setRaceDate] = useState(goal?.goal_type === 'hyrox' ? goal.race_date : '');
-  const [distance, setDistance] = useState('');
+  const [raceDate, setRaceDate] = useState(goal && goal.goal_type !== 'hybrid' ? goal.race_date : '');
+  const storedDistance = goal && type === 'race' ? formatKm(goal.distance_km) : '';
+  const [distance, setDistance] = useState(storedDistance);
   const [target, setTarget] = useState(goal?.target_time_sec != null ? formatRaceTime(goal.target_time_sec) : '');
   const [priority, setPriority] = useState<GoalPriority>(goal?.priority ?? 'A');
   const [division, setDivision] = useState<GoalDetails['division']>(goal?.details?.division ?? 'open');
@@ -234,12 +236,14 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
     const targetSec = target.trim() ? parseRaceTime(target) : null;
     const label = name.trim();
     if (type === 'race') {
-      const km = parseKm(distance);
+      // An untouched distance keeps its stored value, not its rounded text.
+      const km = goal && distance === storedDistance ? goal.distance_km : parseKm(distance);
       if (!label || !raceDate) return setInvalid('Nom et date de course requis.');
       if (km == null) return setInvalid('Distance entre 1 et 250 km.');
       if (target.trim() && targetSec == null) return setInvalid('Temps visé au format h:mm:ss.');
       setInvalid(null);
-      return create.mutate({ name: label, race_date: raceDate, distance_km: km, target_time_sec: targetSec, priority });
+      const fields = { name: label, race_date: raceDate, distance_km: km, target_time_sec: targetSec, priority };
+      return editing ? update.mutate(fields) : create.mutate(fields);
     }
     if (type === 'hyrox') {
       if (!label || !raceDate) return setInvalid('Nom et date du Hyrox requis.');
@@ -464,7 +468,6 @@ function GoalRow({
   onDelete: () => void;
 }) {
   const block = goal.goal_type === 'hybrid';
-  const editable = goal.goal_type === 'hyrox' || block;
   return (
     <li className={cn('rounded border border-text-muted/20 p-3 space-y-2', goal.status !== 'active' && 'opacity-60')}>
       <div className="flex items-start justify-between gap-3">
@@ -490,11 +493,9 @@ function GoalRow({
         <Button variant="purple" size="sm" onClick={onPlan} disabled={goal.status !== 'active'}>
           <CalendarRange className="size-3.5" /> Générer le plan
         </Button>
-        {editable && (
-          <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Modifier ${goal.name}`}>
-            <Pencil className="size-3.5" />
-          </Button>
-        )}
+        <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Modifier ${goal.name}`}>
+          <Pencil className="size-3.5" />
+        </Button>
         <Button variant="ghost" size="sm" onClick={onDelete} aria-label={`Supprimer ${goal.name}`}>
           <Trash2 className="size-3.5" />
         </Button>
@@ -511,13 +512,16 @@ export function RaceGoalsPanel() {
   const [editing, setEditing] = useState<number | null>(null);
   const [toDelete, setToDelete] = useState<Goal | null>(null);
   const [planFor, setPlanFor] = useState<Goal | null>(null);
+  // The changed sessions the last deleted goal left in the planning, until another goal is opened.
+  const [kept, setKept] = useState(0);
 
   const remove = useMutation({
     mutationFn: (id: number) => goalsApi.remove(id),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: qk.goals });
-      // The goal's future generated sessions go with it.
+      // The goal's future generated sessions go with it, apart from the changed ones.
       invalidateAfterSession(queryClient);
+      setKept(result.kept);
       setToDelete(null);
     },
   });
@@ -539,6 +543,11 @@ export function RaceGoalsPanel() {
       <div className="space-y-3">
         {goals.isLoading && <p className="text-sm text-text-muted">Chargement des objectifs…</p>}
         {goals.isError && <p className="text-sm text-danger-red">Objectifs indisponibles.</p>}
+        {kept > 0 && (
+          <p role="status" className="text-xs text-text-muted">
+            Objectif supprimé. {keptEditsText(kept)}
+          </p>
+        )}
         {goals.data?.length === 0 && !adding && (
           <p className="text-sm text-text-muted">
             Aucun objectif prévu. Ajoute une course, un Hyrox ou un bloc hybride pour construire ton plan.
@@ -556,7 +565,10 @@ export function RaceGoalsPanel() {
                   key={goal.id}
                   goal={goal}
                   onPlan={() => setPlanFor(goal)}
-                  onEdit={() => setEditing(goal.id)}
+                  onEdit={() => {
+                    setKept(0);
+                    setEditing(goal.id);
+                  }}
                   onDelete={() => setToDelete(goal)}
                 />
               )
@@ -566,7 +578,14 @@ export function RaceGoalsPanel() {
         {adding ? (
           <GoalForm onDone={() => setAdding(false)} />
         ) : (
-          <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setKept(0);
+              setAdding(true);
+            }}
+          >
             <Plus className="size-3.5" /> Ajouter un objectif
           </Button>
         )}
@@ -577,7 +596,10 @@ export function RaceGoalsPanel() {
         <Modal open={toDelete !== null} onClose={closeDelete} className="max-w-sm p-4 sm:p-6">
           <ModalHeader title="Supprimer l’objectif" onClose={closeDelete} className="mb-4" />
           <p className="text-sm text-text-secondary mb-2">Supprimer « {toDelete?.name} » ?</p>
-          <p className="text-xs text-text-muted mb-6">Les séances à venir générées pour cet objectif sont supprimées aussi.</p>
+          <p className="text-xs text-text-muted mb-6">
+            Les séances à venir générées pour cet objectif sont supprimées aussi. Celles déjà modifiées, par toi ou par le
+            coach, restent dans ton planning.
+          </p>
           {remove.isError && <p className="text-xs text-danger-red mb-3">{readableError(remove.error)}</p>}
           <div className="flex gap-3 justify-end">
             <Button variant="ghost" onClick={closeDelete}>

@@ -813,7 +813,8 @@ class TestBriefingFacts:
             generate_briefing(target_date=clean_day)
         assert facts.call_count == 1
         # The model reads the floor's numbers rather than a second computation.
-        assert "(ACWR, sur 28 jours) : 1.00" in run.call_args.args[0]
+        # With a decimal comma, which the French briefing copies.
+        assert "(ACWR, sur 28 jours) : 1,00" in run.call_args.args[0]
 
     def test_concurrent_first_requests_produce_once(self, clean_day, enabled):
         from concurrent.futures import ThreadPoolExecutor

@@ -193,3 +193,29 @@ test('OCR preview compares the original, filters uncertain passages and works on
   await expect(preview).toHaveCount(0);
   await expect(page.getByRole('button', { name: `Consulter ${doc.name}` })).toBeFocused();
 });
+
+test('the sheet select stays a compact toolbar control on a desktop pointer, with the shared chevron', async ({ page }) => {
+  const { createHash } = await import('node:crypto');
+  const original = Buffer.from('plan');
+  const doc = { id: '11111111-1111-4111-8111-111111111111', name: 'Plan.xlsx', size: original.length, sha256: createHash('sha256').update(original).digest('hex'), status: 'ready' };
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
+    if (path.endsWith('/documents')) return route.fulfill({ json: [doc] });
+    if (path.endsWith('/extraction')) return route.fulfill({ json: { warnings: [], blocks: [{ locator: 'Semaine 1!A1', text: 'Footing 30 min', method: 'text', confidence: null }, { locator: 'Semaine 2!A1', text: 'Fractionné 6 × 400 m', method: 'text', confidence: null }] } });
+    if (path.endsWith('/chunks/0')) return route.fulfill({ body: original, contentType: 'application/octet-stream' });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/planning');
+  await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
+  await page.getByRole('button', { name: 'Fichiers du fil (1)' }).click();
+  await page.getByRole('button', { name: `Consulter ${doc.name}` }).click();
+  const sheet = page.getByRole('dialog', { name: `Aperçu de ${doc.name}` }).getByRole('combobox', { name: 'Page ou feuille du document' });
+  await expect(sheet).toBeVisible();
+  // A mouse is precise: the toolbar keeps its 12 px text and short row; touch raises it to 44 px (mobile-ux).
+  expect((await sheet.boundingBox())!.height).toBeLessThan(40);
+  expect(await sheet.evaluate(element => getComputedStyle(element).backgroundImage)).toContain('linear-gradient');
+  await expect(sheet).toHaveCSS('font-size', '12px');
+  await sheet.selectOption('Semaine 2');
+  await expect(page.getByText('Fractionné 6 × 400 m', { exact: true })).toBeVisible();
+});

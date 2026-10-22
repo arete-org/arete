@@ -350,6 +350,13 @@ Planning ne possède aucune variante de navigation propre à sa page.
 - `useVisualViewport` fournit une seule mesure de l’espace visible aux dialogues
   et à Chiron. Le clavier ne doit masquer ni les champs ni les commandes ; les
   champs mobiles font au moins 16 px et les commandes tactiles au moins 44 px.
+  Toute liste déroulante porte `ui-input` (composant `Select`, ou la classe seule
+  sur un `<select>` au style propre) : WebKit perd son rendu natif, qui ignorait
+  la hauteur, et le chevron dessiné remplace le sien, sauf en couleurs forcées.
+  Seul le choix de page ou de feuille de l’aperçu de document reste compact
+  (texte de 12 px), au pointeur précis et au-delà de 768 px seulement : sous
+  768 px, la règle des téléphones lui donne 16 px et 44 px, comme au toucher
+  la règle des dialogues.
   Les dialogues bloquent le défilement de fond et restaurent le focus sans
   déplacer la page. Les formulaires longs défilent dans leur panneau.
 - Le Planning commence par le sélecteur de jours, les compteurs et les séances.
