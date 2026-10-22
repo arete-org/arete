@@ -171,8 +171,8 @@ before the guidelines' approval.
    Garmin user id to the athlete; payloads go through the same import path as
    today (`garmin/sync.py` for Garmin activities, `services/activity_import.py`
    for files). The file import refuses a workout already stored from any
-   source; the Garmin sync only takes over legacy Strava rows today and must
-   also recognise an imported file's row before going official.
+   source; the Garmin sync takes over a legacy Strava row or an imported
+   file's row of the same workout.
 3. Deregistration and user-permission notifications: delete tokens, mark the
    connection closed, record the date.
 4. Training API for the existing workout export (`services/garmin_export.py`),

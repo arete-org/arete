@@ -22,9 +22,11 @@ from arete.dataio.game_events import CaptureContext
 from arete.dataio.settings import athlete_zone_model
 from arete.features.hr_zones import ZoneModel, samples_from_laps
 from arete.garmin.client import GarminAuthError, GarminClient
+from arete.garmin.duplicates import find_duplicate
 from arete.garmin.fit_parser import FITParser, laps_to_json
 from arete.garmin.matcher import SessionMatcher
 from arete.garmin.models import (
+    FILE_SOURCES,
     ActivitySource,
     ActualSession,
     SessionStatus,
@@ -65,7 +67,7 @@ class SyncResult:
     activities_skipped: int = 0
     errors: list[str] = field(default_factory=list)
     last_activity_date: date | None = None
-    #: Sessions this run created or took over from Strava, for the feedback.
+    #: Sessions this run created or took over (Strava, file), for the feedback.
     session_ids: list[int] = field(default_factory=list)
     next_history_offset: int | None = None
     history_anchor: int | None = None
@@ -319,7 +321,8 @@ STRAVA_ONLY_FIELDS = (
 )
 
 #: Computed from the row's measures when it was matched to its plan: Strava's
-#: on a legacy row, so cleared on a takeover rather than read by the coach.
+#: on a legacy row (a file's on a file row), so cleared on a takeover rather
+#: than read by the coach.
 DERIVED_FROM_STRAVA = ("adherence_score", "intensity_deviation")
 
 #: What a Garmin import measures: on a takeover, its value replaces Strava's,
@@ -374,6 +377,23 @@ def garmin_takeover(garmin: ActualSession) -> dict[str, Any]:
     }
 
 
+def file_takeover(garmin: ActualSession) -> dict[str, Any]:
+    """Columns to write on a file-imported row when Garmin syncs that workout.
+
+    The row becomes the Garmin row (ARE-181): Garmin's provenance and every
+    value it measured replace the file's. A value Garmin lacks (its FIT file
+    could not be read) keeps the file's, which is the same workout. The
+    athlete's notes and RPE and the plan link stay; the adherence computed
+    from the file's values is cleared, for the caller to rescore.
+    """
+    measured = {column: getattr(garmin, column) for column in GARMIN_MEASURED_FIELDS}
+    return {
+        "source": garmin.source.value,
+        **{column: value for column, value in measured.items() if value is not None},
+        **dict.fromkeys(DERIVED_FROM_STRAVA),
+    }
+
+
 class GarminSyncClient:
     """Syncs activities from Garmin Connect into the local database."""
 
@@ -393,6 +413,7 @@ class GarminSyncClient:
         self.presence: dict[int, bool] = {}
         # Read once per import, on its first new activity.
         self._legacy_strava: bool | None = None
+        self._file_imports: bool | None = None
         self._game: CaptureContext | None = None
 
     @property
@@ -654,14 +675,24 @@ class GarminSyncClient:
                         if self._legacy_strava
                         else None
                     )
-                    if (
-                        twin is not None
-                        and twin.id is not None
-                        and twin.source == ActivitySource.STRAVA
-                    ):
-                        self.repository.update_actual_session_fields(
-                            twin.id, **garmin_takeover(session)
-                        )
+                    if twin is not None and twin.source != ActivitySource.STRAVA:
+                        twin = None
+                    # Or on a row imported from a file (ARE-181)?
+                    if twin is None and activity.start_time_known:
+                        twin = self._file_twin(session)
+                    if twin is not None and twin.id is not None:
+                        if twin.source == ActivitySource.STRAVA:
+                            self.repository.update_actual_session_fields(
+                                twin.id, **garmin_takeover(session)
+                            )
+                        elif not self.repository.take_over_file_session(
+                            twin.id, file_takeover(session)
+                        ):
+                            # Deleted or changed meanwhile: the next sync
+                            # imports this activity afresh; nothing is replayed.
+                            raise RuntimeError(
+                                f"session {twin.id} changed during the takeover"
+                            )
                         actual_id = twin.id
                         result.activities_merged += 1
                         result.session_ids.append(actual_id)
@@ -726,7 +757,7 @@ class GarminSyncClient:
             result.success = not result.errors
             logger.info(
                 f"Sync complete: {result.activities_synced} synced, "
-                f"{result.activities_merged} merged into Strava rows, "
+                f"{result.activities_merged} merged into existing rows, "
                 f"{result.activities_skipped} skipped, "
                 f"{len(result.errors)} errors"
             )
@@ -736,6 +767,16 @@ class GarminSyncClient:
             logger.error(f"Sync failed: {e}")
 
         yield result
+
+    def _file_twin(self, session: ActualSession) -> ActualSession | None:
+        """The file-imported row of this workout, by the import's own rule."""
+        if self._file_imports is None:
+            self._file_imports = self.repository.has_file_imports()
+        if not self._file_imports:
+            return None
+        return find_duplicate(
+            self.repository, session, session.duration_sec, FILE_SOURCES
+        )
 
     def _is_already_synced(self, activity_id: int) -> bool:
         """Check if activity is already in database.

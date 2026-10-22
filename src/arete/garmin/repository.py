@@ -11,6 +11,7 @@ from arete.dataio.db import connect
 from arete.dataio.game_events import CaptureContext
 from arete.dataio.ownership import require_owned
 from arete.garmin.models import (
+    FILE_SOURCES,
     ActivitySource,
     ActualSession,
     PlannedSession,
@@ -19,6 +20,10 @@ from arete.garmin.models import (
 )
 from arete.garmin.streams import CHANNELS, ActivityStreams
 from arete.services.athlete_scope import resolve_athlete_id
+
+#: ``FILE_SOURCES`` as SQL parameters, in a stable order, and their placeholders.
+FILE_SOURCE_VALUES = tuple(sorted(source.value for source in FILE_SOURCES))
+FILE_SOURCE_PARAMS = ", ".join("?" * len(FILE_SOURCE_VALUES))
 
 PLANNED_COLUMNS = (
     "id, user_id, date, sport, session_type, target_duration_min, "
@@ -743,6 +748,50 @@ class GarminRepository:
             conn.execute(
                 f"UPDATE actual_sessions SET {assignments} WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
                 [*fields.values(), session_id],
+            )
+        finally:
+            conn.close()
+
+    def take_over_file_session(self, session_id: int, fields: dict[str, Any]) -> bool:
+        """Write a Garmin import's columns on a row still imported from a file.
+
+        The run's best efforts are recomputed in the same transaction: its
+        sport or distance may change, before or without Garmin's streams.
+        False when the row is gone or no longer a file import: nothing is
+        written and the caller does not retry (ARE-150). A concurrent edit of
+        the row conflicts and raises instead of being lost.
+        """
+        unknown = set(fields) - self.ENRICHMENT_COLUMNS
+        if unknown or not fields:
+            raise ValueError(f"Not updatable: {sorted(unknown)}")
+        assignments = ", ".join(f"{col} = ?" for col in fields)
+        conn = self._get_connection()
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            row = conn.execute(
+                f"UPDATE actual_sessions SET {assignments} WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ? AND source IN ({FILE_SOURCE_PARAMS})) RETURNING id",
+                [*fields.values(), session_id, *FILE_SOURCE_VALUES],
+            ).fetchone()
+            if row is not None:
+                best_efforts.refresh_runs(conn, [session_id])
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+        return row is not None
+
+    def has_file_imports(self) -> bool:
+        """Whether any session imported from a file remains for Garmin to take over."""
+        conn = self._get_connection()
+        try:
+            return (
+                conn.execute(
+                    f"SELECT 1 FROM visible_actual_sessions WHERE source IN ({FILE_SOURCE_PARAMS}) LIMIT 1",
+                    list(FILE_SOURCE_VALUES),
+                ).fetchone()
+                is not None
             )
         finally:
             conn.close()

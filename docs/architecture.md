@@ -673,11 +673,25 @@ file states it, else the athlete's timezone), and refuses with a French
 message a session starting within five minutes of a stored one of any source
 when the sport is the same or the two share half their time (a FIT row of the
 old route, which stored its local end as start, is compared by end), or
-matching a start-less manual entry's sport and duration. It commits in one
+matching a start-less manual entry's sport and duration (the rule is
+`garmin/duplicates.py`'s). It commits in one
 function, then matches the plan, links and drafts strength, keeps the streams
 and runs terrain and weather. Sources are `fit_file`, `tcx_file` and
 `gpx_file`; the daily feedback catch-up reads those dated within two days, so
 a history import announces nothing.
+
+The Garmin sync takes over a file-imported row of the same workout, by that
+same rule, instead of adding a second one (ARE-181,
+`garmin/sync.file_takeover`): the row becomes Garmin's, every value Garmin
+measured replaces the file's (one it lacks, such as zones without its FIT
+file, keeps the file's), and the athlete's notes and RPE and the plan link
+stay; the adherence is rescored on Garmin's values. The update is one
+`UPDATE … RETURNING` that requires the row to still be a file import and
+recomputes the run's best efforts in its transaction; Garmin's streams then
+replace the file's through `save_activity_streams`. A concurrent edit or
+deletion makes the activity an error of that run, never replayed: the next
+sync takes it over or imports it. The row keeps its id, so its game event
+(captured at the import) and its feedback stay single.
 
 The session page opens with its summary, before the tiles and the curves. The
 detail payload carries it (`summary`, typed `SessionSummary` beside the service),

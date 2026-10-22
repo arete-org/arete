@@ -8,9 +8,10 @@ strength link and draft, the streams, terrain and weather, the game evidence
 (captured with the row) and the daily feedback catch-up.
 
 Every file is parsed in full before anything is written: a corrupt file
-leaves no row. A session that starts within ``DUPLICATE_START_SEC`` of one
-already stored, whatever its source, is refused; so is one with the same
-sport and duration on a day whose session has no start time (a manual entry).
+leaves no row. A session that starts within five minutes of one already
+stored, whatever its source, is refused; so is one with the same sport and
+duration on a day whose session has no start time (a manual entry). The rule
+is ``garmin/duplicates.py``'s, shared with the Garmin sync's takeover.
 
 Times: an imported start is stored on the athlete's clock, like Garmin's
 ``startTimeLocal``, so the comparison holds across sources. The offset is the
@@ -21,7 +22,6 @@ from __future__ import annotations
 
 import io
 import logging
-import re
 import threading
 import zipfile
 from collections.abc import Iterator
@@ -42,6 +42,7 @@ from arete.garmin.activity_files import (
     gunzip_bounded,
     parse_activity,
 )
+from arete.garmin.duplicates import find_duplicate
 from arete.garmin.fit_parser import ParsedActivity, laps_to_json
 from arete.garmin.models import ActivitySource, ActualSession, canonical_sport
 from arete.garmin.repository import GarminRepository
@@ -56,13 +57,6 @@ logger = logging.getLogger(__name__)
 
 #: Files per upload, an archive's members included (the browser sends one at a time).
 MAX_FILES = 10
-#: Two starts closer than this are the same workout (two watches, a re-export).
-DUPLICATE_START_SEC = 300
-#: Without a start time: same sport and day, duration within max(2 min, 10 %).
-DUPLICATE_DURATION_SEC = 120
-DUPLICATE_DURATION_SHARE = 0.10
-#: Different sports are one workout only when they share most of their time.
-DUPLICATE_OVERLAP = 0.5
 #: Parses at once per process; a file is parsed in the request's worker thread.
 MAX_PARSERS = 2
 PARSE_WAIT_SEC = 30
@@ -239,73 +233,6 @@ def local_start(
         return utc_start.replace(tzinfo=UTC).astimezone(zone).replace(tzinfo=None)
     except OverflowError as exc:  # parse_activity bounds the start; belt and braces
         raise ActivityFileError("Date de départ invalide.") from exc
-
-
-def find_duplicate(
-    repo: GarminRepository, session: ActualSession, elapsed_sec: int
-) -> ActualSession | None:
-    """A stored session that is this workout, whatever its source.
-
-    Same workout: starts within ``DUPLICATE_START_SEC`` and the same sport
-    or mostly the same time (two watches may name one session differently).
-    """
-    assert session.start_time is not None
-    nearby = repo.list_actual_sessions(
-        start_date=session.date - timedelta(days=1),
-        end_date=session.date + timedelta(days=1),
-        limit=200,
-        include_blobs=False,
-    )
-    tolerance = max(
-        DUPLICATE_DURATION_SEC, int(session.duration_sec * DUPLICATE_DURATION_SHARE)
-    )
-    start = session.start_time
-    end = start + timedelta(seconds=elapsed_sec)
-    for other in nearby:
-        if other.start_time is not None:
-            if _legacy_fit(other):
-                # The old FIT route stored the local end (wall clock) as start.
-                other_end = other.start_time
-                other_start = other_end - timedelta(seconds=other.duration_sec)
-                gap = abs((other_end - end).total_seconds())
-            else:
-                other_start = other.start_time
-                other_end = other_start + timedelta(seconds=other.duration_sec)
-                gap = abs((other_start - start).total_seconds())
-            if gap <= DUPLICATE_START_SEC and (
-                other.sport == session.sport
-                or _overlap(start, end, other_start, other_end) >= DUPLICATE_OVERLAP
-            ):
-                return other
-        elif (
-            other.date == session.date
-            and other.sport == session.sport
-            and abs(other.duration_sec - session.duration_sec) <= tolerance
-        ):
-            return other
-    return None
-
-
-def _overlap(
-    start: datetime, end: datetime, other_start: datetime, other_end: datetime
-) -> float:
-    """Shared time over the shorter of the two sessions, 0 to 1."""
-    shorter = min(
-        (end - start).total_seconds(), (other_end - other_start).total_seconds()
-    )
-    shared = (min(end, other_end) - max(start, other_start)).total_seconds()
-    return max(0.0, shared) / shorter if shorter > 0 else 0.0
-
-
-#: What ``to_actual_session`` appends to a file name; the old route did not.
-IMPORT_SUFFIX = re.compile(r"@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
-
-
-def _legacy_fit(session: ActualSession) -> bool:
-    """A FIT upload of the old route: its name lacks this route's suffix."""
-    return session.source == ActivitySource.FIT_FILE and not IMPORT_SUFFIX.search(
-        session.source_file or ""
-    )
 
 
 def _commit(
