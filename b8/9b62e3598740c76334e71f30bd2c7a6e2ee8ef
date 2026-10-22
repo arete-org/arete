@@ -1,0 +1,30 @@
+AGENTS.md
+  s_7f1c3e02a04de7::t_5fcbf3cc6746cc 133-135
+docs/deployment.md
+  s_7f1c3e02a04de7::t_5fcbf3cc6746cc 13,342-348
+docker-compose.yml
+  s_7f1c3e02a04de7::t_47938e813ccae8 13-16
+src/arete/dataio/db.py
+  s_7f1c3e02a04de7::t_7862eb08f60b97 57-77,81
+tests/test_db.py
+  s_7f1c3e02a04de7::t_e0e6a0389a541b 6-7,12,196-244
+src/arete/api/main.py
+  s_7f1c3e02a04de7::t_8d13e8c8f15733 83
+  s_7f1c3e02a04de7::t_fdb865a1168f3a 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b89b62e3598740c76334e71f30bd2c7a6e2ee8ef",
+  "prompts": {},
+  "sessions": {
+    "s_7f1c3e02a04de7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d35701ec-f37f-4de6-94fd-5268c17384c2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nicolas Edmond <nicolas@mac-1.home>"
+    }
+  }
+}
