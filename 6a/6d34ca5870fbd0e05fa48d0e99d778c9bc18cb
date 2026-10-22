@@ -1,0 +1,38 @@
+src/arete/agent/runtime/context.py
+  s_1a7b9f3749473c::t_77f3b46dc0b5d2 22,133-137,140
+  s_1a7b9f3749473c::t_038055af76b82d 138-139
+docs/personal-memory.md
+  s_1a7b9f3749473c::t_b69b438b8dfad7 163-164
+tests/test_agent_execution.py
+  s_1a7b9f3749473c::t_df9522499be6b0 4-6,31,317-344,347-353,357-424,426-440
+  s_1a7b9f3749473c::t_4503a92ad1cec7 345-346,354-356,425
+  s_1a7b9f3749473c::t_db91b0721375bb 441-442
+src/arete/agent/capabilities/registry.py
+  s_1a7b9f3749473c::t_77f3b46dc0b5d2 207-210
+src/arete/agent/context/builder.py
+  s_1a7b9f3749473c::t_038055af76b82d 235-236,250-251
+  s_1a7b9f3749473c::t_c8577d1654d5c6 5,29,142-147,154-158,161-165,211-222,234,237-249,252-253
+src/arete/agent/middlewares/capabilities.py
+  s_1a7b9f3749473c::t_038055af76b82d 102
+  s_1a7b9f3749473c::t_77f3b46dc0b5d2 15-19,94,96,98-101,103,168,180
+docs/architecture.md
+  s_1a7b9f3749473c::t_86d3b8139b9fdf 250-255,1205-1206
+tests/test_personal_memory.py
+  s_1a7b9f3749473c::t_ed82263935bc46 306-310,332,335
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6a6d34ca5870fbd0e05fa48d0e99d778c9bc18cb",
+  "prompts": {},
+  "sessions": {
+    "s_1a7b9f3749473c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e1d8439e-b0e2-4d22-bfe3-039a26d22d8a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nicolas Edmond <nicolas@mac-1.home>"
+    }
+  }
+}
