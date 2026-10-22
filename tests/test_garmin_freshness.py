@@ -8,6 +8,7 @@ import pytest
 
 from arete.dataio.db import db_connection
 from arete.garmin.client import GarminClient
+from arete.garmin.health_sync import sync_day as real_sync_day
 from arete.garmin.sync import GarminSyncClient
 from arete.garmin.sync_budget import SyncBudget, SyncStopped
 from arete.services import garmin_sync as service
@@ -640,3 +641,65 @@ def test_profile_lookup_caches_the_handle_for_the_next_sync(tmp_path):
         "account": "me@garmin.test",
         "display_name": "pierre",
     }
+
+
+def test_a_4xx_signal_is_unavailable_and_the_others_still_advance(
+    provider, monkeypatch
+):
+    """One signal Garmin does not serve must not fail the day (ARE-177)."""
+    from garminconnect import Garmin
+
+    def request(method, url, **kwargs):
+        response = Mock(status_code=200)
+        if "dailySleepData" in url:
+            response.status_code = 404
+        elif "hrv-service" in url:
+            response.json.return_value = {"hrvSummary": {"lastNightAvg": 61}}
+        elif "dailyStress" in url:
+            response.json.return_value = {"avgStressLevel": 27}
+        else:
+            response.json.return_value = []
+        return response
+
+    def connect(self):
+        if self._api is None:
+            api = Garmin(retry_attempts=0)
+            api.display_name = "pierre"
+            api.client._run_request = self._sync_request
+            api.client.get_api_headers = lambda: {}
+            api.client._api_session.request = request
+            self._api = api
+        return self._api
+
+    monkeypatch.setattr(GarminClient, "connect", connect)
+    monkeypatch.setattr("arete.garmin.sync_budget.sleep", lambda _seconds: None)
+    monkeypatch.setattr("arete.garmin.health_sync.sync_day", real_sync_day)
+    result = service.ensure_fresh()
+    assert result["complete"] and result["health_checked_at"]
+    assert not result["errors"]
+    assert result["health_days"]["2026-10-13"]["state"] == "available"
+    with db_connection() as con:
+        hrv, stress = con.execute(
+            "SELECT hrv_last_night, stress_avg FROM app.visible_daily_metrics WHERE date=?",
+            [date(2026, 10, 13)],
+        ).fetchone()
+    assert hrv == 61 and stress == 27
+
+
+def test_only_a_4xx_read_is_unavailable_a_5xx_still_fails(monkeypatch):
+    from arete.garmin.client import GarminUnavailable
+
+    monkeypatch.setattr("arete.garmin.sync_budget.sleep", lambda _seconds: None)
+    budget = SyncBudget(monotonic() + 60)
+    client = GarminClient(sync_budget=budget)
+    api = Mock()
+    api.client._connectapi = "https://example.invalid"
+    api.client.get_api_headers.return_value = {}
+    client._api = api
+    api.client._api_session.request.return_value.status_code = 503
+    with pytest.raises(ConnectionError):
+        client._sync_request("GET", "/wellness-service/x")
+    api.client._api_session.request.return_value.status_code = 404
+    with pytest.raises(GarminUnavailable):
+        client._sync_request("GET", "/wellness-service/x")
+    assert budget.errors == ["Garmin HTTP 503"] and budget.calls == 2

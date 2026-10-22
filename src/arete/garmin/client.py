@@ -42,6 +42,14 @@ class GarminAuthError(RuntimeError):
     """No usable Garmin session (no tokens, expired, or login refused)."""
 
 
+class GarminUnavailable(LookupError):
+    """Garmin refused this one read (4xx other than 401/403/429).
+
+    The account or day has no such measurement: the signal is unavailable,
+    not a failed request, so other reads and the health check still advance.
+    """
+
+
 class GarminClient:
     """Authenticated access to Garmin Connect for one user."""
 
@@ -210,6 +218,8 @@ class GarminClient:
             )
             self._record_refusal()
             raise SyncStopped(budget.stopped)
+        if 400 <= response.status_code < 500:
+            raise GarminUnavailable(f"Garmin HTTP {response.status_code}")
         if not 200 <= response.status_code < 300:
             budget.errors.append(f"Garmin HTTP {response.status_code}")
             raise ConnectionError(budget.errors[-1])

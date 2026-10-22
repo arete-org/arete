@@ -63,8 +63,11 @@ does. The Garmin profile handle that health URLs need is cached with the
 account record, so a sync makes no profile lookup once it is known; a new
 login replaces it. The daily catch-up retains its four-day window and current
 performance metrics. Each day
-reports available, unavailable or failed measurements. Failed requests preserve
-previously stored values and do not advance `health_checked_at`. Missing values
+reports available, unavailable or failed measurements. A 4xx answer to one
+signal (other than 401, 403 and 429) means Garmin has no such measurement:
+that signal is unavailable and the other signals and `health_checked_at` still
+advance. Failed requests (timeouts, 5xx) preserve previously stored values and
+do not advance `health_checked_at`. Missing values
 are not converted into zeros. Terrain/weather work shares the refresh deadline;
 unfinished enrichment is reported separately from committed imports.
 
