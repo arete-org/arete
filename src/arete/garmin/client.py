@@ -356,7 +356,7 @@ class GarminClient:
 
             auth_state.clear()
             if config.is_remote_db:
-                token_store.delete()
+                token_store.delete(self.token_file)
         with self._mfa_lock:
             self._pending_mfa.pop(self.token_dir.resolve(), None)
         if self.token_file.exists():

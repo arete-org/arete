@@ -352,13 +352,14 @@ it('never lets the build turn sign-in off: anything but true asks the server', a
   expect(requests.map((r) => r.url)).toEqual(['/api/auth/config']);
 });
 
-it('reports a build that enables sign-in without its key', async () => {
+it('asks the server when the build enables sign-in without its key', async () => {
   built('');
   const requests = server(enabled);
   mount();
-  expect(await screen.findByText('Authentification mal configurée')).toBeTruthy();
-  expect(screen.queryByText('Tableau de bord')).toBeNull();
-  expect(requests).toEqual([]);
+  // A reload would never add the key to the build: the server's answer stands in.
+  expect(await screen.findByText('Formulaire Clerk')).toBeTruthy();
+  expect(screen.queryByText('Authentification mal configurée')).toBeNull();
+  expect(requests.map((r) => r.url)).toEqual(['/api/auth/config']);
 });
 
 it('shows a misconfiguration, not a sign-out loop, when the server expects another Clerk instance', async () => {
@@ -371,6 +372,12 @@ it('shows a misconfiguration, not a sign-out loop, when the server expects anoth
   expect(clerk.signOut).not.toHaveBeenCalled();
   // The server was asked only after it refused the session.
   expect(requests.map((r) => r.url)).toEqual(['/api/auth/me', '/api/auth/config']);
+  // Signing out would only come back here once signed in again: retry reloads.
+  const reload = vi.fn();
+  vi.stubGlobal('location', { ...window.location, reload });
+  fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(clerk.signOut).not.toHaveBeenCalled();
 });
 
 it('ends a refused session as before when the server expects the same instance', async () => {

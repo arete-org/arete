@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from arete.config import config
+from arete.dataio import mirror
 from arete.dataio.db import db_connection
 
 TOKEN_PATH = "garmin_tokens/garmin_tokens.json"
@@ -29,6 +30,11 @@ def _write(path: Path, data: bytes) -> None:
 
 
 def hydrate(path: Path) -> bool:
+    """Rewrite the local token files from the database, the source of truth.
+
+    The mirror records what was read: its flush then writes back only what the
+    SDK changes since, never these copies over another instance's logout.
+    """
     with db_connection() as con:
         rows = dict(
             con.execute(
@@ -40,14 +46,20 @@ def hydrate(path: Path) -> bool:
     if TOKEN_PATH not in rows:
         path.unlink(missing_ok=True)
         account.unlink(missing_ok=True)
+        mirror.remember(path, None)
+        mirror.remember(account, None)
         return False
     data = bytes(rows[TOKEN_PATH])
     assert len(data) <= MAX_TOKEN_BYTES
     _write(path, data)
+    mirror.remember(path, data)
     if ACCOUNT_PATH in rows:
-        _write(account, bytes(rows[ACCOUNT_PATH]))
+        record = bytes(rows[ACCOUNT_PATH])
+        _write(account, record)
+        mirror.remember(account, record)
     else:
         account.unlink(missing_ok=True)
+        mirror.remember(account, None)
     return True
 
 
@@ -105,13 +117,15 @@ def needs_account(token_file: Path) -> bool:
 
 def _store_record(token_file: Path, record: dict, *, remote: bool) -> None:
     data = json.dumps(record).encode()
-    _write(token_file.with_name(ACCOUNT_FILE), data)
+    account = token_file.with_name(ACCOUNT_FILE)
+    _write(account, data)
     if remote:
         with db_connection() as con:
             con.execute(
                 "INSERT OR REPLACE INTO app.files(path,content,updated_at) VALUES(?,?,now()) RETURNING path",
                 [ACCOUNT_PATH, data],
             )
+        mirror.remember(account, data)
 
 
 def save_account(
@@ -191,11 +205,15 @@ def save(path: Path) -> None:
             "INSERT OR REPLACE INTO app.files(path,content,updated_at) VALUES(?,?,now()) RETURNING path",
             [TOKEN_PATH, data],
         )
+    mirror.remember(path, data)
 
 
-def delete() -> None:
+def delete(token_file: Path) -> None:
+    """Remove the stored tokens; the caller removes ``token_file`` and its account."""
     with db_connection() as con:
         con.execute(
             "DELETE FROM app.files WHERE athlete_id=getvariable('arete_athlete_id') AND path IN (?, ?)",
             [TOKEN_PATH, ACCOUNT_PATH],
         )
+    mirror.remember(token_file, None)
+    mirror.remember(token_file.with_name(ACCOUNT_FILE), None)

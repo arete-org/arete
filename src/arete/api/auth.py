@@ -137,15 +137,17 @@ def _jwt_key_is_usable(pem: str) -> bool:
     A key that does not load would turn every session into a 401 that looks
     like a sign-in problem: refuse it as a misconfiguration instead.
     """
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
     from jwt.algorithms import RSAAlgorithm
     from jwt.exceptions import InvalidKeyError
 
     try:
         # The SDK strips line breaks before handing the key to PyJWT.
-        RSAAlgorithm(RSAAlgorithm.SHA256).prepare_key(re.sub(r"[\r\n]", "", pem))
+        key = RSAAlgorithm(RSAAlgorithm.SHA256).prepare_key(re.sub(r"[\r\n]", "", pem))
     except (InvalidKeyError, ValueError, TypeError):
         return False
-    return True
+    # A private key loads too, then fails every verification: refuse it here.
+    return isinstance(key, RSAPublicKey)
 
 
 def is_public(path: str) -> bool:

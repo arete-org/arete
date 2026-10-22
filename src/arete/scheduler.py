@@ -169,10 +169,22 @@ def daily_sync() -> dict[str, str]:
     if feedback_ids:
         status["feedback"], feedback = write_sync_feedback(feedback_ids)
 
-    # Garmin sessions are announced with their feedback, once; a failed
-    # feedback run leaves them to the import count.
-    unannounced = 0 if feedback is not None else imported
-    if (announced := announce_sync(feedback or [], unannounced)) is not None:
+    # Garmin sessions are announced with their feedback, once. After a failed
+    # run the push counts all of this sync's imports; after one that stored no
+    # feedback, those of them still without any. When it stored some (an earlier
+    # import's included), the one push carries the coach's sentence and the
+    # sessions it could not store go unannounced now: the daily catch-up
+    # retries their feedback and announces it once stored. So a session may
+    # be counted in one push, then get its own push later.
+    unannounced = imported
+    if feedback is not None:
+        try:
+            done = SessionFeedbackRepository().with_feedback(synced_ids)
+        except Exception as exc:  # noqa: BLE001 - background job must not die
+            logger.warning("Sync feedback lookup failed: %s", exc)
+            done = {f["session_id"] for f in feedback}
+        unannounced = len(set(synced_ids) - done)
+    if (announced := announce_sync(feedback or [], unannounced, imported)) is not None:
         status["notification"] = announced
     logger.info("Daily sync: %s", status)
     _last_status[current_athlete_id()] = dict(status)
@@ -234,15 +246,18 @@ def write_sync_feedback(session_ids: list[int]) -> tuple[str, list[dict] | None]
     return status, list(outcome.get("written", []))
 
 
-def announce_sync(feedback: list[dict], unannounced: int) -> str | None:
+def announce_sync(feedback: list[dict], unannounced: int, imported: int) -> str | None:
     """At most one notification per sync: the coach's sentence, else the count.
 
     ``feedback`` is what this run stored, so a session is announced once: a
     later sync finds its feedback and writes none. No model request here; the
     sentence was already paid for. The body stays short for the lock screen.
+    With post-session pushes turned off, the sync's imports are counted instead.
     """
-    from arete.services.notifications import first_sentence, notify
+    from arete.services.notifications import first_sentence, kind_allowed, notify
 
+    if feedback and not kind_allowed("post_session"):
+        feedback, unannounced = [], imported
     if feedback:
         latest = max(feedback, key=lambda f: (f["date"], f["session_id"]))
         url = f"/log/sessions/{latest['session_id']}?rpe=1"

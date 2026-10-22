@@ -59,11 +59,8 @@ export function AuthGate({ children, onSessionEnd }: AuthGateProps) {
     };
   }, [attempt, built]);
 
+  // Only reached from the server's answer: a build configuration always has its key.
   const retry = () => {
-    if (built) {
-      window.location.reload(); // a build without its key stays so until redeployed
-      return;
-    }
     setState({ status: 'loading' });
     setAttempt((n) => n + 1);
   };

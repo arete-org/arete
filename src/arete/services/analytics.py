@@ -307,7 +307,8 @@ def update_session(session_id: int, fields: Mapping[str, int | str | None]):
     """Update RPE and/or notes for an actual session.
 
     Every given field is written, ``None`` included: that is how the athlete
-    clears an RPE. Absent fields are left alone.
+    clears an RPE. Absent fields are left alone. None when the athlete has no
+    such session (another athlete's included): nothing was written.
     """
     unknown = set(fields) - set(_EDITABLE_SESSION_FIELDS)
     if unknown:
@@ -317,11 +318,11 @@ def update_session(session_id: int, fields: Mapping[str, int | str | None]):
         return {"success": True}
     con = connect(read_only=False)
     try:
-        con.execute(
+        updated = con.execute(
             f"UPDATE app.actual_sessions SET {', '.join(f'{c} = ?' for c in columns)} WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
             [*(fields[c] for c in columns), session_id],
-        )
-        return {"success": True}
+        ).fetchall()
+        return {"success": True} if updated else None
     finally:
         con.close()
 

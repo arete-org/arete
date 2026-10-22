@@ -366,13 +366,112 @@ def test_receipts_of_caps_aliases_and_moved_duplicates_are_unchanged(game_db):
         [
             ("activity:earlier", previous, 50, 10, "Course"),
             *[(f"activity:session:{n}", week, 50, 10, "Course") for n in range(6)],
-            # Known bug, tracked in Linear ARE-93: the duplicate dated last
-            # week moves session 1 there, but its sum per cause is already
-            # credited, so only the current week's reversal is written and the
-            # session ends uncredited. Pinned here until ARE-93 fixes it.
+            # The duplicate dated last week moves session 1 there: credited
+            # there, reversed in the current week (ARE-93).
+            ("activity:session:1", previous, 50, 10, "Course"),
             ("activity:session:1", week, -50, -10, fix + "Séance rapprochée"),
             ("week:" + week, week, 200, 40, "Objectif hebdomadaire respecté"),
             ("week:" + week, week, -200, -40, fix + "Objectif hebdomadaire respecté"),
+        ]
+    )
+
+
+def test_duplicate_in_an_earlier_week_moves_the_credit_there(game_db):
+    """A past week (not the current one) loses its credit to an earlier week."""
+    enable()
+    with transaction() as con:  # opted in for three weeks already
+        con.execute(
+            "UPDATE app.game_periods SET started_at=started_at - INTERVAL 20 DAY"
+        )
+    today = athlete_today()
+    week_n, week_before = today - timedelta(days=7), today - timedelta(days=14)
+    evidence("run", week_n)
+    assert game.sync()["xp"] == 50
+    with transaction() as con:
+        capture(con, "dup", week_before, "Doublon", True, canonical="run")
+    state = game.sync()
+    n, before = (str(d - timedelta(days=d.weekday())) for d in (week_n, week_before))
+    expected = sorted(
+        [
+            ("activity:run", n, 50, 10, "Course"),
+            ("activity:run", before, 50, 10, "Course"),
+            ("activity:run", n, -50, -10, "Correction de doublon · Séance rapprochée"),
+        ]
+    )
+    assert _ledger() == expected
+    assert (state["xp"], state["shards"]) == (50, 10)
+    game.sync()  # idempotent: nothing left to settle
+    assert _ledger() == expected
+
+
+def test_a_ledger_credited_in_the_old_week_is_not_paid_twice(game_db):
+    """Written before ARE-93: credited only where the activity no longer lives."""
+    enable()
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.game_periods SET started_at=started_at - INTERVAL 30 DAY"
+        )
+    today = athlete_today()
+    old_day, home_day = today - timedelta(days=7), today - timedelta(days=14)
+    evidence("run", old_day)
+    assert game.sync()["xp"] == 50
+    # The former projection processed the earlier duplicate and wrote nothing.
+    with transaction() as con:
+        capture(con, "dup", home_day, "Doublon", True, canonical="run")
+        con.execute("UPDATE app.game_events SET processed=true RETURNING source_key")
+    # Later, another activity settles the home week only.
+    evidence("other", home_day)
+    state = game.sync()
+    old, home = (str(d - timedelta(days=d.weekday())) for d in (old_day, home_day))
+    assert (state["xp"], state["shards"]) == (100, 20)
+    assert _ledger() == sorted(
+        [
+            ("activity:run", old, 50, 10, "Course"),
+            ("activity:run", home, 50, 10, "Course"),
+            (
+                "activity:run",
+                old,
+                -50,
+                -10,
+                "Correction de doublon · Séance rapprochée",
+            ),
+            ("activity:other", home, 50, 10, "Course"),
+        ]
+    )
+
+
+def test_a_duplicate_in_a_week_the_game_never_opened_keeps_the_credit(game_db):
+    """An ineligible earlier duplicate cannot move the credit where none can go."""
+    enable()
+    with transaction() as con:
+        con.execute(
+            "UPDATE app.game_periods SET started_at=started_at - INTERVAL 20 DAY"
+        )
+    today = athlete_today()
+    day = today - timedelta(days=7)
+    evidence("run", day)
+    assert game.sync()["xp"] == 50
+    with transaction() as con:
+        capture(
+            con, "dup", today - timedelta(days=14), "Doublon", False, canonical="run"
+        )
+        assert not con.execute(
+            "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?",
+            [day - timedelta(days=day.weekday() + 7)],
+        ).fetchone()
+    state = game.sync()
+    week = str(day - timedelta(days=day.weekday()))
+    assert (state["xp"], state["shards"]) == (50, 10)
+    assert _ledger() == [("activity:run", week, 50, 10, "Course")]
+    # An unrelated activity opens that earlier week later: the credit stays.
+    evidence("other", today - timedelta(days=14))
+    state = game.sync()
+    earlier = str(day - timedelta(days=day.weekday() + 7))
+    assert (state["xp"], state["shards"]) == (100, 20)
+    assert _ledger() == sorted(
+        [
+            ("activity:run", week, 50, 10, "Course"),
+            ("activity:other", earlier, 50, 10, "Course"),
         ]
     )
 

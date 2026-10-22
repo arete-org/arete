@@ -215,6 +215,26 @@ def test_an_unreadable_jwt_key_fails_closed(client, real_verifier, monkeypatch, 
     assert client.get("/health").status_code == 200
 
 
+def test_a_private_jwt_key_is_reported_as_misconfigured(
+    client, real_verifier, monkeypatch, caplog
+):
+    from cryptography.hazmat.primitives import serialization
+
+    signing, _pem = _rsa_key()
+    private_pem = signing.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    monkeypatch.setenv("CLERK_JWT_KEY", private_pem)
+    with caplog.at_level(logging.ERROR, logger="arete.api.auth"):
+        refused = client.get("/settings", headers=_bearer(_session_token(signing)))
+    # The cause is named, not mistaken for an identity provider outage.
+    assert refused.status_code == 503
+    assert "CLERK_JWT_KEY illisible" in caplog.text
+    assert real_verifier == []
+
+
 def test_an_identity_provider_outage_is_a_503_not_a_leak(client, enforced, monkeypatch):
     def down(_token):
         raise RuntimeError("clerk unreachable")

@@ -72,8 +72,9 @@ export function EnableNotifications() {
         <Button loading={busy} onClick={() => void enable()}>
           Activer les notifications
         </Button>
+        {/* Remembered for good: « Plus tard » would promise a return it never makes. */}
         <Button variant="ghost" onClick={close}>
-          Plus tard
+          Non merci
         </Button>
       </div>
     </Modal>
