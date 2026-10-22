@@ -463,6 +463,17 @@ def test_a_duplicate_in_a_week_the_game_never_opened_keeps_the_credit(game_db):
     week = str(day - timedelta(days=day.weekday()))
     assert (state["xp"], state["shards"]) == (50, 10)
     assert _ledger() == [("activity:run", week, 50, 10, "Course")]
+    # An unrelated activity opens that earlier week later: the credit stays.
+    evidence("other", today - timedelta(days=14))
+    state = game.sync()
+    earlier = str(day - timedelta(days=day.weekday() + 7))
+    assert (state["xp"], state["shards"]) == (100, 20)
+    assert _ledger() == sorted(
+        [
+            ("activity:run", week, 50, 10, "Course"),
+            ("activity:other", earlier, 50, 10, "Course"),
+        ]
+    )
 
 
 WRITES = ("INSERT", "UPDATE", "DELETE", "BEGIN")

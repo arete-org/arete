@@ -17,8 +17,9 @@ from arete.services.plan_repository import ATHLETE_CHOICE
 
 MAX_EVENTS = 100
 MAX_WEEK_ACTIVITIES = 1000
-#: Weeks one projection settles together, linked weeks included (ten years).
-MAX_SETTLED_WEEKS = 520
+#: Weeks one projection settles together, linked weeks included (a year):
+#: each round of the closure scans the athlete's events inside the lock.
+MAX_SETTLED_WEEKS = 53
 RANKS = (
     (1, "Novice"),
     (3, "Initié"),
@@ -169,15 +170,14 @@ _UNRESOLVED_LINK = f"""SELECT 1 FROM app.visible_game_events e, app.visible_stre
     AND NOT ends_with(e.reason, '{KEPT_AT_LINK}') LIMIT 1"""
 
 
-#: Each activity's home week, where it is credited: its earliest evidence in a
-#: week that holds receipts (a ``game_weeks`` row), else its earliest one. An
-#: ineligible duplicate dated in a week the game never opened therefore cannot
-#: take the credit away from the week holding it (ARE-93).
-_HOMES = """SELECT e.canonical_key, coalesce(min(e.week_start) FILTER (WHERE w.week_start IS NOT NULL),
-    min(e.week_start)) AS home, bool_or(e.eligible) AS eligible, min(e.name) AS name,
-    min(e.created_at) AS created_at
-    FROM app.visible_game_events e LEFT JOIN app.visible_game_weeks w ON w.week_start=e.week_start
-    GROUP BY e.canonical_key"""
+#: Each activity's home week, where it is credited: its earliest eligible
+#: evidence, else its earliest one. Eligibility is fixed at capture, so the
+#: home never moves with later, unrelated activity: an ineligible duplicate
+#: cannot take the credit away from the week holding it (ARE-93).
+_HOMES = """SELECT canonical_key, coalesce(min(week_start) FILTER (WHERE eligible),
+    min(week_start)) AS home, bool_or(eligible) AS eligible, min(name) AS name,
+    min(created_at) AS created_at
+    FROM app.visible_game_events GROUP BY canonical_key"""
 
 #: The weeks sharing an activity with the given ones: its home week and every
 #: week holding its receipts.
