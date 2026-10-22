@@ -306,7 +306,13 @@ def _iter_refresh(
             state["coverage_start"] = lower.isoformat()
             offset = state.get("next_offset", 0)
             anchor = state.get("anchor")
-            importer.refresh_threshold()
+            # Garmin retests the threshold rarely: two paced reads once a day,
+            # retried on the next refresh only when the transport failed.
+            if state.get("threshold_checked_on") != today.isoformat():
+                transport_errors = len(budget.errors)
+                importer.refresh_threshold()
+                if not budget.stopped and len(budget.errors) == transport_errors:
+                    state["threshold_checked_on"] = today.isoformat()
             # Only the activity cap left Garmin activities to import: the next
             # refresh continues from the retained coverage, nothing failed.
             state["more_pending"] = False

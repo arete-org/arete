@@ -703,3 +703,24 @@ def test_only_a_4xx_read_is_unavailable_a_5xx_still_fails(monkeypatch):
     with pytest.raises(GarminUnavailable):
         client._sync_request("GET", "/wellness-service/x")
     assert budget.errors == ["Garmin HTTP 503"] and budget.calls == 2
+
+
+def test_threshold_is_read_once_a_day_and_retried_after_a_transport_error(
+    provider, monkeypatch
+):
+    reads = []
+
+    def threshold(self):
+        reads.append(service.athlete_today())
+        if len(reads) == 1:
+            self.client.sync_budget.errors.append("Garmin HTTP 503")
+        return {}
+
+    monkeypatch.setattr(GarminSyncClient, "refresh_threshold", threshold)
+    service.ensure_fresh(force=True)  # failed: the next refresh reads it again
+    service.ensure_fresh(force=True)
+    service.ensure_fresh(force=True)
+    assert len(reads) == 2
+    monkeypatch.setattr(service, "athlete_today", lambda: date(2026, 10, 14))
+    service.ensure_fresh(force=True)
+    assert reads[-1] == date(2026, 10, 14) and len(reads) == 3

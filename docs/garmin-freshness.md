@@ -46,7 +46,9 @@ the stream's `done` event: the batch succeeded and the next refresh (app entry,
 foreground, scheduler) continues it. Onboarding then reads « N activités
 importées, la suite arrive automatiquement » and the app banner « Import Garmin
 en cours de rattrapage »; any error keeps the incomplete/interrupted wording.
-Onboarding does not chain batches itself. A changed anchor resets continuation without moving
+Onboarding does not chain batches itself. The activity check reads Garmin's
+threshold (two requests) at most once a day, again on the next check only when
+the transport failed. A changed anchor resets continuation without moving
 the lower date. An import error keeps the failed page reachable; already
 committed Garmin IDs deduplicate on the next check.
 
