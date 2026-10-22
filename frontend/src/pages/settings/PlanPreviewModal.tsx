@@ -6,7 +6,7 @@ import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
 import { Button, Modal, ModalHeader } from '@/components/ui';
 import { goalsApi } from '@/lib/api';
 import { parseLocalDate } from '@/lib/dates';
-import { LEVEL_LABEL, PLAN_KIND_LABEL, phaseLabel } from '@/lib/fr';
+import { keptEditsText, LEVEL_LABEL, PLAN_KIND_LABEL, phaseLabel } from '@/lib/fr';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { formatKm } from '@/lib/race';
 import { readableError } from '@/lib/utils';
@@ -223,7 +223,7 @@ export function PlanPreviewModal({ goal, onClose }: { goal: Goal; onClose: () =>
       {remove.data && (
         <p role="status" className="mt-4 text-xs text-text-muted">
           {remove.data.deleted} séance{remove.data.deleted > 1 ? 's' : ''} à venir supprimée
-          {remove.data.deleted > 1 ? 's' : ''}.
+          {remove.data.deleted > 1 ? 's' : ''}.{remove.data.kept > 0 && ` ${keptEditsText(remove.data.kept)}`}
         </p>
       )}
       {(write.isError || remove.isError) && (
@@ -235,7 +235,9 @@ export function PlanPreviewModal({ goal, onClose }: { goal: Goal; onClose: () =>
       <div className="mt-5 flex flex-wrap justify-end gap-2">
         {confirmDelete ? (
           <>
-            <span className="text-xs text-text-muted self-center">Supprimer les séances à venir de ce plan ?</span>
+            <span className="text-xs text-text-muted self-center">
+              Supprimer les séances à venir de ce plan ? Celles que tu as modifiées restent.
+            </span>
             <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)} disabled={busy}>
               Annuler
             </Button>

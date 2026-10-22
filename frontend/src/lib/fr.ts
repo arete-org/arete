@@ -152,6 +152,13 @@ export function weeksAtGoalText(hit: number, weeks: number): string {
   return `${hit} des ${weeks} dernières semaines à l’objectif de charge`;
 }
 
+/** Removing a plan or its goal keeps the sessions the athlete edited (services/plan_builder.py): how many. */
+export function keptEditsText(kept: number): string {
+  return kept > 1
+    ? `${kept} séances que tu as modifiées restent dans ton planning.`
+    : `${kept} séance que tu as modifiée reste dans ton planning.`;
+}
+
 /** "1,12", "+4,2": French decimals with a fixed precision; `signed` marks a positive value. */
 export function formatDecimal(value: number, digits: number, signed = false): string {
   return value.toLocaleString('fr-FR', {

@@ -411,3 +411,40 @@ it('creates a goal from a distance chip and an h:mm:ss target', async () => {
   );
   client.clear();
 });
+
+it('says how many edited sessions removing the plan kept', async () => {
+  vi.spyOn(goalsApi, 'previewPlan').mockResolvedValue(preview);
+  const deletePlan = vi.spyOn(goalsApi, 'deletePlan').mockResolvedValue({ deleted: 9, kept: 2 });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <PlanPreviewModal goal={goal} onClose={() => {}} />
+    </QueryClientProvider>
+  );
+  fireEvent.click(await screen.findByRole('button', { name: 'Supprimer le plan' }));
+  expect(screen.getByText('Supprimer les séances à venir de ce plan ? Celles que tu as modifiées restent.')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Confirmer' }));
+  await waitFor(() => expect(deletePlan).toHaveBeenCalledWith(goal.id));
+  expect((await screen.findByRole('status')).textContent).toBe(
+    '9 séances à venir supprimées. 2 séances que tu as modifiées restent dans ton planning.'
+  );
+  client.clear();
+});
+
+it('says how many edited sessions deleting a goal kept, and nothing when none', async () => {
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([goal]);
+  const remove = vi.spyOn(goalsApi, 'remove').mockResolvedValueOnce({ kept: 1 }).mockResolvedValueOnce({ kept: 0 });
+  const client = renderPanel();
+  fireEvent.click(await screen.findByRole('button', { name: 'Supprimer Semi de Paris' }));
+  expect(screen.getByText(/sauf celles que tu as modifiées : elles restent dans ton planning\./)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+  await waitFor(() => expect(remove).toHaveBeenCalledWith(goal.id));
+  expect((await screen.findByRole('status')).textContent).toBe(
+    'Objectif supprimé. 1 séance que tu as modifiée reste dans ton planning.'
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Supprimer Semi de Paris' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+  await waitFor(() => expect(remove).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+  client.clear();
+});

@@ -353,13 +353,15 @@ def update_goal(goal_id: int, **fields: Any) -> Goal | None:
     return get_goal(goal_id)
 
 
-def delete_goal(goal_id: int) -> bool:
-    """Delete the goal and the sessions its plan generated that are still to do."""
+def delete_goal(goal_id: int) -> int | None:
+    """Delete the goal and its sessions still to do the athlete never edited;
+    the edited ones stay, unlinked like its past ones. How many edited
+    sessions stayed, or None without such a goal."""
     from arete.services.plan_builder import _delete_future
 
     if get_goal(goal_id) is None:
-        return False
-    _delete_future(goal_id, athlete_today())
+        return None
+    kept = _delete_future(goal_id, athlete_today()).kept
     con = connect()
     try:
         con.execute(
@@ -372,4 +374,4 @@ def delete_goal(goal_id: int) -> bool:
         ).fetchone()
     finally:
         con.close()
-    return row is not None
+    return kept if row is not None else None

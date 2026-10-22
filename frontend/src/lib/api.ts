@@ -103,8 +103,8 @@ export const goalsApi = {
       body: JSON.stringify(fields),
     }),
 
-  /** Also deletes the goal's future generated sessions. */
-  remove: (id: number) => fetchAPI<void>(`/goals/${id}`, { method: "DELETE" }),
+  /** Also deletes the goal's future sessions the athlete never edited; `kept` counts the edited ones, which stay. */
+  remove: (id: number) => fetchAPI<{ kept: number }>(`/goals/${id}`, { method: "DELETE" }),
 
   previewPlan: (id: number) =>
     fetchAPI<import("@/types").PlanPreview>(`/goals/${id}/plan/preview`, {
@@ -117,8 +117,9 @@ export const goalsApi = {
       method: "POST",
     }),
 
+  /** Deletes the plan's future sessions the athlete never edited; `kept` counts the edited ones, which stay. */
   deletePlan: (id: number) =>
-    fetchAPI<{ deleted: number }>(`/goals/${id}/plan`, { method: "DELETE" }),
+    fetchAPI<{ deleted: number; kept: number }>(`/goals/${id}/plan`, { method: "DELETE" }),
 
   getProjection: async (id: number) => {
     const data = await fetchAPI<import("@/types").GoalProjection>(`/goals/${id}/projection`);

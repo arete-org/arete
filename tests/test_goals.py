@@ -59,10 +59,88 @@ def test_deleting_a_goal_removes_its_future_plan_only():
     manual = repo.create_planned_session(
         PlannedSession(date=FAR - timedelta(days=2), session_type=SessionType.ENDURANCE)
     )
-    assert goals.delete_goal(g.id) is True
+    assert goals.delete_goal(g.id) == 0  # no edited session kept
     assert repo.get_planned_session(generated) is None
     assert repo.get_planned_session(manual) is not None
-    assert goals.delete_goal(g.id) is False
+    assert goals.delete_goal(g.id) is None
+
+
+def _exports() -> dict[int, tuple[str, bool]]:
+    con = connect()
+    try:
+        rows = con.execute(
+            "SELECT session_id, state, deleted FROM app.garmin_exports WHERE operation_id = 'test-goal'"
+        ).fetchall()
+    finally:
+        con.close()
+    return {r[0]: (r[1], r[2]) for r in rows}
+
+
+def test_deleting_a_goal_keeps_the_sessions_the_athlete_edited():
+    """Edited sessions stay, unlinked from the goal, with their Garmin export;
+    only the untouched one's export is queued for removal."""
+    g = goals.create_goal(name="test-keep", race_date=FAR, distance_km=21.1)
+    repo = GarminRepository()
+    untouched, edited = (
+        repo.create_planned_session(
+            PlannedSession(
+                date=FAR - timedelta(days=d),
+                session_type=SessionType.TEMPO,
+                goal_id=g.id,
+            )
+        )
+        for d in (4, 3)
+    )
+    assert repo.update_planned_session_fields(
+        edited, expected_revision=1, description="Avec le club"
+    )
+    con = connect()
+    try:
+        for session_id in (untouched, edited):
+            con.execute(
+                "INSERT INTO app.garmin_exports (session_id, operation_id, state) VALUES (?, 'test-goal', 'scheduled')",
+                [session_id],
+            )
+    finally:
+        con.close()
+    try:
+        assert goals.delete_goal(g.id) == 1
+        assert repo.get_planned_session(untouched) is None
+        kept = repo.get_planned_session(edited)
+        assert kept is not None and kept.goal_id is None
+        assert kept.description == "Avec le club"
+        assert _exports() == {
+            untouched: ("pending_removal", True),
+            edited: ("scheduled", False),
+        }
+    finally:
+        con = connect()
+        con.execute("DELETE FROM app.garmin_exports WHERE operation_id = 'test-goal'")
+        con.close()
+
+
+def test_deleting_a_goal_keeps_an_edit_landing_meanwhile(monkeypatch):
+    """The athlete's edit commits between the select and the guarded delete."""
+    from write_race import race
+
+    g = goals.create_goal(name="test-race", race_date=FAR, distance_km=10)
+    repo = GarminRepository()
+    session = repo.create_planned_session(
+        PlannedSession(
+            date=FAR - timedelta(days=3), session_type=SessionType.TEMPO, goal_id=g.id
+        )
+    )
+
+    def edit() -> None:
+        assert repo.update_planned_session_fields(
+            session, expected_revision=1, description="Déplacée par moi"
+        )
+
+    with race(monkeypatch, r"SELECT revision FROM visible_planned_sessions", edit):
+        assert goals.delete_goal(g.id) == 1
+    kept = repo.get_planned_session(session)
+    assert kept is not None and kept.description == "Déplacée par moi"
+    assert kept.goal_id is None
 
 
 def test_the_routes(router_client, monkeypatch):
@@ -92,7 +170,9 @@ def test_the_routes(router_client, monkeypatch):
         f"/goals/{body['id']}", json={"target_time_sec": 2400}
     ).json()
     assert patched["target_time_sec"] == 2400
-    assert client.delete(f"/goals/{body['id']}").status_code == 204
+    deleted = client.delete(f"/goals/{body['id']}")
+    assert deleted.status_code == 200 and deleted.json() == {"kept": 0}
+    assert client.delete(f"/goals/{body['id']}").status_code == 404
     assert client.patch(f"/goals/{body['id']}", json={"name": "x"}).status_code == 404
 
 

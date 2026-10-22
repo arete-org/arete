@@ -5,6 +5,7 @@ import { CalendarRange, Flag, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button, Field, Input, Modal, ModalHeader, Panel } from '@/components/ui';
 import { goalsApi } from '@/lib/api';
 import { toLocalISODate } from '@/lib/dates';
+import { keptEditsText } from '@/lib/fr';
 import { invalidateAfterSession, invalidateWithDashboard, qk } from '@/lib/queryKeys';
 import {
   addDays,
@@ -511,13 +512,16 @@ export function RaceGoalsPanel() {
   const [editing, setEditing] = useState<number | null>(null);
   const [toDelete, setToDelete] = useState<Goal | null>(null);
   const [planFor, setPlanFor] = useState<Goal | null>(null);
+  // The edited sessions the last deleted goal left in the planning.
+  const [kept, setKept] = useState(0);
 
   const remove = useMutation({
     mutationFn: (id: number) => goalsApi.remove(id),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: qk.goals });
-      // The goal's future generated sessions go with it.
+      // The goal's future generated sessions go with it, apart from the edited ones.
       invalidateAfterSession(queryClient);
+      setKept(result.kept);
       setToDelete(null);
     },
   });
@@ -539,6 +543,11 @@ export function RaceGoalsPanel() {
       <div className="space-y-3">
         {goals.isLoading && <p className="text-sm text-text-muted">Chargement des objectifs…</p>}
         {goals.isError && <p className="text-sm text-danger-red">Objectifs indisponibles.</p>}
+        {kept > 0 && (
+          <p role="status" className="text-xs text-text-muted">
+            Objectif supprimé. {keptEditsText(kept)}
+          </p>
+        )}
         {goals.data?.length === 0 && !adding && (
           <p className="text-sm text-text-muted">
             Aucun objectif prévu. Ajoute une course, un Hyrox ou un bloc hybride pour construire ton plan.
@@ -577,7 +586,10 @@ export function RaceGoalsPanel() {
         <Modal open={toDelete !== null} onClose={closeDelete} className="max-w-sm p-4 sm:p-6">
           <ModalHeader title="Supprimer l’objectif" onClose={closeDelete} className="mb-4" />
           <p className="text-sm text-text-secondary mb-2">Supprimer « {toDelete?.name} » ?</p>
-          <p className="text-xs text-text-muted mb-6">Les séances à venir générées pour cet objectif sont supprimées aussi.</p>
+          <p className="text-xs text-text-muted mb-6">
+            Les séances à venir générées pour cet objectif sont supprimées aussi, sauf celles que tu as modifiées : elles
+            restent dans ton planning.
+          </p>
           {remove.isError && <p className="text-xs text-danger-red mb-3">{readableError(remove.error)}</p>}
           <div className="flex gap-3 justify-end">
             <Button variant="ghost" onClick={closeDelete}>

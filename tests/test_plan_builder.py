@@ -98,7 +98,7 @@ def test_apply_writes_replaces_and_respects_other_sessions(goal):
     assert again["replaced"] == first["created"]
     assert len(_plan_sessions(goal.id)) == again["created"]
     assert repo.get_planned_session(manual) is not None
-    assert plan_builder.remove(goal.id, TODAY) == again["created"]
+    assert plan_builder.remove(goal.id, TODAY) == (again["created"], 0)
     assert _plan_sessions(goal.id) == []
 
 
@@ -285,6 +285,48 @@ def test_regeneration_does_not_delete_an_edit_landing_meanwhile(
 
     with race(monkeypatch, window, edit):
         plan_builder.apply(goal.id, TODAY)
+    kept = repo.get_planned_session(first.id or 0)
+    assert kept is not None and kept.description == "Déplacée par moi"
+
+
+def test_removing_the_plan_keeps_the_sessions_the_athlete_edited(goal, router_client):
+    from arete.api.goals import router
+
+    repo = GarminRepository()
+    created = plan_builder.apply(goal.id, TODAY)["created"]
+    edited = _plan_sessions(goal.id)[0]
+    assert repo.update_planned_session_fields(
+        edited.id or 0, expected_revision=1, description="Footing avec un ami"
+    )
+    with patch("arete.services.plan_builder.athlete_today", return_value=TODAY):
+        body = router_client(router).delete(f"/goals/{goal.id}/plan").json()
+    assert body == {"deleted": created - 1, "kept": 1}
+    assert [s.id for s in _plan_sessions(goal.id)] == [edited.id]
+
+
+@pytest.mark.parametrize(
+    "window",
+    [
+        r"SELECT id FROM app.visible_planned_sessions WHERE goal_id",  # the ids read
+        r"SELECT revision FROM visible_planned_sessions",  # the delete's own read
+    ],
+)
+def test_removing_the_plan_keeps_an_edit_landing_meanwhile(goal, monkeypatch, window):
+    """The athlete's edit commits between the select and the delete."""
+    from write_race import race
+
+    repo = GarminRepository()
+    created = plan_builder.apply(goal.id, TODAY)["created"]
+    first = min(_plan_sessions(goal.id), key=lambda s: s.id or 0)
+
+    def edit() -> None:
+        assert repo.update_planned_session_fields(
+            first.id or 0, expected_revision=1, description="Déplacée par moi"
+        )
+
+    with race(monkeypatch, window, edit):
+        removal = plan_builder.remove(goal.id, TODAY)
+    assert removal == (created - 1, 1)
     kept = repo.get_planned_session(first.id or 0)
     assert kept is not None and kept.description == "Déplacée par moi"
 
