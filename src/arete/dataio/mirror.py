@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import os
 import threading
 from collections.abc import Iterator
 from contextlib import closing
@@ -157,6 +158,24 @@ def flush() -> int:
         return len(changed) + len(deleted)
 
 
+def _relative(path: Path) -> str | None:
+    """``path`` as the flush names it, None when outside the data directory.
+
+    Lexically first, as the walk sees a symlinked ``garmin_tokens`` inside
+    it; resolved next, for a data directory reached through a link.
+    """
+    root = config.data_dir
+    for candidate, base in (
+        (Path(os.path.abspath(path)), Path(os.path.abspath(root))),
+        (path.resolve(), root.resolve()),
+    ):
+        try:
+            return candidate.relative_to(base).as_posix()
+        except ValueError:
+            continue
+    return None
+
+
 def remember(path: Path, data: bytes | None) -> None:
     """Record a file its owner just read from or wrote to ``app.files`` itself.
 
@@ -167,9 +186,8 @@ def remember(path: Path, data: bytes | None) -> None:
     as ``ARETE_GARMIN_TOKENS_DIR`` may place the tokens, or off its list) is
     ignored: recording it would make the flush delete its row.
     """
-    try:
-        relative = path.resolve().relative_to(config.data_dir.resolve()).as_posix()
-    except ValueError:
+    relative = _relative(path)
+    if relative is None:
         return
     if relative not in MIRRORED_FILES and not relative.startswith(
         tuple(f"{directory}/" for directory in MIRRORED_DIRS)

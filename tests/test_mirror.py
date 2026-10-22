@@ -171,6 +171,28 @@ def test_tokens_kept_outside_the_data_directory_stay_out_of_the_flush(
     assert set(_stored(store)) == {token_store.TOKEN_PATH, token_store.ACCOUNT_PATH}
 
 
+def test_a_symlinked_token_directory_is_still_remembered(store, tmp_path, monkeypatch):
+    """The walk follows a linked ``garmin_tokens``: so does the record."""
+    from arete.garmin import token_store
+
+    root = _use_data_dir(monkeypatch, tmp_path / "data")
+    real = tmp_path / "volume"
+    real.mkdir()
+    root.mkdir()
+    (root / "garmin_tokens").symlink_to(real, target_is_directory=True)
+    mirror.hydrate()
+    with store() as con:
+        con.execute(
+            "INSERT INTO app.files (path, content) VALUES (?, '{\"t\": 1}'), (?, '{}')",
+            [token_store.TOKEN_PATH, token_store.ACCOUNT_PATH],
+        )
+    assert token_store.hydrate(root / token_store.TOKEN_PATH)
+    with store() as con:  # another instance logs out
+        con.execute("DELETE FROM app.files")
+    assert mirror.flush() == 0
+    assert _stored(store) == {}
+
+
 def test_middleware_is_inert_on_a_local_database(monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))
