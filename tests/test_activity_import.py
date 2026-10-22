@@ -303,6 +303,14 @@ def _with_pause(gpx: bytes, after: str, minutes: int) -> bytes:
     return re.sub(rb"<time>([0-9T:-]+)Z</time>", shift, gpx)
 
 
+def test_an_at_sign_in_a_legacy_name_keeps_it_legacy(db):
+    # Only this route's « @2026-10-14T08:30:00 » suffix marks a new row.
+    _insert(
+        "(1,'2026-10-14','2026-10-14 08:30:00','running',900,'fit_file','Warm @ parc.fit')"
+    )
+    assert _one("run.gpx", gpx_activity()).status == "imported"
+
+
 def test_a_legacy_fit_with_a_long_pause_is_still_recognised(db):
     # A 7-minute pause: the stored end (08:47) is past start + timer time.
     _insert("(1,'2026-10-14','2026-10-14 08:47:00','running',600,'fit_file','run.fit')")
@@ -564,7 +572,7 @@ def _tcx(laps: str) -> bytes:
             gpx_activity()
             .replace(b"2026-10-14T06:", b"0001-01-01T00:")
             .replace(b"Z<", b"+02:00<"),
-            "Pas d’heure de départ",
+            "Date de départ invalide : vérifie",
         ),
         (
             "fit",
@@ -592,6 +600,19 @@ def test_lap_sums_past_a_week_are_refused_not_overflowed(db):
         "Durée invalide : plus de 7 jours d’enregistrement.",
     )
     assert _sessions() == []
+
+
+def test_an_empty_extra_session_record_is_not_a_second_leg(db):
+    (outcome,) = import_upload("run.fit", fit_activity(empty_sessions=1))
+    assert outcome.status == "imported", outcome.message
+    ((_, day, start, sport, _, duration, *_),) = _sessions()
+    # The empty record neither counted nor overwrote the real one.
+    assert (day, start, sport, duration) == (
+        date(2026, 10, 14),
+        datetime(2026, 10, 14, 8, 30),
+        "running",
+        600,
+    )
 
 
 def test_a_multisport_fit_is_refused_leg_by_leg(db):

@@ -51,6 +51,9 @@ MAX_DURATION_SEC = 7 * 86400
 MAX_CALORIES = 50_000
 #: Starts before this are a watch without a clock, not a recorded session.
 EARLIEST_START = datetime(2000, 1, 1)
+INVALID_START = (
+    "Date de départ invalide : vérifie l’horloge de la montre ou refais l’export."
+)
 
 
 class ActivityFileError(ValueError):
@@ -111,8 +114,7 @@ def parse_activity(
     latest = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=1)
     if not EARLIEST_START <= parsed.start_time <= latest:
         raise ActivityFileError(
-            f"Date de départ invalide ({parsed.start_time:%d/%m/%Y}) : "
-            "vérifie l’horloge de la montre ou refais l’export."
+            INVALID_START.replace(" :", f" ({parsed.start_time:%d/%m/%Y}) :", 1)
         )
     if (parsed.duration_sec or parsed.elapsed_time_sec or 0) <= 0:
         raise ActivityFileError("Séance vide : aucune durée enregistrée.")
@@ -207,8 +209,8 @@ def _time(value: str | None) -> tuple[datetime, int | None] | None:
     offset = int(delta.total_seconds()) if delta is not None else 0
     try:
         utc = stamp.astimezone(UTC).replace(tzinfo=None)
-    except OverflowError:  # 0001-01-01 with a positive offset
-        return None
+    except OverflowError as exc:  # 0001-01-01 with a positive offset
+        raise ActivityFileError(INVALID_START) from exc
     return utc, offset or None
 
 

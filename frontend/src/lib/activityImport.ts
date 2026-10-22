@@ -14,6 +14,9 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_SEND_BYTES = 4_400_000;
 export const TOO_HEAVY_TO_SEND =
   'Fichier trop lourd pour l’envoi (4,5 Mo max après compression) : importe les fichiers un par un ou exporte une activité plus courte.';
+/** The same refusal when this browser cannot compress (no CompressionStream). */
+export const TOO_HEAVY_UNCOMPRESSED =
+  'Fichier trop lourd pour l’envoi (4,5 Mo max) : ce navigateur ne compresse pas les fichiers ; utilise un navigateur à jour ou exporte une activité plus courte.';
 
 export type ImportStatus = 'imported' | 'duplicate' | 'error';
 
@@ -59,17 +62,19 @@ export function selectFiles(files: File[]): { accepted: File[]; refused: ImportR
  * stays under the hosting's request limit (the server detects gzip itself).
  * Archives and .gz files are already compressed.
  */
-async function payload(file: File): Promise<Blob> {
+async function payload(file: File): Promise<{ body: Blob; tooHeavy: string }> {
   const lower = file.name.toLowerCase();
-  if (typeof CompressionStream === 'undefined' || lower.endsWith('.zip') || lower.endsWith('.gz')) return file;
-  return new Response(file.stream().pipeThrough(new CompressionStream('gzip'))).blob();
+  if (lower.endsWith('.zip') || lower.endsWith('.gz')) return { body: file, tooHeavy: TOO_HEAVY_TO_SEND };
+  if (typeof CompressionStream === 'undefined') return { body: file, tooHeavy: TOO_HEAVY_UNCOMPRESSED };
+  const body = await new Response(file.stream().pipeThrough(new CompressionStream('gzip'))).blob();
+  return { body, tooHeavy: TOO_HEAVY_TO_SEND };
 }
 
 /** Import one file; a ZIP gives one result per activity inside. Never throws. */
 export async function importActivityFile(file: File): Promise<ImportResult[]> {
   try {
-    const body = await payload(file);
-    if (body.size > MAX_SEND_BYTES) return [{ filename: file.name, status: 'error', message: TOO_HEAVY_TO_SEND }];
+    const { body, tooHeavy } = await payload(file);
+    if (body.size > MAX_SEND_BYTES) return [{ filename: file.name, status: 'error', message: tooHeavy }];
     const form = new FormData();
     form.append('file', body, file.name);
     const response = await authFetch('/api/activities/import', { method: 'POST', body: form });

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import threading
 import zipfile
 from collections.abc import Iterator
@@ -296,9 +297,13 @@ def _overlap(
     return max(0.0, shared) / shorter if shorter > 0 else 0.0
 
 
+#: What ``to_actual_session`` appends to a file name; the old route did not.
+IMPORT_SUFFIX = re.compile(r"@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
+
+
 def _legacy_fit(session: ActualSession) -> bool:
-    """A FIT upload of the old route: its name has no ``@start`` suffix."""
-    return session.source == ActivitySource.FIT_FILE and "@" not in (
+    """A FIT upload of the old route: its name lacks this route's suffix."""
+    return session.source == ActivitySource.FIT_FILE and not IMPORT_SUFFIX.search(
         session.source_file or ""
     )
 

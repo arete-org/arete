@@ -161,7 +161,8 @@ class ParsedActivity:
 
     # Source file
     source_file: str | None = None
-    #: FIT ``session`` records read: a multisport file has one per leg.
+    #: FIT ``session`` records with recorded time: a multisport file has
+    #: one per leg; an empty extra record (some exports write one) is not a leg.
     session_count: int = 0
 
     # Detailed time series (only populated when parse_detailed=True)
@@ -321,8 +322,15 @@ class FITParser:
             record_type = record.name
 
             if record_type == "session":
-                activity.session_count += 1
-                self._parse_session_record(record, activity)
+                timer = next(
+                    (f.value for f in record.fields if f.name == "total_timer_time"),
+                    None,
+                )
+                # An empty session record must not overwrite the real one.
+                if timer:
+                    activity.session_count += 1
+                if timer or activity.session_count == 0:
+                    self._parse_session_record(record, activity)
             elif record_type == "activity":
                 self._parse_activity_record(record, activity)
             elif record_type == "lap" and detailed:

@@ -86,12 +86,17 @@ def _semicircles(degrees: float) -> int:
 
 
 def fit_activity(
-    *, utc_offset_sec: int = 7200, shift: timedelta = timedelta(0), sessions: int = 1
+    *,
+    utc_offset_sec: int = 7200,
+    shift: timedelta = timedelta(0),
+    sessions: int = 1,
+    empty_sessions: int = 0,
 ) -> bytes:
     """The run as a FIT file, with the device's local clock ``utc_offset_sec`` ahead.
 
     ``shift`` moves every timestamp; ``sessions`` repeats the session record,
-    as a multisport file has one per leg.
+    as a multisport file has one per leg; ``empty_sessions`` adds session
+    records without time or sport, as some exports write after the real one.
     """
 
     def _stamp(at: datetime) -> int:
@@ -156,6 +161,17 @@ def fit_activity(
             (18, "uint8", 85),
             (22, "uint16", 12),
             (23, "uint16", 12),
+        ],
+    )
+    body += empty_sessions * _message(
+        5,
+        18,
+        [
+            (253, "uint32", _stamp(end)),
+            (2, "uint32", _stamp(end)),
+            (5, "enum", 0),  # generic
+            (7, "uint32", 0),
+            (8, "uint32", 0),
         ],
     )
     body += _message(

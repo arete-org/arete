@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setTokenGetter } from './auth';
-import { importActivities, importActivityFile, MAX_FILE_BYTES, MAX_SEND_BYTES, selectFiles, summarise, TOO_HEAVY_TO_SEND, type ImportResult } from './activityImport';
+import { importActivities, importActivityFile, MAX_FILE_BYTES, MAX_SEND_BYTES, selectFiles, summarise, TOO_HEAVY_TO_SEND, TOO_HEAVY_UNCOMPRESSED, type ImportResult } from './activityImport';
 
 afterEach(() => {
   setTokenGetter(null);
@@ -70,6 +70,17 @@ describe('importActivities', () => {
     expect(TOO_HEAVY_TO_SEND).toBe(
       'Fichier trop lourd pour l’envoi (4,5 Mo max après compression) : importe les fichiers un par un ou exporte une activité plus courte.'
     );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('says when this browser cannot compress a file that is too heavy', async () => {
+    vi.stubGlobal('CompressionStream', undefined);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await importActivityFile(file('long.gpx', MAX_SEND_BYTES + 1))).toEqual([
+      { filename: 'long.gpx', status: 'error', message: TOO_HEAVY_UNCOMPRESSED },
+    ]);
+    expect(TOO_HEAVY_UNCOMPRESSED).toContain('ce navigateur ne compresse pas les fichiers');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

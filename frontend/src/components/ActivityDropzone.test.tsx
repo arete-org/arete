@@ -30,7 +30,7 @@ it('speaks French, accepts every watch’s files and states the sending limit', 
     </MemoryRouter>
   );
   expect(html).toContain('Dépose tes fichiers d’activité ici');
-  expect(html).toContain('FIT, TCX, GPX ou ZIP, depuis n’importe quelle montre (10 fichiers, 4,5 Mo chacun une fois compressé)');
+  expect(html).toContain('FIT, TCX, GPX ou ZIP, depuis n’importe quelle montre (10 fichiers, 4,5 Mo par fichier, après compression si ton navigateur la permet)');
   expect(html).toContain('accept=".fit,.tcx,.gpx,.zip,.gz"');
   expect(html).toContain('aria-label="Importer une activité"');
   expect(html).toContain('focus-within:outline');
@@ -50,7 +50,8 @@ it('answers a drop during an import, then announces the batch in a live region',
   expect(status.textContent).toBe('Import 1 sur 2…');
 
   drop(zone, 'rando.gpx');
-  expect(status.textContent).toBe('Un import est déjà en cours : dépose ces fichiers quand il sera terminé.');
+  expect(screen.getByRole('alert').textContent).toBe('Un import est déjà en cours : dépose ces fichiers quand il sera terminé.');
+  expect(status.textContent).toBe('Import 1 sur 2…'); // the progress is still what the region says
 
   const results: ImportResult[] = [
     { filename: 'matin.fit', status: 'imported', message: 'Séance importée.', session_id: 41 },
@@ -59,5 +60,6 @@ it('answers a drop during an import, then announces the batch in a live region',
   await act(async () => sending.finish(results));
   expect(screen.getByRole('status')).toBe(status); // the same region, still mounted
   expect(status.textContent).toBe('Import terminé : 1 importé, 1 déjà dans Arete.');
+  expect(screen.queryByRole('alert')).toBeNull();
   expect(imported).toHaveBeenCalledWith(results);
 });

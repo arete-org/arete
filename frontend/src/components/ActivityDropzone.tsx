@@ -23,29 +23,36 @@ export function ActivityDropzone({ onImported }: ActivityDropzoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [results, setResults] = useState<ImportResult[]>([]);
-  /** What the live region says between progress steps: a refusal or the batch's summary. */
-  const [notice, setNotice] = useState<string | null>(null);
+  /** The last batch in one sentence, once every file is sent. */
+  const [summary, setSummary] = useState<string | null>(null);
+  /** A drop refused while a batch runs; the progress keeps its own region. */
+  const [refusal, setRefusal] = useState<string | null>(null);
   const busy = progress !== null;
 
   const run = useCallback(
     async (files: File[]) => {
       if (files.length === 0) return;
       if (busy) {
-        setNotice('Un import est déjà en cours : dépose ces fichiers quand il sera terminé.');
+        setRefusal('Un import est déjà en cours : dépose ces fichiers quand il sera terminé.');
         return;
       }
-      setNotice(null);
+      setSummary(null);
+      setRefusal(null);
       const all = await importActivities(files, (done, total, sofar) => {
         setProgress({ done, total });
         setResults(sofar);
       });
       setProgress(null);
-      setNotice(summarise(all));
+      setRefusal(null);
+      setSummary(summarise(all));
       onImported?.(all);
     },
     [busy, onImported]
   );
-  const status = notice ?? (progress && progress.total > 0 ? `Import ${Math.min(progress.done + 1, progress.total)} sur ${progress.total}…` : '');
+  const status =
+    progress && progress.total > 0
+      ? `Import ${Math.min(progress.done + 1, progress.total)} sur ${progress.total}…`
+      : (summary ?? '');
 
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -111,7 +118,7 @@ export function ActivityDropzone({ onImported }: ActivityDropzoneProps) {
               {busy ? 'Import en cours…' : 'Dépose tes fichiers d’activité ici'}
             </span>
             <div className="text-xs text-text-muted mt-1 font-sans">
-              ou clique pour parcourir · FIT, TCX, GPX ou ZIP, depuis n’importe quelle montre ({MAX_FILES} fichiers, 4,5 Mo chacun une fois compressé)
+              ou clique pour parcourir · FIT, TCX, GPX ou ZIP, depuis n’importe quelle montre ({MAX_FILES} fichiers, 4,5 Mo par fichier, après compression si ton navigateur la permet)
             </div>
           </div>
         </div>
@@ -121,6 +128,11 @@ export function ActivityDropzone({ onImported }: ActivityDropzoneProps) {
       <p role="status" aria-live="polite" className="text-xs font-sans text-text-muted">
         {status}
       </p>
+      {refusal && (
+        <p role="alert" className="text-xs font-sans text-warning-orange">
+          {refusal}
+        </p>
+      )}
       {progress && progress.total > 0 && (
         <div className="space-y-1">
           <div

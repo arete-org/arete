@@ -104,8 +104,9 @@ them. The default routes are free models
 a paid model is used only when an administrator turns it on. Arete does not
 send OpenRouter's `data_collection: "deny"` preference, so the providers
 OpenRouter routes free requests to may retain prompts or use them for
-training under their own terms; the privacy policy already warns of possible
-training on free requests.
+training under their own terms. The privacy policy only holds a placeholder
+on this (`[À COMPLÉTER]` on retention and training by free providers), still
+to be completed (ARE-161).
 
 **[OWNER]** two questions before submitting: (1) whether Garmin's API licence
 allows Garmin data in AI-generated coaching at all (the Strava agreement of
