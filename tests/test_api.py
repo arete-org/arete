@@ -1,5 +1,6 @@
 """Tests for the API endpoints."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -211,5 +212,25 @@ def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
     out = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, env=env
     )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "[]"
+
+
+@pytest.mark.skip(
+    reason="deepagents <= 0.7.30 imports langchain_anthropic from its package "
+    "__init__ and from deepagents.middleware's; enable once a release makes "
+    "both lazy and the pin is upgraded"
+)
+def test_the_coach_stack_leaves_the_anthropic_sdk_out():
+    """Arete never calls Anthropic, yet its SDK cost 3 s of a cold first chat."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, arete.coaching; "
+        "print(sorted({m.split('.')[0] for m in sys.modules} "
+        "& {'anthropic', 'langchain_anthropic'}))"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "[]"

@@ -121,3 +121,34 @@ def test_a_streamed_model_name_is_not_repeated():
     name = "nvidia/nemotron-3-super-120b-a12b:free"
     message = SimpleNamespace(response_metadata={"model_name": name * 2})
     assert served_models(SimpleNamespace(result=[message])) == [name]
+
+
+def test_only_the_first_successful_assembly_reports_the_cold_start(monkeypatch, caplog):
+    from threading import Lock
+
+    from arete import coaching
+
+    def fail(**kwargs):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_MODEL", "test-coach")
+    monkeypatch.setattr(coaching, "_stack_ready_unlogged", Lock())
+    caplog.set_level(logging.INFO, logger="arete.observability.agent")
+
+    def ready_lines():
+        return [m for m in caplog.messages if m.startswith("Coach stack ready:")]
+
+    monkeypatch.setattr(coaching, "build_chat_model", fail)
+    with pytest.raises(RuntimeError, match="provider down"):
+        coaching._assemble("briefing")
+    assert ready_lines() == []
+
+    monkeypatch.setattr(
+        coaching, "build_chat_model", lambda **kwargs: Model(messages=iter([]))
+    )
+    coaching._assemble("briefing")
+    coaching._assemble("feedback")
+    (line,) = ready_lines()
+    assert line.startswith(f"Coach stack ready: import_ms={coaching._IMPORT_MS} ")
+    assert "compile_ms=" in line
