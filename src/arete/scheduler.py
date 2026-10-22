@@ -169,9 +169,13 @@ def daily_sync() -> dict[str, str]:
     if feedback_ids:
         status["feedback"], feedback = write_sync_feedback(feedback_ids)
 
-    # Garmin sessions are announced with their feedback, once; a failed
-    # feedback run, or a session it could not analyse or store, leaves them to
-    # the import count.
+    # Garmin sessions are announced with their feedback, once. After a failed
+    # run the push counts all of this sync's imports; after one that stored no
+    # feedback, those of them still without any. When it stored some (an earlier
+    # import's included), the one push carries the coach's sentence and the
+    # sessions it could not store go unannounced now: the daily catch-up
+    # retries their feedback and announces it once stored. So a session may
+    # be counted in one push, then get its own push later.
     unannounced = imported
     if feedback is not None:
         try:
