@@ -24,8 +24,8 @@ pain or both lower the band once, never twice. Pain alone never turns a
 session into rest: its band stops at the recovery replacement (a readiness
 already in the rest band still rests). The reason gives the intensity and the
 ACWR, not the area. Without a readiness the check-in decides nothing, but
-such a pain does, from the top band: a hard session is eased, an easy one
-kept (a keep is never stored). Pain under a safe load, or on an area the
+such a pain does, from the top band and without the ACWR rest rule: a hard
+session is eased, an easy one kept (a keep is never stored). Pain under a safe load, or on an area the
 session spares, changes nothing here; the coach reads it.
 """
 
@@ -74,7 +74,8 @@ _BACK = frozenset({"lower_back", "upper_back"})
 _UPPER_LIMBS = frozenset({"shoulder", "elbow", "wrist_hand", "neck"})
 LOADED_AREAS: dict[str, frozenset[str]] = {
     "running": _LOWER_LIMBS | _BACK | {"other"},
-    "cycling": _LOWER_LIMBS | _BACK | {"other"},
+    # The handlebar position loads the neck and the wrists too.
+    "cycling": _LOWER_LIMBS | _BACK | {"neck", "wrist_hand", "other"},
     "swimming": _UPPER_LIMBS | _BACK | {"other"},
 }
 HARD_TYPES = frozenset({"tempo", "intervals"})
@@ -179,15 +180,16 @@ def pain_under_load(
     """
     if acwr is None or acwr <= ACWR_SAFE_MAX:
         return None
-    loaded = LOADED_AREAS.get(sport, frozenset()) if sport is not None else None
+    loaded = (
+        LOADED_AREAS.get(sport, frozenset({"other"})) if sport is not None else None
+    )
     counted = [p for p in pain if loaded is None or p.area in loaded]
     if not counted:
         return None
     worst = max(p.intensity for p in counted)
-    ratio = f"{acwr:.2f}".replace(".", ",")
     return (
         f"douleur déclarée à {worst}/10 avec une charge au-dessus de la zone sûre "
-        f"(ACWR {ratio})"
+        f"(ACWR {format_acwr(acwr)})"
     )
 
 
@@ -247,7 +249,8 @@ def evaluate(inp: AdaptationInput) -> Adaptation | None:
         # One penalty for both; pain alone stops at the recovery replacement.
         band = max(0 if tired_morning else min(1, measured), measured - 1)
 
-    if inp.acwr is not None and inp.acwr > ACWR_REST_AT:
+    # Without a readiness only the pain decides, and pain never means rest.
+    if inp.readiness is not None and inp.acwr is not None and inp.acwr > ACWR_REST_AT:
         return Adaptation(
             Decision.REST,
             f"Charge aiguë très au-dessus de la chronique (ACWR {format_acwr(inp.acwr)}) : "

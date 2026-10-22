@@ -1321,15 +1321,16 @@ profile (`body_log.context_block`, empty when nothing is recorded), the
 **Santé** page is a page-data read (`health`), and the rule facts carry pain at
 4/10 or more within three days. With an ACWR above its safe zone (1.3), such a
 pain on an area the session's sport loads (`adaptation.LOADED_AREAS`: lower
-limbs and back for running and cycling, upper limbs and back for swimming; an
-« autre » pain counts for every sport) lowers the day's readiness band. It
+limbs and back for running, plus the neck and wrists for cycling, upper limbs
+and back for swimming; an « autre » pain counts for every sport) lowers the
+day's readiness band. It
 shares one penalty with a low morning check-in (one band in total, never two),
 and pain alone stops at the recovery replacement, never rest. The reason gives
 the intensity and the ACWR, not the area. Without a readiness the check-in
-decides nothing, but such a pain still does, from the top band: a hard session
-is eased, an easy one kept. The briefing's facts list the pain of the last
+decides nothing, but such a pain still does, from the top band (the ACWR
+rest rule then does not apply): a hard session is eased, an easy one kept. The briefing's facts list the pain of the last
 three days (area, intensity, day; the notes come with the context section) and
-the signal when it holds, without claiming an outcome: the day's decision says
+the signal when it holds for a session planned that day the rules can adapt, without claiming an outcome: the day's decision says
 what happened. Weight is shown, never used
 to normalise a pace or a power, and no Garmin weigh-in is imported yet.
 

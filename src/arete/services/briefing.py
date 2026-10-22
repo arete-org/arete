@@ -279,8 +279,13 @@ def briefing_facts(
         logger.warning("Briefing facts: check-in unavailable", exc_info=True)
         declared = ["indisponible"]
     try:
+        from arete.garmin.repository import GarminRepository
         from arete.services import body_log
-        from arete.services.adaptation import DeclaredPain, pain_under_load
+        from arete.services.adaptation import (
+            ADAPTABLE_SPORTS,
+            DeclaredPain,
+            pain_under_load,
+        )
 
         days = {0: "aujourd'hui", 1: "hier", 2: "avant-hier"}
         start = target_date - timedelta(days=body_log.PAIN_RECENT_DAYS - 1)
@@ -293,8 +298,24 @@ def briefing_facts(
             if facts is None:
                 facts = rule_facts(target_date)
             # The fact only: the day's decision, listed below, says what it did.
-            signal = pain_under_load(
-                [DeclaredPain(p.area, p.intensity) for p in facts.pain], facts.acwr
+            # Only for a session the decision could adapt, on an area it loads.
+            sports = sorted(
+                {
+                    s.sport
+                    for s in GarminRepository().list_planned_sessions(
+                        start_date=target_date, end_date=target_date, status=None
+                    )
+                    if s.sport in ADAPTABLE_SPORTS
+                }
+            )
+            pains = [DeclaredPain(p.area, p.intensity) for p in facts.pain]
+            signal = next(
+                (
+                    said
+                    for sport in sports
+                    if (said := pain_under_load(pains, facts.acwr, sport))
+                ),
+                None,
             )
             if signal:
                 hurts.append(f"Signal pour la décision du jour : {signal}")

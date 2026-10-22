@@ -109,6 +109,7 @@ def test_an_old_entry_stays_correctable_on_its_day(db, client, monkeypatch):
         ).status_code
         == 422
     )
+    assert client.put("/body/pain/999999", json=_pain(later)).status_code == 404
 
 
 def test_a_day_has_one_weight_corrected_by_entering_it_again(db, client):
@@ -578,6 +579,67 @@ def test_without_a_readiness_pain_under_a_high_load_still_eases_a_hard_session()
     assert easy is not None and easy.decision == Decision.KEEP
 
 
+@pytest.mark.parametrize(
+    ("readiness", "with_pain", "with_check_in"),
+    [
+        # 80, the bottom of the keep band: one band lower either way.
+        (80, "ease", "ease"),
+        # 60, the bottom of the ease band: down to the recovery either way.
+        (60, "replace_easy", "replace_easy"),
+        # 40, the bottom of the recovery band: pain stops there, a check-in rests.
+        (40, "replace_easy", "rest"),
+    ],
+)
+def test_the_band_edges_with_pain_or_a_low_check_in(
+    readiness, with_pain, with_check_in
+):
+    from arete.services.adaptation import evaluate
+
+    assert evaluate(_session(readiness=readiness, pain=_shin())).decision == with_pain
+    assert evaluate(_session(readiness=readiness, legs=1)).decision == with_check_in
+
+
+def test_the_acwr_rest_rule_needs_a_readiness_and_more_than_1_5():
+    from arete.services.adaptation import Decision, evaluate
+
+    at_limit = evaluate(_session(readiness=85, acwr=1.5))
+    assert at_limit.decision == Decision.KEEP
+    over = evaluate(_session(readiness=85, acwr=1.51))
+    assert over.decision == Decision.REST
+    assert "(ACWR 1,51)" in over.reason
+    # Without a readiness only the pain decides, and pain never means rest.
+    hurt = evaluate(_session(acwr=1.6, pain=_shin()))
+    assert hurt.decision == Decision.EASE
+    assert "(ACWR 1,60)" in hurt.reason
+
+
+def test_each_sport_counts_the_areas_it_loads():
+    from arete.services.adaptation import Decision, DeclaredPain, evaluate
+
+    for area in ("wrist_hand", "neck"):
+        cycling = evaluate(
+            _session(readiness=85, sport="cycling", pain=(DeclaredPain(area, 6),))
+        )
+        assert cycling.decision == Decision.EASE, area
+    for area in ("knee", "calf", "foot"):
+        swim = evaluate(
+            _session(readiness=85, sport="swimming", pain=(DeclaredPain(area, 6),))
+        )
+        assert swim.decision == Decision.KEEP, area
+
+
+@pytest.mark.parametrize("sport", ["rowing", "cross_training", "other", "strength"])
+def test_sports_the_bands_do_not_adapt_get_no_decision(sport):
+    from arete.services.adaptation import DeclaredPain, evaluate, pain_under_load
+
+    other = (DeclaredPain("other", 8),)
+    assert evaluate(_session(readiness=85, sport=sport, pain=_shin())) is None
+    assert evaluate(_session(sport=sport, pain=other)) is None
+    # « Autre » has no known place: it counts whatever the sport.
+    assert pain_under_load(other, 1.42, sport) is not None
+    assert pain_under_load(_shin(), 1.42, sport) is None
+
+
 def test_the_briefing_s_facts_name_the_pain_and_the_rule(tempo_today):
     from arete.services.briefing import _rule_floor, briefing_facts
 
@@ -601,6 +663,20 @@ def test_the_briefing_s_facts_name_the_pain_and_the_rule(tempo_today):
     rule_text, _, facts = _rule_floor(today)
     calm = briefing_facts(today, rule_text, facts)
     assert "- hier : hanche 5/10" in calm and "Signal pour" not in calm
+
+
+def test_the_briefing_gives_no_signal_for_an_area_the_day_s_session_spares(
+    tempo_today,
+):
+    from arete.services.briefing import _rule_floor, briefing_facts
+
+    today = athlete_today()
+    body_log.add_pain(today, area="shoulder", intensity=7)
+    rule_text, _, facts = _rule_floor(today)
+    text = briefing_facts(today, rule_text, facts)
+    # The pain is listed; a run spares the shoulder, so no signal.
+    assert "- aujourd'hui : épaule 7/10" in text
+    assert "Signal pour" not in text
 
 
 # --------------------------------------------------------------------------- #

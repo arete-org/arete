@@ -140,3 +140,11 @@ it('follows the athlete’s day once Settings load, unless the athlete chose one
   });
   expect(day.value).toBe(shiftDay(TODAY, -3));
 });
+
+it('dates the day’s weight on the athlete’s clock, bounded to the 90 days before it', () => {
+  mount(<WeightForm />);
+  const day = screen.getByLabelText<HTMLInputElement>('Jour');
+  expect(day.value).toBe(TODAY);
+  expect(day.max).toBe(TODAY);
+  expect(day.min).toBe(shiftDay(TODAY, -90));
+});
