@@ -60,6 +60,8 @@ DUPLICATE_START_SEC = 300
 #: Without a start time: same sport and day, duration within max(2 min, 10 %).
 DUPLICATE_DURATION_SEC = 120
 DUPLICATE_DURATION_SHARE = 0.10
+#: Different sports are one workout only when they share most of their time.
+DUPLICATE_OVERLAP = 0.5
 #: Parses at once per process; a file is parsed in the request's worker thread.
 MAX_PARSERS = 2
 PARSE_WAIT_SEC = 30
@@ -149,12 +151,13 @@ def import_file(filename: str, content: bytes) -> ImportOutcome:
         zone = zone_of((settings_repo.get_user_settings() or {}).get("timezone"))
         session = to_actual_session(parsed, fmt, filename, zone)
         streams = from_time_series(parsed.time_series, session.sport)
+        elapsed = parsed.elapsed_time_sec or session.duration_sec
     except ActivityFileError as exc:
         return ImportOutcome(filename, "error", str(exc))
     finally:
         _parse_slots.release()
     repo = GarminRepository()
-    session_id, twin = _commit(repo, session)
+    session_id, twin = _commit(repo, session, elapsed)
     if twin is not None:
         return ImportOutcome(
             filename,
@@ -229,15 +232,22 @@ def local_start(
     utc_start: datetime, offset_sec: int | None, zone: ZoneInfo
 ) -> datetime:
     """A naive UTC start on the device's clock if known, else the athlete's."""
-    if offset_sec is not None:
-        return utc_start + timedelta(seconds=offset_sec)
-    return utc_start.replace(tzinfo=UTC).astimezone(zone).replace(tzinfo=None)
+    try:
+        if offset_sec is not None:
+            return utc_start + timedelta(seconds=offset_sec)
+        return utc_start.replace(tzinfo=UTC).astimezone(zone).replace(tzinfo=None)
+    except OverflowError as exc:  # parse_activity bounds the start; belt and braces
+        raise ActivityFileError("Date de départ invalide.") from exc
 
 
 def find_duplicate(
-    repo: GarminRepository, session: ActualSession
+    repo: GarminRepository, session: ActualSession, elapsed_sec: int
 ) -> ActualSession | None:
-    """A stored session that is this workout, whatever its source."""
+    """A stored session that is this workout, whatever its source.
+
+    Same workout: starts within ``DUPLICATE_START_SEC`` and the same sport
+    or mostly the same time (two watches may name one session differently).
+    """
     assert session.start_time is not None
     nearby = repo.list_actual_sessions(
         start_date=session.date - timedelta(days=1),
@@ -248,14 +258,23 @@ def find_duplicate(
     tolerance = max(
         DUPLICATE_DURATION_SEC, int(session.duration_sec * DUPLICATE_DURATION_SHARE)
     )
-    end = session.start_time + timedelta(seconds=session.duration_sec)
+    start = session.start_time
+    end = start + timedelta(seconds=elapsed_sec)
     for other in nearby:
         if other.start_time is not None:
-            gap = abs((other.start_time - session.start_time).total_seconds())
-            # A FIT upload from before ARE-143 stored its local end as start.
             if _legacy_fit(other):
-                gap = min(gap, abs((other.start_time - end).total_seconds()))
-            if gap <= DUPLICATE_START_SEC:
+                # The old FIT route stored the local end (wall clock) as start.
+                other_end = other.start_time
+                other_start = other_end - timedelta(seconds=other.duration_sec)
+                gap = abs((other_end - end).total_seconds())
+            else:
+                other_start = other.start_time
+                other_end = other_start + timedelta(seconds=other.duration_sec)
+                gap = abs((other_start - start).total_seconds())
+            if gap <= DUPLICATE_START_SEC and (
+                other.sport == session.sport
+                or _overlap(start, end, other_start, other_end) >= DUPLICATE_OVERLAP
+            ):
                 return other
         elif (
             other.date == session.date
@@ -266,6 +285,17 @@ def find_duplicate(
     return None
 
 
+def _overlap(
+    start: datetime, end: datetime, other_start: datetime, other_end: datetime
+) -> float:
+    """Shared time over the shorter of the two sessions, 0 to 1."""
+    shorter = min(
+        (end - start).total_seconds(), (other_end - other_start).total_seconds()
+    )
+    shared = (min(end, other_end) - max(start, other_start)).total_seconds()
+    return max(0.0, shared) / shorter if shorter > 0 else 0.0
+
+
 def _legacy_fit(session: ActualSession) -> bool:
     """A FIT upload of the old route: its name has no ``@start`` suffix."""
     return session.source == ActivitySource.FIT_FILE and "@" not in (
@@ -274,7 +304,7 @@ def _legacy_fit(session: ActualSession) -> bool:
 
 
 def _commit(
-    repo: GarminRepository, session: ActualSession
+    repo: GarminRepository, session: ActualSession, elapsed_sec: int
 ) -> tuple[int | None, ActualSession | None]:
     """The one place an imported session is written: (id, None) or (None, twin).
 
@@ -283,7 +313,7 @@ def _commit(
     spans instances); the athlete then sees two rows and deletes one.
     """
     with _commit_lock:
-        twin = find_duplicate(repo, session)
+        twin = find_duplicate(repo, session, elapsed_sec)
         if twin is not None:
             return None, twin
         return repo.create_actual_session(session), None
@@ -322,8 +352,10 @@ def _duplicate_message(twin: ActualSession) -> str:
     word = SOURCE_WORDS.get(str(source), "un ancien import")
     if twin.start_time is None:
         return (
-            f"Doublon : une séance de même sport et de même durée existe déjà le "
-            f"{twin.date:%d/%m/%Y} ({word}). Supprime-la pour importer ce fichier."
+            f"Doublon probable : une saisie manuelle de même sport et de durée "
+            f"proche existe le {twin.date:%d/%m/%Y}. Si c’est la même séance, "
+            "supprime la saisie puis importe ce fichier ; si ce sont deux séances, "
+            "supprime-la, importe ce fichier, puis saisis l’autre à nouveau."
         )
     return (
         f"Doublon : cette séance est déjà dans Arete ({word}, le "

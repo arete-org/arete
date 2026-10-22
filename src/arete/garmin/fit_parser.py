@@ -161,6 +161,8 @@ class ParsedActivity:
 
     # Source file
     source_file: str | None = None
+    #: FIT ``session`` records read: a multisport file has one per leg.
+    session_count: int = 0
 
     # Detailed time series (only populated when parse_detailed=True)
     time_series: TimeSeriesData | None = None
@@ -319,6 +321,7 @@ class FITParser:
             record_type = record.name
 
             if record_type == "session":
+                activity.session_count += 1
                 self._parse_session_record(record, activity)
             elif record_type == "activity":
                 self._parse_activity_record(record, activity)

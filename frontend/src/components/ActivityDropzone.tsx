@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Check, FileUp, Loader2, Upload, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ACCEPTED_EXTENSIONS, importActivities, MAX_FILES, type ImportResult } from '@/lib/activityImport';
+import { ACCEPTED_EXTENSIONS, importActivities, MAX_FILES, summarise, type ImportResult } from '@/lib/activityImport';
 
 interface ActivityDropzoneProps {
   /** Every file's result, once the whole batch has been sent. */
@@ -23,20 +23,29 @@ export function ActivityDropzone({ onImported }: ActivityDropzoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [results, setResults] = useState<ImportResult[]>([]);
+  /** What the live region says between progress steps: a refusal or the batch's summary. */
+  const [notice, setNotice] = useState<string | null>(null);
   const busy = progress !== null;
 
   const run = useCallback(
     async (files: File[]) => {
-      if (busy || files.length === 0) return;
+      if (files.length === 0) return;
+      if (busy) {
+        setNotice('Un import est déjà en cours : dépose ces fichiers quand il sera terminé.');
+        return;
+      }
+      setNotice(null);
       const all = await importActivities(files, (done, total, sofar) => {
         setProgress({ done, total });
         setResults(sofar);
       });
       setProgress(null);
+      setNotice(summarise(all));
       onImported?.(all);
     },
     [busy, onImported]
   );
+  const status = notice ?? (progress && progress.total > 0 ? `Import ${Math.min(progress.done + 1, progress.total)} sur ${progress.total}…` : '');
 
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -68,6 +77,7 @@ export function ActivityDropzone({ onImported }: ActivityDropzoneProps) {
         className={cn(
           'relative border-2 border-dashed rounded-lg p-6 sm:p-8 text-center',
           'transition-all duration-200 cursor-pointer',
+          'focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-neon-cyan',
           isDragOver
             ? 'border-neon-cyan bg-neon-cyan/10 scale-[1.02]'
             : 'border-text-muted/30 hover:border-neon-cyan/50 hover:bg-abyss/50'
@@ -101,17 +111,18 @@ export function ActivityDropzone({ onImported }: ActivityDropzoneProps) {
               {busy ? 'Import en cours…' : 'Dépose tes fichiers d’activité ici'}
             </span>
             <div className="text-xs text-text-muted mt-1 font-sans">
-              ou clique pour parcourir · FIT, TCX, GPX ou ZIP, depuis n’importe quelle montre ({MAX_FILES} fichiers, 10 Mo chacun)
+              ou clique pour parcourir · FIT, TCX, GPX ou ZIP, depuis n’importe quelle montre ({MAX_FILES} fichiers, 4,5 Mo chacun une fois compressé)
             </div>
           </div>
         </div>
       </div>
 
+      {/* Always mounted, so screen readers announce each step and the summary. */}
+      <p role="status" aria-live="polite" className="text-xs font-sans text-text-muted">
+        {status}
+      </p>
       {progress && progress.total > 0 && (
         <div className="space-y-1">
-          <p role="status" className="text-xs font-sans text-text-muted">
-            Import {Math.min(progress.done + 1, progress.total)} sur {progress.total}…
-          </p>
           <div
             role="progressbar"
             aria-label="Progression de l’import"

@@ -5,10 +5,12 @@ from __future__ import annotations
 import gzip
 import io
 import json
+import re
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
+from activity_samples import START as SAMPLE_START
 from activity_samples import fit_activity, gpx_activity, tcx_activity
 
 from arete.dataio.db import connect, db_connection
@@ -241,18 +243,71 @@ def test_a_garmin_session_starting_within_five_minutes_is_the_same_workout(db):
     assert "(Garmin, le 14/10/2026 à 08:34)" in outcome.message
 
 
-def test_a_manual_entry_of_that_day_blocks_the_file_until_deleted(db):
+def test_a_manual_entry_of_that_day_blocks_the_file_and_says_how_to_keep_both(db):
     with db_connection() as con:
         con.execute(
             "INSERT INTO app.actual_sessions (user_id,date,sport,duration_sec,source) "
-            "VALUES (1,'2026-10-14','running',660,'manual')"
+            "VALUES (1,'2026-10-14','running',660,'manual'),"
+            "(1,'2026-10-14','cycling',600,'manual')"
         )
     outcome = _one("run.tcx", tcx_activity())
     assert outcome.status == "duplicate"
     assert outcome.message == (
-        "Doublon : une séance de même sport et de même durée existe déjà le "
-        "14/10/2026 (saisie manuelle). Supprime-la pour importer ce fichier."
+        "Doublon probable : une saisie manuelle de même sport et de durée proche "
+        "existe le 14/10/2026. Si c’est la même séance, supprime la saisie puis "
+        "importe ce fichier ; si ce sont deux séances, supprime-la, importe ce "
+        "fichier, puis saisis l’autre à nouveau."
     )
+
+
+def _insert(sql_values: str) -> None:
+    with db_connection() as con:
+        con.execute(
+            "INSERT INTO app.actual_sessions "
+            "(user_id,date,start_time,sport,duration_sec,source,source_file) VALUES "
+            + sql_values
+        )
+
+
+def test_another_sport_minutes_apart_is_not_the_same_workout(db):
+    # A 5-minute bike warm-up from 08:26, then the 08:30 run: one minute shared.
+    _insert(
+        "(1,'2026-10-14','2026-10-14 08:26:00','cycling',300,'garmin_connect',NULL)"
+    )
+    assert _one("run.gpx", gpx_activity()).status == "imported"
+
+
+def test_another_sport_label_over_the_same_time_is_the_same_workout(db):
+    # A second watch called the same run « other »: 90 % of the time shared.
+    _insert("(1,'2026-10-14','2026-10-14 08:31:00','other',600,'garmin_connect',NULL)")
+    assert _one("run.gpx", gpx_activity()).status == "duplicate"
+
+
+def test_a_race_right_after_a_legacy_fit_warm_up_is_imported(db):
+    # The old route stored the warm-up's local end (08:30) as its start.
+    _insert(
+        "(1,'2026-10-14','2026-10-14 08:30:00','running',900,'fit_file','warmup.fit')"
+    )
+    assert _one("run.gpx", gpx_activity()).status == "imported"
+
+
+def _with_pause(gpx: bytes, after: str, minutes: int) -> bytes:
+    """The GPX with every point after ``after`` (HH:MM:SS UTC) moved later."""
+
+    def shift(match: re.Match[bytes]) -> bytes:
+        at = datetime.fromisoformat(match.group(1).decode())
+        if at.strftime("%H:%M:%S") > after:
+            at += timedelta(minutes=minutes)
+        return b"<time>" + at.strftime("%Y-%m-%dT%H:%M:%S").encode() + b"Z</time>"
+
+    return re.sub(rb"<time>([0-9T:-]+)Z</time>", shift, gpx)
+
+
+def test_a_legacy_fit_with_a_long_pause_is_still_recognised(db):
+    # A 7-minute pause: the stored end (08:47) is past start + timer time.
+    _insert("(1,'2026-10-14','2026-10-14 08:47:00','running',600,'fit_file','run.fit')")
+    paused = _with_pause(gpx_activity(), "06:35:00", 7)
+    assert _one("run.gpx", paused).status == "duplicate"
 
 
 def test_a_later_session_on_the_same_day_is_not_a_duplicate(db):
@@ -306,11 +361,16 @@ def test_an_imported_run_completes_the_planned_session_of_the_day(db):
     assert planned is not None and planned.status.value == "completed"
 
 
-def test_imported_files_wait_for_the_daily_feedback_like_garmin_ones(db):
+def test_recent_imported_files_wait_for_the_daily_feedback_old_ones_do_not(db):
     from arete.services.coaching_repository import SessionFeedbackRepository
+    from arete.services.settings import athlete_today
 
-    outcome = _one("run.tcx", tcx_activity())
-    assert SessionFeedbackRepository().pending_garmin() == ([outcome.session_id], 1)
+    # A history import (14 October, a week ago) is not news for the coach.
+    assert _one("run.tcx", tcx_activity()).status == "imported"
+    assert SessionFeedbackRepository().pending_garmin() == ([], 0)
+    yesterday = (athlete_today() - timedelta(days=1)).isoformat().encode()
+    recent = _one("recent.gpx", gpx_activity().replace(b"2026-10-14", yesterday))
+    assert SessionFeedbackRepository().pending_garmin() == ([recent.session_id], 1)
 
 
 def _zip(members: dict[str, bytes]) -> bytes:
@@ -481,3 +541,63 @@ def test_a_server_failure_on_one_file_spares_the_others(db, monkeypatch):
         "Import interrompu par une erreur du serveur : réessaie ce fichier."
     )
     assert len(_sessions()) == 1
+
+
+def _tcx(laps: str) -> bytes:
+    return (
+        "<TrainingCenterDatabase><Activities><Activity Sport='Running'>"
+        f"{laps}</Activity></Activities></TrainingCenterDatabase>"
+    ).encode()
+
+
+@pytest.mark.parametrize(
+    ("fmt", "content", "message"),
+    [
+        (
+            "gpx",
+            gpx_activity().replace(b"2026-10-14T", b"9999-12-31T"),
+            "Date de départ invalide",
+        ),
+        (
+            "gpx",
+            # 00:30+02:00 on 1 January of year 1 is before datetime's minimum.
+            gpx_activity()
+            .replace(b"2026-10-14T06:", b"0001-01-01T00:")
+            .replace(b"Z<", b"+02:00<"),
+            "Pas d’heure de départ",
+        ),
+        (
+            "fit",
+            fit_activity(
+                shift=datetime(2100, 1, 1, tzinfo=SAMPLE_START.tzinfo) - SAMPLE_START
+            ),
+            "Date de départ invalide",
+        ),
+    ],
+    ids=["year-9999", "year-1-with-offset", "fit-2100"],
+)
+def test_absurd_dates_are_refused_in_french(fmt, content, message):
+    with pytest.raises(ActivityFileError, match=message):
+        parse_activity(fmt, content, ZONES)
+
+
+def test_lap_sums_past_a_week_are_refused_not_overflowed(db):
+    lap = (
+        "<Lap StartTime='2026-10-14T06:30:00Z'><TotalTimeSeconds>604800</TotalTimeSeconds>"
+        "<Calories>20000</Calories></Lap>"
+    )
+    (outcome,) = import_upload("long.tcx", _tcx(lap * 400))
+    assert (outcome.status, outcome.message) == (
+        "error",
+        "Durée invalide : plus de 7 jours d’enregistrement.",
+    )
+    assert _sessions() == []
+
+
+def test_a_multisport_fit_is_refused_leg_by_leg(db):
+    (outcome,) = import_upload("triathlon.fit", fit_activity(sessions=3))
+    assert outcome.status == "error"
+    assert outcome.message == (
+        "Ce fichier FIT contient 3 séances (multisport) : exporte chaque partie séparément."
+    )
+    assert _sessions() == []

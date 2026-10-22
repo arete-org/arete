@@ -18,7 +18,7 @@ import io
 import math
 import xml.parsers.expat
 import zlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from xml.etree.ElementTree import Element, TreeBuilder
 
@@ -46,6 +46,11 @@ MAX_POINTS = 200_000
 PAUSE_GAP_SEC = 60
 #: Elevation changes smaller than this are GPS or barometer noise.
 ELEVATION_HYSTERESIS_M = 3.0
+#: No activity lasts longer; also keeps sums inside the INTEGER columns.
+MAX_DURATION_SEC = 7 * 86400
+MAX_CALORIES = 50_000
+#: Starts before this are a watch without a clock, not a recorded session.
+EARLIEST_START = datetime(2000, 1, 1)
 
 
 class ActivityFileError(ValueError):
@@ -90,6 +95,11 @@ def parse_activity(
             )
         except Exception as exc:  # fitparse raises its own errors and more
             raise ActivityFileError("Fichier FIT illisible ou corrompu.") from exc
+        if parsed.session_count > 1:
+            raise ActivityFileError(
+                f"Ce fichier FIT contient {parsed.session_count} séances "
+                "(multisport) : exporte chaque partie séparément."
+            )
     else:
         root = _parse_xml(content, fmt)
         parsed = (_parse_tcx if fmt == "tcx" else _parse_gpx)(root, zones)
@@ -98,8 +108,16 @@ def parse_activity(
             "Pas d’heure de départ : ce fichier décrit un itinéraire, "
             "pas une séance enregistrée."
         )
+    latest = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=1)
+    if not EARLIEST_START <= parsed.start_time <= latest:
+        raise ActivityFileError(
+            f"Date de départ invalide ({parsed.start_time:%d/%m/%Y}) : "
+            "vérifie l’horloge de la montre ou refais l’export."
+        )
     if (parsed.duration_sec or parsed.elapsed_time_sec or 0) <= 0:
         raise ActivityFileError("Séance vide : aucune durée enregistrée.")
+    if max(parsed.duration_sec or 0, parsed.elapsed_time_sec or 0) > MAX_DURATION_SEC:
+        raise ActivityFileError("Durée invalide : plus de 7 jours d’enregistrement.")
     return parsed
 
 
@@ -187,7 +205,11 @@ def _time(value: str | None) -> tuple[datetime, int | None] | None:
         return stamp, None
     delta = stamp.utcoffset()
     offset = int(delta.total_seconds()) if delta is not None else 0
-    return stamp.astimezone(UTC).replace(tzinfo=None), offset or None
+    try:
+        utc = stamp.astimezone(UTC).replace(tzinfo=None)
+    except OverflowError:  # 0001-01-01 with a positive offset
+        return None
+    return utc, offset or None
 
 
 def _extension_value(element: Element, names: tuple[str, ...]) -> str | None:
@@ -498,7 +520,7 @@ def _parse_tcx(root: Element, zones: ZoneModel) -> ParsedActivity:
                 segments.append(segment)
     activity.duration_sec = int(round(timer))
     activity.distance_m = round(distance, 1)
-    activity.calories = int(round(calories))
+    activity.calories = int(round(min(calories, MAX_CALORIES)))
     activity.max_speed_mps = max_speed
     laps_hr = [(lap.avg_hr, lap.duration_sec) for lap in laps if lap.avg_hr]
     if laps_hr and sum(t for _, t in laps_hr):

@@ -51,6 +51,7 @@ async function expectThreeOutcomes(page: Page) {
   await expect(gpx).toContainText('Refusé');
   await expect(gpx).toContainText('Pas d’heure de départ');
   await expect(page.getByText('Dépose tes fichiers d’activité ici')).toBeVisible(); // ready again
+  await expect(page.getByText('Import terminé : 1 importé, 1 déjà dans Arete, 1 refusé.')).toBeVisible();
   await expect(page.getByText('Footing régulier, cardio bien tenu.')).toBeVisible();
 }
 

@@ -370,11 +370,10 @@ class StoredFeedback:
 
 
 MAX_PENDING_GARMIN_FEEDBACK = 20
-#: Activities the daily feedback reads: Garmin's and imported files.
-FEEDBACK_SOURCES = (
-    ActivitySource.GARMIN_CONNECT.value,
-    *sorted(source.value for source in FILE_SOURCES),
-)
+#: An imported file is commented only when recent: a history import is not news.
+FILE_FEEDBACK_DAYS = 2
+#: Imported files the daily feedback reads, beside Garmin's activities.
+FILE_FEEDBACK_SOURCES = tuple(sorted(source.value for source in FILE_SOURCES))
 FEEDBACK_IMPORT_LOOKBACK_DAYS = 30
 
 
@@ -384,7 +383,8 @@ class SessionFeedbackRepository:
     def pending_garmin(self) -> tuple[list[int], int]:
         """Daily catch-up: 20 recent imports, independent of the activity date.
 
-        Garmin's and imported files' (any watch). On-use refresh deliberately
+        Garmin's, and imported files' (any watch) dated within
+        ``FILE_FEEDBACK_DAYS``. On-use refresh deliberately
         does not write feedback. Missing feedback is its durable queue; a
         30-day import window avoids announcing ancient historical rows when
         this behavior is first enabled.
@@ -393,11 +393,16 @@ class SessionFeedbackRepository:
             rows = conn.execute(
                 "SELECT a.id, COUNT(*) OVER () FROM app.visible_actual_sessions a "
                 "LEFT JOIN app.visible_session_feedback f ON f.actual_session_id=a.id "
-                f"WHERE a.source IN ({sql_in(FEEDBACK_SOURCES)}) "
+                f"WHERE (a.source = '{ActivitySource.GARMIN_CONNECT.value}' "
+                f"OR (a.source IN ({sql_in(FILE_FEEDBACK_SOURCES)}) AND a.date >= ?)) "
                 "AND f.actual_session_id IS NULL "
                 "AND a.created_at >= current_timestamp - ? * INTERVAL '1 day' "
                 "ORDER BY a.created_at, a.id LIMIT ?",
-                [FEEDBACK_IMPORT_LOOKBACK_DAYS, MAX_PENDING_GARMIN_FEEDBACK],
+                [
+                    athlete_today() - timedelta(days=FILE_FEEDBACK_DAYS),
+                    FEEDBACK_IMPORT_LOOKBACK_DAYS,
+                    MAX_PENDING_GARMIN_FEEDBACK,
+                ],
             ).fetchall()
         return [int(row[0]) for row in rows], int(rows[0][1]) if rows else 0
 

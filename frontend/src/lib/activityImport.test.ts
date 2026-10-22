@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setTokenGetter } from './auth';
-import { importActivities, importActivityFile, MAX_FILE_BYTES, selectFiles } from './activityImport';
+import { importActivities, importActivityFile, MAX_FILE_BYTES, MAX_SEND_BYTES, selectFiles, summarise, TOO_HEAVY_TO_SEND, type ImportResult } from './activityImport';
 
 afterEach(() => {
   setTokenGetter(null);
@@ -58,6 +58,26 @@ describe('importActivities', () => {
       ['a.fit', 'imported'],
       ['b.tcx', 'duplicate'],
     ]);
+  });
+
+  it('checks what will be sent against the hosting’s limit, before sending', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    // An archive is sent as is: 4.5 MB of ZIP cannot pass, compressed or not.
+    expect(await importActivityFile(file('export.zip', MAX_SEND_BYTES + 1))).toEqual([
+      { filename: 'export.zip', status: 'error', message: TOO_HEAVY_TO_SEND },
+    ]);
+    expect(TOO_HEAVY_TO_SEND).toBe(
+      'Fichier trop lourd pour l’envoi (4,5 Mo max après compression) : importe les fichiers un par un ou exporte une activité plus courte.'
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('says the batch in one French sentence', () => {
+    const r = (status: ImportResult['status']): ImportResult => ({ filename: 'f', status, message: '' });
+    expect(summarise([r('imported'), r('imported'), r('error')])).toBe('Import terminé : 2 importés, 1 refusé.');
+    expect(summarise([r('duplicate')])).toBe('Import terminé : 1 déjà dans Arete.');
+    expect(summarise([])).toBe('Import terminé : aucun fichier.');
   });
 
   it('turns a refused request into that file’s French error', async () => {

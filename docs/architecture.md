@@ -653,27 +653,31 @@ source (October 2026): no connection, sync or OAuth route remains, and
 it created stay readable and marked Strava on the athlete's pages; Garmin
 importing the same workout takes such a row over with its own values and clears
 the Strava-only ones (`garmin/sync.garmin_takeover`). Garmin sync and the
-file import are the activity sources.
+file import are the activity sources. Analytics come from
+`garmin/time_series.py`: decoupling, pace fade, cadence variability, power and
+the work intervals of a structured workout (FIT lap intensity).
 
 The file import is the watch-agnostic path (ARE-143): the Journal's
 « Importer une activité » sends FIT, TCX or GPX files, or a ZIP of them,
 one request per file (`POST /activities/import`, gzip-compressed by the
-browser to stay under the hosting's body limit; `POST /garmin/upload-fit`
-is the same import with its older answer). `garmin/activity_files.py`
-reads every format into the FIT parser's shape; TCX and GPX go through
-expat with DOCTYPE and entities refused and an element bound, and any
-member or decompressed file is read to 10 MB at most.
-`services/activity_import.py` parses a file fully before writing (a
-corrupt one leaves no row), stores its start on the athlete's clock like
-Garmin's (the device's offset when the FIT file states it, else the
-athlete's timezone), refuses a session starting within five minutes of a
-stored one of any source (or matching a start-less manual entry's sport
-and duration) with a French message, and commits in one function, then
-matches the plan, links and drafts strength, keeps the streams and runs
-terrain and weather. Sources are `fit_file`, `tcx_file` and `gpx_file`;
-the daily feedback catch-up reads them with Garmin's. Analytics come from
-`garmin/time_series.py`: decoupling, pace fade, cadence variability, power and
-the work intervals of a structured workout (FIT lap intensity).
+browser, which refuses what would still exceed the hosting's 4.5 MB body
+limit; `POST /garmin/upload-fit` is the same import with its older answer).
+`garmin/activity_files.py` reads every format into the FIT parser's shape;
+TCX and GPX go through expat with DOCTYPE and entities refused and an element
+bound, any member or decompressed file is read to 10 MB at most, and a start
+outside 2000 to tomorrow, more than seven days of recording or a multisport
+FIT (one session record per leg) is refused. `services/activity_import.py`
+parses a file fully before writing (a corrupt one leaves no row), stores its
+start on the athlete's clock like Garmin's (the device's offset when the FIT
+file states it, else the athlete's timezone), and refuses with a French
+message a session starting within five minutes of a stored one of any source
+when the sport is the same or the two share half their time (a FIT row of the
+old route, which stored its local end as start, is compared by end), or
+matching a start-less manual entry's sport and duration. It commits in one
+function, then matches the plan, links and drafts strength, keeps the streams
+and runs terrain and weather. Sources are `fit_file`, `tcx_file` and
+`gpx_file`; the daily feedback catch-up reads those dated within two days, so
+a history import announces nothing.
 
 The session page opens with its summary, before the tiles and the curves. The
 detail payload carries it (`summary`, typed `SessionSummary` beside the service),

@@ -5,7 +5,15 @@ import { readableError } from './utils';
 /** Activity files from any watch (FIT, TCX, GPX), a ZIP of them, or a .gz of one. */
 export const ACCEPTED_EXTENSIONS = ['.fit', '.tcx', '.gpx', '.zip', '.gz'] as const;
 export const MAX_FILES = 10;
+/** The server's own limit per file (self-hosted deployments reach it). */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/**
+ * What one request may carry: the hosting (Vercel) refuses bodies over 4.5 MB,
+ * so the compressed file must stay under it, the form's own bytes included.
+ */
+export const MAX_SEND_BYTES = 4_400_000;
+export const TOO_HEAVY_TO_SEND =
+  'Fichier trop lourd pour l’envoi (4,5 Mo max après compression) : importe les fichiers un par un ou exporte une activité plus courte.';
 
 export type ImportStatus = 'imported' | 'duplicate' | 'error';
 
@@ -60,12 +68,13 @@ async function payload(file: File): Promise<Blob> {
 /** Import one file; a ZIP gives one result per activity inside. Never throws. */
 export async function importActivityFile(file: File): Promise<ImportResult[]> {
   try {
+    const body = await payload(file);
+    if (body.size > MAX_SEND_BYTES) return [{ filename: file.name, status: 'error', message: TOO_HEAVY_TO_SEND }];
     const form = new FormData();
-    form.append('file', await payload(file), file.name);
+    form.append('file', body, file.name);
     const response = await authFetch('/api/activities/import', { method: 'POST', body: form });
     if (!response.ok) throw new ApiError(response.status, await response.text());
-    const body = (await response.json()) as { results: ImportResult[] };
-    return body.results;
+    return ((await response.json()) as { results: ImportResult[] }).results;
   } catch (error) {
     return [{ filename: file.name, status: 'error', message: readableError(error) }];
   }
@@ -87,4 +96,16 @@ export async function importActivities(
     onProgress(index + 1, accepted.length, [...results]);
   }
   return results;
+}
+
+/** The batch in one sentence, for the live region once every file is sent. */
+export function summarise(results: ImportResult[]): string {
+  const count = (status: ImportStatus) => results.filter((r) => r.status === status).length;
+  const parts = [
+    [count('imported'), 'importé', 'importés'],
+    [count('duplicate'), 'déjà dans Arete', 'déjà dans Arete'],
+    [count('error'), 'refusé', 'refusés'],
+  ] as const;
+  const said = parts.filter(([n]) => n > 0).map(([n, one, many]) => `${n} ${n > 1 ? many : one}`);
+  return `Import terminé : ${said.join(', ') || 'aucun fichier'}.`;
 }

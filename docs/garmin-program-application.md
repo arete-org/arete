@@ -41,8 +41,10 @@
 
 ## 3. Product description (for "project background")
 
-Arete is a self-hosted training assistant for amateur hybrid athletes (running,
-cycling, strength, Hyrox-style training), in French. It reads the athlete's
+Arete is a training assistant for amateur hybrid athletes (running, cycling,
+strength, Hyrox-style training), in French, run by its publisher as a hosted web
+application (Vercel functions, MotherDuck database; the code can also run in a
+private Docker stack, which shares the same database). It reads the athlete's
 completed workouts and recovery data, keeps a training plan, logs strength
 sessions, and gives a daily briefing and post-session feedback written by an
 AI coach. It is a web application (installable PWA) with a small number of
@@ -60,8 +62,9 @@ What Garmin data does for the athlete:
 - **Workouts** that Arete plans are sent to the athlete's Garmin Connect
   calendar so the watch guides the session.
 
-Arete does not sell data, does not advertise, does not build cross-user
-profiles and does not train models on athlete data.
+Arete does not sell data, does not advertise and does not build cross-user
+profiles. Arete itself does not train models on athlete data; see section 5
+for what the AI providers it calls may do.
 
 ## 4. APIs and data requested
 
@@ -94,12 +97,22 @@ the consent screen's backfill option, if the athlete ticks it.
 ### Use of AI
 
 The coach's answers, briefings and session feedback are produced by language
-models reached through OpenRouter (default: free open models; a paid model
-only when an administrator enables it). Requests carry the training and health
-facts the answer needs; they are not used by Arete to train models. **[OWNER]**
-confirm with Garmin that AI-generated coaching from Garmin data is acceptable
-under the current API licence (the Strava agreement of 1 June 2026 forbade it,
-which is why Strava was retired as a source).
+models reached through OpenRouter. Requests carry the training and health facts
+the answer needs (Garmin data included). Arete itself does not train models on
+them. The default routes are free models
+(`agent/models/registry.py`: `max_price` 0, no other provider restriction);
+a paid model is used only when an administrator turns it on. Arete does not
+send OpenRouter's `data_collection: "deny"` preference, so the providers
+OpenRouter routes free requests to may retain prompts or use them for
+training under their own terms; the privacy policy already warns of possible
+training on free requests.
+
+**[OWNER]** two questions before submitting: (1) whether Garmin's API licence
+allows Garmin data in AI-generated coaching at all (the Strava agreement of
+1 June 2026 forbade it, which is why Strava was retired as a source); (2)
+whether to send `data_collection: "deny"` (and accept fewer free providers, or
+paid ones) so that no provider may retain or train on Garmin-derived prompts,
+which Garmin is likely to require.
 
 ### Storage and isolation
 
