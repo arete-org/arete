@@ -6,18 +6,24 @@ import sys
 
 # Not the tail of a longer word such as `SHARE-1`.
 LINEAR_ID = re.compile(r"(?<![A-Z0-9])ARE-[0-9]+", re.IGNORECASE)
-# Automation opens these: no person can name a ticket for them.
-EXEMPT_AUTHORS = frozenset({"dependabot[bot]", "renovate[bot]"})
-EXEMPT_BRANCH_PREFIXES = ("dependabot/", "renovate/", "openwiki/update")
+# Automation opens these: no person can name a ticket for them. Both the
+# author and its branch must match: a person's branch named like a bot's is
+# checked, and so is a bot's PR on another branch. The OpenWiki workflow opens
+# its PR with the workflow token, hence `github-actions[bot]`.
+EXEMPT = (
+    ("dependabot[bot]", "dependabot/"),
+    ("renovate[bot]", "renovate/"),
+    ("github-actions[bot]", "openwiki/update"),
+)
 FAILURE = (
     "No Linear identifier (ARE-<n>) in the branch name or the PR body: "
-    "rename the branch with Linear's suggested name or add ARE-<n> to the body, "
-    "then re-run this job."
+    "rename the branch with Linear's suggested name or add ARE-<n> to the body "
+    "(editing the body runs this check again)."
 )
 
 
 def is_exempt(branch: str, author: str) -> bool:
-    return author in EXEMPT_AUTHORS or branch.startswith(EXEMPT_BRANCH_PREFIXES)
+    return any(author == bot and branch.startswith(prefix) for bot, prefix in EXEMPT)
 
 
 def has_linear_reference(branch: str, body: str) -> bool:

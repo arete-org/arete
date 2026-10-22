@@ -125,7 +125,8 @@ do not add tests that merely repeat an implementation.
   it with auto-merge armed: `gh pr create … && gh pr merge --auto --merge`.
 - Use Conventional Commits with an English subject and a body explaining why.
 - Every PR names its Linear ticket (`ARE-<n>`) in the branch name or the body, so
-  Linear links it; CI's `linear` job fails otherwise (bots and OpenWiki exempt).
+  Linear links it; the `Linear` workflow fails otherwise (bots and OpenWiki
+  exempt) and checks again when the body is edited.
 - A PR body fills every section of `.github/pull_request_template.md`, in order,
   including when an agent passes `--body` or `--body-file` to `gh pr create`, which
   skips GitHub's prefill.

@@ -39,8 +39,16 @@ class LinearReferenceTests(unittest.TestCase):
         ):
             with self.subTest(branch=branch):
                 self.assertIsNone(check(branch, author, ""))
-        # A person cannot opt out with a branch merely resembling a bot's.
-        self.assertEqual(check("openwiki-notes", "someone", ""), FAILURE)
+        # The exemption needs both the bot and its branch.
+        for branch, author in (
+            ("openwiki/update", "someone"),
+            ("dependabot/npm_and_yarn/vite-7.1.2", "someone"),
+            ("feature-x", "dependabot[bot]"),
+            ("renovate/vite-7.x", "dependabot[bot]"),
+            ("feature-x", "github-actions[bot]"),
+        ):
+            with self.subTest(branch=branch, author=author):
+                self.assertEqual(check(branch, author, ""), FAILURE)
 
     def test_main_reports_a_workflow_error_and_exit_code(self):
         output = io.StringIO()

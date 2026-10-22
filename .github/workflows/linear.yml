@@ -1,0 +1,38 @@
+name: Linear
+
+# Linear links a PR on its own when its branch or body names `ARE-<n>`. Its
+# own workflow, apart from CI: editing the body (`edited`) checks again
+# without rerunning the suites, and a new commit (`synchronize`) carries the
+# check. Pull requests only: a merge queue entry has no body. Branch
+# protection does not require this check until the rule is announced.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: linear-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  linear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/ci
+      # The body is read live: an edit made while this run waited counts.
+      - name: Require a Linear identifier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BRANCH: ${{ github.head_ref }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          body=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+          BODY="$body" python3 scripts/ci/linear_reference.py
