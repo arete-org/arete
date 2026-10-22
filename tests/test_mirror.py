@@ -150,6 +150,27 @@ def test_a_status_read_does_not_undo_another_instance_logout(
     assert _stored(store) == {}
 
 
+def test_tokens_kept_outside_the_data_directory_stay_out_of_the_flush(
+    store, tmp_path, monkeypatch
+):
+    """``ARETE_GARMIN_TOKENS_DIR``: the mirror never walks those files."""
+    from arete.garmin import token_store
+
+    _use_data_dir(monkeypatch, tmp_path / "data")
+    tokens = tmp_path / "elsewhere"
+    monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(tokens))
+    mirror.hydrate()
+    with store() as con:
+        con.execute(
+            "INSERT INTO app.files (path, content) VALUES (?, '{\"t\": 1}'), (?, '{}')",
+            [token_store.TOKEN_PATH, token_store.ACCOUNT_PATH],
+        )
+    assert token_store.hydrate(tokens / token_store.TOKEN_FILE)
+    # Recorded as mirrored, they would read as deleted: a logout everywhere.
+    assert mirror.flush() == 0
+    assert set(_stored(store)) == {token_store.TOKEN_PATH, token_store.ACCOUNT_PATH}
+
+
 def test_middleware_is_inert_on_a_local_database(monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))

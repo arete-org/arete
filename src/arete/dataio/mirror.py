@@ -157,14 +157,24 @@ def flush() -> int:
         return len(changed) + len(deleted)
 
 
-def remember(relative: str, data: bytes | None) -> None:
+def remember(path: Path, data: bytes | None) -> None:
     """Record a file its owner just read from or wrote to ``app.files`` itself.
 
     The Garmin token store does so on every request: without it, the next
     flush would find the file changed and write back a copy that another
     instance has replaced or deleted meanwhile (a logout undone). None: the
-    row is gone.
+    row is gone. A file this mirror does not walk (outside the data directory,
+    as ``ARETE_GARMIN_TOKENS_DIR`` may place the tokens, or off its list) is
+    ignored: recording it would make the flush delete its row.
     """
+    try:
+        relative = path.resolve().relative_to(config.data_dir.resolve()).as_posix()
+    except ValueError:
+        return
+    if relative not in MIRRORED_FILES and not relative.startswith(
+        tuple(f"{directory}/" for directory in MIRRORED_DIRS)
+    ):
+        return
     with _lock:
         athlete_id = current_athlete_id()
         if athlete_id not in _known and len(_known) >= MAX_MIRRORED_ATHLETES:

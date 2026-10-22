@@ -923,7 +923,7 @@ def test_remote_token_store_revokes_stale_worker_files(athletes, tmp_path):
     with athlete_scope(athletes[1].athlete_id):
         assert token_store.hydrate(stale)
         assert stale.read_text() == athletes[1].email
-        token_store.delete()
+        token_store.delete(stale)
         assert token_store.hydrate(stale) is False
         assert not stale.exists()
     with athlete_scope(athletes[0].athlete_id):
@@ -961,7 +961,7 @@ def test_remote_session_status_reads_each_athletes_rows(
         finally:
             con.close()
     with athlete_scope(first):
-        token_store.delete()
+        token_store.delete(source)
         assert token_store.session_status() == (False, None)
 
 
