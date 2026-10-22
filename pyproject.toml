@@ -50,7 +50,7 @@ packages = ["src/arete"]
 [project.optional-dependencies]
 dev = [
     "mypy>=1.19.0",
-    "pypdf>=6.1,<7",
+    "pypdf>=6.21.1,<7",
     "pytest>=9.0.3",
     "pytest-xdist>=3.8,<4",
     "ruff>=0.14.7,<0.15",
