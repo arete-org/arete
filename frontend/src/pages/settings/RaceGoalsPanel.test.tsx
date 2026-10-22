@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ApiError, goalsApi } from '@/lib/api';
 import type { Goal, PlanPreview, PlanWeek } from '@/types';
@@ -473,7 +473,7 @@ it('shows a race edit’s errors in French under the form', async () => {
   client.clear();
 });
 
-it('says how many edited sessions removing the plan kept', async () => {
+it('says how many changed sessions removing the plan kept', async () => {
   vi.spyOn(goalsApi, 'previewPlan').mockResolvedValue(preview);
   const deletePlan = vi.spyOn(goalsApi, 'deletePlan').mockResolvedValue({ deleted: 9, kept: 2 });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -483,29 +483,50 @@ it('says how many edited sessions removing the plan kept', async () => {
     </QueryClientProvider>
   );
   fireEvent.click(await screen.findByRole('button', { name: 'Supprimer le plan' }));
-  expect(screen.getByText('Supprimer les séances à venir de ce plan ? Celles que tu as modifiées restent.')).toBeTruthy();
+  expect(screen.getByText('Supprimer les séances à venir de ce plan ? Celles déjà modifiées, par toi ou par le coach, restent.')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Confirmer' }));
   await waitFor(() => expect(deletePlan).toHaveBeenCalledWith(goal.id));
   expect((await screen.findByRole('status')).textContent).toBe(
-    '9 séances à venir supprimées. 2 séances que tu as modifiées restent dans ton planning.'
+    '9 séances à venir supprimées. 2 séances restent dans ton planning : déjà modifiées, ou avec un envoi Garmin à vérifier.'
   );
   client.clear();
 });
 
-it('says how many edited sessions deleting a goal kept, and nothing when none', async () => {
+it('says how many changed sessions deleting a goal kept, and nothing when none', async () => {
   vi.spyOn(goalsApi, 'list').mockResolvedValue([goal]);
   const remove = vi.spyOn(goalsApi, 'remove').mockResolvedValueOnce({ kept: 1 }).mockResolvedValueOnce({ kept: 0 });
   const client = renderPanel();
   fireEvent.click(await screen.findByRole('button', { name: 'Supprimer Semi de Paris' }));
-  expect(screen.getByText(/sauf celles que tu as modifiées : elles restent dans ton planning\./)).toBeTruthy();
+  expect(screen.getByText(/Celles déjà modifiées, par toi ou par le coach, restent dans ton planning\./)).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
   await waitFor(() => expect(remove).toHaveBeenCalledWith(goal.id));
   expect((await screen.findByRole('status')).textContent).toBe(
-    'Objectif supprimé. 1 séance que tu as modifiée reste dans ton planning.'
+    'Objectif supprimé. 1 séance reste dans ton planning : déjà modifiée, ou avec un envoi Garmin à vérifier.'
   );
   fireEvent.click(screen.getByRole('button', { name: 'Supprimer Semi de Paris' }));
   fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
   await waitFor(() => expect(remove).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+  client.clear();
+});
+
+it('clears the deleted goal notice once another goal is opened', async () => {
+  const other: Goal = { ...goal, id: 2, name: '10 km de Lyon' };
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([goal, other]);
+  vi.spyOn(goalsApi, 'remove').mockResolvedValue({ kept: 2 });
+  const client = renderPanel();
+  const deleteGoal = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Supprimer Semi de Paris' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    expect((await screen.findByRole('status')).textContent).toContain('Objectif supprimé. 2 séances restent');
+  };
+  await deleteGoal();
+  fireEvent.click(screen.getByRole('button', { name: 'Modifier 10 km de Lyon' }));
+  expect(screen.queryByRole('status')).toBeNull();
+  const form = screen.getByRole('button', { name: 'Enregistrer' }).closest('form')!;
+  fireEvent.click(within(form).getByRole('button', { name: 'Annuler' }));
+  await deleteGoal();
+  fireEvent.click(screen.getByRole('button', { name: /Ajouter un objectif/ }));
+  expect(screen.queryByRole('status')).toBeNull();
   client.clear();
 });

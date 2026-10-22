@@ -152,11 +152,14 @@ export function weeksAtGoalText(hit: number, weeks: number): string {
   return `${hit} des ${weeks} dernières semaines à l’objectif de charge`;
 }
 
-/** Removing a plan or its goal keeps the sessions the athlete edited (services/plan_builder.py): how many. */
+/**
+ * Removing a plan or its goal keeps its sessions already changed (by the athlete or the coach,
+ * skipped) and those whose Garmin export is unsettled (services/plan_builder.py): how many.
+ */
 export function keptEditsText(kept: number): string {
   return kept > 1
-    ? `${kept} séances que tu as modifiées restent dans ton planning.`
-    : `${kept} séance que tu as modifiée reste dans ton planning.`;
+    ? `${kept} séances restent dans ton planning : déjà modifiées, ou avec un envoi Garmin à vérifier.`
+    : `${kept} séance reste dans ton planning : déjà modifiée, ou avec un envoi Garmin à vérifier.`;
 }
 
 /** "1,12", "+4,2": French decimals with a fixed precision; `signed` marks a positive value. */

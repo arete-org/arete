@@ -318,7 +318,7 @@ def preview(goal_id: int, today: date | None = None) -> dict[str, Any]:
 
 
 class Removal(NamedTuple):
-    """Sessions taken back, and those the athlete edited that stayed."""
+    """Sessions taken back, and the goal's other sessions still to come that stayed."""
 
     deleted: int
     kept: int
@@ -353,10 +353,14 @@ def _delete_future(goal_id: int, start: date) -> Removal:
             )
         except (ValueError, duckdb.TransactionException):
             continue  # an export in progress, or the athlete's edit won
+    # What stays still to come: edited, changed by the coach (``modified``),
+    # re-statused (``skipped``), or refused for an export in progress.
     con = connect()
     try:
         row = con.execute(
-            f"SELECT count(*) {pending} AND revision > 1", [goal_id, start]
+            "SELECT count(*) FROM app.visible_planned_sessions"
+            " WHERE goal_id = ? AND date >= ? AND status <> 'completed'",
+            [goal_id, start],
         ).fetchone()
     finally:
         con.close()
@@ -427,8 +431,8 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
 
 
 def remove(goal_id: int, today: date | None = None) -> Removal:
-    """Delete the goal's sessions still to come that the athlete never
-    edited: how many went, and how many edited ones stayed."""
+    """Delete the goal's sessions still to come that nobody changed: how
+    many went, and how many others stayed (``Removal``)."""
     _goal_or_raise(goal_id)
     return _delete_future(goal_id, (today or athlete_today()) + timedelta(days=1))
 

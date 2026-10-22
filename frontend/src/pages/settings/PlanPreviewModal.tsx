@@ -236,7 +236,7 @@ export function PlanPreviewModal({ goal, onClose }: { goal: Goal; onClose: () =>
         {confirmDelete ? (
           <>
             <span className="text-xs text-text-muted self-center">
-              Supprimer les séances à venir de ce plan ? Celles que tu as modifiées restent.
+              Supprimer les séances à venir de ce plan ? Celles déjà modifiées, par toi ou par le coach, restent.
             </span>
             <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)} disabled={busy}>
               Annuler

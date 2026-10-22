@@ -512,14 +512,14 @@ export function RaceGoalsPanel() {
   const [editing, setEditing] = useState<number | null>(null);
   const [toDelete, setToDelete] = useState<Goal | null>(null);
   const [planFor, setPlanFor] = useState<Goal | null>(null);
-  // The edited sessions the last deleted goal left in the planning.
+  // The changed sessions the last deleted goal left in the planning, until another goal is opened.
   const [kept, setKept] = useState(0);
 
   const remove = useMutation({
     mutationFn: (id: number) => goalsApi.remove(id),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: qk.goals });
-      // The goal's future generated sessions go with it, apart from the edited ones.
+      // The goal's future generated sessions go with it, apart from the changed ones.
       invalidateAfterSession(queryClient);
       setKept(result.kept);
       setToDelete(null);
@@ -565,7 +565,10 @@ export function RaceGoalsPanel() {
                   key={goal.id}
                   goal={goal}
                   onPlan={() => setPlanFor(goal)}
-                  onEdit={() => setEditing(goal.id)}
+                  onEdit={() => {
+                    setKept(0);
+                    setEditing(goal.id);
+                  }}
                   onDelete={() => setToDelete(goal)}
                 />
               )
@@ -575,7 +578,14 @@ export function RaceGoalsPanel() {
         {adding ? (
           <GoalForm onDone={() => setAdding(false)} />
         ) : (
-          <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setKept(0);
+              setAdding(true);
+            }}
+          >
             <Plus className="size-3.5" /> Ajouter un objectif
           </Button>
         )}
@@ -587,8 +597,8 @@ export function RaceGoalsPanel() {
           <ModalHeader title="Supprimer l’objectif" onClose={closeDelete} className="mb-4" />
           <p className="text-sm text-text-secondary mb-2">Supprimer « {toDelete?.name} » ?</p>
           <p className="text-xs text-text-muted mb-6">
-            Les séances à venir générées pour cet objectif sont supprimées aussi, sauf celles que tu as modifiées : elles
-            restent dans ton planning.
+            Les séances à venir générées pour cet objectif sont supprimées aussi. Celles déjà modifiées, par toi ou par le
+            coach, restent dans ton planning.
           </p>
           {remove.isError && <p className="text-xs text-danger-red mb-3">{readableError(remove.error)}</p>}
           <div className="flex gap-3 justify-end">

@@ -85,7 +85,7 @@ def update_goal(goal_id: int, body: GoalUpdate) -> dict[str, Any]:
 
 @router.delete("/{goal_id}")
 def delete_goal(goal_id: int) -> dict[str, int]:
-    """``kept``: its future sessions the athlete edited, which stay."""
+    """``kept``: its future sessions already changed, which stay."""
     kept = service.delete_goal(goal_id)
     if kept is None:
         raise HTTPException(status_code=404, detail="Objectif introuvable")
@@ -126,7 +126,7 @@ def remove_plan(goal_id: int) -> dict[str, Any]:
     from arete.services import plan_builder
 
     try:
-        # The future sessions the athlete edited stay: ``kept`` counts them.
+        # The future sessions already changed stay: ``kept`` counts them.
         return plan_builder.remove(goal_id)._asdict()
     except LookupError:
         raise HTTPException(status_code=404, detail="Objectif introuvable") from None

@@ -289,19 +289,31 @@ def test_regeneration_does_not_delete_an_edit_landing_meanwhile(
     assert kept is not None and kept.description == "Déplacée par moi"
 
 
-def test_removing_the_plan_keeps_the_sessions_the_athlete_edited(goal, router_client):
+def test_removing_the_plan_keeps_the_sessions_already_changed(goal, router_client):
     from arete.api.goals import router
 
     repo = GarminRepository()
     created = plan_builder.apply(goal.id, TODAY)["created"]
-    edited = _plan_sessions(goal.id)[0]
+    edited, adapted, skipped = _plan_sessions(goal.id)[:3]
     assert repo.update_planned_session_fields(
         edited.id or 0, expected_revision=1, description="Footing avec un ami"
     )
+    # Re-statused at revision 1: the coach's adaptation, a skipped day.
+    con = connect()
+    for session, status in ((adapted, "modified"), (skipped, "skipped")):
+        con.execute(
+            "UPDATE app.planned_sessions SET status = ? WHERE id = ?",
+            [status, session.id],
+        )
+    con.close()
     with patch("arete.services.plan_builder.athlete_today", return_value=TODAY):
         body = router_client(router).delete(f"/goals/{goal.id}/plan").json()
-    assert body == {"deleted": created - 1, "kept": 1}
-    assert [s.id for s in _plan_sessions(goal.id)] == [edited.id]
+    assert body == {"deleted": created - 3, "kept": 3}
+    assert [s.id for s in _plan_sessions(goal.id)] == [
+        edited.id,
+        adapted.id,
+        skipped.id,
+    ]
 
 
 @pytest.mark.parametrize(

@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from arete.dataio.db import connect
-from arete.garmin.models import PlannedSession, SessionType
+from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services import goals
 from arete.services.settings import athlete_today, today_in
@@ -113,6 +113,49 @@ def test_deleting_a_goal_keeps_the_sessions_the_athlete_edited():
             untouched: ("pending_removal", True),
             edited: ("scheduled", False),
         }
+    finally:
+        con = connect()
+        con.execute("DELETE FROM app.garmin_exports WHERE operation_id = 'test-goal'")
+        con.close()
+
+
+def test_deleting_a_goal_counts_every_session_still_to_come_that_stays():
+    """Adapted by the coach (``modified``), skipped, or refused for an export
+    in progress: each stays and counts; a completed one stays, uncounted."""
+    g = goals.create_goal(name="test-stays", race_date=FAR, distance_km=10)
+    repo = GarminRepository()
+    modified, skipped, exporting, completed, untouched = (
+        repo.create_planned_session(
+            PlannedSession(
+                date=FAR - timedelta(days=d),
+                session_type=SessionType.TEMPO,
+                status=status,
+                goal_id=g.id,
+            )
+        )
+        for d, status in (
+            (6, SessionStatus.MODIFIED),
+            (5, SessionStatus.SKIPPED),
+            (4, SessionStatus.PENDING),
+            (3, SessionStatus.COMPLETED),
+            (2, SessionStatus.PENDING),
+        )
+    )
+    con = connect()
+    try:
+        con.execute(
+            "INSERT INTO app.garmin_exports (session_id, operation_id, state) VALUES (?, 'test-goal', 'working')",
+            [exporting],
+        )
+    finally:
+        con.close()
+    try:
+        assert goals.delete_goal(g.id) == 3
+        assert repo.get_planned_session(untouched) is None
+        for session_id in (modified, skipped, exporting, completed):
+            stayed = repo.get_planned_session(session_id)
+            assert stayed is not None and stayed.goal_id is None
+        assert _exports() == {exporting: ("working", False)}
     finally:
         con = connect()
         con.execute("DELETE FROM app.garmin_exports WHERE operation_id = 'test-goal'")

@@ -103,7 +103,7 @@ export const goalsApi = {
       body: JSON.stringify(fields),
     }),
 
-  /** Also deletes the goal's future sessions the athlete never edited; `kept` counts the edited ones, which stay. */
+  /** Also deletes the goal's future sessions nobody changed; `kept` counts the others, which stay. */
   remove: (id: number) => fetchAPI<{ kept: number }>(`/goals/${id}`, { method: "DELETE" }),
 
   previewPlan: (id: number) =>
@@ -117,7 +117,7 @@ export const goalsApi = {
       method: "POST",
     }),
 
-  /** Deletes the plan's future sessions the athlete never edited; `kept` counts the edited ones, which stay. */
+  /** Deletes the plan's future sessions nobody changed; `kept` counts the others, which stay. */
   deletePlan: (id: number) =>
     fetchAPI<{ deleted: number; kept: number }>(`/goals/${id}/plan`, { method: "DELETE" }),
 
