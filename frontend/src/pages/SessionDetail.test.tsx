@@ -81,7 +81,7 @@ const detail: ActivityDetail = {
     start_altitude_m: 1035,
     source: 'open-meteo-archive',
   },
-  summary: { rule_feedback: null, strength: null, next_day: null },
+  summary: { rule_feedback: null, strength: null, plan: null, next_day: null },
 };
 
 function renderAt(path: string) {
@@ -237,7 +237,7 @@ it('opens with the summary, the coach in one sentence and tomorrow, before the t
       text: 'Fractionné régulier du début à la fin, sans dérive cardiaque. Garde cette allure pour la prochaine séance.',
       source: 'agent', trigger: 'sync', created_at: null,
     },
-    summary: { rule_feedback: null, strength: null, next_day: { date: '2026-10-09', relative: 'tomorrow', planned: [planned], proposals: [], next: null } },
+    summary: { rule_feedback: null, strength: null, plan: null, next_day: { date: '2026-10-09', relative: 'tomorrow', planned: [planned], proposals: [], next: null } },
   });
   renderAt('/log/sessions/12');
   const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
@@ -266,6 +266,7 @@ it('shows the rules\' sentence when no feedback is stored, and today\'s proposal
     summary: {
       rule_feedback: 'Séance de course terminée (49 min). Bon travail de fond, intensité bien maîtrisée.',
       strength: null,
+      plan: null,
       next_day: {
         date: '2026-10-09', relative: 'today', planned: [{ ...planned, session_type: 'tempo', description: null }],
         proposals: [{ planned_session_id: 40, decision: 'ease', reason: 'Préparation Garmin 55/100 : séance allégée.', state: 'pending' }],
@@ -279,6 +280,27 @@ it('shows the rules\' sentence when no feedback is stored, and today\'s proposal
   expect(summary.textContent).toContain('Séance de course terminée (49 min). Bon travail de fond');
   expect(summary.textContent).toContain('Aujourd’hui : Seuil · 45 min · Z2, le coach propose : allégée.');
   expect(summary.textContent).toContain('Préparation Garmin 55/100 : séance allégée.');
+});
+
+it('says how a planned session compared with its plan and links to it, and nothing without a plan', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockClear();
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail,
+    session: { ...session, duration_sec: 35 * 60, avg_hr: 150 },
+    summary: { ...detail.summary, plan: { planned: { ...planned, date: '2026-10-08' }, verdict: 'shorter', target_hr_bpm: 154 } },
+  });
+  const { unmount } = renderAt('/log/sessions/12');
+  const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(summary.textContent).toContain('Face au plan : plus court. 35 min au total pour 45 min prévues, FC 150 bpm pour une Z2 autour de 154 bpm.');
+  expect(screen.getByRole('link', { name: 'Voir la séance prévue : Footing souple' }).getAttribute('href')).toBe('/planning?date=2026-10-08&session=40');
+  expect(analyticsApi.getSessionDetail).toHaveBeenCalledTimes(1);
+  unmount();
+
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue(detail);
+  renderAt('/log/sessions/12');
+  const plain = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(plain.textContent).not.toContain('Face au plan');
+  expect(screen.queryByRole('link', { name: /Voir la séance prévue/ })).toBeNull();
 });
 
 it('asks for the RPE inside the summary when it is missing', async () => {

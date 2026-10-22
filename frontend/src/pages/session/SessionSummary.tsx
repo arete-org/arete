@@ -1,16 +1,17 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { GlossaryLink } from '@/components/GlossaryLink';
 import { RpePicker } from '@/components/RpePicker';
 import { useCoachWords } from '@/lib/coachName';
 import type { ActivityDetail } from '@/types';
 import { summaryNumbers } from './summaryNumbers';
-import { leadSentence, nextDayLine } from './summaryText';
+import { leadSentence, nextDayLine, planLine } from './summaryText';
 
 /**
  * What a session's page opens with: its three numbers, the coach's word in
- * one sentence and what the plan holds next. All from the detail payload: no
- * request of its own, no model call.
+ * one sentence, how it compared with its plan and what the plan holds next.
+ * All from the detail payload: no request of its own, no model call.
  */
 export function SessionSummary({ detail, focusRpe }: { detail: ActivityDetail; focusRpe: boolean }) {
   const coach = useCoachWords();
@@ -19,6 +20,7 @@ export function SessionSummary({ detail, focusRpe }: { detail: ActivityDetail; f
   const { summary, session } = detail;
   const word = detail.feedback ?? (summary.rule_feedback ? { text: summary.rule_feedback, source: 'rules' as const } : null);
   const [lead, more] = word ? leadSentence(word.text) : ['', ''];
+  const plan = summary.plan ? planLine(summary.plan, session) : null;
   const next = summary.next_day ? nextDayLine(summary.next_day, coach) : null;
 
   return (
@@ -58,6 +60,21 @@ export function SessionSummary({ detail, focusRpe }: { detail: ActivityDetail; f
               {open ? 'Réduire' : 'Lire la suite'}
             </button>
           )}
+        </div>
+      )}
+      {plan && (
+        <div className="text-sm">
+          <p>
+            <span className="font-medium text-ink-primary">{plan.label} :</span>{' '}
+            {plan.verdict && <><span className="font-medium text-ink-primary">{plan.verdict}.</span>{' '}</>}
+            <span className="text-ink-secondary">{plan.text}</span>
+          </p>
+          <Link
+            to={plan.href}
+            className="inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-2"
+          >
+            Voir la séance prévue : {plan.title}
+          </Link>
         </div>
       )}
       {next && (

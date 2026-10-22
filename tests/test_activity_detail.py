@@ -469,6 +469,56 @@ class TestSummary:
         assert next_day["next"]["id"] == later
         assert next_day["next"]["session_type"] == "intervals"
 
+    @pytest.mark.parametrize(
+        ("minutes", "avg_hr", "verdict"),
+        [(48, 152, "on_plan"), (35, 152, "shorter"), (45, 178, "harder")],
+    )
+    def test_a_linked_session_is_compared_with_its_plan(
+        self, make_session, plan_day, monkeypatch, minutes, avg_hr, verdict
+    ):
+        from arete.features.hr_zones import ZoneModel
+        from arete.services.activity_detail import get_activity_detail
+
+        # Z2 of a 176 bpm threshold is 150-157 bpm: the intensity is read at 154.
+        monkeypatch.setattr(
+            "arete.services.activity_detail.athlete_zone_model",
+            lambda: ZoneModel.from_reference(lthr=176),
+        )
+        planned = _plan(SUMMARY_DAY, description="Footing ARE-179")
+        detail = get_activity_detail(
+            make_session(
+                date=SUMMARY_DAY - timedelta(days=5),
+                planned_session_id=planned,
+                duration_sec=minutes * 60,
+                avg_hr=avg_hr,
+            )
+        )
+        assert detail is not None
+        plan = detail["summary"]["plan"]
+        assert plan["planned"]["id"] == planned
+        assert plan["planned"]["description"] == "Footing ARE-179"
+        assert plan["planned"]["target_duration_min"] == 45
+        assert plan["planned"]["target_hr_zone"] == "Z2"
+        assert plan["target_hr_bpm"] == 154
+        assert plan["verdict"] == verdict
+
+    def test_an_unplanned_session_has_no_plan_line(self, make_session, plan_day):
+        from arete.services.activity_detail import get_activity_detail
+
+        detail = get_activity_detail(make_session(date=SUMMARY_DAY))
+        assert detail is not None
+        assert detail["summary"]["plan"] is None
+
+    def test_a_link_to_a_deleted_plan_shows_none(self, make_session, plan_day):
+        from arete.services.activity_detail import get_activity_detail
+
+        planned = _plan(SUMMARY_DAY)
+        session_id = make_session(date=SUMMARY_DAY, planned_session_id=planned)
+        GarminRepository().delete_planned_session(planned)
+        detail = get_activity_detail(session_id)
+        assert detail is not None
+        assert detail["summary"]["plan"] is None
+
     def test_an_older_session_says_nothing_about_a_past_day(
         self, make_session, plan_day
     ):

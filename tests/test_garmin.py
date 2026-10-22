@@ -215,6 +215,52 @@ class TestSessionMatcher:
         assert result.is_matched
         assert result.planned_session.id == 2  # Should pick the better match
 
+    # A 50 min Z2 for a 176 bpm threshold: Z2 is 150-157, read against 154 bpm.
+    @pytest.mark.parametrize(
+        ("minutes", "avg_hr", "zone", "target_min", "expected"),
+        [
+            (50, 154, "Z2", 50, "on_plan"),
+            # The full-points bands are inclusive: 10 % over is still on plan.
+            (55, 154, "Z2", 50, "on_plan"),
+            (50, 167, "Z2", 50, "on_plan"),
+            (40, 154, "Z2", 50, "shorter"),
+            (60, 154, "Z2", 50, "longer"),
+            (50, 175, "Z2", 50, "harder"),
+            (50, 135, "Z2", 50, "easier"),
+            (48, 185, "Z2", 50, "harder"),
+            # Both outside their band: the furthest one names the difference.
+            (40, 175, "Z2", 50, "shorter"),
+            (44, 185, "Z2", 50, "harder"),
+            # What cannot be measured is not held against the session.
+            (50, None, "Z2", 50, "on_plan"),
+            (40, None, None, 50, "shorter"),
+            (50, 175, "Z2", None, "harder"),
+            (50, None, "Z2", None, None),
+            (50, 154, None, None, None),
+        ],
+    )
+    def test_the_verdict_reads_the_score_s_full_points_bands(
+        self, minutes, avg_hr, zone, target_min, expected
+    ):
+        from arete.features.hr_zones import ZoneModel
+
+        actual = ActualSession(
+            date=date(2024, 6, 15),
+            sport="running",
+            duration_sec=minutes * 60,
+            avg_hr=avg_hr,
+        )
+        planned = PlannedSession(
+            id=1,
+            date=date(2024, 6, 15),
+            session_type=SessionType.ENDURANCE,
+            target_duration_min=target_min,
+            target_hr_zone=zone,
+        )
+        matcher = SessionMatcher(zones=ZoneModel.from_reference(lthr=176))
+        assert matcher.target_hr(planned) == (154 if zone else None)
+        assert matcher.verdict(actual, planned) == expected
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # Repository Tests

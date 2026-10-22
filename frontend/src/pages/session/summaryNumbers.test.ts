@@ -44,7 +44,7 @@ function detail(overrides: Partial<ActivityDetail> = {}, fields: Partial<Activit
     feedback: null,
     terrain: null,
     weather: null,
-    summary: { rule_feedback: null, strength: null, next_day: null },
+    summary: { rule_feedback: null, strength: null, plan: null, next_day: null },
     ...overrides,
   };
 }
@@ -127,6 +127,7 @@ describe('summaryNumbers', () => {
       {
         summary: {
           rule_feedback: null,
+          plan: null,
           next_day: null,
           strength: {
             tonnage_kg: 4250,
@@ -150,6 +151,7 @@ describe('summaryNumbers', () => {
       {
         summary: {
           rule_feedback: null,
+          plan: null,
           next_day: null,
           strength: { tonnage_kg: 500, sets: 1, top_e1rm: { exercise: 'Squat', e1rm_kg: 100, previous_kg: null, previous_date: null } },
         },
@@ -165,6 +167,7 @@ describe('summaryNumbers', () => {
       {
         summary: {
           rule_feedback: null,
+          plan: null,
           next_day: null,
           strength: { tonnage_kg: 0, sets: 4, top_e1rm: { exercise: 'Squat', e1rm_kg: 100, previous_kg: 100, previous_date: '2026-10-13' } },
         },

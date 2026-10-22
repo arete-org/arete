@@ -662,11 +662,16 @@ detail payload carries it (`summary`, typed `SessionSummary` beside the service)
 so the page makes no request of its own and no model is called: the rules'
 sentence when no feedback is stored (`coaching_rules.cardio_rule_feedback`, or
 `strength_rule_feedback` for a linked Muscu log), the linked log's tonnage,
-working sets and top 1RM estimate against that lift's previous session, and the
+working sets and top 1RM estimate against that lift's previous session, the
+planned session the session is linked to (`planned_session_id`) with a verdict
+on the adherence score's own full-points bands (`garmin/matcher.plan_verdict`:
+duration and average heart rate within 10 % of the target are on plan, else the
+furthest one says shorter, longer, harder or easier), and the
 day after the session while it is today or tomorrow: its planned sessions, the
 morning's standing proposals on them (today only), or the next open session
 within a week. The browser picks the three numbers by sport and detected
-structure (`pages/session/summaryNumbers.ts`) and words « Demain : … ».
+structure (`pages/session/summaryNumbers.ts`) and words « Face au plan : … »,
+linking the planned session's day in Planning, and « Demain : … ».
 
 Migration 32 stores what the streams and the start say about a session's
 conditions, once, so no page or card rescans a stream: `app.activity_terrain`

@@ -745,7 +745,7 @@ export interface ActivityDetail {
   summary: ActivitySummary;
 }
 
-/** A planned session as the session page's « Demain » line names it. */
+/** A planned session as the session page's « Face au plan » and « Demain » lines name it. */
 export interface PlannedBrief {
   id: number;
   date: string;
@@ -767,6 +767,14 @@ export interface ActivitySummary {
     sets: number;
     /** The session's best 1RM estimate and that exercise's previous session. */
     top_e1rm: { exercise: string; e1rm_kg: number; previous_kg: number | null; previous_date: string | null } | null;
+  } | null;
+  /** The planned session this one is linked to, and how it compared (garmin/matcher.plan_verdict). */
+  plan: {
+    planned: PlannedBrief;
+    /** Null when neither the duration nor the intensity could be compared. */
+    verdict: 'on_plan' | 'shorter' | 'longer' | 'harder' | 'easier' | null;
+    /** The planned zone's middle heart rate, which the intensity is read against. */
+    target_hr_bpm: number | null;
   } | null;
   /** The day after the session, while it is today or tomorrow. */
   next_day: {

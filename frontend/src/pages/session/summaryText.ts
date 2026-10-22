@@ -1,7 +1,7 @@
 import type { CoachWords } from '@/lib/coachName';
 import { DECISION_LABEL } from '@/lib/fr';
 import { sessionTitle, STATE_LABELS } from '@/pages/planning/sessionForm';
-import type { ActivitySummary, PlannedBrief } from '@/types';
+import type { ActivityDetail, ActivitySummary, PlannedBrief } from '@/types';
 
 /** Under this the first sentence says too little alone (« Bravo ! »): the next one joins it. */
 const MIN_LEAD_CHARS = 40;
@@ -28,6 +28,41 @@ function plannedText(planned: PlannedBrief): string {
   if (planned.status === 'skipped') return `${text} (${STATE_LABELS.skipped.toLowerCase()})`;
   if (planned.status === 'completed') return `${text} (${STATE_LABELS.done.toLowerCase()})`;
   return text;
+}
+
+const VERDICT: Record<NonNullable<NonNullable<ActivitySummary['plan']>['verdict']>, string> = {
+  on_plan: 'conforme',
+  shorter: 'plus court',
+  longer: 'plus long',
+  harder: 'plus intense',
+  easier: 'plus facile',
+};
+
+/**
+ * « Face au plan : conforme. 48 min au total pour 45 min prévues, FC 152 bpm pour une Z2 autour de 154 bpm. »
+ * The measures the verdict read (duration_sec, avg_hr) against the plan's targets;
+ * without a verdict, the planned session itself.
+ */
+export function planLine(
+  plan: NonNullable<ActivitySummary['plan']>,
+  session: Pick<ActivityDetail['session'], 'duration_sec' | 'avg_hr'>,
+): { label: string; verdict: string | null; text: string; title: string; href: string } {
+  const { planned } = plan;
+  const parts: string[] = [];
+  if (planned.target_duration_min) {
+    parts.push(`${Math.round(session.duration_sec / 60)} min au total pour ${planned.target_duration_min} min prévues`);
+  }
+  if (planned.target_hr_zone && plan.target_hr_bpm && session.avg_hr) {
+    parts.push(`FC ${Math.round(session.avg_hr)} bpm pour une ${planned.target_hr_zone.toUpperCase()} autour de ${plan.target_hr_bpm} bpm`);
+  }
+  return {
+    label: plan.verdict ? 'Face au plan' : 'Séance prévue',
+    verdict: plan.verdict ? VERDICT[plan.verdict] : null,
+    text: parts.length ? `${parts.join(', ')}.` : `${plannedText(planned)}.`,
+    title: sessionTitle(planned),
+    // The planning's day, as the workout card links it.
+    href: `/planning?date=${planned.date}&session=${planned.id}`,
+  };
 }
 
 const weekday = (iso: string) =>
