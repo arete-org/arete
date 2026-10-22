@@ -11,7 +11,8 @@ workout read from the FIT laps' intensity.
 
 The page gets everything, streams down-sampled for a chart, and the block it
 opens with (``summary``): the rule sentence when no feedback is stored, a
-strength log's totals and the next day's plan. The model gets a compact digest
+strength log's totals, how the session compared with its linked plan and the
+next day's plan. The model gets a compact digest
 without any stream, and never a Strava row (Strava's API agreement keeps its
 data out of AI applications).
 """
@@ -24,7 +25,9 @@ from datetime import date, timedelta
 from typing import Any, Literal, TypedDict
 
 from arete.dataio.queries import FOOT_SPORTS
+from arete.dataio.settings import athlete_zone_model
 from arete.features.overview import ZONES
+from arete.garmin.matcher import PlanVerdict, SessionMatcher
 from arete.garmin.models import ActualSession, PlannedSession
 from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import ActivityStreams, downsample, route
@@ -112,12 +115,24 @@ class NextDay(TypedDict):
     next: PlannedBrief | None
 
 
+class PlanComparison(TypedDict):
+    """The planned session this one is linked to, and how it compared."""
+
+    planned: PlannedBrief
+    #: ``garmin.matcher.plan_verdict``: None when nothing could be compared.
+    verdict: PlanVerdict | None
+    #: The planned zone's middle heart rate, which the intensity is read against.
+    target_hr_bpm: int | None
+
+
 class SessionSummary(TypedDict):
     """What the session page opens with, from stored rows only (no model call)."""
 
     #: The rules' sentence, only when the session has no stored feedback.
     rule_feedback: str | None
     strength: StrengthTotals | None
+    #: None when the session is linked to no planned session.
+    plan: PlanComparison | None
     next_day: NextDay | None
 
 
@@ -380,7 +395,26 @@ def _summary_block(
     return {
         "rule_feedback": None if has_feedback else _rule_feedback(session, log),
         "strength": _strength_totals(log) if log else None,
+        "plan": _plan_comparison(session, repo),
         "next_day": _next_day(session.date, repo),
+    }
+
+
+def _plan_comparison(
+    session: ActualSession, repo: GarminRepository
+) -> PlanComparison | None:
+    """The linked planned session against what was done, on the matcher's rules."""
+    if session.planned_session_id is None:
+        return None
+    planned = repo.get_planned_session(session.planned_session_id)
+    if planned is None or planned.id is None:
+        return None
+    matcher = SessionMatcher(zones=athlete_zone_model())
+    target_hr = matcher.target_hr(planned)
+    return {
+        "planned": _brief(planned),
+        "verdict": matcher.verdict(session, planned),
+        "target_hr_bpm": None if target_hr is None else round(target_hr),
     }
 
 

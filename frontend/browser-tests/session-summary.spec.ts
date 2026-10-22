@@ -16,7 +16,7 @@ const run: ActivityDetail = {
     source: 'agent', trigger: 'sync', created_at: null,
   },
   session: { ...detail.session, name: 'Footing du matin', rpe: null },
-  summary: { rule_feedback: null, strength: null, next_day: { date: '2026-10-09', relative: 'tomorrow', planned: [tomorrow], proposals: [], next: null } },
+  summary: { rule_feedback: null, strength: null, plan: null, next_day: { date: '2026-10-09', relative: 'tomorrow', planned: [tomorrow], proposals: [], next: null } },
 };
 
 const strength: ActivityDetail = {
@@ -30,12 +30,26 @@ const strength: ActivityDetail = {
   summary: {
     rule_feedback: 'Séance musculation terminée — 4250 kg de volume total sur quadriceps, fessiers. RPE ressenti : 7/10.',
     strength: { tonnage_kg: 4250, sets: 18, top_e1rm: { exercise: 'Squat', e1rm_kg: 120, previous_kg: 117.5, previous_date: '2026-10-01' } },
+    plan: null,
     next_day: {
       date: '2026-10-09', relative: 'today', planned: [{ ...tomorrow, session_type: 'intervals', description: null, target_duration_min: 50, target_hr_zone: 'Z4' }],
       proposals: [{ planned_session_id: 40, decision: 'ease', reason: 'Préparation Garmin 55/100 : fractionné allégé à 35 min.', state: 'pending' }],
       next: null,
     },
   },
+};
+
+/** The same run linked to its planned session of the day: on plan (13), then cut short (14). */
+const todays = { ...tomorrow, id: 41, date: '2026-10-08', description: 'Footing vallonné', target_duration_min: 50 };
+const planned: ActivityDetail = {
+  ...run,
+  session: { ...run.session, id: 13, planned_session_id: 41, adherence_score: 95 },
+  summary: { ...run.summary, plan: { planned: todays, verdict: 'on_plan', target_hr_bpm: 154 } },
+};
+const cutShort: ActivityDetail = {
+  ...planned,
+  session: { ...planned.session, id: 14, duration_sec: 38 * 60, moving_time_sec: 37 * 60, adherence_score: 75 },
+  summary: { ...planned.summary, plan: { planned: todays, verdict: 'shorter', target_hr_bpm: 154 } },
 };
 
 const log: StrengthSession = {
@@ -58,6 +72,8 @@ async function mockApi(page: Page, theme: string) {
     if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'disconnected' } });
     if (path === '/api/analytics/sessions/12/detail') return route.fulfill({ json: run });
+    if (path === '/api/analytics/sessions/13/detail') return route.fulfill({ json: planned });
+    if (path === '/api/analytics/sessions/14/detail') return route.fulfill({ json: cutShort });
     if (path === '/api/analytics/sessions/301/detail') return route.fulfill({ json: strength });
     if (path === '/api/strength/sessions/4') return route.fulfill({ json: log });
     return route.fulfill({ json: [] });
@@ -70,6 +86,7 @@ const pageReads = (requests: string[]) =>
   requests.filter((r) => /\/api\/(analytics|strength|plan|planned|coach|tips|metrics|goals)\b/.test(r));
 
 const SHOTS = '../.context/are140';
+const SHOTS_179 = '../.context/are179';
 
 for (const theme of ['pierre', 'encre']) {
   for (const width of [390, 1440]) {
@@ -88,6 +105,9 @@ for (const theme of ['pierre', 'encre']) {
       await expect(summary).toContainText('Footing bien dosé : le cardio est resté en endurance du début à la fin.');
       await expect(summary).not.toContainText('sortie longue de dimanche');
       await expect(summary).toContainText('Demain : Footing souple · 45 min · Z2.');
+      // Linked to no planned session: no comparison, no link.
+      await expect(summary).not.toContainText('Face au plan');
+      await expect(summary.getByRole('link', { name: /Voir la séance prévue/ })).toHaveCount(0);
       await expect(summary.getByRole('region', { name: 'Effort ressenti' })).toBeVisible();
       // Above the fold: the numbers, the coach's sentence and tomorrow fit the first screen.
       const box = (await summary.getByText('Demain :').boundingBox())!;
@@ -99,10 +119,35 @@ for (const theme of ['pierre', 'encre']) {
       expect(tilesTop).toBeLessThan(curvesTop);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: `${SHOTS}/run-${theme}-${width}.png` });
+      await page.screenshot({ path: `${SHOTS_179}/unplanned-${theme}-${width}.png` });
       // One read of the detail, nothing else: the summary has no request of its own.
       expect(pageReads(requests)).toEqual(['GET /api/analytics/sessions/12/detail']);
       expect(errors).toEqual([]);
     });
+
+    for (const [id, verdict, line] of [
+      [13, 'conforme', '50 min au total pour 50 min prévues, FC 152 bpm pour une Z2 autour de 154 bpm.'],
+      [14, 'plus court', '38 min au total pour 50 min prévues, FC 152 bpm pour une Z2 autour de 154 bpm.'],
+    ] as const) {
+      test(`a planned run says it was ${verdict} and links to its plan in ${theme} at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 844 });
+        const { requests, errors } = await mockApi(page, theme);
+        await page.goto(`/log/sessions/${id}`);
+        const summary = page.getByRole('region', { name: 'L’essentiel de la séance' });
+        await expect(summary).toContainText(`Face au plan : ${verdict}. ${line}`);
+        const link = summary.getByRole('link', { name: 'Voir la séance prévue : Footing vallonné' });
+        await expect(link).toHaveAttribute('href', '/planning?date=2026-10-08&session=41');
+        // A thumb-sized target, inside the first screen with the day after.
+        const box = (await link.boundingBox())!;
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect((await summary.getByText('Demain :').boundingBox())!.y).toBeLessThan(844);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: `${SHOTS_179}/planned-${id}-${theme}-${width}.png` });
+        // The comparison came with the detail: still one read.
+        expect(pageReads(requests)).toEqual([`GET /api/analytics/sessions/${id}/detail`]);
+        expect(errors).toEqual([]);
+      });
+    }
 
     test(`a strength session opens with tonnage, sets and its top 1RM in ${theme} at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 844 });
