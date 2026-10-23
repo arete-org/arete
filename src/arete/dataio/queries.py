@@ -50,6 +50,15 @@ def sql_in(values: Iterable[str]) -> str:
     return ", ".join(f"'{v}'" for v in values)
 
 
+#: Sources whose rows never reach a language model. Strava's API agreement
+#: (1 June 2026) forbids using its data in AI applications, inference
+#: included: sessions imported from Strava stay out of the coach's inputs and
+#: out of every series built here (ARE-126).
+MODEL_EXCLUDED_SOURCES: tuple[str, ...] = ("strava",)
+#: ``MODEL_EXCLUDED_SOURCES`` as an SQL list, for ``NOT IN (...)``.
+EXCLUDED_SOURCES_SQL = sql_in(MODEL_EXCLUDED_SOURCES)
+
+
 # The athlete's threshold HR, for the HR branch of the TSS estimate: tested,
 # else derived from max HR, else derived from the default max HR (single
 # athlete: settings live on user 1).
@@ -62,15 +71,15 @@ THRESHOLD_HR_SQL = f"""
 """
 
 # TSS estimate per session, best signal first:
-# RPE -> Strava suffer score -> hrTSS on the threshold -> flat default (RPE 5).
+# RPE -> hrTSS on the threshold -> flat default (RPE 5). Strava's suffer score
+# is never read: Strava's API agreement forbids its data in an AI application,
+# and this load feeds the coach (ARE-126).
 # RPE: (duration_min * (RPE/10)^2) / 0.36, so 1 h at RPE 6 = 60, at ~7.7 = 100.
 # HR: hours * (avg HR / threshold HR)^2 * 100, so 1 h at threshold = 100.
 TSS_EXPR = f"""
     CASE
       WHEN rpe IS NOT NULL THEN
         (COALESCE(duration_sec, 0) / 60.0) * POWER(rpe / 10.0, 2) / 0.36
-      WHEN suffer_score IS NOT NULL THEN
-        suffer_score * 0.8
       WHEN avg_hr IS NOT NULL THEN
         (COALESCE(duration_sec, 0) / 3600.0)
         * POWER(avg_hr / CAST({THRESHOLD_HR_SQL} AS DOUBLE), 2) * 100
@@ -83,17 +92,26 @@ TSS_EXPR = f"""
 # strength sessions not already linked to one of them (a linked strength
 # session is the Garmin activity it was recorded with: counted once). Strength
 # sessions without a duration carry no load, so they cannot skew a day's RPE.
-LOAD_ROWS = """
+# Excluded sources are left out: every series built on this reaches the
+# coach. A strength log linked to an excluded row is the athlete's own data and
+# still counts.
+LOAD_ROWS = f"""
     (
-      SELECT id, user_id, date, sport, duration_sec, rpe, suffer_score, avg_hr,
+      SELECT id, user_id, date, sport, duration_sec, rpe, avg_hr,
              distance_m, hr_zones_json, avg_pace_sec_km, ascent_m, avg_cadence
       FROM app.visible_actual_sessions
+      WHERE COALESCE(source, '') NOT IN ({EXCLUDED_SOURCES_SQL})
       UNION ALL
       SELECT -id, user_id, date, 'strength', duration_min * 60,
-             CAST(ROUND(overall_rpe) AS INTEGER), NULL, NULL,
+             CAST(ROUND(overall_rpe) AS INTEGER), NULL,
              NULL, NULL, NULL, NULL, NULL
       FROM app.visible_strength_sessions
-      WHERE actual_session_id IS NULL AND duration_min > 0
+      WHERE duration_min > 0 AND (
+        actual_session_id IS NULL
+        OR actual_session_id IN (
+          SELECT id FROM app.visible_actual_sessions WHERE source IN ({EXCLUDED_SOURCES_SQL})
+        )
+      )
     ) AS sessions
 """
 
@@ -169,8 +187,9 @@ def tss_history(days: int, end: date | None = None) -> list[DailyTSS]:
         return daily_tss(con, end - timedelta(days=days), end)
 
 
-def training_loads(days: int, end: date | None = None) -> list[DailyLoad]:
-    end = end or date.today()
+def training_loads(days: int, end: date) -> list[DailyLoad]:
+    """``end`` is the athlete's day (``athlete_today``), which this layer cannot
+    read: no default."""
     with db_connection() as con:
         return daily_loads(con, end - timedelta(days=days), end)
 
@@ -270,7 +289,9 @@ def earliest_session_date(
     """Date of the first recorded session, used by the "all" period."""
     user_id = resolve_athlete_id(user_id)
     row = con.execute(
-        "SELECT MIN(date) FROM app.visible_actual_sessions WHERE user_id = ?", [user_id]
+        "SELECT MIN(date) FROM app.visible_actual_sessions WHERE user_id = ?"
+        f" AND COALESCE(source, '') NOT IN ({EXCLUDED_SOURCES_SQL})",
+        [user_id],
     ).fetchone()
     return row[0] if row and row[0] else None
 
@@ -329,6 +350,7 @@ def drift_rows(
                moving_time_sec, avg_hr, avg_pace_sec_km, laps_json
         FROM app.visible_actual_sessions
         WHERE date >= ? AND date <= ? AND user_id = ?
+          AND COALESCE(source, '') NOT IN ({EXCLUDED_SOURCES_SQL})
           AND sport IN ({sql_in(RUNNING_SPORTS)})
           AND moving_time_sec >= ?
           AND laps_json IS NOT NULL
@@ -384,21 +406,3 @@ def terrain_rows(
         )
         for row in rows
     ]
-
-
-def best_effort_rows(
-    con: duckdb.DuckDBPyConnection, sports: Sequence[str], user_id: int | None = None
-) -> list[tuple]:
-    """(best_efforts_json, date, name, id) for every session carrying best efforts."""
-    user_id = resolve_athlete_id(user_id)
-    return con.execute(
-        f"""
-        SELECT best_efforts_json, date, name, id
-        FROM app.visible_actual_sessions
-        WHERE user_id = ?
-          AND best_efforts_json IS NOT NULL
-          AND sport IN ({sql_in(sports)})
-        ORDER BY date DESC
-        """,
-        [user_id],
-    ).fetchall()

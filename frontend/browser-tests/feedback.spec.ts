@@ -12,6 +12,7 @@ for (const rpg of [false, true]) {
     const writes: { key: string; value: unknown }[] = [];
     await page.route('**/api/**', async route => {
       const path = new URL(route.request().url()).pathname;
+      if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
       if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
       if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { enabled: rpg, opted_in: rpg, available: true, version: 1 } });
       if (path.includes('/agent/feedback/')) {
@@ -37,7 +38,7 @@ for (const rpg of [false, true]) {
       }] }));
     }, { thread, trace, answer });
     await page.reload();
-    const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
+    const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     await open();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await expect(panel).toHaveCSS('opacity', '1');

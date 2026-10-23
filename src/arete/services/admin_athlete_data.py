@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from typing import Literal
 
 from arete.dataio.db import db_connection
-from arete.services import slack_identity, users
+from arete.services import consent, slack_identity, users
 from arete.services.athlete_scope import athlete_scope
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,12 @@ def read(
     slack_identity.require_admin(team, slack_user, account_id)
     if not users.athlete_is_active(athlete_id):
         raise PermissionError("Athlète introuvable ou désactivé.")
+    # What is read here goes to the administrator's model: never without the
+    # athlete's consent to the processing of their health data.
+    if not consent.allows_processing(athlete_id):
+        raise PermissionError(
+            "Cet athlète n'a pas consenti au traitement de ses données de santé."
+        )
     if not 1 <= days <= 120 or not 0 <= offset <= MAX_OFFSET:
         raise ValueError("Lecture limitée à 120 jours et un offset de 0 à 20 Mio.")
     logger.info(
@@ -76,12 +82,15 @@ def _read(
     start_date: str,
 ) -> object:
     from arete.services import analytics, athlete_facts, documents, memory, planning
+    from arete.services.settings import athlete_today
 
-    start = (
-        date.fromisoformat(start_date)
-        if start_date
-        else date.today() - timedelta(days=days - 1)
-    )
+    def first_day(back: int) -> date:
+        """The requested day, else the scoped athlete's today less ``back`` days:
+        the server's date is behind theirs after their midnight."""
+        if start_date:
+            return date.fromisoformat(start_date)
+        return athlete_today() - timedelta(days=back)
+
     if section == "settings":
         from arete.dataio.settings import get_user_settings
 
@@ -93,6 +102,7 @@ def _read(
         if section == "strength_session":
             session = repo.get_session(int(resource))
             return asdict(session) if session else None
+        start = first_day(days - 1)
         sessions = repo.list_sessions(
             start_date=start, end_date=start + timedelta(days=days - 1), limit=51
         )
@@ -104,13 +114,14 @@ def _read(
     if section == "session":
         return analytics.get_session(int(resource))
     if section == "planning":
-        today = date.fromisoformat(start_date) if start_date else date.today()
+        today = first_day(0)
         return planning.list_planned(
             today.isoformat(), (today + timedelta(days=days)).isoformat()
         )
     if section == "health":
         from arete.dataio.queries import daily_metrics_range
 
+        start = first_day(days - 1)
         with db_connection() as con:
             return daily_metrics_range(con, start, start + timedelta(days=days - 1))
     if section == "facts":

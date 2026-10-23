@@ -1,0 +1,374 @@
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { planApi, settingsApi, type DailyTip } from '@/lib/api';
+import { coachApi } from '@/lib/coachToday';
+import type { DashboardData } from '@/lib/dashboard';
+import { formCurveApi } from '@/lib/formCurve';
+import { gameApi, type Player } from '@/lib/gamification';
+import { weeksAtGoalText } from '@/lib/fr';
+import { DashboardPage } from './HUD';
+
+const board: DashboardData = {
+  date: '2026-10-14',
+  planned: [],
+  actual: [],
+  strength: [],
+  plan_today: { date: '2026-10-14', decisions: [] },
+  next_goal: null,
+  player_stats: {
+    level: 0,
+    weeks_at_goal: 30,
+    weekly_goal_tss: 300,
+    recent_weeks_at_goal: 9,
+    recent_weeks: 12,
+    hp: { current: 62, max: 100, label: 'Préparation', detail: 'Préparation à l’entraînement Garmin (ce matin)', source: 'garmin_training' },
+    mp: { current: 57, max: 100, label: 'Fraîcheur', detail: 'TSB +4,2', source: 'model' },
+    xp: { current: 120, max: 300, label: 'Charge de la semaine', detail: 'Objectif 300 TSS · 6 séances', source: 'model' },
+  },
+  fitness: {
+    ctl: 40, atl: 36, tsb: 4.2, form_zone: 'fresh', readiness_score: 62, readiness_level: 'good',
+    readiness_source: 'garmin_training', readiness_measured_on: '2026-10-14', ramp_rate: null, days_analyzed: 30,
+  },
+  workload: {
+    acwr: 1.12, acwr_zone: 'optimal', acwr_ewma: null, monotony: null, monotony_zone: 'unknown', strain: null,
+    strain_zone: 'unknown', acute_load: 300, chronic_load: 260, days_analyzed: 20,
+  },
+  health: null,
+  garmin_connected: false,
+  has_load: true,
+  checkin: null,
+};
+
+const player = {
+  enabled: true, available: true, version: 1, athlete_class: 'sentinel', silhouette: 'balanced', equipped: 'base',
+  xp: 1770, shards: 390, level: 6, rank: 'Adepte', in_level: 270, level_span: 600, sessions: 21, pending: 0,
+  week: { sessions: 5, goal: 5, complete: true, timezone: 'Europe/Paris' },
+  catalog: [], badges: [], history: [], has_more: false,
+} satisfies Player;
+
+vi.mock('@/lib/dashboard', () => ({ fetchDashboard: vi.fn(async () => board) }));
+const written: DailyTip = {
+  status: 'ready', tip: 'Footing facile, garde de la fraîcheur pour jeudi.', priority: 'info', source: 'agent',
+  generated_at: '2026-10-14T07:12:00', updated_after_sync: false, id: 41, first_written_at: null,
+  reaction: null, reaction_comment: null,
+};
+const daily = vi.hoisted(() => ({ tip: undefined as unknown }));
+vi.mock('@/lib/dailyTip', () => ({
+  useDailyTip: () => ({ day: '2026-10-14', tip: daily.tip, writing: false, stalled: false, refresh: () => {} }),
+}));
+
+const stats = board.player_stats;
+const fitness = board.fitness;
+let client: QueryClient;
+beforeEach(() => {
+  board.player_stats = stats;
+  board.fitness = fitness;
+  board.health = null;
+  board.has_load = true;
+  board.checkin = null;
+  board.weekly_review = null;
+  daily.tip = written;
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.spyOn(settingsApi, 'get').mockResolvedValue({ display_name: 'Arthur' } as Awaited<ReturnType<typeof settingsApi.get>>);
+  vi.spyOn(coachApi, 'today').mockResolvedValue({ date: '2026-10-14', items: [], remaining: 0, briefing: null });
+  vi.spyOn(gameApi, 'snapshot').mockResolvedValue(player);
+  vi.spyOn(formCurveApi, 'get').mockResolvedValue({
+    today: '2026-10-14', goal_id: 3, planned_sessions: 4, last_planned: '2026-11-22', key_session: null,
+    race_day: { ctl: 45, tsb: 8 },
+    // Today is the dashboard's form (+4,2 in `board.fitness`, shown +4); the projection,
+    // with today's planned session, starts the next day.
+    series: [
+      { date: '2026-10-14', ctl: 40, atl: 36, tsb: 4.2, planned: false },
+      { date: '2026-10-15', ctl: 40.9, atl: 44.8, tsb: -3.9, planned: true },
+    ],
+  });
+  board.next_goal = null;
+});
+afterEach(() => {
+  cleanup();
+  client.clear();
+  vi.restoreAllMocks();
+});
+
+async function mount(rpg: boolean) {
+  vi.spyOn(gameApi, 'preference').mockResolvedValue({ enabled: rpg, opted_in: rpg, available: true, version: 1 });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  await screen.findByText('Charge de la semaine');
+  if (rpg) await screen.findByText('Niveau 6 · Adepte');
+  else await vi.waitFor(() => expect(client.getQueryState(['game-preference'])?.status).toBe('success'));
+}
+
+it('speaks plain words without the RPG: no HP, MP, XP, player nor level', async () => {
+  await mount(false);
+  expect(screen.getByRole('heading', { name: 'Ma forme du jour' })).toBeTruthy();
+  // Per element: the page's joined text would hide a tag between two words.
+  expect(screen.queryAllByText(/^(HP|MP|XP|TSS)$/)).toHaveLength(0);
+  expect(screen.queryAllByText(/\b(HP|MP|XP)\b/)).toHaveLength(0);
+  expect(screen.queryAllByText(/joueur/i)).toHaveLength(0);
+  expect(screen.queryAllByText(/niveau/i)).toHaveLength(0);
+  // Each bar names itself and keeps its detail on screen (a title never shows on a phone).
+  for (const label of ['Préparation', 'Charge de la semaine']) expect(screen.getByText(label, { selector: ':not(h2)' })).toBeTruthy();
+  expect(screen.getByText('Objectif 300 TSS · 6 séances')).toBeTruthy();
+  expect(screen.getByText('Préparation à l’entraînement Garmin (ce matin)')).toBeTruthy();
+  expect(document.querySelector('[title]')).toBeNull();
+  // Plain label first, the acronym as a secondary line, French decimals. TSB is
+  // "Fraîcheur", as the coach says it: the bar and the card name the same number.
+  expect(screen.getByText('Équilibre de charge')).toBeTruthy();
+  expect(screen.getByText('1,12')).toBeTruthy();
+  expect(screen.getByText('ACWR · cette semaine face aux quatre dernières')).toBeTruthy();
+  expect(screen.getAllByText('Fraîcheur')).toHaveLength(2);
+  expect(screen.getByText('+4,2')).toBeTruthy();
+  expect(screen.getByText(/^TSB ·/)).toBeTruthy();
+});
+
+it('keeps the RPG tags with the game on, and a single level: the RPG one', async () => {
+  await mount(true);
+  expect(screen.getByRole('heading', { name: 'État du joueur' })).toBeTruthy();
+  for (const tag of ['HP', 'MP', 'TSS']) expect(screen.getByText(tag)).toBeTruthy();
+  expect(screen.getAllByText(/Niveau/)).toHaveLength(1);
+});
+
+it('shows the regularity over the last twelve weeks, not a streak', async () => {
+  await mount(false);
+  expect(screen.getByText('9/12')).toBeTruthy();
+  expect(screen.getByText('semaines à l’objectif de charge')).toBeTruthy();
+  expect(screen.getByText('Régularité : 9 des 12 dernières semaines à l’objectif de charge')).toBeTruthy();
+  expect(weeksAtGoalText(3, 4)).toBe('3 des 4 dernières semaines à l’objectif de charge');
+  expect(weeksAtGoalText(0, 1)).toBe('Dernière semaine sous l’objectif de charge');
+});
+
+it('says one week in the singular', async () => {
+  board.player_stats = { ...stats, recent_weeks_at_goal: 1, recent_weeks: 1 };
+  await mount(false);
+  expect(screen.getByText('1/1')).toBeTruthy();
+  expect(screen.getByText('semaine à l’objectif de charge')).toBeTruthy();
+});
+
+it('hides the regularity before the first full week', async () => {
+  board.player_stats = { ...stats, recent_weeks_at_goal: 0, recent_weeks: 0 };
+  await mount(false);
+  expect(screen.queryByText(/objectif de charge/)).toBeNull();
+  expect(screen.queryByText(/^Régularité/)).toBeNull();
+});
+
+it('offers one way to log a session and no duplicate quick links', async () => {
+  await mount(false);
+  expect(screen.getAllByRole('link', { name: 'Saisir une séance' })).toHaveLength(1);
+  // Planning a session is another action than logging one.
+  expect(screen.getByRole('link', { name: '+ Planifier une séance' }).getAttribute('href')).toBe('/planning?new=1');
+  expect(screen.queryByRole('link', { name: /Voir le planning/ })).toBeNull();
+  const refresh = screen.getByRole('button', { name: 'Actualiser le suivi' });
+  expect(refresh.getAttribute('aria-describedby')).toBe('coach-prepare-hint');
+  expect(within(document.body).getByText(/Rien ne change sans ton accord/)).toBeTruthy();
+});
+
+it('leads with the briefing, today\'s session right below it', async () => {
+  await mount(false);
+  const headings = screen.getAllByRole('heading').map((h) => h.textContent);
+  expect(headings.indexOf('Briefing du jour')).toBeGreaterThanOrEqual(0);
+  expect(headings.indexOf('Briefing du jour') + 1).toBe(headings.indexOf('Séance du jour'));
+  const briefing = screen.getByText(written.tip!);
+  const session = screen.getByText('Repos — aucune séance prévue');
+  expect(briefing.compareDocumentPosition(session) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByText('Écrit à 7 h 12')).toBeTruthy();
+  // The coach card no longer repeats it.
+  expect(screen.getAllByText(written.tip!)).toHaveLength(1);
+});
+
+it('asks the morning check-in before the briefing until the day is answered', async () => {
+  await mount(false);
+  const card = screen.getByRole('region', { name: 'Check-in du matin' });
+  const briefing = screen.getByRole('heading', { name: 'Briefing du jour' });
+  expect(card.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  cleanup();
+  client.clear();
+  board.checkin = {
+    date: '2026-10-14', sleep: 4, legs: 4, mood: null, note: null,
+    answered_at: '2026-10-14T05:12:00+00:00', updated_at: '2026-10-14T05:12:00+00:00',
+  };
+  await mount(false);
+  expect(screen.queryByRole('region', { name: 'Check-in du matin' })).toBeNull();
+});
+
+it('says when the sync rewrote the briefing, and when it was first written', async () => {
+  daily.tip = { ...written, updated_after_sync: true, first_written_at: '2026-10-14T07:12:00', generated_at: '2026-10-14T08:05:00' };
+  await mount(false);
+  expect(screen.getByText('Écrit à 7 h 12 · mis à jour après la synchro de 8 h 05')).toBeTruthy();
+});
+
+it('leads with the race goal above the briefing, and the one form curve in plain words', async () => {
+  board.next_goal = {
+    id: 3, name: 'Semi de Lyon', race_date: '2026-11-23', distance_km: 21.1, target_time_sec: null,
+    priority: 'A', status: 'active', days_left: 40, created_at: null,
+  };
+  await mount(false);
+  const goal = screen.getByRole('region', { name: 'Objectif de course' });
+  const briefing = screen.getByRole('heading', { name: 'Briefing du jour' });
+  expect(goal.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(await screen.findByText('entre +3 et +13')).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Courbe de forme' })).toBeTruthy();
+  expect(await screen.findByText(/Aujourd’hui : fatigue 36, fraîcheur \+4\./)).toBeTruthy();
+  // The goal card and the curve share one request.
+  expect(formCurveApi.get).toHaveBeenCalledTimes(1);
+});
+
+it('offers to set a goal when there is none', async () => {
+  await mount(false);
+  expect(screen.getByRole('link', { name: 'Fixer un objectif' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Objectif de course' })).toBeNull();
+});
+
+it('says this morning is not synced yet when the recovery still comes from Garmin', async () => {
+  board.fitness = { ...board.fitness, readiness_source: 'garmin', readiness_measured_on: '2026-10-13' };
+  board.player_stats = { ...stats, hp: { ...stats.hp, source: 'garmin_previous', detail: 'Garmin, mesure du 13/10' } };
+  await mount(false);
+  expect(screen.getByText(/Pas encore synchronisé ce matin/)).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Reconnecter Garmin' })).toBeTruthy();
+  expect(screen.queryByRole('link', { name: 'Connecter Garmin' })).toBeNull();
+  expect(screen.queryByText(/Pas de données santé/)).toBeNull();
+});
+
+it('shows this morning when it is in, even without Arete’s own score (HRV missing)', async () => {
+  // Garmin's Training Readiness arrived, the HRV fetch failed: no Arete score.
+  board.health = {
+    date: '2026-10-14', readiness_score: null, training_readiness_score: 64, hrv_last_night: null, hrv_status: null,
+    sleep_score: 78, sleep_duration_sec: 25200, stress_avg: 22, steps: 4100,
+  } as unknown as DashboardData['health'];
+  await mount(false);
+  expect(screen.queryByText(/Pas encore synchronisé ce matin/)).toBeNull();
+  expect(screen.queryByText(/Pas de données santé/)).toBeNull();
+  expect(screen.getByText('64/100')).toBeTruthy();
+  expect(screen.getByText('64')).toBeTruthy();
+});
+
+it('still says not synced when an early sync wrote the day’s row empty', async () => {
+  // A sync before the watch uploads the night writes the date and nothing else.
+  board.fitness = { ...board.fitness, readiness_source: 'garmin', readiness_measured_on: '2026-10-13' };
+  board.health = {
+    date: '2026-10-14', readiness_score: null, training_readiness_score: null, hrv_last_night: null, hrv_status: null,
+    sleep_score: null, sleep_duration_sec: null, stress_avg: null, steps: 0,
+  } as unknown as DashboardData['health'];
+  await mount(false);
+  expect(screen.getByText(/Pas encore synchronisé ce matin/)).toBeTruthy();
+  expect(screen.queryByText('—')).toBeNull();
+});
+
+it('draws the curve after months off, when rounded fitness reads zero', async () => {
+  board.fitness = { ...fitness, ctl: 0, atl: 0, tsb: 0, days_analyzed: 0 };
+  await mount(false);
+  expect(await screen.findByText(/Aujourd’hui : fatigue/)).toBeTruthy();
+  expect(screen.queryByText(/Pas encore de charge enregistrée/)).toBeNull();
+});
+
+it('leads to « Ma semaine » while the week waits for an answer, from the same answer', async () => {
+  board.weekly_review = { id: 9, week_start: '2026-10-05', open: 2 };
+  await mount(false);
+  const entry = screen.getByRole('link', { name: /Ta semaine est prête/ });
+  expect(entry.getAttribute('href')).toBe('/planning/semaine');
+  expect(within(entry).getByText('Bilan de ta semaine · 2 propositions du coach à accepter')).toBeTruthy();
+});
+
+it('names the next week to accept when the review proposes no change', async () => {
+  board.weekly_review = { id: 9, week_start: '2026-10-05', open: 0 };
+  await mount(false);
+  const entry = screen.getByRole('link', { name: /Ta semaine est prête/ });
+  expect(within(entry).getByText('Bilan de ta semaine · semaine suivante à accepter')).toBeTruthy();
+});
+
+it('shows no week entry once answered', async () => {
+  await mount(false);
+  expect(screen.queryByRole('link', { name: /Ta semaine est prête/ })).toBeNull();
+});
+
+const tempo = {
+  id: 12, date: '2026-10-14', sport: 'running', session_type: 'tempo', target_duration_min: 50,
+  target_distance_km: null, target_hr_zone: 'Z4', target_intensity: 'hard', description: null,
+  source: 'manual', status: 'pending', garmin_workout_id: null, garmin_pushed_at: null, revision: 1,
+} satisfies DashboardData['planned'][number];
+const decision = {
+  id: 5, date: '2026-10-14', planned_session_id: 12, decision: 'move', reason: 'Pas le temps : la séance tempo 50 min Z4 passe à jeudi 15 octobre.',
+  readiness_score: null, readiness_source: 'model', acwr: null, original: { session_type: 'tempo' }, adapted: { date: '2026-10-15' },
+  applied_at: '2026-10-14T17:00:00', reverted_at: null, created_at: null,
+} satisfies DashboardData['plan_today']['decisions'][number];
+
+it('offers « Modifier » on today’s session and reads its options only once opened', async () => {
+  board.planned = [tempo];
+  const read = vi.spyOn(planApi, 'renegotiationOptions').mockResolvedValue({
+    session_id: 12, date: '2026-10-14', version: '0123456789abcdef', blocked: null, reasons: [],
+  });
+  try {
+    await mount(false);
+    expect(read).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }));
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  } finally {
+    board.planned = [];
+  }
+});
+
+it('keeps a session moved away today on the card, with « Rétablir », and no « Modifier » once adjusted', async () => {
+  board.plan_today = { date: '2026-10-14', decisions: [decision] };
+  try {
+    await mount(false);
+    expect(screen.getByText(decision.reason)).toBeTruthy();
+    expect(screen.getByText('→ jeudi 15 octobre')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Rétablir la séance prévue' })).toBeTruthy();
+    cleanup();
+    client.clear();
+    // Eased today and still on it: « Rétablir » first, no second renegotiation.
+    board.planned = [{ ...tempo, session_type: 'endurance', status: 'modified' }];
+    board.plan_today = { date: '2026-10-14', decisions: [{ ...decision, decision: 'ease', reason: 'Je suis cuit : allégée.' }] };
+    await mount(false);
+    expect(screen.getByText('Je suis cuit : allégée.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Modifier' })).toBeNull();
+  } finally {
+    board.planned = [];
+    board.plan_today = { date: '2026-10-14', decisions: [] };
+  }
+});
+
+it('reports a moved session’s « Rétablir » with Garmin’s part, and focuses it', async () => {
+  board.plan_today = { date: '2026-10-14', decisions: [decision] };
+  vi.spyOn(planApi, 'revert').mockResolvedValue({ ...decision, reverted_at: '2026-10-14T18:00:00', garmin: 'sent' });
+  try {
+    await mount(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Rétablir la séance prévue' }));
+    const box = (await screen.findByText('Séance rétablie à aujourd’hui.')).closest('[role="status"]');
+    expect(box).toBeTruthy();
+    expect(box!.textContent).toContain('Garmin : la séance est à jour sur ta montre.');
+    await vi.waitFor(() => expect(document.activeElement).toBe(box));
+  } finally {
+    board.plan_today = { date: '2026-10-14', decisions: [] };
+  }
+});
+
+it('keeps the focus on the card when another tab’s decision closes the open menu', async () => {
+  board.planned = [tempo];
+  vi.spyOn(planApi, 'renegotiationOptions').mockResolvedValue({
+    session_id: 12, date: '2026-10-14', version: '0123456789abcdef', blocked: 'Séance déjà ajustée aujourd’hui.', reasons: [],
+  });
+  try {
+    await mount(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }));
+    const other = await screen.findByRole('button', { name: /Autre… en parler au coach/ });
+    await vi.waitFor(() => expect(document.activeElement).toBe(other));
+    // Another tab eased it: the refetch shows the decision, the menu leaves.
+    board.plan_today = { date: '2026-10-14', decisions: [{ ...decision, decision: 'ease', reason: 'Je suis cuit : allégée.' }] };
+    await client.refetchQueries({ queryKey: ['dashboard'] });
+    await screen.findByText('Je suis cuit : allégée.');
+    expect(screen.queryByRole('button', { name: 'Modifier' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('group', { name: 'Séance du jour : Seuil' }));
+  } finally {
+    board.planned = [];
+    board.plan_today = { date: '2026-10-14', decisions: [] };
+  }
+});

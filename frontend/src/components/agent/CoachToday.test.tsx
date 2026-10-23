@@ -102,3 +102,39 @@ it('checks an uncertain answer with a read of its own while the card waits for t
   await waitFor(() => expect(today).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Vérifier l’état' })).toBeNull());
 });
+
+const missedMove = proposal(9, {
+  decision: 'move',
+  readiness_source: 'missed',
+  readiness_score: null,
+  readiness_measured_on: null,
+  reason: 'Séance manquée aujourd’hui : la séance fractionné 60 min passe à jeudi 15 octobre, premier jour libre sans séance dure la veille ni le lendemain.',
+  adapted: { date: '2026-10-15' },
+  revision: 1,
+});
+
+it('offers a missed session’s move in one tap, then reports it with Garmin apart', async () => {
+  const respond = vi.spyOn(coachApi, 'proposal').mockResolvedValue({ ...missedMove, state: 'applied', garmin: 'sent' });
+  renderPanel([missedMove]);
+  expect(await screen.findByText(/Séance manquée ·/)).toBeTruthy();
+  expect(screen.getByText('Proposé : Déplacée à jeudi 15 octobre')).toBeTruthy();
+  expect(screen.getByText(/Aucune activité enregistrée aujourd’hui/)).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Pas maintenant' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Déplacer' }));
+  await waitFor(() => expect(respond).toHaveBeenCalledWith(9, 1, 'apply', []));
+  const status = await screen.findByRole('status');
+  expect(status.textContent).toContain('Séance déplacée à jeudi 15 octobre.');
+  expect(status.textContent).toContain('Garmin : la séance est à jour sur ta montre.');
+  expect(document.activeElement).toBe(status);
+});
+
+it('declines a missed session’s drop in one tap', async () => {
+  const drop = { ...missedMove, decision: 'drop' as const, adapted: null };
+  const respond = vi.spyOn(coachApi, 'proposal').mockResolvedValue({ ...drop, state: 'dismissed', garmin: 'unchanged' });
+  renderPanel([drop]);
+  expect(await screen.findByText('Proposé : Laissée de côté')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Laisser de côté' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Non merci' }));
+  await waitFor(() => expect(respond).toHaveBeenCalledWith(9, 1, 'keep', []));
+  expect((await screen.findByRole('status')).textContent).toBe('C’est noté : rien ne change.');
+});

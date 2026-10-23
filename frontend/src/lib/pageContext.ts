@@ -17,6 +17,8 @@ export function pageFromPath(pathname: string): string {
   switch (first) {
     case '':
       return 'dashboard';
+    case 'follow-up':
+      return 'follow_up';
     case 'planning':
       return 'planning';
     case 'analytics':
@@ -27,6 +29,8 @@ export function pageFromPath(pathname: string): string {
       return 'profile';
     case 'settings':
       return 'settings';
+    case 'sante':
+      return 'health';
     default:
       // Legacy redirects (/forge, /quest-log…) never settle here — they
       // immediately <Navigate> to a canonical route.
@@ -36,9 +40,12 @@ export function pageFromPath(pathname: string): string {
 
 export function usePanelContext(): PanelPageContext {
   const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  // Gauge visibility cannot change the model request or its context count.
+  params.delete('contextGaugeAlways');
   return {
     page: pageFromPath(location.pathname),
     path: location.pathname,
-    params: Object.fromEntries(new URLSearchParams(location.search)),
+    params: Object.fromEntries(params),
   };
 }

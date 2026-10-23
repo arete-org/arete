@@ -1,11 +1,17 @@
 """The athlete's own data, downloaded as one JSON document or a ZIP of CSV files.
 
-Only an allowlist of tables leaves the database: sessions done and planned,
-daily health metrics, strength sessions and their sets, goals, athlete facts,
-weekly reviews, plus the coach's journal files. Credentials never do: Strava
-tokens, push subscriptions, accounts, calendar actions and ``app.files`` (which
-holds the Garmin session tokens) are not read at all. Strava rows are included:
-this is the athlete's own download, not model input.
+Only an allowlist of tables leaves the database: sessions done and planned
+with their feedback, terrain, weather and streams, daily health
+metrics, strength sessions, sets and exercises, goals, athlete facts and their
+revisions, morning check-ins, pain and body weight, evening messages,
+briefings, plan decisions, follow-ups, weekly reviews, settings, the game,
+documents' names, saved conversations and the coach's journal files; the heavy ones
+(``OPT_IN``) only on request. Credentials never do: Strava tokens, push
+subscriptions, accounts, calendar connections and actions and ``app.files``
+(which holds the Garmin session tokens) are not read at all. Neither are
+documents' contents (they stay in their chat) nor technical state: imports,
+automation checkpoints, Garmin exports and sync leases. Strava rows are
+included: this is the athlete's own download, not model input.
 
 The body is built in memory and refused past ``EXPORT_LIMIT_BYTES``, under the
 4.5 MB a Vercel function may answer: the caller narrows the date range or the
@@ -20,7 +26,7 @@ import json
 import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 from arete.dataio.db import db_connection
@@ -46,6 +52,24 @@ class ExportTable:
 
 
 TABLES: tuple[ExportTable, ...] = (
+    *(
+        ExportTable(
+            name,
+            f"SELECT * FROM app.visible_{name} WHERE true",
+            "created_at",
+            "created_at",
+        )
+        for name in (
+            "automations",
+            "automation_runs",
+            "automation_interrupts",
+            "automation_effects",
+            "notifications",
+            "coach_attention_claims",
+            "coach_attention_days",
+            "plan_change_sets",
+        )
+    ),
     ExportTable(
         "actual_sessions",
         "SELECT * FROM app.visible_actual_sessions WHERE user_id = getvariable('arete_athlete_id')",
@@ -98,16 +122,156 @@ TABLES: tuple[ExportTable, ...] = (
         None,
         "since, id",
     ),
+    # The answers only: a row holding just the day's push record says nothing.
+    ExportTable(
+        "daily_checkins",
+        "SELECT date, sleep, legs, mood, note, answered_at, updated_at "
+        "FROM app.visible_daily_checkins "
+        "WHERE athlete_id = getvariable('arete_athlete_id') AND answered_at IS NOT NULL",
+        "date",
+        "date",
+    ),
+    # Pain and body weight (ARE-62), as the athlete entered them.
+    ExportTable(
+        "pain_entries",
+        "SELECT id, date, area, side, intensity, note, created_at, updated_at "
+        "FROM app.visible_pain_entries WHERE athlete_id = getvariable('arete_athlete_id')",
+        "date",
+        "date, id",
+    ),
+    ExportTable(
+        "weight_entries",
+        "SELECT date, weight_kg, source, created_at, updated_at "
+        "FROM app.visible_weight_entries WHERE athlete_id = getvariable('arete_athlete_id')",
+        "date",
+        "date",
+    ),
+    # The written evening messages and their answers, never a claim.
+    ExportTable(
+        "evening_messages",
+        "SELECT date, reasons, text, question, written_at, answer, answered_at "
+        "FROM app.visible_coach_evening_messages "
+        "WHERE athlete_id = getvariable('arete_athlete_id') AND status = 'ok'",
+        "date",
+        "date",
+    ),
+    # A claimed review being written (``pending``) is no review yet.
     ExportTable(
         "weekly_reviews",
-        "SELECT * FROM app.visible_weekly_reviews WHERE user_id = getvariable('arete_athlete_id')",
+        "SELECT * FROM app.visible_weekly_reviews WHERE user_id = getvariable('arete_athlete_id') "
+        "AND source <> 'pending'",
         "week_start",
         "week_start",
+    ),
+    # What a session's page shows beside it, dated by its session.
+    *(
+        ExportTable(
+            name,
+            f"SELECT s.date, t.* FROM app.visible_{name} t "
+            "JOIN app.visible_actual_sessions s ON s.id = t.actual_session_id WHERE true",
+            "s.date",
+            "s.date, t.actual_session_id",
+        )
+        for name in (
+            "session_feedback",
+            "activity_terrain",
+            "activity_weather",
+            "activity_streams",
+        )
+    ),
+    ExportTable(
+        "coach_briefings",
+        "SELECT * FROM app.visible_coach_briefings WHERE status <> 'pending'",
+        "date",
+        "date, id",
+    ),
+    ExportTable(
+        "plan_decisions",
+        "SELECT * FROM app.visible_plan_decisions WHERE true",
+        "date",
+        "date, id",
+    ),
+    ExportTable(
+        "coach_followups",
+        "SELECT * FROM app.visible_coach_followups WHERE true",
+        "requested_on",
+        "requested_on, id",
+    ),
+    ExportTable(
+        "settings",
+        "SELECT * FROM app.visible_user_settings WHERE true",
+        None,
+        "user_id",
+    ),
+    ExportTable(
+        "exercises",
+        "SELECT * FROM app.visible_exercises WHERE true",
+        None,
+        "name, id",
+    ),
+    ExportTable(
+        "athlete_fact_revisions",
+        "SELECT * FROM app.visible_athlete_fact_revisions WHERE true",
+        None,
+        "fact_id, revision",
+    ),
+    ExportTable(
+        "banister_coefficients",
+        "SELECT * FROM app.visible_banister_coefficients WHERE true",
+        None,
+        "fitted_at",
+    ),
+    # Saved conversations, as the history page reopens them.
+    ExportTable(
+        "conversations",
+        "SELECT id, title, payload, created_at, updated_at "
+        "FROM app.visible_coach_conversations WHERE true",
+        "created_at",
+        "created_at, id",
+    ),
+    # Attached documents' names and states; their content stays in the chat.
+    ExportTable(
+        "documents",
+        "SELECT id, thread_id, name, size, sha256, status, created_at "
+        "FROM app.visible_coach_documents WHERE true",
+        None,
+        "created_at, id",
+    ),
+    *(
+        ExportTable(name, f"SELECT * FROM app.visible_{name} WHERE true", None, order)
+        for name, order in (
+            ("game_profile", "id"),
+            ("game_periods", "started_at"),
+            ("game_weeks", "week_start"),
+            ("game_events", "activity_date, source_key"),
+            ("game_ledger", "created_at, id"),
+            ("game_owned", "skin"),
+        )
     ),
 )
 
 #: Every name a caller may select, in download order.
 EXPORT_NAMES: tuple[str, ...] = (*(t.name for t in TABLES), JOURNAL)
+#: Selected only on request: a session's samples or a saved conversation weigh
+#: up to megabytes, and the others grow by a text or JSON row a day or per
+#: session. Without them the default stays within one response for years of
+#: history (``tests/test_data_export.py`` builds one).
+OPT_IN: frozenset[str] = frozenset(
+    {
+        "activity_streams",
+        "conversations",
+        "coach_briefings",
+        "plan_decisions",
+        "athlete_fact_revisions",
+        "game_events",
+        "game_ledger",
+        "automation_runs",
+        "automation_interrupts",
+        "automation_effects",
+        # before/after copies of the plan for every proposal
+        "plan_change_sets",
+    }
+)
 
 
 class ExportTooLarge(Exception):
@@ -135,7 +299,7 @@ class ExportFile:
 
 def _selected(names: Sequence[str] | None) -> list[str]:
     if not names:
-        return list(EXPORT_NAMES)
+        return [n for n in EXPORT_NAMES if n not in OPT_IN]
     unknown = sorted(set(names) - set(EXPORT_NAMES))
     if unknown:
         raise ValueError(f"Tables inconnues : {', '.join(unknown)}")
@@ -156,7 +320,12 @@ def collect(
     if start and end and start > end:
         raise ValueError("La date de début suit la date de fin")
     selected = _selected(names)
-    bounds = [start or date.min, end or date.max]
+    # A half-open range: a timestamp late on the end day stays inside it,
+    # which ``BETWEEN`` with a date (midnight) bound would cut.
+    bounds = [
+        start or date.min,
+        end + timedelta(days=1) if end and end < date.max else date.max,
+    ]
     tables: dict[str, tuple[list[str], list[tuple]]] = {}
     with db_connection() as con:
         for table in TABLES:
@@ -164,7 +333,7 @@ def collect(
                 continue
             sql, params = table.select, []
             if table.date_column:
-                sql += f" AND {table.date_column} BETWEEN ? AND ?"
+                sql += f" AND {table.date_column} >= ? AND {table.date_column} < ?"
                 params = bounds
             result = con.execute(f"{sql} ORDER BY {table.order_by}", params)
             columns = [d[0] for d in result.description]

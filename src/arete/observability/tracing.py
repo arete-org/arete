@@ -31,7 +31,7 @@ def _export_error(error: Exception) -> None:
 
 
 def get_tracing_client() -> Client | None:
-    """Lazy for CLI/evals, also called at API startup to reject missing keys."""
+    """Lazy for CLI scripts, also called at API startup to reject missing keys."""
     global _client
     if not config.langsmith_tracing:
         return None
@@ -56,7 +56,7 @@ def get_tracing_client() -> Client | None:
             with _client.tracing_queue.mutex:
                 _client.tracing_queue.maxsize = TRACE_QUEUE_MAX_SIZE
             # Register after Client's own exit handler so our bounded close
-            # drains first, including in short-lived scripts and evals.
+            # drains first, including in short-lived scripts.
             atexit.register(close_tracing)
         return _client
 

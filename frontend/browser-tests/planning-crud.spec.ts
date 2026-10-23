@@ -76,9 +76,12 @@ test.afterAll(async () => {
 async function connect(page: Page) {
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace(/^\/api/, '');
+    if (path === '/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (
       /^\/garmin\/(planned|actual|exports)/.test(path) ||
       path === '/strength/sessions' ||
+      path.startsWith('/coach/plan-changes') ||
+      path === '/coach/attention' ||
       path === '/settings'
     ) {
       return route.fulfill({
@@ -189,6 +192,21 @@ for (const width of [1440, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
+    await page.evaluate(() => (document.documentElement.dataset.theme = 'pierre'));
+    const options = page.getByRole('button', { name: 'Options du planning' });
+    await options.click();
+    const menu = page.getByRole('dialog', { name: 'Options du planning' });
+    await expect(menu.getByLabel('Filtrer par sport')).toBeFocused();
+    const menuBounds = (await menu.boundingBox())!;
+    const triggerBounds = (await options.boundingBox())!;
+    expect(menuBounds.y).toBeGreaterThanOrEqual(triggerBounds.y + triggerBounds.height);
+    await page.screenshot({ path: `../.context/arete-week-options-${width}.png`, animations: 'disabled' });
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveCount(0);
+    await expect(options).toBeFocused();
+    await options.click();
+    await page.getByRole('heading', { name: 'Planning', exact: true }).click();
+    await expect(menu).toHaveCount(0);
     await page.evaluate(() => (document.documentElement.dataset.theme = 'odyssey'));
     await page.screenshot({
       path: `../.context/planning-a-${width}.png`,
@@ -266,12 +284,8 @@ test('mobile prioritizes sessions, uses one focus ring and stays usable in every
     for (const theme of [
       'pierre',
       'prune',
-      'light',
-      'dark',
-      'darker',
-      'abyss',
-      'performance',
       'odyssey',
+      'encre',
     ]) {
       await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -305,7 +319,7 @@ test('mobile prioritizes sessions, uses one focus ring and stays usable in every
   await page.getByRole('dialog').getByLabel('Filtrer par sport').selectOption('');
   await page.keyboard.press('Escape');
   // Planning keeps the shared page title and the navigation of every other page.
-  await expect(page.locator('h1')).toHaveCSS('font-size', '30px');
+  await expect(page.locator('h1')).toHaveCSS('font-size', '36px');
   await expect(
     page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('link'),
   ).toHaveText(['Accueil', 'Planning', 'Analyses', 'Journal', 'Profil', 'Réglages']);
@@ -356,7 +370,7 @@ test('mobile prioritizes sessions, uses one focus ring and stays usable in every
     animations: 'disabled',
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await expect(page.locator('h1')).toHaveCSS('font-size', '42px');
+  await expect(page.locator('h1')).toHaveCSS('font-size', '44px');
   // The weekday and the date read as a pair rather than at opposite ends of the column.
   const heading = page.locator('.planning-day-heading').first();
   const weekday = (await heading.locator('h3').boundingBox())!;
@@ -368,3 +382,37 @@ test('mobile prioritizes sessions, uses one focus ring and stays usable in every
     animations: 'disabled',
   });
 });
+
+for (const width of [1440, 390]) {
+  test(`grouped adjustment shows before/after and commits through HTTP at ${width}px`, async ({ page, request }) => {
+    const day = new Date();
+    day.setDate(day.getDate() + 4);
+    const date = day.toLocaleDateString('sv-SE');
+    const create = async (description: string) => {
+      const response = await request.post(`${API}/garmin/planned`, { data: { date, sport: 'running', session_type: 'endurance', description, target_duration_min: 40 } });
+      expect(response.ok()).toBe(true);
+      return response.json();
+    };
+    const first = await create(`Sortie groupée A ${width}`);
+    const second = await create(`Sortie groupée B ${width}`);
+    const draft = await request.post(`${API}/coach/plan-changes`, { data: { items: [first, second].map(session => ({ session_id: session.id, revision: session.revision, changes: { target_duration_min: 30 } })) } });
+    expect(draft.ok(), await draft.text()).toBe(true);
+    const preview = await draft.json();
+    await connect(page);
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto(`/planning?date=${date}&change_set=${preview.id}`);
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: 'Ajuster 2 séances' })).toBeVisible();
+    await expect(dialog.getByText('Avant', { exact: true })).toHaveCount(2);
+    await expect(dialog.getByText('Après', { exact: true })).toHaveCount(2);
+    await page.screenshot({ path: `../.context/arete-plan-change-${width}.png`, animations: 'disabled' });
+    await dialog.getByRole('button', { name: 'Appliquer les changements' }).click();
+    await expect(dialog.getByRole('status')).toContainText('Le planning Arete est enregistré');
+    await page.reload();
+    await expect(page.getByRole('dialog').getByRole('status')).toContainText('Le planning Arete est enregistré');
+    const saved = (await (await request.get(`${API}/garmin/planned`)).json()).filter((session: { id: number }) => [first.id, second.id].includes(session.id));
+    expect(saved).toHaveLength(2);
+    expect(saved.every((session: { target_duration_min: number; revision: number }) => session.target_duration_min === 30 && session.revision === 2)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}

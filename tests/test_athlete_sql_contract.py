@@ -5,7 +5,8 @@ import re
 from pathlib import Path
 
 from arete.dataio.tenant_schema import PRIVATE_TABLES
-from arete.scheduler import _CANDIDATES
+from arete.scheduler import _CANDIDATES_FROM
+from arete.services.product_kpis import TRUSTED_READS
 
 # Bootstrap is deliberately privileged and never used by a domain request.
 BOOTSTRAP = {
@@ -16,6 +17,30 @@ BOOTSTRAP = {
     "dataio/game_schema.py",
     "dataio/memory_schema.py",
 }
+
+
+def _trusted(relative: str, sql: str) -> bool:
+    """The deliberate cross-athlete reads, each matched exactly."""
+    # Bootstrap owner lookup before a scope exists.
+    if relative == "services/users.py":
+        return sql == "SELECT email FROM app.user_settings WHERE user_id = 1"
+    # Trusted dispatch: every athlete's zone and quiet hours (the query's
+    # literal head, joined to the consent predicate).
+    if relative == "scheduler.py":
+        return sql == _CANDIDATES_FROM
+    # Administrators' indicators: counts, never a row.
+    if relative == "services/product_kpis.py":
+        return sql in TRUSTED_READS
+    return False
+
+
+def test_trusted_reads_match_whole_statements_only():
+    read = TRUSTED_READS[0]
+    assert _trusted("services/product_kpis.py", read)
+    # A piece of a trusted read, reused in a new statement, is checked again.
+    assert not _trusted("services/product_kpis.py", read[: len(read) // 2])
+    assert not _trusted("services/product_kpis.py", f"{read} JOIN app.goals g")
+    assert not _trusted("services/briefing.py", read)
 
 
 def test_domain_reads_use_live_athlete_projections():
@@ -38,13 +63,8 @@ def test_domain_reads_use_live_athlete_projections():
                 continue
             # DELETE's target is a write, not a read; its subqueries still count.
             sql = re.sub(r"\bDELETE\s+FROM\s+(?:app\.)?\w+", "", sql, flags=re.I)
-            if (
-                relative == "services/users.py"
-                and sql == "SELECT email FROM app.user_settings WHERE user_id = 1"
-            ):
-                continue  # Bootstrap owner lookup before a scope exists.
-            if relative == "scheduler.py" and sql == _CANDIDATES:
-                continue  # Trusted dispatch: every athlete's zone and quiet hours.
+            if _trusted(relative, sql):
+                continue
             if reads.search(sql):
                 failures.append(f"{relative}:{node.lineno}: {sql[:160]}")
     assert failures == [], "Unscoped private reads:\n" + "\n".join(failures)

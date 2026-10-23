@@ -1,9 +1,10 @@
 """End-to-end domain boundaries of propose / respond / remember, with no LLM."""
 
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import patch
 
+import duckdb
 import pytest
 
 from arete.dataio.db import db_connection
@@ -12,6 +13,7 @@ from arete.garmin.repository import GarminRepository
 from arete.services import coach_followup, coach_today, memory, plan_adaptation
 from arete.services.athlete_scope import athlete_scope
 from arete.services.coaching_rules import RuleFacts, _generate_cardio_feedback
+from arete.services.settings import athlete_today
 
 
 @pytest.fixture
@@ -44,7 +46,7 @@ def proposal():
     repo = GarminRepository()
     sid = repo.create_planned_session(
         PlannedSession(
-            date=date.today(),
+            date=athlete_today(),
             sport="running",
             session_type=SessionType.TEMPO,
             target_duration_min=50,
@@ -57,7 +59,7 @@ def proposal():
         fatigue_threshold=85,
         fitness_goal="build",
         readiness_source="garmin_training",
-        readiness_measured_on=date.today() - timedelta(days=1),
+        readiness_measured_on=athlete_today() - timedelta(days=1),
     )
     with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
         decision = plan_adaptation.adapt_today()[0]
@@ -72,7 +74,7 @@ def low_adapt():
         fatigue_threshold=85,
         fitness_goal="build",
         readiness_source="garmin_training",
-        readiness_measured_on=date.today(),
+        readiness_measured_on=athlete_today(),
     )
     with patch("arete.services.coaching_rules.rule_facts", return_value=facts):
         return plan_adaptation.adapt_today()
@@ -81,7 +83,7 @@ def low_adapt():
 def planned(kind, minutes):
     return GarminRepository().create_planned_session(
         PlannedSession(
-            date=date.today(),
+            date=athlete_today(),
             sport="running",
             session_type=kind,
             target_duration_min=minutes,
@@ -178,7 +180,7 @@ def test_a_snooze_hides_the_whole_day_and_a_legacy_one_hides_its_member(athlete)
     with db_connection() as con:  # a row snoozed alone before the grouping
         con.execute(
             "UPDATE app.plan_decisions SET snoozed_until=?,revision=revision+1 WHERE id=?",
-            [date.today() + timedelta(days=1), rest["id"]],
+            [athlete_today() + timedelta(days=1), rest["id"]],
         )
     (item,) = coach_today.today()["items"]
     assert [d["id"] for d in item["group"]] == [key["id"]]
@@ -201,7 +203,7 @@ def test_a_proposal_created_meanwhile_makes_the_answer_conflict(athlete, monkeyp
 
     def racing():
         PlanDecisionRepository().create(
-            day=date.today(),
+            day=athlete_today(),
             planned_session_id=late,
             decision="rest",
             reason="r",
@@ -246,7 +248,7 @@ def test_proposal_requires_validation_and_replay_cannot_apply_twice(athlete):
     assert repo.get_planned_session(sid).revision == 1
     assert decision.state == "pending" and decision.applied_at is None
     assert coach_today.today()["items"][0]["record"]["readiness_measured_on"] == str(
-        date.today() - timedelta(days=1)
+        athlete_today() - timedelta(days=1)
     )
     result = plan_adaptation.respond(decision.id, 1, "apply")
     assert result.state == "applied" and repo.get_planned_session(sid).revision == 2
@@ -287,14 +289,14 @@ def test_followup_prioritizes_accepted_adaptation_and_saves_actual_rpe(athlete):
     repo = GarminRepository()
     actual = repo.create_actual_session(
         ActualSession(
-            date=date.today(),
+            date=athlete_today(),
             sport="running",
             duration_sec=1800,
             planned_session_id=sid,
         )
     )
     repo.create_actual_session(
-        ActualSession(date=date.today(), sport="running", duration_sec=7200)
+        ActualSession(date=athlete_today(), sport="running", duration_sec=7200)
     )
     coach_followup.prepare()
     coach_followup.prepare()
@@ -318,7 +320,7 @@ def test_followup_prioritizes_accepted_adaptation_and_saves_actual_rpe(athlete):
 
 def test_snooze_does_not_renew_expiry_and_skip_closes_it(athlete):
     GarminRepository().create_actual_session(
-        ActualSession(date=date.today(), sport="running", duration_sec=6000)
+        ActualSession(date=athlete_today(), sport="running", duration_sec=6000)
     )
     coach_followup.prepare()
     item = coach_followup.pending()[0]
@@ -331,7 +333,7 @@ def test_snooze_does_not_renew_expiry_and_skip_closes_it(athlete):
 
 def test_expired_or_foreign_followup_cannot_write(athlete):
     GarminRepository().create_actual_session(
-        ActualSession(date=date.today(), sport="running", duration_sec=6000)
+        ActualSession(date=athlete_today(), sport="running", duration_sec=6000)
     )
     coach_followup.prepare()
     item = coach_followup.pending()[0]
@@ -341,17 +343,46 @@ def test_expired_or_foreign_followup_cannot_write(athlete):
             coach_followup.respond(item["id"], 1, "answer", rpe=5)
     with db_connection() as con:
         con.execute(
-            "UPDATE app.coach_followups SET expires_at=now()-INTERVAL '1 hour' WHERE id=?",
+            "UPDATE app.coach_followups SET expires_at=(now() AT TIME ZONE 'UTC')-INTERVAL '1 hour' WHERE id=?",
             [item["id"]],
         )
     with pytest.raises(coach_followup.FollowupConflict):
         coach_followup.respond(item["id"], 1, "answer", rpe=5)
 
 
+def test_followup_lifetime_runs_on_one_clock(athlete):
+    # conftest puts the server's date a day apart from the athlete's (Paris):
+    # an expiry built from the athlete's date and the server's time was 24 h off.
+    # Instants are naive UTC, whatever the server's zone.
+    GarminRepository().create_actual_session(
+        ActualSession(date=athlete_today(), sport="running", duration_sec=6000)
+    )
+    coach_followup.prepare()
+    item = coach_followup.pending()[0]
+    with db_connection() as con:
+        left = con.execute(
+            "SELECT epoch(expires_at - (now() AT TIME ZONE 'UTC')) FROM app.coach_followups WHERE id=?",
+            [item["id"]],
+        ).fetchone()[0]
+    assert abs(left - coach_followup.MAX_FOLLOWUP_HOURS * 3600) < 60
+    # The home card and the coach's context agree on the expiry, either side.
+    for shift, visible in (
+        ("+ INTERVAL '1 hour'", True),
+        ("- INTERVAL '1 hour'", False),
+    ):
+        with db_connection() as con:
+            con.execute(
+                f"UPDATE app.coach_followups SET expires_at=(now() AT TIME ZONE 'UTC') {shift} WHERE id=?",
+                [item["id"]],
+            )
+        assert bool(coach_followup.pending()) is visible
+        assert (item["question"] in coach_followup.context_block()) is visible
+
+
 def test_strength_hr_is_not_interpreted_as_cardio_quality(athlete):
     sid = GarminRepository().create_actual_session(
         ActualSession(
-            date=date.today(),
+            date=athlete_today(),
             sport="strength",
             duration_sec=1020,
             avg_hr=79,
@@ -379,6 +410,124 @@ def test_memory_import_is_once_and_scope_isolated(athlete):
         assert memory.read_file("notes.md").content == ""
     assert memory.append_entry("notes.md", "new", "new evidence")
     assert "resurrected" not in memory.read_file("notes.md").content
+
+
+def test_two_concurrent_imports_both_succeed_with_one_set_of_rows(athlete, monkeypatch):
+    """ARE-81: another run's import commits inside this one's snapshot."""
+    from write_race import race
+
+    root = memory.memory_root()
+    root.mkdir(parents=True)
+    (root / "notes.md").write_text("old")
+    imports, outcomes = memory._import_once, []
+
+    def import_once():
+        try:
+            imports()
+        except Exception as exc:
+            outcomes.append(type(exc))
+            raise
+        outcomes.append("imported")
+
+    monkeypatch.setattr(memory, "_import_once", import_once)
+    with race(
+        monkeypatch, r"INSERT INTO app.coach_memory_imports", memory.ensure_imported
+    ):
+        memory.ensure_imported()
+    # The rival imported inside this claim; this one lost and read its marker.
+    assert outcomes == ["imported", duckdb.ConstraintException]
+    with db_connection() as con:
+        assert con.execute(
+            "SELECT count(*) FROM app.coach_memory_imports WHERE athlete_id=8123"
+        ).fetchone() == (1,)
+        assert con.execute(
+            "SELECT path, content FROM app.coach_memory_files WHERE athlete_id=8123"
+        ).fetchall() == [("notes.md", "old")]
+
+
+@pytest.mark.parametrize("winner_commits", [True, False])
+def test_a_losing_import_waits_a_bounded_time_for_the_winner(
+    athlete, monkeypatch, winner_commits
+):
+    """ARE-81: across processes the winner may still be committing its claim."""
+    lost, waits = [], []
+
+    def import_once():
+        lost.append(1)
+        raise duckdb.TransactionException("Failed to commit: duplicate key")
+
+    def wait(seconds):
+        waits.append(seconds)
+        if winner_commits and len(waits) == 1:
+            with db_connection() as con:
+                con.execute(
+                    "INSERT INTO app.coach_memory_imports (athlete_id) VALUES (8123)"
+                )
+
+    monkeypatch.setattr(memory, "_import_once", import_once)
+    monkeypatch.setattr(memory.time, "sleep", wait)
+    if winner_commits:
+        memory.ensure_imported()
+        assert waits == [memory.IMPORT_CLAIM_READ_DELAY_SECONDS]
+    else:
+        with pytest.raises(duckdb.TransactionException):
+            memory.ensure_imported()
+        assert len(waits) == memory.IMPORT_CLAIM_READS - 1
+    assert lost == [1]  # the import itself is never replayed
+
+
+def test_a_hidden_import_marker_is_not_claimed_again(monkeypatch, tmp_path):
+    """ARE-81: an unprovisioned athlete's marker is invisible, yet it exists."""
+    monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path))
+    try:
+        with athlete_scope(8124):
+            memory.ensure_imported()
+            with db_connection() as con:
+                first = con.execute(
+                    "SELECT imported_at FROM app.coach_memory_imports WHERE athlete_id=8124"
+                ).fetchall()
+            memory.ensure_imported()
+            with db_connection() as con:
+                assert con.execute(
+                    "SELECT count(*) FROM app.visible_coach_memory_imports"
+                ).fetchone() == (0,)
+        with db_connection() as con:
+            assert len(first) == 1
+            assert (
+                con.execute(
+                    "SELECT imported_at FROM app.coach_memory_imports WHERE athlete_id=8124"
+                ).fetchall()
+                == first
+            )
+            assert con.execute(
+                "SELECT count(*) FROM app.coach_memory_files WHERE athlete_id=8124"
+            ).fetchone() == (0,)
+    finally:
+        with db_connection() as con:
+            for table in ("coach_memory_files", "coach_memory_imports"):
+                con.execute(f"DELETE FROM app.{table} WHERE athlete_id=8124")
+
+
+def test_a_deleted_athlete_s_journal_refuses_new_files(monkeypatch, tmp_path):
+    """ARE-81: an import that stops at a hidden marker must not open writes."""
+    monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path))
+    with db_connection() as con:
+        con.execute("INSERT INTO app.athletes(id, deleted_at) VALUES (8125, now())")
+    try:
+        with athlete_scope(8125):
+            with pytest.raises(memory.MemoryConflict):
+                memory.append_entry("notes.md", "Titre", "Corps")
+            with pytest.raises(memory.MemoryConflict):
+                memory.replace_file("profile.md", "Profil", 0)
+        with db_connection() as con:
+            assert con.execute(
+                "SELECT count(*) FROM app.coach_memory_files WHERE athlete_id=8125"
+            ).fetchone() == (0,)
+    finally:
+        with db_connection() as con:
+            for table in ("coach_memory_files", "coach_memory_imports"):
+                con.execute(f"DELETE FROM app.{table} WHERE athlete_id=8125")
+            con.execute("DELETE FROM app.athletes WHERE id=8125")
 
 
 def test_forget_fact_cannot_delete_a_newer_revision(athlete):

@@ -13,9 +13,13 @@ from pydantic import BaseModel, Field
 from arete.config import config
 from arete.dataio.db import db_connection, transaction
 from arete.dataio.game_events import KEPT_AT_LINK
+from arete.services.plan_repository import ATHLETE_CHOICE
 
 MAX_EVENTS = 100
 MAX_WEEK_ACTIVITIES = 1000
+#: Weeks one projection settles together, linked weeks included (a year):
+#: each round of the closure scans the athlete's events inside the lock.
+MAX_SETTLED_WEEKS = 53
 RANKS = (
     (1, "Novice"),
     (3, "Initié"),
@@ -106,7 +110,7 @@ def _require(con):
 def _lock(con) -> None:
     # DuckDB rejects overlapping writers on this row. Never retry a failed write.
     con.execute(
-        "UPDATE app.game_profile SET version=version WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+        "UPDATE app.game_profile SET version=version WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
     )
 
 
@@ -129,7 +133,7 @@ def set_preference(command: Preference) -> dict:
         if p[0] != command.enabled:
             now = datetime.now(UTC)
             con.execute(
-                "UPDATE app.game_profile SET enabled=?,version=version+1,activated_at=coalesce(activated_at,?) WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+                "UPDATE app.game_profile SET enabled=?,version=version+1,activated_at=coalesce(activated_at,?) WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
                 [command.enabled, now],
             )
             if command.enabled:
@@ -143,7 +147,7 @@ def set_preference(command: Preference) -> dict:
                 )
             else:
                 con.execute(
-                    "UPDATE app.game_periods SET ended_at=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (ended_at IS NULL) ",
+                    "UPDATE app.game_periods SET ended_at=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (ended_at IS NULL) RETURNING started_at",
                     [now],
                 )
     return preference()
@@ -166,16 +170,55 @@ _UNRESOLVED_LINK = f"""SELECT 1 FROM app.visible_game_events e, app.visible_stre
     AND NOT ends_with(e.reason, '{KEPT_AT_LINK}') LIMIT 1"""
 
 
+#: Each activity's home week, where it is credited: its earliest eligible
+#: evidence, else its earliest one. Eligibility is fixed at capture, so the
+#: home never moves with later, unrelated activity: an ineligible duplicate
+#: cannot take the credit away from the week holding it (ARE-93).
+_HOMES = """SELECT canonical_key, coalesce(min(week_start) FILTER (WHERE eligible),
+    min(week_start)) AS home, bool_or(eligible) AS eligible, min(name) AS name,
+    min(created_at) AS created_at
+    FROM app.visible_game_events GROUP BY canonical_key"""
+
+#: The weeks sharing an activity with the given ones: its home week and every
+#: week holding its receipts.
+_LINKED_WEEKS = f"""WITH links AS (
+    SELECT 'activity:'||canonical_key AS cause, home AS week FROM ({_HOMES})
+    UNION SELECT cause, week_start FROM app.visible_game_ledger
+    WHERE starts_with(cause, 'activity:') AND week_start IS NOT NULL)
+    SELECT DISTINCT week FROM links WHERE cause IN
+    (SELECT cause FROM links WHERE week IN (SELECT unnest(?)))"""
+
+
+def _linked_weeks(con, weeks: set[date]) -> set[date]:
+    """``weeks`` and every week linked to them, transitively. Reads only.
+
+    An activity's credit and its reversal must settle in one projection:
+    settling only one side would lose the credit or pay it twice, ledgers
+    written before ARE-93 (credited where the activity no longer lives)
+    included. The closure grows until stable, bounded by ``MAX_SETTLED_WEEKS``.
+    """
+    linked = set(weeks)
+    while True:
+        found = {w for (w,) in con.execute(_LINKED_WEEKS, [list(linked)]).fetchall()}
+        if found <= linked:
+            return linked
+        linked |= found
+        if len(linked) > MAX_SETTLED_WEEKS:
+            raise GameError("Trop de semaines liées : projection suspendue.")
+
+
 def _receipts(con, week: date, targets: list[tuple[str, int, int, str]]) -> list[list]:
-    """Ledger rows that bring each cause's total to its target, in order.
+    """Ledger rows that bring each cause's total in this week to its target.
 
     One query for the week's causes; a cause appears at most once per week.
+    Summed per week, not across weeks: an activity a duplicate moves to an
+    earlier week is credited there and reversed where it was (ARE-93).
     """
     sums = {
         cause: (xp, shards)
         for cause, xp, shards in con.execute(
-            "SELECT cause,coalesce(sum(xp),0),coalesce(sum(shards),0) FROM app.visible_game_ledger WHERE cause IN (SELECT unnest(?)) GROUP BY cause",
-            [[cause for cause, *_ in targets]],
+            "SELECT cause,coalesce(sum(xp),0),coalesce(sum(shards),0) FROM app.visible_game_ledger WHERE week_start=? AND cause IN (SELECT unnest(?)) GROUP BY cause",
+            [week, [cause for cause, *_ in targets]],
         ).fetchall()
     }
     rows = []
@@ -204,7 +247,7 @@ def _week(con, week: date, today: date) -> tuple[dict, list[list]]:
         "SELECT goal,timezone FROM app.visible_game_weeks WHERE week_start=?", [week]
     ).fetchone()
     rows = con.execute(
-        "SELECT canonical_key,bool_or(eligible),min(name),epoch(min(created_at)) FROM app.visible_game_events GROUP BY canonical_key HAVING min(week_start)=? ORDER BY min(created_at),canonical_key LIMIT ?",
+        f"SELECT canonical_key,eligible,name,epoch(created_at) FROM ({_HOMES}) WHERE home=? ORDER BY created_at,canonical_key LIMIT ?",
         [week, MAX_WEEK_ACTIVITIES + 1],
     ).fetchall()
     if len(rows) > MAX_WEEK_ACTIVITIES:
@@ -227,10 +270,13 @@ def _week(con, week: date, today: date) -> tuple[dict, list[list]]:
         (cause, 0, 0, "Séance rapprochée") for (cause,) in old if cause not in live
     ]
     # A prescribed rest counts once per planned session and only after its day.
+    # A rest the athlete chose (« Modifier ») is not prescribed: it never fills
+    # the week's goal.
     rest = con.execute(
-        """SELECT count(DISTINCT d.planned_session_id) FROM app.visible_plan_decisions d
+        f"""SELECT count(DISTINCT d.planned_session_id) FROM app.visible_plan_decisions d
         WHERE d.date>=? AND d.date<? AND d.date<=? AND d.decision='rest'
         AND d.applied_at IS NOT NULL AND d.reverted_at IS NULL
+        AND d.readiness_source IS DISTINCT FROM '{ATHLETE_CHOICE}'
         AND EXISTS (SELECT 1 FROM app.visible_game_periods p WHERE d.applied_at>=p.started_at AND (p.ended_at IS NULL OR d.applied_at<p.ended_at))
         AND NOT EXISTS (SELECT 1 FROM app.visible_actual_sessions a WHERE a.planned_session_id=d.planned_session_id)
         """,
@@ -335,18 +381,20 @@ def sync() -> dict:
                 """UPDATE app.game_events e SET canonical_key=a.canonical_key
                 FROM app.visible_strength_sessions s, app.visible_game_events a
                 WHERE e.athlete_id = getvariable('arete_athlete_id') AND e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=e.athlete_id AND scope_owner.deleted_at IS NULL) AND (e.source_key='strength:'||s.id AND a.source_key='actual:'||s.actual_session_id
-                AND e.canonical_key<>a.canonical_key AND NOT ends_with(e.reason, ?)) """,
+                AND e.canonical_key<>a.canonical_key AND NOT ends_with(e.reason, ?)) RETURNING e.source_key""",
                 [KEPT_AT_LINK],
             )
-        # A duplicate imported with another date must settle its original week too.
+        # A duplicate imported with another date settles its activity's home
+        # week too, and every week linked to them: one dated earlier moves the
+        # activity, whose old week must then reverse its credit.
         if pending:
-            keys = [key for key, _ in pending]
-            original_weeks = con.execute(
-                "SELECT min(week_start) FROM app.visible_game_events WHERE canonical_key IN (SELECT canonical_key FROM app.visible_game_events WHERE source_key IN (SELECT unnest(?))) GROUP BY canonical_key",
-                [keys],
+            homes = con.execute(
+                f"""SELECT home FROM ({_HOMES}) WHERE canonical_key IN (SELECT canonical_key
+                FROM app.visible_game_events WHERE source_key IN (SELECT unnest(?)))""",
+                [[key for key, _ in pending]],
             ).fetchall()
-            weeks.update(w for (w,) in original_weeks)
-        for week in sorted(weeks):
+            weeks.update(w for (w,) in homes)
+        for week in sorted(_linked_weeks(con, weeks)):
             if con.execute(
                 "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?", [week]
             ).fetchone():
@@ -357,7 +405,7 @@ def sync() -> dict:
                     )
         if pending:
             con.execute(
-                "UPDATE app.game_events SET processed=true WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key IN (SELECT unnest(?))) ",
+                "UPDATE app.game_events SET processed=true WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key IN (SELECT unnest(?))) RETURNING source_key",
                 [[key for key, _ in pending]],
             )
         xp, _ = _balance(con)
@@ -367,7 +415,7 @@ def sync() -> dict:
             )
         if pending or _balance(con) != balance_before:
             con.execute(
-                "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+                "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
             )
     return snapshot()
 
@@ -386,7 +434,7 @@ def _snapshot(con, offset: int = 0) -> dict:
         "SELECT goal FROM app.visible_game_weeks WHERE week_start=?", [week]
     ).fetchone()
     counts = con.execute(
-        "SELECT count(*),count(*) FILTER(WHERE week_start=?) FROM (SELECT canonical_key,min(week_start) AS week_start FROM app.visible_game_events GROUP BY canonical_key HAVING bool_or(eligible))",
+        f"SELECT count(*),count(*) FILTER(WHERE home=?) FROM ({_HOMES}) WHERE eligible",
         [week],
     ).fetchone()
     owned = {
@@ -495,7 +543,7 @@ def purchase(command: Purchase) -> dict:
             [command.key, fingerprint, json.dumps(result)],
         )
         con.execute(
-            "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+            "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
         )
     return result
 
@@ -511,7 +559,7 @@ def equip(command: Equip) -> dict:
         ).fetchone():
             raise GameError("Cette tenue n’est pas possédée.")
         con.execute(
-            "UPDATE app.game_profile SET equipped=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+            "UPDATE app.game_profile SET equipped=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
             [command.skin],
         )
     return snapshot()
@@ -524,7 +572,7 @@ def appearance(command: Appearance) -> dict:
         if p[1] != command.version:
             raise GameError("Le profil a changé. Actualise-le.")
         con.execute(
-            "UPDATE app.game_profile SET athlete_class=?,silhouette=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+            "UPDATE app.game_profile SET athlete_class=?,silhouette=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
             [command.athlete_class, command.silhouette],
         )
     return snapshot()

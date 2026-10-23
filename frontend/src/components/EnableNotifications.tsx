@@ -1,15 +1,15 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Modal, ModalHeader } from '@/components/ui/Modal';
 import { notificationsApi } from '@/lib/api';
-import { NOTIFICATIONS_OFFERED_KEY, readFlag, writeFlag } from '@/lib/install';
+import { NOTIFICATIONS_OFFERED_KEY, onPushOffersQuiet, pushOffersQuiet, quietPushOffers, readFlag, writeFlag } from '@/lib/install';
 import { currentState, isStandalone, subscribeDevice } from '@/lib/push';
 import { qk } from '@/lib/queryKeys';
 
 const EXAMPLES = [
-  { title: 'Briefing du coach', body: 'Forme en hausse : garde le seuil prévu, 3 × 10 min.' },
+  { title: 'Briefing du coach', body: 'Fraîcheur en hausse : garde le seuil prévu, 3 × 10 min.' },
   { title: 'Séance analysée', body: 'Allure régulière sur la sortie longue, la fin était solide.' },
   { title: 'Bilan de la semaine', body: 'Semaine tenue à 92 %, deux ajustements proposés.' },
 ];
@@ -28,11 +28,15 @@ export function EnableNotifications() {
   const { data: state } = useQuery({ queryKey: qk.pushState, queryFn: currentState, staleTime: Infinity, enabled: eligible });
   const { data: vapid } = useQuery({ queryKey: qk.vapidKey, queryFn: notificationsApi.getVapidPublicKey, enabled: eligible });
   const vapidKey = vapid?.key ?? null;
+  // A contextual offer answered first: no second ask in this session.
+  const quiet = useSyncExternalStore(onPushOffersQuiet, pushOffersQuiet, () => false);
 
-  if (!eligible || state !== 'unsubscribed' || !vapidKey) return null;
+  if (!eligible || state !== 'unsubscribed' || !vapidKey || quiet) return null;
 
   const close = () => {
     writeFlag(NOTIFICATIONS_OFFERED_KEY, '1');
+    // Answered here: the contextual offers (PushOffer) do not ask again this session.
+    quietPushOffers();
     setOpen(false);
   };
   const enable = async () => {
@@ -68,8 +72,9 @@ export function EnableNotifications() {
         <Button loading={busy} onClick={() => void enable()}>
           Activer les notifications
         </Button>
+        {/* Remembered for good: « Plus tard » would promise a return it never makes. */}
         <Button variant="ghost" onClick={close}>
-          Plus tard
+          Non merci
         </Button>
       </div>
     </Modal>

@@ -1,12 +1,12 @@
 """append_journal: dated, deduplicated new journal entries."""
 
 import json
-from datetime import date
 
 import pytest
 
 from arete.agent.tools.journal import MAX_BODY_CHARS, append_journal
 from arete.services.memory import read_file as read_memory_file
+from arete.services.settings import athlete_today
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def _call(**args):
 def test_an_entry_is_filed_under_a_server_dated_heading(memory):
     out = _call(file="notes.md", title="tendon", body="gêne à l'Achille droit")
     assert out["written"] is True
-    today = date.today().isoformat()
+    today = athlete_today().isoformat()
     assert read_memory_file("notes.md").content.startswith(f"- {today} — tendon :")
 
 

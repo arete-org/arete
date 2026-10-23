@@ -1,7 +1,9 @@
 import { isWorkoutUpdate } from './workouts';
+import { CHART_CONTRACT, chartPart, isChartCard } from './chartCards';
 import { isTraceReceipt, isFeedbackState } from './agentFeedback';
 import {
   settleMessage,
+  isSentAt,
   type ChatMessage,
   type ChatPart,
   type ToolPart,
@@ -26,12 +28,17 @@ export function restoreConversation(raw: string | null): ChatMessage[] {
       typeof m.content !== 'string'
     )
       throw new Error('Message sauvegardé invalide.');
+    if (m.sentAt !== undefined && !isSentAt(m.sentAt))
+      throw new Error('Horodatage sauvegardé invalide.');
     if (m.attachmentIds !== undefined && (!Array.isArray(m.attachmentIds) || m.attachmentIds.length > 20 || !m.attachmentIds.every((id: unknown) => typeof id === 'string'))) throw new Error('Pièces jointes sauvegardées invalides.');
     let parts: ChatPart[] | undefined;
     if (Array.isArray(m.parts)) {
+      if (m.parts.filter((part: ChatPart) => part?.kind === 'chart_card').length > CHART_CONTRACT.max_cards)
+        throw new Error('Trop de graphiques dans la réponse sauvegardée.');
       parts = m.parts.map((p: ChatPart) => {
         if (!p || typeof p.id !== 'string')
           throw new Error('Activité sauvegardée invalide.');
+        if (p.kind === 'chart_card' && isChartCard(p)) return chartPart(p);
         if (p.kind === 'coach_card' && (p.ref_kind === 'fact' || p.ref_kind === 'followup') && Number.isSafeInteger(p.ref_id) && p.ref_id > 0 && p.id === `${p.ref_kind}:${p.ref_id}`) return p;
         if (p.kind === 'text' && typeof p.text === 'string') return p;
         if (p.kind === 'calendar_action' && /^[a-f0-9]{32}$/.test(p.id))
@@ -84,6 +91,7 @@ export function restoreConversation(raw: string | null): ChatMessage[] {
         attachmentIds: Array.isArray(m.attachmentIds) && m.attachmentIds.length <= 20 && m.attachmentIds.every((id: unknown) => typeof id === 'string') ? m.attachmentIds : undefined,
         workouts: m.workouts,
         role: m.role,
+        sentAt: m.sentAt,
         content: m.content,
         parts,
       },

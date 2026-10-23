@@ -2,7 +2,8 @@
 
 import asyncio
 import json
-from datetime import date
+from datetime import date, timedelta
+from uuid import uuid4
 
 import pytest
 from langchain.agents import create_agent
@@ -14,12 +15,22 @@ from arete.agent.capabilities.discovery import authorized_tools
 from arete.agent.middlewares.capabilities import ToolkitMiddleware
 from arete.agent.middlewares.context import ContextBuilderMiddleware
 from arete.agent.runtime.context import AgentContext
-from arete.agent.tools.planning import create_planned_session, update_planned_session
+from arete.agent.tools.planning import (
+    create_planned_session,
+    preview_plan_changes,
+    set_session_prescription,
+    update_planned_session,
+)
+from arete.garmin.models import PlannedSession
 from arete.garmin.repository import GarminRepository
 from arete.garmin.workouts import convert
 from arete.services import planning
 from arete.services.garmin_export import inspect_session
-from arete.services.prescriptions import Prescription
+from arete.services.prescriptions import Prescription, strength_prescription
+from arete.services.settings import athlete_today
+
+# The chat binds every planning tool on each model call; ARE-171 measured 49,844.
+CHAT_SCHEMA_CHARS_MAX = 33_000
 
 
 class Model(GenericFakeChatModel):
@@ -92,6 +103,18 @@ def patch(session, **changes):
     )
 
 
+def set_steps(session, prescription):
+    return json.loads(
+        set_session_prescription.invoke(
+            {
+                "session_id": session["id"],
+                "revision": session["revision"],
+                "prescription": prescription,
+            }
+        )
+    )
+
+
 def test_one_patch_moves_changes_status_and_clears_targets():
     session = create(
         description="ancienne", target_duration_min=45, target_distance_km=8
@@ -117,7 +140,7 @@ def test_prescription_replaces_stale_targets_and_cannot_be_downgraded():
     prescription = {
         "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 1800}]
     }
-    updated = patch(session, prescription=prescription)["session"]
+    updated = set_steps(session, prescription)["session"]
     assert updated["structured"] and updated["target_duration_min"] is None
     assert "error" in patch(updated, target_duration_min=90)
     assert "error" in patch(updated, prescription=None)
@@ -135,11 +158,7 @@ def test_incomplete_repeat_is_correctable_without_losing_workout_steps(edge_seco
     This proves persistence/export, not the model's ability to choose the correction.
     """
     session = create(description="20x300")
-    bad = patch(
-        session,
-        description="20x300 r100",
-        prescription={"steps": [{"kind": "repeat", "duration_kind": "meters"}]},
-    )
+    bad = set_steps(session, {"steps": [{"kind": "repeat", "duration_kind": "meters"}]})
     assert "repeat (entier de 2 à 100)" in bad["error"]
     assert "steps (sous-étapes non vides)" in bad["error"]
     saved = GarminRepository().get_planned_session(session["id"])
@@ -168,7 +187,7 @@ def test_incomplete_repeat_is_correctable_without_losing_workout_steps(edge_seco
             {"kind": "cooldown", **duration},
         ]
     expected = Prescription.model_validate({"steps": steps})
-    updated = patch(session, description="20x300 r100", prescription={"steps": steps})
+    updated = set_steps(session, {"steps": steps})
     assert updated["session"]["id"] == session["id"]
     assert updated["session"]["revision"] == session["revision"] + 1
     inspected = inspect_session(session["id"])["session"]
@@ -210,31 +229,27 @@ def test_invalid_patch_never_writes(changes):
 
 
 def test_workout_tool_wire_schema_keeps_nested_intervals_typed():
-    for tool in (create_planned_session, update_planned_session):
-        params = convert_to_openai_tool(tool)["function"]["parameters"]
-        properties = params["properties"]
-        assert params["additionalProperties"] is False
-        assert (
-            not {"runtime", "config", "thread_id", "prescription_json"}
-            & properties.keys()
-        )
-        if tool is update_planned_session:
-            properties = properties["changes"]["properties"]
-        prescription = properties["prescription"]["anyOf"][0]
-        step = prescription["properties"]["steps"]["items"]
-        for _ in range(2):
-            assert step["properties"]["repeat"]["anyOf"][0]["maximum"] == 100
-            assert "recovery" in step["properties"]["skip_last_recovery"]["description"]
-            step = step["properties"]["steps"]["items"]
-        assert "repeat" not in step["properties"]["kind"]["enum"]
-        # No repeat at the leaf depth, so nothing to skip there either.
-        assert step["properties"]["skip_last_recovery"] == {"type": "null"}
-        assert step["properties"]["duration_kind"]["enum"] == [
-            "seconds",
-            "meters",
-            "reps",
-            "lap",
-        ]
+    for tool in (create_planned_session, update_planned_session, preview_plan_changes):
+        wire = json.dumps(convert_to_openai_tool(tool))
+        assert '"prescription"' not in wire
+    params = convert_to_openai_tool(set_session_prescription)["function"]["parameters"]
+    assert '"title"' not in json.dumps(params["properties"]["prescription"])
+    assert params["additionalProperties"] is False
+    assert params["required"] == ["session_id", "revision", "prescription"]
+    step = params["properties"]["prescription"]["properties"]["steps"]["items"]
+    for _ in range(2):
+        assert step["properties"]["repeat"]["maximum"] == 100
+        assert "recovery" in step["properties"]["skip_last_recovery"]["description"]
+        step = step["properties"]["steps"]["items"]
+    assert "repeat" not in step["properties"]["kind"]["enum"]
+    # No repeat at the leaf depth, so nothing to skip there either.
+    assert step["properties"]["skip_last_recovery"] == {"type": "null"}
+    assert step["properties"]["duration_kind"]["enum"] == [
+        "seconds",
+        "meters",
+        "reps",
+        "lap",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -278,3 +293,249 @@ def test_clearable_targets_have_portable_schemas_and_strict_validation():
         field = properties["target_intensity"]
         field = field.get("anyOf", [field])[0]
         assert "enum" not in field and "pattern" in field
+
+
+def test_chat_tool_schemas_fit_their_budget():
+    sizes = {
+        tool.name: len(json.dumps(convert_to_openai_tool(tool), ensure_ascii=False))
+        for tool in authorized_tools("chat")
+    }
+    listing = "\n".join(
+        f"{size:>7} {name}" for name, size in sorted(sizes.items(), key=lambda x: -x[1])
+    )
+    assert sum(sizes.values()) <= CHAT_SCHEMA_CHARS_MAX, listing
+
+
+def repeat(count, *children, **extra):
+    return {"kind": "repeat", "repeat": count, "steps": list(children), **extra}
+
+
+def meters(kind, value, **extra):
+    return {"kind": kind, "duration_kind": "meters", "value": value, **extra}
+
+
+def seconds(kind, value, **extra):
+    return {"kind": kind, "duration_kind": "seconds", "value": value, **extra}
+
+
+def target(kind, low, high=None):
+    return {"kind": kind, "low": low, "high": high or low}
+
+
+SQUAT = "Squat 3x10 20kg r1'30"
+# Steps the coach sets after creation, one per sport and step feature it can carry.
+PRESCRIPTIONS = [
+    (
+        "running",
+        "intervals",
+        {
+            "steps": [
+                {"kind": "warmup"},
+                repeat(20, meters("effort", 300), meters("recovery", 100)),
+                {"kind": "cooldown"},
+            ]
+        },
+    ),
+    (
+        "running",
+        "tempo",
+        {
+            "steps": [
+                seconds(
+                    "effort",
+                    1200,
+                    target=target("pace_sec_km", 230, 240),
+                    secondary_target=target("heart_rate_bpm", 160, 170),
+                )
+            ]
+        },
+    ),
+    (
+        "running",
+        "intervals",
+        {
+            "steps": [
+                repeat(
+                    2,
+                    repeat(
+                        4,
+                        seconds("effort", 60),
+                        seconds("recovery", 60),
+                        skip_last_recovery=True,
+                    ),
+                    seconds("rest", 180),
+                )
+            ]
+        },
+    ),
+    (
+        "running",
+        "endurance",
+        {
+            "steps": [
+                {"kind": "effort", "target": target("hr_zone", 2)},
+            ]
+        },
+    ),
+    (
+        "cycling",
+        "intervals",
+        {
+            "steps": [
+                seconds("warmup", 900),
+                repeat(
+                    3,
+                    seconds("effort", 600, target=target("power_w", 250, 270)),
+                    seconds("recovery", 300),
+                ),
+            ]
+        },
+    ),
+    (
+        "cycling",
+        "tempo",
+        {
+            "steps": [
+                seconds("effort", 1800, target=target("cadence_rpm", 85, 95)),
+            ]
+        },
+    ),
+    (
+        "swimming",
+        "intervals",
+        {
+            "pool_length_m": 25,
+            "steps": [
+                meters("warmup", 200, stroke="mixed"),
+                repeat(8, meters("effort", 50, stroke="free"), seconds("rest", 20)),
+            ],
+        },
+    ),
+    ("hiking", "endurance", {"steps": [seconds("effort", 7200, notes="Dénivelé")]}),
+]
+
+
+def strength_steps():
+    """The grammar's sets regrouped as the coach would for Garmin."""
+    effort, rest = strength_prescription(SQUAT, None).model_dump()["steps"][:2]
+    effort["garmin_exercise"] = "BARBELL_BACK_SQUAT"
+    return {"steps": [repeat(3, effort, rest)]}
+
+
+def stored(session_id):
+    return GarminRepository().get_planned_session(session_id).prescription
+
+
+def old_create(day, sport, session_type, prescription, strength_text):
+    return planning.create_planned_session(
+        day.isoformat(),
+        session_type,
+        sport=sport,
+        prescription=Prescription.model_validate(prescription),
+        strength_text=strength_text,
+    )
+
+
+def old_update(session, prescription, strength_text):
+    changes = {"prescription": prescription}
+    if strength_text:
+        changes["strength_text"] = strength_text
+    return planning.update_planned_session(
+        session["id"],
+        session["revision"],
+        planning.SessionChanges.model_validate(changes),
+    )
+
+
+def old_preview(session, prescription, strength_text):
+    changes = {"prescription": prescription}
+    if strength_text:
+        changes["strength_text"] = strength_text
+    preview = planning.preview_plan_changes(
+        planning.PlanChangeSet.model_validate(
+            {"items": [{**session_ref(session), "changes": changes}]}
+        )
+    )
+    return planning.apply_plan_changes(preview["id"], preview["revision"], str(uuid4()))
+
+
+def session_ref(session):
+    return {"session_id": session["id"], "revision": session["revision"]}
+
+
+@pytest.mark.parametrize(
+    "sport,session_type,prescription",
+    [*PRESCRIPTIONS, ("strength", "strength", None)],
+)
+@pytest.mark.parametrize("old_path", ["create", "update", "preview"])
+def test_set_session_prescription_stores_what_the_structured_argument_stored(
+    sport, session_type, prescription, old_path
+):
+    prescription = prescription or strength_steps()
+    strength_text = SQUAT if sport == "strength" else ""
+    day = athlete_today() + timedelta(days=1)
+
+    def blank():
+        return json.loads(
+            planning.create_planned_session(
+                day.isoformat(),
+                session_type,
+                sport=sport,
+                strength_text=strength_text,
+            )
+        )["session"]
+
+    if old_path == "create":
+        old = json.loads(
+            old_create(day, sport, session_type, prescription, strength_text)
+        )["session"]
+    elif old_path == "update":
+        old = blank()
+        assert "error" not in json.loads(old_update(old, prescription, strength_text))
+    else:
+        old = blank()
+        assert old_preview(old, prescription, strength_text)["applied"]
+    new = blank()
+    assert set_steps(new, prescription)["updated"]
+    assert stored(new["id"]) == stored(old["id"])
+    assert stored(new["id"]) == Prescription.model_validate(prescription).model_dump(
+        mode="json"
+    )
+
+
+def test_set_session_prescription_with_a_stale_revision_writes_nothing():
+    session = create(target_duration_min=45)
+    steps = {"steps": [seconds("effort", 1800)]}
+    assert set_steps(session, steps)["updated"]
+    replay = set_steps(session, {"steps": [seconds("effort", 600)]})
+    assert "error" in replay
+    saved = GarminRepository().get_planned_session(session["id"])
+    assert saved.revision == session["revision"] + 1
+    assert saved.prescription == Prescription.model_validate(steps).model_dump(
+        mode="json"
+    )
+
+
+@pytest.mark.parametrize(
+    "from_text,change",
+    [(True, {"value": 12}), (True, {"kind": "warmup"}), (False, {"value": 12})],
+)
+def test_strength_steps_cannot_replace_the_sets_the_grammar_read(from_text, change):
+    day = athlete_today() + timedelta(days=2)
+    if from_text:
+        session = json.loads(
+            planning.create_planned_session(
+                day.isoformat(), "strength", sport="strength", strength_text=SQUAT
+            )
+        )["session"]
+    else:
+        identifier = GarminRepository().create_planned_session(
+            PlannedSession(date=day, sport="strength", session_type="strength")
+        )
+        session = {"id": identifier, "revision": 1}
+    before = stored(session["id"])
+    grouped = strength_steps()
+    grouped["steps"][0]["steps"][0].update(change)
+    assert "strength_text" in set_steps(session, grouped)["error"]
+    saved = GarminRepository().get_planned_session(session["id"])
+    assert saved.revision == session["revision"] and saved.prescription == before

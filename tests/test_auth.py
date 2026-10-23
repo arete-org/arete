@@ -10,7 +10,7 @@ import pytest
 
 from arete.api import auth
 from arete.dataio.db import connect
-from arete.services import oauth_state, users
+from arete.services import users
 
 OWNER = "user_owner"
 OTHER = "user_other"
@@ -33,7 +33,7 @@ def _clean_users():
 
 
 @pytest.fixture
-def enforced(monkeypatch):
+def enforced(monkeypatch, consented):
     """Clerk mode with a fake verifier: no network, no real keys."""
     monkeypatch.setenv("ARETE_AUTH", "clerk")
     monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test_fake")
@@ -92,15 +92,13 @@ def test_enforced_mode_requires_a_credential(client, enforced):
         "publishable_key": "pk_test_fake",
     }
     assert client.get("/openapi.json").status_code == 200
-    # The Strava callback arrives from the provider's redirect, with no session:
-    # it keeps its own state check and must not be turned away at the door.
-    assert client.get("/strava/callback").status_code != 401
     # Slack events carry Slack's signature, checked by their own route.
     assert "www-authenticate" not in client.post("/slack/events").headers
 
 
 def test_each_account_gets_its_own_athlete(client, enforced):
     me = client.get("/auth/me", headers=_bearer("owner-token")).json()
+    assert me.pop("consent")["required"] is True  # test_consent.py covers it
     assert me == {
         "email": "owner@example.com",
         "name": "Greg",
@@ -143,9 +141,7 @@ def test_production_without_clerk_fails_closed_including_health(client, monkeypa
     refused = client.get("/settings")
     assert refused.status_code == 503
     assert client.get("/health").status_code == 503
-    # Still reachable: the OAuth callback and the sign-in bootstrap keep
-    # their own checks and must stay up for the fix to be deployable.
-    assert client.get("/strava/callback").status_code != 503
+    # The sign-in bootstrap remains reachable for diagnosis.
     assert client.get("/auth/config").status_code != 503
 
 
@@ -187,7 +183,7 @@ def _session_token(key: Any, subject: str = OWNER, **claims: Any) -> str:
 
 
 @pytest.fixture
-def real_verifier(monkeypatch):
+def real_verifier(monkeypatch, consented):
     """Clerk mode through the SDK's real verification; Clerk itself is a stub."""
     from clerk_backend_api.security import verifytoken
 
@@ -255,6 +251,26 @@ def test_an_unreadable_jwt_key_fails_closed(client, real_verifier, monkeypatch, 
     assert real_verifier == []
     # The public paths stay up, so the fix can be deployed and probed.
     assert client.get("/health").status_code == 200
+
+
+def test_a_private_jwt_key_is_reported_as_misconfigured(
+    client, real_verifier, monkeypatch, caplog
+):
+    from cryptography.hazmat.primitives import serialization
+
+    signing, _pem = _rsa_key()
+    private_pem = signing.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    monkeypatch.setenv("CLERK_JWT_KEY", private_pem)
+    with caplog.at_level(logging.ERROR, logger="arete.api.auth"):
+        refused = client.get("/settings", headers=_bearer(_session_token(signing)))
+    # The cause is named, not mistaken for an identity provider outage.
+    assert refused.status_code == 503
+    assert "CLERK_JWT_KEY illisible" in caplog.text
+    assert real_verifier == []
 
 
 def test_an_identity_provider_outage_is_a_503_not_a_leak(client, enforced, monkeypatch):
@@ -351,17 +367,6 @@ class TestUsers:
         con.close()
         assert users.upsert_user("u3", "me@example.com", verified=True).athlete_id == 1
         assert users.upsert_user("u4", "you@example.com", verified=True).athlete_id > 1
-
-
-class TestOAuthState:
-    def test_round_trip_tamper_and_expiry(self):
-        state = oauth_state.issue("secret", now=1_000_000)
-        assert oauth_state.verify("secret", state, now=1_000_100)
-        assert not oauth_state.verify("other", state, now=1_000_100)
-        assert not oauth_state.verify("secret", state + "x", now=1_000_100)
-        assert not oauth_state.verify("secret", state, now=1_000_000 + 601)
-        assert not oauth_state.verify("secret", None)
-        assert not oauth_state.verify("secret", "a.b")
 
 
 def test_http_workers_enforce_private_plans(client, enforced):

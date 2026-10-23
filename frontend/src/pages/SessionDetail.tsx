@@ -1,18 +1,20 @@
-import { createElement, type ReactNode } from 'react';
+import { createElement, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft, Dumbbell } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
-import { RpePicker } from '@/components/RpePicker';
-import { Panel, RpeBadge } from '@/components/ui';
-import { analyticsApi } from '@/lib/api';
+import { BodyLogEntry } from '@/components/body/BodyLogEntry';
+import { GlossaryLink } from '@/components/GlossaryLink';
+import { Button, Modal, ModalHeader, Panel, RpeBadge } from '@/components/ui';
+import { analyticsApi, strengthApi } from '@/lib/api';
 import { chartRows, formatElapsed, intensityLabel, isFootSport } from '@/lib/activity';
 import { CHART, COLORS, HR_ZONE_COLORS } from '@/lib/chartTheme';
 import { parseLocalDate } from '@/lib/dates';
-import { sportLabel } from '@/lib/fr';
+import { formatDecimal, sportLabel } from '@/lib/fr';
+import { glossaryHref, type GlossaryId } from '@/lib/glossary';
 import { qk } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
-import { cn, formatDurationCompact, formatPace } from '@/lib/utils';
+import { cn, formatDurationCompact, formatPace, readableError } from '@/lib/utils';
 import type {
   ActivityDetail,
   ActivityIntervals,
@@ -22,18 +24,24 @@ import type {
   ActivityTerrain,
   ActivityWeather,
 } from '@/types';
+import { StrengthExercises } from './log/StrengthExercises';
+import { SameDayLogWarning } from './log/SameDayLogWarning';
+import { useOpenDraft } from './log/useOpenDraft';
 import { RouteTrace } from './session/RouteTrace';
+import { SessionSummary } from './session/SessionSummary';
 import { StreamChart } from './session/StreamChart';
 
 const ZONE_NAME = ['Z1 récupération', 'Z2 endurance', 'Z3 tempo', 'Z4 seuil', 'Z5 VO2max'];
 const SOURCE_LABEL: Record<string, string> = {
   garmin_connect: 'Garmin',
   fit_file: 'Fichier FIT',
+  tcx_file: 'Fichier TCX',
+  gpx_file: 'Fichier GPX',
   strava: 'Strava',
   manual: 'Saisie manuelle',
 };
 
-const km = (m: number | null | undefined) => (m ? `${(m / 1000).toFixed(2)} km` : '—');
+const km = (m: number | null | undefined) => (m ? `${formatDecimal(m / 1000, 2)} km` : '—');
 const pace = (sec: number | null | undefined) => (sec ? `${formatPace(sec)} /km` : '—');
 const pct = (v: number) => `${v > 0 ? '+' : ''}${v.toLocaleString('fr-FR')} %`;
 const VAM_MINUTES = ['5', '10', '20', '30', '60'];
@@ -41,7 +49,7 @@ const VAM_MINUTES = ['5', '10', '20', '30', '60'];
 const HOT_C = 25;
 const HIGH_M = 1500;
 
-/** A cardio session's page: summary, coach, charts, analysis, laps, zones, route. */
+/** A session's page: its summary and the coach's word first, then tiles, charts, analysis, laps, zones, route. */
 export function SessionDetailPage() {
   const { id } = useParams();
   const sessionId = id && /^\d+$/.test(id) ? Number(id) : null;
@@ -53,20 +61,20 @@ export function SessionDetailPage() {
 
   return (
     <div className="page-shell bg-void">
-      <div className="page-content space-y-4 sm:space-y-6">
+      <div className="page-content analytics-page">
         <Link
           to="/log?tab=cardio"
-          className="inline-flex items-center gap-1 text-xs font-sans text-text-muted hover:text-neon-cyan"
+          className="inline-flex min-h-11 items-center gap-1 text-sm font-sans text-text-muted hover:text-neon-cyan"
         >
           <ArrowLeft className="w-4 h-4" />
-          JOURNAL
+          Journal
         </Link>
         {sessionId === null ? (
-          <EmptyState message="SÉANCE INTROUVABLE" />
+          <EmptyState message="Séance introuvable" />
         ) : query.isLoading ? (
-          <LoadingState message="CHARGEMENT DE LA SÉANCE…" />
+          <LoadingState message="Chargement de la séance…" />
         ) : query.isError || !query.data ? (
-          <ErrorState message="SÉANCE INTROUVABLE OU INDISPONIBLE" onRetry={() => query.refetch()} />
+          <ErrorState message="Séance introuvable ou indisponible" onRetry={() => query.refetch()} />
         ) : (
           <SessionView detail={query.data} />
         )}
@@ -98,6 +106,7 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
       <header className="flex items-start gap-3 animate-fade-down">
         {icon}
         <div className="min-w-0 flex-1">
+          <p className="page-eyebrow">Ta séance en détail</p>
           <h1 className="page-title break-words">
             {session.name || sportLabel(session.sport)}
           </h1>
@@ -106,10 +115,15 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
             {start && ` · ${start}`} · {sportLabel(session.sport)} · {SOURCE_LABEL[session.source] ?? session.source}
           </p>
         </div>
-        <RpeBadge rpe={session.rpe} />
+        {session.rpe != null && (
+          <span className="flex shrink-0 items-center gap-1">
+            <RpeBadge rpe={session.rpe} />
+            <GlossaryLink term="rpe" />
+          </span>
+        )}
       </header>
 
-      {session.rpe == null && <RpePicker sessionId={session.id} autoFocus={params.get('rpe') === '1'} />}
+      <SessionSummary detail={detail} focusRpe={params.get('rpe') === '1'} />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
         <Stat label="Durée" value={formatDurationCompact(session.moving_time_sec ?? session.duration_sec)} />
@@ -126,28 +140,27 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
         <Stat label="Calories" value={session.calories ? `${session.calories} kcal` : '—'} />
       </div>
 
-      {detail.feedback && (
-        <Panel
-          title={
-            <span className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              {detail.feedback.source === 'agent' ? 'LE COACH' : 'CALCULÉ À PARTIR DE LA SÉANCE'}
-            </span>
-          }
-          titleTone="text-neon-cyan"
-        >
-          <p className="text-sm font-sans text-text-secondary whitespace-pre-line">{detail.feedback.text}</p>
-        </Panel>
+      {session.sport === 'strength' && (
+        <LinkedStrengthLog
+          activityId={session.id}
+          logId={detail.strength_log_id ?? null}
+          unlinkedLogId={detail.strength_unlinked_log_id ?? null}
+          source={session.source}
+        />
       )}
 
+      <Panel title="Une douleur pendant ou après ?">
+        <BodyLogEntry painDate={session.date} weight={false} />
+      </Panel>
+
       {session.notes && (
-        <Panel title="NOTES">
+        <Panel title="Notes">
           <p className="text-sm font-sans text-text-secondary whitespace-pre-line">{session.notes}</p>
         </Panel>
       )}
 
       {rows.length > 0 ? (
-        <Panel title="AU FIL DE LA SÉANCE">
+        <Panel title="Au fil de la séance">
           <div className="space-y-4">
             <StreamChart rows={rows} dataKey="hr" label="Fréquence cardiaque (bpm)" color={CHART.red} format={(v) => `${Math.round(v)}`} />
             <StreamChart
@@ -164,33 +177,32 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
       ) : (
         <Panel animate={false}>
           <EmptyState
-            message="PAS DE FLUX POUR CETTE SÉANCE"
+            message="Pas de flux pour cette séance"
             action="Les courbes viennent du fichier FIT : séances Garmin synchronisées ou importées depuis la conservation des flux."
           />
         </Panel>
       )}
 
       {(detail.metrics || detail.intervals) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="analysis-grid">
           {detail.metrics && <Analysis metrics={detail.metrics} foot={foot} />}
           {detail.intervals && <Intervals intervals={detail.intervals} foot={foot} />}
         </div>
       )}
 
       {(climbs || gap || detail.weather) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="analysis-grid">
           {detail.terrain && (climbs || gap) && <Terrain terrain={detail.terrain} />}
           {detail.weather && <Weather weather={detail.weather} />}
         </div>
       )}
 
-      {detail.laps.length > 0 && <LapsTable laps={detail.laps} foot={foot} />}
-      {detail.splits.length > 0 && <SplitsTable splits={detail.splits} />}
+      {(detail.laps.length > 0 || detail.splits.length > 0) && <SessionBreakdown laps={detail.laps} splits={detail.splits} foot={foot} />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+      <div className="analysis-grid">
         {detail.zones && <Zones zones={detail.zones} />}
         {detail.route && (
-          <Panel title="TRACÉ">
+          <Panel title="Tracé">
             <RouteTrace route={detail.route} />
           </Panel>
         )}
@@ -199,21 +211,84 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
   );
 }
 
+/**
+ * The exercises of the Muscu log recorded with this strength activity, or the
+ * offer to add them: the server says which log is linked (`strength_log_id`).
+ */
+function LinkedStrengthLog({
+  activityId,
+  logId,
+  unlinkedLogId,
+  source,
+}: {
+  activityId: number;
+  logId: number | null;
+  unlinkedLogId: number | null;
+  source: string;
+}) {
+  const log = useQuery({
+    queryKey: qk.strengthSession(logId ?? -1),
+    queryFn: () => strengthApi.getSession(logId!),
+    enabled: logId !== null,
+  });
+  const openDraft = useOpenDraft();
+  const exercises = log.data?.exercises ?? [];
+  if (logId === null) {
+    const watch = ['garmin_connect', 'fit_file', 'tcx_file', 'gpx_file'].includes(source ?? '');
+    return (
+      <Panel title="Charges">
+        <p className="text-sm font-sans text-text-secondary mb-3">
+          {watch
+            ? 'Ta montre ne transmet pas tes charges. Ajoute-les pour suivre tes records et ta progression.'
+            : 'Ajoute tes exercices et tes charges pour suivre tes records et ta progression.'}
+        </p>
+        {unlinkedLogId !== null && (
+          <div className="mb-3">
+            <SameDayLogWarning logId={unlinkedLogId} />
+          </div>
+        )}
+        <Button variant="gold" strong className="min-h-11" loading={openDraft.isPending} onClick={() => openDraft.mutate(activityId)}>
+          <Dumbbell className="w-4 h-4" aria-hidden />
+          Ajoute tes charges
+        </Button>
+        {openDraft.isError && (
+          <p role="alert" className="mt-2 text-xs font-sans text-danger-red">{readableError(openDraft.error)}</p>
+        )}
+      </Panel>
+    );
+  }
+  if (exercises.length === 0) return null;
+  return (
+    <Panel title="Exercices">
+      <StrengthExercises exercises={exercises} />
+      <Link
+        to={`/log?session=${logId}`}
+        className="mt-2 inline-flex min-h-11 items-center text-sm font-sans text-text-muted hover:text-neon-cyan"
+      >
+        Ouvrir le log Muscu
+      </Link>
+    </Panel>
+  );
+}
+
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="p-2 sm:p-3 bg-abyss rounded border border-text-muted/20 min-w-0">
-      <div className="text-[10px] sm:text-xs font-sans text-text-muted uppercase truncate">{label}</div>
-      <div className="text-base sm:text-lg font-sans text-text-primary mt-0.5 truncate">{value}</div>
+    <div className="analysis-card min-w-0">
+      <div className="text-xs text-text-muted">{label}</div>
+      <div className="text-xl sm:text-2xl font-semibold text-text-primary mt-2 tabular-nums break-words">{value}</div>
       {sub && <div className="text-[11px] sm:text-xs font-sans text-neon-gold truncate">{sub}</div>}
     </div>
   );
 }
 
-function Row({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
+function Row({ label, value, hint, term }: { label: string; value: ReactNode; hint?: string; term?: GlossaryId }) {
   return (
     <div className="py-2 border-b border-text-muted/10 last:border-0">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-xs font-sans text-text-secondary">{label}</span>
+        <span className="flex items-center gap-1 self-center text-xs font-sans text-text-secondary">
+          {label}
+          {term && <GlossaryLink term={term} />}
+        </span>
         <span className="text-sm font-sans text-text-primary text-right">{value}</span>
       </div>
       {hint && <p className="text-[11px] font-sans text-text-muted mt-0.5">{hint}</p>}
@@ -223,16 +298,17 @@ function Row({ label, value, hint }: { label: string; value: ReactNode; hint?: s
 
 function Analysis({ metrics, foot }: { metrics: ActivityMetrics; foot: boolean }) {
   return (
-    <Panel title="ANALYSE">
+    <Panel title="Analyse">
       {metrics.decoupling_pct !== undefined && (
         <Row
           label="Découplage cardiaque"
+          term="decouplage"
           value={pct(metrics.decoupling_pct)}
-          hint="Efficacité (vitesse par battement) perdue en 2e moitié. Au-delà de 5 %, l'endurance a cédé."
+          hint="Évolution de la vitesse par battement en seconde moitié. À interpréter avec le terrain, la chaleur et la durée."
         />
       )}
       {metrics.hr_drift_pct !== undefined && (
-        <Row label="Dérive de la FC" value={pct(metrics.hr_drift_pct)} hint="FC moyenne de la 2e moitié par rapport à la 1re." />
+        <Row label="Dérive de la FC" term="derive-fc" value={pct(metrics.hr_drift_pct)} hint="FC moyenne de la 2e moitié par rapport à la 1re." />
       )}
       {foot && metrics.pace_first_half_sec_km !== undefined && metrics.pace_second_half_sec_km !== undefined && (
         <Row
@@ -268,10 +344,11 @@ function Analysis({ metrics, foot }: { metrics: ActivityMetrics; foot: boolean }
 function Terrain({ terrain }: { terrain: ActivityTerrain }) {
   const effort = terrain.grade_factor !== null ? Math.round((terrain.grade_factor - 1) * 100) : null;
   return (
-    <Panel title="PENTE ET MONTÉE">
+    <Panel title="Pente et montée">
       {terrain.gap_sec_km !== null && (
         <Row
           label="Allure ajustée à la pente (GAP)"
+          term="gap"
           value={pace(terrain.gap_sec_km)}
           hint={`L'allure à plat pour le même effort (coût énergétique de Minetti)${
             effort ? ` : la pente a pesé ${pct(effort)}.` : '.'
@@ -279,7 +356,7 @@ function Terrain({ terrain }: { terrain: ActivityTerrain }) {
         />
       )}
       {VAM_MINUTES.filter((m) => terrain.vam[m] !== undefined).map((m) => (
-        <Row key={m} label={`Vitesse ascensionnelle ${m} min`} value={`${terrain.vam[m].toLocaleString('fr-FR')} m/h`} />
+        <Row key={m} label={`Vitesse ascensionnelle ${m} min`} term="vam" value={`${terrain.vam[m].toLocaleString('fr-FR')} m/h`} />
       ))}
     </Panel>
   );
@@ -290,7 +367,7 @@ function Weather({ weather }: { weather: ActivityWeather }) {
   const temp = weather.temperature_c;
   const altitude = weather.start_altitude_m;
   return (
-    <Panel title="MÉTÉO AU DÉPART">
+    <Panel title="Météo au départ">
       {temp !== null && (
         <Row
           label="Température"
@@ -314,7 +391,7 @@ function Weather({ weather }: { weather: ActivityWeather }) {
 
 function Intervals({ intervals, foot }: { intervals: ActivityIntervals; foot: boolean }) {
   return (
-    <Panel title="FRACTIONNÉ DÉTECTÉ">
+    <Panel title="Fractionné détecté">
       <p className="text-sm font-sans text-text-secondary mb-3">
         {intervals.count} × {formatElapsed(intervals.work_avg_sec)}
         {intervals.rest_avg_sec ? ` · récup ${formatElapsed(intervals.rest_avg_sec)}` : ''}
@@ -354,10 +431,23 @@ function Intervals({ intervals, foot }: { intervals: ActivityIntervals; foot: bo
   );
 }
 
+function SessionBreakdown({ laps, splits, foot }: { laps: ActivityLap[]; splits: ActivitySplit[]; foot: boolean }) {
+  const [tab, setTab] = useState<'laps' | 'splits'>(laps.length ? 'laps' : 'splits');
+  return <section className="space-y-4" aria-label="Détail des tours et kilomètres">
+    <div className="flex gap-2" role="group" aria-label="Découpage de la séance">
+      {laps.length > 0 && <button type="button" className="analysis-tab" aria-pressed={tab === 'laps'} onClick={() => setTab('laps')}>Tours · {laps.length}</button>}
+      {splits.length > 0 && <button type="button" className="analysis-tab" aria-pressed={tab === 'splits'} onClick={() => setTab('splits')}>Kilomètres · {splits.length}</button>}
+    </div>
+    {tab === 'laps' ? <LapsTable laps={laps} foot={foot} /> : <SplitsTable splits={splits} />}
+  </section>;
+}
+
 function LapsTable({ laps, foot }: { laps: ActivityLap[]; foot: boolean }) {
+  const [selected, setSelected] = useState<ActivityLap | null>(null);
   const hasIntensity = laps.some((lap) => lap.intensity !== null);
   return (
-    <Panel title={`TOURS (${laps.length})`}>
+    <>
+    <Panel title={`Tours (${laps.length})`}>
       <div className="overflow-x-auto">
         <table className="w-full text-xs font-sans whitespace-nowrap">
           <thead className="text-text-muted">
@@ -375,7 +465,7 @@ function LapsTable({ laps, foot }: { laps: ActivityLap[]; foot: boolean }) {
           <tbody className="text-text-primary">
             {laps.map((lap) => (
               <tr key={lap.n} className="border-t border-text-muted/10">
-                <td className="py-1 pr-3">{lap.n}</td>
+                <td className="py-1 pr-3"><button type="button" className="min-h-11 min-w-11 text-neon-cyan underline" aria-label={`Détail du tour ${lap.n}`} onClick={() => setSelected(lap)}>{lap.n}</button></td>
                 {hasIntensity && <td className="py-1 pr-3 text-text-secondary">{intensityLabel(lap.intensity)}</td>}
                 <td className="py-1 pr-3">{formatElapsed(lap.duration_sec)}</td>
                 <td className="py-1 pr-3">{km(lap.distance_m)}</td>
@@ -391,12 +481,24 @@ function LapsTable({ laps, foot }: { laps: ActivityLap[]; foot: boolean }) {
         </table>
       </div>
     </Panel>
+    <Modal open={selected !== null} onClose={() => setSelected(null)} className="max-w-md p-6">
+      <ModalHeader title={`Tour ${selected?.n ?? ''}`} onClose={() => setSelected(null)} />
+      {selected && <div className="mt-4">
+        {selected.intensity !== null && <Row label="Type" value={intensityLabel(selected.intensity)} />}
+        <Row label="Durée" value={formatElapsed(selected.duration_sec)} />
+        <Row label="Distance" value={km(selected.distance_m)} />
+        <Row label={foot ? 'Allure' : 'Vitesse'} value={foot ? pace(selected.pace_sec_km) : selected.speed_mps ? `${(selected.speed_mps * 3.6).toFixed(1)} km/h` : '—'} />
+        <Row label="FC moyenne / maximale" value={`${selected.avg_hr ?? '—'} / ${selected.max_hr ?? '—'} bpm`} />
+        <Row label="Cadence" value={selected.cadence == null ? '—' : `${selected.cadence} ${foot ? 'pas/min' : 'tr/min'}`} />
+      </div>}
+    </Modal>
+    </>
   );
 }
 
 function SplitsTable({ splits }: { splits: ActivitySplit[] }) {
   return (
-    <Panel title="KILOMÈTRES">
+    <Panel title="Kilomètres">
       <div className="overflow-x-auto">
         <table className="w-full text-xs font-sans whitespace-nowrap">
           <thead className="text-text-muted">
@@ -429,7 +531,7 @@ function Zones({ zones }: { zones: NonNullable<ActivityDetail['zones']> }) {
   const values = [zones.z1, zones.z2, zones.z3, zones.z4, zones.z5];
   const total = values.reduce((a, b) => a + b, 0) || 1;
   return (
-    <Panel title="ZONES CARDIAQUES">
+    <Panel title="Zones cardiaques">
       <div className="flex h-3 rounded overflow-hidden gap-0.5 mb-3" aria-hidden>
         {values.map((sec, i) =>
           sec > 0 ? (
@@ -450,6 +552,12 @@ function Zones({ zones }: { zones: NonNullable<ActivityDetail['zones']> }) {
           </li>
         ))}
       </ul>
+      <Link
+        to={glossaryHref('zones')}
+        className="mt-2 inline-flex min-h-11 items-center text-xs font-sans text-text-muted hover:text-neon-cyan"
+      >
+        Comprendre les zones
+      </Link>
     </Panel>
   );
 }

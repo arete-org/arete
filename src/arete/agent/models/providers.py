@@ -1,5 +1,7 @@
 """Translate a resolved model route into the OpenAI-compatible adapter."""
 
+import hashlib
+import json
 from urllib.parse import urlsplit
 
 from langchain_openai import ChatOpenAI
@@ -46,6 +48,9 @@ def build_chat_model(
             extra_body["reasoning"] = {"enabled": openrouter_reasoning}
     return ChatOpenAI(
         model=route.model,
+        # Fraction-based native summarization uses the configured deployment
+        # window; a provider router's advertised maximum is not our envelope.
+        profile={"max_input_tokens": route.context_tokens},
         base_url=route.base_url,
         api_key=route.api_key,
         temperature=temperature,
@@ -55,3 +60,12 @@ def build_chat_model(
         stream_chunk_timeout=min(timeout, AGENT_STREAM_CHUNK_TIMEOUT_SEC),
         extra_body=extra_body or None,
     )
+
+
+def provider_session_id(athlete_id: int, profile: str, identity: str) -> str:
+    """Namespace untrusted thread IDs without mutating cached provider clients."""
+    value = json.dumps(
+        ["arete-provider-affinity-v1", athlete_id, profile, identity],
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()

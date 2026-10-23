@@ -5,6 +5,8 @@ import { EmptyState, LoadingState } from '@/components';
 import { Modal, ModalHeader, RPE_TEXT, rpeTone } from '@/components/ui';
 import { strengthApi } from '@/lib/api';
 import { parseLocalDate } from '@/lib/dates';
+import { invalidateAfterSession } from '@/lib/queryKeys';
+import { StrengthExercises } from './StrengthExercises';
 
 interface SessionDetailModalProps {
   sessionId: number | null;
@@ -32,13 +34,15 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['strengthSession', sessionId] });
       queryClient.invalidateQueries({ queryKey: ['garminCandidates', sessionId] });
+      // A link settles the activity's draft, its same-day warning and the game.
+      invalidateAfterSession(queryClient);
     },
   });
 
   return (
     <Modal open={open} onClose={onClose} className="max-w-2xl max-h-[80vh] overflow-y-auto">
       <ModalHeader
-        title={<span className="font-sans uppercase tracking-wider">DÉTAIL DE LA SÉANCE</span>}
+        title="Détail de la séance"
         tone="text-neon-gold"
         onClose={onClose}
       />
@@ -83,48 +87,20 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
 
           {session.exercises && session.exercises.length > 0 && (
             <div>
-              <h3 className="text-sm font-sans text-text-muted uppercase tracking-wider mb-3">Exercices</h3>
-              <div className="space-y-3">
-                {session.exercises.map((ex, idx) => (
-                  <div key={idx} className="p-3 bg-abyss rounded border border-text-muted/20">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-sans text-text-primary">
-                        {ex.exercise?.name || `Exercice n°${ex.exercise_id}`}
-                      </span>
-                      <span className="text-xs font-sans text-text-muted">{ex.sets?.length || 0} séries</span>
-                    </div>
-                    {ex.sets && ex.sets.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {ex.sets.map((set, setIdx) => (
-                          <div
-                            key={setIdx}
-                            className={cn(
-                              'px-2 py-1 rounded text-xs font-sans',
-                              set.is_warmup ? 'bg-info-blue/20 text-info-blue' : 'bg-neon-gold/10 text-neon-gold'
-                            )}
-                          >
-                            {set.weight_kg && `${set.weight_kg}kg × `}
-                            {set.reps !== null ? `${set.reps}` : 'échec'}
-                            {set.rpe && ` @${set.rpe}`}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <h3 className="text-sm font-sans font-medium text-text-secondary mb-3">Exercices</h3>
+              <StrengthExercises exercises={session.exercises} />
             </div>
           )}
 
           {session.notes && (
             <div>
-              <h3 className="text-sm font-sans text-text-muted uppercase tracking-wider mb-2">Notes</h3>
+              <h3 className="text-sm font-sans font-medium text-text-secondary mb-2">Notes</h3>
               <p className="text-sm text-text-secondary font-sans">{session.notes}</p>
             </div>
           )}
 
           <div className="border-t border-text-muted/20 pt-4">
-            <h3 className="text-sm font-sans text-text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-sans font-medium text-text-secondary mb-3 flex items-center gap-2">
               <Link className="w-4 h-4" />
               Synchro Garmin
             </h3>
@@ -143,8 +119,9 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
                   disabled={linkMutation.isPending}
                   className="p-2 hover:bg-danger-red/20 rounded text-danger-red transition-colors"
                   title="Délier"
+                  aria-label="Délier l’activité Garmin"
                 >
-                  <Unlink className="w-4 h-4" />
+                  <Unlink aria-hidden="true" className="w-4 h-4" />
                 </button>
               </div>
             ) : garminCandidates?.candidates && garminCandidates.candidates.length > 0 ? (
@@ -169,7 +146,7 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
                           ({Math.round(candidate.duration_seconds / 60)} min)
                         </span>
                       </div>
-                      <span className="text-xs font-sans text-neon-cyan uppercase">[LIER]</span>
+                      <span className="text-xs font-sans text-neon-cyan">Lier</span>
                     </div>
                   </button>
                 ))}
@@ -182,7 +159,7 @@ export function SessionDetailModal({ sessionId, onClose }: SessionDetailModalPro
           </div>
         </div>
       ) : (
-        <EmptyState message="SÉANCE INTROUVABLE" />
+        <EmptyState message="Séance introuvable" />
       )}
     </Modal>
   );
@@ -192,7 +169,7 @@ function Stat({ value, label, tone }: { value: number | string; label: string; t
   return (
     <div className="text-center p-2 sm:p-3 bg-abyss rounded border border-text-muted/20">
       <div className={cn('text-lg sm:text-2xl font-sans', tone)}>{value}</div>
-      <div className="text-[10px] sm:text-xs font-sans text-text-muted uppercase">{label}</div>
+      <div className="text-[10px] sm:text-xs font-sans text-text-muted">{label}</div>
     </div>
   );
 }

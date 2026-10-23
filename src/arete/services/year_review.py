@@ -2,7 +2,8 @@
 
 The Garmin Rundown / Strava Year in Sport equivalent. Everything is read from
 the stored sessions and derived deterministically: totals and sports, month by
-month, the year's standout sessions, best efforts against the years before,
+month, the year's standout sessions, its records against the years before
+(``app.best_efforts``: Garmin streams and the strength log),
 consistency, the fitness (CTL) curve and strength volume. The fitness series is
 the one every other surface draws (``services.metrics.fitness_series``) and the
 load per session is the shared TSS estimate, so the numbers agree with Analytics.
@@ -14,14 +15,16 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Any, NamedTuple
 
-from arete.dataio.db import db_connection
-from arete.dataio.queries import (
-    RUNNING_SPORTS,
-    TSS_EXPR,
-    best_effort_rows,
-    daily_tss_by_date,
+from arete.dataio.best_efforts import (
+    LIFT,
+    RUN,
+    RUN_KEYS,
+    EffortRecord,
+    record_rows,
 )
-from arete.services.analytics import EFFORT_NAMES, best_efforts
+from arete.dataio.db import db_connection
+from arete.dataio.queries import TSS_EXPR, daily_tss_by_date
+from arete.features import records
 from arete.services.metrics import fitness_series
 from arete.services.settings import athlete_today
 
@@ -31,16 +34,18 @@ FIRST_YEAR = 2000
 #: Strength sessions recorded with a Garmin activity are that activity: counted
 #: once, as in ``queries.LOAD_ROWS``. Unlike the load series, a strength session
 #: without a duration still counts as a session here (it carries no load).
+#: Strava rows count: the year review is the athlete's own page and never
+#: reaches the coach, unlike the load series (ARE-126).
 _SESSIONS_SQL = f"""
     SELECT id, date, sport, name, COALESCE(duration_sec, 0), distance_m, ascent_m,
            {TSS_EXPR}
     FROM (
-      SELECT id, user_id, date, sport, name, duration_sec, rpe, suffer_score,
+      SELECT id, user_id, date, sport, name, duration_sec, rpe,
              avg_hr, distance_m, ascent_m
       FROM app.visible_actual_sessions
       UNION ALL
       SELECT -id, user_id, date, 'strength', name, duration_min * 60,
-             CAST(ROUND(overall_rpe) AS INTEGER), NULL, NULL, NULL, NULL
+             CAST(ROUND(overall_rpe) AS INTEGER), NULL, NULL, NULL
       FROM app.visible_strength_sessions
       WHERE actual_session_id IS NULL
     ) AS sessions
@@ -232,24 +237,30 @@ def _fitness(by_date: dict[date, float], start: date, end: date) -> dict[str, An
     }
 
 
-def _efforts(rows: Sequence[tuple], start: date, end: date) -> list[dict[str, Any]]:
-    """The year's best effort per distance, and whether it beat every earlier year."""
-    this_year = best_efforts([r for r in rows if start <= r[1] <= end])
-    before = best_efforts([r for r in rows if r[1] < start])
-    efforts = []
-    for name in EFFORT_NAMES:
-        if name not in this_year:
-            continue
-        effort = this_year[name]
-        previous = before.get(name, {}).get("time_sec")
-        efforts.append(
-            {
-                **effort,
-                "previous_best_sec": previous,
-                "is_pr": previous is None or effort["time_sec"] < previous,
-            }
-        )
-    return efforts
+def _records(rows: Sequence[EffortRecord]) -> dict[str, list[dict[str, Any]]]:
+    """The year's best run per distance and lift per exercise, each against
+    the best of every earlier year (``previous_best``: seconds, or kg)."""
+    held = {(row.kind, row.key): row for row in rows}
+
+    def flagged(record: Any, kind: str, key: str) -> dict[str, Any]:
+        row = held[(kind, key)]
+        previous = row.previous
+        return {
+            **record,
+            "previous_best": None if previous is None else round(previous, 1),
+            "is_pr": records.is_record(row),
+        }
+
+    return {
+        "runs": [
+            flagged(run, RUN, RUN_KEYS[run["distance_m"]])
+            for run in records.run_records(rows)
+        ],
+        "lifts": [
+            flagged(lift, LIFT, str(lift["exercise_id"]))
+            for lift in records.lift_records(rows)
+        ],
+    }
 
 
 def year_review(year: int, today: date | None = None) -> dict[str, Any]:
@@ -271,11 +282,10 @@ def year_review(year: int, today: date | None = None) -> dict[str, Any]:
             _TOP_EXERCISES_SQL, [start, end, TOP_EXERCISES]
         ).fetchall()
         by_date = daily_tss_by_date(con)
-        effort_rows = best_effort_rows(con, RUNNING_SPORTS)
+        year_records = _records(record_rows(con, start, end))
         years = {int(r[0]) for r in con.execute(_YEARS_SQL).fetchall()}
 
     years.add(today.year)
-    efforts = _efforts(effort_rows, start, end)
     return {
         "year": year,
         "start": start.isoformat(),
@@ -298,8 +308,10 @@ def year_review(year: int, today: date | None = None) -> dict[str, Any]:
             "hardest": _session_dict(_top(sessions, lambda s: s.tss)),
             "biggest_climb": _session_dict(_top(sessions, lambda s: s.ascent_m)),
         },
-        "best_efforts": efforts,
-        "pr_count": sum(1 for e in efforts if e["is_pr"]),
+        "records": year_records,
+        "pr_count": sum(
+            1 for kind in year_records.values() for r in kind if r["is_pr"]
+        ),
         "fitness": _fitness(by_date, start, end),
         "strength": {
             "sessions": sum(n for n, _, _ in strength.values()),

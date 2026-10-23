@@ -109,6 +109,7 @@ def test_classifier_typed_and_measured(jev_api, surface, private, outbound, capl
     assert len(jev_api.requests) == 1
     body = json.loads(jev_api.requests[0].content)
     assert body["provider"]["max_price"] == {"prompt": 0.042, "completion": 0}
+    assert body["provider"]["data_collection"] == "deny"
     assert "input_tokens" in caplog.text and "cost" in caplog.text
     assert jev_api.transport.call_args.kwargs == {"retries": 0}
 
@@ -469,6 +470,7 @@ def test_product_graph_executes_native_tool_without_personal_context(
 
     for name in (
         "facts_block",
+        "body_block",
         "journal_block",
         "followup_block",
         "search_personal_context",
@@ -590,6 +592,49 @@ def test_composition_selects_route_and_keeps_classifier_budget(
     assert captured["context"].classifier_calls == 1
     assert captured["context"].profile == "slack"
     assert captured["context"].slack_decision.surface == route
+
+
+def test_admin_composition_never_runs_on_the_event_loop(setup, monkeypatch, jev_api):
+    from worker_only import worker_only
+
+    from arete import coaching
+    from arete.agent.runtime import execution
+    from arete.services.feature_flags import FeatureFlags
+
+    admin, _, service = setup
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    jev_api.payload["answers"]["surface"]["choice"] = "coach"
+    compiled = []
+    monkeypatch.setattr(coaching, "get_feature_flags", worker_only(FeatureFlags))
+    monkeypatch.setattr(
+        coaching,
+        "_assemble",
+        worker_only(lambda profile, **kw: compiled.append(profile) or object()),
+    )
+
+    async def stream(graph, state, *, context):
+        yield {
+            "type": "updates",
+            "data": {"model": {"messages": [AIMessage(content="Fait.")]}},
+        }
+
+    monkeypatch.setattr(execution, "stream_agent", stream)
+
+    async def run():
+        prepared = await coaching.prepare_slack_agent(
+            [{"role": "user", "content": "question"}], service.message, service.client
+        )
+        assert await prepared.produce([], "thread", "public", AsyncMock()) == "Fait."
+        prepared.finalize()
+
+    coaching._slack_graph.cache_clear()
+    try:
+        with athlete_scope(admin.athlete_id):
+            asyncio.run(run())
+    finally:
+        coaching._slack_graph.cache_clear()
+    assert compiled == ["slack"]
 
 
 def test_nonadmin_has_no_classifier_and_revoked_private_thread_is_denied(
@@ -827,7 +872,7 @@ def test_shared_graph_isolates_concurrent_intents_and_denies_unbound_tools(
 
     admin, _, service = setup
     captured = {}
-    for name in ("facts_block", "journal_block", "followup_block"):
+    for name in ("facts_block", "body_block", "journal_block", "followup_block"):
         monkeypatch.setattr(builder, name, lambda *a: "PERSONAL_SECRET")
     monkeypatch.setattr(builder, "personal_context_section", lambda *a: "MEMORY_SECRET")
 
@@ -952,3 +997,16 @@ def test_shared_graph_refuses_missing_preflight_and_private_channel():
     context.slack_visibility = "public"
     with pytest.raises(AssertionError, match="requires DM"):
         middleware.before_agent({}, SimpleNamespace(context=context))
+
+
+def test_the_slack_surface_shows_the_runs_instant_in_the_slack_zone():
+    from arete.agent.context.sections import surface_section
+
+    context = SimpleNamespace(
+        slack_product=SimpleNamespace(timezone="America/New_York"),
+        resolved_profile=SimpleNamespace(personal_context=False),
+        slack_visibility="public",
+        current_datetime=datetime(2026, 10, 17, 22, 30, tzinfo=UTC),
+    )
+    # The run's clock, not a second one read when the prompt is assembled.
+    assert "Heure actuelle : 2026-10-17T18:30:00-04:00." in surface_section(context)

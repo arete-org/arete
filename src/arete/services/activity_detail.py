@@ -9,20 +9,26 @@ session arrived. The analytics are the ones
 cadence variability, normalized power, and the work intervals of a structured
 workout read from the FIT laps' intensity.
 
-The page gets everything, streams down-sampled for a chart. The model gets a
-compact digest without any stream, and never a Strava row (Strava's API
-agreement keeps its data out of AI applications).
+The page gets everything, streams down-sampled for a chart, and the block it
+opens with (``summary``): the rule sentence when no feedback is stored, a
+strength log's totals, how the session compared with its linked plan and the
+next day's plan. The model gets a compact digest
+without any stream, and never a Strava row (Strava's API agreement keeps its
+data out of AI applications).
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from datetime import date, timedelta
+from typing import Any, Literal, TypedDict
 
 from arete.dataio.queries import FOOT_SPORTS
+from arete.dataio.settings import athlete_zone_model
 from arete.features.overview import ZONES
-from arete.garmin.models import ActualSession
+from arete.garmin.matcher import PlanVerdict, SessionMatcher
+from arete.garmin.models import ActualSession, PlannedSession
 from arete.garmin.repository import GarminRepository
 from arete.garmin.streams import ActivityStreams, downsample, route
 from arete.garmin.time_series import (
@@ -33,7 +39,12 @@ from arete.garmin.time_series import (
 )
 from arete.services.analytics import MODEL_EXCLUDED_SOURCES
 from arete.services.coaching_repository import SessionFeedbackRepository
+from arete.services.plan_repository import PlanDecisionRepository
 from arete.services.session_conditions import get_terrain, get_weather
+from arete.services.settings import athlete_today
+from arete.strength.models import StrengthSession
+from arete.strength.progression import ExerciseSession, WorkSet
+from arete.strength.repository import StrengthRepository
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +59,81 @@ MODEL_INTERVALS = 20
 MIN_ANALYSIS_SEC = 20 * 60
 #: The terrain changed the effort by this fraction at least (GAP vs pace).
 GAP_NOTABLE = 0.03
+#: How far past the next day the page looks for the next open session.
+NEXT_SESSION_DAYS = 7
+#: Planned statuses still ahead of the athlete.
+_OPEN_STATUSES = frozenset({"pending", "modified"})
+#: Plan decisions that still shape their day (dismissed ones changed nothing).
+_STANDING_DECISIONS = frozenset({"pending", "discussion", "applied"})
+
+
+class TopLift(TypedDict):
+    """The session's best e1RM and that exercise's previous session."""
+
+    exercise: str
+    e1rm_kg: float
+    previous_kg: float | None
+    previous_date: str | None
+
+
+class StrengthTotals(TypedDict):
+    """A linked Muscu log's working sets (never warm-ups)."""
+
+    tonnage_kg: float
+    sets: int
+    top_e1rm: TopLift | None
+
+
+class PlannedBrief(TypedDict):
+    id: int
+    date: str
+    sport: str
+    session_type: str
+    description: str | None
+    target_duration_min: int | None
+    target_distance_km: float | None
+    target_hr_zone: str | None
+    status: str
+
+
+class Proposal(TypedDict):
+    planned_session_id: int
+    decision: str
+    reason: str
+    state: str
+
+
+class NextDay(TypedDict):
+    """The day after the session, when it is today or tomorrow."""
+
+    date: str
+    relative: Literal["today", "tomorrow"]
+    planned: list[PlannedBrief]
+    #: That day's standing plan decisions (only today has any).
+    proposals: list[Proposal]
+    #: The first open session after that day, when that day has none.
+    next: PlannedBrief | None
+
+
+class PlanComparison(TypedDict):
+    """The planned session this one is linked to, and how it compared."""
+
+    planned: PlannedBrief
+    #: ``garmin.matcher.plan_verdict``: None when nothing could be compared.
+    verdict: PlanVerdict | None
+    #: The planned zone's middle heart rate, which the intensity is read against.
+    target_hr_bpm: int | None
+
+
+class SessionSummary(TypedDict):
+    """What the session page opens with, from stored rows only (no model call)."""
+
+    #: The rules' sentence, only when the session has no stored feedback.
+    rule_feedback: str | None
+    strength: StrengthTotals | None
+    #: None when the session is linked to no planned session.
+    plan: PlanComparison | None
+    next_day: NextDay | None
 
 
 def _source(session: ActualSession) -> str:
@@ -275,6 +361,7 @@ def get_activity_detail(
     streams = repo.get_activity_streams(session_id)
     laps, intervals, metrics = _analysis(session, streams)
     feedback = SessionFeedbackRepository().get(session_id)
+    links = _strength_links(session)
     return {
         "session": _summary(session),
         "zones": _zones(session.hr_zones_json),
@@ -287,6 +374,180 @@ def get_activity_detail(
         "feedback": feedback.to_dict() if feedback else None,
         "terrain": get_terrain(session_id),
         "weather": get_weather(session_id),
+        **links,
+        "summary": _summary_block(
+            session,
+            has_feedback=feedback is not None,
+            log_id=links["strength_log_id"],
+            repo=repo,
+        ),
+    }
+
+
+def _summary_block(
+    session: ActualSession,
+    *,
+    has_feedback: bool,
+    log_id: int | None,
+    repo: GarminRepository,
+) -> SessionSummary:
+    log = StrengthRepository().get_session(log_id) if log_id else None
+    return {
+        "rule_feedback": None if has_feedback else _rule_feedback(session, log),
+        "strength": _strength_totals(log) if log else None,
+        "plan": _plan_comparison(session, repo),
+        "next_day": _next_day(session.date, repo),
+    }
+
+
+def _plan_comparison(
+    session: ActualSession, repo: GarminRepository
+) -> PlanComparison | None:
+    """The linked planned session against what was done, on the matcher's rules."""
+    if session.planned_session_id is None:
+        return None
+    planned = repo.get_planned_session(session.planned_session_id)
+    if planned is None or planned.id is None:
+        return None
+    matcher = SessionMatcher(zones=athlete_zone_model())
+    target_hr = matcher.target_hr(planned)
+    return {
+        "planned": _brief(planned),
+        "verdict": matcher.verdict(session, planned),
+        "target_hr_bpm": None if target_hr is None else round(target_hr),
+    }
+
+
+def _rule_feedback(session: ActualSession, log: StrengthSession | None) -> str:
+    """The sentence the rules write when the coach has not (yet) answered."""
+    # Local: coaching_rules reads this module's analysis for its highlights.
+    from arete.services import coaching_rules
+
+    if log is not None:
+        return coaching_rules.strength_rule_feedback(log)
+    return coaching_rules.cardio_rule_feedback(session)
+
+
+def _strength_totals(log: StrengthSession) -> StrengthTotals:
+    """Tonnage, working sets and the top e1RM against that lift's last session."""
+    assert log.id is not None
+    best: dict[int, tuple[str, float]] = {}
+    for ex in log.exercises:
+        if ex.exercise_id is None:
+            continue
+        sets = [
+            WorkSet(reps=s.reps or 0, weight_kg=s.weight_kg)
+            for s in ex.sets
+            if not s.is_warmup
+        ]
+        e1rm = ExerciseSession(log.id, log.date, sets).best_e1rm
+        held = best.get(ex.exercise_id)
+        if e1rm is not None and (held is None or e1rm > held[1]):
+            name = ex.exercise.name if ex.exercise else "Exercice"
+            best[ex.exercise_id] = (name, e1rm)
+    top: TopLift | None = None
+    if best:
+        exercise_id, (name, e1rm) = max(best.items(), key=lambda item: item[1][1])
+        history = (
+            StrengthRepository()
+            .working_sessions([exercise_id], exclude_session_id=log.id, before=log.date)
+            .get(exercise_id, [])
+        )
+        # The latest earlier session that set an e1RM, every block of the lift in it.
+        dated = [h for h in history if h.best_e1rm is not None]
+        last = dated[-1].session_id if dated else None
+        previous = [h.best_e1rm for h in dated if h.session_id == last and h.best_e1rm]
+        top = {
+            "exercise": name,
+            "e1rm_kg": round(e1rm, 1),
+            "previous_kg": round(max(previous), 1) if previous else None,
+            "previous_date": dated[-1].date.isoformat() if dated else None,
+        }
+    return {
+        "tonnage_kg": round(log.total_volume, 1),
+        "sets": log.total_sets,
+        "top_e1rm": top,
+    }
+
+
+def _brief(planned: PlannedSession) -> PlannedBrief:
+    assert planned.id is not None
+    return {
+        "id": planned.id,
+        "date": planned.date.isoformat(),
+        "sport": planned.sport,
+        "session_type": planned.session_type.value,
+        "description": planned.description,
+        "target_duration_min": planned.target_duration_min,
+        "target_distance_km": planned.target_distance_km,
+        "target_hr_zone": planned.target_hr_zone,
+        "status": planned.status.value,
+    }
+
+
+def _next_day(session_date: date, repo: GarminRepository) -> NextDay | None:
+    """What the plan holds the day after the session, while that day is ahead.
+
+    The day after an older session is past: None. The morning's proposals
+    exist for today only, so a session of yesterday also reads today's.
+    """
+    today = athlete_today()
+    day = session_date + timedelta(days=1)
+    if day < today or day > today + timedelta(days=1):
+        return None
+    planned = repo.list_planned_sessions(
+        start_date=day,
+        end_date=day + timedelta(days=NEXT_SESSION_DAYS),
+        status=None,
+        limit=20,
+        ascending=True,
+    )
+    on_day = [p for p in planned if p.date == day and p.id is not None]
+    later = next(
+        (
+            p
+            for p in planned
+            if p.date > day and p.id is not None and p.status.value in _OPEN_STATUSES
+        ),
+        None,
+    )
+    decisions = PlanDecisionRepository().list_for_day(day) if day == today else []
+    return {
+        "date": day.isoformat(),
+        "relative": "today" if day == today else "tomorrow",
+        "planned": [_brief(p) for p in on_day],
+        "proposals": [
+            {
+                "planned_session_id": d.planned_session_id,
+                "decision": d.decision,
+                "reason": d.reason,
+                "state": d.state,
+            }
+            for d in decisions
+            if d.state in _STANDING_DECISIONS
+            and d.reverted_at is None
+            # A snoozed proposal is out of the athlete's way until then.
+            and (d.snoozed_until is None or d.snoozed_until <= day)
+        ],
+        "next": _brief(later) if later and not on_day else None,
+    }
+
+
+def _strength_links(session: ActualSession) -> dict[str, int | None]:
+    """A strength activity's Muscu log, or the day's unlinked one to link instead.
+
+    Without a linked log the page offers to add the loads; a log of that day
+    linked to no activity is probably this session, so the page says so.
+    """
+    if session.sport != "strength" or session.id is None:
+        return {"strength_log_id": None, "strength_unlinked_log_id": None}
+    repo = StrengthRepository()
+    linked = repo.log_for_activity(session.id)
+    return {
+        "strength_log_id": linked,
+        "strength_unlinked_log_id": None
+        if linked
+        else repo.unlinked_log_on(session.date),
     }
 
 

@@ -56,16 +56,16 @@ describe('French formatting', () => {
 it('shows a deload as such, with its reason', () => {
   render(
     <SuggestionNote
-      suggestion={suggestion({ deload: true, rule: 'deload', reason: 'Récupération basse aujourd’hui (40/100).' })}
+      suggestion={suggestion({ deload: true, rule: 'deload', reason: 'Préparation basse aujourd’hui (40/100).' })}
     />
   );
   expect(screen.getByText(/Allègement/)).toBeTruthy();
-  expect(screen.getByText(/Récupération basse/)).toBeTruthy();
+  expect(screen.getByText(/Préparation basse/)).toBeTruthy();
 });
 
 it('celebrates each record, grouped by exercise', () => {
   render(<RecordsCelebration records={[record(), record({ kind: 'e1rm', value: 139.3, previous: 126.7 })]} />);
-  expect(screen.getByText('2 NOUVEAUX RECORDS !')).toBeTruthy();
+  expect(screen.getByText('2 nouveaux records !')).toBeTruthy();
   expect(screen.getAllByText('Hip Thrust')).toHaveLength(1);
   expect(screen.getByText(/1RM estimé/)).toBeTruthy();
 });

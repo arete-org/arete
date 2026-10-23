@@ -28,6 +28,7 @@ export function CadenceCard({
   return (
     <StatCard
       title="Cadence"
+      term="cadence"
       question="Combien de pas par minute en course ?"
       card={card}
       secondaryLabels={['Longueur de pas']}
@@ -55,13 +56,13 @@ export function CadenceCard({
               return [`${value} pas/min${detail} · ${runs} sortie${runs > 1 ? 's' : ''}`, 'Cadence médiane'];
             }}
           />
-          <Line
+          <Line isAnimationActive={false}
             type="monotone"
             dataKey="cadence"
             name="Cadence médiane"
             stroke={COLORS.neonCyan}
             strokeWidth={2}
-            connectNulls
+            connectNulls={false}
             dot={{ r: 3 }}
           />
         </LineChart>

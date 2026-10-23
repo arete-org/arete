@@ -17,14 +17,17 @@ import zipfile
 from datetime import date
 from pathlib import Path
 from threading import Lock
-from typing import Any, cast
-from urllib.parse import parse_qsl, urlsplit
+from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import parse_qsl, quote, urlsplit
 
 from garminconnect import Garmin, GarminConnectAuthenticationError
 
 from arete.config import config
 from arete.dataio import mirror
 from arete.garmin import token_store
+
+if TYPE_CHECKING:
+    from arete.garmin.sync_budget import SyncBudget
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,14 @@ class GarminAuthError(RuntimeError):
     """No usable Garmin session (no tokens, expired, or login refused)."""
 
 
+class GarminUnavailable(LookupError):
+    """Garmin refused this one read (4xx other than 401/403/429).
+
+    The account or day has no such measurement: the signal is unavailable,
+    not a failed request, so other reads and the health check still advance.
+    """
+
+
 class GarminClient:
     """Authenticated access to Garmin Connect for one user."""
 
@@ -47,9 +58,17 @@ class GarminClient:
     _pending_mfa: dict[Path, tuple[float, Garmin]] = {}
     _mfa_lock = Lock()
 
-    def __init__(self, token_dir: str | Path | None = None):
+    def __init__(
+        self,
+        token_dir: str | Path | None = None,
+        *,
+        sync_budget: SyncBudget | None = None,
+    ):
         self.token_dir = Path(token_dir) if token_dir else default_token_dir()
         self._api: Garmin | None = None
+        self.sync_budget = sync_budget
+        #: The profile handle came from the account record, not this session.
+        self._handle_cached = False
         # Explicit directories support standalone CLI clients; application logins
         # use a durable continuation so the next request may land on any worker.
         self._durable_auth = token_dir is None
@@ -80,6 +99,24 @@ class GarminClient:
                 "(Settings > System, or scripts/garmin_login.py)."
             )
         api = Garmin(retry_attempts=0)
+        if self.sync_budget is not None:
+            # Load locally, then replace this client's transport only. The SDK's
+            # normal transport refreshes/replays 401s outside our request budget.
+            api.client.load(str(self.token_dir))
+            api.client._run_request = self._sync_request
+            api._load_social_profile = self._sync_load_profile
+            # The SDK looks the profile up (one paced request) only when unset.
+            api.display_name = token_store.display_name(self.token_file)
+            self._handle_cached = api.display_name is not None
+            self._api = api
+            if api.client.di_refresh_token and api.client._token_expires_soon():
+                # One proactive refresh is counted too; never replay a refused GET.
+                api.client._http_post = self._sync_refresh_token
+                api.client._refresh_di_token()
+                api.client.dump(str(self.token_dir))
+                if self._durable_auth and config.is_remote_db:
+                    token_store.save(self.token_file)
+            return api
         try:
             api.login(str(self.token_dir))
         except Exception as e:
@@ -94,6 +131,125 @@ class GarminClient:
             # this working session records whose account it opens.
             self._remember_account(api)
         return api
+
+    def _sync_load_profile(self) -> None:
+        """The SDK's lazy profile lookup normally retries three times."""
+        from arete.garmin.sync_budget import SyncStopped
+
+        assert self._api is not None and self.sync_budget is not None
+        try:
+            profile = self._api.client.connectapi("/userprofile-service/socialProfile")
+            name = profile.get("displayName") if isinstance(profile, dict) else None
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("Profil Garmin sans identifiant utilisable.")
+        except Exception as exc:
+            self.sync_budget.stopped = (
+                self.sync_budget.stopped
+                or "Profil Garmin indisponible ; vérification interrompue."
+            )
+            raise SyncStopped(self.sync_budget.stopped) from exc
+        self._api.display_name = name
+        self._api.full_name = profile.get("fullName", "")
+        profile_id = profile.get("profileId")
+        self._api.profile_id = profile_id if isinstance(profile_id, int) else None
+        try:
+            # Tokens saved before the handle was kept: the next sync reuses it.
+            token_store.save_display_name(
+                self.token_file,
+                name,
+                remote=self._durable_auth and config.is_remote_db,
+            )
+        except Exception:
+            logger.warning("Could not cache the Garmin profile handle", exc_info=True)
+
+    def _sync_refresh_token(self, url: str, **kwargs: Any) -> Any:
+        from arete.garmin.sync_budget import SyncRateLimited, SyncStopped
+
+        assert self._api is not None and self.sync_budget is not None
+        assert url == self._api.client._di_token_url
+        kwargs["timeout"] = self.sync_budget.before_request()
+        response = self._api.client._api_session.request(
+            "POST", url, allow_redirects=False, **kwargs
+        )
+        if response.status_code == 429:
+            self.sync_budget.rate_limited = True
+            self.sync_budget.stopped = (
+                "Garmin limite les requêtes. Nouvelle vérification dans 15 minutes."
+            )
+            raise SyncRateLimited(self.sync_budget.stopped)
+        if not 200 <= response.status_code < 300:
+            self.sync_budget.stopped = (
+                "Renouvellement Garmin refusé ; reconnecte le compte."
+            )
+            raise SyncStopped(self.sync_budget.stopped)
+        return response
+
+    def _sync_request(self, method: str, path: str, **kwargs: Any) -> Any:
+        from arete.garmin.sync_budget import SyncRateLimited, SyncStopped
+
+        assert self.sync_budget is not None and self._api is not None
+        assert method == "GET", "Sync transport is read-only"
+        endpoint = urlsplit(path)
+        assert not endpoint.scheme and not endpoint.netloc and ".." not in path
+        budget = self.sync_budget
+        timeout = budget.before_request()
+        client = self._api.client
+        headers = client.get_api_headers()
+        headers.update(kwargs.pop("headers", {}))
+        kwargs.pop("timeout", None)
+        try:
+            response = client._api_session.request(
+                method,
+                f"{client._connectapi}/{path.lstrip('/')}",
+                headers=headers,
+                timeout=timeout,
+                allow_redirects=False,
+                **kwargs,
+            )
+        except Exception as exc:
+            budget.errors.append(type(exc).__name__)
+            raise
+        if response.status_code == 429:
+            budget.rate_limited = True
+            budget.stopped = (
+                "Garmin limite les requêtes. Nouvelle vérification dans 15 minutes."
+            )
+            raise SyncRateLimited(budget.stopped)
+        if response.status_code in {401, 403}:
+            budget.stopped = (
+                "Session Garmin refusée. Reconnecte Garmin dans les réglages."
+            )
+            self._record_refusal()
+            raise SyncStopped(budget.stopped)
+        if 400 <= response.status_code < 500 and response.status_code not in {408, 425}:
+            if self._refused_cached_handle(path):
+                # Fail this read, not "unavailable": the day is retried, and
+                # the next handle URL looks the profile up again.
+                budget.errors.append(f"Garmin HTTP {response.status_code}")
+                raise ConnectionError(budget.errors[-1])
+            raise GarminUnavailable(f"Garmin HTTP {response.status_code}")
+        if not 200 <= response.status_code < 300:
+            budget.errors.append(f"Garmin HTTP {response.status_code}")
+            raise ConnectionError(budget.errors[-1])
+        return response
+
+    def _refused_cached_handle(self, path: str) -> bool:
+        """Garmin refused a URL built on the cached handle: forget the handle."""
+        assert self._api is not None
+        name = self._api.display_name
+        if not (self._handle_cached and name and quote(name, safe="") in path):
+            return False
+        self._handle_cached = False
+        self._api.display_name = None
+        try:
+            token_store.save_display_name(
+                self.token_file,
+                None,
+                remote=self._durable_auth and config.is_remote_db,
+            )
+        except Exception:
+            logger.warning("Could not drop the Garmin profile handle", exc_info=True)
+        return True
 
     def is_authenticated(self) -> bool:
         try:
@@ -180,6 +336,7 @@ class GarminClient:
                 self.token_file,
                 name if isinstance(name, str) else None,
                 remote=self._durable_auth and config.is_remote_db,
+                display_name=api.display_name,
             )
         except Exception:
             logger.warning("Could not record the Garmin account", exc_info=True)
@@ -199,7 +356,7 @@ class GarminClient:
 
             auth_state.clear()
             if config.is_remote_db:
-                token_store.delete()
+                token_store.delete(self.token_file)
         with self._mfa_lock:
             self._pending_mfa.pop(self.token_dir.resolve(), None)
         if self.token_file.exists():

@@ -7,6 +7,7 @@ const IPHONE =
 async function mockApi(page: Page, saved: unknown[] = []) {
   await page.route('**/api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/settings') {
       if (route.request().method() === 'PUT') {
@@ -73,9 +74,13 @@ test('notification kinds and quiet hours are saved with the settings', async ({ 
   await mockApi(page, saved);
   await page.goto('/settings?tab=coach');
   await page.getByRole('checkbox', { name: 'Séances importées' }).uncheck();
-  await expect(page.getByRole('checkbox', { name: /Check-in du matin/ })).toBeDisabled();
+  // The check-in push (ARE-59) and the evening message (ARE-64) ship; the
+  // reminder before a key session is still to come.
+  await expect(page.getByRole('checkbox', { name: /Check-in du matin/ })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: /Message du soir \(si activé/ })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: /Rappel la veille/ })).toBeDisabled();
   await page.getByLabel('Début des heures calmes').fill('22:00');
-  await page.getByRole('button', { name: 'ENREGISTRER' }).click();
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
   await expect.poll(() => saved.length).toBe(1);
   expect(saved[0].notification_preferences.kinds.imports).toBe(false);
   expect(saved[0].notification_preferences.kinds.briefing).toBe(true);

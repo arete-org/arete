@@ -43,7 +43,7 @@ export function DescentCard({
     >
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
+          <CartesianGrid stroke={CHART.grid} vertical={false} />
           <XAxis dataKey="label" {...AXIS} tick={{ ...TICK, fontSize: 10 }} interval={0} />
           <YAxis stroke={CHART.axis} tick={{ fontSize: 11, fill: CHART.axis }} unit=" km/h" width={64} />
           {flat !== null && <ReferenceLine y={flat} stroke={CHART.axis} strokeDasharray="4 3" />}
@@ -56,7 +56,7 @@ export function DescentCard({
               ];
             }}
           />
-          <Bar dataKey="speed" name="Vitesse" fill={COLORS.neonCyan} radius={[2, 2, 0, 0]} />
+          <Bar isAnimationActive={false} dataKey="speed" name="Vitesse" fill={COLORS.neonCyan} radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </StatCard>

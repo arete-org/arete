@@ -4,7 +4,7 @@ import { AretePresence } from '@/components/AreteBrand';
 /** Full-page frame for what the gate shows in place of the app. */
 export function GateScreen({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-void flex items-center justify-center p-6">{children}</div>
+    <div className="gate-screen min-h-screen bg-void flex items-center justify-center">{children}</div>
   );
 }
 

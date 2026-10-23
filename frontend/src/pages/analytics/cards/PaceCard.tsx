@@ -29,6 +29,7 @@ export function PaceCard({
   return (
     <StatCard
       title="Allure de course"
+      term="allure"
       question="L'allure progresse-t-elle à mesure des semaines ? Les sorties vallonnées comptent leur allure ajustée à la pente (GAP)."
       card={card}
       secondaryLabels={['Allure médiane']}
@@ -38,7 +39,7 @@ export function PaceCard({
     >
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
+          <CartesianGrid stroke={CHART.grid} vertical={false} />
           <XAxis {...bucketAxis(bucket)} />
           <YAxis
             reversed
@@ -59,13 +60,13 @@ export function PaceCard({
               ];
             }}
           />
-          <Line
+          <Line isAnimationActive={false}
             type="monotone"
             dataKey="pace_sec_km"
             name="Allure médiane"
             stroke={COLORS.neonGold}
             strokeWidth={2}
-            connectNulls
+            connectNulls={false}
             dot={{ r: 3 }}
           />
         </LineChart>

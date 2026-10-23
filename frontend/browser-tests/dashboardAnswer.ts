@@ -7,7 +7,7 @@ export function localDay(offset = 0): string {
 
 /**
  * A `GET /dashboard` answer (src/lib/dashboard.ts): an empty day with no load,
- * no Garmin night and a written briefing, unless `fields` says otherwise.
+ * no Garmin night, a written briefing and no check-in, unless `fields` says otherwise.
  */
 export function dashboardAnswer(fields: Record<string, unknown> = {}) {
   const date = (fields.date as string | undefined) ?? localDay();
@@ -19,10 +19,10 @@ export function dashboardAnswer(fields: Record<string, unknown> = {}) {
     plan_today: { date, decisions: [] },
     next_goal: null,
     player_stats: {
-      level: 0, weeks_at_goal: 0, weekly_goal_tss: 300,
-      hp: { current: 50, max: 100, label: 'Récupération', detail: 'Aucune donnée de charge ni mesure Garmin', source: 'model' },
-      mp: { current: 50, max: 100, label: 'Forme', detail: 'TSB +0.0', source: 'model' },
-      xp: { current: 0, max: 300, label: 'Charge de la semaine', detail: 'Objectif 6 séances', source: 'model' },
+      level: 0, weeks_at_goal: 0, weekly_goal_tss: 300, recent_weeks_at_goal: 0, recent_weeks: 0,
+      hp: { current: 50, max: 100, label: 'Préparation', detail: 'Aucune donnée de charge ni mesure Garmin', source: 'model' },
+      mp: { current: 50, max: 100, label: 'Fraîcheur', detail: 'TSB +0,0', source: 'model' },
+      xp: { current: 0, max: 300, label: 'Charge de la semaine', detail: 'Objectif 300 TSS · 6 séances', source: 'model' },
     },
     fitness: {
       ctl: 0, atl: 0, tsb: 0, form_zone: 'neutral', readiness_score: 50, readiness_level: 'moderate',
@@ -34,8 +34,11 @@ export function dashboardAnswer(fields: Record<string, unknown> = {}) {
     },
     health: null,
     garmin_connected: false,
-    briefing: { status: 'ready', tip: 'Prépare tes prochaines séances.', priority: 'info', source: 'rules', generated_at: `${date}T07:00:00`, updated_after_sync: false },
+    has_load: false,
+    briefing: { status: 'ready', tip: 'Prépare tes prochaines séances.', priority: 'info', source: 'rules', generated_at: `${date}T07:00:00`, updated_after_sync: false, id: 1, first_written_at: null, reaction: null, reaction_comment: null },
     coach: { date, items: [], remaining: 0, briefing: null },
+    // Not answered yet: the morning check-in card asks.
+    checkin: null,
     ...fields,
   };
 }

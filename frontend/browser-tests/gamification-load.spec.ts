@@ -19,6 +19,8 @@ test('loading pages reads the RPG snapshot and logging a session syncs it once',
   await page.route('**/api/**', (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
+    if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh', complete: true } });
     if (path === '/api/gamification/sync') {
       syncs.push(path);
       return route.fulfill({ json: synced });
@@ -45,9 +47,9 @@ test('loading pages reads the RPG snapshot and logging a session syncs it once',
   expect(reads.length).toBeGreaterThanOrEqual(2);
 
   await page.goto('/log?tab=cardio');
-  await page.getByRole('button', { name: 'SANS MONTRE' }).click();
-  await page.getByRole('button', { name: 'ENREGISTRER' }).click();
-  await expect(page.getByRole('button', { name: 'ENREGISTRER' })).toBeHidden();
+  await page.getByRole('button', { name: 'Sans montre' }).click();
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('button', { name: 'Enregistrer' })).toBeHidden();
   await expect.poll(() => syncs.length).toBe(1);
   // The journal's summary shows the sync's answer: the cache holds it before the reload.
   await expect(page.getByText('Dernier reçu : Séance sans montre')).toBeVisible();

@@ -13,7 +13,12 @@ from time import monotonic
 
 from langchain.agents.middleware import AgentMiddleware
 
-from arete.agent.runtime.events import coach_card, preview, tool_result_event
+from arete.agent.runtime.events import (
+    chart_card,
+    coach_card,
+    preview,
+    tool_result_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +77,8 @@ class ToolEventMiddleware(AgentMiddleware):
         )
         if card := coach_card(result):
             writer(card)
+        if chart := chart_card(result):
+            writer(chart)
         return result
 
     async def awrap_tool_call(self, request, handler):
@@ -94,4 +101,6 @@ class ToolEventMiddleware(AgentMiddleware):
         )
         if card := coach_card(result):
             writer(card)
+        if chart := chart_card(result):
+            writer(chart)
         return result

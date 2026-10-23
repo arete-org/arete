@@ -1,26 +1,37 @@
-import { CoachTodayPanel } from '@/components/agent/CoachToday';
-import { AretePresence } from '@/components/AreteBrand';
+import { CoachingAttention } from '@/components/agent/CoachingAttention';
+import { BriefingCard } from '@/components/BriefingCard';
 import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight, Calendar, Dumbbell, Flag, Zap } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Calendar, Dumbbell, HeartPulse, TrendingUp, Zap } from 'lucide-react';
 import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
-import { Button, Panel, Skeleton } from '@/components/ui';
+import { CheckinCard } from '@/components/dashboard/CheckinCard';
+import { BodyLogEntry } from '@/components/body/BodyLogEntry';
+import { PushOffer } from '@/components/PushOffer';
+import { MovedSession, RenegotiationOutcome } from '@/components/dashboard/RenegotiationOutcome';
+import { RenegotiateMenu } from '@/components/dashboard/RenegotiateMenu';
+import { SESSION_TYPE_LABEL } from '@/components/SessionCard';
+import { WeekReviewEntry } from '@/components/dashboard/WeekReviewEntry';
+import { Panel, Skeleton } from '@/components/ui';
 import { planApi, settingsApi } from '@/lib/api';
 import { fetchDashboard, type DashboardData } from '@/lib/dashboard';
 import { exportApi } from '@/lib/documents';
 import { readWorkouts, watchLine, workoutsKey, type WorkoutView } from '@/lib/workouts';
+import { renegotiationOutcome, revertOutcome, type DayOutcome, type Renegotiation } from '@/lib/renegotiation';
+import { readableError } from '@/lib/utils';
 import { useDailyTip } from '@/lib/dailyTip';
-import { formatHoursMinutes } from '@/lib/fr';
-import { goalCountdown } from '@/lib/race';
+import { formatDecimal, formatHoursMinutes, weeksAtGoalText } from '@/lib/fr';
 import { cn } from '@/lib/utils';
+import type { GlossaryId } from '@/lib/glossary';
+import { GlossaryLink } from '@/components/GlossaryLink';
+import { importChunk } from '@/lib/chunkReload';
 import { toLocalISODate } from '@/lib/dates';
 import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { linkDay, type DayLink } from '@/lib/sessionMatch';
-import type { PlanDecision } from '@/types';
+import type { PlanDecision, StatBar } from '@/types';
 
 /** Readiness / stress traffic lights as Tailwind classes (theme colors).
  *  `threshold` is the user's fatigue threshold from Settings (default 85). */
@@ -31,8 +42,19 @@ const readinessTone = (score: number, threshold: number) =>
       ? 'text-neon-gold border-neon-gold'
       : 'text-danger-red border-danger-red';
 const stressTone = (avg: number) => (avg > 40 ? 'text-danger-red' : avg > 25 ? 'text-neon-gold' : 'text-success-green');
+// Each colour above also reads as words: a colour alone says nothing to a screen reader or a colour-blind eye.
+const readinessWord = (score: number, threshold: number) =>
+  score >= threshold ? 'bonne' : score >= threshold * 0.6 ? 'moyenne' : 'basse';
+const stressWord = (avg: number) => (avg > 40 ? 'élevé' : avg > 25 ? 'modéré' : 'faible');
+const HRV_WORD: Record<string, string> = { BALANCED: 'équilibrée', UNBALANCED: 'déséquilibrée', LOW: 'basse', POOR: 'faible' };
 
 
+
+// The race goal and the form curve keep the entry chunk unchanged (ARE-46): their
+// code, and recharts after it, load beside the dashboard's answer.
+const loadOutlook = importChunk(() => import('@/components/dashboard/outlook'));
+const GoalCard = lazy(() => loadOutlook().then((m) => ({ default: m.GoalCard })));
+const FormCurvePanel = lazy(() => loadOutlook().then((m) => ({ default: m.FormCurvePanel })));
 
 /** Shown on a repeat visit while cached data waits for its refresh (a cold server can take seconds). */
 const STALE_HINT_MS = 10 * 60_000;
@@ -74,11 +96,82 @@ function Unavailable({ what, retry }: { what: string; retry: () => void }) {
   );
 }
 
-function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }) {
+/** The dashboard's one way to log a session (the nav's Journal is the other). */
+function LogSessionLink() {
+  return (
+    <Link to="/log?new=1" className="text-neon-gold hover:text-neon-gold/80 transition-colors">
+      Saisir une séance <span aria-hidden>→</span>
+    </Link>
+  );
+}
+
+function SectionHeader({ icon, title, term }: { icon: React.ReactNode; title: string; term?: GlossaryId }) {
   return (
     <div className="flex items-center gap-2 mb-4">
       {icon}
-      <h2 className="text-sm font-sans text-text-muted uppercase tracking-wider">{title}</h2>
+      <h2 className="text-[15px] font-sans font-medium text-text-primary">{title}</h2>
+      {term && <GlossaryLink term={term} about={`section ${title.toLowerCase()}`} />}
+    </div>
+  );
+}
+
+/** A recovery row's label with the "?" of its term. */
+function TermLabel({ term, label }: { term: GlossaryId; label: string }) {
+  return (
+    <span className="flex items-center gap-1 text-xs font-sans text-text-muted">
+      {label}
+      <GlossaryLink term={term} about={label} />
+    </span>
+  );
+}
+
+/**
+ * One bar of the day's form. Without the RPG it reads in plain words (the
+ * coach's: préparation, fraîcheur, charge); with it, the HP/MP/TSS tags lead.
+ * The detail stays on screen: a `title` never shows on a phone.
+ */
+function FormBar({ stat, color, tag, term }: { stat: StatBar; color: string; tag?: string; term: GlossaryId }) {
+  const value = (
+    <span className="text-xs font-sans text-text-secondary tabular-nums">
+      {Math.round(stat.current)}/{Math.round(stat.max)}
+    </span>
+  );
+  const bar = (
+    <div className="flex-1 h-3 bg-shadow rounded-full overflow-hidden">
+      <div
+        className={cn('h-full rounded-full transition-all duration-500 motion-reduce:transition-none', color)}
+        style={{ width: `${Math.min(100, (stat.current / stat.max) * 100)}%` }}
+      />
+    </div>
+  );
+  if (!tag)
+    return (
+      <div>
+        <div className="flex items-baseline justify-between gap-3 mb-1">
+          <span className="flex items-center gap-1 self-center text-xs font-sans text-text-primary">
+            {stat.label}
+            <GlossaryLink term={term} about={`barre ${stat.label}`} />
+          </span>
+          {value}
+        </div>
+        {bar}
+        {stat.detail && <p className="mt-0.5 text-[11px] font-sans text-text-muted">{stat.detail}</p>}
+      </div>
+    );
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-sans text-text-muted w-8">{tag}</span>
+        {bar}
+        <span className="w-20 text-right">{value}</span>
+      </div>
+      <div className="flex flex-wrap justify-between gap-x-2 pl-11 pr-1 text-[11px] font-sans text-text-muted">
+        <span className="flex items-center gap-1">
+          {stat.label}
+          <GlossaryLink term={term} about={`barre ${stat.label}`} />
+        </span>
+        {stat.detail && <span>{stat.detail}</span>}
+      </div>
     </div>
   );
 }
@@ -92,13 +185,28 @@ function TodaySession({
   row,
   decision,
   view,
+  onRenegotiated,
+  onReverted,
 }: {
   row: DayLink['planned'][number];
   decision: PlanDecision | null;
   view: WorkoutView | undefined;
+  onRenegotiated: (done: Renegotiation) => void;
+  onReverted: (outcome: DayOutcome) => void;
 }) {
   const queryClient = useQueryClient();
   const { session, realised, state } = row;
+  // Still to do and not already adjusted today (« Rétablir » first): the athlete renegotiates it.
+  const renegotiable =
+    !realised && state === 'pending' && session.session_type !== 'race' && !(decision && !decision.reverted_at && decision.decision !== 'keep');
+  // A decision read from another tab removes the open menu: the focus it held stays on the card.
+  const anchor = useRef<HTMLDivElement>(null);
+  const menuFocused = useRef(false);
+  useEffect(() => {
+    if (renegotiable || !menuFocused.current) return;
+    menuFocused.current = false;
+    if (!document.activeElement || document.activeElement === document.body) anchor.current?.focus();
+  }, [renegotiable]);
 
   const skipped = session.status === 'skipped';
   const push = useMutation({
@@ -110,8 +218,11 @@ function TodaySession({
   const revert = useMutation({
     mutationFn: (decisionId: number) => planApi.revert(decisionId),
     // The reverted session is no longer the copy sent: forget the local answer.
-    onSuccess: () => push.reset(),
-    // 409 means it was already reverted elsewhere: a refetch shows it.
+    onSuccess: (reverted) => {
+      push.reset();
+      onReverted(revertOutcome(reverted.garmin, 'Séance prévue rétablie.'));
+    },
+    // 409: reverted elsewhere, or changed since (its message says so); a refetch shows it.
     onSettled: () => invalidateAfterSession(queryClient),
   });
 
@@ -120,12 +231,19 @@ function TodaySession({
       ? watchLine(view, session.garmin_pushed_at, {
           run: () => push.mutate(),
           pending: push.isPending,
-          error: push.error ? push.error.message || 'Garmin ne répond pas, réessaie plus tard.' : null,
+          error: push.error ? readableError(push.error) : null,
           result: push.data ?? null,
         })
       : undefined;
 
   return (
+    <div
+      ref={anchor}
+      tabIndex={-1}
+      role="group"
+      aria-label={`Séance du jour : ${SESSION_TYPE_LABEL[session.session_type] ?? session.session_type}`}
+      className="focus:outline-none"
+    >
     <SessionCard
       planned={session}
       realised={realised}
@@ -137,12 +255,30 @@ function TodaySession({
     >
       {/* Cardio only: strength rows carry negative ids and their own RPE. */}
       {realised && realised.id > 0 && realised.rpe == null && <RpePicker sessionId={realised.id} className="mt-2" />}
+      {revert.error && (
+        <p role="alert" className="mt-1 text-[11px] font-sans text-danger-red">
+          {readableError(revert.error)}
+        </p>
+      )}
+      {renegotiable && (
+        <div
+          onFocus={() => (menuFocused.current = true)}
+          // Removal blurs with no target: the focus was still in the menu.
+          onBlur={(event) => {
+            if (event.relatedTarget) menuFocused.current = false;
+          }}
+        >
+          <RenegotiateMenu session={session} onDone={onRenegotiated} />
+        </div>
+      )}
     </SessionCard>
+    </div>
   );
 }
 
 export function DashboardPage() {
-  const game = useGamePreference();
+  // Unknown until read: plain words meanwhile, never a flash of game vocabulary.
+  const rpg = useGamePreference().data?.enabled === true;
 
   // The app shell already reads the settings: the same key, no second request.
   const { data: userSettings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
@@ -187,6 +323,16 @@ export function DashboardPage() {
   const { data: planToday } = useDashboard((d) => d.plan_today);
   const decisionFor = (sessionId: number) =>
     planToday?.decisions.find((d) => d.planned_session_id === sessionId && d.applied_at) ?? null;
+  // A session moved away today leaves its decision here, with its « Rétablir ».
+  const moved = (planToday?.decisions ?? []).filter(
+    (d) =>
+      d.decision === 'move' &&
+      d.applied_at &&
+      !d.reverted_at &&
+      !todayLink.planned.some((row) => row.session.id === d.planned_session_id),
+  );
+  // The last « Modifier » answer, shown above the day's sessions until dismissed.
+  const [outcome, setOutcome] = useState<DayOutcome | null>(null);
 
 
   const {
@@ -201,6 +347,35 @@ export function DashboardPage() {
   const { data: workload } = useDashboard((d) => d.workload);
 
   const { data: healthData, isPending: healthPending } = useDashboard((d) => d.health);
+  // No row for the board's day yet, while yesterday's Garmin night drives the recovery.
+  const fromGarmin = fitness != null && fitness.readiness_source !== 'model';
+  const morningScore = healthData?.readiness_score ?? healthData?.training_readiness_score ?? null;
+  // A sync before the watch uploads the night still writes the day's row, empty.
+  const morningIn =
+    healthData != null &&
+    (morningScore != null ||
+      healthData.hrv_last_night != null ||
+      healthData.sleep_score != null ||
+      healthData.stress_avg != null);
+  const { data: hasLoad } = useDashboard((d) => d.has_load);
+  // Null until today is answered; undefined until the dashboard says (or from a server without it).
+  const { data: checkin } = useDashboard((d) => d.checkin);
+  // The week's review waiting for an answer: a field of the same answer, no request.
+  const { data: weekReview } = useDashboard((d) => d.weekly_review ?? null);
+  // The check-in push opens `/?checkin=1`: the card shows and takes the focus,
+  // once; the parameter then goes, so a reload keeps « Plus tard ».
+  const [params, setParams] = useSearchParams();
+  const checkinFocused = useCallback(
+    () =>
+      setParams(
+        (current) => {
+          current.delete('checkin');
+          return current;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
 
   const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
@@ -219,117 +394,117 @@ export function DashboardPage() {
               {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             <UpdatedAgo at={plannedAt} />
-            {nextGoal && (
-              <Link
-                to="/planning"
-                className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded border border-neon-gold/30 bg-neon-gold/10 px-2 py-0.5 text-[11px] font-sans text-neon-gold hover:bg-neon-gold/20 transition-colors"
-              >
-                <Flag className="w-3 h-3 shrink-0" />
-                <span className="truncate">{goalCountdown(nextGoal)}</span>
-              </Link>
-            )}
           </div>
-          {playerStats && (
-            <div className="text-right">
+          {/* Regularity, not a level: a missed week lowers it by one, never to zero. */}
+          {playerStats && playerStats.recent_weeks > 0 && (
+            <div className="shrink-0 text-right">
               <div
-                className="w-12 h-12 ml-auto flex items-center justify-center rounded-full bg-abyss border-2 border-neon-gold font-sans text-neon-gold text-lg font-bold shadow-[0_0_12px_color-mix(in_srgb,var(--color-neon-gold)_30%,transparent)] transition-transform hover:scale-105"
-                title={`${playerStats.weeks_at_goal} semaines à l'objectif au total`}
+                aria-hidden
+                className="w-12 h-12 ml-auto flex items-center justify-center rounded-full bg-abyss border-2 border-neon-gold font-sans text-neon-gold text-sm font-bold tabular-nums shadow-[0_0_12px_color-mix(in_srgb,var(--color-neon-gold)_30%,transparent)]"
               >
-                {playerStats.level}
+                {playerStats.recent_weeks_at_goal}/{playerStats.recent_weeks}
               </div>
-              <p className="text-[11px] font-sans text-text-muted mt-1">
-                {playerStats.level > 0
-                  ? `${playerStats.level} sem. d'affilée`
-                  : 'Niveau · semaines à l’objectif'}
+              <p aria-hidden className="text-[11px] font-sans text-text-muted mt-1 max-w-[8rem] ml-auto leading-tight">
+                {playerStats.recent_weeks > 1 ? 'semaines' : 'semaine'} à l’objectif de charge
+              </p>
+              <p className="sr-only">
+                Régularité : {weeksAtGoalText(playerStats.recent_weeks_at_goal, playerStats.recent_weeks)}
               </p>
             </div>
           )}
         </header>
 
+        {/* The race leads once the dashboard says whether there is one. */}
+        {nextGoal !== undefined && (
+          <Suspense fallback={<Skeleton label="Chargement de l’objectif" lines={1} className="glass-panel px-4 py-3" />}>
+            <GoalCard goal={nextGoal} day={boardDay} ready={boardSettled} />
+          </Suspense>
+        )}
+
         <div className="dashboard-grid">
           <div className="dashboard-primary">
-            {/* Block 1: Today's Plan */}
+            {/* Ten seconds before the briefing: the answer feeds the day's decision. */}
+            {checkin === null && boardDay && (
+              <CheckinCard
+                key={boardDay}
+                day={boardDay}
+                focus={params.get('checkin') === '1'}
+                onFocused={checkinFocused}
+              />
+            )}
+
+            {weekReview && <WeekReviewEntry open={weekReview.open} />}
+
+            {/* The coach's briefing leads (on a phone, right after the greeting); the first
+                visit of the day may wait for the coach. */}
             <Panel className="p-4">
-              <SectionHeader icon={<Calendar className="w-4 h-4 text-neon-purple" />} title="SÉANCE DU JOUR" />
+              <BriefingCard tip={tip} writing={tipWriting} stalled={tipStalled} refresh={refreshTip} />
+            </Panel>
+
+            {/* Today's plan, right below the briefing */}
+            <Panel className="p-4">
+              <SectionHeader icon={<Calendar className="w-4 h-4 text-neon-purple" />} title="Séance du jour" />
               {plannedPending ? (
                 <Skeleton label="Chargement de la séance du jour" />
               ) : boardFailed ? (
                 <Unavailable what="Séance du jour" retry={() => void retryBoard()} />
-              ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 ? (
+              ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 || moved.length > 0 ? (
                 <div className="space-y-2">
+                  {outcome && <RenegotiationOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />}
                   {todayLink.planned.map((row) => (
                     <TodaySession
                       key={row.session.id}
                       row={row}
                       decision={decisionFor(row.session.id)}
                       view={viewFor(row.session.id)}
+                      onRenegotiated={(done) => setOutcome(renegotiationOutcome(done))}
+                      onReverted={setOutcome}
+                    />
+                  ))}
+                  {moved.map((decision) => (
+                    <MovedSession
+                      key={decision.id}
+                      decision={decision}
+                      onReverted={(garmin) => setOutcome(revertOutcome(garmin))}
                     />
                   ))}
                   {todayLink.offPlan.map((a) => (
                     <OffPlanRow key={a.id} session={a} />
                   ))}
+                  {/* A session just arrived: the moment the coach's feedback by push makes sense. */}
+                  {(todayLink.offPlan.length > 0 || todayLink.planned.some((row) => row.realised)) && (
+                    <PushOffer moment="session" />
+                  )}
                   <div className="flex justify-end items-center gap-4 pt-1 text-xs font-sans">
                     <Link to="/planning" className="text-neon-cyan hover:underline">
-                      Semaine →
+                      Semaine <span aria-hidden>→</span>
                     </Link>
-                    <Link to="/log?new=1" className="text-neon-gold hover:text-neon-gold/80 transition-colors">
-                      Saisir la séance →
-                    </Link>
+                    <LogSessionLink />
                   </div>
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-shadow/30 p-4">
                   <p className="text-sm font-sans text-text-muted">Repos — aucune séance prévue</p>
-                  <Link to="/planning?new=1" className="text-xs font-sans text-neon-cyan hover:underline">
-                    + Ajouter une séance
-                  </Link>
+                  <div className="flex items-center gap-4 text-xs font-sans">
+                    <Link to="/planning?new=1" className="text-neon-cyan hover:underline">
+                      + Planifier une séance
+                    </Link>
+                    <LogSessionLink />
+                  </div>
                 </div>
               )}
             </Panel>
 
-            {/* Block 4: AI Tip — the first visit of the day may wait for the coach */}
-            {tipWriting && (
-              <p className="glass-panel p-4 text-sm font-sans text-text-muted flex items-center gap-2">
-                <AretePresence size={24} />
-                Le coach écrit ton briefing…
-                {tipStalled && (
-                  <Button variant="ghost" className="ml-auto" onClick={refreshTip}>
-                    Actualiser
-                  </Button>
-                )}
-              </p>
-            )}
-            <CoachTodayPanel
-              enabled={boardSettled}
-              refetchOnFocus={false}
-              briefing={tip?.tip ?? undefined}
-              briefingNote={tip?.updated_after_sync ? 'Mis à jour après la synchro' : undefined}
-            />
+            <CoachingAttention enabled={boardSettled} />
 
-            {/* Quick Actions Footer */}
-            <div className="flex gap-3 animate-fade-in">
-              <Link
-                to="/log?new=1"
-                className="flex-1 flex items-center justify-center gap-2 glass-panel px-4 py-3 text-sm font-sans text-neon-cyan hover:bg-abyss/80 transition-colors"
-              >
-                <Dumbbell className="w-4 h-4" />
-                Saisir une séance
-                <ArrowRight className="w-3 h-3" />
-              </Link>
-              <Link
-                to="/planning"
-                className="flex-1 flex items-center justify-center gap-2 glass-panel px-4 py-3 text-sm font-sans text-neon-purple hover:bg-abyss/80 transition-colors"
-              >
-                <Calendar className="w-4 h-4" />
-                Voir le planning
-                <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
           </div>
           <div className="dashboard-secondary">
             {/* Block 2: Player Status */}
             <Panel className="p-4">
-              <SectionHeader icon={<Dumbbell className="w-4 h-4 text-neon-gold" />} title="ÉTAT DU JOUEUR" />
+              <SectionHeader
+                icon={<Dumbbell className="w-4 h-4 text-neon-gold" />}
+                title={rpg ? 'État du joueur' : 'Ma forme du jour'}
+              />
               <PlayerSummary />
 
               {statsPending ? (
@@ -344,75 +519,87 @@ export function DashboardPage() {
               ) : (
                 playerStats && (
                   <div className="space-y-3 mb-4">
-                    {[
-                      { stat: playerStats.hp, color: 'bg-danger-red', tag: 'HP' },
-                      { stat: playerStats.mp, color: 'bg-neon-cyan', tag: 'MP' },
-                      { stat: playerStats.xp, color: 'bg-neon-gold', tag: game.data?.enabled ? 'TSS' : 'XP' },
-                    ].map(({ stat, color, tag }) => (
-                      <div key={tag} title={stat.detail ?? undefined}>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-sans text-text-muted w-8">{tag}</span>
-                          <div className="flex-1 h-3 bg-shadow rounded-full overflow-hidden">
-                            <div
-                              className={cn('h-full rounded-full transition-all duration-500', color)}
-                              style={{ width: `${Math.min(100, (stat.current / stat.max) * 100)}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-sans text-text-secondary w-20 text-right">
-                            {Math.round(stat.current)}/{Math.round(stat.max)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between pl-11 pr-1 text-[11px] font-sans text-text-muted">
-                          <span>{stat.label}</span>
-                          {stat.detail && <span className="truncate ml-2">{stat.detail}</span>}
-                        </div>
-                      </div>
-                    ))}
+                    {/* The RPG's XP is its own ledger (Profile): the weekly load stays TSS. */}
+                    <FormBar stat={playerStats.hp} color="bg-danger-red" tag={rpg ? 'HP' : undefined} term="preparation" />
+                    <FormBar stat={playerStats.mp} color="bg-neon-cyan" tag={rpg ? 'MP' : undefined} term="tsb" />
+                    <FormBar stat={playerStats.xp} color="bg-neon-gold" tag={rpg ? 'TSS' : undefined} term="tss" />
                   </div>
                 )
               )}
 
               <div className="grid grid-cols-2 gap-3">
+                {/* Plain words first, the acronym the coach never says as a secondary line. */}
                 <MetricCard
-                  title="Charge (ACWR)"
-                  value={workload?.acwr?.toFixed(2) ?? '—'}
+                  title="Équilibre de charge"
+                  value={workload?.acwr != null ? formatDecimal(workload.acwr, 2) : '—'}
                   kind="acwr"
+                  term="acwr"
                   zone={workload?.acwr_zone}
+                  subtitle="ACWR · cette semaine face aux quatre dernières"
                 />
                 <MetricCard
-                  title="Fraîcheur (TSB)"
-                  value={
-                    fitness?.tsb != null ? `${fitness.tsb > 0 ? '+' : ''}${fitness.tsb.toFixed(1)}` : '—'
-                  }
+                  title="Fraîcheur"
+                  value={fitness?.tsb != null ? formatDecimal(fitness.tsb, 1, true) : '—'}
                   kind="form"
+                  term="tsb"
                   zone={fitness?.form_zone}
+                  subtitle="TSB · forme de fond moins fatigue"
                 />
               </div>
             </Panel>
 
+            {/* One curve for forme de fond, fatigue and fraîcheur: its own lazy request. */}
+            <Panel className="p-4">
+              <SectionHeader icon={<TrendingUp className="w-4 h-4 text-neon-cyan" />} title="Courbe de forme" term="ctl" />
+              <Suspense
+                fallback={
+                  <div className="min-h-[19rem]">
+                    <Skeleton label="Chargement de la courbe de forme" lines={6} />
+                  </div>
+                }
+              >
+                <FormCurvePanel
+                  day={boardDay}
+                  ready={boardSettled}
+                  hasLoad={hasLoad}
+                  failed={boardFailed}
+                  retry={() => void retryBoard()}
+                />
+              </Suspense>
+            </Panel>
+
             {/* Block 3: Readiness (Garmin) */}
             <Panel className="p-4">
-              <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="RÉCUPÉRATION" />
+              <SectionHeader icon={<Zap className="w-4 h-4 text-neon-gold" />} title="Préparation" term="preparation" />
 
               {healthPending ? (
-                <Skeleton label="Chargement de la récupération" />
+                <Skeleton label="Chargement de la préparation" />
               ) : boardFailed ? (
-                <Unavailable what="Récupération" retry={() => void retryBoard()} />
-              ) : healthData && healthData.readiness_score != null ? (
+                <Unavailable what="Préparation" retry={() => void retryBoard()} />
+              ) : healthData && morningIn ? (
+                // This morning's row is in: its numbers show even when Arete's own
+                // score is missing (an HRV fetch that failed leaves only Garmin's).
                 <div className="flex items-center gap-6">
-                  <div
-                    className={cn(
-                      'flex-shrink-0 w-20 h-20 rounded-full bg-abyss border-2 flex items-center justify-center',
-                      readinessTone(healthData.readiness_score, fatigueThreshold)
+                  <div className="flex-shrink-0 flex flex-col items-center gap-1">
+                    <div
+                      className={cn(
+                        'w-20 h-20 rounded-full bg-abyss border-2 flex items-center justify-center',
+                        morningScore != null ? readinessTone(morningScore, fatigueThreshold) : 'text-text-muted border-text-muted/40'
+                      )}
+                    >
+                      <span className="text-2xl font-sans font-bold">{morningScore ?? '—'}</span>
+                    </div>
+                    {morningScore != null && (
+                      <span className="text-[11px] font-sans text-text-secondary first-letter:uppercase">
+                        Préparation {readinessWord(morningScore, fatigueThreshold)}
+                      </span>
                     )}
-                  >
-                    <span className="text-2xl font-sans font-bold">{healthData.readiness_score}</span>
                   </div>
 
                   <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
                     {healthData.training_readiness_score != null && (
                       <>
-                        <span className="text-xs font-sans text-text-muted">Préparation Garmin</span>
+                        <TermLabel term="preparation" label="Préparation Garmin" />
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.training_readiness_score}/100
                         </span>
@@ -420,20 +607,18 @@ export function DashboardPage() {
                     )}
                     {healthData.hrv_last_night != null && (
                       <>
-                        <span className="text-xs font-sans text-text-muted">VFC</span>
+                        <TermLabel term="vfc" label="VFC" />
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.hrv_last_night} ms
-                          {healthData.hrv_status && (
-                            <span className="text-[11px] text-neon-cyan ml-1">
-                              {healthData.hrv_status === 'BALANCED' ? '⚖' : healthData.hrv_status === 'LOW' ? '↓' : '↑'}
-                            </span>
+                          {healthData.hrv_status && HRV_WORD[healthData.hrv_status] && (
+                            <span className="block text-[11px] text-text-secondary">VFC {HRV_WORD[healthData.hrv_status]}</span>
                           )}
                         </span>
                       </>
                     )}
                     {healthData.sleep_score != null && (
                       <>
-                        <span className="text-xs font-sans text-text-muted">Sommeil</span>
+                        <TermLabel term="sommeil" label="Sommeil" />
                         <span className="text-xs font-sans text-text-primary text-right">
                           {healthData.sleep_score}/100
                           {healthData.sleep_duration_sec != null && (
@@ -446,9 +631,10 @@ export function DashboardPage() {
                     )}
                     {healthData.stress_avg != null && (
                       <>
-                        <span className="text-xs font-sans text-text-muted">Stress</span>
-                        <span className={cn('text-xs font-sans text-right', stressTone(healthData.stress_avg))}>
-                          {healthData.stress_avg}
+                        <TermLabel term="stress" label="Stress" />
+                        <span className="text-xs font-sans text-right">
+                          <span className={stressTone(healthData.stress_avg)}>{healthData.stress_avg}</span>
+                          <span className="block text-[11px] text-text-secondary">Stress {stressWord(healthData.stress_avg)}</span>
                         </span>
                       </>
                     )}
@@ -464,17 +650,29 @@ export function DashboardPage() {
                 </div>
               ) : (
                 <p className="text-sm font-sans text-text-muted">
-                  Pas de données santé aujourd&apos;hui.{' '}
+                  {/* Yesterday's Garmin night still drives the recovery above: Garmin
+                      is known, only this morning's sync is missing. */}
+                  {fromGarmin ? 'Pas encore synchronisé ce matin.' : 'Pas de données santé aujourd’hui.'}{' '}
                   {garminConnected !== undefined && (
                     <Link
                       to={garminConnected ? '/settings?tab=system' : '/settings?tab=connections'}
                       className="text-neon-cyan hover:underline"
                     >
-                      {garminConnected ? 'Synchroniser' : 'Connecter Garmin'}
+                      {garminConnected ? 'Synchroniser' : fromGarmin ? 'Reconnecter Garmin' : 'Connecter Garmin'}
                     </Link>
                   )}
                 </p>
               )}
+            </Panel>
+
+            {/* Pain and weight in a few taps, after the day's form (which stays above
+                the fold): no read until the athlete opens a form. */}
+            <Panel className="p-4">
+              <SectionHeader icon={<HeartPulse className="w-4 h-4 text-neon-cyan" />} title="Douleur ou poids" />
+              <p className="mb-3 text-xs font-sans text-text-muted">
+                Une gêne, une douleur, ton poids du jour : le coach en tient compte.
+              </p>
+              <BodyLogEntry />
             </Panel>
 
           </div>

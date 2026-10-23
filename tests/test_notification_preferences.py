@@ -40,7 +40,14 @@ def _send(prefs: dict | None, at: datetime, kind="briefing"):
         patch.object(notifications, "get_user_settings", return_value=stored),
         patch.object(notifications, "utc_now", return_value=at),
     ):
-        return notifications.notify("Briefing du coach", "Footing.", "/", kind=kind)
+        # Independent events exercise each preference; a stored event is never replayed.
+        return notifications.notify(
+            "Briefing du coach",
+            "Footing.",
+            "/",
+            kind=kind,
+            event_key=f"preferences:{kind}:{at.isoformat()}:{prefs}",
+        )
 
 
 def test_a_disabled_kind_is_never_sent(device):

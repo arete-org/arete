@@ -201,14 +201,9 @@ def build_pmc_card(
         "headline": headline(round(ctl, 1), "pts", f"{ctl:.0f}", prev_ctl, "up"),
         "secondary": [
             headline(round(tsb, 1), "pts", f"{tsb:+.0f}", prev_tsb, "up"),
+            # The ACWR is shown by the risk card (``answers.risk_card``); the
+            # insight below still warns about it.
             headline(round(atl, 1), "pts", f"{atl:.0f}", None, "down"),
-            headline(
-                round(acwr, 2) if acwr is not None else None,
-                "",
-                f"{acwr:.2f}" if acwr is not None else "—",
-                None,
-                "neutral",
-            ),
         ],
         "insight": insights.pmc_insight(ctl, tsb, acwr, acwr_zone),
         "series": points,

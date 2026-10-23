@@ -6,6 +6,7 @@ import { coachApi, coachTodayKey } from '@/lib/coachToday';
 import { readFlag, writeFlag } from '@/lib/install';
 import { invalidateAfterSession } from '@/lib/queryKeys';
 import { cn } from '@/lib/utils';
+import { GlossaryLink } from './GlossaryLink';
 
 /** Borg CR-10 wording; only both ends are written under the chips. */
 const RPE_LABELS = [
@@ -32,8 +33,16 @@ function dismissed(): number[] {
  * One-tap RPE for a cardio session that has none, saved through the existing
  * session PATCH. Hidden once saved, once dismissed (remembered per session),
  * and while the coach's own follow-up already asks about this session.
+ * Keyed by session: a card that switches session never inherits the previous
+ * one's saved or dismissed state.
  */
-export function RpePicker({ sessionId, autoFocus = false, className }: { sessionId: number; autoFocus?: boolean; className?: string }) {
+export function RpePicker(props: Props) {
+  return <SessionRpePicker key={props.sessionId} {...props} />;
+}
+
+type Props = { sessionId: number; autoFocus?: boolean; className?: string };
+
+function SessionRpePicker({ sessionId, autoFocus = false, className }: Props) {
   const queryClient = useQueryClient();
   const firstChip = useRef<HTMLButtonElement>(null);
   const [hidden, setHidden] = useState(() => dismissed().includes(sessionId));
@@ -70,7 +79,10 @@ export function RpePicker({ sessionId, autoFocus = false, className }: { session
       className={cn('rounded-lg border border-neon-cyan/25 bg-neon-cyan/5 p-3', className)}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
-        <p className="text-sm text-text-primary">Comment l’as-tu ressentie ? Effort de 1 à 10.</p>
+        <p className="flex items-center gap-1 text-sm text-text-primary">
+          Comment l’as-tu ressentie ? Effort de 1 à 10.
+          <GlossaryLink term="rpe" />
+        </p>
         <button type="button" onClick={dismiss} aria-label="Ne pas noter cette séance" className="rounded p-1 hover:bg-text-muted/20">
           <X className="size-4 text-text-muted" />
         </button>

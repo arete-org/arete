@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowDownToLine, ChevronLeft, ChevronRight, FileSearch, ScanText, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { documentsApi, originalDocument, type CoachDocument, type SourceBlock } from '@/lib/documents';
-import { cn } from '@/lib/utils';
+import { cn, readableError } from '@/lib/utils';
 import { Button, Modal } from '../ui';
 
 const BLOCKS_PER_VIEW = 50;
@@ -90,11 +90,11 @@ function PreviewContent({ threadId, document: doc }: { threadId: string; documen
   const warnings = source.data?.extraction.warnings ?? [];
 
   if (source.isPending) return <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-text-muted" role="status"><FileSearch size={20} className="animate-pulse text-neon-cyan" />Chargement du document…</div>;
-  if (source.error) return <div className="space-y-4 p-8"><p role="alert" className="text-sm text-danger-red">{source.error.message}</p><Button onClick={() => source.refetch()}>Réessayer</Button></div>;
+  if (source.error) return <div className="space-y-4 p-8"><p role="alert" className="text-sm text-danger-red">{readableError(source.error)}</p><Button onClick={() => source.refetch()}>Réessayer</Button></div>;
   return <>
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-white/[0.02] px-5 py-3 sm:px-6">
       <div className="flex flex-wrap items-center gap-3">
-        {groups.size > 1 ? <select aria-label="Page ou feuille du document" value={activeGroup} onChange={e => { setGroup(e.target.value); setOffset(0); setSelected(null); }} className="max-w-48 rounded-md border border-white/10 bg-abyss px-3 py-1.5 text-xs">{Array.from(groups.keys(), name => <option key={name}>{name}</option>)}</select> : <span className="text-xs text-text-muted">{activeGroup}</span>}
+        {groups.size > 1 ? <select aria-label="Page ou feuille du document" value={activeGroup} onChange={e => { setGroup(e.target.value); setOffset(0); setSelected(null); }} className="ui-input max-w-48 border border-white/10 bg-abyss px-3 py-1.5 text-xs">{Array.from(groups.keys(), name => <option key={name}>{name}</option>)}</select> : <span className="text-xs text-text-muted">{activeGroup}</span>}
         <span className="h-3 w-px bg-white/10" />
         <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary"><ScanText size={14} />{hasOcr ? 'Texte reconnu par OCR' : 'Texte extrait'}</span>
         <span className="text-xs text-text-muted">{all.length} passage{all.length > 1 ? 's' : ''}</span>
@@ -136,7 +136,7 @@ export function DocumentPreview({ threadId, document: doc, onClose }: { threadId
   return createPortal(<Modal open onClose={onClose} padded={false} label={`Aperçu de ${doc.name}`} className="flex h-[min(860px,92dvh)] max-w-6xl flex-col overflow-hidden rounded-xl border-white/10 bg-abyss! shadow-2xl">
     <header className="flex shrink-0 items-center gap-4 border-b border-white/10 px-5 py-5 sm:px-6">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neon-cyan/15 bg-neon-cyan/5 text-neon-cyan"><FileSearch size={20} /></div>
-      <div className="min-w-0 flex-1"><p className="mb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-text-muted">Aperçu du document</p><h2 className="truncate text-sm font-medium text-text-primary sm:text-base" title={doc.name}>{doc.name}</h2></div>
+      <div className="min-w-0 flex-1"><p className="mb-1 text-[10px] font-medium text-text-muted">Aperçu du document</p><h2 className="truncate text-sm font-medium text-text-primary sm:text-base" title={doc.name}>{doc.name}</h2></div>
       <button aria-label="Fermer l’aperçu" onClick={onClose} className="rounded-lg p-2 text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary"><X size={20} /></button>
     </header>
     <PreviewContent threadId={threadId} document={doc} />

@@ -25,11 +25,14 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
 from arete.dataio.settings import get_user_settings
+from arete.features.workload import format_acwr
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.coaching_repository import Briefing, BriefingRepository
+from arete.services.plan_repository import MISSED_REPLAN
 from arete.services.settings import athlete_today
 
 if TYPE_CHECKING:
+    from arete.garmin.models import PlannedSession
     from arete.services.coaching_rules import RuleFacts
 
 logger = logging.getLogger(__name__)
@@ -88,14 +91,65 @@ def _clock(seconds: int) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
 
 
-def _block(title: str, read: Callable[[], list[str]]) -> str:
-    """One section of the facts; a failed read says so instead of failing."""
+def bullet_block(title: str, read: Callable[[], list[str]]) -> str:
+    """One section of the facts, shared by the missions that list them; a failed
+    read says so instead of failing."""
     try:
         lines = read()
     except Exception:
         logger.warning("Briefing facts: %s unavailable", title, exc_info=True)
         lines = ["indisponible"]
     return f"{title} :\n" + "\n".join(f"- {line}" for line in lines or ["aucune"])
+
+
+def load_lines(facts: RuleFacts, day: date) -> list[str]:
+    """Load, form, the readiness and where it comes from: the facts' lines,
+    shared with the evening message (``evening_message``)."""
+    if facts.readiness_score is None:
+        readiness = "Préparation : indisponible"
+    elif facts.readiness_source == "garmin_training":
+        readiness = (
+            "Préparation à l'entraînement Garmin ce matin : "
+            f"{facts.readiness_score:.0f}/100"
+        )
+    elif facts.readiness_source == "garmin" and facts.readiness_measured_on:
+        night = (
+            "cette nuit"
+            if facts.readiness_measured_on == day
+            else f"mesure du {facts.readiness_measured_on:%d/%m}"
+        )
+        readiness = (
+            f"Préparation Garmin (VFC, sommeil, {night}) : "
+            f"{facts.readiness_score:.0f}/100"
+        )
+    else:
+        readiness = (
+            "Préparation estimée par la charge (pas de mesure Garmin récente) : "
+            f"{facts.readiness_score:.0f}/100"
+        )
+    return [
+        # A decimal comma: the model copies it into the French briefing.
+        "Charge aiguë/chronique (ACWR, sur 28 jours) : "
+        + (format_acwr(facts.acwr) if facts.acwr is not None else "indisponible"),
+        f"Fraîcheur (TSB) : {_fmt(facts.tsb, '{:+.0f}')}",
+        readiness,
+        f"Objectif de la période : {_GOALS.get(facts.fitness_goal, facts.fitness_goal)}",
+    ]
+
+
+def session_line(s: PlannedSession) -> str:
+    """One planned session as the facts list it."""
+    return " — ".join(
+        str(part)
+        for part in (
+            s.session_type.value,
+            f"{s.target_duration_min} min" if s.target_duration_min else None,
+            s.target_hr_zone,
+            s.description,
+            f"statut : {s.status.value}",
+        )
+        if part
+    )
 
 
 def briefing_facts(
@@ -106,7 +160,10 @@ def briefing_facts(
     The agent used to read its load and form through tools — at least three
     model requests and 99 s on the free tier — while the rule floor had just
     computed the same numbers. It never saw today's plan either. ``facts``
-    are the floor's; without them the load section reads its own.
+    are the floor's; without them the load section reads its own. The
+    morning check-in (today's and yesterday's) appears only once answered,
+    the pain declared within three days only once declared, without its notes:
+    the coach's context section already carries them.
     """
     from arete.garmin.repository import GarminRepository
     from arete.services.analytics import list_sessions
@@ -116,53 +173,13 @@ def briefing_facts(
         nonlocal facts
         if facts is None:
             facts = rule_facts(target_date)
-        if facts.readiness_score is None:
-            readiness = "Préparation : indisponible"
-        elif facts.readiness_source == "garmin_training":
-            readiness = (
-                "Préparation à l'entraînement Garmin ce matin : "
-                f"{facts.readiness_score:.0f}/100"
-            )
-        elif facts.readiness_source == "garmin" and facts.readiness_measured_on:
-            night = (
-                "cette nuit"
-                if facts.readiness_measured_on == target_date
-                else f"mesure du {facts.readiness_measured_on:%d/%m}"
-            )
-            readiness = (
-                f"Préparation Garmin (VFC, sommeil, {night}) : "
-                f"{facts.readiness_score:.0f}/100"
-            )
-        else:
-            readiness = (
-                "Préparation estimée par la charge (pas de mesure Garmin récente) : "
-                f"{facts.readiness_score:.0f}/100"
-            )
-        return [
-            f"Charge aiguë/chronique (ACWR, sur 28 jours) : {_fmt(facts.acwr, '{:.2f}')}",
-            f"Fraîcheur (TSB) : {_fmt(facts.tsb, '{:+.0f}')}",
-            readiness,
-            f"Objectif de la période : {_GOALS.get(facts.fitness_goal, facts.fitness_goal)}",
-        ]
+        return load_lines(facts, target_date)
 
     def planned() -> list[str]:
         sessions = GarminRepository().list_planned_sessions(
             start_date=target_date, end_date=target_date, status=None, limit=5
         )
-        return [
-            " — ".join(
-                str(part)
-                for part in (
-                    s.session_type.value,
-                    f"{s.target_duration_min} min" if s.target_duration_min else None,
-                    s.target_hr_zone,
-                    s.description,
-                    f"statut : {s.status.value}",
-                )
-                if part
-            )
-            for s in sessions
-        ]
+        return [session_line(s) for s in sessions]
 
     def decisions() -> list[str]:
         from arete.services.adaptation import describe
@@ -187,8 +204,21 @@ def briefing_facts(
                 "ease": "allégée",
                 "replace_easy": "remplacée par de la récupération",
                 "rest": "remplacée par du repos",
+                "move": "déplacée",
+                "drop": "laissée de côté (séance manquée)",
             }.get(d.decision, d.decision)
-            lines.append(f"{planned} : {verdict} — raison : {d.reason}")
+            line = f"{planned} : {verdict} — raison : {d.reason}"
+            replaced = before.get("replaced")
+            if isinstance(replaced, dict) and replaced.get("reason"):
+                # The athlete's choice replaced the system's suggestion: the
+                # morning's, or the evening's replanning of a missed session.
+                when = (
+                    "soir"
+                    if replaced.get("readiness_source") == MISSED_REPLAN
+                    else "matin"
+                )
+                line += f" (proposition du {when} remplacée : {replaced['reason']})"
+            lines.append(line)
         return lines
 
     def predictions() -> list[str]:
@@ -237,16 +267,101 @@ def briefing_facts(
         return [previous.text] if previous else []
 
     weekday = _WEEKDAYS[target_date.weekday()]
+    try:
+        from arete.services import checkins
+
+        # Yesterday's too: one answered after its briefing reaches the next.
+        declared = [
+            f"{'ce matin' if c.date == target_date else 'hier'} : {c.describe()}"
+            for c in checkins.recent(2, today=target_date)
+        ]
+    except Exception:
+        logger.warning("Briefing facts: check-in unavailable", exc_info=True)
+        declared = ["indisponible"]
+    try:
+        from arete.garmin.repository import GarminRepository
+        from arete.services import body_log
+        from arete.services.adaptation import (
+            ADAPTABLE_SPORTS,
+            DeclaredPain,
+            pain_under_load,
+        )
+
+        days = {0: "aujourd'hui", 1: "hier", 2: "avant-hier"}
+        start = target_date - timedelta(days=body_log.PAIN_RECENT_DAYS - 1)
+        hurts = [
+            f"{days.get((target_date - p.date).days, p.date.isoformat())} : "
+            f"{p.label} {p.intensity}/10"
+            for p in body_log.list_pain(start, target_date)
+        ]
+        if hurts:
+            if facts is None:
+                facts = rule_facts(target_date)
+            # The fact only: the day's decision, listed below, says what it did.
+            # Only for a session the decision could adapt, on an area it loads.
+            sports = sorted(
+                {
+                    s.sport
+                    for s in GarminRepository().list_planned_sessions(
+                        start_date=target_date, end_date=target_date, status=None
+                    )
+                    if s.sport in ADAPTABLE_SPORTS
+                }
+            )
+            pains = [DeclaredPain(p.area, p.intensity) for p in facts.pain]
+            signal = next(
+                (
+                    said
+                    for sport in sports
+                    if (said := pain_under_load(pains, facts.acwr, sport))
+                ),
+                None,
+            )
+            if signal:
+                hurts.append(f"Signal pour la décision du jour : {signal}")
+    except Exception:
+        logger.warning("Briefing facts: declared pain unavailable", exc_info=True)
+        hurts = ["indisponible"]
+    try:
+        from arete.services import evening_message
+
+        # Last evening's question, once the athlete answered it (ARE-64).
+        answered = evening_message.answered_lines(target_date - timedelta(days=1))
+    except Exception:
+        # Omitted, like a missing answer: a failed read must not move the digest.
+        logger.warning("Briefing facts: evening answer unavailable", exc_info=True)
+        answered = []
     return "\n\n".join(
         [
             f"Nous sommes {weekday} {target_date.isoformat()}.",
             f"Conseil calculé par les règles : {rule_text}",
-            _block("Charge, forme et récupération", load),
-            _block("Séance(s) prévue(s) aujourd'hui", planned),
-            _block("Décision du coach pour aujourd'hui", decisions),
-            _block("Prédictions de course Garmin", predictions),
-            _block("Dernières séances réalisées", recent),
-            _block("Ton briefing d'hier", yesterday),
+            bullet_block("Charge, fraîcheur et préparation", load),
+            # Only once answered: a day without one keeps its facts (and digest).
+            *(
+                [bullet_block("Check-in déclaré par l'athlète", lambda: declared)]
+                if declared
+                else []
+            ),
+            # Only once declared, like the check-in.
+            *(
+                [bullet_block("Douleurs déclarées (3 derniers jours)", lambda: hurts)]
+                if hurts
+                else []
+            ),
+            *(
+                [
+                    bullet_block(
+                        "Ta question d'hier soir et sa réponse", lambda: answered
+                    )
+                ]
+                if answered
+                else []
+            ),
+            bullet_block("Séance(s) prévue(s) aujourd'hui", planned),
+            bullet_block("Décision du coach pour aujourd'hui", decisions),
+            bullet_block("Prédictions de course Garmin", predictions),
+            bullet_block("Dernières séances réalisées", recent),
+            bullet_block("Ton briefing d'hier", yesterday),
         ]
     )
 

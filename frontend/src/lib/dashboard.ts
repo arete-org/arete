@@ -1,5 +1,6 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { fetchAPI, type DailyTip, type garminHealthApi } from './api';
+import type { Checkin } from './checkins';
 import { coachTodayKey, type CoachToday } from './coachToday';
 import { qk } from './queryKeys';
 import type {
@@ -21,8 +22,14 @@ export interface Dashboard {
   /** Null where `/garmin/health/daily` answers 404. */
   health: Awaited<ReturnType<typeof garminHealthApi.getDaily>> | null;
   garmin_connected: boolean;
+  /** Any load ever logged: the form curve has something to draw (rounded CTL/ATL can read 0). */
+  has_load: boolean;
   briefing: DailyTip;
   coach: CoachToday;
+  /** Today's morning check-in, null until answered (the card asks for it). */
+  checkin: Checkin | null;
+  /** The week's review still to answer (« Ma semaine »); absent from an older server. */
+  weekly_review?: { id: number; week_start: string; open: number } | null;
 }
 
 /** What the dashboard query keeps: the briefing and the coach card live under their own keys. */

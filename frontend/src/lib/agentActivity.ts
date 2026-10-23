@@ -2,6 +2,7 @@ import type { ChatMessage, ToolPart } from './agentStream';
 
 /** Presentation only: permissions and execution remain server-owned. */
 const TOOL_LABELS: Record<string, [running: string, done: string]> = {
+  render_chart: ['Préparation du graphique', 'Graphique préparé'],
   read_file: ['Lecture d’un fichier', 'Fichier consulté'],
   ls: ['Recherche dans tes notes', 'Recherche terminée'],
   glob: ['Recherche dans tes notes', 'Recherche terminée'],
@@ -11,7 +12,7 @@ const TOOL_LABELS: Record<string, [running: string, done: string]> = {
   append_journal: ['Mise à jour du journal', 'Journal à jour'],
   remember_fact: ['Mise à jour de ton profil', 'Information enregistrée'],
   get_workload: ['Analyse de la charge', 'Charge analysée'],
-  get_fitness: ['Analyse de la forme', 'Forme analysée'],
+  get_fitness: ['Analyse de la forme de fond et de la fraîcheur', 'Forme de fond et fraîcheur analysées'],
   get_training_advice: ['Préparation des recommandations', 'Analyse terminée'],
   list_recent_sessions: ['Lecture de tes séances', 'Séances consultées'],
   save_workout: ['Enregistrement de la séance', 'Séance enregistrée'],
@@ -24,6 +25,7 @@ const TOOL_LABELS: Record<string, [running: string, done: string]> = {
   sync_garmin_activities: ['Synchronisation Garmin', 'Synchronisation terminée'],
   create_planned_session: ['Création d’une séance', 'Séance créée'],
   update_planned_session: ['Modification d’une séance', 'Séance mise à jour'],
+  set_session_prescription: ['Modification des étapes', 'Étapes mises à jour'],
   delete_planned_session: ['Suppression d’une séance', 'Séance supprimée'],
 };
 

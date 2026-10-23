@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./pages/analytics/analytics.css";
 
 /* ========================= */
 /* FONTS - LOCAL HOSTING    */
@@ -47,48 +48,68 @@
 /* ========================= */
 /* TAILWIND THEME CONFIG    */
 /* ========================= */
-/* Charts and inline SVG reference these same tokens via src/lib/chartTheme.ts. */
+/* Every color is a semantic token defined once per theme (THEMES section below):
+   surfaces, ink, accents and signals. Tailwind utilities, charts and inline SVG
+   (src/lib/chartTheme.ts) read them through the names declared here. */
 
 @theme {
-  /* Colors - Solo Leveling Theme */
-  --color-void: #0A0A0F;
-  --color-abyss: #12121A;
-  --color-shadow: #1A1A24;
-  --color-neon-cyan: #00F0FF;
-  --color-neon-purple: #9D4EDD;
-  --color-neon-gold: #FFD700;
-  --color-success-green: #00FF88;
-  --color-warning-orange: #FF8C00;
-  --color-danger-red: #FF3B3B;
-  --color-info-blue: #3B82F6;
-  --color-text-primary: #E8E8E8;
-  --color-text-secondary: #A0A0A0;
-  --color-text-muted: #8A8A93;
+  /* Semantic utilities: new code uses these names. */
+  --color-surface-page: var(--surface-page);
+  --color-surface-card: var(--surface-card);
+  --color-surface-raised: var(--surface-raised);
+  --color-ink-primary: var(--ink-primary);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-signal-success: var(--signal-success);
+  --color-signal-warning: var(--signal-warning);
+  --color-signal-danger: var(--signal-danger);
+  --color-signal-info: var(--signal-info);
+
+  /* Compatibility aliases, kept for one release while components move to the
+     semantic names above. Each one only points at its semantic owner. */
+  --color-void: var(--surface-page);
+  --color-abyss: var(--surface-card);
+  --color-shadow: var(--surface-raised);
+  --color-neon-cyan: var(--accent);
+  --color-neon-purple: var(--accent-secondary);
+  --color-neon-gold: var(--accent-tertiary);
+  --color-success-green: var(--signal-success);
+  --color-warning-orange: var(--signal-warning);
+  --color-danger-red: var(--signal-danger);
+  --color-info-blue: var(--signal-info);
+  --color-text-primary: var(--ink-primary);
+  --color-text-secondary: var(--ink-secondary);
+  --color-text-muted: var(--ink-muted);
+  --color-border: var(--surface-border);
+  --color-selection: var(--surface-selection);
+  --color-on-accent: var(--ink-on-accent);
+  --color-on-purple: var(--ink-on-accent-secondary);
 
   /* Brands */
-  --color-strava: #FC4C02;
+  --color-strava: var(--brand-strava);
 
-  /* Chart palette (recharts) */
-  --color-chart-surface: #1A1A2E;
-  --color-chart-grid: #3A3A46;
-  --color-chart-axis: #9A9AA5;
-  --color-chart-label: #8A8A93;
-  --color-chart-text: #E0E0E6;
-  --color-chart-blue: #3B82F6;
-  --color-chart-green: #22C55E;
-  --color-chart-yellow: #EAB308;
-  --color-chart-orange: #F97316;
-  --color-chart-red: #EF4444;
-  --color-chart-grey: #6B7280;
+  /* Chart palette: series reuse the signals, so they pass the same contrast checks. */
+  --color-chart-surface: var(--surface-card);
+  --color-chart-grid: var(--surface-border);
+  --color-chart-axis: var(--ink-secondary);
+  --color-chart-label: var(--ink-muted);
+  --color-chart-text: var(--ink-primary);
+  --color-chart-blue: var(--signal-info);
+  --color-chart-green: var(--signal-success);
+  --color-chart-yellow: var(--accent-tertiary);
+  --color-chart-orange: var(--signal-warning);
+  --color-chart-red: var(--signal-danger);
+  --color-chart-grey: var(--ink-muted);
 
   /* Muscle heatmap */
-  --color-heat-0: #2A2F3B;
-  --color-heat-1: #1F6F63;
-  --color-heat-2: #C99213;
-  --color-heat-3: #F97316;
-  --color-heat-4: #EF4444;
-  --color-outline-dim: #475569;
-  --color-outline: #64748B;
+  --color-heat-0: var(--heat-0);
+  --color-heat-1: var(--heat-1);
+  --color-heat-2: var(--heat-2);
+  --color-heat-3: var(--heat-3);
+  --color-heat-4: var(--heat-4);
+  --color-outline-dim: var(--outline-dim);
+  --color-outline: var(--outline);
 
   /* Fonts */
   --font-sans: 'Inter', system-ui, sans-serif;
@@ -96,26 +117,83 @@
   --font-mono: 'JetBrains Mono', monospace;
   --radius-control: 9px;
   --radius-panel: 16px;
-  --color-border: color-mix(in srgb, var(--color-text-muted) 25%, transparent);
-  --color-selection: color-mix(in srgb, var(--color-neon-cyan) 10%, transparent);
-  --color-on-accent: #0A0A0F;
-  --color-on-purple: #FFFFFF;
-  --color-on-strava: #0A0A0F;
 }
+
+/* ========================= */
+/* THEMES                   */
+/* ========================= */
+/* Pierre, Prune, Odyssey and Encre; « Système » resolves to Pierre or Encre in
+   src/lib/theme.ts. Contrast (WCAG AA, 4.5:1) of ink, accents, signals and chart
+   series is measured on page, card and raised surfaces; see design.md. */
+
+/* Pierre is also the palette of a page whose theme is not resolved yet. */
+:root, html[data-theme='pierre'] {
+  color-scheme: light;
+  --surface-page: #F6F3ED; --surface-card: #FFFCF5; --surface-raised: #EEE8DD;
+  --surface-border: #D8D1C3; --surface-selection: #E3E9DF;
+  --ink-primary: #1C2927; --ink-secondary: #586158; --ink-muted: #64675D;
+  --ink-on-accent: #FFFCF5; --ink-on-accent-secondary: #FFFFFF;
+  --accent: #285349; --accent-secondary: #73536C; --accent-tertiary: #8A5C35;
+  --signal-success: #32694C; --signal-warning: #8A5C35; --signal-danger: #AA3E3E; --signal-info: #356278;
+  --brand-strava: #B03E0F;
+  --heat-0: #EAE3D5; --heat-1: #57866C; --heat-2: #B58A3F; --heat-3: #BD693B; --heat-4: #AA3E3E;
+  --outline-dim: #B7B4A8; --outline: #797D70;
+}
+html[data-theme='prune'] {
+  color-scheme: dark;
+  --surface-page: #291E29; --surface-card: #342636; --surface-raised: #57394E;
+  --surface-border: #62495D; --surface-selection: #57394E;
+  --ink-primary: #F2E8DA; --ink-secondary: #D2BBCB; --ink-muted: #BEABB8;
+  --ink-on-accent: #291E29; --ink-on-accent-secondary: #291E29;
+  --accent: #DBB5BC; --accent-secondary: #C7AACB; --accent-tertiary: #D2AB76;
+  --signal-success: #9ACAA7; --signal-warning: #D2AB76; --signal-danger: #F2AAAA; --signal-info: #A6C5DD;
+  --brand-strava: #FFAB83;
+  --heat-0: #482D40; --heat-1: #7AAB8A; --heat-2: #D2AB76; --heat-3: #DC956D; --heat-4: #F2AAAA;
+  --outline-dim: #806879; --outline: #BEABB8;
+}
+html[data-theme='odyssey'] {
+  color-scheme: light;
+  --surface-page: #F5EBDD; --surface-card: #FFF9EF; --surface-raised: #EDDDC9;
+  --surface-border: #D9C3A9; --surface-selection: #EDDDC9;
+  --ink-primary: #3B3432; --ink-secondary: #6B594C; --ink-muted: #6B594C;
+  --ink-on-accent: #FFFFFF; --ink-on-accent-secondary: #FFFFFF;
+  --accent: #96472D; --accent-secondary: #79551F; --accent-tertiary: #79551F;
+  --signal-success: #325B47; --signal-warning: #79551F; --signal-danger: #A92832; --signal-info: #245A83;
+  --brand-strava: #A63A0E;
+  --heat-0: #EDDDC9; --heat-1: #4F7D65; --heat-2: #A8782F; --heat-3: #B2582F; --heat-4: #A92832;
+  --outline-dim: #B9A48C; --outline: #6B594C;
+}
+/* Encre follows the dark laurel: cream on a near-black drawn from Pierre's ink.
+   Prune's plum is too dark to carry text here (1.9:1), so it fills the selection
+   and the accent text uses Prune's light rose. */
+html[data-theme='encre'] {
+  color-scheme: dark;
+  --surface-page: #0E1413; --surface-card: #172120; --surface-raised: #1C2927;
+  --surface-border: #2C3B38; --surface-selection: #57394E;
+  --ink-primary: #F2E8DA; --ink-secondary: #CFC6B8; --ink-muted: #A8A397;
+  --ink-on-accent: #0E1413; --ink-on-accent-secondary: #0E1413;
+  --accent: #DBB5BC; --accent-secondary: #C7AACB; --accent-tertiary: #D2AB76;
+  --signal-success: #9ACAA7; --signal-warning: #D2AB76; --signal-danger: #F2AAAA; --signal-info: #A6C5DD;
+  --brand-strava: #FFAB83;
+  --heat-0: #22302D; --heat-1: #7AAB8A; --heat-2: #D2AB76; --heat-3: #DC956D; --heat-4: #F2AAAA;
+  --outline-dim: #3A4A46; --outline: #A8A397;
+}
+/* Compatibility for one release: a raw custom property some components still read. */
+:root { --arete-border: var(--surface-border); }
 
 /* ========================= */
 /* BASE STYLES              */
 /* ========================= */
 
 html {
-  color-scheme: dark;
   background-color: var(--color-void);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
 }
 
 /* A theme changes the palette, never the brand's typographic hierarchy. */
-.page-title { font-family: var(--font-display); font-size: clamp(30px, 3vw, 42px); font-weight: 600; line-height: 1.1; letter-spacing: 0; text-transform: none; color: var(--color-text-primary); }
+.page-title { font-family: var(--font-display); font-size: clamp(36px, 3.1vw, 44px); font-weight: 600; line-height: 1.1; letter-spacing: 0; text-transform: none; color: var(--color-text-primary); }
+.page-eyebrow { margin-bottom: 8px; color: var(--color-text-muted); font-size: 11px; }
 .coach-title { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.1; }
 
 code, kbd, samp, pre { font-family: var(--font-mono); }
@@ -124,57 +202,6 @@ code, kbd, samp, pre { font-family: var(--font-mono); }
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--color-neon-cyan);
   outline-offset: 3px;
-}
-
-html[data-theme='darker'] {
-  --color-void: #050508;
-  --color-abyss: #0A0A0F;
-  --color-shadow: #12121A;
-}
-
-html[data-theme='abyss'] {
-  --color-void: #000000;
-  --color-abyss: #050508;
-  --color-shadow: #0A0A0F;
-}
-
-/* Darker accents keep text and chart labels readable on pale surfaces. */
-html[data-theme='light'] {
-  --color-on-accent: #FFFFFF;
-  --color-on-strava: #FFFFFF;
-  color-scheme: light;
-  --color-void: #F4F7FA;
-  --color-abyss: #FFFFFF;
-  --color-shadow: #E2E8F0;
-  --color-text-primary: #172B3A;
-  --color-text-secondary: #465B6B;
-  --color-text-muted: #5E6E7D;
-  --color-neon-cyan: #006B78;
-  --color-neon-purple: #7733AF;
-  --color-neon-gold: #826000;
-  --color-success-green: #137344;
-  --color-warning-orange: #A44700;
-  --color-danger-red: #C02632;
-  --color-info-blue: #245DC1;
-  --color-strava: #C73A00;
-  --color-chart-surface: #FFFFFF;
-  --color-chart-grid: #CBD5E1;
-  --color-chart-axis: #526477;
-  --color-chart-label: #5E6E7D;
-  --color-chart-text: #172B3A;
-  --color-chart-blue: #245DC1;
-  --color-chart-green: #137344;
-  --color-chart-yellow: #826000;
-  --color-chart-orange: #A44700;
-  --color-chart-red: #C02632;
-  --color-chart-grey: #5E6E7D;
-  --color-heat-0: #E2E8F0;
-  --color-heat-1: #368878;
-  --color-heat-2: #B8860B;
-  --color-heat-3: #D65B15;
-  --color-heat-4: #C02632;
-  --color-outline-dim: #94A3B8;
-  --color-outline: #64748B;
 }
 
 body {
@@ -198,13 +225,27 @@ body {
 
 .ui-inset { border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-void); }
 .ui-input, .ui-button, .navigation-item, .settings-nav button { border-radius: var(--radius-control); }
+/* Session entry dates: iOS draws a date as a centred native button wider than a phone column. */
+.session-date-input { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; }
+.session-date-input::-webkit-date-and-time-value { text-align: left; min-height: 1.5em; }
+/* WebKit sizes a native select itself, ignoring the field's padding and the 44 px
+   touch minimum: the shared field drops the native look and draws its own chevron. */
+select.ui-input:not([multiple], [size]) {
+  -webkit-appearance: none; appearance: none;
+  padding-right: 36px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%), linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 21px) 50%, calc(100% - 16px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+/* Forced colours drop background images: keep the system dropdown there. */
+@media (forced-colors: active) { select.ui-input:not([multiple], [size]) { -webkit-appearance: auto; appearance: auto; background-image: none; } }
 .ui-button { font-weight: 500; }
 .ui-button[data-variant='cyan'] { --button-accent: var(--color-neon-cyan); }
 .ui-button[data-variant='purple'] { --button-accent: var(--color-neon-purple); --button-on-accent: var(--color-on-purple); }
 .ui-button[data-variant='gold'] { --button-accent: var(--color-neon-gold); }
 .ui-button[data-variant='green'] { --button-accent: var(--color-success-green); }
 .ui-button[data-variant='danger'] { --button-accent: var(--color-danger-red); }
-.ui-button[data-variant='strava'] { --button-accent: var(--color-strava); --button-on-accent: var(--color-on-strava); }
 .ui-button[data-strong='true']:not([data-variant='outline'], [data-variant='ghost']) {
   background: var(--button-accent);
   border-color: var(--button-accent);
@@ -226,8 +267,8 @@ body {
 @container theme-picker (min-width: 420px) {
   .theme-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@container theme-picker (min-width: 860px) {
-  .theme-options { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@container theme-picker (min-width: 640px) {
+  .theme-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* Data views stay still; only the route entrance carries a short transition. */
@@ -348,10 +389,11 @@ body {
 .coach-markdown input[type="checkbox"] { margin-right: 0.5em; accent-color: var(--color-neon-cyan); }
 
 /* Keep the coach below desktop navigation and above the mobile tab bar,
-   so its toggle remains reachable while the conversation is open. */
+   so its toggle remains reachable while the conversation is open. Navigation
+   publishes its real bottom edge, which a notice above the bar moves. */
 .coach-panel { right: var(--safe-right); width: calc(100% - var(--safe-left) - var(--safe-right)); top: calc(var(--visible-top, 0px) + var(--safe-top)); bottom: max(var(--mobile-nav-space), var(--keyboard-inset, 0px)); max-height: calc(var(--visible-height, 100dvh) - var(--safe-top)); }
 @media (min-width: 768px) {
-  .coach-panel { top: max(3.5rem, var(--visible-top, 0px)); bottom: var(--keyboard-inset, 0px); }
+  .coach-panel { top: max(var(--navigation-bottom, 3.5rem), var(--visible-top, 0px)); bottom: var(--keyboard-inset, 0px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .coach-panel { animation: none; }
@@ -366,30 +408,6 @@ body {
   .coach-confirmation, .coach-status-label, .coach-answer-part { animation: none; }
 }
 
-/* Original Figma palettes; preserve the existing UI's semantic token owners. */
-html[data-theme='performance'], html[data-theme='odyssey'] {
-  color-scheme: light;
-  --color-on-accent: #FFFFFF;
-  --color-selection: var(--rpg-selection);
-}
-html[data-theme='performance'] {
-  --color-void: #F4F5EF; --color-abyss: #FFFFFF; --color-shadow: #E8EBDF;
-  --color-text-primary: #17281E; --color-text-secondary: #56665A; --color-text-muted: #56665A;
-  --color-neon-cyan: #17281E; --color-neon-purple: #456144; --color-neon-gold: #456144;
-  --color-success-green: #325B47; --color-danger-red: #A92832; --color-warning-orange: #79551F;
-  --color-info-blue: #245A83; --rpg-selection: #D5FF3F;
-  --color-chart-surface: #FFFFFF; --color-chart-grid: #CCD3C7; --color-chart-axis: #56665A;
-  --color-chart-label: #56665A; --color-chart-text: #17281E;
-}
-html[data-theme='odyssey'] {
-  --color-void: #F5EBDD; --color-abyss: #FFF9EF; --color-shadow: #EDDDC9;
-  --color-text-primary: #3B3432; --color-text-secondary: #6B594C; --color-text-muted: #6B594C;
-  --color-neon-cyan: #96472D; --color-neon-purple: #79551F; --color-neon-gold: #79551F;
-  --color-success-green: #325B47; --color-danger-red: #A92832; --color-warning-orange: #79551F;
-  --color-info-blue: #245A83; --rpg-selection: #EDDDC9;
-  --color-chart-surface: #FFF9EF; --color-chart-grid: #D9C3A9; --color-chart-axis: #6B594C;
-  --color-chart-label: #6B594C; --color-chart-text: #3B3432;
-}
 .rpg-tab[aria-current='page'] { background: var(--color-selection); color: var(--color-neon-cyan); }
 
 /* Arete's editorial identity uses a local font: no third-party font request. */
@@ -408,64 +426,36 @@ html[data-theme='odyssey'] {
 @keyframes activity-orbit { to { transform: rotate(79714.285deg); } }
 .route-content { animation: fade-in .16s ease-out both; }
 .coach-panel { animation: coach-enter .22s ease-out both; }
+.coach-reference-context:empty { display: none; }
+@media (min-width: 1024px) {
+  .coach-panel[data-display="expanded"] .coach-header { padding-inline: max(24px, calc((100vw - 1248px) / 2)); }
+  .coach-panel[data-display="expanded"] .coach-thread,
+  .coach-panel[data-display="expanded"] > footer { width: 100%; max-width: 848px; margin-inline: auto; }
+  .coach-panel[data-display="expanded"][data-context="attached"] .coach-thread { display: grid; grid-template-columns: minmax(240px, 360px) minmax(0, 800px); align-items: start; gap: 32px; max-width: 1280px; }
+  .coach-panel[data-display="expanded"][data-context="attached"] .coach-reference-context { position: sticky; top: 0; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-void); }
+}
 @keyframes coach-enter { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
 
-/* Keep existing semantic owners: abyss is a card surface throughout the app. */
-html[data-theme='pierre'] {
-  --color-on-accent: #FFFCF5;
-  --color-on-strava: #FFFCF5;
-  color-scheme: light;
-  --color-void: #F6F3ED; --color-abyss: #FFFCF5; --color-shadow: #EEE8DD;
-  --color-text-primary: #1C2927; --color-text-secondary: #586158; --color-text-muted: #696C62;
-  --color-neon-cyan: #285349; --color-neon-purple: #73536C; --color-neon-gold: #8A5C35;
-  --color-success-green: #32694C; --color-danger-red: #AA3E3E; --color-warning-orange: #8A5C35;
-  --color-info-blue: #356278; --color-strava: #B94110;
-  --arete-border: #D8D1C3; --rpg-selection: #E3E9DF;
-  --arete-accent-text: #FFFCF5;
-  --color-heat-0: #EAE3D5; --color-heat-1: #57866C; --color-heat-2: #B58A3F; --color-heat-3: #BD693B; --color-heat-4: #AA3E3E;
-  --color-outline-dim: #B7B4A8; --color-outline: #797D70;
-}
-html[data-theme='prune'] {
-  --color-on-accent: #291E29;
-  --color-on-purple: #291E29;
-  --color-on-strava: #291E29;
-  color-scheme: dark;
-  --color-void: #291E29; --color-abyss: #342636; --color-shadow: #57394E;
-  --color-text-primary: #F2E8DA; --color-text-secondary: #D2BBCB; --color-text-muted: #BBA8B5;
-  --color-neon-cyan: #DBB5BC; --color-neon-purple: #C7AACB; --color-neon-gold: #D2AB76;
-  --color-success-green: #9ACAA7; --color-danger-red: #F2AAAA; --color-warning-orange: #D2AB76;
-  --color-info-blue: #A6C5DD; --color-strava: #FFAB83;
-  --arete-border: #62495D; --rpg-selection: #57394E;
-  --arete-accent-text: #291E29;
-  --color-heat-0: #482D40; --color-heat-1: #7AAB8A; --color-heat-2: #D2AB76; --color-heat-3: #DC956D; --color-heat-4: #F2AAAA;
-  --color-outline-dim: #806879; --color-outline: #BBA8B5;
-}
-html[data-theme='pierre'], html[data-theme='prune'] {
-  --color-border: var(--arete-border);
-  --color-selection: var(--rpg-selection);
-  --color-chart-surface: var(--color-abyss); --color-chart-grid: var(--arete-border);
-  --color-chart-axis: var(--color-text-secondary); --color-chart-label: var(--color-text-muted); --color-chart-text: var(--color-text-primary);
-  --color-chart-blue: var(--color-info-blue); --color-chart-green: var(--color-success-green); --color-chart-yellow: var(--color-neon-gold);
-  --color-chart-orange: var(--color-warning-orange); --color-chart-red: var(--color-danger-red); --color-chart-grey: var(--color-text-muted);
-}
 .coach-panel { background: var(--color-abyss); border-color: var(--color-border); box-shadow: -8px 0 32px color-mix(in srgb, var(--color-text-primary) 4%, transparent); }
 @media (prefers-reduced-motion: reduce) {
   .activity-orbit, .coach-panel, .route-content,
   .animate-fade-in, .animate-fade-out, .animate-fade-up, .animate-fade-down, .animate-fade-left, .animate-scale-in, .animate-scale-out { animation: none !important; }
 }
 
-/* A shared gutter keeps the wordmark and page headings aligned at every width.
-   Content uses the available workspace, including when the coach is docked. */
+/* Page gutters follow the approved desktop/mobile layout. The compact navbar
+   keeps its own edge spacing so a docked coach never changes its geometry. */
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
-  --page-gutter: 16px;
+  --page-gutter: 20px;
   --mobile-nav-space: calc(4rem + var(--safe-bottom));
   --launcher-space: 68px;
 }
 .app-shell { min-height: 100dvh; padding-top: var(--safe-top); }
+/* The sign-in and account screens replace the shell: they keep clear of the notch too. */
+.gate-screen { padding: max(24px, var(--safe-top)) max(24px, var(--safe-right)) max(24px, var(--safe-bottom)) max(24px, var(--safe-left)); }
 .app-main { padding-bottom: calc(var(--mobile-nav-space) + var(--launcher-space)); }
 .mobile-navigation { padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left); }
 .journal-actions { position: sticky; top: var(--safe-top); z-index: 20; padding-block: 8px; margin-bottom: 16px; background: var(--color-void); }
@@ -475,14 +465,14 @@ html[data-theme='pierre'], html[data-theme='prune'] {
   .journal-actions { position: static; }
   .journal-actions > button { width: auto; }
 }
-.navigation-shell { padding-inline: max(var(--page-gutter), var(--safe-left)) max(var(--page-gutter), var(--safe-right)); }
+.navigation-shell { padding-inline: max(20px, var(--safe-left)) max(16px, var(--safe-right)); }
 .page-shell { width: 100%; min-width: 0; padding: 20px max(var(--page-gutter), var(--safe-right)) 20px max(var(--page-gutter), var(--safe-left)); }
 .page-content { width: 100%; min-width: 0; }
 .dashboard-content { container-type: inline-size; }
 .dashboard-grid, .dashboard-primary, .dashboard-secondary { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 20px; align-content: start; }
 @media (min-width: 768px) {
-  :root { --page-gutter: clamp(24px, 3vw, 56px); }
-  .page-shell { padding-block: 28px; }
+  :root { --page-gutter: clamp(24px, 5vw, 72px); }
+  .page-shell { padding-block: 48px; }
 }
 /* Measure the workspace, not the viewport: opening the coach can remove 520 px. */
 @container (min-width: 960px) {
@@ -542,7 +532,7 @@ html[data-theme='pierre'], html[data-theme='prune'] {
   .coach-panel[data-display="floating"] {
     --coach-bottom: max(24px, var(--safe-bottom), calc(var(--keyboard-inset, 0px) + 12px));
     right: max(24px, var(--safe-right));
-    max-height: min(560px, calc(var(--visible-height, 100dvh) - 104px));
+    max-height: min(560px, calc(var(--visible-height, 100dvh) - var(--navigation-bottom, 3.5rem) - 48px));
   }
 }
 @media (prefers-reduced-transparency: reduce) {
@@ -569,7 +559,22 @@ body:has([aria-modal='true']) .coach-launcher { visibility: hidden; }
 
 /* Modal touch scrolling must not move the page behind it. CSS handles nested dialogs. */
 html:has([aria-modal='true']) { overflow: hidden; }
+/* On a phone, upright or on its side, the open coach overlays the page the same way:
+   a swipe on its header, composer or past the end of the thread must not scroll the
+   page beneath, which keeps its offset for when the coach closes. Desktop and
+   tablets keep a scrollable page. */
+@media (max-width: 767px), (hover: none) and (pointer: coarse) and (max-height: 500px) {
+  html:has(.coach-panel) { overflow: hidden; }
+}
 /* The install invitation occupies its own layer above the persistent launcher. */
+/* App-wide notices (connectivity, new version): above the page and the tab bar, below dialogs. */
+.app-notices { position: fixed; z-index: 60; top: calc(var(--safe-top) + 8px); left: calc(var(--safe-left) + 12px); right: calc(var(--safe-right) + 12px); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.app-notices:empty { display: none; }
+.app-notice { pointer-events: auto; }
+/* On a phone the open coach takes the top of the screen: its header stays reachable. */
+@media (max-width: 767px) { body:has(.coach-panel) .app-notices { display: none; } }
+/* Desktop: under the 56 px navigation bar, never over its links. */
+@media (min-width: 768px) { .app-notices { top: calc(var(--safe-top) + 64px); left: 50%; right: auto; width: min(32rem, calc(100% - 24px)); transform: translateX(-50%); } }
 .install-invitation { bottom: calc(var(--mobile-nav-space) + var(--launcher-space)); max-height: calc(var(--visible-height, 100dvh) - var(--safe-top) - var(--mobile-nav-space) - var(--launcher-space) - 24px); overflow-y: auto; }
 body:has(.coach-panel) .install-invitation, body:has([aria-modal='true']) .install-invitation { display: none; }
 @media (min-width: 768px) { .install-invitation { bottom: 84px; } }
@@ -577,5 +582,49 @@ body:has(.coach-panel) .install-invitation, body:has([aria-modal='true']) .insta
 @media (pointer: coarse) {
   .ui-input, .coach-panel[data-display] .coach-composer-input,
   .modal-panel input:not([type='checkbox'], [type='radio']), .modal-panel select, .modal-panel textarea { font-size: 16px; }
-  .ui-button, .navigation-item, .modal-panel button { min-height: 44px; }
+  .ui-button, .navigation-item, .modal-panel button,
+  .modal-panel :is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='range']), select, textarea) { min-height: 44px; }
+}
+
+/* Coach feedback has one visual owner across stored briefings and live answers. */
+.coach-feedback-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+}
+.coach-feedback-action:hover { background: var(--color-shadow); color: var(--color-text-primary); }
+.coach-feedback-action[aria-pressed="true"] { background: var(--color-selection); color: var(--color-neon-cyan); }
+.coach-feedback-action:disabled { opacity: 0.4; }
+@media (pointer: coarse) { .coach-feedback-action { width: 44px; height: 44px; } }
+.briefing-entry, .briefing-history-link { border-radius: var(--radius-control); }
+.briefing-entry:enabled:hover, .briefing-history-link:hover { background: var(--color-selection); }
+.briefing-history-link { padding: 8px; min-height: 44px; }
+
+/* The physio report (/sante/rapport) prints alone, on Pierre's light ink
+   whatever the screen's theme: browsers drop dark backgrounds on paper. */
+@media print {
+  @page { size: A4; margin: 14mm; }
+  html:has(.health-report) {
+    color-scheme: light;
+    --surface-page: #FFFFFF; --surface-card: #FFFFFF; --surface-raised: #F2EFE9;
+    --surface-border: #CFC8BA;
+    --ink-primary: #1C2927; --ink-secondary: #3F4943; --ink-muted: #565A51;
+    --accent: #285349;
+    --signal-warning: #8A5C35; --signal-danger: #AA3E3E;
+  }
+  html:has(.health-report) body { background: #FFFFFF; }
+  html:has(.health-report) .app-shell > :not(.app-main),
+  html:has(.health-report) .report-toolbar { display: none !important; }
+  html:has(.health-report) .app-main { margin: 0 !important; padding: 0 !important; }
+  html:has(.health-report) .page-shell { padding: 0; }
+  .health-report .page-title { font-size: 24px; }
+  .health-report .report-section { break-inside: auto; }
+  .health-report .report-section > h2 { break-after: avoid; }
+  .health-report tr { break-inside: avoid; }
+  .health-report .report-table { overflow: visible; }
+  .health-report .report-bar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }

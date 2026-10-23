@@ -20,3 +20,5 @@ class Toolkit:
     read_tools: frozenset[str]
     # Only explicit workout actions may create interactive chat cards.
     workout_actions: frozenset[str] = frozenset()
+    # Persist reviewable proposals without executing the proposed training change.
+    proposal_tools: frozenset[str] = frozenset()

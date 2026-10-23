@@ -15,9 +15,6 @@ from typing import Literal
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from arete.dataio.settings import athlete_zone_model
-from arete.garmin.fit_parser import FITParser, laps_to_json
-from arete.garmin.matcher import SessionMatcher
 from arete.garmin.models import (
     ActivitySource,
     ActualSession,
@@ -27,8 +24,6 @@ from arete.garmin.models import (
     canonical_sport,
 )
 from arete.garmin.repository import GarminRepository
-from arete.garmin.streams import from_time_series
-from arete.services.settings import athlete_today
 from arete.strength.logging_service import link_garmin_strength
 
 logger = logging.getLogger(__name__)
@@ -335,136 +330,41 @@ def delete_planned_session(session_id: int, revision: int | None = Query(None, g
 
 @router.post("/upload-fit", response_model=FITUploadResponse)
 def upload_fit_file(
-    file: UploadFile = File(..., description="FIT file from Garmin device"),
-    auto_match: bool = Query(
-        True, description="Automatically match to planned session"
-    ),
+    file: UploadFile = File(..., description="FIT file from any watch"),
 ):
-    """Upload a FIT file and parse the activity.
+    """Import one FIT file: the earlier route of ``POST /activities/import``.
 
-    The activity is saved to the database and optionally matched
-    to a planned session based on date and activity type. A plain ``def``:
-    the FIT parse and the writes run in a worker thread, not on the event
-    loop every other request shares.
+    Same import (``services/activity_import``), this route's answer shape:
+    400 for an unreadable file, 409 for a session already stored. A plain
+    ``def``: the parse and the writes run in a worker thread.
     """
-    import io
-    from pathlib import Path
+    from arete.api.activities import read_upload
+    from arete.services.activity_import import import_upload
 
     if not file.filename or not file.filename.lower().endswith(".fit"):
-        raise HTTPException(status_code=400, detail="File must be a .fit file")
-
-    # Read with size limit (10MB for typical FIT files)
-    MAX_FIT_SIZE = 10 * 1024 * 1024  # 10MB
-    content = bytearray()
-    total_size = 0
-
-    while chunk := file.file.read(8192):
-        total_size += len(chunk)
-        if total_size > MAX_FIT_SIZE:
-            raise HTTPException(status_code=413, detail="FIT file too large (max 10MB)")
-        content.extend(chunk)
-
-    content_bytes = bytes(content)
-
-    # The athlete's zones: bucketing the upload's HR and reading a planned
-    # "Z2" both need them (the default 190 bpm model misreads both).
-    zones = athlete_zone_model()
-    try:
-        parser = FITParser(zones=zones)
-        # Detailed: the laps and the per-second streams are kept for the
-        # session page and the coach's analysis.
-        parsed = parser.parse_stream(io.BytesIO(content_bytes), detailed=True)
-        # Sanitize filename to prevent path traversal
-        parsed.source_file = Path(file.filename).name
-    except Exception as e:
-        logger.error(f"Failed to parse FIT file: {e}")
-        raise HTTPException(
-            status_code=400, detail=f"Failed to parse FIT file: {e}"
-        ) from e
-
-    # Convert parsed activity to ActualSession
-    actual = ActualSession(
-        date=parsed.start_time.date() if parsed.start_time else athlete_today(),
-        sport=canonical_sport(parsed.sport or "running"),
-        session_type=parsed.sub_sport or parsed.infer_session_type(),
-        duration_sec=parsed.duration_sec or parsed.elapsed_time_sec or 0,
-        distance_m=parsed.distance_m,
-        calories=parsed.calories,
-        avg_hr=parsed.avg_hr,
-        max_hr=parsed.max_hr,
-        hr_zones_json=parsed.hr_zones.to_json() if parsed.hr_zones else None,
-        avg_speed_mps=parsed.avg_speed_mps,
-        max_speed_mps=parsed.max_speed_mps,
-        ascent_m=parsed.ascent_m,
-        descent_m=parsed.descent_m,
-        start_lat=parsed.start_lat,
-        start_lon=parsed.start_lon,
-        avg_cadence=parsed.avg_cadence,
-        max_cadence=parsed.max_cadence,
-        laps_json=laps_to_json(parsed),
-        source=ActivitySource.FIT_FILE,
-        source_file=file.filename,
-        start_time=parsed.start_time,
-    )
-
-    # Calculate avg pace if running
-    if actual.distance_m and actual.duration_sec and actual.distance_m > 0:
-        pace_sec_per_km = actual.duration_sec / (actual.distance_m / 1000)
-        actual.avg_pace_sec_km = int(pace_sec_per_km)
-
-    # Auto-match to planned session
-    match_result = None
-    if auto_match:
-        planned_sessions = _repo.get_potential_matches(actual)
-        if planned_sessions:
-            matcher = SessionMatcher(zones=zones)
-            match = matcher.find_match(actual, planned_sessions)
-            if match.is_matched and match.planned_session is not None:
-                planned_id = match.planned_session.id
-                actual.planned_session_id = planned_id
-                actual.adherence_score = match.adherence_score
-                match_result = {
-                    "planned_session_id": planned_id,
-                    "confidence": match.confidence.value,
-                    "adherence_score": match.adherence_score,
-                    "summary": match.summary(),
-                }
-                # Update planned session status
-                if planned_id is not None:
-                    _repo.update_planned_session_status(
-                        planned_id, SessionStatus.COMPLETED
-                    )
-
-    # Save actual session
-    activity_id = _repo.create_actual_session(actual)
-    # A file without a start time is dated today: too weak to pair a Muscu log.
-    if actual.sport == "strength" and parsed.start_time:
-        link_garmin_strength([actual.date])
-    streams = from_time_series(parsed.time_series, actual.sport)
-    if streams is not None:
-        try:
-            _repo.save_activity_streams(activity_id, streams)
-        except Exception:  # the session is saved; only its page loses the charts
-            logger.warning("Could not store the upload's streams", exc_info=True)
-    from arete.services.session_conditions import enrich_sessions
-
-    enrich_sessions([activity_id])  # GAP, climbing speed, weather; never raises
-
-    activity_dict = {
-        "id": activity_id,
-        "date": str(actual.date),
-        "sport": actual.sport,
-        "duration_min": actual.duration_min,
-        "distance_km": actual.distance_km,
-        "avg_hr": actual.avg_hr,
-        "avg_pace": actual.avg_pace_min_km,
-    }
-
+        raise HTTPException(status_code=400, detail="Le fichier doit être un .fit.")
+    outcome = import_upload(file.filename, read_upload(file))[0]
+    if outcome.status != "imported" or outcome.session_id is None:
+        code = 409 if outcome.status == "duplicate" else 400
+        raise HTTPException(status_code=code, detail=outcome.message)
+    actual = _repo.get_actual_session(outcome.session_id)
+    if actual is None:  # pragma: no cover - just inserted
+        raise HTTPException(status_code=500, detail="Session could not be read back")
     return FITUploadResponse(
-        activity_id=activity_id,
-        activity=activity_dict,
-        match=match_result,
-        message="Activity saved" + (" and matched" if match_result else ""),
+        activity_id=outcome.session_id,
+        activity={
+            "id": outcome.session_id,
+            "date": str(actual.date),
+            "sport": actual.sport,
+            "duration_min": actual.duration_min,
+            "distance_km": actual.distance_km,
+            "avg_hr": actual.avg_hr,
+            "avg_pace": actual.avg_pace_min_km,
+        },
+        match={"planned_session_id": outcome.planned_session_id}
+        if outcome.planned_session_id
+        else None,
+        message=outcome.message,
     )
 
 

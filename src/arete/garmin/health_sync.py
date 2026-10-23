@@ -268,6 +268,7 @@ def _upsert_daily_metrics(metrics: dict[str, Any]) -> None:
             INSERT INTO app.daily_metrics ({col_list})
             VALUES ({placeholders})
             ON CONFLICT (user_id, date) DO UPDATE SET {update_set}
+            RETURNING date
             """,
             values,
         )
@@ -284,6 +285,11 @@ def sync_day(
 ) -> DailySyncResult:
     """Sync one day of Garmin health data."""
     client = client or GarminClient()
+    from arete.garmin.sync_budget import SyncBudget
+
+    budget = getattr(client, "sync_budget", None)
+    budget = budget if isinstance(budget, SyncBudget) else None
+    error_count = len(budget.errors) if budget else 0
     try:
         client.connect()
     except GarminAuthError as e:
@@ -304,9 +310,15 @@ def sync_day(
         return DailySyncResult(
             date=target_date, success=False, fields_synced=0, error=str(e)
         )
+    failed = budget is not None and (budget.stopped or len(budget.errors) > error_count)
     return DailySyncResult(
-        date=target_date, success=True, fields_synced=len(metrics) - 1
-    )  # -1 for 'date'
+        date=target_date,
+        success=not failed,
+        fields_synced=len(metrics) - 2,
+        error=(budget.stopped or "; ".join(budget.errors[error_count:]))
+        if failed and budget
+        else None,
+    )  # Exclude the date and source metadata from the measurement count.
 
 
 def sync_range(start: date, end: date) -> list[DailySyncResult]:

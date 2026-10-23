@@ -127,6 +127,9 @@ def _rows(con, corpus: Corpus, sql: str, params: list | None = None):
 
 
 def _database_corpus(corpus: Corpus, thread_id: str | None) -> None:
+    from arete.dataio.queries import sql_in
+    from arete.services.analytics import MODEL_EXCLUDED_SOURCES
+
     # One transaction gives source rows and their revision links a consistent view.
     with transaction() as con:
         sql = """SELECT id, revision, CAST(since AS VARCHAR), to_json(struct_pack(
@@ -150,9 +153,9 @@ def _database_corpus(corpus: Corpus, thread_id: str | None) -> None:
                 "Version historique, pas une règle actuelle : " + body,
                 links=links,
             )
-        sql = """SELECT id, CAST(date AS VARCHAR), planned_session_id,
+        sql = f"""SELECT id, CAST(date AS VARCHAR), planned_session_id,
             concat_ws(' ', sport, name, notes) AS body FROM app.visible_actual_sessions
-            WHERE user_id = getvariable('arete_athlete_id') ORDER BY id"""
+            WHERE user_id = getvariable('arete_athlete_id') AND source NOT IN ({sql_in(MODEL_EXCLUDED_SOURCES)}) ORDER BY id"""
         for sid, day, planned, body in _rows(con, corpus, sql):
             corpus.add(
                 f"actual:{sid}",

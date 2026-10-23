@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export type CoachDisplay = 'sidebar' | 'floating';
+export type CoachDisplay = 'sidebar' | 'floating' | 'expanded';
 export const COACH_DISPLAY_KEY = 'arete.coach-display.v2';
 const STORAGE_ERROR = 'Le mode reste actif pour cette session, mais ce navigateur ne peut pas enregistrer ton choix.';
 
@@ -10,8 +10,8 @@ export function useCoachDisplay() {
     try {
       // A new key migrates old choices once; subsequent explicit choices survive.
       const saved = localStorage.getItem(COACH_DISPLAY_KEY);
-      if (saved !== 'sidebar' && saved !== 'floating') localStorage.setItem(COACH_DISPLAY_KEY, 'floating');
-      return { mode: saved === 'sidebar' ? 'sidebar' : 'floating', error: null };
+      if (saved !== 'sidebar' && saved !== 'floating' && saved !== 'expanded') localStorage.setItem(COACH_DISPLAY_KEY, 'floating');
+      return { mode: saved === 'sidebar' || saved === 'expanded' ? saved : 'floating', error: null };
     } catch {
       return { mode: 'floating', error: STORAGE_ERROR };
     }

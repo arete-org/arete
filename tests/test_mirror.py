@@ -129,6 +129,70 @@ def test_hydrate_leaves_foreign_rows_on_the_server(store, tmp_path, monkeypatch)
     assert set(_stored(store)) == {"arete.duckdb", "garmin_tokens/garmin_tokens.json"}
 
 
+def test_a_status_read_does_not_undo_another_instance_logout(
+    store, tmp_path, monkeypatch
+):
+    """Instance A reads the tokens while instance B logs out: they stay out."""
+    from arete.garmin import token_store
+
+    root = _use_data_dir(monkeypatch, tmp_path / "data")
+    mirror.hydrate()  # A started before any login
+    with store() as con:  # B logs in
+        con.execute(
+            "INSERT INTO app.files (path, content) VALUES (?, '{\"t\": 1}'), (?, '{}')",
+            [token_store.TOKEN_PATH, token_store.ACCOUNT_PATH],
+        )
+    # A's GET /garmin/status: has_tokens rewrites the local copies.
+    assert token_store.hydrate(root / token_store.TOKEN_PATH)
+    with store() as con:  # B logs out meanwhile
+        con.execute("DELETE FROM app.files")
+    assert mirror.flush() == 0  # A's request ends: nothing written back
+    assert _stored(store) == {}
+
+
+def test_tokens_kept_outside_the_data_directory_stay_out_of_the_flush(
+    store, tmp_path, monkeypatch
+):
+    """``ARETE_GARMIN_TOKENS_DIR``: the mirror never walks those files."""
+    from arete.garmin import token_store
+
+    _use_data_dir(monkeypatch, tmp_path / "data")
+    tokens = tmp_path / "elsewhere"
+    monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(tokens))
+    mirror.hydrate()
+    with store() as con:
+        con.execute(
+            "INSERT INTO app.files (path, content) VALUES (?, '{\"t\": 1}'), (?, '{}')",
+            [token_store.TOKEN_PATH, token_store.ACCOUNT_PATH],
+        )
+    assert token_store.hydrate(tokens / token_store.TOKEN_FILE)
+    # Recorded as mirrored, they would read as deleted: a logout everywhere.
+    assert mirror.flush() == 0
+    assert set(_stored(store)) == {token_store.TOKEN_PATH, token_store.ACCOUNT_PATH}
+
+
+def test_a_symlinked_token_directory_is_still_remembered(store, tmp_path, monkeypatch):
+    """The walk follows a linked ``garmin_tokens``: so does the record."""
+    from arete.garmin import token_store
+
+    root = _use_data_dir(monkeypatch, tmp_path / "data")
+    real = tmp_path / "volume"
+    real.mkdir()
+    root.mkdir()
+    (root / "garmin_tokens").symlink_to(real, target_is_directory=True)
+    mirror.hydrate()
+    with store() as con:
+        con.execute(
+            "INSERT INTO app.files (path, content) VALUES (?, '{\"t\": 1}'), (?, '{}')",
+            [token_store.TOKEN_PATH, token_store.ACCOUNT_PATH],
+        )
+    assert token_store.hydrate(root / token_store.TOKEN_PATH)
+    with store() as con:  # another instance logs out
+        con.execute("DELETE FROM app.files")
+    assert mirror.flush() == 0
+    assert _stored(store) == {}
+
+
 def test_middleware_is_inert_on_a_local_database(monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))
@@ -142,7 +206,7 @@ def test_middleware_is_inert_on_a_local_database(monkeypatch):
 
 def test_middleware_hydrates_then_flushes_on_a_remote_database(monkeypatch):
     calls: list[str] = []
-    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setenv("ARETE_DB", "md:arete_v2")
     monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))
     monkeypatch.setattr(mirror, "flush", lambda: calls.append("flush"))
     app = FastAPI()
@@ -155,7 +219,7 @@ def test_middleware_hydrates_then_flushes_on_a_remote_database(monkeypatch):
 def test_a_read_only_request_skips_the_flush(monkeypatch):
     """The dashboard's GETs paid a walk and a hash of every mirrored file each."""
     calls: list[str] = []
-    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setenv("ARETE_DB", "md:arete_v2")
     monkeypatch.setattr(mirror, "hydrate", lambda: calls.append("hydrate"))
     monkeypatch.setattr(mirror, "flush", lambda: calls.append("flush"))
     app = FastAPI()
@@ -169,7 +233,7 @@ def test_a_read_only_request_skips_the_flush(monkeypatch):
 
 def _remote_app(monkeypatch, path: str, handler) -> TestClient:
     """A remote database whose mirror writes to the local store fixture."""
-    monkeypatch.setenv("ARETE_DB", "md:arete")
+    monkeypatch.setenv("ARETE_DB", "md:arete_v2")
     app = FastAPI()
     app.add_middleware(mirror.MirrorMiddleware)
     app.get(path)(handler)

@@ -1,23 +1,93 @@
-# Arete — Design system commun aux huit thèmes
+# Arete — Design system commun aux quatre thèmes
 
 ## Références et décision
 
 - [Identité retenue dans Figma](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=5-82) : « Cormorant Garamond pour la marque et les grands titres. Inter pour les données, les boutons et la navigation. »
-- [Maquette comparative ARE-33, éditable](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=17-111) : huit déclinaisons du même spécimen, avec les composants de marque existants et les palettes du produit.
-- La capture de l’incident montre **Plus sombre** : marque serif, titres sans serif, navigation et contrôles monospace.
+- [Maquette comparative ARE-33, éditable](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=17-111) : huit déclinaisons du même spécimen, avec les composants de marque existants et les palettes de l’époque (cinq ont été retirées par ARE-134).
+- [Parcours unifiés, analyses et Chiron](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=334-81) : déclinaisons bureau/mobile, états et interactions natifs. [Correspondance avec le produit](docs/unified-experience.md).
 
-La référence définit cette hiérarchie pour Pierre et Prune. ARE-33 l’étend à
-Clair, Sombre, Plus sombre, Abysse, Performance et Odyssey. Changer de thème
-ne change plus les familles de polices ni la hiérarchie des titres.
-Les palettes et préférences sont conservées. Les surfaces, contrôles et états
-interactifs utilisent désormais les mêmes règles sur toutes les pages.
+La référence définit cette hiérarchie pour Pierre et Prune. ARE-134 réduit les
+palettes à une seule langue visuelle : Pierre (clair), Prune (prune), Odyssey
+(sable clair) et Encre (sombre, celle du laurier crème sur fond presque noir),
+plus « Système », qui suit l’appareil. Changer de thème ne change ni les familles
+de polices ni la hiérarchie des titres. Les surfaces, contrôles et états
+interactifs utilisent les mêmes règles sur toutes les pages.
+
+## Thèmes et tokens sémantiques
+
+| Choix | Rôle | Fond | Texte | Accent |
+| --- | --- | --- | --- | --- |
+| Système (par défaut) | Pierre si l’appareil est clair, Encre s’il est sombre ; suit un changement en direct | — | — | — |
+| Pierre | Clair, pierre et encre | `#F6F3ED` | `#1C2927` | `#285349` |
+| Prune | Sombre prune | `#291E29` | `#F2E8DA` | `#DBB5BC` |
+| Odyssey | Clair sable, chaud | `#F5EBDD` | `#3B3432` | `#96472D` |
+| Encre | Sombre, laurier crème sur l’encre de Pierre assombrie | `#0E1413` | `#F2E8DA` | `#DBB5BC`, sélection `#57394E` |
+
+Encre est construit avec la palette existante : l’encre `#1C2927` de Pierre
+assombrie en fond (`#0E1413`) et en surface relevée, la crème `#F2E8DA` du laurier
+sombre en texte, la prune `#57394E` en fond de sélection. Le prune est trop
+sombre pour porter du texte sur ce fond (1,9:1) : le texte d’accent reprend le
+rose clair de Prune (`#DBB5BC`), comme le badge prune du laurier. Variante non
+retenue : un accent crème (`#F2E8DA`), plus sobre mais qui ne distingue plus
+l’accent du texte principal.
+
+Chaque thème définit une fois, dans `index.css`, les tokens `--surface-page`,
+`--surface-card`, `--surface-raised`, `--surface-border`, `--surface-selection`,
+`--ink-primary|secondary|muted|on-accent`, `--accent` (et `--accent-secondary|tertiary`),
+`--signal-success|warning|danger|info`, la marque Strava et la carte musculaire.
+Les utilitaires Tailwind `surface-*`, `ink-*`, `accent` et `signal-*` les exposent.
+Les séries de graphiques (`chartTheme.ts`) réutilisent les signaux, donc les mêmes
+contrastes. Les anciens noms (`void`, `abyss`, `shadow`, `neon-*`, `text-*`,
+`success-green`…, `--arete-border`) restent des alias de ces tokens pendant une
+version, le temps de migrer les composants.
+
+Contraste WCAG mesuré (minimum sur fond de page, carte et surface relevée ;
+AA demande 4,5:1 pour le texte) :
+
+| Thème | Texte principal | Secondaire | Discret | Accents | Signaux et séries | Texte sur accent | Accent sur sélection |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Pierre | 12,34 | 5,27 | 4,73 | 4,70 | 4,70 | 6,60 | 7,01 |
+| Prune | 8,25 | 5,58 | 4,62 | 4,68 | 4,68 | 7,65 | 5,40 |
+| Odyssey | 9,16 | 5,00 | 5,00 | 4,88 | 5,04 | 6,49 | 4,88 |
+| Encre | 12,42 | 8,90 | 5,98 | 7,04 | 7,04 | 8,90 | 5,40 |
+
+Ajustements pour atteindre AA : texte discret de Pierre `#64675D` (4,39 avant sur
+surface relevée) et de Prune `#BEABB8` (4,47), Strava `#B03E0F` sur Pierre et
+`#A63A0E` sur Odyssey ; Odyssey reçoit ses propres couleurs de séries et de carte
+musculaire au lieu des valeurs sombres héritées. `design-system.spec.ts` recalcule
+ces contrastes dans le navigateur.
+
+Les thèmes retirés (Clair, Sombre, Plus sombre, Abysse, Performance) migrent une
+seule fois au chargement : clairs vers Pierre, sombres vers Encre. Le navigateur
+réécrit sa copie locale (`arete.theme.v1`) ; le serveur lit l’ancienne valeur
+comme son remplacement et l’enregistre à la prochaine sauvegarde, sans migration
+de base. Un nouveau compte et un navigateur neuf partent de « Système ».
+Un court script dans `index.html` applique le thème mis en cache (ou « Système »)
+et la couleur `theme-color` avant le premier rendu, pour qu’un thème sombre ne
+s’affiche jamais d’abord en crème ; `theme.test.ts` vérifie qu’il choisit le même
+thème que `initializeTheme()`.
+
+## Nom du coach
+
+`coachWords()` (`lib/coachName.ts`) donne les mots de chaque position dans la
+phrase. Avec la gamification activée, « Chiron » est un nom propre : « Demander à
+Chiron », « Avec Chiron aujourd’hui ». Sinon, et tant que la préférence n’est pas
+connue, « le coach » est un nom commun avec son article : « Demander au coach »,
+« Le regard du coach », « Le coach aujourd’hui » ; seuls les en-têtes disent
+« Coach ». Le mode classique n’affiche jamais « Chiron » ni « à Coach » ;
+`coach-name.spec.ts` le vérifie dans les deux modes.
+
+Tous les textes sont en casse naturelle, titres, boutons, labels, badges et
+puces compris ; le CSS ne met plus rien en capitales, hors la première lettre
+d’une date. Les sigles (TSB,
+ACWR, TSS, RPE, FIT) gardent leurs capitales.
 
 ## Hiérarchie
 
 | Rôle | Police | Traitement |
 | --- | --- | --- |
 | Signature ARETE | Cormorant Garamond SemiBold | 32 px, graisse 600, interligne 1, espacement 1,1 px ; laurier existant |
-| Titre principal de page | Cormorant Garamond SemiBold | `clamp(30px, 3vw, 42px)`, graisse 600, interligne 1,1, sans espacement ajouté |
+| Titre principal de page | Cormorant Garamond SemiBold | `clamp(36px, 3.1vw, 44px)`, graisse 600, interligne 1,1, sans espacement ajouté |
 | Titre du coach | Cormorant Garamond SemiBold | 24 px, graisse 600, interligne 1,1 |
 | Navigation, boutons, formulaires, titres de panneaux | Inter | Tailles et graisses existantes ; une même famille pour tous les thèmes |
 | Texte courant, réponses du coach | Inter | Taille et interligne propres au contenu, conservés |
@@ -25,14 +95,14 @@ interactifs utilisent désormais les mêmes règles sur toutes les pages.
 | Code, paramètres et résultats techniques des outils | JetBrains Mono | Monospace dans chaque thème, y compris Pierre et Prune |
 
 Le choix typographique dépend du rôle du texte. Un grand titre n’impose pas une
-police serif aux titres de panneaux, aux labels ou aux données. Les titres de page sont en casse naturelle. Les petits labels de
-métadonnées peuvent rester en capitales ; ils ne deviennent pas des titres serif.
+police serif aux titres de panneaux, aux labels ou aux données. Tous les textes sont en casse naturelle, petits labels de
+métadonnées compris ; ils ne deviennent pas des titres serif.
 
 ## Maquette
 
 La planche reprend le spécimen produit de la référence Figma (`6:155`) :
 signature, navigation, titre « Réglages », texte courant, mesure et bouton.
-Les huit variantes utilisent les mêmes familles et dimensions ; seules leurs
+Les variantes utilisent les mêmes familles et dimensions ; seules leurs
 couleurs diffèrent. Les valeurs affichées sont fictives. Cette planche définit
 la typographie, pas une refonte de la disposition de la page Réglages.
 
@@ -40,12 +110,8 @@ la typographie, pas une refonte de la disposition de la page Réglages.
 | --- | --- | --- | --- |
 | Pierre | `#F6F3ED` | `#1C2927` | Hiérarchie commune |
 | Prune | `#291E29` | `#F2E8DA` | Hiérarchie commune |
-| Clair | `#F4F7FA` | `#172B3A` | Hiérarchie commune |
-| Sombre | `#0A0A0F` | `#E8E8E8` | Hiérarchie commune |
-| Plus sombre | `#050508` | `#E8E8E8` | Hiérarchie commune |
-| Abysse | `#000000` | `#E8E8E8` | Hiérarchie commune |
-| Performance | `#F4F5EF` | `#17281E` | Hiérarchie commune |
 | Odyssey | `#F5EBDD` | `#3B3432` | Hiérarchie commune |
+| Encre | `#0E1413` | `#F2E8DA` | Hiérarchie commune |
 
 ## Propriétaire dans le code
 
@@ -64,13 +130,14 @@ la typographie, pas une refonte de la disposition de la page Réglages.
 | Carte, panneau, dialogue | Surface opaque, bordure neutre, rayon 16 px ; pas de halo ni de grossissement au survol | `.glass-panel`, `.rpg-surface`, `--radius-panel` |
 | Surface imbriquée | Fond de page, bordure neutre, rayon 9 px | `.ui-inset` |
 | Contrôle, bouton, onglet | Rayon 9 px, Inter ; états désactivés conservés | `--radius-control`, composants `ui/` |
-| Action principale | Fond plein selon sa sémantique ; texte contrasté, y compris violet et Strava | `.ui-button[data-strong]`, tokens `--color-on-*` |
+| Action principale | Fond plein selon sa sémantique ; texte contrasté, y compris violet | `.ui-button[data-strong]`, tokens `--color-on-*` |
 | Action secondaire | Fond légèrement teinté, texte sémantique | `Button` existant |
 | Navigation active | Fond de sélection, état courant accessible | `--color-selection`, `aria-current` |
 | Focus clavier | Contour de 2 px, décalé de 3 px, couleur d’accent | `:focus-visible` |
 | Mesure de santé | Valeur Inter, chiffres tabulaires ; statut porté par le badge et son texte | `MetricCard` |
+| Aide sur une mesure | « ? » de 20 px à côté du libellé, cible tactile de 44 px, nom « Qu’est-ce que … ? », sans infobulle ; mène à l’entrée du Lexique (`/analytics/lexique#terme`) | `GlossaryLink`, `lib/glossary.ts`, `lib/glossaryEntries.ts` |
 | Connexion et accès refusé | Même signature au laurier ; widget Clerk relié aux tokens | `AreteWordmark`, `ClerkGate` |
-| Sélecteur de thème | Huit aperçus de même taille avec signature, titre et donnée fictive ; sélection cochée et `aria-pressed` | `AppearanceTab`, `THEMES` |
+| Sélecteur de thème | « Système » (aperçu Pierre en haut, Encre en bas) puis quatre aperçus de même taille avec signature, titre et donnée fictive ; sélection cochée et `aria-pressed` | `AppearanceTab`, `THEMES` |
 | Mouvement | Apparition courte, sans cascade retardant la lecture ; respect du mouvement réduit | `index.css` |
 
 La refonte conserve les routes, formulaires, requêtes, permissions, outils du coach
@@ -86,17 +153,17 @@ enregistrée n’est ajouté.
 
 ## Critères de vérification
 
-1. Passer par les huit thèmes dans Réglages : navigation, labels et boutons restent en Inter.
+1. Passer par les quatre thèmes et « Système » dans Réglages : navigation, labels et boutons restent en Inter.
 2. Comparer Planning, Analyses et Bilan annuel : tous les titres principaux utilisent Cormorant Garamond, graisse 600.
 3. Ouvrir le coach : son titre suit la même règle ; son texte courant reste en Inter.
-4. Vérifier le code Markdown et les aperçus techniques : JetBrains Mono dans les huit thèmes.
+4. Vérifier le code Markdown et les aperçus techniques : JetBrains Mono dans les quatre thèmes.
 5. Vérifier à 390 px et sur bureau : aucun débordement horizontal dû aux titres ; la navigation reste utilisable.
 6. Prévisualiser, abandonner puis enregistrer un thème : conserver les comportements existants.
 7. Exécuter `make check` et les contrôles navigateur pertinents.
 
 ## Validation de l’identité
 
-Les huit spécimens de la planche Figma ont été inspectés : signature et titre en
+Les spécimens de la planche Figma ont été inspectés : signature et titre en
 Cormorant Garamond SemiBold, texte d’interface en Inter, deux instances de marque
 par spécimen (signature et symbole). Les références approuvées restent intactes.
 Les rayons et traitements de contrôles généralisent les composants Pierre/Prune
@@ -104,9 +171,10 @@ existants ; ils constituent l’adaptation produit de cette identité, et non un
 copie de la disposition de la planche de marque.
 
 La vérification locale comprend `make check`, les scénarios Playwright existants,
-et `frontend/browser-tests/design-system.spec.ts` pour les huit thèmes à 390, 430,
+et `frontend/browser-tests/design-system.spec.ts` pour les quatre thèmes à 390, 430,
 768 et 1440 px : polices calculées, couleurs des aperçus, focus clavier, absence de
-débordement horizontal et retour à la préférence enregistrée après rechargement.
+débordement horizontal, retour à la préférence enregistrée après rechargement,
+contrastes AA, « Système » qui suit l’appareil et migration d’un thème retiré.
 
 ## Chiron : chat compact optionnel
 
@@ -138,6 +206,68 @@ Les contrôles Playwright de `chiron.spec.ts` utilisent un flux SSE local contr�
 vérifier la croissance, le plafond, le défilement manuel et le changement de mode en cours
 de réponse, puis le retour au choix sauvegardé après rechargement.
 
+## Chiron — cartes de graphiques
+
+Les graphiques de Chiron prolongent la référence compacte `62:143` : carte opaque
+`Panel`, bordure neutre, rayon partagé de 16 px, titre et données en Inter. Le SVG
+est statique et responsive ; le titre et le résumé restent des éléments React
+accessibles. Les couleurs et les classes de séries viennent de `chartTheme.ts` et
+suivent les quatre thèmes, y compris après réception ou rechargement d’une carte.
+L’iframe isolée reçoit les polices Inter locales embarquées et les tokens du thème.
+Le modèle ne choisit ni CSS, ni police, ni couleur littérale. Une carte invalide
+conserve son résumé et signale l’échec. Les cartes suivent le fil et son ordre de
+réception dans les modes flottant et latéral ; aucun téléchargement n’est proposé.
+
+`chart-cards.spec.ts` vérifie courbes et barres à 390 et 1440 px, les quatre thèmes,
+le rechargement, le changement de fil pendant une réponse et l’isolation du rendu.
+
+## Chiron — jauge de contexte
+
+La [planche de la jauge et de la compaction](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=151-575)
+prolonge le chat compact avec quatre variantes éditables : normal, élevé,
+saturé et compaction. La jauge reste sous le champ, alignée à droite, pour
+préserver la largeur du brouillon et des commandes. Anneau de 16 px, texte
+Inter de 11 px, couleurs sémantiques succès/avertissement/danger des thèmes.
+La cible passe à 44 px sur écran tactile ; la pulsation respecte le mouvement réduit.
+
+Sans compteurs, rien ne s’affiche. Sous 85 %, la jauge apparaît seulement si
+`contextGaugeAlways` est présent dans l’URL. La compaction reste visible avec
+des compteurs, même sous ce seuil. Le pourcentage affiché est plafonné à 100 %.
+L’infobulle au survol, au clavier et au toucher conserve les valeurs réelles et
+indique que la mesure précède la compaction. `ContextWindowGauge` n’effectue
+aucun comptage ni appel réseau : il lit les événements du fil courant.
+
+`context-gauge.spec.ts` vérifie le flux SSE, l’arrêt, le rechargement sans
+compaction bloquée, les brouillons et les thèmes Pierre/Prune à 390 px.
+
+## Analyses — quatre questions
+
+La page s’ouvre sur quatre réponses calculées par le serveur, une phrase chacune
+qui nomme sa période et sa source : « Suis-je prêt ? », « Est-ce que je
+progresse ? », « Où est le risque ? », « Qu’est-ce qui marche ? ». Chaque bloc
+est une surface `--surface-card` dont le liseré gauche reprend le ton
+(`--signal-success|warning|danger`, discret sinon) ; le verdict est dans la
+phrase, la couleur ne fait que le répéter. « Voir les cartes » mène à la section
+de la question, dont la première carte porte les chiffres de la réponse : la
+fraîcheur, puis la préparation ; l’allure et les records ; « Charge des 7
+derniers jours » (ACWR, monotonie, forme de fond gagnée en 7 jours, sans
+graphique) ; « Semaines comparées » (un tableau des semaines par nombre de
+jours d’entraînement). La barre de saut utilise des libellés courts (« Prêt ? »,
+« Progrès », « Risque », « Ce qui marche ») pour tenir sur un téléphone. Le
+sélecteur de période garde ses six choix, en casse naturelle (« 7 j », « 30 j »,
+« 90 j », « 6 mois », « 1 an », « Tout »). Deux colonnes à partir de 640 px de
+contenu, une seule en dessous.
+
+« Qu’est-ce qui marche ? » décrit ce qui a coïncidé avec la hausse de la forme
+de fond, sans verdict : la forme de fond suit la charge, donc plus de jours
+d’entraînement la font monter par construction.
+
+La carte Records (sous « Est-ce que je progresse ? ») liste les meilleurs
+chronos mesurés par la montre et le meilleur 1RM estimé par exercice, sur les
+séances récentes seulement, et dit combien elle en a lues ; chaque chrono mène à
+sa séance. `analytics.spec.ts` vérifie à 390 et 1440 px que les quatre réponses
+précèdent les cartes et que la première tient sur le premier écran.
+
 ## Planning — proposition A
 
 [Référence Figma retenue](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=110-81).
@@ -146,14 +276,16 @@ La semaine affiche sept colonnes sur grand écran ; sous 1050 px de largeur
 Sur mobile, les compteurs deviennent une ligne pour laisser la priorité aux séances.
 La proposition A ne concerne que le contenu de la page : la navigation, la marge de page
 et l’en-tête (`page-title` « Planning » et sous-titre discret) sont ceux des autres pages.
-Les cartes utilisent les tokens communs aux huit thèmes.
+Les cartes utilisent les tokens communs aux quatre thèmes.
 Inter Regular, Medium et SemiBold sont chargés localement avec leurs vraies graisses
 (version 4.0, licence OFL fournie), sans dépendre du gras simulé par le navigateur.
 
 La [référence mobile](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=111-175)
 conserve les jours, les compteurs et le bouton « Ouvrir la séance » sous la carte.
-Les options de filtre, sélection et rafraîchissement sont regroupées dans le menu
-de la barre de semaine. Les cibles tactiles font au moins 44 px :
+Les options de filtre, retour à aujourd’hui, sélection et rafraîchissement sont regroupées
+dans un menu déroulant ancré au bouton de la barre de semaine (`WeekOptions`).
+Échap et un clic extérieur le ferment ; Échap rend le focus au bouton.
+Les cibles tactiles font au moins 44 px :
 le titre d’une carte étend sa cible à la carte entière. Le focus de cette cible
 fusionne avec la bordure de sélection pour éviter deux rectangles imbriqués.
 Les données et les statuts restent ceux du serveur ; aucun retrait Garmin fictif
@@ -186,17 +318,20 @@ Planning ne possède aucune variante de navigation propre à sa page.
   libellés Inter de 10 px et cibles d’au moins 44 × 44 px. L’onglet actif utilise
   la couleur de sélection, l’accent et l’indicateur supérieur du menu commun.
 - Sur bureau : barre de 56 px, signature au laurier, liens Tableau de bord,
-  Planning, Analyses, Journal et Réglages, puis accès au coach. Profil s’insère
-  avant Réglages lorsque la gamification est activée ; les six entrées mobiles
-  restent présentes dans les deux cas.
+  Planning, Analyses, Journal et Réglages, puis Suivi, Profil et Chiron.
+  Profil reste accessible par son icône avec ou sans gamification ; les six
+  entrées mobiles restent présentes dans les deux cas.
 - Les couleurs et rayons suivent les tokens communs. Les textes et les icônes
   des maquettes restent éditables ; les quatre écrans utilisent des instances
   des composants partagés. Le code de référence reste `Navigation.tsx` et
-  `index.css` pour les huit thèmes et les zones de sécurité.
+  `index.css` pour les quatre thèmes et les zones de sécurité.
 
 - `App` réserve les zones de sécurité système et l’espace de la navigation et du
   lanceur. Les tokens `--safe-*`, `--mobile-nav-space` et `--launcher-space` dans
   `index.css` en sont les propriétaires communs, y compris en mode installé.
+  Tant que Chiron est ouvert, `Navigation` publie `--navigation-bottom`, le bord
+  inférieur réel de la barre du bureau (abaissée par l’avis Garmin, puis collée
+  en haut au défilement) : le panneau commence dessous, sans décalage fixe.
 - Le document défile pour les pages. Une navigation vers une autre page repart
   en haut ; le retour navigateur restaure les 100 dernières positions en mémoire.
   La restauration attend au plus deux secondes l’arrivée du contenu différé et
@@ -205,11 +340,23 @@ Planning ne possède aucune variante de navigation propre à sa page.
 - Le Journal présente « Saisir une séance » sous son titre. Cette action reste
   visible en haut pendant le défilement mobile et ouvre le formulaire de l’onglet
   Force ou Cardio. `/log?new=1` ouvre directement la saisie force depuis l’accueil ;
-  `/log?tab=cardio&new=1` ouvre la saisie cardio manuelle. Fermer retire `new` sans
-  ajouter une entrée d’historique.
+  `/log?tab=cardio&new=1` ouvre la saisie cardio manuelle. Ouverte depuis le
+  Journal, la fermer retire `new` sans ajouter une entrée d’historique ; ouverte
+  depuis une autre page (accueil, séance, lien du coach), la fermer y revient, ou
+  revient à l’accueil si le lien a ouvert l’onglet. Il en va de même pour un
+  brouillon (`?draft=`). Un enregistrement cardio reste sur le Journal, où
+  s’affiche l’avis du coach. Les champs de date restent dans leur colonne sur
+  téléphone (320 px compris).
 - `useVisualViewport` fournit une seule mesure de l’espace visible aux dialogues
   et à Chiron. Le clavier ne doit masquer ni les champs ni les commandes ; les
   champs mobiles font au moins 16 px et les commandes tactiles au moins 44 px.
+  Toute liste déroulante porte `ui-input` (composant `Select`, ou la classe seule
+  sur un `<select>` au style propre) : WebKit perd son rendu natif, qui ignorait
+  la hauteur, et le chevron dessiné remplace le sien, sauf en couleurs forcées.
+  Seul le choix de page ou de feuille de l’aperçu de document reste compact
+  (texte de 12 px), au pointeur précis et au-delà de 768 px seulement : sous
+  768 px, la règle des téléphones lui donne 16 px et 44 px, comme au toucher
+  la règle des dialogues.
   Les dialogues bloquent le défilement de fond et restaurent le focus sans
   déplacer la page. Les formulaires longs défilent dans leur panneau.
 - Le Planning commence par le sélecteur de jours, les compteurs et les séances.
@@ -221,12 +368,105 @@ Planning ne possède aucune variante de navigation propre à sa page.
   suivants sont conservés. Le lanceur mobile reste présent en mode latéral.
   Ouvrir, fermer ou déplacer le chat ne crée aucun appel modèle.
 - Les invitations d’installation restent au-dessus du lanceur et s’effacent
-  temporairement devant un dialogue ou le coach. Les zones musculaires peuvent
+  temporairement devant un dialogue ou le coach. Les notifications sont aussi proposées
+  dans la page, aux deux moments où elles servent (`PushOffer`) : sous une séance
+  arrivée (tableau de bord, Journal) et sous le briefing une fois lu. Chaque
+  invitation est une surface `.ui-inset` avec `ui/Button`, une seule fois par
+  appareil, absente si l’appareil est abonné ; sur iPhone hors app installée,
+  elle mène d’abord au guide d’installation. Les zones musculaires peuvent
   être consultées au toucher, sans nécessiter un survol.
+- Les annonces de l’application (`AppNotices`) restent en haut, sous la barre de
+  navigation sur bureau, et s’effacent sur mobile devant le coach ouvert : connexion
+  perdue ou serveur injoignable, puis « Nouvelle version disponible » avec « Recharger ».
+  Surfaces `.glass-panel`, contrôles `ui/Button`, croix de 44 px nommée ; une annonce
+  masquée revient à la panne suivante.
+- Nouvelle version : une page qui se charge (nouvel onglet, actualisation, app
+  relancée) pendant qu’une version attend la prend aussitôt, en un seul rechargement
+  (garde de 30 s contre les boucles). Un onglet déjà ouvert l’annonce ; « Recharger »
+  attend la fin d’une réponse de Chiron en cours, qui ne doit pas être coupée.
+  Une adresse inconnue affiche « Page introuvable » et un lien vers l’accueil.
+- Un statut ne repose jamais sur la seule couleur : récupération, VFC et stress
+  ont un mot à côté de leur valeur. Les titres de panneaux sont des `h2` sous le
+  `h1` de la page ; chaque bouton à icône seule porte un `aria-label`.
 
 Validation : `mobile-ux.spec.ts` utilise Chromium et WebKit en mode tactile à
 320, 390 et 430 px, avec zones de sécurité et clavier simulés. Les scénarios
-existants vérifient les huit thèmes à 390, 430, 768 et 1440 px, les flux SSE et
+existants vérifient les quatre thèmes à 390, 430, 768 et 1440 px, les flux SSE et
 les écritures Planning sur une base jetable. Les captures sont enregistrées
 sous `.context/`. L’émulation ne remplace pas une recette sur iPhone et Android
 réels, notamment pour le clavier système, les barres du navigateur et le mode installé.
+
+## Suivi et automatisations — même identité, mêmes interactions
+
+La [page Figma Suivi et automatisations](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=168-81)
+utilise les navigations bureau/mobile de la page `109:81` et les états Chiron
+compacts de la page `5:81`. Les huit écrans déclinent Suivi et Automatisations,
+bureau et mobile, Pierre et Prune. Les composants de référence restent inchangés.
+
+La boîte est une liste à séparateurs discrets, sans empilement de cartes.
+La cloche ouvre cette même boîte ; les actions de lecture et d’archivage sont
+regroupées dans le menu de chaque ligne. Répondre ou examiner une proposition
+ouvre `AgentSidePanel`, avec son mode, ses dimensions et son focus existants.
+`AutomationReview` fournit seulement le contenu : question et saisie courte,
+ou changements avant/après et actions Approuver, Modifier, Refuser.
+Aucun second dialogue de validation n’est créé. « En parler à Chiron » retrouve
+le brouillon et transmet une référence serveur, sans envoyer de message.
+
+`FollowUp.tsx` et `followUp.css` utilisent les tokens communs et `ui/Button`.
+Le formulaire de programmation remplace temporairement la liste ; les champs
+suivent le déclencheur sélectionné. La séance se choisit dans le planning,
+sans demander un identifiant technique à l’athlète. L’accueil et la boîte lisent
+les mêmes notifications et partagent leur cache de requêtes.
+
+`automations.spec.ts` vérifie les deux thèmes à 390 et 1440 px : menus communs,
+réponse, approbation, conservation du brouillon, création, focus et absence de
+débordement. Consulter ou décider n’effectue aucun appel modèle depuis le navigateur.
+
+## Briefing → conversation Chiron
+
+[Proposition UX éditable : aperçu, nouveau fil, échange](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=166-632).
+
+Le briefing est une entrée vers le coach. Le tableau de bord montre un titre
+Inter actionnable, un aperçu limité à trois lignes et l’heure d’écriture.
+« Briefing du jour » et « En parler avec Chiron » ouvrent une **nouvelle
+conversation**, avec le briefing complet visible avant les échanges. Les anciens
+briefings utilisent le même parcours. Le texte complet n’est jamais tronqué dans
+la conversation ni dans le contexte envoyé au modèle.
+
+- L’ouverture ne lance aucun appel modèle et ne remplit pas la saisie. Le brouillon,
+  les pièces jointes et une réponse en cours restent dans leur fil d’origine.
+- La référence appartient à `CoachThread`, pas à `App` ni à la page. Elle est
+  sauvegardée avec le fil, restaurée au rechargement et incluse dans chaque demande
+  de ce fil. Le serveur relit le briefing par son identifiant, dans le périmètre
+  de l’athlète. Une autre conversation ne reçoit pas cette référence.
+- Le briefing est présenté comme un document de contexte, sans inventer un message
+  assistant ni un reçu de trace. Sa lecture HTTP ne charge pas la pile agent.
+- Les avis sont dans la conversation. `FeedbackRating` possède les deux icônes
+  Lucide et leurs états ; `MessageFeedback` et `BriefingDiscussion` le réutilisent.
+  `index.css` possède `.coach-feedback-action` : rayon de contrôle commun,
+  couleurs du thème, cible tactile de 44 px. Pas de boutons 👍/👎 autonomes,
+  de cercles décoratifs ni de formulaire de commentaire parallèle au chat.
+- Les commentaires déjà enregistrés restent lisibles. Pour préciser son avis,
+  l’athlète écrit à Chiron dans la saisie commune. Les avis du briefing restent
+  enregistrés sur le briefing ; ceux d’une réponse tracée utilisent son reçu.
+- Une erreur de lecture reste visible, avec nouvelle tentative explicite. Un avis
+  non confirmé bloque les autres votes jusqu’à vérification par lecture.
+- La limite de 30 conversations échoue explicitement, sans effacer un brouillon.
+  Les modes flottant et latéral réutilisent la même conversation et le même contexte.
+
+Garde-fous : tests de restauration et d’isolation dans `agentThreads.test.ts` et
+`useCoachThreads.test.tsx`, lectures privées dans `test_briefing_reactions.py`,
+avis partagés dans `BriefingDiscussion.test.tsx`, parcours clavier et captures
+mobile/bureau Pierre/Prune dans `briefing.spec.ts`. Toute évolution de ce parcours
+met à jour ces contrats et conserve la référence de marque `5:81` et le chat `70:201`.
+
+## Conversations sauvegardées
+
+La [proposition éditable](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=271-3203)
+ajoute « Conversations » à Suivi et Automatisations. `ThreadHistory` partage la
+recherche explicite, la liste à séparateurs, le renommage et la pagination entre
+cette page et le panneau Chiron. Les quatre thèmes utilisent les tokens existants.
+Ouvrir un résultat reprend le fil sans appel modèle ni remplissage du brouillon.
+La saisie reste celle de `AgentSidePanel` ; les réponses en cours et les brouillons
+restent dans leur fil d’origine. Une erreur de sauvegarde est visible et conserve
+la copie locale. La limite de 30 devient une taille de page, pas une rétention.

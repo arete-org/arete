@@ -8,6 +8,7 @@ from urllib.parse import parse_qsl
 
 import httpx
 import pytest
+from agent_clock import CLOCK
 from pydantic import ValidationError
 
 from arete.dataio.db import db_connection
@@ -520,6 +521,8 @@ def test_the_calendar_is_built_for_the_runs_account_only():
 def test_configured_calendar_is_preloaded_only_for_chat(calendar, monkeypatch):
     from unittest.mock import patch
 
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+
     from arete import coaching
     from arete.services.athlete_scope import athlete_scope
 
@@ -528,7 +531,11 @@ def test_configured_calendar_is_preloaded_only_for_chat(calendar, monkeypatch):
     with (
         athlete_scope(1),
         patch.object(coaching, "get_calendar_service") as factory,
-        patch.object(coaching, "build_chat_model"),
+        patch.object(
+            coaching,
+            "build_chat_model",
+            return_value=GenericFakeChatModel(messages=iter([])),
+        ),
         patch.object(coaching, "build_agent") as build,
     ):
         for mission in ("chat", "briefing", "feedback"):
@@ -603,7 +610,9 @@ def test_calendar_tools_stream_proposal_without_writing(calendar):
         async for part in stream_agent(
             graph,
             {"messages": [HumanMessage("Planifie ma course")]},
-            context=AgentContext(thread_id="thread", account_id="user_athlete"),
+            context=AgentContext(
+                current_datetime=CLOCK, thread_id="thread", account_id="user_athlete"
+            ),
         ):
             events.extend(projection.events(part))
         return events

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine, FileText, LoaderCircle, Paperclip, Trash2, X } from 'lucide-react';
 import { ACCEPTED_FILES, documentsApi, downloadDocument, uploadDocument, type CoachDocument } from '@/lib/documents';
 import { DocumentPreview } from './DocumentPreview';
+import { readableError } from '@/lib/utils';
 
 export interface AttachmentsHandle { choose: () => void; upload: (files: File[]) => void }
 
@@ -31,7 +32,7 @@ export function DocumentAttachments({ threadId, disabled = false, ref, onBusy, o
           const doc = await uploadDocument(threadId, file, abort.signal, message => setProgress(`${file.name} · ${message}`));
           if (!selected.includes(doc.id)) { selected.push(doc.id); onDocuments([...selected]); }
         }
-        catch (error) { setErrors(previous => [...previous, `${file.name} : ${abort.signal.aborted ? 'Envoi annulé. Supprime le fichier incomplet avant de le renvoyer.' : error instanceof Error ? error.message : 'Envoi impossible.'}`]); }
+        catch (error) { setErrors(previous => [...previous, `${file.name} : ${abort.signal.aborted ? 'Envoi annulé. Supprime le fichier incomplet avant de le renvoyer.' : readableError(error)}`]); }
       }
     } finally {
       // Keep Send blocked until the library includes the finalized extraction.
@@ -41,7 +42,7 @@ export function DocumentAttachments({ threadId, disabled = false, ref, onBusy, o
   };
   useImperativeHandle(ref, () => ({ choose: () => input.current?.click(), upload: files => { void upload(files); } }));
   const action = async (work: () => Promise<unknown>) => {
-    try { await work(); } catch (error) { setErrors(previous => [...previous.slice(-19), error instanceof Error ? error.message : 'Opération impossible.']); }
+    try { await work(); } catch (error) { setErrors(previous => [...previous.slice(-19), readableError(error)]); }
   };
   const picker = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
@@ -95,7 +96,7 @@ export function DocumentAttachments({ threadId, disabled = false, ref, onBusy, o
     </div>}
     {(busy || query.error || errors.length > 0) && <div className="col-span-full row-start-2 mt-2 flex min-w-0 flex-col gap-2">
       {busy && <div role="status" aria-live="polite" className="flex items-center gap-2 text-text-secondary"><LoaderCircle size={14} className="animate-spin" /><span className="min-w-0 flex-1 break-words">{progress || 'Préparation…'}</span><button className="min-h-11" onClick={() => controller.current?.abort()}>Annuler</button></div>}
-      {query.error && <p role="alert" className="text-danger-red">{query.error.message}</p>}
+      {query.error && <p role="alert" className="text-danger-red">{readableError(query.error)}</p>}
       {errors.map((error, i) => <p role="alert" key={i} className="text-danger-red break-words">{error}</p>)}
     </div>}
     {source && <DocumentPreview threadId={threadId} document={source} onClose={() => setSource(null)} />}

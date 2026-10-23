@@ -41,6 +41,12 @@ export const ZONE_LABEL: Record<ZoneKind, Record<string, string>> = {
 export const zoneLabel = (kind: ZoneKind, zone: string | null | undefined): string =>
   !zone || zone === 'unknown' ? 'inconnu' : (ZONE_LABEL[kind][zone] ?? zone.replace(/_/g, ' '));
 
+/** A label shown alone (badge, chip, option) in natural case: « inconnu » → « Inconnu ». */
+export const capitalized = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** A backend key with no French label yet, readable on its own: « open_water » → « Open water ». */
+export const readableKey = (key: string): string => capitalized(key.replace(/_/g, ' ').trim());
+
 /** "7h12" from seconds, for sleep durations. */
 export function formatHoursMinutes(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -81,7 +87,7 @@ export const SPORT_LABEL: Record<string, string> = {
 };
 
 export const sportLabel = (sport: string | null | undefined): string =>
-  sport ? (SPORT_LABEL[sport.toLowerCase()] ?? sport.replace(/_/g, ' ')) : 'Autre';
+  sport ? (SPORT_LABEL[sport.toLowerCase()] ?? readableKey(sport)) : 'Autre';
 
 /** The morning adaptation's decisions (services/adaptation.py). */
 export const DECISION_LABEL: Record<string, string> = {
@@ -89,6 +95,8 @@ export const DECISION_LABEL: Record<string, string> = {
   ease: 'Allégée',
   replace_easy: 'Remplacée',
   rest: 'Repos',
+  move: 'Déplacée',
+  drop: 'Laissée de côté',
 };
 
 /** "08:05" in the browser's time zone, from an ISO timestamp. */
@@ -106,6 +114,26 @@ export const PHASE_LABEL: Record<string, string> = {
 
 export const phaseLabel = (phase: string): string => PHASE_LABEL[phase] ?? phase;
 
+/** Session kinds of a Hyrox or hybrid plan (features/hybrid_plan.py, services/plan_summary.py). */
+export const PLAN_KIND_LABEL: Record<string, string> = {
+  race: 'course',
+  key_run: 'course clé',
+  compromised: 'course compromise',
+  easy: 'footing',
+  heavy_lower: 'bas du corps',
+  upper: 'haut du corps',
+  station: 'circuit stations',
+  activation: 'activation',
+  benchmark: 'test de fin de bloc',
+};
+
+/** The athlete's level a Hyrox or hybrid plan is sized for. */
+export const LEVEL_LABEL: Record<string, string> = {
+  novice: 'débutant',
+  intermediate: 'intermédiaire',
+  advanced: 'confirmé',
+};
+
 /** Kinds of durable athlete facts (services/athlete_facts.py). */
 export const FACT_KIND_LABEL: Record<string, string> = {
   injury: 'blessure',
@@ -114,3 +142,38 @@ export const FACT_KIND_LABEL: Record<string, string> = {
   goal: 'objectif',
   other: 'autre',
 };
+
+/**
+ * "9 des 12 dernières semaines à l’objectif de charge": the regularity a missed
+ * week lowers by one. The goal is the weekly load (TSS), not a session count.
+ */
+export function weeksAtGoalText(hit: number, weeks: number): string {
+  if (weeks === 1) return hit ? 'Dernière semaine à l’objectif de charge' : 'Dernière semaine sous l’objectif de charge';
+  return `${hit} des ${weeks} dernières semaines à l’objectif de charge`;
+}
+
+/**
+ * Removing a plan or its goal keeps its sessions already changed (by the athlete or the coach,
+ * skipped) and those whose Garmin export is unsettled (services/plan_builder.py): how many.
+ */
+export function keptEditsText(kept: number): string {
+  return kept > 1
+    ? `${kept} séances restent dans ton planning : déjà modifiées, ou avec un envoi Garmin à vérifier.`
+    : `${kept} séance reste dans ton planning : déjà modifiée, ou avec un envoi Garmin à vérifier.`;
+}
+
+/** "1,12", "+4,2": French decimals with a fixed precision; `signed` marks a positive value. */
+export function formatDecimal(value: number, digits: number, signed = false): string {
+  return value.toLocaleString('fr-FR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    signDisplay: signed ? 'exceptZero' : 'auto',
+  });
+}
+
+/** "7 h 12", "8 h" on the hour: a time of day as French text reads it. */
+export function frenchClock(iso: string): string {
+  const at = new Date(iso);
+  const minutes = at.getMinutes();
+  return minutes ? `${at.getHours()} h ${String(minutes).padStart(2, '0')}` : `${at.getHours()} h`;
+}

@@ -7,6 +7,10 @@ const session = {
   revision: 1, target_duration_min: 40, target_distance_km: null, target_hr_zone: 2, target_intensity: null, garmin_workout_id: null, garmin_pushed_at: null,
 };
 
+/** The form curve's own request: lazy, after the dashboard, never in its first burst. */
+const CURVE = 'GET /api/dashboard/form-curve';
+const eager = (requests: string[]) => requests.filter(r => r !== CURVE);
+
 /**
  * The dashboard's answers; `hold` keeps matching requests unanswered (a cold or
  * unreachable server) and `answer` replaces an answer when it returns one.
@@ -22,6 +26,7 @@ async function dashboard(
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     requests.push(`${route.request().method()} ${path}`);
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     const delay = hold(path);
     if (delay === null) return; // never answered
     if (delay) await new Promise(resolve => setTimeout(resolve, delay));
@@ -29,8 +34,12 @@ async function dashboard(
     if (own !== undefined) return route.fulfill({ json: own });
     const json =
       path === '/api/settings' ? { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' }
+      : path === '/api/onboarding' ? { status: 'completed', revision: 1 }
       : path === '/api/settings/gamification' ? { enabled: false, opted_in: false, available: true, version: 1 }
       : path === '/api/dashboard' ? dashboardAnswer({ planned: [session] })
+      : path === '/api/coach/today' ? dashboardAnswer().coach
+      : path === '/api/coach/attention' ? { enabled: false, mode: 'observation', items: [], remaining: 0, primary_ref: null }
+      : path === '/api/garmin/sync/ensure' ? { state: 'fresh' }
       : [];
     await route.fulfill({ json }).catch(() => {}); // the page may have moved on
   });
@@ -55,7 +64,7 @@ test('the page frame shows at once, today’s session with the one answer, whate
   await expect(page.getByText('Chargement de la progression…')).toBeVisible();
 });
 
-test('the dashboard loads with at most four requests, its slices read from one answer', async ({ page }) => {
+test('the dashboard loads with seven reads and one freshness check, attention waits for the board', async ({ page }) => {
   // The worst case short of the RPG: Garmin connected and today's session still to send.
   const requests = await dashboard(page, () => 0, (route, path) => {
     if (path === '/api/dashboard') return dashboardAnswer({
@@ -77,10 +86,15 @@ test('the dashboard loads with at most four requests, its slices read from one a
   await expect(page.getByText(/Semi de Lyon/)).toBeVisible();
   await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
   await page.waitForLoadState('networkidle');
-  // The app shell's settings and game preference, the dashboard, the watch card's export view.
-  expect([...requests].sort(), requests.join('\n')).toEqual([
-    'GET /api/dashboard', 'GET /api/garmin/workouts', 'GET /api/settings', 'GET /api/settings/gamification',
+  // The additional attention projection is bounded and starts after the board settles.
+  expect(eager(requests).sort(), requests.join('\n')).toEqual([
+    'GET /api/coach/attention', 'GET /api/dashboard', 'GET /api/garmin/workouts', 'GET /api/notifications', 'GET /api/onboarding', 'GET /api/settings', 'GET /api/settings/gamification',
+    'POST /api/garmin/sync/ensure',
   ]);
+  expect(requests.indexOf('GET /api/coach/attention')).toBeGreaterThan(requests.indexOf('GET /api/dashboard'));
+  // The form curve is the page's one lazy read: once, after the dashboard answered.
+  expect(requests.filter(r => r === CURVE)).toHaveLength(1);
+  expect(requests.indexOf(CURVE)).toBeGreaterThan(requests.indexOf('GET /api/dashboard'));
 });
 
 test('today’s session goes to the watch through the export view and shows when', async ({ page }) => {
@@ -151,16 +165,25 @@ test('a repeat visit and a focus refresh stay within the budget, the coach card 
   await expect(page.getByText('Footing du jour')).toBeVisible();
   await expect(page.getByText('Comment était la séance ?')).toBeVisible();
   await page.waitForLoadState('networkidle');
-  expect([...requests].sort(), requests.join('\n')).toEqual(['GET /api/dashboard', 'GET /api/settings', 'GET /api/settings/gamification']);
+  expect(eager(requests).sort(), requests.join('\n')).toEqual([
+    'GET /api/coach/attention', 'GET /api/dashboard', 'GET /api/notifications', 'GET /api/onboarding', 'GET /api/settings', 'GET /api/settings/gamification', 'POST /api/garmin/sync/ensure',
+  ]);
+  expect(requests.filter(r => r === CURVE).length).toBeLessThanOrEqual(1);
 
   // Past the 30 s freshness, the athlete comes back to the tab.
   requests.length = 0;
+  // The reload already reached `networkidle`, which would not wait again. The coach
+  // card reads once the board has answered: its answer closes the refresh.
+  const attention = page.waitForResponse(r => new URL(r.url()).pathname === '/api/coach/attention', { timeout: 10_000 });
   await page.clock.fastForward('00:45');
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-  await expect.poll(() => requests.includes('GET /api/dashboard')).toBe(true);
-  await page.waitForLoadState('networkidle');
-  expect(requests.filter(r => r.endsWith('/coach/today') || r.endsWith('/tips/daily')), requests.join('\n')).toEqual([]);
-  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(4);
+  await attention;
+  expect(requests, requests.join('\n')).toContain('GET /api/dashboard');
+  expect(requests.filter(r => r.endsWith('/coach/today') || r.endsWith('/tips/daily') || r === CURVE), requests.join('\n')).toEqual([]);
+  // Progress refreshes too: another device may have confirmed the athlete's profile.
+  expect(requests.filter(r => r === 'GET /api/onboarding')).toHaveLength(1);
+  expect(requests.filter(r => r === 'GET /api/coach/attention')).toHaveLength(1);
+  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(6);
 });
 
 test('a dashboard that fails says so with a retry, and the coach card and briefing load on their own', async ({ page }) => {
@@ -168,8 +191,11 @@ test('a dashboard that fails says so with a retry, and the coach card and briefi
   const reads: string[] = [];
   await page.route('**/api/**', async (route: Route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
+    if (path === '/api/onboarding') return route.fulfill({ json: { status: 'completed', revision: 1 } });
     reads.push(path);
+    if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh' } });
     if (path === '/api/dashboard') return failing ? route.fulfill({ status: 500, body: 'boom' }) : route.fulfill({ json: dashboardAnswer({ planned: [session] }) });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, display_name: 'HUNTER' } });
     if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: false, opted_in: false, available: true, version: 1 } });
@@ -179,7 +205,7 @@ test('a dashboard that fails says so with a retry, and the coach card and briefi
   });
   await page.goto('/');
   await expect(page.getByText('Séance du jour indisponible.')).toBeVisible();
-  await expect(page.getByText('Récupération indisponible.')).toBeVisible();
+  await expect(page.getByText('Préparation indisponible.')).toBeVisible();
   await expect(page.getByText('Statistiques indisponibles.')).toBeVisible();
   await expect(page.getByText('Repos — aucune séance prévue')).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Connecter Garmin' })).toHaveCount(0);

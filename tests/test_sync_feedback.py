@@ -197,20 +197,34 @@ class TestSyncFeedback:
 
 class TestDailySync:
     def _garmin(self, session_ids):
-        garmin = MagicMock()
-        garmin.has_tokens.return_value = True
+        from arete.garmin.client import GarminClient
+
         sync_client = MagicMock()
         sync_client.sync_activities.return_value = MagicMock(
             activities_synced=len(session_ids), errors=[], session_ids=session_ids
         )
         return (
-            patch("arete.garmin.client.GarminClient", return_value=garmin),
-            patch("arete.garmin.sync.GarminSyncClient", return_value=sync_client),
+            # Only the method: replacing the class would leave its mock bound in
+            # any module first imported under this patch (arete.garmin.health_sync).
+            patch.object(GarminClient, "has_tokens", return_value=True),
+            patch(
+                "arete.services.garmin_sync.ensure_fresh",
+                return_value={
+                    "imported": len(session_ids),
+                    "session_ids": session_ids,
+                    "errors": [],
+                    "state": "complete",
+                    "health_checked_at": "2026-10-13",
+                },
+            ),
             patch("arete.garmin.health_sync.sync_range", return_value=[]),
             patch("arete.garmin.readiness.update_readiness_range"),
             patch("arete.services.plan_adaptation.adapt_today", return_value=[]),
             patch("arete.services.plan_adaptation.push_today", return_value="0"),
-            patch("arete.api.strava._get_strava_tokens", return_value=None),
+            patch(
+                "arete.services.coaching_repository.SessionFeedbackRepository.pending_garmin",
+                return_value=([], 0),
+            ),
             patch("arete.services.notifications.notify"),
         )
 
@@ -245,6 +259,30 @@ class TestDailySync:
         write.assert_not_called()
         assert "feedback" not in status
 
+    def test_on_use_import_gets_feedback_in_the_next_daily_run(self):
+        from contextlib import ExitStack
+
+        from arete import scheduler
+
+        with ExitStack() as stack:
+            for p in self._garmin([]):
+                stack.enter_context(p)
+            stack.enter_context(
+                patch(
+                    "arete.services.coaching_repository.SessionFeedbackRepository.pending_garmin",
+                    return_value=([17], 1),
+                )
+            )
+            write = stack.enter_context(
+                patch(
+                    "arete.coaching.write_sync_feedback",
+                    return_value={"sessions": 1, "agent": 1, "written": []},
+                )
+            )
+            status = scheduler.daily_sync()
+        write.assert_called_once_with([17])
+        assert status["feedback_pending"] == "1"
+
     def test_a_failing_feedback_is_reported_not_raised(self):
         from contextlib import ExitStack
 
@@ -269,9 +307,15 @@ class TestDailySync:
 
         calls: list[str] = []
 
-        def enrich(ids):
+        def refresh(**kwargs):
             calls.append("conditions")
-            return {"terrain": 2, "weather": 1}
+            return {
+                "imported": 2,
+                "session_ids": [4, 5],
+                "errors": [],
+                "state": "complete",
+                "conditions": {"terrain": 2, "weather": 1},
+            }
 
         def feedback(ids):
             calls.append("feedback")
@@ -280,17 +324,14 @@ class TestDailySync:
         with ExitStack() as stack:
             for p in self._garmin([4, 5]):
                 stack.enter_context(p)
-            enriched = stack.enter_context(
-                patch(
-                    "arete.services.session_conditions.enrich_sessions",
-                    side_effect=enrich,
-                )
+            refreshed = stack.enter_context(
+                patch("arete.services.garmin_sync.ensure_fresh", side_effect=refresh)
             )
             stack.enter_context(
                 patch("arete.coaching.write_sync_feedback", side_effect=feedback)
             )
             status = scheduler.daily_sync()
-        enriched.assert_called_once_with([4, 5])
+        refreshed.assert_called_once_with(force=True, daily=True)
         assert calls == ["conditions", "feedback"]
         assert status["conditions"] == "2 terrain, 1 weather"
 
@@ -375,6 +416,24 @@ class TestPostSessionPush:
         assert notify_calls[0][0].args[2] == f"/log/sessions/{session_id}?rpe=1"
         assert notify_calls[1] == []
         run.assert_not_called()  # nor is the feedback paid for twice
+
+    def test_post_session_pushes_off_fall_back_to_the_imports_count(self):
+        written = [{"session_id": 4, "date": date(2031, 5, 6), "text": "Bien."}]
+        with patch(
+            "arete.services.notifications.kind_allowed",
+            side_effect=lambda kind: kind != "post_session",
+        ):
+            notify, _ = self._run([4, 5], written)
+        notify.assert_called_once_with(
+            "Arete", "2 séance(s) importée(s)", "/log?tab=cardio", kind="imports"
+        )
+
+    def test_a_session_whose_feedback_was_not_stored_is_counted(self):
+        # The feedback run succeeded but stored nothing for session 4.
+        notify, _ = self._run([4], [])
+        notify.assert_called_once_with(
+            "Arete", "1 séance(s) importée(s)", "/log?tab=cardio", kind="imports"
+        )
 
     def test_the_athlete_rpe_reaches_the_coach_facts(self, memory, synced):
         from arete.services.coaching_rules import sync_feedback

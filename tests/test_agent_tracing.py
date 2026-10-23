@@ -8,6 +8,7 @@ from threading import Barrier, Lock
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from agent_clock import CLOCK
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_core.outputs import ChatGenerationChunk
@@ -41,8 +42,16 @@ def invoke(state, *, context):
     )
 
 
-def stream_run(state, *, context):
-    return execution.stream_agent(graph_for(context), state, context=context)
+async def stream_run(state, *, context):
+    from contextlib import aclosing
+
+    from anyio import to_thread
+
+    # Composition reads the rollout flag: never on the event loop.
+    graph = await to_thread.run_sync(graph_for, context)
+    async with aclosing(execution.stream_agent(graph, state, context=context)) as run:
+        async for part in run:
+            yield part
 
 
 class FakeCoach(GenericFakeChatModel):
@@ -202,10 +211,12 @@ def test_concurrent_profiles_keep_instructions_and_traces_isolated(
     with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(run, tasks, timeout=10))
     assert all(r["messages"][-1].content == "ok" for r in results)
-    assert factory.call_count == 3  # One main model per declarative profile.
+    assert factory.call_count == 4  # Three main models plus chat's summary client.
     for messages in model._seen:
         task = next(
-            m.content for m in messages if m.type == "human" and m.content in tasks
+            m.text.split("\n", 1)[0]
+            for m in messages
+            if m.type == "human" and m.text.split("\n", 1)[0] in tasks
         )
         prompt = messages[0].content
         assert TASK_INSTRUCTIONS[task] in prompt
@@ -236,7 +247,7 @@ def test_native_dynamic_and_filesystem_tools_stay_in_one_trace(
                 "journal",
             ),
             tool_call("get_workload", {"days": 0}, "dynamic"),
-            tool_call("read_file", {"file_path": "/notes.md"}, "memory"),
+            tool_call("read_file", {"file_path": "/memories/notes.md"}, "memory"),
             AIMessage(
                 content="Finished.",
                 usage_metadata={
@@ -250,7 +261,12 @@ def test_native_dynamic_and_filesystem_tools_stay_in_one_trace(
     if streaming:
 
         async def consume():
-            return [part async for part in stream_run(state(), context=AgentContext())]
+            return [
+                part
+                async for part in stream_run(
+                    state(), context=AgentContext(current_datetime=CLOCK)
+                )
+            ]
 
         parts = asyncio.run(consume())
         events = [p["data"] for p in parts if p["type"] == "custom"]
@@ -335,7 +351,12 @@ def test_inference_errors_close_the_root_and_model_spans(
         if streaming:
 
             async def consume():
-                return [p async for p in stream_run(state(), context=AgentContext())]
+                return [
+                    p
+                    async for p in stream_run(
+                        state(), context=AgentContext(current_datetime=CLOCK)
+                    )
+                ]
 
             asyncio.run(consume())
         else:
@@ -426,7 +447,9 @@ def test_early_stream_close_finishes_trace_in_its_original_context(
 
     async def consume():
         before = get_tracing_context().copy()
-        async with aclosing(stream_run(state(), context=AgentContext())) as stream:
+        async with aclosing(
+            stream_run(state(), context=AgentContext(current_datetime=CLOCK))
+        ) as stream:
             async with asyncio.timeout(5):
                 async for part in stream:
                     if part["type"] == "messages":
@@ -479,7 +502,12 @@ def test_dynamic_tool_exception_is_traced_and_propagated(
         if streaming:
 
             async def consume():
-                return [p async for p in stream_run(state(), context=AgentContext())]
+                return [
+                    p
+                    async for p in stream_run(
+                        state(), context=AgentContext(current_datetime=CLOCK)
+                    )
+                ]
 
             asyncio.run(consume())
         else:
@@ -519,7 +547,8 @@ def test_task_limits_reach_both_execution_paths(monkeypatch, task, limit):
             async for p in stream_run(
                 state(),
                 context=AgentContext(
-                    profile="feedback" if task == "session_feedback" else task
+                    current_datetime=CLOCK,
+                    profile="feedback" if task == "session_feedback" else task,
                 ),
             )
         ]
@@ -548,7 +577,7 @@ def test_unattended_runs_do_not_emit_ui_tool_events(monkeypatch):
     install_model(
         monkeypatch,
         [
-            tool_call("read_file", {"file_path": "/notes.md"}, "memory"),
+            tool_call("read_file", {"file_path": "/memories/notes.md"}, "memory"),
             AIMessage(content="feedback"),
         ],
     )
@@ -556,7 +585,10 @@ def test_unattended_runs_do_not_emit_ui_tool_events(monkeypatch):
     async def consume():
         return [
             p
-            async for p in stream_run(state(), context=AgentContext(profile="feedback"))
+            async for p in stream_run(
+                state(),
+                context=AgentContext(current_datetime=CLOCK, profile="feedback"),
+            )
         ]
 
     assert not [p for p in asyncio.run(consume()) if p["type"] == "custom"]
@@ -572,13 +604,13 @@ def test_invalid_tracing_switch_is_a_configuration_error(monkeypatch):
 def test_chat_turns_share_thread_metadata_without_reusing_trace_or_date(
     monkeypatch, recorder, streaming
 ):
-    from datetime import date, timedelta
+    from datetime import UTC, datetime, timedelta
 
     turn_ids = []
     model, factory = install_model(monkeypatch, [AIMessage(content="ok")] * 3)
     for index, thread_id in enumerate(("thread-a", "thread-a", "thread-b")):
-        today = date(2026, 10, 8) + timedelta(days=index)
-        context = AgentContext(thread_id=thread_id, current_date=today)
+        now = datetime(2026, 10, 8, 12, 30, tzinfo=UTC) + timedelta(days=index)
+        context = AgentContext(thread_id=thread_id, current_datetime=now)
         turn_ids.append(context.run_id)
         if streaming:
 
@@ -588,10 +620,11 @@ def test_chat_turns_share_thread_metadata_without_reusing_trace_or_date(
             asyncio.run(consume())
         else:
             invoke(state(), context=context)
-        prompt = model._seen[-1][0].content
-        assert f"Date actuelle : {today.isoformat()}" in prompt
-        assert f"Demain : {(today + timedelta(days=1)).isoformat()}" in prompt
-    factory.assert_called_once()
+        assert "<server_datetime>" not in model._seen[-1][0].text
+        prompt = next(m.text for m in reversed(model._seen[-1]) if m.type == "human")
+        assert now.isoformat(timespec="seconds") in prompt
+        assert f"Demain : {(now.date() + timedelta(days=1)).isoformat()}" in prompt
+    assert factory.call_count == 2  # Main and summary clients are cached across turns.
     runs, roots = assert_trace_tree(recorder, roots=3)
     assert len({r["trace_id"] for r in roots}) == 3
     assert {r["id"] for r in roots} == set(turn_ids)

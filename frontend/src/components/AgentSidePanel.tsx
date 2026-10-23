@@ -1,10 +1,14 @@
+import { AutomationReview } from './agent/AutomationReview';
 import type { CoachDisplay } from '@/hooks/useCoachDisplay';
 import { CoachDisplayOptions } from './agent/CoachDisplayOptions';
 import { CoachMemory, MemoryReceipt } from './agent/CoachMemory';
-import { CoachReferenceCard } from './agent/CoachReferenceCard';
-import type { CoachReference } from '@/lib/coachToday';
+import { CoachReferenceCard, FollowupReference, ProposalReference } from './agent/CoachReferenceCard';
+import { BriefingDiscussion } from './agent/BriefingDiscussion';
+import { OnboardingContext } from './agent/OnboardingContext';
+import { EveningDiscussion } from './agent/EveningDiscussion';
 import { MessageFeedback } from './agent/MessageFeedback';
 import { SkillInput } from './agent/SkillInput';
+import { ContextWindowGauge } from './agent/ContextWindowGauge';
 import { useGamePreference } from '@/lib/gamification';
 import { AreteMark } from './AreteBrand';
 import { MessageAttachments } from './agent/MessageAttachments';
@@ -43,9 +47,12 @@ import { CoachActivity, CoachPresence } from './agent/CoachActivity';
 import { canRetryMessage, isThinking } from '@/lib/agentActivity';
 import { DocumentAttachments, type AttachmentsHandle } from './agent/DocumentAttachments';
 import { CalendarActionCard } from './agent/CalendarActionCard';
+import { ChartCard } from './agent/ChartCard';
+import { coachWords } from '@/lib/coachName';
 
 const PAGE_LABELS: Record<string, string> = {
   dashboard: 'Tableau de bord',
+  follow_up: 'Suivi',
   planning: 'Planning',
   analytics: 'Analyses',
   log: 'Carnet',
@@ -81,7 +88,7 @@ const MessageSurfaces = memo(function MessageSurfaces({
   for (const part of parts) {
     if (part.kind === 'text') {
       if (part.text.trim()) groups.push(part);
-    } else if (part.kind === 'calendar_action' || (part.kind === 'coach_card' && part.ref_kind !== 'fact')) groups.push(part);
+    } else if (part.kind === 'chart_card' || part.kind === 'calendar_action' || (part.kind === 'coach_card' && part.ref_kind !== 'fact')) groups.push(part);
     else if (!chiron && part === tools[0]) groups.push(tools);
   }
   return (
@@ -92,7 +99,7 @@ const MessageSurfaces = memo(function MessageSurfaces({
         ) : part.kind === 'text' ? (
           chiron ? <div key={`text-${part.id}`} className="coach-answer-part"><AgentMarkdown text={part.text} /></div>
             : <AgentMarkdown key={`text-${part.id}`} text={part.text} />
-        ) : part.kind === 'coach_card' ? <CoachReferenceCard key={part.id} reference={part} /> : part.kind === 'calendar_action' ? (
+        ) : part.kind === 'chart_card' ? <ChartCard key={part.id} chart={part} /> : part.kind === 'coach_card' ? <CoachReferenceCard key={part.id} reference={part} /> : part.kind === 'calendar_action' ? (
           <CalendarActionCard key={`calendar-${part.id}`} id={part.id} />
         ) : null
       )}
@@ -115,8 +122,6 @@ const MessageSurfaces = memo(function MessageSurfaces({
 });
 
 export function AgentSidePanel({
-  reference,
-  onClearReference,
   open,
   onClose,
   onBusyChange,
@@ -127,23 +132,22 @@ export function AgentSidePanel({
   display?: CoachDisplay;
   onDisplayChange?: (mode: CoachDisplay) => void;
   displayError?: string | null;
-  reference?: CoachReference | null;
-  onClearReference?: () => void;
   open: boolean;
   onClose: () => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
   const floating = display === 'floating';
-  const pageContext = usePanelContext();
-  const panelContext = { ...pageContext, params: { ...pageContext.params, ...(reference ? { coach_ref: `${reference.kind}:${reference.id}` } : {}) } };
+  const panelContext = usePanelContext();
   const [showMemory, setShowMemory] = useState(false);
   const { data: preference } = useGamePreference();
   const rpg = preference?.enabled === true;
-  const [expanded, setExpanded] = useState(false);
+  const coachLabel = coachWords(rpg);
+  const expanded = display === 'expanded';
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const coach = useCoachThreads(panelContext, true);
   const { active, store, runningId } = coach;
+  const reference = active.reference;
   const messages = active.messages;
   const attachmentsRef = useRef<AttachmentsHandle>(null);
   const [documentBusyByThread, setDocumentBusyByThread] = useState<Record<string, boolean>>({});
@@ -223,12 +227,19 @@ export function AgentSidePanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose, showHistory, showMemory, deleteId]);
 
+  useEffect(() => {
+    const reveal = () => { setShowHistory(false); setShowMemory(false); followRef.current = true; setFollowing(true); };
+    window.addEventListener('arete:coach-discuss', reveal);
+    window.addEventListener('arete:conversation-open', reveal);
+    return () => { window.removeEventListener('arete:coach-discuss', reveal); window.removeEventListener('arete:conversation-open', reveal); };
+  }, []);
+
   const followLatest = () => {
     followRef.current = true;
     setFollowing(true);
   };
   const selectThread = (id: string) => {
-    coach.select(id);
+    void coach.openArchived(id);
     setShowHistory(false);
     followLatest();
   };
@@ -242,7 +253,7 @@ export function AgentSidePanel({
   };
 
   if (!open) return null;
-  const page = PAGE_LABELS[panelContext.page] ?? panelContext.page;
+  const page = reference?.kind === 'briefing' ? 'Briefing' : reference?.kind === 'evening' ? 'Message du soir' : PAGE_LABELS[panelContext.page] ?? panelContext.page;
   return (
     <aside
       onDragEnter={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
@@ -251,8 +262,9 @@ export function AgentSidePanel({
       onDrop={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); dragDepth.current = 0; setDragging(false); if (!busy) attachmentsRef.current?.upload(Array.from(event.dataTransfer.files)); }}
       id="coach-panel"
       data-display={display}
+      data-context={reference?.kind === 'briefing' || reference?.kind === 'onboarding' || reference?.kind === 'evening' || reference?.kind === 'followup' || reference?.kind === 'proposal' ? 'attached' : 'page'}
       data-view={showMemory || showHistory ? 'auxiliary' : 'conversation'}
-      className={cn("coach-panel fixed right-0 z-40 flex w-full flex-col border-l border-text-muted/20 shadow-2xl", rpg ? 'bg-void' : 'bg-abyss', !floating && rpg && expanded ? "max-w-none md:px-[max(24px,calc((100vw-800px)/2))]" : "max-w-[520px]")}
+      className={cn("coach-panel fixed right-0 z-40 flex w-full flex-col border-l border-text-muted/20 shadow-2xl", rpg ? 'bg-void' : 'bg-abyss', expanded ? "max-w-none" : "max-w-[520px]")}
       role="complementary"
       aria-label="Coach IA"
     >
@@ -260,18 +272,18 @@ export function AgentSidePanel({
       <header className="coach-header flex shrink-0 items-center gap-2 border-b border-text-muted/15 px-4 py-3">
         {floating ? <>
           <AreteMark size={18} />
-          <h2 className="coach-title">Chiron</h2>
+          <h2 className="coach-title">{coachLabel.name}</h2>
           <span className="min-w-0 flex-1 truncate text-[11px] text-text-muted">{page}</span>
         </> : <>
         <div className={cn('flex size-9 shrink-0 items-center justify-center', !rpg && 'rounded-xl border border-neon-cyan/15 bg-neon-cyan/5')}>
           <AreteMark size={36} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="coach-title text-sm font-semibold">{rpg ? 'Chiron' : 'Coach Arete'}</h2>
+          <h2 className="coach-title text-sm font-semibold">{coachLabel.name}</h2>
           {rpg ? <button onClick={() => setShowHistory(true)} aria-label="Changer de conversation" className="mt-0.5 flex max-w-full items-center gap-1 text-[11px] text-text-muted hover:text-text-primary"><span className="truncate">{active.title}</span><ChevronDown className="size-3 shrink-0" /></button> : <p className="mt-0.5 text-[11px] text-text-muted">{page}</p>}
         </div>
-        <button className="min-h-11 rounded px-2 text-xs text-text-muted hover:text-text-primary" aria-label="Ce que Chiron sait de moi" aria-expanded={showMemory} onClick={() => { setShowMemory(value => !value); setShowHistory(false); }}>Mémoire</button>
-        {rpg && <button aria-label={expanded ? 'Réduire la conversation' : 'Agrandir la conversation'} onClick={() => setExpanded(!expanded)} className="ml-auto hidden md:flex size-11 items-center justify-center text-text-muted">{expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>}
+        <button className="min-h-11 rounded px-2 text-xs text-text-muted hover:text-text-primary" aria-label={`Ce que ${coachLabel.the} sait de moi`} aria-expanded={showMemory} onClick={() => { setShowMemory(value => !value); setShowHistory(false); }}>Mémoire</button>
+        {onDisplayChange && <button aria-label={expanded ? 'Réduire la conversation' : 'Agrandir la conversation'} onClick={() => onDisplayChange(expanded ? 'sidebar' : 'expanded')} className="ml-auto hidden md:flex size-11 items-center justify-center text-text-muted">{expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>}
         <button
           onClick={() => { setShowHistory((v) => !v); setShowMemory(false); }}
           className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-text-muted/10"
@@ -302,6 +314,8 @@ export function AgentSidePanel({
           className="border-b border-warning-orange/20 bg-warning-orange/5 px-4 py-2 text-xs text-warning-orange"
         >
           {coach.storageError}
+          <button className="ml-2 min-h-11 underline" onClick={coach.retryArchive}>Réessayer</button>
+          <button className="ml-2 min-h-11 underline" onClick={() => void coach.recoverArchive()}>Conserver une copie et recharger le fil</button>
         </p>
       )}
       {coach.error && (
@@ -337,15 +351,16 @@ export function AgentSidePanel({
           </div>
         </div>
       )}
-      {reference && <div className="border-b border-text-muted/15 px-4 py-2">
-        {reference && <p className="text-xs text-text-secondary">{reference.kind === 'proposal' ? 'Proposition' : 'Suivi'} sélectionné · prêt à en parler <button className="min-h-11 px-2 underline" onClick={onClearReference}>Retirer</button></p>}
+      {reference && reference.kind !== 'briefing' && reference.kind !== 'onboarding' && reference.kind !== 'evening' && (reference.kind !== 'automation_run' || reference.mode === 'discussion') && <div className="border-b border-text-muted/15 px-4 py-2">
+        <p className="text-xs text-text-secondary">{{ proposal: 'Proposition sélectionnée', followup: 'Suivi sélectionné', review: 'Bilan de la semaine sélectionné', session: 'Séance du jour sélectionnée', automation_run: 'Exécution sélectionnée' }[reference.kind]} · prêt à en parler <button className="min-h-11 px-2 underline" onClick={coach.clearReference}>Retirer</button></p>
       </div>}
-      {showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
+      {!showMemory && !showHistory && reference?.kind === 'automation_run' && reference.mode !== 'discussion' ? <AutomationReview id={reference.id} /> : showMemory ? <div className="min-h-0 flex-1 overflow-y-auto p-5"><h3 className="text-lg font-semibold">Ce que je retiens de toi</h3><p className="mt-2 mb-4 text-sm text-text-muted">Tu peux tout corriger ou me demander d’oublier.</p><CoachMemory /></div> : showHistory ? (
         <ThreadHistory
           threads={store.threads}
           activeId={active.id}
           runningId={runningId}
           onSelect={selectThread}
+          onRename={coach.renameLocal}
           onCreate={newThread}
           onDelete={setDeleteId}
           onClose={() => setShowHistory(false)}
@@ -396,7 +411,15 @@ export function AgentSidePanel({
             }}
             className="coach-thread min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6"
           >
-            {!messages.length && (
+            <div className="coach-reference-context">
+              {reference?.kind === 'followup' && <FollowupReference key={reference.id} id={reference.id} />}
+              {reference?.kind === 'proposal' && <ProposalReference key={reference.id} id={reference.id} />}
+              {reference?.kind === 'briefing' && <BriefingDiscussion key={reference.id} id={reference.id} />}
+              {reference?.kind === 'onboarding' && <OnboardingContext key={active.id} />}
+              {reference?.kind === 'evening' && <EveningDiscussion key={reference.id} id={reference.id} />}
+            </div>
+            <div className="coach-messages min-w-0">
+            {!messages.length && reference?.kind !== 'briefing' && reference?.kind !== 'evening' && (
               <div className="coach-empty mx-auto mt-10 max-w-sm">
                 {!floating && <AreteMark size={48} />}
                 <h3 className="text-lg font-semibold">On prépare la suite ?</h3>
@@ -405,7 +428,7 @@ export function AgentSidePanel({
                   consulte les données utiles.
                 </p>}
                 <div className="mt-6 space-y-2">
-                  {starters(panelContext.page).slice(0, floating ? 2 : 3).map((prompt) => (
+                  {(reference?.kind === 'onboarding' ? ['Comment avancer vers mon objectif ?', 'Aide-moi à trouver un rythme réaliste'] : starters(panelContext.page).slice(0, floating ? 2 : 3)).map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => send(prompt)}
@@ -443,7 +466,7 @@ export function AgentSidePanel({
                           <AreteMark size={24} /> CHIRON
                         </div>
                       )}
-                      <CoachActivity message={message} />
+                      <CoachActivity message={message} coach={coachLabel} />
                       <MessageSurfaces message={message} chiron locked={busy} onAction={text => coach.recordAction(active.id, text)} />
                       <div className="mt-1 flex flex-wrap items-center gap-x-0.5">
                         {message.trace && !message.pending && !message.error && !message.interrupted && <MessageFeedback
@@ -466,6 +489,7 @@ export function AgentSidePanel({
                   )}
                 </article>
               ))}
+            </div>
             </div>
           </div>
           {!following && (
@@ -496,6 +520,7 @@ export function AgentSidePanel({
                   className="col-start-1 row-start-1 flex size-11 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-text-primary focus-visible:outline-2 focus-visible:outline-neon-cyan disabled:opacity-30"
                 ><Plus className="size-4" aria-hidden="true" /></button>
                 <SkillInput
+                  coach={coachLabel}
                   key={active.id}
                   inputRef={inputRef}
                   aria-label="Message au coach"
@@ -516,7 +541,7 @@ export function AgentSidePanel({
                       send();
                     }
                   }}
-                  placeholder={floating ? 'Demander à Chiron…' : 'Ton message…'}
+                  placeholder={floating ? `Demander ${coachLabel.to}…` : 'Ton message…'}
                   className={cn('coach-composer-input block min-h-11 max-h-36 min-w-0 flex-1 resize-none appearance-none overflow-x-hidden overflow-y-auto bg-transparent py-1.5 text-sm leading-relaxed outline-none', 'col-start-2 row-start-1 w-full px-1')}
                 />
                 {streaming ? (
@@ -539,6 +564,7 @@ export function AgentSidePanel({
                 )}
               </div>
             </div>
+            <ContextWindowGauge key={active.id} usage={active.contextWindowUsage} compacting={coach.compacting} />
             {!floating && (!rpg || streaming) && <p className="mt-2 text-center text-[10px] text-text-muted">
               {rpg && streaming ? 'Tu peux préparer ton prochain message.' : touchKeyboard()
                 ? 'Touche Envoyer pour envoyer'

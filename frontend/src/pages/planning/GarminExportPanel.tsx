@@ -3,6 +3,7 @@ import { exportApi } from '@/lib/documents';
 import { exportLabel } from '@/lib/workouts';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
 import { Button } from '@/components/ui';
+import { readableError } from '@/lib/utils';
 
 /** Deleted sessions retain their cleanup controls until Garmin confirms removal. */
 export function GarminExportPanel() {
@@ -19,7 +20,7 @@ export function GarminExportPanel() {
     <section className="planning-cleanup glass-panel" aria-label="Retraits Garmin à terminer">
       {statuses.error && (
         <p role="alert" className="text-xs text-danger-red">
-          {statuses.error.message}
+          {readableError(statuses.error)}
         </p>
       )}
       {pending.length > 0 && (

@@ -11,18 +11,24 @@ from deepagents.middleware.filesystem import FilesystemPermission
 from arete.agent.backends.text import ReadOnlyTextBackend
 from arete.services.memory import (
     NOTES_LEDGER,
+    PROFILE_LEDGER,
     SESSIONS_LEDGER,
     delete_file,
     edit_file,
     list_files,
 )
 
+MEMORIES_ROUTE = "/memories/"
+
 # Permissions default to allow in Deep Agents: the trailing deny is essential.
 JOURNAL_PERMISSIONS = [
     FilesystemPermission(operations=["write"], paths=["/skills/**"], mode="deny"),
     FilesystemPermission(
         operations=["write"],
-        paths=[f"/{NOTES_LEDGER}", f"/{SESSIONS_LEDGER}"],
+        paths=[
+            f"{MEMORIES_ROUTE}{name}"
+            for name in (PROFILE_LEDGER, NOTES_LEDGER, SESSIONS_LEDGER)
+        ],
         mode="allow",
     ),
     FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
@@ -31,16 +37,16 @@ JOURNAL_PERMISSIONS = [
 
 LEDGER_TOOL_DESCRIPTIONS = {
     "read_file": "Lit les fichiers du journal, des pièces jointes et des skills. "
-    "Le journal contient sessions.md, notes.md ou une "
+    "Dans /memories/, le journal contient profile.md, sessions.md, notes.md ou une "
     "archive mensuelle sessions-AAAA-MM.md. 100 lignes par défaut; offset et "
     "limit pour paginer. Dans sessions.md les entrées récentes sont à la fin: "
     "lis la fin du fichier pour les trouver. Les lignes arrivent numérotées, "
     "ne recopie jamais ces numéros.",
-    "edit_file": "Corrige ou retire un passage de /notes.md ou /sessions.md. "
+    "edit_file": "Corrige ou retire un passage de /memories/profile.md, /memories/notes.md ou /memories/sessions.md. "
     "old_string doit correspondre exactement au texte existant, sans numéros "
     "de ligne; new_string vide retire le passage. Préserve les autres entrées "
     "et leurs dates. Pour une nouvelle entrée, utilise append_journal.",
-    "delete": "Supprime entièrement /notes.md ou /sessions.md uniquement "
+    "delete": "Supprime entièrement /memories/profile.md, /memories/notes.md ou /memories/sessions.md uniquement "
     "si tout son contenu doit être oublié. Pour retirer un passage, utilise "
     "edit_file. Les archives et les pièces jointes restent en lecture seule.",
 }

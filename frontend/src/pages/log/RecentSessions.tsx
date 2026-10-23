@@ -1,19 +1,32 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Pencil, Save } from 'lucide-react';
+import { ChevronRight, Dumbbell, Pencil, Save } from 'lucide-react';
 import { cn, formatDurationCompact } from '@/lib/utils';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
+import { PushOffer } from '@/components/PushOffer';
 import { Button, Panel, RPE_TEXT, RpeBadge, Textarea, rpeTone } from '@/components/ui';
 import { analyticsApi } from '@/lib/api';
-import { qk, strengthSessionsQuery } from '@/lib/queryKeys';
+import { qk, strengthDraftsQuery, strengthSessionsQuery } from '@/lib/queryKeys';
 import { getSportColor, getSportIconComponent } from '@/lib/sport';
 import type { CardioSession } from '@/types';
+import { SameDayLogWarning } from './SameDayLogWarning';
+import { useOpenDraft } from './useOpenDraft';
 
 const SOURCE_BADGE: Record<string, string> = {
   strava: 'bg-strava/20 text-strava',
   garmin: 'bg-info-blue/20 text-info-blue',
+  garmin_connect: 'bg-info-blue/20 text-info-blue',
   manual: 'bg-text-muted/20 text-text-muted',
+};
+const SOURCE_LABEL: Record<string, string> = {
+  strava: 'Strava',
+  garmin: 'Garmin',
+  garmin_connect: 'Garmin',
+  fit_file: 'FIT',
+  tcx_file: 'TCX',
+  gpx_file: 'GPX',
+  manual: 'Manuel',
 };
 
 /** Recent cardio sessions with inline RPE/notes editing. */
@@ -25,7 +38,17 @@ export function RecentSessions() {
   });
   // A Garmin activity linked to a Muscu log is shown once, as that log (Force tab).
   const { data: strength } = useQuery(strengthSessionsQuery);
-  const linked = new Set((strength ?? []).map((l) => l.garmin_activity_id));
+  // One awaiting its loads is shown once too, in the Force tab's « À compléter ».
+  const { data: drafts } = useQuery(strengthDraftsQuery);
+  const linked = new Set([
+    ...(strength ?? []).map((l) => l.garmin_activity_id),
+    ...(drafts?.items ?? []).map((d) => d.actual_session_id),
+  ]);
+  const openDraft = useOpenDraft();
+  // A day's Muscu log linked to no activity is probably that strength session.
+  const unlinkedLogByDay = new Map(
+    (strength ?? []).filter((l) => !l.garmin_activity_id).map((l) => [l.date, l.id] as const)
+  );
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRpe, setEditRpe] = useState<number | null>(null);
@@ -55,21 +78,22 @@ export function RecentSessions() {
     });
   };
 
-  if (isLoading) return <LoadingState message="CHARGEMENT DES SÉANCES…" />;
-  if (isError) return <ErrorState message="ÉCHEC DU CHARGEMENT DES SÉANCES" onRetry={() => refetch()} />;
+  if (isLoading) return <LoadingState message="Chargement des séances…" />;
+  if (isError) return <ErrorState message="Échec du chargement des séances" onRetry={() => refetch()} />;
 
   const sessions = (data?.sessions || []).filter((s) => !linked.has(s.id));
   if (sessions.length === 0) {
     return (
       <Panel animate={false}>
-        <EmptyState message="AUCUNE SÉANCE CARDIO" action="Importe un fichier FIT, saisis-la sans montre ou synchronise Strava" />
+        <EmptyState message="Aucune séance cardio" action="Importe un fichier d’activité (FIT, TCX, GPX), saisis-la sans montre ou synchronise Garmin" />
       </Panel>
     );
   }
 
   return (
-    <Panel title="SÉANCES RÉCENTES" delay={0.1}>
+    <Panel title="Séances récentes" delay={0.1}>
       <div className="space-y-2">
+        <PushOffer moment="session" />
         {sessions.map((s) => {
           const Icon = getSportIconComponent(s.sport);
           const editing = editingId === s.id;
@@ -107,11 +131,11 @@ export function RecentSessions() {
                   {s.source && (
                     <span
                       className={cn(
-                        'px-1.5 py-0.5 rounded text-[10px] font-sans uppercase',
+                        'px-1.5 py-0.5 rounded text-[10px] font-sans',
                         SOURCE_BADGE[s.source] ?? SOURCE_BADGE.manual
                       )}
                     >
-                      {s.source}
+                      {SOURCE_LABEL[s.source] ?? s.source}
                     </span>
                   )}
                   {!editing && <RpeBadge rpe={s.rpe} showEmpty />}
@@ -121,6 +145,7 @@ export function RecentSessions() {
                     disabled={updateMutation.isPending}
                     className="p-1 hover:bg-text-muted/20 rounded transition-colors text-text-muted hover:text-neon-cyan"
                     title={editing ? 'Enregistrer' : 'Modifier RPE et notes'}
+                    aria-label={editing ? `Enregistrer le RPE et les notes de ${s.name || 'la séance'}` : `Modifier le RPE et les notes de ${s.name || 'la séance'}`}
                   >
                     {editing ? <Save className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
                   </button>
@@ -130,7 +155,7 @@ export function RecentSessions() {
               {editing && (
                 <div className="mt-3 pt-3 border-t border-text-muted/10 space-y-3 animate-fade-in">
                   <div>
-                    <label className="text-xs font-sans text-text-muted uppercase block mb-1">RPE (1-10)</label>
+                    <label className="text-xs font-sans text-text-muted block mb-1">RPE (1-10)</label>
                     <input
                       type="range"
                       min={1}
@@ -159,7 +184,7 @@ export function RecentSessions() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-sans text-text-muted uppercase block mb-1">Notes</label>
+                    <label className="text-xs font-sans text-text-muted block mb-1">Notes</label>
                     <Textarea
                       value={editNotes}
                       onChange={(e) => setEditNotes(e.target.value)}
@@ -170,13 +195,31 @@ export function RecentSessions() {
                   </div>
                   <div className="flex gap-2 justify-end">
                     <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>
-                      ANNULER
+                      Annuler
                     </Button>
                     <Button size="sm" strong onClick={saveEdit} loading={updateMutation.isPending}>
-                      {updateMutation.isPending ? 'ENREGISTREMENT…' : 'ENREGISTRER'}
+                      {updateMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
                     </Button>
                   </div>
                 </div>
+              )}
+
+              {!editing && s.sport === 'strength' && unlinkedLogByDay.has(s.date) && (
+                <div className="mt-2">
+                  <SameDayLogWarning logId={unlinkedLogByDay.get(s.date)!} />
+                </div>
+              )}
+              {!editing && s.sport === 'strength' && (
+                <Button
+                  variant="gold"
+                  size="sm"
+                  className="mt-2 min-h-11"
+                  loading={openDraft.isPending && openDraft.variables === s.id}
+                  onClick={() => openDraft.mutate(s.id)}
+                >
+                  <Dumbbell className="w-4 h-4" aria-hidden />
+                  Ajoute tes charges
+                </Button>
               )}
 
               {!editing && s.notes && (

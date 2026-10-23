@@ -3,11 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { ActivityDetail } from '@/types';
-import { analyticsApi } from '@/lib/api';
+import type { ActivityDetail, Exercise, ExerciseSet, StrengthSession } from '@/types';
+import { analyticsApi, strengthApi } from '@/lib/api';
 import { SessionDetailPage } from './SessionDetail';
 
-vi.mock('@/lib/api', () => ({ analyticsApi: { getSessionDetail: vi.fn(), updateSession: vi.fn() } }));
+vi.mock('@/lib/api', () => ({
+  analyticsApi: { getSessionDetail: vi.fn(), updateSession: vi.fn() },
+  strengthApi: { getSessions: vi.fn(), getSession: vi.fn() },
+}));
 
 afterEach(() => {
   cleanup();
@@ -78,6 +81,7 @@ const detail: ActivityDetail = {
     start_altitude_m: 1035,
     source: 'open-meteo-archive',
   },
+  summary: { rule_feedback: null, strength: null, plan: null, next_day: null },
 };
 
 function renderAt(path: string) {
@@ -99,8 +103,8 @@ it('shows the summary, the coach, the intervals, the laps, the zones and the rou
   expect(await screen.findByText('Fractionné 5×1000')).toBeTruthy();
   expect(analyticsApi.getSessionDetail).toHaveBeenCalledWith(12);
   expect(screen.getByText('Répétitions régulières, bravo.')).toBeTruthy();
-  expect(screen.getByText('FRACTIONNÉ DÉTECTÉ')).toBeTruthy();
-  expect(screen.getByText('TOURS (3)')).toBeTruthy();
+  expect(screen.getByText('Fractionné détecté')).toBeTruthy();
+  expect(screen.getByText('Tours (3)')).toBeTruthy();
   expect(screen.getByText('Échauffement')).toBeTruthy();
   expect(screen.getByText('Récup')).toBeTruthy();
   expect(screen.getByText('Z2 endurance')).toBeTruthy();
@@ -117,7 +121,7 @@ it('shows the grade-adjusted pace, the climbing speeds and the weather', async (
   expect(screen.getByText(/980 m\/h/)).toBeTruthy();
   expect(screen.getByText('27 °C')).toBeTruthy();
   expect(screen.getByText(/Chaleur/)).toBeTruthy();
-  expect(screen.getByText('MÉTÉO AU DÉPART')).toBeTruthy();
+  expect(screen.getByText('Météo au départ')).toBeTruthy();
 });
 
 it('says why a session without a recording has no curve', async () => {
@@ -133,15 +137,15 @@ it('says why a session without a recording has no curve', async () => {
     weather: null,
   });
   renderAt('/log/sessions/12');
-  expect(await screen.findByText('PAS DE FLUX POUR CETTE SÉANCE')).toBeTruthy();
+  expect(await screen.findByText('Pas de flux pour cette séance')).toBeTruthy();
   expect(screen.queryByRole('img', { name: /Tracé GPS/ })).toBeNull();
-  expect(screen.queryByText('MÉTÉO AU DÉPART')).toBeNull();
+  expect(screen.queryByText('Météo au départ')).toBeNull();
 });
 
 it('rejects an id that is not a number without asking the server', () => {
   vi.mocked(analyticsApi.getSessionDetail).mockClear();
   renderAt('/log/sessions/abc');
-  expect(screen.getByText('SÉANCE INTROUVABLE')).toBeTruthy();
+  expect(screen.getByText('Séance introuvable')).toBeTruthy();
   expect(analyticsApi.getSessionDetail).not.toHaveBeenCalled();
 });
 
@@ -170,4 +174,138 @@ it('keeps the RPE picker away once rated or dismissed', async () => {
   renderAt('/log/sessions/12');
   await screen.findByText('Fractionné 5×1000');
   expect(screen.queryByRole('region', { name: 'Effort ressenti' })).toBeNull();
+});
+
+it('shows the exercises of the Muscu log linked to a strength activity', async () => {
+  // The server names the linked log; the page never searches the latest logs for it.
+  const strength = { ...detail, strength_log_id: 4, session: { ...session, id: 301, sport: 'strength', name: 'Strength' } };
+  const log: StrengthSession = {
+    id: 4, date: '2026-10-08', name: null, program: null, duration_min: 30, overall_rpe: null,
+    fatigue_level: null, sleep_quality: null, notes: null, total_volume: 0, total_sets: 2,
+    garmin_activity_id: 301,
+  };
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue(strength);
+  vi.mocked(strengthApi.getSession).mockResolvedValue({
+    ...log,
+    exercises: [{
+      id: 1, order: 1, exercise: { id: 9, name: 'Squat' } as Exercise,
+      target_sets: null, target_reps: null, target_rpe: null, total_volume: 0, working_sets_count: 1, avg_rpe: null, notes: null,
+      sets: [{ set_number: 1, reps: 5, weight_kg: 100, is_warmup: false } as ExerciseSet],
+    }],
+  });
+  renderAt('/log/sessions/301');
+  expect(await screen.findByText('Squat')).toBeTruthy();
+  expect(screen.getByText('100kg × 5')).toBeTruthy();
+  expect(strengthApi.getSession).toHaveBeenCalledWith(4);
+  expect(screen.getByRole('link', { name: 'Ouvrir le log Muscu' }).getAttribute('href')).toBe('/log?session=4');
+});
+
+it('offers to add the loads of a strength activity without a linked log', async () => {
+  vi.mocked(strengthApi.getSession).mockClear();
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail, strength_log_id: null, session: { ...session, id: 302, sport: 'strength', name: 'Strength' },
+  });
+  renderAt('/log/sessions/302');
+  expect(await screen.findByRole('button', { name: 'Ajoute tes charges' })).toBeTruthy();
+  expect(screen.queryByText('Exercices')).toBeNull();
+  expect(strengthApi.getSession).not.toHaveBeenCalled();
+});
+
+it('points to the day\'s unlinked Muscu log rather than inviting a second one', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail, strength_log_id: null, strength_unlinked_log_id: 5,
+    session: { ...session, id: 303, sport: 'strength', name: 'Strength' },
+  });
+  renderAt('/log/sessions/303');
+  expect(await screen.findByText(/Tu as déjà saisi une séance de muscu ce jour-là/)).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Ouvrir la séance saisie' }).getAttribute('href')).toBe('/log?session=5');
+  // A genuine second session can still get its loads.
+  expect(screen.getByRole('button', { name: 'Ajoute tes charges' })).toBeTruthy();
+});
+
+const planned = {
+  id: 40, date: '2026-10-09', sport: 'running', session_type: 'endurance', description: 'Footing souple',
+  target_duration_min: 45, target_distance_km: null, target_hr_zone: 'Z2', status: 'pending' as const,
+};
+
+it('opens with the summary, the coach in one sentence and tomorrow, before the tiles and the curves', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockClear();
+  vi.mocked(strengthApi.getSession).mockClear();
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail,
+    feedback: {
+      text: 'Fractionné régulier du début à la fin, sans dérive cardiaque. Garde cette allure pour la prochaine séance.',
+      source: 'agent', trigger: 'sync', created_at: null,
+    },
+    summary: { rule_feedback: null, strength: null, plan: null, next_day: { date: '2026-10-09', relative: 'tomorrow', planned: [planned], proposals: [], next: null } },
+  });
+  renderAt('/log/sessions/12');
+  const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(summary.textContent).toContain('5 × 4 min');
+  expect(summary.textContent).toContain('Le mot du coach');
+  expect(summary.textContent).not.toContain('Chiron');
+  expect(summary.textContent).toContain('Fractionné régulier du début à la fin, sans dérive cardiaque.');
+  expect(summary.textContent).not.toContain('Garde cette allure');
+  expect(summary.textContent).toContain('Demain : Footing souple · 45 min · Z2.');
+  fireEvent.click(screen.getByRole('button', { name: 'Lire la suite' }));
+  expect(summary.textContent).toContain('Garde cette allure pour la prochaine séance.');
+  // Summary, then the tiles, then the curves.
+  const tiles = screen.getByText('Calories');
+  const curves = screen.getByText('Au fil de la séance');
+  expect(summary.compareDocumentPosition(tiles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(tiles.compareDocumentPosition(curves) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Everything came with the detail: no request of the summary's own.
+  expect(analyticsApi.getSessionDetail).toHaveBeenCalledTimes(1);
+  expect(strengthApi.getSession).not.toHaveBeenCalled();
+});
+
+it('shows the rules\' sentence when no feedback is stored, and today\'s proposal the morning after', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail,
+    feedback: null,
+    summary: {
+      rule_feedback: 'Séance de course terminée (49 min). Bon travail de fond, intensité bien maîtrisée.',
+      strength: null,
+      plan: null,
+      next_day: {
+        date: '2026-10-09', relative: 'today', planned: [{ ...planned, session_type: 'tempo', description: null }],
+        proposals: [{ planned_session_id: 40, decision: 'ease', reason: 'Préparation Garmin 55/100 : séance allégée.', state: 'pending' }],
+        next: null,
+      },
+    },
+  });
+  renderAt('/log/sessions/12');
+  const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(summary.textContent).toContain('Calculé à partir de la séance');
+  expect(summary.textContent).toContain('Séance de course terminée (49 min). Bon travail de fond');
+  expect(summary.textContent).toContain('Aujourd’hui : Seuil · 45 min · Z2, le coach propose : allégée.');
+  expect(summary.textContent).toContain('Préparation Garmin 55/100 : séance allégée.');
+});
+
+it('says how a planned session compared with its plan and links to it, and nothing without a plan', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockClear();
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({
+    ...detail,
+    session: { ...session, duration_sec: 35 * 60, avg_hr: 150 },
+    summary: { ...detail.summary, plan: { planned: { ...planned, date: '2026-10-08' }, verdict: 'shorter', target_hr_bpm: 154 } },
+  });
+  const { unmount } = renderAt('/log/sessions/12');
+  const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(summary.textContent).toContain('Face au plan : plus court. 35 min au total pour 45 min prévues, FC 150 bpm pour une Z2 autour de 154 bpm.');
+  expect(screen.getByRole('link', { name: 'Voir la séance prévue : Footing souple' }).getAttribute('href')).toBe('/planning?date=2026-10-08&session=40');
+  expect(analyticsApi.getSessionDetail).toHaveBeenCalledTimes(1);
+  unmount();
+
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue(detail);
+  renderAt('/log/sessions/12');
+  const plain = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(plain.textContent).not.toContain('Face au plan');
+  expect(screen.queryByRole('link', { name: /Voir la séance prévue/ })).toBeNull();
+});
+
+it('asks for the RPE inside the summary when it is missing', async () => {
+  vi.mocked(analyticsApi.getSessionDetail).mockResolvedValue({ ...detail, session: { ...session, rpe: null } });
+  renderAt('/log/sessions/12');
+  const summary = await screen.findByRole('region', { name: 'L’essentiel de la séance' });
+  expect(summary.querySelector('[aria-label="Effort ressenti"]')).toBeTruthy();
 });

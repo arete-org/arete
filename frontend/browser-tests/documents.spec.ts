@@ -92,13 +92,17 @@ test('PDF upload delegates extraction to the server without a browser OCR worker
 });
 
 test('Garmin export is an explicit selected action and never claims watch delivery', async ({ page }) => {
-  // The planning shows the browser's local week: the UTC day is yesterday just after midnight in Paris.
-  const day = toLocalISODate();
+  // The planning shows the browser's local week. Half past midnight, when the UTC day
+  // is still yesterday east of Greenwich: a UTC date would show the session missed.
+  const now = new Date(2026, 9, 20, 0, 30);
+  await page.clock.install({ time: now });
+  const day = toLocalISODate(now);
   const session = { id: 42, date: day, sport: 'running', session_type: 'endurance', description: 'Footing de référence', source: 'coach', status: 'pending', revision: 1, prescription: { version: 1, steps: [{ kind: 'effort', duration_kind: 'seconds', value: 1800, steps: [] }] } };
   let sent = 0;
   let statuses: object[] = [];
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/garmin/planned')) return route.fulfill({ json: [session] });
     if (path.endsWith('/42/workout')) return route.fulfill({ json: { session: { ...session, exportable: true, summary: '30 min' }, export: statuses[0] ?? null } });
     if (path.endsWith('/workout-devices')) return route.fulfill({ json: [{ id: 10, name: 'fēnix 8', sports: ['running'], compatibility: 'documented' }, { id: 11, name: 'Modèle inconnu', sports: [], compatibility: 'unknown' }] });
@@ -152,6 +156,7 @@ test('OCR preview compares the original, filters uncertain passages and works on
   let downloads = 0;
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/documents')) return route.fulfill({ json: [doc] });
     if (path.endsWith('/extraction')) return route.fulfill({ json: { warnings: ['Texte reconnu automatiquement : vérifie les dates, chiffres et unités dans l’original.'], blocks: lines.map((text, i) => ({ locator: `page 1, ligne ${i+1}`, text, method: 'ocr', confidence: i === 4 ? 61 : 96 })) } });
     if (path.endsWith('/chunks/0')) { downloads++; return route.fulfill({ body: raw, contentType: 'application/octet-stream' }); }
@@ -187,4 +192,30 @@ test('OCR preview compares the original, filters uncertain passages and works on
   await page.keyboard.press('Escape');
   await expect(preview).toHaveCount(0);
   await expect(page.getByRole('button', { name: `Consulter ${doc.name}` })).toBeFocused();
+});
+
+test('the sheet select stays a compact toolbar control on a desktop pointer, with the shared chevron', async ({ page }) => {
+  const { createHash } = await import('node:crypto');
+  const original = Buffer.from('plan');
+  const doc = { id: '11111111-1111-4111-8111-111111111111', name: 'Plan.xlsx', size: original.length, sha256: createHash('sha256').update(original).digest('hex'), status: 'ready' };
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
+    if (path.endsWith('/documents')) return route.fulfill({ json: [doc] });
+    if (path.endsWith('/extraction')) return route.fulfill({ json: { warnings: [], blocks: [{ locator: 'Semaine 1!A1', text: 'Footing 30 min', method: 'text', confidence: null }, { locator: 'Semaine 2!A1', text: 'Fractionné 6 × 400 m', method: 'text', confidence: null }] } });
+    if (path.endsWith('/chunks/0')) return route.fulfill({ body: original, contentType: 'application/octet-stream' });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/planning');
+  await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
+  await page.getByRole('button', { name: 'Fichiers du fil (1)' }).click();
+  await page.getByRole('button', { name: `Consulter ${doc.name}` }).click();
+  const sheet = page.getByRole('dialog', { name: `Aperçu de ${doc.name}` }).getByRole('combobox', { name: 'Page ou feuille du document' });
+  await expect(sheet).toBeVisible();
+  // A mouse is precise: the toolbar keeps its 12 px text and short row; touch raises it to 44 px (mobile-ux).
+  expect((await sheet.boundingBox())!.height).toBeLessThan(40);
+  expect(await sheet.evaluate(element => getComputedStyle(element).backgroundImage)).toContain('linear-gradient');
+  await expect(sheet).toHaveCSS('font-size', '12px');
+  await sheet.selectOption('Semaine 2');
+  await expect(page.getByText('Fractionné 6 × 400 m', { exact: true })).toBeVisible();
 });

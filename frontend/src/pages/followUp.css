@@ -1,0 +1,53 @@
+/* The product application on Figma page 5:81 uses shared theme tokens,
+   one expanded surface and quiet list rows (16 px panels / 9 px controls). */
+.suivi-page { color: var(--color-text-primary); max-width: 1128px; margin: 0 auto; padding: 36px 24px 64px; font-size: 14px; line-height: 1.55; }
+.suivi-header { margin-bottom: 28px; }
+.suivi-header h1 { margin-bottom: 8px; }
+.suivi-header p, .suivi-note { color: var(--color-text-secondary); }
+.suivi-page h2, .suivi-page h3 { font-family: var(--font-sans); font-size: 16px; font-weight: 600; line-height: 1.4; }
+.suivi-page .suivi-section-title { font-family: var(--font-display); font-size: 28px; }
+.suivi-page p { overflow-wrap: anywhere; }
+.suivi-eyebrow { color: var(--color-text-secondary); font-size: 12px; }
+.suivi-tabs { display: flex; gap: 8px; margin-bottom: 28px; }
+.suivi-page button, .suivi-page a:not(.suivi-plain) { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 9px 12px; cursor: pointer; font: inherit; border-radius: var(--radius-control, 9px); overflow-wrap: anywhere; }
+.suivi-page button:hover, .suivi-page a:hover { background: var(--color-selection); }
+.suivi-page button[aria-current], .suivi-page button[aria-pressed='true'] { background: var(--color-shadow); color: var(--color-text-primary); font-weight: 500; }
+.suivi-page button:disabled { opacity: .55; cursor: wait; }
+.suivi-page .suivi-primary { background: var(--color-neon-cyan); color: var(--color-on-accent); padding-inline: 18px; }
+.suivi-grid { display: block; }
+.suivi-stack { display: grid; gap: 20px; align-content: start; min-width: 0; }
+.suivi-card { padding: 24px 0; display: grid; gap: 10px; min-width: 0; border-bottom: 1px solid var(--color-border); }
+.suivi-card .suivi-actions { margin-top: 4px; }
+.suivi-form { display: grid; gap: 20px; max-width: 620px; }
+.suivi-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.suivi-page label { display: grid; gap: 8px; }
+.suivi-page input:not([type='checkbox']), .suivi-page textarea, .suivi-page select { border: 1px solid var(--color-border); background: var(--color-void); color: var(--color-text-primary); padding: 12px; width: 100%; min-width: 0; border-radius: var(--radius-control, 9px); }
+.suivi-page textarea { min-height: 100px; }
+/* Its selects are shared `.ui-input` fields (no native look, drawn chevron): a 44 px touch target here too. */
+.suivi-page select { min-height: 44px; }
+.suivi-page pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.suivi-page [role='alert'] { color: var(--color-danger-red); }
+.suivi-page .suivi-link { justify-self: start; color: var(--color-neon-cyan); padding-left: 0; }
+.suivi-ideas { color: var(--color-text-secondary); padding-block: 24px; }
+.suivi-ideas summary { cursor: pointer; min-height: 44px; }
+.suivi-ideas button { display: flex; text-align: left; justify-content: flex-start; }
+.suivi-empty { padding-block: 40px; color: var(--color-text-secondary); }
+@media (max-width: 767px) { .suivi-page { padding: 28px 20px 48px; } .suivi-tabs { gap: 4px; } }
+
+.suivi-stack > a, .suivi-card > button { justify-self: start; }
+.suivi-expanded form { display: grid; gap: 14px; }
+.suivi-expanded form button { justify-self: start; }
+
+.suivi-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 18px 0; border-bottom: 1px solid var(--color-border); }
+.suivi-row h2 { margin-bottom: 6px; font-size: 15px; font-weight: 500; }
+.suivi-row .suivi-note { font-size: 12px; }
+.suivi-page .suivi-row-main { flex: 1; align-items: center; display: flex; justify-content: space-between; text-align: left; gap: 16px; padding: 0; }
+.suivi-menu { position: relative; }
+.suivi-menu summary { display: flex; align-items: center; justify-content: center; cursor: pointer; list-style: none; width: 44px; height: 44px; border-radius: var(--radius-control); color: var(--color-text-secondary); }
+.suivi-menu summary::-webkit-details-marker { display: none; }
+.suivi-menu-content { position: absolute; right: 0; top: 44px; min-width: 170px; z-index: 20; background: var(--color-abyss); border: 1px solid var(--color-border); border-radius: var(--radius-control); padding: 4px; box-shadow: 0 8px 20px #00000014; }
+.suivi-page .suivi-menu-content button { display: flex; width: 100%; justify-content: flex-start; white-space: nowrap; }
+.suivi-history { flex-basis: 100%; display: grid; gap: 8px; }
+
+.suivi-page .suivi-row-main:hover { background: transparent; color: var(--color-neon-cyan); }
+.suivi-list { min-width: 0; }

@@ -31,6 +31,7 @@ export function VamCard({
   return (
     <StatCard
       title="Vitesse ascensionnelle"
+      term="vam"
       question="À quelle vitesse je monte, sur 5 min comme sur une heure ? (sorties à pied avec les flux)"
       card={card}
       secondaryLabels={['Record 30 min', 'Meilleure 5 min']}
@@ -40,7 +41,7 @@ export function VamCard({
     >
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
+          <CartesianGrid stroke={CHART.grid} vertical={false} />
           <XAxis dataKey="label" {...AXIS} tick={TICK} />
           <YAxis stroke={CHART.axis} tick={{ fontSize: 11, fill: CHART.axis }} unit=" m/h" width={72} domain={[0, 'auto']} />
           <ChartTooltip
@@ -51,8 +52,8 @@ export function VamCard({
             }}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Line type="monotone" dataKey="record" name="Record" stroke={CHART.purple} strokeWidth={2} strokeDasharray="4 3" connectNulls dot={{ r: 3 }} />
-          <Line type="monotone" dataKey="period" name="Période" stroke={COLORS.neonGold} strokeWidth={2} connectNulls dot={{ r: 3 }} />
+          <Line isAnimationActive={false} type="monotone" dataKey="record" name="Record" stroke={CHART.purple} strokeWidth={2} strokeDasharray="4 3" connectNulls={false} dot={{ r: 3 }} />
+          <Line isAnimationActive={false} type="monotone" dataKey="period" name="Période" stroke={COLORS.neonGold} strokeWidth={2} connectNulls={false} dot={{ r: 3 }} />
         </LineChart>
       </ResponsiveContainer>
     </StatCard>

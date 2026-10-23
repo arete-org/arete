@@ -188,6 +188,21 @@ class TestMonotony:
         # All same loads means std = 0, returns None
         assert monotony is None
 
+    def test_statistics_error_returns_none(self, monkeypatch) -> None:
+        """A StatisticsError from stdev/mean is the only expected failure; it yields None."""
+        import arete.features.workload as workload
+
+        def _raise(*args: object, **kwargs: object) -> None:
+            raise workload.StatisticsError("no data points")
+
+        monkeypatch.setattr(workload, "stdev", _raise)
+        today = date.today()
+        loads = [
+            DailyLoad(date=today - timedelta(days=i), duration_min=60, rpe=5)
+            for i in range(7)
+        ]
+        assert calculate_monotony(loads, today) is None
+
     def test_monotony_zones(self) -> None:
         """Test monotony zone classification."""
         assert get_monotony_zone(1.0) == MonotonyZone.IDEAL

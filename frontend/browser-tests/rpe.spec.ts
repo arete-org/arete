@@ -12,6 +12,7 @@ const detail = {
   zones: null, laps: [], splits: [], intervals: null, metrics: null, streams: null, route: null,
   feedback: { text: 'Footing bien dosé, le cardio est resté bas.', source: 'agent', trigger: 'sync', created_at: null },
   terrain: null, weather: null,
+  summary: { rule_feedback: null, strength: null, plan: null, next_day: null },
 };
 
 test('the post-session link opens the RPE picker, one tap saves it', async ({ page }) => {
@@ -19,6 +20,7 @@ test('the post-session link opens the RPE picker, one tap saves it', async ({ pa
   let rpe: number | null = null;
   await page.route('**/api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1 } });
     if (path === '/api/analytics/sessions/12/detail') return route.fulfill({ json: { ...detail, session: { ...detail.session, rpe } } });

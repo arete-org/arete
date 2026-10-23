@@ -105,11 +105,29 @@ def test_signed_challenge_does_not_run_coach(router_client, configured):
 
 
 @pytest.mark.parametrize("options", [{"secret": "wrong"}, {"age": 301}, {"age": -301}])
-def test_invalid_signatures_rejected(router_client, configured, payload, options):
+def test_invalid_signatures_rejected(
+    router_client, configured, payload, options, monkeypatch
+):
+    # A future signature 301s ahead can become valid if a slow CI request takes
+    # over a second. Freeze signing and verification at the same instant.
+    monkeypatch.setattr(time, "time", lambda: 1_800_000_000)
     response = router_client(api.router).post(
         "/slack/events", **signed(payload, **options)
     )
     assert response.status_code == 401
+    configured.assert_not_called()
+
+
+@pytest.mark.parametrize("age", [-300, 300])
+def test_signature_window_includes_exact_boundary(
+    router_client, configured, monkeypatch, age
+):
+    monkeypatch.setattr(time, "time", lambda: 1_800_000_000)
+    response = router_client(api.router).post(
+        "/slack/events",
+        **signed({"type": "url_verification", "challenge": "boundary"}, age=age),
+    )
+    assert response.json() == {"challenge": "boundary"}
     configured.assert_not_called()
 
 
@@ -467,6 +485,36 @@ def test_slack_reuses_chat_graph_and_thread_metadata(monkeypatch):
     assert context.profile == "chat"
     assert context.thread_id == "slack:T:D:1"
     assert context.slack_visibility == "public"
+
+
+def test_slack_chat_graph_is_composed_off_the_event_loop(monkeypatch):
+    from langchain_core.messages import AIMessage
+    from worker_only import worker_only
+
+    from arete import coaching
+    from arete.agent.runtime import execution
+    from arete.services.feature_flags import FeatureFlags
+
+    graph = object()
+
+    async def stream(*args, **kwargs):
+        assert args[0] is graph
+        yield {
+            "type": "updates",
+            "data": {"model": {"messages": [AIMessage(content="Repos.")]}},
+        }
+
+    monkeypatch.setattr(coaching, "get_feature_flags", worker_only(FeatureFlags))
+    monkeypatch.setattr(coaching, "_assemble", worker_only(lambda *a, **kw: graph))
+    monkeypatch.setattr(execution, "stream_agent", stream)
+    coaching.get_agent.cache_clear()
+    try:
+        answer = asyncio.run(
+            coaching.run_slack_coach([], "slack:T:D:1", "public", AsyncMock())
+        )
+    finally:
+        coaching.get_agent.cache_clear()
+    assert answer == "Repos."
 
 
 @pytest.mark.parametrize("resolved", [7, None])

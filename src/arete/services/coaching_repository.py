@@ -16,6 +16,9 @@ import duckdb
 
 from arete.dataio.db import connect, db_connection, transaction
 from arete.dataio.ownership import require_owned
+from arete.dataio.queries import sql_in
+from arete.garmin.models import FILE_SOURCES, ActivitySource
+from arete.services import settings
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.settings import athlete_today
 
@@ -24,6 +27,19 @@ Source = Literal["agent", "rules"]
 #: 'pending' marks a run in progress (``claim``); it is never served or audited.
 Status = Literal["ok", "failed", "pending"]
 Trigger = Literal["scheduler", "api"]
+
+
+def naive_utc_now() -> datetime:
+    """``created_at`` and ``reacted_at`` are naive UTC: instances on other
+    clocks (Docker in Paris, Vercel in UTC) share the database. Rows written
+    before that are local time, so the order of a day's rows is their id."""
+    return settings.utc_now().replace(tzinfo=None)
+
+
+#: The athlete's reaction to a briefing (``react``).
+Reaction = Literal["up", "down"]
+#: The previous briefings the dashboard lists.
+HISTORY_LIMIT = 7
 
 
 @dataclass(frozen=True)
@@ -43,6 +59,11 @@ class Briefing:
     facts_digest: str | None = None
     #: An earlier usable briefing of the same day was replaced by this one.
     revised: bool = False
+    #: The athlete's reaction (``react``) and their optional word with it.
+    reaction: str | None = None
+    reaction_comment: str | None = None
+    #: When the day's first usable briefing was written (``get_for_day``).
+    first_created_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -54,12 +75,17 @@ class Briefing:
             "status": self.status,
             "error": self.error,
             "trigger": self.trigger,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": (
+                self.created_at.replace(tzinfo=UTC).isoformat()
+                if self.created_at
+                else None
+            ),
         }
 
 
 _COLUMNS = (
-    "id, date, text, priority, source, status, error, trigger, created_at, facts_digest"
+    "id, date, text, priority, source, status, error, trigger, created_at,"
+    " facts_digest, reaction, reaction_comment"
 )
 
 
@@ -75,6 +101,8 @@ def _row_to_briefing(row: tuple) -> Briefing:
         trigger=row[7],
         created_at=row[8],
         facts_digest=row[9],
+        reaction=row[10],
+        reaction_comment=row[11],
     )
 
 
@@ -119,7 +147,7 @@ class BriefingRepository:
                     status,
                     error,
                     trigger,
-                    datetime.now(),
+                    naive_utc_now(),
                     facts_digest,
                 ],
             ).fetchone()
@@ -146,10 +174,10 @@ class BriefingRepository:
         try:
             row = conn.execute(
                 f"""
-                SELECT {_COLUMNS}, count(*) OVER () > 1
+                SELECT {_COLUMNS}, count(*) OVER () > 1, arg_min(created_at, id) OVER ()
                 FROM app.visible_coach_briefings
                 WHERE user_id = ? AND date = ? AND status = 'ok'
-                ORDER BY created_at DESC, id DESC
+                ORDER BY id DESC
                 LIMIT 1
                 """,
                 [user_id, briefing_date or athlete_today()],
@@ -159,7 +187,75 @@ class BriefingRepository:
                 conn.close()
         if row is None:
             return None
-        return replace(_row_to_briefing(row), revised=bool(row[10]))
+        return replace(
+            _row_to_briefing(row), revised=bool(row[12]), first_created_at=row[13]
+        )
+
+    def get(self, briefing_id: int) -> Briefing | None:
+        """One of the athlete's usable briefings, whatever its day."""
+        with db_connection() as conn:
+            row = conn.execute(
+                f"SELECT {_COLUMNS} FROM app.visible_coach_briefings"
+                " WHERE id = ? AND status = 'ok'",
+                [briefing_id],
+            ).fetchone()
+        return _row_to_briefing(row) if row else None
+
+    def history(self, before: date, limit: int = HISTORY_LIMIT) -> list[Briefing]:
+        """The athlete's previous days, newest first: each day's usable briefing."""
+        with db_connection() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT {_COLUMNS} FROM app.visible_coach_briefings
+                WHERE status = 'ok' AND date < ?
+                QUALIFY row_number() OVER (
+                    PARTITION BY date ORDER BY id DESC
+                ) = 1
+                ORDER BY date DESC
+                LIMIT ?
+                """,
+                [before, min(limit, HISTORY_LIMIT)],
+            ).fetchall()
+        return [_row_to_briefing(row) for row in rows]
+
+    def react(
+        self, briefing_id: int, reaction: Reaction | None, comment: str | None
+    ) -> Briefing:
+        """Set the athlete's reaction to a briefing; None clears it.
+
+        One per briefing (it lives on the row) and idempotent: sending the
+        same reaction again leaves the same state. LookupError when the
+        briefing is not one of the athlete's usable briefings.
+        """
+        assert reaction is not None or comment is None, "A comment needs a reaction"
+        with db_connection() as conn:
+            row = conn.execute(
+                f"""
+                UPDATE app.coach_briefings
+                SET reaction = $reaction, reaction_comment = $comment,
+                    reacted_at = CASE
+                        WHEN $reaction IS NULL THEN NULL
+                        -- The same answer again changes nothing, not even its time.
+                        WHEN reaction IS NOT DISTINCT FROM $reaction
+                         AND reaction_comment IS NOT DISTINCT FROM $comment
+                        THEN reacted_at
+                        ELSE $at
+                    END
+                WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL
+                  AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL)
+                  AND id = $id AND status = 'ok'
+                RETURNING {_COLUMNS}
+                """,
+                {
+                    "reaction": reaction,
+                    "comment": comment,
+                    "id": briefing_id,
+                    "at": naive_utc_now(),
+                },
+            ).fetchone()
+        if row is None:
+            raise LookupError("Briefing introuvable")
+        return _row_to_briefing(row)
 
     def list_recent(
         self, limit: int = 30, user_id: int | None = None
@@ -172,7 +268,7 @@ class BriefingRepository:
                 f"""
                 SELECT {_COLUMNS} FROM visible_coach_briefings
                 WHERE user_id = ? AND status <> 'pending'
-                ORDER BY date DESC, created_at DESC, id DESC
+                ORDER BY date DESC, id DESC
                 LIMIT ?
                 """,
                 [user_id, limit],
@@ -198,9 +294,8 @@ class BriefingRepository:
         still both succeed (no unique key), at worst one extra model request.
         """
         user_id = resolve_athlete_id(user_id)
-        # Naive UTC, like the scheduler's markers: instances on other clocks
-        # (Docker in Paris, Vercel in UTC) share the database.
-        now = datetime.now(UTC).replace(tzinfo=None)
+        # Naive UTC, like the scheduler's markers and every briefing's time.
+        now = naive_utc_now()
         try:
             with transaction() as conn:
                 held = conn.execute(
@@ -274,8 +369,42 @@ class StoredFeedback:
         }
 
 
+MAX_PENDING_GARMIN_FEEDBACK = 20
+#: An imported file is commented only when recent: a history import is not news.
+FILE_FEEDBACK_DAYS = 2
+#: Imported files the daily feedback reads, beside Garmin's activities.
+FILE_FEEDBACK_SOURCES = tuple(sorted(source.value for source in FILE_SOURCES))
+FEEDBACK_IMPORT_LOOKBACK_DAYS = 30
+
+
 class SessionFeedbackRepository:
     """``app.session_feedback``: one row per cardio session, the latest wins."""
+
+    def pending_garmin(self) -> tuple[list[int], int]:
+        """Daily catch-up: 20 recent imports, independent of the activity date.
+
+        Garmin's, and imported files' (any watch) dated within
+        ``FILE_FEEDBACK_DAYS``. On-use refresh deliberately
+        does not write feedback. Missing feedback is its durable queue; a
+        30-day import window avoids announcing ancient historical rows when
+        this behavior is first enabled.
+        """
+        with db_connection() as conn:
+            rows = conn.execute(
+                "SELECT a.id, COUNT(*) OVER () FROM app.visible_actual_sessions a "
+                "LEFT JOIN app.visible_session_feedback f ON f.actual_session_id=a.id "
+                f"WHERE (a.source = '{ActivitySource.GARMIN_CONNECT.value}' "
+                f"OR (a.source IN ({sql_in(FILE_FEEDBACK_SOURCES)}) AND a.date >= ?)) "
+                "AND f.actual_session_id IS NULL "
+                "AND a.created_at >= current_timestamp - ? * INTERVAL '1 day' "
+                "ORDER BY a.created_at, a.id LIMIT ?",
+                [
+                    athlete_today() - timedelta(days=FILE_FEEDBACK_DAYS),
+                    FEEDBACK_IMPORT_LOOKBACK_DAYS,
+                    MAX_PENDING_GARMIN_FEEDBACK,
+                ],
+            ).fetchall()
+        return [int(row[0]) for row in rows], int(rows[0][1]) if rows else 0
 
     def save(self, session_id: int, *, text: str, source: str, trigger: str) -> None:
         with db_connection() as conn:

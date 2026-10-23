@@ -8,6 +8,7 @@ import type { PlannedState } from '@/lib/sessionMatch';
 import { cn, formatDurationCompact, formatPace } from '@/lib/utils';
 import type { ActualSession, PlanDecision, PlannedSession, StrengthSession } from '@/types';
 import { DecisionBadge } from './DecisionBadge';
+import { GlossaryLink } from './GlossaryLink';
 import { Spinner } from './ui/Spinner';
 
 const INTENSITY_LABEL: Record<string, string> = {
@@ -31,6 +32,7 @@ export const SESSION_TYPE_LABEL: Record<string, string> = {
   hypertrophy: 'Muscu',
   power: 'Muscu',
   deload: 'Décharge',
+  cross_training: 'Circuit',
   race: 'Course',
 };
 
@@ -266,7 +268,7 @@ export function SessionCard({
             <SessionFacts session={realised} />
           ) : (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-sans">
-              <span className="text-text-primary uppercase tracking-wider">{typeLabel}</span>
+              <span className="text-text-primary">{typeLabel}</span>
               <span className="text-text-muted capitalize">{planned.sport}</span>
               {targets.map((t) => (
                 <span key={t} className="text-text-muted">
@@ -313,7 +315,7 @@ export function SessionCard({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {state === 'done' && <Check className="w-4 h-4 text-success-green" />}
+          {state === 'done' && <><Check aria-hidden="true" className="w-4 h-4 text-success-green" /><span className="sr-only">{STATE_LABEL.done}</span></>}
           {state !== 'done' && state !== 'pending' && (
             <span className="text-[11px] font-sans text-text-muted">{STATE_LABEL[state]}</span>
           )}
@@ -324,18 +326,20 @@ export function SessionCard({
                 disabled={busy}
                 onClick={() => onStatus('completed')}
                 title="Marquer comme faite (sans montre)"
+                aria-label="Marquer comme faite (sans montre)"
                 className="p-1 rounded text-text-muted hover:text-success-green hover:bg-success-green/10 disabled:opacity-40"
               >
-                <Check className="w-4 h-4" />
+                <Check aria-hidden="true" className="w-4 h-4" />
               </button>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => onStatus(state === 'skipped' ? 'pending' : 'skipped')}
                 title={state === 'skipped' ? 'Remettre en attente' : 'Marquer comme sautée'}
+                aria-label={state === 'skipped' ? 'Remettre en attente' : 'Marquer comme sautée'}
                 className="p-1 rounded text-text-muted hover:text-warning-orange hover:bg-warning-orange/10 disabled:opacity-40"
               >
-                <X className="w-4 h-4" />
+                <X aria-hidden="true" className="w-4 h-4" />
               </button>
             </>
           )}
@@ -345,9 +349,10 @@ export function SessionCard({
               disabled={busy}
               onClick={onDelete}
               title="Supprimer la séance planifiée"
+              aria-label="Supprimer la séance planifiée"
               className="p-1 rounded text-text-muted hover:text-danger-red hover:bg-danger-red/10 disabled:opacity-40"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 aria-hidden="true" className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -378,8 +383,9 @@ export function SessionCard({
       )}
 
       {state === 'done' && realised?.adherence_score != null && (
-        <div className="mt-1 text-[11px] font-sans text-success-green/80">
+        <div className="mt-1 flex items-center gap-1 text-[11px] font-sans text-success-green/80">
           Adhérence {Math.round(realised.adherence_score)} %
+          <GlossaryLink term="adherence" />
         </div>
       )}
       {children}

@@ -1,9 +1,10 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject, type TextareaHTMLAttributes } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { documentRequest } from '@/lib/documents';
-import { cn } from '@/lib/utils';
+import { cn, readableError } from '@/lib/utils';
+import { coachWords, type CoachWords } from '@/lib/coachName';
 
-interface SystemSkill { name: string; description: string; path: string }
+interface SystemSkill { name: string; display_name?: string; description: string; path: string }
 const MAX_SYSTEM_SKILLS = 32;
 const CATALOG_STALE_MS = 60_000;
 
@@ -11,8 +12,9 @@ async function loadSkills(signal: AbortSignal): Promise<SystemSkill[]> {
   const data = await documentRequest<SystemSkill[]>('/agent/skills', { signal });
   if (!Array.isArray(data) || data.length > MAX_SYSTEM_SKILLS || data.some(skill =>
     !skill || typeof skill.name !== 'string' || !/^[a-z0-9-]+$/.test(skill.name) ||
-    typeof skill.description !== 'string' || typeof skill.path !== 'string'
-  )) throw new Error('Le catalogue des skills est invalide.');
+    typeof skill.description !== 'string' || typeof skill.path !== 'string' ||
+    (skill.display_name !== undefined && (typeof skill.display_name !== 'string' || !skill.display_name.trim() || skill.display_name.length > 80))
+  )) throw new Error('Le catalogue des méthodes est invalide.');
   return data;
 }
 
@@ -34,9 +36,11 @@ type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChan
   value: string;
   onValueChange: (value: string) => void;
   inputRef: RefObject<HTMLTextAreaElement | null>;
+  /** The coach's words for the athlete's mode (coachWords). */
+  coach?: CoachWords;
 };
 
-export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect, ...props }: Props) {
+export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect, coach = coachWords(false), ...props }: Props) {
   const listId = useId();
   const [caret, setCaret] = useState(value.length);
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -62,7 +66,7 @@ export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect
   });
   const query = normalize(command?.query ?? '');
   const matches = (catalog.data ?? []).filter(skill =>
-    normalize(`${skill.name} ${skill.description}`).includes(query)
+    normalize(`${skill.name} ${skill.display_name ?? ''} ${skill.description}`).includes(query)
   );
   const index = highlight.key === key ? Math.min(highlight.index, Math.max(0, matches.length - 1)) : 0;
   useEffect(() => {
@@ -81,13 +85,13 @@ export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect
 
   return <>
     {open && <div className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-xl border border-text-muted/20 bg-abyss shadow-xl">
-      <p className="border-b border-text-muted/15 px-3 py-2 text-xs text-text-muted">Skills · Entrée pour sélectionner · Échap pour fermer</p>
-      {catalog.isPending ? <p role="status" className="px-3 py-3 text-sm text-text-muted">Chargement des skills…</p>
+      <p className="border-b border-text-muted/15 px-3 py-2 text-xs text-text-muted">Méthodes {coach.of} · Entrée pour sélectionner · Échap pour fermer</p>
+      {catalog.isPending ? <p role="status" className="px-3 py-3 text-sm text-text-muted">Chargement des méthodes…</p>
         : catalog.isError ? <div role="alert" className="px-3 py-3 text-sm">
-          <p>{catalog.error.message}</p>
+          <p>{readableError(catalog.error)}</p>
           <button type="button" onClick={() => void catalog.refetch()} className="mt-2 text-neon-cyan">Réessayer</button>
         </div>
-          : <ul id={listId} role="listbox" aria-label="Skills disponibles" className="max-h-60 overflow-y-auto p-1">
+          : <ul id={listId} role="listbox" aria-label="Méthodes disponibles" className="max-h-60 overflow-y-auto p-1">
             {matches.map((skill, i) => <li
               key={skill.name}
               id={`${listId}-${i}`}
@@ -98,10 +102,11 @@ export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect
               onClick={() => choose(skill)}
               className={cn('cursor-pointer rounded-lg px-3 py-2', i === index ? 'bg-neon-cyan/10' : 'hover:bg-text-muted/10')}
             >
-              <p className="text-sm font-medium text-neon-cyan">/{skill.name}</p>
+              <p className="text-sm font-medium text-neon-cyan">{skill.display_name ?? skill.name}</p>
+              <p className="text-[10px] text-text-muted">/{skill.name}</p>
               <p className="mt-0.5 text-xs leading-relaxed text-text-muted">{skill.description}</p>
             </li>)}
-            {!matches.length && <li role="presentation" className="px-3 py-3 text-sm text-text-muted">Aucun skill correspondant.</li>}
+            {!matches.length && <li role="presentation" className="px-3 py-3 text-sm text-text-muted">Aucune méthode correspondante.</li>}
           </ul>}
     </div>}
     <textarea

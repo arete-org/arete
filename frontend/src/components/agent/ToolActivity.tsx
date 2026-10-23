@@ -22,7 +22,7 @@ function ToolPreview({ label, preview }: { label: string; preview?: Preview }) {
   }
   return (
     <div className="mt-3 min-w-0">
-      <p className="mb-1 text-[10px] uppercase tracking-wider text-text-muted">
+      <p className="mb-1 text-[10px] text-text-muted">
         {label}
       </p>
       <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-void/70 p-2.5 font-mono text-[11px] leading-relaxed text-text-secondary">

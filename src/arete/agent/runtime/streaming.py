@@ -20,10 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 class StreamProjection:
-    def __init__(self) -> None:
+    def __init__(self, *, supports_chart_cards: bool = False) -> None:
+        self.supports_chart_cards = supports_chart_cards
         self.texts: dict[str, str] = {}
         self.last_id = ""
         self.chars = 0
+        self.context_usage: dict | None = None
 
     def _record(self, message_id: str, text: str) -> None:
         self.chars += len(text) - len(self.texts.get(message_id, ""))
@@ -37,22 +39,47 @@ class StreamProjection:
             return []
         kind, data = part["type"], part["data"]
         if kind == "custom":
+            # Cached clients reject unknown events. Their standalone answer and
+            # existing tool activity remain usable during a rolling release.
+            if isinstance(data, dict) and data.get("type") == "chart_card":
+                return [data] if self.supports_chart_cards else []
             return (
                 [data]
                 if isinstance(data, dict)
                 and data.get("type")
                 in (
+                    "thread_title",
+                    "sync_status",
                     "tool_start",
                     "tool_end",
                     "calendar_action",
                     "workout_update",
                     "coach_card",
+                    "context_compaction",
                 )
                 else []
             )
+        if kind == "values":
+            usage = data.get("context_window_usage")
+            if usage is None or usage == self.context_usage:
+                return []
+            if not isinstance(usage, dict) or any(
+                type(usage.get(key)) is not int or usage[key] < minimum
+                for key, minimum in (("used_tokens", 0), ("window_tokens", 1))
+            ):
+                raise ValueError("Mesure de contexte invalide.")
+            # Never forward the rest of graph state (files, prompts or history).
+            self.context_usage = {
+                key: usage[key] for key in ("used_tokens", "window_tokens")
+            }
+            return [{"type": "values", "context_window_usage": self.context_usage}]
         if kind == "messages":
             chunk, meta = data
-            if meta.get("langgraph_node") != "model":
+            if (
+                meta.get("langgraph_node") != "model"
+                or meta.get("lc_source") in {"summarization", "conversation_title"}
+                or "conversation_title" in meta.get("tags", [])
+            ):
                 return []
             text = chunk.text
             if not text:

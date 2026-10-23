@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import httpx2
 import pytest
+from agent_clock import CLOCK
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest
 from langchain_core.messages import HumanMessage
@@ -141,6 +142,7 @@ def test_sdk_sends_stable_hash_and_keeps_caps_on_each_fallback_attempt(provider,
         assert "tools" in body
         assert body["provider"]["sort"] == "latency"
         assert "order" not in body["provider"]
+        assert body["provider"]["data_collection"] == "deny"
         assert body["provider"]["max_price"] == (
             {"prompt": 0, "completion": 0}
             if body["model"] == "unavailable"
@@ -170,7 +172,7 @@ def test_concurrent_conversations_do_not_share_affinity(
             await invoke_agent(
                 agent,
                 {"messages": [HumanMessage("Lis le planning.")]},
-                context=AgentContext(thread_id=thread),
+                context=AgentContext(current_datetime=CLOCK, thread_id=thread),
             )
 
     async def concurrent():

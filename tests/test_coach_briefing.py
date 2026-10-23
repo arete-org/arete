@@ -729,6 +729,8 @@ class TestBriefingFacts:
         assert "Préparation Garmin (VFC, sommeil, cette nuit) : 71/100" in garmin
         assert "Préparation estimée par la charge" in model
         assert garmin.count("Préparation") == 1
+        # The heading names what its lines hold, in the dashboard's words.
+        assert "Charge, fraîcheur et préparation :\n- Charge aiguë" in garmin
 
     def test_the_facts_carry_the_decision_and_its_reason(self, clean_day):
         from arete.services.briefing import briefing_facts
@@ -811,7 +813,8 @@ class TestBriefingFacts:
             generate_briefing(target_date=clean_day)
         assert facts.call_count == 1
         # The model reads the floor's numbers rather than a second computation.
-        assert "(ACWR, sur 28 jours) : 1.00" in run.call_args.args[0]
+        # With a decimal comma, which the French briefing copies.
+        assert "(ACWR, sur 28 jours) : 1,00" in run.call_args.args[0]
 
     def test_concurrent_first_requests_produce_once(self, clean_day, enabled):
         from concurrent.futures import ThreadPoolExecutor

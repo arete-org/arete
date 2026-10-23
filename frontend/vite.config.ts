@@ -10,7 +10,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: "autoUpdate",
+      // The page announces a waiting version (UpdateNotice) instead of swapping silently.
+      registerType: "prompt",
       includeAssets: ["favicon.svg", "favicon.png", "apple-touch-icon.png"],
       manifest: {
         name: "Arete — Assistant d’entraînement",
@@ -20,7 +21,8 @@ export default defineConfig({
         theme_color: "#0A0A0F",
         background_color: "#0A0A0F",
         display: "standalone",
-        orientation: "portrait",
+        // Any orientation: a phone on a stand or a tablet in landscape keeps the app (WCAG 1.3.4).
+        orientation: "any",
         start_url: "/",
         scope: "/",
         icons: [

@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowUp, Loader2, SmilePlus, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ArrowUp, Loader2, SmilePlus } from 'lucide-react';
+import { FeedbackRating } from './FeedbackRating';
 import { cn } from '@/lib/utils';
 import { EMPTY_FEEDBACK, isEmoji, readFeedback, writeFeedback, type FeedbackKey, type MessageFeedback as Feedback, type TraceReceipt } from '@/lib/agentFeedback';
 
 const REACTIONS = ['🎯', '💪', '🔥', '🤔', '❤️', '🙌'];
-const BUTTON = 'flex size-8 items-center justify-center rounded-md [@media(pointer:coarse)]:size-10 text-text-muted hover:bg-shadow hover:text-text-primary aria-pressed:bg-neon-cyan/10 aria-pressed:text-neon-cyan focus-visible:outline-2 focus-visible:outline-neon-cyan disabled:opacity-40';
+const BUTTON = 'coach-feedback-action';
 
 export function MessageFeedback({ trace, threadId, feedback, onChange }: {
   trace: TraceReceipt;
@@ -63,14 +64,7 @@ export function MessageFeedback({ trace, threadId, feedback, onChange }: {
 
   return <div className="contents" role="group" aria-label="Donner un avis sur cette réponse">
     <div className="inline-flex items-center gap-0.5">
-      {([1, 0] as const).map(score => {
-        const selected = current.user_score === score;
-        const Icon = score ? ThumbsUp : ThumbsDown;
-        return <button key={score} type="button" disabled={blocked} aria-pressed={selected}
-          aria-label={score ? 'Réponse utile' : 'Réponse peu utile'} title={score ? 'Réponse utile' : 'Réponse peu utile'}
-          className={BUTTON}
-          onClick={() => void submit('user_score', selected ? null : score)}><Icon className="size-4" /></button>;
-      })}
+      <FeedbackRating value={current.user_score} disabled={blocked} onChange={score => void submit('user_score', score)} />
       {current.reaction && <button type="button" disabled={blocked} className={cn(BUTTON, 'bg-neon-cyan/10 text-lg')}
         aria-label={`Retirer la réaction ${current.reaction}`} onClick={() => void submit('reaction', null)}>{current.reaction}</button>}
       <button ref={pickerButton} type="button" className={BUTTON} disabled={blocked} aria-label="Choisir une réaction" title="Choisir une réaction"

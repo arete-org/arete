@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { planApi } from '@/lib/api';
 import { qk } from '@/lib/queryKeys';
@@ -42,7 +43,9 @@ afterEach(() => {
 const renderPanel = () =>
   render(
     <QueryClientProvider client={client}>
-      <WeeklyReviewPanel />
+      <MemoryRouter>
+        <WeeklyReviewPanel />
+      </MemoryRouter>
     </QueryClientProvider>
   );
 
@@ -89,7 +92,7 @@ it('applies the ticked proposals and refreshes the planned sessions', async () =
   expect(boxes.every((b) => b.checked)).toBe(true);
   fireEvent.click(boxes[1]);
   fireEvent.click(screen.getByRole('button', { name: 'Appliquer' }));
-  await waitFor(() => expect(apply).toHaveBeenCalledWith(4, [0, 2]));
+  await waitFor(() => expect(apply).toHaveBeenCalledWith(4, [0, 2], '2026-10-05T07:00:00'));
   expect(await screen.findByText('Séance modifiée depuis : proposition ignorée')).toBeTruthy();
   expect(client.getQueryState(qk.planned())?.isInvalidated).toBe(true);
 });
@@ -101,7 +104,7 @@ it('rewrites the review on demand', async () => {
     .mockResolvedValue({ ...review, id: 5, source: 'agent', text: 'Nouveau bilan.' });
   renderPanel();
   fireEvent.click(await screen.findByRole('button', { name: /Refaire le bilan/ }));
-  await waitFor(() => expect(write).toHaveBeenCalledWith(true));
+  await waitFor(() => expect(write).toHaveBeenCalledWith(true, 4));
   expect(await screen.findByText('Nouveau bilan.')).toBeTruthy();
   expect(screen.getByText(/Le coach/)).toBeTruthy();
 });

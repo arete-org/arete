@@ -16,6 +16,8 @@ async function record(page: Page) {
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (!path.endsWith('/auth/config')) requests.push(`${path}${url.search}`);
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
+    if (path.endsWith('/garmin/sync/ensure')) return route.fulfill({ json: { state: 'fresh', complete: true } });
     if (path.endsWith('/auth/config')) return route.fulfill({ json: { enabled: false } });
     if (path.endsWith('/settings/gamification')) return route.fulfill({ json: { enabled: false, opted_in: false, available: true, version: 1 } });
     if (path.endsWith('/garmin/planned')) return route.fulfill({ json: sessions });
@@ -23,6 +25,7 @@ async function record(page: Page) {
     const one = path.match(/\/garmin\/planned\/(\d+)\/workout$/);
     if (one) return route.fulfill({ json: view(Number(one[1])) });
     if (path.endsWith('/garmin/workouts')) return route.fulfill({ json: { workouts: url.searchParams.getAll('ids').map(id => view(Number(id))), errors: {} } });
+    if (path.startsWith('/api/agent/conversations/') && route.request().method() === 'PUT') return route.fulfill({ json: { revision: 1, title: 'Semaine' } });
     if (path.includes('/settings')) return route.fulfill({ json: {} });
     return route.fulfill({ json: [] });
   });
@@ -36,8 +39,9 @@ test('a Planning week with 10 sessions loads with a constant number of requests'
   await expect(page.getByTestId('workout-109')).toBeVisible();
   await page.waitForLoadState('networkidle');
   expect(workoutReads(requests)).toEqual([]);
-  // settings, game preference, planned, actual, strength, Garmin states.
-  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(6);
+  // Settings, game preference, shared inbox, planned, actual, strength, Garmin states, one freshness check.
+  expect(requests.filter(r => r === '/api/garmin/sync/ensure')).toHaveLength(1);
+  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(8);
   // The collapsed review and goal projection load when opened.
   await page.getByText('Bilan et objectifs', { exact: true }).click();
   await expect.poll(() => requests.some(r => r.endsWith('/plan/review'))).toBe(true);
@@ -51,14 +55,19 @@ test('the coach reads its workout cards once and not again when reopened', async
       messages: [{ role: 'user', content: 'Envoie ma semaine' }, { role: 'assistant', content: 'C’est fait.', workouts: views }],
     }] }));
   }, sessions.slice(0, 5).map(s => ({ type: 'workout_update', id: `w-${s.id}`, thread_id: 't1', sequence: 1, ...view(s.id) })));
+  // The stored thread was never archived: the page saves it once, a second
+  // after mounting, whatever the panel does. Wait for that write so it cannot
+  // land in the reopen window below.
+  const archived = page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/agent/conversations/t1', { timeout: 10_000 });
   await page.goto('/planning?date=2027-01-12');
   await expect(page.getByTestId('workout-109')).toBeVisible();
-  const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
+  const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
   await open();
   const panel = page.getByRole('complementary', { name: 'Coach IA' });
   await expect(panel.getByTestId('workout-104').getByText('Programmée dans Garmin Connect', { exact: true })).toBeVisible();
   await page.waitForLoadState('networkidle');
   expect(workoutReads(requests)).toEqual(['/api/garmin/workouts?ids=100&ids=101&ids=102&ids=103&ids=104']);
+  await archived;
   await panel.getByRole('button', { name: 'Masquer le coach' }).click();
   const before = requests.length;
   await open();

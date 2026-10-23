@@ -39,14 +39,15 @@ def build_filesystem_middleware(
     *,
     permissions: list[FilesystemPermission],
     tool_descriptions: Mapping[str, str] | None = None,
+    offload_tool_results: bool = True,
 ) -> FilesystemMiddleware:
     """Keep framework execution; only request bounds and schemas are app-specific."""
     middleware = FilesystemMiddleware(
         backend=backend,
         tools=["read_file", "ls", "glob", "grep", "edit_file", "delete"],
         custom_tool_descriptions=tool_descriptions,
-        tool_token_limit_before_evict=None,
-        human_message_token_limit_before_evict=None,
+        tool_token_limit_before_evict=(20_000 if offload_tool_results else None),
+        human_message_token_limit_before_evict=50_000 if offload_tool_results else None,
         grep_max_count=100,
         # Pinned Deep Agents 0.7.4 exposes permissions through this argument.
         _permissions=permissions,

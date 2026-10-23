@@ -73,14 +73,21 @@ def _endpoints(client, day: str, headers=None) -> dict:
         "garmin_connected": get("/garmin/sync/status")["garmin_authenticated"],
         "briefing": get("/tips/daily"),
         "coach": get("/coach/today"),
+        "checkin": next(iter(get("/checkins?days=1")), None),
     }
 
 
 def test_every_slice_equals_its_former_endpoint(history, client):
     day = history.isoformat()
+    answer = {"sleep": 4, "legs": 3, "mood": None, "note": None}
+    assert client.put(f"/checkins/{day}", json=answer).status_code == 200
     board = client.get("/dashboard").json()
     expected = _endpoints(client, day)
 
+    # The fields without a former endpoint: whether any load was ever logged,
+    # and the week's review to answer (none written here).
+    assert board.pop("has_load") is True
+    assert board.pop("weekly_review") is None
     assert board.keys() == expected.keys()
     for field, value in expected.items():
         assert board[field] == value, field
@@ -89,12 +96,17 @@ def test_every_slice_equals_its_former_endpoint(history, client):
     assert board["plan_today"]["decisions"] and board["coach"]["items"]
     assert board["next_goal"] and board["health"]
     assert board["briefing"]["status"] == "ready"
+    assert board["checkin"]["legs"] == 3
     # Ties on the date keep a stable order: the newest session first.
     assert [s["name"] for s in board["actual"]] == ["Velo", "Réveil musculaire"]
 
 
 def test_the_fixture_day_keeps_its_numbers(history, client):
-    """Golden values, read from origin/main's endpoints on the same fixture."""
+    """Golden values, read from origin/main's endpoints on the same fixture.
+
+    Since ARE-126 the fixture's Strava rows (and their suffer scores) load
+    nothing: the load series reach the coach, and Strava data may not.
+    """
     board = client.get("/dashboard").json()
     fitness, stats, workload = (
         board["fitness"],
@@ -103,23 +115,24 @@ def test_the_fixture_day_keeps_its_numbers(history, client):
     )
 
     assert {k: fitness[k] for k in ("ctl", "atl", "tsb", "ramp_rate", "form_zone")} == {
-        "ctl": 70.5,
-        "atl": 86.8,
-        "tsb": -16.3,
-        "ramp_rate": 3.1,
+        "ctl": 63.6,
+        "atl": 86.5,
+        "tsb": -22.8,
+        "ramp_rate": 4.4,
         "form_zone": "tired",
     }
-    assert fitness["days_analyzed"] == 32
+    assert fitness["days_analyzed"] == 26
     assert (fitness["readiness_score"], fitness["readiness_source"]) == (54.0, "garmin")
     assert (stats["xp"]["current"], stats["xp"]["max"]) == (390.4, 250.0)
-    assert (stats["level"], stats["weeks_at_goal"]) == (22, 98)
-    assert (stats["mp"]["current"], stats["hp"]["current"]) == (22.8, 54.0)
+    assert (stats["level"], stats["weeks_at_goal"]) == (3, 85)
+    assert (stats["recent_weeks_at_goal"], stats["recent_weeks"]) == (10, 12)
+    assert (stats["mp"]["current"], stats["hp"]["current"]) == (12.0, 54.0)
     assert (workload["acwr"], workload["acwr_ewma"], workload["acwr_zone"]) == (
-        1.219,
-        1.343,
+        1.263,
+        1.357,
         "optimal",
     )
-    assert workload["days_analyzed"] == 21
+    assert workload["days_analyzed"] == 20
 
 
 def test_garmin_connection_follows_the_stored_tokens(history, client):
@@ -197,7 +210,9 @@ def test_one_connection_one_load_history_and_no_write(
     assert len(statement_log) == count
 
 
-def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
+def test_each_athlete_reads_only_their_dashboard(
+    tmp_path, client, monkeypatch, give_consent
+):
     from arete.api import auth
     from arete.services.users import upsert_user
 
@@ -207,6 +222,8 @@ def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
     init_schema()
     first = upsert_user("first", "first@example.com", "First", verified=True)
     second = upsert_user("second", "second@example.com", "Second", verified=True)
+    assert first.athlete_id is not None and second.athlete_id is not None
+    give_consent(first.athlete_id, second.athlete_id)
     today = athlete_today()
     with athlete_scope(first.athlete_id):
         con = connect()
@@ -221,6 +238,9 @@ def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
     as_first = {"Authorization": f"Bearer {first.clerk_user_id}"}
     as_second = {"Authorization": f"Bearer {second.clerk_user_id}"}
 
+    answer = {"sleep": 2, "legs": 4}
+    put = client.put(f"/checkins/{today}", json=answer, headers=as_first)
+    assert put.status_code == 200
     mine = client.get("/dashboard", headers=as_first).json()
     theirs = client.get("/dashboard", headers=as_second).json()
 
@@ -230,6 +250,9 @@ def test_each_athlete_reads_only_their_dashboard(tmp_path, client, monkeypatch):
     assert theirs["planned"] == theirs["actual"] == theirs["strength"] == []
     assert theirs["plan_today"]["decisions"] == theirs["coach"]["items"] == []
     assert theirs["next_goal"] is None and theirs["health"] is None
+    assert mine["checkin"]["sleep"] == 2 and theirs["checkin"] is None
     assert theirs["fitness"]["ctl"] == 0.0
     assert theirs["briefing"]["status"] == "pending"
+    assert mine.pop("has_load") is True and theirs.pop("has_load") is False
+    assert mine.pop("weekly_review") is theirs.pop("weekly_review") is None
     assert theirs == _endpoints(client, today.isoformat(), headers=as_second)

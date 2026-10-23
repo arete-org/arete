@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Modal } from '@/components/ui';
 import { authFetch } from '@/lib/auth';
 import { invalidateWithDashboard } from '@/lib/queryKeys';
+import { readableError } from '@/lib/utils';
 
 interface GarminLoginModalProps {
   isOpen: boolean;
@@ -12,7 +13,7 @@ interface GarminLoginModalProps {
 }
 
 const FIELD = inputClasses('cyan', 'text-sm');
-const LABEL = 'text-xs text-text-muted font-sans uppercase tracking-wider block mb-1';
+const LABEL = 'text-xs text-text-muted font-sans block mb-1';
 
 export function GarminLoginModal({ isOpen, onClose, onSuccess }: GarminLoginModalProps) {
   const queryClient = useQueryClient();
@@ -45,7 +46,7 @@ export function GarminLoginModal({ isOpen, onClose, onSuccess }: GarminLoginModa
         onSuccess();
       }
     },
-    onError: (err) => setError(String(err)),
+    onError: (err) => setError(readableError(err)),
   });
 
   const handleClose = () => {
@@ -75,14 +76,14 @@ export function GarminLoginModal({ isOpen, onClose, onSuccess }: GarminLoginModa
         }}
       >
       <h2 className="text-lg font-sans text-neon-cyan mb-4">
-        GARMIN CONNECT — {needsMfa ? 'Vérification en deux étapes' : 'Connexion'}
+        Garmin Connect — {needsMfa ? 'Vérification en deux étapes' : 'Connexion'}
       </h2>
 
       {needsMfa ? (
         <>
           <p className="text-sm font-sans text-text-muted mb-6">Saisis le code envoyé sur ton appareil.</p>
           <div>
-            <label htmlFor="garmin-mfa" className={LABEL}>[CODE]</label>
+            <label htmlFor="garmin-mfa" className={LABEL}>Code</label>
             <input
               id="garmin-mfa"
               type="text"
@@ -107,7 +108,7 @@ export function GarminLoginModal({ isOpen, onClose, onSuccess }: GarminLoginModa
           <p className="text-sm font-sans text-text-muted mb-6">Connecte ton compte Garmin pour synchroniser tes activités.</p>
           <div className="space-y-4">
             <div>
-              <label htmlFor="garmin-email" className={LABEL}>[EMAIL]</label>
+              <label htmlFor="garmin-email" className={LABEL}>E-mail</label>
               <input
                 id="garmin-email"
                 type="email"
@@ -120,7 +121,7 @@ export function GarminLoginModal({ isOpen, onClose, onSuccess }: GarminLoginModa
               />
             </div>
             <div>
-              <label htmlFor="garmin-password" className={LABEL}>[MOT DE PASSE]</label>
+              <label htmlFor="garmin-password" className={LABEL}>Mot de passe</label>
               <input
                 id="garmin-password"
                 type={showPassword ? 'text' : 'password'}
@@ -157,10 +158,10 @@ export function GarminLoginModal({ isOpen, onClose, onSuccess }: GarminLoginModa
 
       <div className="mt-6 flex gap-3 justify-end">
         <Button variant="ghost" onClick={handleClose}>
-          [ANNULER]
+          Annuler
         </Button>
         <Button type="submit" disabled={incomplete} loading={loginMutation.isPending}>
-          {loginMutation.isPending ? 'VÉRIFICATION…' : needsMfa ? '[VÉRIFIER]' : '[CONNECTER]'}
+          {loginMutation.isPending ? 'Vérification…' : needsMfa ? 'Vérifier' : 'Connecter'}
         </Button>
       </div>
       </form>

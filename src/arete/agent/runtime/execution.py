@@ -87,7 +87,37 @@ def _elapsed_ms(started: float) -> int:
     return round((monotonic() - started) * 1000)
 
 
-async def invoke_agent(graph: Any, state: dict, *, context: AgentContext) -> dict:
+def _personal(context: AgentContext) -> bool:
+    from arete.agent.runtime.policy import slack_policy
+
+    return context.profile == "chat" or (
+        context.profile == "slack" and slack_policy(context).personal_context
+    )
+
+
+async def refresh_personal_data(context: AgentContext) -> None:
+    """Refresh once before context reads, never for product/admin/background runs."""
+    from anyio import to_thread
+
+    from arete.services.garmin_sync import ensure_fresh
+
+    if not _personal(context) or context.garmin_freshness is not None:
+        return
+    assert context.deadline is not None
+    try:
+        context.garmin_freshness = await to_thread.run_sync(
+            partial(ensure_fresh, deadline=context.deadline - 120)
+        )
+    except Exception as exc:
+        context.garmin_freshness = {
+            "state": "failed",
+            "complete": False,
+            "error": type(exc).__name__,
+        }
+    context.page_section = None
+
+
+async def invoke_agent(graph: Any, state: Any, *, context: AgentContext) -> dict:
     started = context.started_at or monotonic()
     context.started_at = started
     context.deadline = context.deadline or started + MAX_RUN_SECONDS
@@ -95,6 +125,7 @@ async def invoke_agent(graph: Any, state: dict, *, context: AgentContext) -> dic
     try:
         with agent_tracing():
             async with asyncio.timeout(max(0, context.deadline - monotonic())):
+                await refresh_personal_data(context)
                 result = cast(
                     dict,
                     await graph.ainvoke(
@@ -111,6 +142,9 @@ async def invoke_agent(graph: Any, state: dict, *, context: AgentContext) -> dic
         error = type(exc).__name__
         raise
     finally:
+        from arete.agent.runtime.conversation_title import close_title
+
+        await close_title(context)
         context.run_logged = True
         record_run(
             profile=context.profile,
@@ -140,11 +174,25 @@ async def stream_agent(
     try:
         with agent_tracing():
             async with asyncio.timeout(max(0, context.deadline - monotonic())):
+                if _personal(context):
+                    yield {
+                        "type": "custom",
+                        "data": {"type": "sync_status", "state": "running"},
+                    }
+                await refresh_personal_data(context)
+                if context.garmin_freshness is not None:
+                    yield {
+                        "type": "custom",
+                        "data": {
+                            "type": "sync_status",
+                            "state": context.garmin_freshness.get("state", "failed"),
+                        },
+                    }
                 stream = graph.astream(
                     state,
                     context=context,
                     config=run_config(context=context, graph=graph),
-                    stream_mode=["messages", "updates", "custom"],
+                    stream_mode=["messages", "updates", "custom", "values"],
                     version="v2",
                 )
                 async with aclosing(stream):
@@ -160,6 +208,9 @@ async def stream_agent(
         error = type(exc).__name__
         raise
     finally:
+        from arete.agent.runtime.conversation_title import close_title
+
+        await close_title(context)
         context.run_logged = True
         record_run(
             profile=context.profile,
@@ -174,4 +225,8 @@ def _is_answer_text(part: dict) -> bool:
     if part.get("type") != "messages" or part.get("ns"):
         return False
     chunk, meta = part["data"]
-    return meta.get("langgraph_node") == "model" and bool(chunk.text)
+    return (
+        meta.get("langgraph_node") == "model"
+        and meta.get("lc_source") != "summarization"
+        and bool(chunk.text)
+    )

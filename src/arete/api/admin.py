@@ -1,22 +1,23 @@
 """Accounts and rollout flags for administrators; roles for the owner alone.
 
 Reads and writes shared account and rollout tables, never an athlete's private
-data. The rules live in ``services.users`` and ``services.feature_flags``.
+data; the product indicators read it only as counts across athletes. The rules
+live in ``services.users``, ``services.feature_flags`` and ``services.product_kpis``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, StrictBool
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel, StrictBool, model_validator
 
 from arete import scheduler
 from arete.api.auth import forget_accounts, require_admin, require_owner
-from arete.services import users
+from arete.services import product_kpis, users
 from arete.services.feature_flags import (
     FeatureFlags,
     get_feature_flags,
@@ -53,7 +54,11 @@ class FeatureFlagsOut(FeatureFlags):
 
 
 class FeatureFlagsUpdate(FeatureFlags):
-    glm_flash: StrictBool
+    @model_validator(mode="after")
+    def specified(self):
+        if not self.model_fields_set:
+            raise ValueError("Indique une option à modifier.")
+        return self
 
 
 @router.get("/feature-flags", response_model=FeatureFlagsOut)
@@ -72,6 +77,28 @@ def update_feature_flags(body: FeatureFlagsUpdate) -> FeatureFlagsOut:
     return FeatureFlagsOut(
         **flags.model_dump(), glm_flash_available=glm_flash_available()
     )
+
+
+class KpiCell(BaseModel):
+    numerator: int
+    denominator: int
+    #: numerator / denominator, or hours for ``first_action_hours``; None
+    #: when nothing is counted.
+    value: float | None
+
+
+class KpiWeek(BaseModel):
+    week_start: date
+    current: bool
+    indicators: dict[str, KpiCell]
+
+
+@router.get("/kpis", response_model=list[KpiWeek])
+def read_kpis(
+    weeks: int = Query(12, ge=1, le=product_kpis.MAX_WEEKS),
+) -> list[product_kpis.WeekKpis]:
+    """Product indicators per ISO week, the current one first; counts only."""
+    return product_kpis.weekly(weeks)
 
 
 @contextmanager
@@ -116,3 +143,25 @@ def reactivate(athlete_id: int) -> Response:
 def release_lease(athlete_id: int) -> dict[str, bool]:
     """After a failed or stopped daily sync, let the next window run it again."""
     return {"released": scheduler.release_sync_lease(athlete_id)}
+
+
+class GarminReconciliation(BaseModel):
+    operation_id: str
+    workers_stopped: StrictBool
+
+
+@router.post("/athletes/{athlete_id}/garmin/reconcile")
+def reconcile_garmin(athlete_id: int, body: GarminReconciliation) -> dict:
+    """Recover an expired import only after the administrator stopped old workers."""
+    from arete.services.athlete_scope import athlete_scope
+    from arete.services.garmin_sync import reconcile_abandoned
+
+    if not users.athlete_is_active(athlete_id):
+        raise HTTPException(status_code=404, detail="Athlète introuvable.")
+    try:
+        with athlete_scope(athlete_id):
+            return reconcile_abandoned(
+                body.operation_id, workers_stopped=body.workers_stopped
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

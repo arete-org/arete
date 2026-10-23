@@ -123,7 +123,7 @@ test('Planning selection, direct export and editing work on mobile without model
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/planning?date=2027-01-12');
-  await page.evaluate(() => document.documentElement.dataset.theme = 'light');
+  await page.evaluate(() => document.documentElement.dataset.theme = 'pierre');
   await page.getByRole('button', { name: 'Options du planning', exact: true }).click();
   await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
   await page.getByLabel('Sélectionner Fractionné · 6 × 400 m').check();

@@ -16,7 +16,7 @@ Ne demande pas de choisir un rôle pour simplement expliquer ce que tu peux fair
 """
 
 PRODUCT_INSTRUCTIONS = """Contexte produit versionné, v1 : Arete est une application d'entraînement
-personnel : FastAPI, DuckDB/MotherDuck, React/Vite, synchronisations Garmin/Strava,
+personnel : FastAPI, DuckDB/MotherDuck, React/Vite, synchronisation Garmin, import FIT,
 planning sportif, musculation et coaching. Les conversations web restent dans le navigateur.
 Slack permet de discuter avec le coach et, pour les administrateurs, de coordonner le produit.
 Tu n'as aucun connecteur GitHub : aucun accès aux tickets actuels, branches ou PR.

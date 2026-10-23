@@ -1,5 +1,7 @@
 ---
 name: document-planning
+metadata:
+  display_name: Préparer un plan depuis un document
 description: Consulter et interpréter un planning d’entraînement joint, notamment un tableur, pour un jour ou une semaine ; créer les séances et les envoyer vers Garmin seulement sur demande.
 ---
 

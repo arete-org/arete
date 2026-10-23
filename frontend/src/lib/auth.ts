@@ -1,3 +1,5 @@
+import { reportRequest, reportUnreached } from './connectivity';
+import { isNetworkError } from './utils';
 import { claimPushDevice } from './pushSession';
 import { clearPersistedQueries } from './queryPersistence';
 /**
@@ -47,12 +49,41 @@ export function reportUnauthorized(): void {
   if (tokenGetter) unauthorizedHandler?.();
 }
 
-/** `fetch` with the session header; a 401 reports the lost session before returning. */
+/** The header the server sets on a 403 for missing consent (api/auth.py `CONSENT_HEADER`). */
+export const CONSENT_HEADER = 'X-Arete-Consent';
+
+let consentRequiredHandler: (() => void) | null = null;
+
+/**
+ * Registers what to do when the server refuses a request for missing consent
+ * (a new text version, a withdrawal on another device). Returns the function
+ * that unregisters it.
+ */
+export function onConsentRequired(handler: () => void): () => void {
+  consentRequiredHandler = handler;
+  return () => {
+    if (consentRequiredHandler === handler) consentRequiredHandler = null;
+  };
+}
+
+/** `fetch` with the session header; a 401 reports the lost session, a 403 for
+ *  missing consent the consent to ask again, before returning. */
 export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   for (const [name, value] of Object.entries(await authHeaders())) headers.set(name, value);
-  const response = await fetch(input, { ...init, headers });
+  let response: Response;
+  try {
+    response = await fetch(input, { ...init, headers });
+  } catch (error) {
+    // Only a network failure (not a cancellation or a timeout) says the server is out of reach.
+    if (isNetworkError(error)) reportUnreached();
+    throw error;
+  }
+  reportRequest(true);
   if (response.status === 401) reportUnauthorized();
+  if (response.status === 403 && response.headers.get(CONSENT_HEADER) === 'required') {
+    consentRequiredHandler?.();
+  }
   return response;
 }
 
@@ -82,13 +113,22 @@ export async function endSession(
   let cleaned = false;
   const cleanup = async () => {
     cleaned = true;
-    setTokenGetter(null);
-    reset?.();
-    await clearSignedOutCaches();
-    await claimPushDevice(null);
-    window.location.reload();
+    await endSessionLocally(reset);
   };
   await signOut(cleanup);
   // Clerk skips the callback when it holds no session: still leave a clean page.
   if (!cleaned) await cleanup();
+}
+
+/**
+ * The browser's half of a sign-out, without Clerk: forget the token, `reset`,
+ * the cached and persisted answers and the push channel, then reload. For an
+ * erased account whose Clerk session is already revoked, so `signOut` fails.
+ */
+export async function endSessionLocally(reset?: () => void): Promise<void> {
+  setTokenGetter(null);
+  reset?.();
+  await clearSignedOutCaches();
+  await claimPushDevice(null);
+  window.location.reload();
 }

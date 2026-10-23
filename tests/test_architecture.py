@@ -63,6 +63,19 @@ def test_factory_is_only_imported_by_composition_root():
     assert not violations
 
 
+def test_no_module_imports_the_retired_strava_integration():
+    # Strava's API agreement forbids its data in an AI application (ARE-126):
+    # its rows stay readable, but nothing may fetch from Strava again.
+    violations = [
+        f"{p.relative_to(ROOT)}: {name}"
+        for p in ROOT.rglob("*.py")
+        for name in imports(p)
+        if name == "arete.strava"
+        or name.startswith(("arete.strava.", "arete.api.strava"))
+    ]
+    assert not violations, "\n".join(violations)
+
+
 def test_profile_capabilities_are_registered_and_preloads_authorized():
     from arete.agent.capabilities.registry import CAPABILITIES, validate_registry
     from arete.agent.profiles.catalog import PROFILES
@@ -70,7 +83,9 @@ def test_profile_capabilities_are_registered_and_preloads_authorized():
     validate_registry()
     for profile in PROFILES.values():
         assert set(profile.capabilities) <= CAPABILITIES.keys()
-        assert profile.id in {"chat", "slack"} or not profile.training_writes
+        assert (
+            profile.id in {"chat", "slack", "automation"} or not profile.training_writes
+        )
 
 
 def test_memory_and_journal_have_independent_tool_owners_and_policy():

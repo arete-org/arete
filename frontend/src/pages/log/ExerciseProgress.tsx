@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Panel } from '@/components/ui';
+import { Panel, Select } from '@/components/ui';
 import { strengthApi } from '@/lib/api';
 import { parseLocalDate } from '@/lib/dates';
 import { qk } from '@/lib/queryKeys';
@@ -52,13 +52,14 @@ export function ExerciseProgress({
   const failed = exercises.error || history.error || records.error || suggestion.error;
 
   return (
-    <Panel title="PROGRESSION PAR EXERCICE" delay={0.2}>
+    <Panel title="Progression par exercice" delay={0.2}>
       <label className="block text-xs font-sans text-text-muted">
         Exercice
-        <select
+        <Select
+          aria-label="Exercice"
           value={exerciseId ?? ''}
           onChange={(e) => onSelect(e.target.value ? Number(e.target.value) : null)}
-          className="block mt-2 min-h-11 w-full rounded border border-text-muted/30 bg-abyss px-3 text-sm text-text-primary"
+          className="block mt-2 min-h-11 text-sm"
         >
           <option value="">Choisir un exercice</option>
           {exercises.data?.map((e) => (
@@ -66,7 +67,7 @@ export function ExerciseProgress({
               {e.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
 
       {failed && (
@@ -77,7 +78,7 @@ export function ExerciseProgress({
 
       {enabled && history.isSuccess && (
         <div className="mt-4">
-          <h4 className="text-[11px] font-sans text-text-muted uppercase mb-2">1RM estimé (Epley)</h4>
+          <h4 className="text-[11px] font-sans text-text-muted mb-2">1RM estimé (Epley)</h4>
           {points.length > 1 ? (
             <Suspense fallback={<div className="h-[180px]" />}>
               <E1rmChart points={points} />

@@ -59,11 +59,8 @@ export function AuthGate({ children, onSessionEnd }: AuthGateProps) {
     };
   }, [attempt, built]);
 
+  // Only reached from the server's answer: a build configuration always has its key.
   const retry = () => {
-    if (built) {
-      window.location.reload(); // a build without its key stays so until redeployed
-      return;
-    }
     setState({ status: 'loading' });
     setAttempt((n) => n + 1);
   };
@@ -72,7 +69,7 @@ export function AuthGate({ children, onSessionEnd }: AuthGateProps) {
   if (state.status === 'unknown') {
     return (
       <GateScreen>
-        <ErrorState message="SERVEUR INJOIGNABLE" onRetry={retry} />
+        <ErrorState message="Serveur injoignable" onRetry={retry} />
       </GateScreen>
     );
   }
@@ -83,7 +80,7 @@ export function AuthGate({ children, onSessionEnd }: AuthGateProps) {
   if (!config.publishable_key) {
     return (
       <GateScreen>
-        <ErrorState message="AUTHENTIFICATION MAL CONFIGURÉE" onRetry={retry} />
+        <ErrorState message="Authentification mal configurée" onRetry={retry} />
       </GateScreen>
     );
   }

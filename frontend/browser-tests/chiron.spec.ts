@@ -4,7 +4,7 @@ import { coachStream as fixture } from './coachStream';
 
 async function openCoach(page: Page) {
   await page.goto('/planning?date=2026-10-10');
-  const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first();
+  const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first();
   await toggle.click();
   const panel = page.getByRole('complementary', { name: 'Coach IA' });
   await expect(panel).toHaveCSS('opacity', '1');
@@ -196,7 +196,7 @@ test('the existing opt-out keeps its composer and uses the shared coach presence
   const stream = await fixture(page, false);
   try {
     const panel = await openCoach(page);
-    await expect(panel.getByRole('heading', { name: 'Coach Arete', exact: true })).toBeVisible();
+    await expect(panel.getByRole('heading', { name: 'Coach', exact: true })).toBeVisible();
     await panel.getByLabel('Message au coach').fill('Ma forme ?');
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await expect(panel.locator('.activity-presence')).toBeVisible();
@@ -329,10 +329,10 @@ test('classic coach: one memory receipt, inline files, drafts and reload', async
     await expect(panel.getByRole('status')).toHaveCount(0);
     await expect(panel.getByText('RETENU', { exact: true })).toHaveCount(0);
     await panel.getByLabel('Message au coach').fill('Mon brouillon');
-    await panel.getByRole('button', { name: 'Ce que Chiron sait de moi' }).click();
+    await panel.getByRole('button', { name: 'Ce que le coach sait de moi' }).click();
     await expect(panel.getByText('Ce que je retiens de toi')).toBeVisible();
     await expect(panel.getByLabel('Nouveau fait')).toHaveCount(0);
-    await panel.getByRole('button', { name: 'Ce que Chiron sait de moi' }).click();
+    await panel.getByRole('button', { name: 'Ce que le coach sait de moi' }).click();
     await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon');
     expect(stream.requests()).toBe(1);
     expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -346,7 +346,7 @@ test('classic coach: one memory receipt, inline files, drafts and reload', async
       await route.fulfill({ json: { enabled: false } });
     });
     await page.reload();
-    const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first();
+    const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first();
     releaseBootstrap();
     await toggle.click();
     await expect(receipt).toHaveCount(1);
@@ -364,7 +364,7 @@ async function chooseDisplay(panel: ReturnType<Page['getByRole']>, label: string
   await panel.getByRole('button', { name: 'Options du coach' }).click();
   // The selected radio closes its popover, so assert the resulting panel mode.
   await panel.getByRole('radio', { name: label, exact: true }).click();
-  await expect(panel).toHaveAttribute('data-display', label === 'Chat flottant' ? 'floating' : 'sidebar');
+  await expect(panel).toHaveAttribute('data-display', label === 'Chat flottant' ? 'floating' : label === 'Conversation élargie' ? 'expanded' : 'sidebar');
 }
 
 test('floating chat grows with SSE, caps its height and respects reading older messages', async ({ page }) => {
@@ -422,7 +422,7 @@ test('display opt-in and opt-out preserve a live stream, input node, draft and f
     await expect.poll(() => stream.requests()).toBe(1);
     await input.fill('Garde mon dimanche libre.');
     const node = await input.elementHandle();
-    for (const label of ['Chat flottant', 'Panneau latéral classique', 'Chat flottant']) {
+    for (const label of ['Chat flottant', 'Conversation élargie', 'Panneau latéral classique', 'Chat flottant']) {
       await chooseDisplay(panel, label);
       await expect(input).toHaveValue('Garde mon dimanche libre.');
       expect(await node!.evaluate(el => el === document.querySelector('[aria-label="Message au coach"]'))).toBe(true);
@@ -442,7 +442,7 @@ test('display opt-in and opt-out preserve a live stream, input node, draft and f
     await expect(input).toHaveValue('Garde mon dimanche libre.');
     await chooseDisplay(panel, 'Panneau latéral classique');
     await page.reload();
-    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander à Chiron)$/ }).filter({ visible: true }).first().click();
+    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     await expect(panel).toHaveAttribute('data-display', 'sidebar');
     await expect(page.locator('main')).toHaveCSS('margin-right', '520px');
     expect(stream.requests()).toBe(1);
@@ -515,3 +515,41 @@ test('floating mobile: long answers and menus stay inside a resized visual viewp
     await page.screenshot({ path: '../.context/chiron-floating-keyboard-app.png' });
   } finally { await stream.close(); }
 });
+
+// ARE-164 with a mouse: the Garmin notice above the bar pushes the navigation down,
+// including when it appears after the coach opened; the docked panel follows the bar.
+for (const notice of ['shown', 'absent', 'appearing after opening'] as const) {
+  test(`desktop: the docked coach starts at the navigation's bottom edge (Garmin notice ${notice})`, async ({ page }) => {
+    const stream = await fixture(page);
+    try {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      let state = notice === 'shown' ? 'partial' : 'fresh';
+      await page.route('**/api/garmin/sync/ensure', route => route.fulfill({ json: { state } }));
+      const ensured = page.waitForResponse('**/api/garmin/sync/ensure');
+      const panel = await openCoach(page);
+      await ensured;
+      const status = page.getByRole('status').filter({ hasText: 'Garmin' });
+      if (notice === 'appearing after opening') {
+        await expect(status).toHaveCount(0);
+        state = 'partial';
+        // Coming back to the tab rechecks Garmin.
+        await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      }
+      if (notice === 'absent') await expect(status).toHaveCount(0);
+      else await expect(status).toBeVisible();
+      const nav = page.getByRole('navigation', { name: 'Navigation principale' });
+      const navBottom = async () => { const bar = (await nav.boundingBox())!; return bar.y + bar.height; };
+      const gap = async () => (await panel.locator('header').boundingBox())!.y - await navBottom();
+      expect(await navBottom()).toBeGreaterThan(notice === 'absent' ? 50 : 80);
+      await expect.poll(gap).toBeGreaterThanOrEqual(-0.5);
+      await expect.poll(gap).toBeLessThanOrEqual(1);
+      const close = panel.getByRole('button', { name: 'Masquer le coach' });
+      const box = (await close.boundingBox())!;
+      expect(await close.evaluate((button, [x, y]) => button.contains(document.elementFromPoint(x, y)), [box.x + box.width / 2, box.y + box.height / 2])).toBe(true);
+      await close.click();
+      await expect(panel).toBeHidden();
+    } finally {
+      await stream.close();
+    }
+  });
+}

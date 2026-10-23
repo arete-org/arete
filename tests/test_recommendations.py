@@ -28,6 +28,8 @@ class TestACWRRecommendations:
         ]
         assert len(critical_recs) > 0
         assert report.risk_level == "high"
+        # French text: a decimal comma.
+        assert "Votre ACWR (1,80)" in critical_recs[0].message
 
     def test_optimal_zone_positive_feedback(self) -> None:
         """ACWR 0.8-1.3 generates positive feedback."""

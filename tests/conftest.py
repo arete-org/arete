@@ -2,12 +2,38 @@
 
 import os
 import tempfile
+import time
 from collections.abc import Callable, Generator
+from datetime import UTC, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
+
+
+def _server_zone_on_another_day(athlete_zone: str) -> str:
+    """A server timezone whose date is not the athlete's at this moment.
+
+    Services date the athlete's day with ``athlete_today()``; a fixture dated
+    with the server's ``date.today()`` only breaks while the two dates differ
+    (22:00-24:00 UTC for Paris, ARE-109). UTC+14 is on another date than Paris
+    from about noon to midnight, UTC-11 from midnight to about noon: every run
+    exercises the divergent case, the server ahead or behind the athlete.
+    """
+    now = datetime.now(UTC)
+    athlete_day = now.astimezone(ZoneInfo(athlete_zone)).date()
+    for zone in ("Pacific/Kiritimati", "Pacific/Pago_Pago"):
+        if now.astimezone(ZoneInfo(zone)).date() != athlete_day:
+            return zone
+    raise AssertionError(f"no candidate timezone is a day apart from {athlete_zone}")
+
+
+# Before importing app modules: DuckDB reads TZ once, when it is imported.
+# Europe/Paris is the default athlete timezone (services.settings.DEFAULT_TIMEZONE).
+os.environ["TZ"] = _server_zone_on_another_day("Europe/Paris")
+time.tzset()
 
 # Set test database path before importing app modules
 _test_db_dir = tempfile.mkdtemp()
@@ -62,6 +88,37 @@ def fresh_account_cache() -> Generator[None, None, None]:
     forget_accounts()
     yield
     forget_accounts()
+
+
+@pytest.fixture
+def give_consent() -> Callable[..., None]:
+    """Record each athlete's consent to the current texts, as the gate would."""
+    from arete.services import consent
+
+    def give(*athlete_ids: int) -> None:
+        for athlete_id in athlete_ids:
+            consent.give(
+                athlete_id,
+                None,
+                terms_version=consent.TERMS_VERSION,
+                privacy_version=consent.PRIVACY_VERSION,
+                terms_accepted=True,
+                health_data=True,
+            )
+
+    return give
+
+
+@pytest.fixture
+def consented(monkeypatch) -> None:
+    """Every athlete has consented: for sign-in tests about something else,
+    whose accounts appear at their first request. The gate itself is tested
+    in ``test_consent.py``."""
+    from arete.api import auth
+    from arete.services import consent
+
+    monkeypatch.setattr(auth, "consent_in_force", lambda *args: True)
+    monkeypatch.setattr(consent, "is_current", lambda athlete_id: True)
 
 
 class _CountingConnection:

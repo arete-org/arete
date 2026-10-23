@@ -108,7 +108,7 @@ def save(api: Garmin) -> None:
     with transaction() as con:
         con.execute(
             "INSERT OR REPLACE INTO app.garmin_login_challenges(id,payload,expires_at) "
-            "VALUES(1,?,current_timestamp + ? * INTERVAL '1 second')",
+            "VALUES(1,?,current_timestamp + ? * INTERVAL '1 second') RETURNING id",
             [payload, MFA_TTL_SECONDS],
         )
 

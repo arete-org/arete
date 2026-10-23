@@ -15,11 +15,14 @@ References:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
 from typing import NamedTuple
+
+logger = logging.getLogger(__name__)
 
 
 class FormZone(Enum):
@@ -507,6 +510,7 @@ def compute_performance_model(
 
         coeffs = load_coefficients(con=con)
     except Exception:
+        logger.exception("Could not load Banister coefficients; using default model")
         coeffs = None
 
     if coeffs:

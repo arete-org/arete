@@ -104,7 +104,7 @@ def ensure_template_fits(session: PlannedSession) -> None:
         raise NotPushable(
             "Séance décrite sans étapes : le modèle générique du type de séance "
             "ne reprend pas la description. Complète les étapes pour l’export "
-            "Garmin (coach : prescription.steps via update_planned_session)."
+            "Garmin (coach : set_session_prescription)."
         )
 
 

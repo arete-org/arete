@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import UTC, date, datetime, time
 from threading import Barrier
 from uuid import uuid4
 
@@ -295,7 +295,7 @@ def test_context_steering_is_independent_of_retrieval_and_refreshes():
     fact = facts.add_fact(
         "constraint", "Jamais le mercredi", evidence="explicit", since=TODAY
     )
-    context = AgentContext(current_date=TODAY)
+    context = AgentContext(current_datetime=datetime.combine(TODAY, time(), UTC))
     request = _request(context)
     first = build_context(request)
     assert "Jamais le mercredi" in first.system_message.text
@@ -303,7 +303,11 @@ def test_context_steering_is_independent_of_retrieval_and_refreshes():
     facts.update_fact(
         fact.id, text="Mercredi possible", expected_revision=1, evidence="explicit"
     )
-    second = build_context(request)
+    # A write from elsewhere reaches the next message, not the running one.
+    assert build_context(request).system_message.text == first.system_message.text
+    assert context.stats.memory_searches == 1
+    following = AgentContext(current_datetime=datetime.combine(TODAY, time(), UTC))
+    second = build_context(_request(following))
     mandatory = second.system_message.text.split("Souvenirs retrouvés")[0]
     assert "Mercredi possible" in mandatory and "Jamais le mercredi" not in mandatory
     assert request.system_message.text == "Instructions serveur"
@@ -317,7 +321,7 @@ def test_memory_budget_and_missing_memory_are_explicit(monkeypatch):
     monkeypatch.setattr(
         "arete.agent.context.builder.search_personal_context", lambda *_: result
     )
-    context = AgentContext(current_date=TODAY)
+    context = AgentContext(current_datetime=datetime.combine(TODAY, time(), UTC))
     text = personal_context_section(_request(context), context, 100)
     assert '"selected": 0' in text or "budget" in text
 
@@ -325,8 +329,10 @@ def test_memory_budget_and_missing_memory_are_explicit(monkeypatch):
         raise OSError("unavailable")
 
     monkeypatch.setattr("arete.agent.context.builder.search_personal_context", fail)
+    context = AgentContext(current_datetime=datetime.combine(TODAY, time(), UTC))
     with pytest.raises(ValueError, match="mémoire indisponible"):
         personal_context_section(_request(context), context, 100)
+    assert context.memory_results == {}
 
 
 def test_background_missions_never_search_or_gain_tools(monkeypatch):
@@ -336,7 +342,11 @@ def test_background_missions_never_search_or_gain_tools(monkeypatch):
     monkeypatch.setattr(
         "arete.agent.context.builder.search_personal_context", unexpected
     )
-    request = _request(AgentContext(profile="briefing", current_date=TODAY))
+    request = _request(
+        AgentContext(
+            profile="briefing", current_datetime=datetime.combine(TODAY, time(), UTC)
+        )
+    )
     assert build_context(request).tools == []
 
 
@@ -379,3 +389,27 @@ def test_duplicate_sources_are_deduplicated_without_losing_distinct_blocks():
     corpus.add("document:1:p1", "2026-10-10", "Deuxième bloc")
     assert len(corpus.passages) == 2
     assert len({p.id for p in corpus.passages}) == 2
+
+
+def test_lexical_context_excludes_strava_session_text():
+    from arete.garmin.models import ActivitySource, ActualSession
+    from arete.garmin.repository import GarminRepository
+
+    repo = GarminRepository()
+    identifier = repo.create_actual_session(
+        ActualSession(
+            date=TODAY,
+            sport="running",
+            duration_sec=600,
+            name="SecretStravaLexicalMarker",
+            source=ActivitySource.STRAVA,
+        )
+    )
+    try:
+        result = memory.search_personal_context(
+            "SecretStravaLexicalMarker", None, TODAY
+        )
+        assert not any(h.passage.source == f"actual:{identifier}" for h in result.hits)
+    finally:
+        with db_connection() as con:
+            con.execute("DELETE FROM app.actual_sessions WHERE id=?", [identifier])

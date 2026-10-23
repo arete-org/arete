@@ -75,7 +75,7 @@ def test_an_easy_session_is_kept_at_a_middling_readiness():
 def test_acwr_overrides_a_high_readiness():
     result = evaluate(_input(readiness=90.0, acwr=1.6))
     assert result is not None and result.decision == Decision.REST
-    assert "1.60" in result.reason
+    assert "ACWR 1,60" in result.reason  # a decimal comma: the athlete reads it
 
 
 def test_deep_fatigue_or_a_recovery_goal_eases_a_tempo_at_90():
@@ -170,3 +170,59 @@ def test_a_rest_day_rests_every_session():
         _day({"session_type": "intervals"}, {"session_type": "endurance"}, readiness=30)
     )
     assert {o.decision for o in outcomes if o is not None} == {Decision.REST}
+
+
+# The morning check-in weighs one band, downwards only (ARE-59).
+@pytest.mark.parametrize(
+    ("score", "answers", "decision", "said"),
+    [
+        (85, {"legs": 2}, Decision.EASE, "jambes lourdes déclarées"),
+        (65, {"sleep": 1}, Decision.REPLACE_EASY, "nuit difficile déclarée"),
+        (45, {"legs": 2, "sleep": 3}, Decision.REST, "jambes lourdes déclarées"),
+        # Two low answers are still one band: keep becomes ease, not recovery.
+        (
+            85,
+            {"legs": 1, "sleep": 2},
+            Decision.EASE,
+            "nuit difficile et jambes lourdes déclarées",
+        ),
+        # Already the lowest band: rest stays rest.
+        (30, {"legs": 1}, Decision.REST, "jambes lourdes déclarées"),
+    ],
+)
+def test_a_low_check_in_lowers_the_readiness_by_one_band(
+    score, answers, decision, said
+):
+    result = evaluate(_input(readiness=float(score), **answers))
+    assert result is not None and result.decision == decision
+    assert said in result.reason
+    assert f"Garmin {score}/100, {said} :" in result.reason
+    assert not any(field in result.reason for field in RAW_FIELDS)
+
+
+@pytest.mark.parametrize("score", [85, 70, 50, 30])
+@pytest.mark.parametrize(
+    "answers", [{}, {"sleep": 5, "legs": 5}, {"sleep": 3, "legs": 3}]
+)
+def test_a_good_or_missing_check_in_changes_nothing(score, answers):
+    alone = evaluate(_input(readiness=float(score)))
+    assert evaluate(_input(readiness=float(score), **answers)) == alone
+
+
+def test_a_check_in_without_a_readiness_decides_nothing():
+    assert evaluate(_input(readiness=None, sleep=1, legs=1)) is None
+
+
+def test_the_day_s_rest_names_the_declared_check_in():
+    outcomes = one_recovery_per_day(
+        _day(
+            {"session_type": "intervals", "legs": 2},
+            {"session_type": "endurance", "target_duration_min": 90, "legs": 2},
+            readiness=65,
+        )
+    )
+    assert [o.decision for o in outcomes if o is not None] == [
+        Decision.REPLACE_EASY,
+        Decision.REST,
+    ]
+    assert "jambes lourdes déclarées : repos" in outcomes[1].reason

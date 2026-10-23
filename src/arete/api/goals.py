@@ -16,10 +16,15 @@ router = APIRouter(prefix="/goals", tags=["goals"])
 
 class GoalCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    race_date: date
-    distance_km: float = Field(ge=1, le=250)
+    race_date: date  # a hybrid block's last day
+    #: Required for a race; Hyrox is 8 km, a hybrid block has none.
+    distance_km: float | None = Field(default=None, ge=1, le=250)
     target_time_sec: int | None = Field(default=None, gt=0)
     priority: Literal["A", "B", "C"] = "A"
+    goal_type: Literal["race", "hyrox", "hybrid"] = "race"
+    #: Hyrox/hybrid: division, format, category, equipment, weeks
+    #: (``services.goals.GoalDetails``, validated there in French).
+    details: dict[str, Any] | None = None
 
 
 class GoalUpdate(BaseModel):
@@ -29,6 +34,7 @@ class GoalUpdate(BaseModel):
     target_time_sec: int | None = Field(default=None, gt=0)
     priority: Literal["A", "B", "C"] | None = None
     status: Literal["active", "done", "cancelled"] | None = None
+    details: dict[str, Any] | None = None
 
 
 def _found(goal: service.Goal | None) -> dict[str, Any]:
@@ -39,31 +45,51 @@ def _found(goal: service.Goal | None) -> dict[str, Any]:
 
 @router.get("")
 def list_goals(include_past: bool = False) -> list[dict[str, Any]]:
-    return [g.to_dict() for g in service.list_goals(include_past=include_past)]
+    # The athlete's settings once, not once per goal.
+    today = athlete_today()
+    goals = service.list_goals(include_past=include_past, today=today)
+    return [g.to_dict(today) for g in goals]
 
 
 @router.get("/next")
 def next_goal() -> dict[str, Any] | None:
-    goal = service.next_goal()
-    return goal.to_dict() if goal else None
+    today = athlete_today()
+    goal = service.next_goal(today)
+    return goal.to_dict(today) if goal else None
 
 
 @router.post("", status_code=201)
 def create_goal(body: GoalCreate) -> dict[str, Any]:
-    if body.race_date < athlete_today():
-        raise HTTPException(status_code=422, detail="La date de course est passée")
-    return service.create_goal(**body.model_dump()).to_dict()
+    today = athlete_today()
+    if body.race_date < today:
+        raise HTTPException(
+            status_code=422,
+            detail="La fin du bloc est passée"
+            if body.goal_type == "hybrid"
+            else "La date de course est passée",
+        )
+    try:
+        return service.create_goal(**body.model_dump(), today=today).to_dict(today)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
 
 
 @router.patch("/{goal_id}")
 def update_goal(goal_id: int, body: GoalUpdate) -> dict[str, Any]:
-    return _found(service.update_goal(goal_id, **body.model_dump(exclude_unset=True)))
+    try:
+        goal = service.update_goal(goal_id, **body.model_dump(exclude_unset=True))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
+    return _found(goal)
 
 
-@router.delete("/{goal_id}", status_code=204)
-def delete_goal(goal_id: int) -> None:
-    if not service.delete_goal(goal_id):
+@router.delete("/{goal_id}")
+def delete_goal(goal_id: int) -> dict[str, int]:
+    """``kept``: its future sessions already changed, which stay."""
+    kept = service.delete_goal(goal_id)
+    if kept is None:
         raise HTTPException(status_code=404, detail="Objectif introuvable")
+    return {"kept": kept}
 
 
 @router.post("/{goal_id}/plan/preview")
@@ -82,7 +108,8 @@ def preview_plan(goal_id: int) -> dict[str, Any]:
 
 @router.post("/{goal_id}/plan")
 def write_plan(goal_id: int) -> dict[str, Any]:
-    """Write the plan; replaces only this goal's future sessions still to do."""
+    """Write the plan; replaces only this goal's future sessions still to do
+    that the athlete left untouched."""
     from arete.features.plan_generator import PlanError
     from arete.services import plan_builder
 
@@ -99,7 +126,8 @@ def remove_plan(goal_id: int) -> dict[str, Any]:
     from arete.services import plan_builder
 
     try:
-        return {"deleted": plan_builder.remove(goal_id)}
+        # The future sessions already changed stay: ``kept`` counts them.
+        return plan_builder.remove(goal_id)._asdict()
     except LookupError:
         raise HTTPException(status_code=404, detail="Objectif introuvable") from None
 

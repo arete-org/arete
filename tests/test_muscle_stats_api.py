@@ -13,7 +13,9 @@ from arete.api.strength import router
 
 @pytest.fixture
 def client(router_client):
-    return router_client(router)
+    # The window ends on the athlete's day; the rows below are dated TODAY.
+    with patch("arete.api.strength.athlete_today", return_value=TODAY):
+        yield router_client(router)
 
 
 TODAY = date.today()

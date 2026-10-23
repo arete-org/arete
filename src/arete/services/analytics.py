@@ -1,8 +1,9 @@
-"""Analytics API: one overview per period, plus personal records.
+"""Analytics API: one overview per period, and session reads and edits.
 
-``/analytics/overview`` answers four questions in one round-trip — how much did
-I train, how hard, how efficiently, how well did I recover — so the page can
-render every card without fanning out to a dozen endpoints.
+``/analytics/overview`` answers four questions in one round-trip — am I ready,
+am I progressing, where is the risk, what works (``features/answers.py``) —
+with the cards under each and the Garmin records (``features/records.py``), so
+the page renders without fanning out to a dozen endpoints.
 """
 
 from __future__ import annotations
@@ -12,13 +13,13 @@ import logging
 from collections.abc import Mapping, Sequence
 from datetime import date, timedelta
 
+from arete.dataio.best_efforts import lift_effort_rows, record_rows
 from arete.dataio.db import connect, db_connection
 from arete.dataio.queries import (
     FOOT_SPORTS,
+    MODEL_EXCLUDED_SOURCES,
     RUNNING_SPORTS,
-    SPORT_GROUPS,
     OverviewRow,
-    best_effort_rows,
     daily_metrics_range,
     drift_rows,
     earliest_session_date,
@@ -27,7 +28,7 @@ from arete.dataio.queries import (
     terrain_rows,
 )
 from arete.dataio.settings import athlete_zone_model
-from arete.features import insights
+from arete.features import answers, insights, records
 from arete.features import overview as ov
 from arete.features.fitness import DailyTSS
 from arete.features.periods import PeriodWindow, resolve_period
@@ -37,38 +38,15 @@ from arete.features.workload import (
     calculate_acute_load,
     calculate_acwr,
     calculate_chronic_load,
+    calculate_monotony,
     get_acwr_zone,
 )
-from arete.services.metrics import fitness_series
+from arete.garmin.readiness import fetch_window
+from arete.services.metrics import current_readiness, fitness_series
 from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
-
-#: Best-effort buckets, ascending by distance. These are the names the source
-#: (Garmin/Strava) writes into ``best_efforts_json`` — matching is
-#: case-insensitive because it is not consistent about it ("1K" and "5K" but
-#: "1 mile", "50k"), and comparing spellings dropped every K distance from the
-#: Records card.
-EFFORT_NAMES = (
-    "400m",
-    "1/2 mile",
-    "1K",
-    "1 mile",
-    "2 mile",
-    "5K",
-    "10K",
-    "15K",
-    "10 mile",
-    "20K",
-    "Half-Marathon",
-    "30K",
-    "Marathon",
-    "50K",
-)
-
-#: Lookup from whatever spelling the data carries to the canonical name above.
-_EFFORT_BY_KEY = {name.casefold(): name for name in EFFORT_NAMES}
 
 ACWR_ZONE_FR = {
     "undertrained": "charge basse",
@@ -158,13 +136,25 @@ def effort_pace(row: OverviewRow) -> tuple[int | None, bool]:
     return row.avg_pace_sec_km, False
 
 
-def get_overview(period: str = "30d"):
-    """Every analytics card for one period, with the previous one as reference.
+def _paces(runs: Sequence[OverviewRow]) -> list[ov.PaceRow]:
+    """The Allure card's rows: (date, pace, distance, duration, graded)."""
+    return [
+        (r.date, pace, r.distance_m, r.duration_sec, graded)
+        for r in runs
+        for pace, graded in [effort_pace(r)]
+        if pace is not None
+    ]
 
-    Five statements on one cursor (the zone model reads the settings on its
+
+def get_overview(period: str = "30d"):
+    """The four answers, every analytics card and the records, for one period.
+
+    Eight statements on one cursor (the zone model reads the settings on its
     own): the first session date, every session from the CTL warm-up on, the
-    long runs with laps, the health metrics, and the stored terrain of every
-    session on foot (the climbing records are all-time). The cards slice them.
+    long runs with laps, the health metrics, the stored terrain of every
+    session on foot (the climbing records are all-time), the readiness
+    window, the all-time records and each log's best lifts from the previous
+    window on (``app.best_efforts``). The cards and answers slice them.
     """
     with db_connection() as con:
         earliest = earliest_session_date(con)
@@ -176,6 +166,15 @@ def get_overview(period: str = "30d"):
         drifts = drift_rows(con, start, window.end, MIN_DRIFT_DURATION_SEC)
         health = daily_metrics_range(con, start, window.end)
         terrain = terrain_rows(con)
+        readiness_rows = fetch_window(con, window.end)
+        # Progress is never judged on one week: a shorter period reads 30 days.
+        base = (
+            window
+            if window.days >= answers.PROGRESS_MIN_DAYS
+            else resolve_period("30d", window.end, earliest)
+        )
+        bests = record_rows(con)
+        lifts = lift_effort_rows(con, _fetch_start(base), base.end)
 
     shown = _between(rows, start, window.end)
     runs = [r for r in shown if r.sport in RUNNING_SPORTS]
@@ -187,12 +186,7 @@ def get_overview(period: str = "30d"):
         if window.prev_start and window.prev_end
         else []
     )
-    paces = [
-        (r.date, pace, r.distance_m, r.duration_sec, graded)
-        for r in runs
-        for pace, graded in [effort_pace(r)]
-        if pace is not None
-    ]
+    paces = _paces(runs)
     efficiency = [
         (r.date, r.avg_hr, r.avg_pace_sec_km, r.duration_sec)
         for r in runs
@@ -220,10 +214,64 @@ def get_overview(period: str = "30d"):
         {t.date: t.tss for t in _daily_tss(rows, tss_start, window.end)}, window.end
     )
     loads_start = window.end - timedelta(days=ACWR_HISTORY_DAYS)
-    acwr, acwr_zone = _acwr(_daily_loads(rows, loads_start, window.end), window.end)
+    loads = _daily_loads(rows, loads_start, window.end)
+    acwr, acwr_zone = _acwr(loads, window.end)
 
     recovery = ov.build_recovery_cards(health, window)
+    pace = ov.build_pace_card(paces, window)
+    ctl = {day.date: fitness for day, fitness, _fatigue in pmc_series}
+    atl = {day.date: fatigue for day, _fitness, fatigue in pmc_series}
+    readiness = current_readiness(window.end, readiness_rows, None)
+    # Without any load in the history the fraîcheur is 0 by construction,
+    # not a measure: the answer then says there is nothing to judge.
+    has_history = any(day.tss > 0 for day, _fitness, _fatigue in pmc_series)
+    tsb = (
+        ctl[window.end] - atl[window.end] if has_history and window.end in ctl else None
+    )
+    base_pace = (
+        pace
+        if base is window
+        else ov.build_pace_card(
+            _paces(
+                [
+                    r
+                    for r in _between(rows, _fetch_start(base), base.end)
+                    if r.sport in RUNNING_SPORTS
+                ]
+            ),
+            base,
+        )
+    )
+    active = {r.date for r in rows if r.duration_sec > 0}
+    pattern_period, weeks = answers.weeks_of(window, active, ctl)
+    has_load = any(load.duration_min > 0 for load in loads)
+    week_ago = window.end - timedelta(days=7)
+    monotony = calculate_monotony(loads, window.end) if has_load else None
+    ramp = (
+        ctl[window.end] - ctl.get(week_ago, 0.0)
+        if has_load and window.end in ctl
+        else None
+    )
     return {
+        "answers": [
+            answers.ready_answer(
+                window.end,
+                readiness.score if readiness else None,
+                readiness.source if readiness else None,
+                readiness.measured_on if readiness else None,
+                tsb,
+            ),
+            answers.progress_answer(
+                base,
+                ctl.get(base.start - timedelta(days=1)),
+                ctl.get(base.end),
+                base_pace["headline"]["value"],
+                records.lift_trend(lifts, base),
+            ),
+            answers.risk_answer(acwr, monotony, ramp),
+            answers.works_answer(pattern_period, weeks),
+        ],
+        "records": records.records_payload(bests),
         "hr_zone_model": athlete_zone_model().as_dict(),
         "period": window.period,
         "bucket": window.bucket,
@@ -237,49 +285,16 @@ def get_overview(period: str = "30d"):
             "zones": ov.build_zones_card(zones, window),
             "sports": ov.build_sports_card(sports_cur, sports_prev),
             "decoupling": ov.build_decoupling_card(drifts, efficiency, window),
-            "pace": ov.build_pace_card(paces, window),
+            "pace": pace,
             "elevation": ov.build_elevation_card(climbs, window, RUNNING_SPORTS),
             "cadence": ov.build_cadence_card(cadences, window),
             "vam": ov.build_vam_card(climbs_vam, window, VAM_MINUTES),
             "descent": ov.build_descent_card(descents, window),
+            "risk": answers.risk_card(acwr, monotony, ramp),
+            "weeks": answers.weeks_card(pattern_period, weeks),
             **recovery,
         },
     }
-
-
-def get_records(sport: str = "running"):
-    """All-time best efforts for the usual distances."""
-    sports = SPORT_GROUPS.get(sport, RUNNING_SPORTS)
-    with db_connection() as con:
-        rows = best_effort_rows(con, sports)
-    bests = best_efforts(rows)
-    return {"records": [bests[n] for n in EFFORT_NAMES if n in bests]}
-
-
-def best_efforts(rows: Sequence[tuple]) -> dict[str, dict]:
-    """Fastest effort per canonical distance over ``best_effort_rows`` rows."""
-    bests: dict[str, dict] = {}
-    for efforts_json, row_date, activity_name, activity_id in rows:
-        efforts = (
-            json.loads(efforts_json) if isinstance(efforts_json, str) else efforts_json
-        )
-        if not isinstance(efforts, list):
-            continue
-        for effort in efforts:
-            name = _EFFORT_BY_KEY.get(str(effort.get("name", "")).casefold())
-            elapsed = effort.get("elapsed_time", 0)
-            if name is None or elapsed <= 0:
-                continue
-            if name not in bests or elapsed < bests[name]["time_sec"]:
-                bests[name] = {
-                    "name": name,
-                    "time_sec": elapsed,
-                    "time_display": ov.format_hms(elapsed),
-                    "date": str(row_date),
-                    "activity_name": activity_name or "",
-                    "activity_id": activity_id,
-                }
-    return bests
 
 
 # ---------- Session CRUD ----------
@@ -292,7 +307,8 @@ def update_session(session_id: int, fields: Mapping[str, int | str | None]):
     """Update RPE and/or notes for an actual session.
 
     Every given field is written, ``None`` included: that is how the athlete
-    clears an RPE. Absent fields are left alone.
+    clears an RPE. Absent fields are left alone. None when the athlete has no
+    such session (another athlete's included): nothing was written.
     """
     unknown = set(fields) - set(_EDITABLE_SESSION_FIELDS)
     if unknown:
@@ -302,20 +318,13 @@ def update_session(session_id: int, fields: Mapping[str, int | str | None]):
         return {"success": True}
     con = connect(read_only=False)
     try:
-        con.execute(
-            f"UPDATE app.actual_sessions SET {', '.join(f'{c} = ?' for c in columns)} WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) ",
+        updated = con.execute(
+            f"UPDATE app.actual_sessions SET {', '.join(f'{c} = ?' for c in columns)} WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
             [*(fields[c] for c in columns), session_id],
-        )
-        return {"success": True}
+        ).fetchall()
+        return {"success": True} if updated else None
     finally:
         con.close()
-
-
-#: Sources whose rows never reach a language model. Strava's API agreement
-#: forbids using its data in AI applications (inference included, per its
-#: 2026 API policy): sessions imported from Strava stay out of the coach's
-#: inputs. Sessions Garmin took over (source garmin_connect) are Garmin's.
-MODEL_EXCLUDED_SOURCES: tuple[str, ...] = ("strava",)
 
 
 def list_sessions(limit: int = 20, offset: int = 0, *, for_model: bool = False):

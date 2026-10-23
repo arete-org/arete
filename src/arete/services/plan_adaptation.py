@@ -20,12 +20,15 @@ from arete.garmin.repository import GarminRepository
 from arete.services.adaptation import (
     AdaptationInput,
     Decision,
+    DeclaredPain,
     describe,
     evaluate,
     one_recovery_per_day,
 )
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.services.plan_repository import (
+    ATHLETE_CHOICE,
+    MISSED_REPLAN,
     AlreadyDecided,
     PlanDecision,
     PlanDecisionRepository,
@@ -53,7 +56,8 @@ ANSWER_SESSION_REQUESTS = 9
 #: A low day's answer: the eased session and the rest, at their worst.
 ANSWER_REQUESTS = 2 * ANSWER_SESSION_REQUESTS
 
-#: The planning fields a decision may overwrite, saved before it does.
+#: The planning fields a decision may overwrite, saved before it does
+#: (``date`` only by a renegotiated move, whose revert restores it alone).
 _PLAN_FIELDS = (
     "session_type",
     "target_duration_min",
@@ -61,10 +65,13 @@ _PLAN_FIELDS = (
     "target_intensity",
     "description",
     "status",
+    "date",
 )
+#: All a rest changes on a session with explicit steps: its status.
+_STRUCTURED_FIELDS = ("status",)
 
 
-def _snapshot(session: PlannedSession) -> dict[str, Any]:
+def snapshot(session: PlannedSession) -> dict[str, Any]:
     return {
         "session_type": session.session_type.value,
         "target_duration_min": session.target_duration_min,
@@ -133,6 +140,9 @@ def adapt_today(
             acwr=facts.acwr,
             tsb=facts.tsb,
             fitness_goal=facts.fitness_goal,
+            sleep=facts.checkin.sleep if facts.checkin else None,
+            legs=facts.checkin.legs if facts.checkin else None,
+            pain=tuple(DeclaredPain(p.area, p.intensity) for p in facts.pain),
         )
         for session in pending
     ]
@@ -159,7 +169,7 @@ def adapt_today(
                 readiness_score=facts.readiness_score,
                 readiness_source=facts.readiness_source,
                 acwr=facts.acwr,
-                original=_snapshot(session),
+                original=snapshot(session),
                 adapted=outcome.adapted or None,
                 state="discussion" if session.prescription is not None else "pending",
                 session_revision=session.revision,
@@ -175,6 +185,10 @@ class NothingToRevert(Exception):
     """The decision was a keep, or has been reverted already."""
 
 
+class RevertRefused(Exception):
+    """Reverting would undo something else: the athlete edits the plan instead."""
+
+
 def revert(decision_id: int) -> PlanDecision:
     """Put the planned session back as it was before the decision.
 
@@ -183,6 +197,18 @@ def revert(decision_id: int) -> PlanDecision:
     marked stale; with the automatic push on, the original replaces it in place
     (or comes back after a reverted rest), once, after the commit. Otherwise,
     or when that attempt fails, the card offers to send it again.
+    """
+    return revert_reporting(decision_id)[0]
+
+
+def revert_reporting(decision_id: int) -> tuple[PlanDecision, str]:
+    """``revert``, with what Garmin did after it (``garmin_outcome``).
+
+    The athlete's own choice (``ATHLETE_CHOICE``) is reverted only while the
+    session is as that choice wrote it (its ``session_revision``), else
+    ``RevertRefused``: an edit made since is never silently undone, and a
+    second tap reverts nothing. A move is reverted only on its own day, and
+    gives back the day alone.
     """
     decisions = PlanDecisionRepository()
     decision = decisions.get(decision_id)
@@ -194,20 +220,42 @@ def revert(decision_id: int) -> PlanDecision:
         or decision.decision == Decision.KEEP.value
     ):
         raise NothingToRevert(f"decision {decision_id}")
+    athletes = decision.readiness_source == ATHLETE_CHOICE
+    moved = decision.decision == Decision.MOVE
+    if moved and decision.date != athlete_today():
+        raise RevertRefused(
+            "Ce déplacement date d’un autre jour : modifie la séance depuis le Planning."
+        )
     session = GarminRepository().get_planned_session(decision.planned_session_id)
-    if session is not None and session.prescription is not None:
-        raise NothingToRevert("Cette séance possède une prescription validée.")
-    original = {k: v for k, v in (decision.original or {}).items() if k in _PLAN_FIELDS}
-    GarminRepository().update_planned_session_fields(
+    fields: tuple[str, ...] = _PLAN_FIELDS
+    if moved:
+        fields = ("date",)
+    elif session is not None and session.prescription is not None:
+        if decision.decision not in {Decision.REST, Decision.DROP}:
+            raise NothingToRevert("Cette séance possède une prescription validée.")
+        fields = _STRUCTURED_FIELDS
+    elif decision.decision in {Decision.REST, Decision.DROP}:
+        # A rest changed the status alone: restoring only it leaves an export
+        # Garmin still holds as it is (not dirty), so nothing is sent again.
+        fields = _STRUCTURED_FIELDS
+    original = {k: v for k, v in (decision.original or {}).items() if k in fields}
+    if "date" in original:
+        original["date"] = date.fromisoformat(str(original["date"]))
+    changed = GarminRepository().update_planned_session_fields(
         decision.planned_session_id,
+        expected_revision=decision.session_revision if athletes else None,
         **original,
         garmin_pushed_at=None,
     )
+    if athletes and not changed:
+        raise RevertRefused(
+            "La séance a changé depuis ce choix : modifie-la depuis le Planning."
+        )
     decisions.mark(decision.id, "reverted_at")
-    follow_on_garmin([decision], reverted=True)
+    garmin = garmin_outcome(follow_on_garmin([decision], reverted=True))
     reverted = decisions.get(decision.id)
     assert reverted is not None
-    return reverted
+    return reverted, garmin
 
 
 # --------------------------------------------------------------------------- #
@@ -333,19 +381,116 @@ def _send(
     return False
 
 
-def _withdraw(exchange: Exchange, session_id: int) -> None:
-    """One withdrawal attempt, logged when unconfirmed. Never raises."""
+def _withdraw(exchange: Exchange, session_id: int) -> bool:
+    """One withdrawal attempt, logged when unconfirmed; whether Garmin
+    confirmed it. Never raises."""
     from arete.services import garmin_export
 
     try:
         result = garmin_export.withdraw_skipped(session_id, exchange=exchange)
     except Exception:  # noqa: BLE001 - refused before any write, or unreadable
         logger.warning("Could not withdraw %s from Garmin", session_id, exc_info=True)
-        return
+        return False
     if result["state"] != "removed":
         logger.warning(
             "Garmin withdrawal unconfirmed for %s: %s", session_id, result["error"]
         )
+        return False
+    return True
+
+
+#: The accepted week (« Ma semaine », ARE-60): at most this many sessions go
+#: to Garmin in one answer, within this wait.
+MAX_WEEK_PUSHES = 4
+WEEK_PUSH_SECONDS = 60
+
+
+def push_week(
+    send: list[PlannedSession],
+    withdraw: list[PlannedSession],
+    client: GarminClient | None = None,
+) -> dict:
+    """The accepted week's key sessions through the export circuit. Never raises.
+
+    Under the athlete's standing authorization only, as the daily push: the
+    automatic push on and Garmin connected (``state`` says which is missing).
+    A skipped session Garmin holds is withdrawn; the others are sent, the
+    first ``MAX_WEEK_PUSHES``, except one Garmin holds as it is or whose
+    export view cannot send it. One attempt each, nothing replayed: an
+    ambiguous export stays ``uncertain`` until reconciled. Each session's
+    outcome is ``sent``, ``already``, ``withdrawn``, ``skipped``, ``failed``
+    or ``not_started`` (budget).
+    """
+    from arete.services import garmin_export
+
+    if not _pushing():
+        return {"state": "disabled", "sessions": []}
+    try:
+        if client is None:
+            from arete.garmin.client import GarminClient
+
+            client = GarminClient()
+        if not client.has_tokens():
+            return {"state": "disconnected", "sessions": []}
+        exchange = garmin_export.Exchange(
+            client,
+            deadline=monotonic() + WEEK_PUSH_SECONDS,
+            max_calls=MAX_WEEK_PUSHES * ANSWER_SESSION_REQUESTS,
+        )
+    except Exception:  # noqa: BLE001 - the plan is written; the watch is best effort
+        logger.warning("Week push not started", exc_info=True)
+        return {"state": "failed", "sessions": []}
+    outcomes: list[dict] = []
+
+    def report(session: PlannedSession, outcome: str) -> None:
+        outcomes.append(
+            {
+                "planned_session_id": session.id,
+                "date": session.date.isoformat(),
+                "session_type": session.session_type.value,
+                "outcome": outcome,
+            }
+        )
+
+    for session in withdraw:
+        assert session.id is not None
+        try:
+            held = garmin_export.on_garmin(session.id)
+        except Exception:  # noqa: BLE001 - one unreadable session, not the answer
+            logger.warning("Garmin state of %s unreadable", session.id, exc_info=True)
+            report(session, "failed")
+            continue
+        if not held:
+            continue
+        if not _affords(exchange, ANSWER_SESSION_REQUESTS):
+            report(session, "not_started")
+        else:
+            report(
+                session, "withdrawn" if _withdraw(exchange, session.id) else "failed"
+            )
+    for position, session in enumerate(send):
+        assert session.id is not None
+        if position >= MAX_WEEK_PUSHES:
+            report(session, "not_started")
+            continue
+        try:
+            prepared = garmin_export.prepare(session.id)
+        except Exception:  # noqa: BLE001 - one unreadable session, not the answer
+            logger.warning("Garmin push check failed for %s", session.id, exc_info=True)
+            report(session, "failed")
+            continue
+        reason = _skip_reason(prepared)
+        if reason == "already on Garmin":
+            report(session, "already")
+        elif reason is not None:
+            logger.info("Week push of %s skipped: %s", session.id, reason)
+            report(session, "skipped")
+        elif not _affords(exchange, ANSWER_SESSION_REQUESTS):
+            report(session, "not_started")
+        else:
+            sent = _send(exchange, session.id, prepared, why="week push")
+            report(session, "sent" if sent else "failed")
+    return {"state": "done", "sessions": outcomes}
 
 
 def follow_on_garmin(
@@ -353,26 +498,37 @@ def follow_on_garmin(
     *,
     reverted: bool = False,
     client: GarminClient | None = None,
-) -> None:
+) -> dict:
     """Bring Garmin in line with a committed answer: one attempt each, never raises.
 
     Only with the automatic push on, and only for a session Garmin holds: an
-    applied rest withdraws it, any other change (or a revert) replaces it in
-    place; a reverted rest sends back the session it withdrew. The whole answer
-    waits at most ``ANSWER_SECONDS``: a session that does not fit is not
-    started and keeps the card's send button. A failure stays in the export
-    state the card shows; nothing replays it.
+    applied rest withdraws it, any other change (a move included, which the
+    export reschedules, or a revert) replaces it in place; a reverted rest
+    sends back the session it withdrew. The whole answer waits at most
+    ``ANSWER_SECONDS``: a session that does not fit is not started and keeps
+    the card's send button. A failure stays in the export state the card
+    shows; nothing replays it.
+
+    What happened, as ``push_week`` reports it: ``state`` (``disabled``
+    when a copy needs the push that is off, ``disconnected``, ``failed`` when
+    not started, else ``done``) and each session acted on with its
+    ``outcome`` (``sent``, ``withdrawn``, ``failed`` or ``not_started``); a
+    session Garmin does not hold is not listed, and none means ``done``.
     """
     from arete.services import garmin_export
 
     try:
-        if not _pushing():
-            return  # the copy stays stale: the card offers to send it again
         actions: list[tuple[int, str]] = []
         for decision in decisions:
             session_id = decision.planned_session_id
-            rest = decision.decision == Decision.REST
+            rest = decision.decision in {Decision.REST, Decision.DROP}
             if garmin_export.on_garmin(session_id):
+                if reverted and rest:
+                    state = garmin_export.export_state(session_id)
+                    if state is None or state["state"] != "dirty":
+                        # Never withdrawn (the push was off): Garmin still
+                        # holds the session as it is.
+                        continue
                 actions.append(
                     (session_id, "withdraw" if rest and not reverted else "export")
                 )
@@ -381,26 +537,54 @@ def follow_on_garmin(
                 if state is not None and state["state"] == "removed":
                     actions.append((session_id, "export"))
         if not actions:
-            return
+            return {"state": "done", "sessions": []}
+        if not _pushing():
+            # The copy stays stale: the card offers to send or withdraw it.
+            return {"state": "disabled", "sessions": []}
         if client is None:
             from arete.garmin.client import GarminClient
 
             client = GarminClient()
             if not client.has_tokens():
-                return
+                return {"state": "disconnected", "sessions": []}
         exchange = garmin_export.Exchange(
             client, deadline=monotonic() + ANSWER_SECONDS, max_calls=ANSWER_REQUESTS
         )
     except Exception:  # noqa: BLE001 - the answer is committed; the watch is best effort
         logger.warning("Garmin follow-up not started", exc_info=True)
-        return
+        return {"state": "failed", "sessions": []}
+    outcomes = []
     for session_id, action in actions:
         if not _affords(exchange, ANSWER_SESSION_REQUESTS):
             logger.warning("Garmin follow-up of %s not started: budget", session_id)
+            outcome = "not_started"
         elif action == "withdraw":
-            _withdraw(exchange, session_id)
+            outcome = "withdrawn" if _withdraw(exchange, session_id) else "failed"
         else:
-            _send(exchange, session_id, why="follow-up")
+            outcome = (
+                "sent" if _send(exchange, session_id, why="follow-up") else "failed"
+            )
+        outcomes.append({"planned_session_id": session_id, "outcome": outcome})
+    return {"state": "done", "sessions": outcomes}
+
+
+def garmin_outcome(result: dict, session_id: int | None = None) -> str:
+    """One session's ``follow_on_garmin`` in one word, for the athlete.
+
+    ``sent`` or ``withdrawn`` (the copy Garmin holds), ``failed`` or
+    ``not_started`` (left in the export state the card shows, never
+    replayed), ``unchanged`` (Garmin holds no copy), ``disabled`` (a copy
+    the automatic push, off, did not touch) or ``disconnected``.
+    ``session_id`` picks that session's outcome among several.
+    """
+    if result["state"] != "done":
+        return str(result["state"])
+    sessions = [
+        s
+        for s in result["sessions"]
+        if session_id is None or s["planned_session_id"] == session_id
+    ]
+    return str(sessions[0]["outcome"]) if sessions else "unchanged"
 
 
 class ProposalConflict(ValueError):
@@ -419,6 +603,17 @@ def respond(
     not at all. ``group`` maps each other decision of the day to the revision
     the athlete saw; a group that differs from the day's is a conflict.
     """
+    return respond_reporting(decision_id, revision, action, group)[0]
+
+
+def respond_reporting(
+    decision_id: int,
+    revision: int,
+    action: str,
+    group: Mapping[int, int] | None = None,
+) -> tuple[PlanDecision, str]:
+    """``respond``, with what Garmin did for this proposal's session after an
+    applied answer (``garmin_outcome``; ``unchanged`` otherwise)."""
     import duckdb
 
     from arete.dataio import plan_changes
@@ -437,7 +632,7 @@ def respond(
         raise LookupError("Proposition introuvable")
     terminal = "applied" if action == "apply" else "dismissed"
     if action != "snooze" and all(day[i].state == terminal for i in seen):
-        return decision
+        return decision, "unchanged"
     members = [d for d in day.values() if d.state in {"pending", "discussion"}]
     if {d.id for d in members} != seen.keys() or any(
         d.revision != seen[d.id] for d in members
@@ -447,6 +642,16 @@ def respond(
         raise ProposalConflict("Cette proposition a expiré.")
     if action == "apply" and any(d.state == "discussion" for d in members):
         raise ProposalConflict("Discute des étapes de cette séance avec le coach.")
+    if action == "apply" and any(d.readiness_source == MISSED_REPLAN for d in members):
+        from arete.dataio.db import db_connection
+        from arete.services.missed_sessions import trained_on
+
+        with db_connection() as con:
+            if trained_on(con, decision.date):
+                raise ProposalConflict(
+                    "Une séance a été enregistrée aujourd’hui depuis : "
+                    "cette proposition n’a plus lieu d’être."
+                )
     try:
         with transaction() as con:
             # A proposal created since the read above joins the group: refuse.
@@ -463,13 +668,14 @@ def respond(
         raise ProposalConflict(
             "Modification concurrente : recharge la proposition."
         ) from exc
+    garmin = "unchanged"
     if action == "apply":
         plan_changes.touch()
         # After the commit: the answer stands whatever Garmin says.
-        follow_on_garmin(members)
+        garmin = garmin_outcome(follow_on_garmin(members), decision.planned_session_id)
     result = repo.get(decision_id)
     assert result is not None
-    return result
+    return result, garmin
 
 
 def _respond_one(
@@ -479,14 +685,36 @@ def _respond_one(
         "SELECT revision,status,prescription,date FROM app.visible_planned_sessions WHERE id=?",
         [decision.planned_session_id],
     ).fetchone()
+    # A move or a drop touches no step: a session with explicit ones allows them.
+    stepless = decision.decision in {Decision.MOVE, Decision.DROP}
     if action == "apply" and (
         not session
         or session[0] != decision.session_revision
         or session[1] not in {"pending", "modified"}
-        or session[2]
+        or (session[2] and not stepless)
         or session[3] != decision.date
     ):
         raise ProposalConflict("La séance a changé : examine une nouvelle proposition.")
+    if action == "apply":
+        # The session before the claim: its revision guard then refuses a
+        # write committed since the proposal, and a racing one conflicts.
+        fields = dict(decision.adapted or {})
+        if "date" in fields:
+            fields["date"] = date.fromisoformat(str(fields["date"]))
+        if decision.decision in {Decision.REST, Decision.DROP}:
+            fields["status"] = SessionStatus.SKIPPED
+        elif decision.decision != Decision.MOVE:
+            # A move keeps the status: its new day's readiness still weighs it.
+            fields["status"] = SessionStatus.MODIFIED
+        fields["garmin_pushed_at"] = None
+        changed = GarminRepository().update_planned_session_fields(
+            decision.planned_session_id,
+            expected_revision=decision.session_revision,
+            connection=con,
+            **fields,
+        )
+        if not changed:
+            raise ProposalConflict("La séance a changé.")
     state = decision.state if action == "snooze" else terminal
     claimed = con.execute(
         "UPDATE app.plan_decisions SET state=?,revision=revision+1,snoozed_until=?,applied_at=CASE WHEN ?='applied' THEN now() ELSE applied_at END "
@@ -501,19 +729,3 @@ def _respond_one(
     ).fetchone()
     if claimed is None:
         raise ProposalConflict("Cette proposition vient de changer.")
-    if action == "apply":
-        fields = dict(decision.adapted or {})
-        fields["status"] = (
-            SessionStatus.SKIPPED
-            if decision.decision == Decision.REST
-            else SessionStatus.MODIFIED
-        )
-        fields["garmin_pushed_at"] = None
-        changed = GarminRepository().update_planned_session_fields(
-            decision.planned_session_id,
-            expected_revision=decision.session_revision,
-            connection=con,
-            **fields,
-        )
-        if not changed:
-            raise ProposalConflict("La séance a changé.")

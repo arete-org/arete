@@ -6,6 +6,7 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
+from agent_clock import CLOCK
 
 from arete.dataio.db import db_connection
 from arete.dataio.init_duckdb import main
@@ -218,9 +219,47 @@ def test_the_summary_says_the_last_recovery_is_skipped():
     skipped = Prescription.model_validate(
         {"steps": [{**_INTERVALS, "skip_last_recovery": True}]}
     )
-    assert describe(plain) == "12 × (400 m / récupération 1 min)"
+    assert describe(plain) == "12 × (400 m / récupération 1:00)"
     assert describe(skipped) == (
-        "12 × (400 m / récupération 1 min), sans la dernière récup"
+        "12 × (400 m / récupération 1:00), sans la dernière récup"
+    )
+
+
+def test_the_summary_reads_durations_and_paces_as_the_editor_shows_them():
+    session = Prescription.model_validate(
+        {
+            "steps": [
+                {"kind": "warmup", "duration_kind": "seconds", "value": 1350},
+                {
+                    **_INTERVALS,
+                    "steps": [
+                        {
+                            "kind": "effort",
+                            "duration_kind": "meters",
+                            "value": 400,
+                            "target": {"kind": "pace_sec_km", "low": 213, "high": 213},
+                        },
+                        {"kind": "recovery", "duration_kind": "seconds", "value": 60},
+                    ],
+                },
+                {
+                    "kind": "effort",
+                    "duration_kind": "seconds",
+                    "value": 5400,
+                    "target": {"kind": "pace_sec_km", "low": 270, "high": 285},
+                },
+                {
+                    "kind": "cooldown",
+                    "duration_kind": "seconds",
+                    "value": 900,
+                    "target": {"kind": "heart_rate_bpm", "low": 120, "high": 120},
+                },
+            ]
+        }
+    )
+    assert describe(session) == (
+        "22:30 · 12 × (400 m · 3'33/km / récupération 1:00)"
+        " · 1:30:00 · 4'30–4'45/km · 15:00 · 120 bpm"
     )
 
 
@@ -757,42 +796,20 @@ def test_invalid_batch_is_rejected_before_remote_io(ids, planned):
 def test_prescription_edit_checks_revision_and_dirties_export(planned):
     garmin = Garmin()
     service.export(planned, client=garmin)
-    from arete.agent.tools.planning import update_planned_session
+    from arete.agent.tools.planning import set_session_prescription
 
     args = dict(
         session_id=planned,
         revision=1,
-        date_str="2027-01-13",
-        description="40 minutes",
         prescription={
             "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 2400}]
         },
     )
-    result = json.loads(
-        update_planned_session.invoke(
-            {
-                "session_id": args["session_id"],
-                "revision": args["revision"],
-                "changes": {
-                    k: v for k, v in args.items() if k not in {"session_id", "revision"}
-                },
-            }
-        )
-    )
+    result = json.loads(set_session_prescription.invoke(args))
     assert result["session"]["revision"] == 2
     assert service.inspect_session(planned)["export"]["state"] == "dirty"
     count = len(garmin.calls)
-    assert json.loads(
-        update_planned_session.invoke(
-            {
-                "session_id": args["session_id"],
-                "revision": args["revision"],
-                "changes": {
-                    k: v for k, v in args.items() if k not in {"session_id", "revision"}
-                },
-            }
-        )
-    )["error"]
+    assert json.loads(set_session_prescription.invoke(args))["error"]
     assert len(garmin.calls) == count
 
 
@@ -917,7 +934,7 @@ def test_graph_streams_domain_progress_before_final_answer(planned, monkeypatch)
         async for part in stream_agent(
             graph,
             {"messages": [{"role": "user", "content": "Envoie ma séance sur Garmin"}]},
-            context=AgentContext(thread_id="test-workouts"),
+            context=AgentContext(current_datetime=CLOCK, thread_id="test-workouts"),
         ):
             events.extend(projection.events(part))
         events.append(projection.done())
@@ -1046,6 +1063,225 @@ def test_incomplete_strength_creation_does_not_persist(planned, text):
     )
     assert "error" in result
     assert planning.list_planned("2027-01-01", "2027-01-31") == before
+
+
+def _hybrid_week(**kw):
+    """A prescribed Hyrox loading week, as plan_builder writes it (ARE-138)."""
+    from arete.features.hybrid_plan import HybridInputs, default_rules
+    from arete.features.hybrid_plan import generate_hybrid_plan as generate
+    from arete.services import hybrid_strength
+
+    start = date(2027, 1, 4)
+    inputs = HybridInputs(
+        start=start,
+        race_date=date(2027, 3, 27),
+        kind="hyrox",
+        level="intermediate",
+        weekly_minutes_now=150,
+        training_days=5,
+        rest_days=frozenset({0}),
+        equipment=frozenset({"sled", "ski_erg", "rower", "wall_ball"}),
+        **kw,
+    )
+    weeks = hybrid_strength.prescribe(
+        generate(inputs, default_rules(acwr_above=1.5, tsb_below=-30)),
+        level="intermediate",
+        division=inputs.division,
+        category="men",
+        equipment=inputs.equipment,
+        starts={"back_squat": hybrid_strength.Start(100.0, True)},
+    )
+    return weeks
+
+
+def _export_draft(draft):
+    from arete.garmin.models import PlannedSession, SessionStatus, SessionType
+
+    identifier = GarminRepository().create_planned_session(
+        PlannedSession(
+            date=draft.date,
+            sport=draft.sport,
+            session_type=SessionType(draft.session_type),
+            target_duration_min=draft.duration_min,
+            description=draft.description,
+            prescription=Prescription.model_validate(draft.prescription).model_dump(
+                mode="json"
+            ),
+            source="plan",
+            status=SessionStatus.PENDING,
+        )
+    )
+    garmin = Garmin()
+    result = service.export_batch([identifier], client=garmin)
+    assert result["results"][0]["state"] == "scheduled", result
+    workout = next(iter(garmin.workouts.values()))
+    return workout, workout["workoutSegments"][0]["workoutSteps"]
+
+
+def _flat(steps):
+    for step in steps:
+        if step.get("type") == "RepeatGroupDTO":
+            yield from _flat(step["workoutSteps"])
+        else:
+            yield step
+
+
+def test_a_generated_lower_body_session_exports_its_lifts(planned):
+    from arete.features.hybrid_plan import HEAVY_LOWER
+
+    weeks = _hybrid_week()
+    # The second loading block's first week.
+    week = next(
+        w for k, w in enumerate(weeks) if k and weeks[k - 1].recovery and not w.recovery
+    )
+    lower = next(s for s in week.sessions if HEAVY_LOWER in s.tags)
+    workout, steps = _export_draft(lower)
+    assert workout["sportType"]["sportTypeKey"] == "strength_training"
+    efforts = [s for s in steps if s["endCondition"]["conditionTypeKey"] == "reps"]
+    assert [(s["category"], s["exerciseName"]) for s in efforts] == (
+        [("SQUAT", "BARBELL_BACK_SQUAT")] * 4
+        + [("DEADLIFT", "ROMANIAN_DEADLIFT")] * 3
+        + [("LUNGE", "LUNGE")] * 3
+    )
+    assert [s["endConditionValue"] for s in efforts] == [6] * 4 + [8] * 3 + [10] * 3
+    # One increment above the history's 100 kg in the second loading block.
+    assert {s["weightValue"] for s in efforts[:4]} == {105_000}
+    assert all("weightValue" not in s for s in efforts[4:])  # never logged
+    assert "RIR 2" in efforts[0]["description"]
+    rests = [s for s in steps if s["stepType"]["stepTypeKey"] == "rest"]
+    assert len(rests) == len(efforts) - 1
+
+
+def test_a_station_circuit_exports_time_reps_and_lap_steps(planned):
+    from arete.features.hybrid_plan import BENCHMARK, STATION
+
+    circuits = [
+        s
+        for w in _hybrid_week()
+        for s in w.sessions
+        if STATION in s.tags and BENCHMARK not in s.tags
+    ]
+    circuit = next(c for c in circuits if "SkiErg" in c.description)
+    assert "poussée de traîneau 1' à 152 kg" in circuit.description
+    workout, steps = _export_draft(circuit)
+    assert workout["sportType"]["sportTypeKey"] == "strength_training"
+    flat = list(_flat(steps))
+    timed = [
+        s
+        for s in flat
+        if s.get("category") and s["endCondition"]["conditionTypeKey"] == "time"
+    ]
+    assert ("SLED", "PUSH", 60.0, 152_000) in {
+        (s["category"], s["exerciseName"], s["endConditionValue"], s.get("weightValue"))
+        for s in timed
+    }
+    laps = [s for s in flat if s["endCondition"]["conditionTypeKey"] == "lap.button"]
+    assert any(s.get("description") == "SkiErg 500 m" for s in laps)
+    assert all("category" not in s and s["description"] for s in laps)
+    assert not any(s["endCondition"]["conditionTypeKey"] == "distance" for s in flat)
+
+
+def test_a_compromised_run_still_exports_as_running(planned):
+    from arete.features.hybrid_plan import COMPROMISED
+
+    week = _hybrid_week()[1]
+    run = next(s for s in week.sessions if COMPROMISED in s.tags)
+    workout, steps = _export_draft(run)
+    assert workout["sportType"]["sportTypeKey"] == "running"
+    flat = list(_flat(steps))
+    assert any(s["endCondition"]["conditionTypeKey"] == "distance" for s in flat)
+    assert not any("category" in s for s in flat)
+
+
+@pytest.mark.parametrize(
+    "step,message",
+    [
+        (
+            Step(kind="effort", duration_kind="meters", value=25, exercise="Sled Push"),
+            "durée",
+        ),
+        (Step(kind="effort", duration_kind="lap"), "nommer sa station"),
+        (
+            Step(kind="effort", duration_kind="lap", weight_kg=20, notes="SkiErg"),
+            "exercice Garmin",
+        ),
+        (Step(kind="effort", duration_kind="seconds", value=60), "exercice Garmin"),
+        # Notes cannot hide an exercise Garmin has: it must be chosen as such.
+        (Step(kind="effort", duration_kind="lap", notes="Squat 5x5"), "en notes"),
+        (
+            Step(kind="effort", duration_kind="lap", notes="Squat 5x5 (10 m)"),
+            "en notes",
+        ),
+        (Step(kind="effort", duration_kind="lap", notes="Wall Ball"), "en notes"),
+        (Step(kind="effort", duration_kind="lap", notes="planche"), "en notes"),
+    ],
+)
+def test_strength_steps_without_an_exact_end_or_name_are_rejected(step, message):
+    with pytest.raises(ValueError, match=message):
+        convert(1, "Circuit", "strength", Prescription(steps=[step]))
+
+
+def test_strength_timed_and_lap_steps_convert():
+    payload = convert(
+        1,
+        "Circuit",
+        "strength",
+        Prescription(
+            steps=[
+                Step(
+                    kind="effort", duration_kind="seconds", value=45, exercise="Plank"
+                ),
+                Step(kind="effort", duration_kind="lap", notes="SkiErg 500 m"),
+                Step(kind="rest", duration_kind="lap"),  # a rest needs no name
+                # A distance Garmin cannot end on stays in the notes.
+                Step(
+                    kind="effort",
+                    duration_kind="lap",
+                    notes="25 m de poussée de traîneau à 152 kg",
+                ),
+                Step(
+                    kind="effort", duration_kind="lap", notes="20 burpees broad jumps"
+                ),
+            ]
+        ),
+    )
+    plank, ski, rest, *_ = payload["workoutSegments"][0]["workoutSteps"]
+    assert rest["stepType"]["stepTypeKey"] == "rest"
+    assert (plank["category"], plank["endCondition"]["conditionTypeKey"]) == (
+        "PLANK",
+        "time",
+    )
+    assert plank["endConditionValue"] == 45
+    assert ski["endCondition"]["conditionTypeKey"] == "lap.button"
+    assert ski["description"] == "SkiErg 500 m" and "category" not in ski
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        # The benchmark's distances, however the unit is written.
+        Step(kind="effort", duration_kind="lap", notes="25 m de poussée de traîneau"),
+        Step(
+            kind="effort", duration_kind="lap", notes="25 mètres de tirage de traîneau"
+        ),
+        Step(kind="effort", duration_kind="lap", notes="1 km de course"),
+        Step(kind="effort", duration_kind="lap", notes="100 m de farmers carry"),
+        # Stations Garmin has no exercise for.
+        Step(kind="effort", duration_kind="lap", notes="SkiErg 500 m"),
+        Step(kind="effort", duration_kind="lap", notes="20 burpees broad jumps"),
+        # A warm-up or cool-down may name exercises: only efforts are checked.
+        Step(kind="warmup", duration_kind="lap", notes="Échauffement : 5' de rameur"),
+        Step(kind="warmup", duration_kind="lap", notes="Fentes 3x10"),
+        Step(kind="cooldown", duration_kind="lap", notes="Gainage et étirements"),
+        # Prose that only contains an exercise word is not that exercise.
+        Step(kind="effort", duration_kind="lap", notes="Clean technique au bâton"),
+    ],
+)
+def test_strength_lap_steps_describing_what_garmin_cannot_hold_convert(step):
+    payload = convert(1, "Circuit", "strength", Prescription(steps=[step]))
+    (converted,) = payload["workoutSegments"][0]["workoutSteps"]
+    assert converted["endCondition"]["conditionTypeKey"] == "lap.button"
+    assert converted["description"] == step.notes and "category" not in converted
 
 
 def test_unstructured_strength_explains_missing_steps_not_unsupported_sport(planned):
@@ -1194,7 +1430,7 @@ def test_described_structured_session_never_reaches_garmin_as_the_template(
     # The template stays visible, labelled as an estimate, but cannot be sent.
     assert view["derived"] and view["needs_steps"] and view["prescription"]
     assert not view["exportable"]
-    assert "prescription.steps via update_planned_session" in view["reason"]
+    assert "coach : set_session_prescription" in view["reason"]
     garmin = Garmin()
     with pytest.raises(DocumentError, match="Séance décrite sans étapes"):
         service.export(planned, client=garmin)
@@ -1305,31 +1541,46 @@ def test_template_still_exports_when_nothing_contradicts_it(
 
 
 @pytest.mark.parametrize("sport", ["running", "cycling"])
-def test_coach_cannot_create_structured_session_without_steps(planned, sport):
+def test_coach_creation_without_steps_is_flagged_until_its_steps_are_set(
+    planned, sport
+):
+    from arete.agent.tools.planning import set_session_prescription
     from arete.services import planning
 
-    before = planning.list_planned("2027-01-01", "2027-01-31")
     result = json.loads(
         planning.create_planned_session(
             "2027-01-15", "intervals", UNREAD, sport=sport, target_duration_min=50
         )
     )
-    assert "prescription.steps" in result["error"]
-    assert planning.list_planned("2027-01-01", "2027-01-31") == before
+    assert "set_session_prescription" in result["steps_required"]
+    session = result["session"]
+    assert not service.inspect_session(session["id"])["session"]["exportable"]
+    steps = {"steps": [{"kind": "effort", "duration_kind": "seconds", "value": 600}]}
+    updated = json.loads(
+        set_session_prescription.invoke(
+            {
+                "session_id": session["id"],
+                "revision": session["revision"],
+                "prescription": steps,
+            }
+        )
+    )
+    assert updated["updated"], updated
+    assert service.inspect_session(session["id"])["session"]["exportable"]
     # Without a description the template is the session itself.
     result = json.loads(
         planning.create_planned_session(
             "2027-01-15", "intervals", sport=sport, target_duration_min=50
         )
     )
-    assert result["created"]
+    assert result["created"] and "steps_required" not in result
     # A run description the grammar reads entirely is its own steps.
     result = json.loads(
         planning.create_planned_session(
             "2027-01-15", "intervals", READ, sport=sport, target_duration_min=50
         )
     )
-    assert ("created" in result) == (sport == "running"), result
+    assert ("steps_required" in result) == (sport == "cycling"), result
 
 
 @pytest.mark.parametrize(
@@ -1358,7 +1609,7 @@ def test_coach_update_is_judged_on_the_session_it_would_save(
     if allowed:
         assert result["updated"], result
     else:
-        assert "prescription.steps" in result["error"]
+        assert "set_session_prescription" in result["error"]
         assert session.description == description and session.revision == 1
 
 
@@ -1617,3 +1868,32 @@ def test_an_automatic_resend_follows_the_latest_manual_choice_of_watch(planned):
     result = service.export(planned, client=garmin, prepared=stale, keep_device=True)
     assert result["state"] == "scheduled" and result["device_id"] is None
     assert all("devicemessage" not in path for _, path, _ in garmin.calls)
+
+
+def test_a_reconciliation_racing_the_previous_worker_s_write_claims_nothing(
+    planned, monkeypatch
+):
+    """ARE-150: the previous worker's update commits inside the claim's snapshot."""
+    import duckdb
+    from write_race import race
+
+    old = service._claim(planned)
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.garmin_exports SET updated_at=current_timestamp-INTERVAL '5 minutes' WHERE session_id=? RETURNING session_id",
+            [planned],
+        )
+    with (
+        race(
+            monkeypatch,
+            r"SET state='working'",
+            lambda: service._update(planned, old["operation_id"], state="scheduled"),
+        ),
+        pytest.raises(duckdb.TransactionException),
+    ):
+        service._claim(planned, reconcile=True)
+    with db_connection() as con:
+        assert con.execute(
+            "SELECT state, operation_id FROM app.garmin_exports WHERE session_id=?",
+            [planned],
+        ).fetchone() == ("scheduled", old["operation_id"])

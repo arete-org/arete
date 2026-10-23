@@ -22,6 +22,40 @@ const DISMISSED_KEY = 'arete.install.dismissed';
 /** Set once the standalone app has offered to turn notifications on. */
 export const NOTIFICATIONS_OFFERED_KEY = 'arete.notifications.offered';
 
+/** The two moments where a notification's value is obvious (ARE-131). */
+export type PushMoment = 'session' | 'briefing';
+/** Answered (enabled, declined or put off) on this device: that offer never returns. */
+export const pushOfferKey = (moment: PushMoment) => `arete.push-offer.${moment}`;
+/** Set once a briefing was opened on this device: the briefing's offer may follow. */
+export const BRIEFING_READ_KEY = 'arete.push-offer.briefing-read';
+/** For this browsing session: one offer was put off, so no other one asks again. */
+const OFFERS_QUIET_KEY = 'arete.push-offer.quiet';
+
+const quietListeners = new Set<() => void>();
+
+export function pushOffersQuiet(): boolean {
+  try {
+    return sessionStorage.getItem(OFFERS_QUIET_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** Offers already on screen (and the first-launch modal) hide at once. */
+export function onPushOffersQuiet(listener: () => void): () => void {
+  quietListeners.add(listener);
+  return () => quietListeners.delete(listener);
+}
+
+export function quietPushOffers(): void {
+  try {
+    sessionStorage.setItem(OFFERS_QUIET_KEY, '1');
+  } catch {
+    // Not remembered: at worst the other moment asks once more in this session.
+  }
+  quietListeners.forEach((listener) => listener());
+}
+
 let deferred: BeforeInstallPromptEvent | null = null;
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((listener) => listener());

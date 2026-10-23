@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Ellipsis, PanelsTopLeft } from 'lucide-react';
 import type { CoachDisplay } from '@/hooks/useCoachDisplay';
+import { useCoachWords } from '@/lib/coachName';
 
 type Props = {
   mode: CoachDisplay;
@@ -16,10 +17,11 @@ export function CoachDisplayOptions({ mode, onChange, onHistory, onMemory, onCre
   const trigger = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
   const id = useId();
+  const coach = useCoachWords();
   const actions = [
     { action: onCreate, label: 'Nouvelle conversation' },
     { action: onHistory, label: 'Historique des conversations' },
-    { action: onMemory, label: 'Ce que Chiron sait de moi' },
+    { action: onMemory, label: `Ce que ${coach.the} sait de moi` },
   ];
   useEffect(() => {
     if (!open) return;
@@ -74,14 +76,14 @@ export function CoachDisplayOptions({ mode, onChange, onHistory, onMemory, onCre
     }
   }}>
     <button ref={trigger} type="button" aria-label="Options du coach" aria-expanded={open} aria-controls={open ? id : undefined}
-      className="flex size-9 items-center justify-center rounded-lg text-text-muted hover:bg-text-muted/10"
+      className="flex size-11 items-center justify-center rounded-lg text-text-muted hover:bg-text-muted/10"
       onClick={() => setOpen(value => !value)}>
       {mode === 'floating' ? <Ellipsis size={17} /> : <PanelsTopLeft size={17} />}
     </button>
     {open && <div ref={popover} id={id} className="absolute right-0 z-50 w-64 max-w-[calc(100vw-48px)] overflow-y-auto rounded-xl border border-text-muted/20 bg-abyss p-2 text-sm shadow-xl">
       <fieldset>
         <legend className="px-2 py-2 text-[11px] text-text-muted">Affichage du coach</legend>
-        {([['sidebar', 'Panneau latéral classique'], ['floating', 'Chat flottant']] as const).map(([value, label]) =>
+        {([['sidebar', 'Panneau latéral classique'], ['floating', 'Chat flottant'], ['expanded', 'Conversation élargie']] as const).map(([value, label]) =>
           <label key={value} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-2 hover:bg-text-muted/10">
             <input type="radio" name={id} value={value} checked={mode === value} onChange={() => choose(() => onChange(value))} className="accent-neon-cyan" />
             {label}

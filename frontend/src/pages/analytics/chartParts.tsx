@@ -31,7 +31,7 @@ export function axisLabel(value: string, position: 'insideLeft' | 'insideBottom'
 }
 
 export function ChartGrid() {
-  return <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />;
+  return <CartesianGrid stroke={CHART.grid} vertical={false} />;
 }
 
 export const TOOLTIP_STYLE = {
@@ -39,11 +39,16 @@ export const TOOLTIP_STYLE = {
   border: `1px solid ${CHART.grid}`,
   color: CHART.text,
   fontSize: 12,
+  borderRadius: 'var(--radius-control)',
+  padding: 12,
+  fontFamily: 'var(--font-sans)',
+  maxWidth: 'min(300px, 80vw)',
+  whiteSpace: 'normal',
 } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ChartTooltip(props: TooltipProps<any, any>) {
-  return <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'rgba(255,255,255,0.04)' }} {...props} />;
+  return <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: 'var(--color-shadow)', fillOpacity: 0.4 }} {...props} />;
 }
 
 export function TooltipBox({ title, children }: { title: string; children: ReactNode }) {

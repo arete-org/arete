@@ -55,6 +55,11 @@ def slack_policy(context: AgentContext) -> AgentProfile:
         return replace(
             get_profile("chat"),
             id="slack",
+            capabilities=tuple(
+                capability
+                for capability in get_profile("chat").capabilities
+                if capability not in {"visualization", "conversations"}
+            ),
             system_prompt=profile.system_prompt,
             instructions=SYSTEM_SKILL + "\n\n" + get_profile("chat").instructions,
         )

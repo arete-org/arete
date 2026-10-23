@@ -22,7 +22,7 @@ it('acknowledges immediately, waits for transport acceptance and keeps the timer
   expect(screen.getAllByRole('status')[0].textContent).toBe('Demande envoyée');
   expect(screen.getByText(/un peu plus de temps/)).toBeTruthy();
   rerender(<CoachActivity message={{ ...message, streamAccepted: true }} />);
-  expect(screen.getByText('Chiron prépare sa réponse')).toBeTruthy();
+  expect(screen.getByText('Le coach prépare sa réponse')).toBeTruthy();
   expect(screen.getByText(/En cours depuis 9 s/).getAttribute('aria-live')).toBe('off');
 });
 

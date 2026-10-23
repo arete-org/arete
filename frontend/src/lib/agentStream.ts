@@ -1,5 +1,6 @@
 import { isWorkoutUpdate, type WorkoutUpdate } from './workouts';
 import { authFetch } from './auth';
+import { CHART_CONTRACT, chartPart, isChartCard, type ChartCardData, type ChartCardPart } from './chartCards';
 import { isTraceReceipt, type TraceReceipt, type MessageFeedback } from './agentFeedback';
 import { readableError } from './utils';
 import type { PanelPageContext } from './pageContext';
@@ -30,8 +31,11 @@ export interface CalendarActionPart {
   id: string;
 }
 export interface CoachCardPart { kind: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
-export type ChatPart = ToolPart | TextPart | CalendarActionPart | CoachCardPart;
+export type ChatPart = ToolPart | TextPart | CalendarActionPart | CoachCardPart | ChartCardPart;
 export interface ChatMessage {
+  /** Server-stamped local ISO time, replayed unchanged with this human message. */
+  sentAt?: string;
+  syncStatus?: string;
   trace?: TraceReceipt;
   feedback?: MessageFeedback;
   /** Local transport state; restored conversations are always settled. */
@@ -46,7 +50,17 @@ export interface ChatMessage {
   interrupted?: boolean;
   pending?: boolean;
 }
+export interface ContextWindowUsage {
+  used_tokens: number;
+  window_tokens: number;
+}
+
 export type StreamEvent =
+  | ({ type: 'chart_card' } & ChartCardData)
+  | { type: "thread_title"; thread_id: string; title: string }
+  | { type: 'values'; context_window_usage: ContextWindowUsage }
+  | { type: 'context_compaction'; phase: 'start' | 'done' }
+  | { type: 'sync_status'; state: string }
   | WorkoutUpdate
   | { type: 'calendar_action'; id: string }
   | { type: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
@@ -86,6 +100,16 @@ export const STREAM_TIMEOUT_MS = 310_000;
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
+export function isSentAt(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/.test(value)
+    && Number.isFinite(Date.parse(value));
+}
+export function isContextWindowUsage(value: unknown): value is ContextWindowUsage {
+  return record(value)
+    && Number.isSafeInteger(value.used_tokens) && Number(value.used_tokens) >= 0
+    && Number.isSafeInteger(value.window_tokens) && Number(value.window_tokens) > 0;
+}
 function isPreview(value: unknown): value is Preview {
   return (
     record(value) &&
@@ -98,8 +122,15 @@ function isPreview(value: unknown): value is Preview {
 export function parseEvent(data: string): StreamEvent | null {
   const e: unknown = JSON.parse(data);
   if (!record(e)) throw new Error('Événement du coach invalide.');
+  if (e.type === 'values' && isContextWindowUsage(e.context_window_usage))
+    return { type: 'values', context_window_usage: e.context_window_usage };
+  if (e.type === 'context_compaction' && (e.phase === 'start' || e.phase === 'done'))
+    return { type: 'context_compaction', phase: e.phase };
+  if (e.type === 'thread_title' && typeof e.thread_id === 'string' && typeof e.title === 'string' && e.title.length > 0 && e.title.length <= 120) return e as StreamEvent;
   if (isWorkoutUpdate(e)) return e;
+  if (e.type === 'sync_status' && typeof e.state === 'string') return e as StreamEvent;
   if (e.type === 'suggestion') return null;
+  if (e.type === 'chart_card' && isChartCard(e)) return { ...e, type: 'chart_card' };
   if (e.type === 'coach_card' && (e.ref_kind === 'fact' || e.ref_kind === 'followup') && Number.isSafeInteger(e.ref_id) && Number(e.ref_id) > 0 && e.id === `${e.ref_kind}:${e.ref_id}`) return e as StreamEvent;
 
   const identified = typeof e.id === 'string' && e.id.length > 0;
@@ -165,6 +196,8 @@ export function applyEvent(
   message: ChatMessage,
   event: StreamEvent
 ): ChatMessage {
+  if (event.type === 'thread_title' || event.type === 'values' || event.type === 'context_compaction') return message;
+  if (event.type === 'sync_status') return { ...message, syncStatus: event.state };
   if (event.type === 'workout_update') {
     const current = message.workouts ?? [];
     const previous = current.find(w => w.session.id === event.session.id);
@@ -176,6 +209,18 @@ export function applyEvent(
   if (event.type === 'done')
     return settleMessage({ ...message, content: event.message.content, trace: event.trace });
   const parts = [...(message.parts ?? [])];
+  if (event.type === 'chart_card') {
+    const existing = parts.find(part => part.kind === 'chart_card' && part.id === event.id);
+    const card = chartPart(event);
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(card)) throw new Error('Un graphique reçu a changé de contenu.');
+      return message;
+    }
+    if (parts.filter(part => part.kind === 'chart_card').length >= CHART_CONTRACT.max_cards)
+      throw new Error('Maximum quatre graphiques par réponse.');
+    parts.push(card);
+    return { ...message, parts };
+  }
   if (event.type === 'coach_card') {
     if (!parts.some(p => p.kind === 'coach_card' && p.id === event.id)) parts.push({ kind: 'coach_card', id: event.id, ref_kind: event.ref_kind, ref_id: event.ref_id });
     return { ...message, parts };
@@ -295,6 +340,7 @@ export async function runAgentStream(
   threadId: string,
   documentIds?: string[],
   onAccepted?: () => void,
+  onSentAt?: (sentAt: string) => void,
 ): Promise<void> {
   const panel_context: Record<string, string> = { page: context.page, path: context.path };
   for (const [key, value] of Object.entries(context.params))
@@ -303,8 +349,9 @@ export async function runAgentStream(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      messages: history.map(({ role, content }) => ({ role, content })),
+      messages: history.map(({ role, content, sentAt }) => ({ role, content, ...(sentAt ? { sent_at: sentAt } : {}) })),
       thread_id: threadId,
+      supports_chart_cards: true,
       ...(documentIds !== undefined ? { document_ids: documentIds } : {}),
       panel_context,
     }),
@@ -312,11 +359,16 @@ export async function runAgentStream(
   });
   if (!response.ok)
     throw new Error(
-      `Le coach n'a pas pu répondre (${response.status}) : ${readableError(
-        new Error(await response.text())
-      )}`
+      `Le coach n’a pas pu répondre : ${readableError(new Error(`API Error ${response.status}: ${await response.text()}`))}`
     );
   if (!response.body) throw new Error('Le serveur ne fournit pas de stream.');
   onAccepted?.();
+  // A header is compatible with cached clients that reject unknown SSE events.
+  // Capture it before consuming tokens so even an interrupted turn keeps its time.
+  const sentAt = response.headers.get('X-Arete-Sent-At');
+  if (sentAt !== null) {
+    if (!isSentAt(sentAt)) throw new Error('Horodatage du coach invalide.');
+    onSentAt?.(sentAt);
+  }
   await consumeStream(response.body, onEvent);
 }

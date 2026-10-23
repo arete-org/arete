@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import type { ConsentState } from '@/lib/api';
 
 /** What the app knows about the signed-in account. */
 export interface AuthState {
@@ -18,6 +19,10 @@ export interface AuthState {
    * sign-in is off.
    */
   grantGoogleScopes: (scopes: string[], returnTo: string) => Promise<boolean>;
+  /** The athlete's consent to the terms and to health data; null when sign-in is off (nothing is asked). */
+  consent: ConsentState | null;
+  /** Adopts the server's answer to a consent or a withdrawal: a withdrawal brings the consent screen back. */
+  setConsent: (consent: ConsentState) => void;
 }
 
 export const AUTH_DISABLED: AuthState = {
@@ -30,6 +35,8 @@ export const AUTH_DISABLED: AuthState = {
   grantGoogleScopes: async () => {
     throw new Error('Connexion Google indisponible : la connexion au compte est désactivée.');
   },
+  consent: null,
+  setConsent: () => {},
 };
 
 /** Provided by the auth gate; components rendered without one see sign-in as off. */

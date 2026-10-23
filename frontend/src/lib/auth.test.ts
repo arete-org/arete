@@ -134,3 +134,18 @@ describe('endSession', () => {
     expect(reload).not.toHaveBeenCalled();
   });
 });
+
+describe('connectivity from the requests', () => {
+  it('reports a request that never reached the server until one does, ignoring cancellations', async () => {
+    const { connectivity } = await import('./connectivity');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new DOMException('aborted', 'AbortError'); }));
+    await expect(authFetch('/api/x')).rejects.toThrow();
+    expect(connectivity()).toBe('online');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    await expect(authFetch('/api/x')).rejects.toThrow('Failed to fetch');
+    expect(connectivity()).toBe('unreachable');
+    answer(500);
+    await authFetch('/api/x');
+    expect(connectivity()).toBe('online');
+  });
+});

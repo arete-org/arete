@@ -12,7 +12,12 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from arete.dataio.db import connect
-from arete.dataio.queries import RUNNING_SPORTS, daily_tss, sql_in
+from arete.dataio.queries import (
+    EXCLUDED_SOURCES_SQL,
+    RUNNING_SPORTS,
+    daily_tss,
+    sql_in,
+)
 from arete.features.fitness import DailyTSS
 from arete.services.athlete_scope import resolve_athlete_id
 
@@ -34,6 +39,7 @@ def get_running_sessions(con, start_date: date, end_date: date) -> list[dict]:
         SELECT date, avg_hr, avg_speed_mps
         FROM app.visible_actual_sessions
         WHERE sport IN ({sql_in(RUNNING_SPORTS)})
+          AND COALESCE(source, '') NOT IN ({EXCLUDED_SOURCES_SQL})
           AND avg_hr IS NOT NULL
           AND avg_speed_mps IS NOT NULL
           AND avg_speed_mps > 0
@@ -173,6 +179,7 @@ def store_coefficients(coeffs: dict, user_id: int | None = None) -> None:
                 r2 = EXCLUDED.r2,
                 n_samples = EXCLUDED.n_samples,
                 fitted_at = now()
+            RETURNING user_id
             """,
             [
                 user_id,

@@ -47,7 +47,7 @@ def document_transaction():
     """Serialize document lifecycle changes across processes, including deletion."""
     with db_transaction() as con:
         con.execute(
-            "UPDATE app.document_quota SET used_bytes=used_bytes WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+            "UPDATE app.document_quota SET used_bytes=used_bytes WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
         )
         yield con
 
@@ -446,7 +446,7 @@ def finalize(
         if used + len(encoded.encode()) > MAX_THREAD_EXTRACT_BYTES:
             raise DocumentError("Les extractions de ce fil dépassent 8 Mio.")
         con.execute(
-            "UPDATE app.coach_documents SET status='ready', extraction=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=?) ",
+            "UPDATE app.coach_documents SET status='ready', extraction=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=?) RETURNING id",
             [encoded, document_id],
         )
     return {**_metadata(row), "status": "ready"}
@@ -504,7 +504,7 @@ def filesystem(
 def delete_documents(thread_id: str, document_id: str | None = None) -> None:
     with document_transaction() as con:
         con.execute(
-            "UPDATE app.document_quota SET used_bytes=used_bytes WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+            "UPDATE app.document_quota SET used_bytes=used_bytes WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
         )
         where = "thread_id=?" + (" AND id=?" if document_id else "")
         params = [_uuid(thread_id)] + ([_uuid(document_id)] if document_id else [])
@@ -521,7 +521,7 @@ def delete_documents(thread_id: str, document_id: str | None = None) -> None:
             params,
         )
         con.execute(
-            "UPDATE app.document_quota SET used_bytes=used_bytes-? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+            "UPDATE app.document_quota SET used_bytes=used_bytes-? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
             [sum(r[1] for r in rows)],
         )
         if document_id is None:

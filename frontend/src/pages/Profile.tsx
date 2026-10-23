@@ -14,10 +14,9 @@ import {
   type Player,
   type Skin,
 } from '@/lib/gamification';
-import { RecordSource } from './RecordSource';
 import { StrengthRecords } from './profileRecords';
-import { RecordsCard } from './analytics/cards/RecordsCard';
 import { RecentSessions } from './log/RecentSessions';
+import { readableError } from '@/lib/utils';
 
 const tabs = [
   ['overview', 'Vue', 'Vue d’ensemble'],
@@ -39,7 +38,7 @@ export function ProfilePage() {
   if (pref.error)
     return (
       <p className="p-6" role="alert">
-        {pref.error.message}
+        {readableError(pref.error)}
       </p>
     );
   if (!pref.data?.enabled)
@@ -68,7 +67,6 @@ function ActiveProfile() {
     queryKey: ['settings'],
     queryFn: settingsApi.get,
   });
-  const [recordSource, setRecordSource] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   if (player.isPending)
     return (
@@ -79,7 +77,7 @@ function ActiveProfile() {
   if (player.error)
     return (
       <div className="p-6" role="alert">
-        Progression indisponible : {player.error.message}{' '}
+        Progression indisponible : {readableError(player.error)}{' '}
         <Button onClick={() => player.refetch()}>Actualiser</Button>
       </div>
     );
@@ -110,7 +108,7 @@ function ActiveProfile() {
       </header>
       {player.syncError && (
         <p role="alert" className="font-sans text-xs text-warning-orange">
-          Progression non actualisée : {player.syncError.message}{' '}
+          Progression non actualisée : {readableError(player.syncError)}{' '}
           <Button variant="ghost" onClick={player.sync}>
             Actualiser
           </Button>
@@ -129,7 +127,7 @@ function ActiveProfile() {
           />
         </button>
         <div className="min-w-0 flex-1 font-sans space-y-2">
-          <p className="text-xs sm:text-sm text-neon-cyan uppercase break-words">
+          <p className="text-xs sm:text-sm text-neon-cyan break-words">
             {settings.data?.display_name ?? 'Athlète'} /{' '}
             {classes.find((c) => c.id === p.athlete_class)?.name}
           </p>
@@ -196,7 +194,7 @@ function ActiveProfile() {
       {tab === 'overview' && (
         <>
           <section className="rpg-surface p-4 font-sans space-y-3">
-            <p className="text-xs text-text-muted">CETTE SEMAINE</p>
+            <p className="text-xs text-text-muted">Cette semaine</p>
             <h3 className="text-lg font-bold text-neon-cyan">
               {p.week.complete
                 ? 'Objectif respecté'
@@ -214,7 +212,7 @@ function ActiveProfile() {
             </p>
           </section>
           <h3 className="text-xs font-sans text-text-muted">
-            DERNIERS ACCOMPLISSEMENTS
+            Derniers accomplissements
           </h3>
           {!p.history.length && (
             <p className="text-sm text-text-secondary">
@@ -233,7 +231,7 @@ function ActiveProfile() {
       )}
       {tab === 'achievements' && (
         <>
-          <h3 className="font-bold text-lg">Mes accomplissements</h3>
+          <h2 className="font-bold text-lg">Mes accomplissements</h2>
           <div className="divide-y divide-text-muted/15">
             {p.badges.map((b) => (
               <div key={b.sessions} className="flex items-center gap-4 py-4">
@@ -255,7 +253,7 @@ function ActiveProfile() {
               </div>
             ))}
           </div>
-          <h3 className="font-bold text-lg">Les six rangs</h3>
+          <h2 className="font-bold text-lg">Les six rangs</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {ranks.map((r) => (
               <div
@@ -288,19 +286,14 @@ function ActiveProfile() {
       )}
       {tab === 'records' && (
         <>
-          <RecordsCard onOpen={setRecordSource} />
           <p className="text-xs text-text-muted">
-            Records mesurés, sans multiplicateur d’XP. La fréquence cardiaque
-            absente reste non mesurée.
+            Records mesurés, sans multiplicateur d’XP.
           </p>
           <StrengthRecords />
         </>
       )}
       {tab === 'history' && <ActivityHistory />}
       {tab === 'collection' && <Collection player={p} refresh={refresh} />}
-      {recordSource !== null && (
-        <RecordSource id={recordSource} close={() => setRecordSource(null)} />
-      )}
       {editing && (
         <CharacterEditor
           player={p}
@@ -330,7 +323,7 @@ function Receipts({
     <div className="font-sans">
       {older.error && (
         <p role="alert" className="text-danger-red">
-          {older.error.message}
+          {readableError(older.error)}
         </p>
       )}
       {(data?.history ?? []).slice(0, compact ? 3 : 50).map((r) => (
@@ -449,7 +442,7 @@ function Collection({
           </p>
           {(buy.error || equip.error) && (
             <p role="alert" className="text-danger-red text-sm mb-4">
-              {buy.error?.message ?? equip.error?.message} En cas
+              {readableError(buy.error ?? equip.error)} En cas
               d’interruption, actualise pour vérifier l’achat avant de le
               relancer.
             </p>
@@ -546,7 +539,7 @@ function CharacterEditor({
       </div>
       {save.error && (
         <p role="alert" className="text-danger-red my-3">
-          {save.error.message}
+          {readableError(save.error)}
         </p>
       )}
       <Button
@@ -574,9 +567,9 @@ function ActivityHistory() {
   });
   return (
     <div className="space-y-5">
-      <h3 className="font-bold">Mes sorties et séances</h3>
+      <h2 className="font-bold">Mes sorties et séances</h2>
       <RecentSessions />
-      <h3 className="font-bold">Force</h3>
+      <h2 className="font-bold">Force</h2>
       {sessions.error && <p role="alert">Séances indisponibles.</p>}
       {sessions.data?.map((s) => (
         <Link

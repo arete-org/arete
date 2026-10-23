@@ -1,32 +1,49 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, AlertTriangle, Check, Loader2, Sparkles } from 'lucide-react';
 import { cn, readableError } from '@/lib/utils';
 import { Button, Field, Input, Modal, ModalHeader, Textarea } from '@/components/ui';
-import { strengthApi, tipsApi } from '@/lib/api';
-import type { ParsedWorkout, WorkoutTranscription } from '@/types';
-import { toLocalISODate } from '@/lib/dates';
-import { invalidateAfterSession } from '@/lib/queryKeys';
+import { ApiError, strengthApi, tipsApi } from '@/lib/api';
+import type { ParsedExercise, ParsedWorkout, StrengthDraft, WorkoutTranscription } from '@/types';
+import { parseLocalDate, toLocalISODate } from '@/lib/dates';
+import { invalidateAfterSession, qk } from '@/lib/queryKeys';
 import { VoiceDictation, type VoiceDictationHandle } from './VoiceDictation';
 import { RecordsCelebration, SuggestionNote } from './progression';
+import { useCoachWords } from '@/lib/coachName';
 
 const today = () => toLocalISODate();
+
+/** The catalog exercise a typed name was read as, in French; null when it is the typed name. */
+function readAs(ex: ParsedExercise): string | null {
+  const match = ex.suggestions?.find((s) => s.exercise_id === ex.exercise_id);
+  const name = match?.name_fr || match?.name;
+  return name && name.toLowerCase() !== ex.name.toLowerCase() ? name : null;
+}
 
 interface LogSessionModalProps {
   open: boolean;
   onClose: () => void;
+  /** A Garmin strength activity awaiting its loads: its text and date, saved onto it. */
+  draft?: StrengthDraft | null;
 }
 
-/** Paste → parse → preview → save flow for strength sessions. */
-export function LogSessionModal({ open, onClose }: LogSessionModalProps) {
+/**
+ * Paste → parse → preview → save flow for strength sessions.
+ *
+ * With a draft, the text opens with what Garmin recognised and the date is the
+ * activity's; saving completes the draft (one session with the activity).
+ */
+export function LogSessionModal({ open, onClose, draft = null }: LogSessionModalProps) {
+  const coach = useCoachWords();
   const queryClient = useQueryClient();
-  const [workoutText, setWorkoutText] = useState('');
-  const [workoutDate, setWorkoutDate] = useState(today);
+  const [workoutText, setWorkoutText] = useState(() => draft?.notation ?? '');
+  const [workoutDate, setWorkoutDate] = useState(() => draft?.date ?? today());
   const [parseResult, setParseResult] = useState<ParsedWorkout | null>(null);
   const [step, setStep] = useState<'input' | 'preview' | 'saved'>('input');
   const [heard, setHeard] = useState<WorkoutTranscription | null>(null);
   const [textBeforeDictation, setTextBeforeDictation] = useState<string | null>(null);
   const dictationRef = useRef<VoiceDictationHandle>(null);
+  const dateId = useId();
 
   /** Dictation is incremental: one exercise, then the next. Append, never overwrite. */
   const insertDictation = (result: WorkoutTranscription) => {
@@ -58,6 +75,27 @@ export function LogSessionModal({ open, onClose }: LogSessionModalProps) {
     },
   });
 
+  // A draft completed elsewhere (another tab, a log of that day) answers 409: nothing written.
+  const completeMutation = useMutation({
+    mutationFn: () => strengthApi.completeDraft(draft!.id, workoutText),
+    onSuccess: (data) => {
+      setParseResult((current) =>
+        current && { ...current, session_id: data.session_id, message: data.message, records: data.records }
+      );
+      setStep('saved');
+      invalidateAfterSession(queryClient);
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        queryClient.invalidateQueries({ queryKey: qk.strengthDrafts });
+      }
+    },
+  });
+  // Names the catalog table does not know: listed, never pre-filled as notation.
+  const freeExercises = draft?.exercises.filter((e) => !e.exercise_id) ?? [];
+  const save = () => (draft ? completeMutation.mutate() : parseMutation.mutate({ save: true }));
+  const saving = draft ? completeMutation.isPending : parseMutation.isPending;
+
   // The coach's word on the saved session; it also files it in its journal.
   const savedId = step === 'saved' ? parseResult?.session_id : undefined;
   const feedback = useQuery({
@@ -68,13 +106,18 @@ export function LogSessionModal({ open, onClose }: LogSessionModalProps) {
     retry: false,
   });
 
+  // A save in flight keeps the screen: leaving the page would lose its outcome.
+  const writing = draft ? completeMutation.isPending : parseMutation.isPending && parseMutation.variables?.save === true;
+
   const reset = () => {
+    if (writing) return;
     dictationRef.current?.cancel();
     setHeard(null);
     setTextBeforeDictation(null);
-    setWorkoutText('');
-    setWorkoutDate(today());
+    setWorkoutText(draft?.notation ?? '');
+    setWorkoutDate(draft?.date ?? today());
     setParseResult(null);
+    completeMutation.reset();
     setStep('input');
     onClose();
   };
@@ -84,7 +127,7 @@ export function LogSessionModal({ open, onClose }: LogSessionModalProps) {
   return (
     <Modal mobileSheet open={open} onClose={reset} className="max-w-lg overflow-y-auto">
       <ModalHeader
-        title="SAISIR UNE SÉANCE"
+        title={draft ? 'Ajoute tes charges' : 'Saisir une séance'}
         tone="text-neon-gold"
         icon={<Sparkles className="w-5 h-5" />}
         onClose={reset}
@@ -92,10 +135,28 @@ export function LogSessionModal({ open, onClose }: LogSessionModalProps) {
 
       {step === 'input' && (
         <div className="space-y-4">
-          <p className="text-sm text-text-muted font-sans">
-            Dicte ta séance ou colle-la ci-dessous. Les exercices, séries et charges sont
-            extraits automatiquement.
-          </p>
+          {draft ? (
+            <div className="space-y-2 text-sm text-text-muted font-sans">
+              <p>
+                Séance du{' '}
+                {parseLocalDate(draft.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                {draft.notation
+                  ? '. Ajoute la charge au bout de chaque ligne («\u00a03x10@80\u00a0»), ou dicte-la.'
+                  : '. Saisis ou dicte tes exercices avec leurs charges («\u00a0Squat 5x5@100\u00a0»).'}
+              </p>
+              {freeExercises.length > 0 && (
+                <p className="text-xs">
+                  Aussi vu par ta montre, à écrire avec tes mots :{' '}
+                  {freeExercises.map((e) => (e.sets ? `${e.name} (${e.sets} séries)` : e.name)).join(' · ')}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-text-muted font-sans">
+              Dicte ta séance ou colle-la ci-dessous. Les exercices, séries et charges sont
+              extraits automatiquement.
+            </p>
+          )}
 
           <VoiceDictation
             ref={dictationRef}
@@ -103,18 +164,23 @@ export function LogSessionModal({ open, onClose }: LogSessionModalProps) {
             disabled={parseMutation.isPending}
           />
 
-          <Field label="Date">
-            <Input
-              type="date"
-              accent="gold"
-              value={workoutDate}
-              onChange={(e) => setWorkoutDate(e.target.value)}
-            />
-          </Field>
+          {!draft && (
+            <Field label="Date" htmlFor={dateId}>
+              <Input
+                id={dateId}
+                type="date"
+                className="session-date-input"
+                accent="gold"
+                value={workoutDate}
+                onChange={(e) => setWorkoutDate(e.target.value)}
+              />
+            </Field>
+          )}
 
           <Field label="Séance en texte libre">
             <Textarea
               accent="gold"
+              aria-label="Séance en texte libre"
               value={workoutText}
               onChange={(e) => setWorkoutText(e.target.value)}
               onKeyDown={(e) => {
@@ -136,7 +202,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
           {heard && (
             <div className="p-3 rounded border border-neon-cyan/30 bg-neon-cyan/5 space-y-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-sans text-neon-cyan uppercase tracking-wider">
+                <span className="text-[10px] font-sans text-neon-cyan">
                   Ce qui a été entendu
                 </span>
                 {textBeforeDictation !== null && (
@@ -145,7 +211,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
                     onClick={undoDictation}
                     className="text-[10px] font-sans text-text-muted hover:text-text-primary"
                   >
-                    ANNULER L'INSERTION
+                    Annuler l'insertion
                   </button>
                 )}
               </div>
@@ -170,11 +236,11 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
             loading={parseMutation.isPending}
           >
             {parseMutation.isPending ? (
-              'ANALYSE…'
+              'Analyse…'
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                ANALYSER
+                Analyser
               </>
             )}
           </Button>
@@ -211,7 +277,10 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-sans text-sm text-text-primary">{ex.name}</span>
                     {ex.exercise_matched ? (
-                      <span className="text-[10px] font-sans text-success-green">✓ RECONNU</span>
+                      <span className="text-[10px] font-sans text-success-green text-right">
+                        ✓ RECONNU
+                        {readAs(ex) ? ` : ${readAs(ex)}` : ''}
+                      </span>
                     ) : (
                       <span className="text-[10px] font-sans text-warning-orange">⚠ INCONNU</span>
                     )}
@@ -233,7 +302,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
 
           {unparsed.length > 0 && (
             <div className="p-3 rounded border border-warning-orange/30 bg-warning-orange/5">
-              <div className="flex items-center gap-2 text-warning-orange text-xs font-sans uppercase tracking-wider mb-2">
+              <div className="flex items-center gap-2 text-warning-orange text-xs font-sans mb-2">
                 <AlertTriangle className="w-4 h-4" />
                 Lignes non reconnues ({unparsed.length})
               </div>
@@ -258,13 +327,20 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
               variant="gold"
               strong
               className="flex-1"
-              onClick={() => parseMutation.mutate({ save: true })}
-              loading={parseMutation.isPending}
+              onClick={save}
+              loading={saving}
             >
-              {!parseMutation.isPending && <Check className="w-4 h-4" />}
-              ENREGISTRER
+              {!saving && <Check className="w-4 h-4" />}
+              Enregistrer
             </Button>
           </div>
+
+          {completeMutation.isError && (
+            <div role="alert" className="flex items-center gap-2 text-danger-red text-sm font-sans">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {readableError(completeMutation.error) || 'Enregistrement impossible'}
+            </div>
+          )}
         </div>
       )}
 
@@ -274,7 +350,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
             <Check className="w-8 h-8 text-success-green" />
           </div>
           <div>
-            <h4 className="font-sans text-lg text-success-green">SÉANCE ENREGISTRÉE</h4>
+            <h4 className="font-sans text-lg text-success-green">Séance enregistrée</h4>
             <p className="text-sm font-sans text-text-muted mt-1">
               {parseResult.message || `${parseResult.exercises.length} exercice(s) enregistré(s)`}
             </p>
@@ -289,13 +365,13 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
           {feedback.data && (
             <div className="text-left glass-panel p-3">
               <p className="text-[11px] font-sans text-neon-cyan mb-1">
-                {feedback.data.source === 'agent' ? 'LE COACH' : 'CALCULÉ À PARTIR DE LA SÉANCE'}
+                {feedback.data.source === 'agent' ? `Le regard ${coach.of}` : 'Calculé à partir de la séance'}
               </p>
               <p className="text-sm font-sans text-text-secondary">{feedback.data.feedback}</p>
             </div>
           )}
           <Button variant="outline" strong size="lg" fullWidth onClick={reset}>
-            FERMER
+            Fermer
           </Button>
         </div>
       )}

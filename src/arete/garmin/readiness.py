@@ -1,14 +1,23 @@
 """Daily readiness score from Garmin health metrics.
 
-Formula (0-100):
-  - 40% HRV score   : last_night_hrv / 14d_baseline, clamped 0.5-1.5
-  - 30% Sleep score : sleep_duration / personal_target, clipped 0.5-1.2
-  - 30% Body Battery: peak BB / 100, capped at 1.0
-  - Penalty: -5 per +1 std-dev above 14d baseline for stress_avg
-  - Penalty: -3 per +5 bpm above 14d baseline for RHR (when available)
+Scores (0-100) a day that has a last-night HRV against a baseline: the 14
+previous days (the target excluded) that have an HRV. The baseline needs at
+least 5 such days, and each metric's mean/std-dev at least 5 non-null values.
 
-Returns a 0-100 integer. If 14-day baseline is unavailable (cold start),
-falls back to fixed thresholds and returns 50 (neutral).
+Weighted sub-scores, each linear and clamped to 0-1:
+  - 40% HRV         : last-night HRV / baseline mean HRV; ratio 0.5 -> 0, 1.5 -> 1
+  - 30% Sleep       : sleep duration / fixed 8 h target; ratio 0.5 -> 0, 1.2 -> 1
+  - 30% Body Battery: the day's peak Body Battery / 100
+Penalties apply only above the baseline mean, in proportion to the z-score
+(population std-dev; skipped when the std-dev is 0):
+  - stress_avg: -5 points per std-dev above the baseline mean
+  - resting HR: -3 points per std-dev above the baseline mean
+The result is truncated to an integer and clamped to 0-100.
+
+Without a baseline (fewer than 5 HRV days in the 14) the HRV ratio counts as
+1.0 (sub-score 0.5) and no penalty applies; with one, a metric with fewer than
+5 values skips only its own penalty. Sleep and Body Battery always count, a
+missing one as 0. A day without HRV scores None.
 """
 
 from __future__ import annotations
@@ -205,33 +214,37 @@ def _score(day: dict | None, baseline: dict | None) -> int | None:
     return final
 
 
-def update_readiness_for_date(target_date: date) -> int | None:
-    """Compute readiness and write to DB. Returns the score or None."""
-    score = compute_readiness(target_date)
-    if score is None:
-        return None
+def update_readiness_range(start: date, end: date) -> int:
+    """Recompute readiness for a range. Returns count of days updated.
+
+    One read of the range with its baselines and one write for all its days:
+    each day's score is ``compute_readiness``'s, and none reads a readiness.
+    """
+    if start > end:
+        return 0
     con = connect()
     try:
+        rows = fetch_window(con, end, (end - start).days + BASELINE_DAYS)
+        scores = []
+        for offset in range((end - start).days + 1):
+            day = start + timedelta(days=offset)
+            score = compute_readiness(day, window=rows)
+            if score is not None:
+                scores.append((day, score))
+        if not scores:
+            return 0
+        values = ", ".join(["(CAST(? AS DATE), ?)"] * len(scores))
         con.execute(
-            """
+            f"""
             UPDATE app.daily_metrics
-            SET readiness_score = ?
-            WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (user_id = getvariable('arete_athlete_id') AND date = ?)
+            SET readiness_score = scored.score
+            FROM (VALUES {values}) AS scored(day, score)
+            WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND date = scored.day
+            RETURNING date
             """,
-            [score, target_date],
+            [value for pair in scores for value in pair],
         )
         con.commit()
     finally:
         con.close()
-    return score
-
-
-def update_readiness_range(start: date, end: date) -> int:
-    """Recompute readiness for a range. Returns count of days updated."""
-    n = 0
-    cur = start
-    while cur <= end:
-        if update_readiness_for_date(cur) is not None:
-            n += 1
-        cur += timedelta(days=1)
-    return n
+    return len(scores)

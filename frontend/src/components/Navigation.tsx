@@ -1,7 +1,7 @@
-import { lazy, Suspense, type MouseEvent } from 'react';
+import { InboxBell } from './AutomationInbox';
+import { lazy, Suspense, useRef, type MouseEvent } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { BarChart3, CalendarDays, Dumbbell, LayoutDashboard, Settings } from 'lucide-react';
-import { useGamePreference } from '@/lib/gamification';
 import { AreteMark, AreteWordmark } from './AreteBrand';
 import { User } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -9,6 +9,8 @@ import { useAuthState } from '@/components/auth/authState';
 import { preloadAgentMarkdown } from './agent/markdownRenderer';
 import { preloadRoute } from '@/pages/routes';
 import { importChunk } from '@/lib/chunkReload';
+import { useCoachWords } from '@/lib/coachName';
+import { useNavigationBottom } from '@/hooks/useNavigationBottom';
 
 // Clerk's account menu lives in the lazily loaded auth chunk; it only renders when sign-in is on.
 const AccountButton = lazy(importChunk(() =>
@@ -38,16 +40,17 @@ export function Navigation({
   agentBusy: boolean;
   onToggleAgent: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const { data: preference } = useGamePreference();
-  const rpg = preference?.enabled === true;
   const profile = { path: '/profile', label: 'Profil', icon: User };
-  const desktopItems = rpg ? [...navItems.slice(0, 4), profile, navItems[4]] : navItems;
   const mobileItems = [...navItems.slice(0, 4), profile, navItems[4]];
   const auth = useAuthState();
+  const coach = useCoachWords();
+  const desktopNav = useRef<HTMLElement>(null);
+  useNavigationBottom(desktopNav, agentOpen);
   return (
     <>
       {/* Desktop top nav — hidden on mobile */}
       <nav
+        ref={desktopNav}
         aria-label="Navigation principale"
         className="hidden md:block sticky top-0 z-50 bg-void/95 backdrop-blur-sm border-b border-text-muted/20"
       >
@@ -58,7 +61,7 @@ export function Navigation({
             </Link>
 
             <div className="flex items-center gap-1">
-              {desktopItems.map((item) => (
+              {navItems.map((item) => (
                 <NavLink
                   key={item.path}
                   to={item.path}
@@ -71,7 +74,7 @@ export function Navigation({
                       'navigation-item flex items-center gap-2 px-3 py-2 text-sm font-sans',
                       'border border-transparent transition-colors duration-150 motion-reduce:transition-none',
                       isActive
-                        ? 'text-neon-cyan bg-neon-cyan/10 border-neon-cyan/30'
+                        ? 'text-neon-cyan bg-shadow'
                         : 'text-text-secondary hover:text-text-primary hover:bg-abyss',
                     )
                   }
@@ -83,6 +86,10 @@ export function Navigation({
             </div>
 
             <div className="flex items-center gap-3">
+              <InboxBell />
+              <NavLink to="/profile" aria-label="Profil" title="Profil" className={({ isActive }) => cn('navigation-item inline-flex min-h-11 min-w-11 items-center justify-center', isActive ? 'bg-shadow text-neon-cyan' : 'text-text-secondary')}>
+                <User className="size-5" aria-hidden />
+              </NavLink>
               <button
                 onClick={onToggleAgent}
                 onPointerEnter={preloadAgentMarkdown}
@@ -103,7 +110,7 @@ export function Navigation({
                     <span className="absolute -right-1 top-0 size-1.5 rounded-full bg-neon-cyan" />
                   )}
                 </span>
-                <span>{rpg ? 'Chiron' : 'Coach'}</span>
+                <span>{coach.name}</span>
               </button>
               {auth.enabled && (
                 <Suspense fallback={null}>
@@ -115,6 +122,7 @@ export function Navigation({
         </div>
       </nav>
 
+      <div className="md:hidden fixed right-4 top-3 z-40 rounded-lg bg-void"><InboxBell /></div>
       {/* Mobile bottom tab bar — hidden on desktop */}
       <nav
         aria-label="Navigation mobile"
@@ -133,7 +141,7 @@ export function Navigation({
                 cn(
                   'navigation-item relative flex flex-1 flex-col items-center justify-center gap-0.5 min-h-11 py-1 px-1 rounded-lg',
                   'transition-colors duration-150 motion-reduce:transition-none min-w-0',
-                  isActive ? 'text-neon-cyan' : 'text-text-muted active:text-text-secondary',
+                  isActive ? 'text-neon-cyan bg-shadow' : 'text-text-muted active:text-text-secondary',
                 )
               }
             >

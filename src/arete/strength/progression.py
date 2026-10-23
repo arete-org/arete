@@ -278,12 +278,12 @@ def round_load(load: float) -> float:
     return round(round(load / step) * step, 2)
 
 
-def _lighter(load: float, factor: float) -> float:
+def lighter(load: float, factor: float) -> float:
     """``load × factor`` on the plate steps, always strictly lighter."""
-    lighter = round_load(load * factor)
-    if lighter >= load:
-        lighter = round_load(load - (1.0 if load < 20 else 2.5))
-    return max(lighter, 0.0)
+    reduced = round_load(load * factor)
+    if reduced >= load:
+        reduced = round_load(load - (1.0 if load < 20 else 2.5))
+    return max(reduced, 0.0)
 
 
 def _fmt(value: float) -> str:
@@ -332,7 +332,7 @@ def suggest_next(
         )
         n_sets = max(1, sets - dropped)
         removed = sets - n_sets
-        weight = _lighter(top, factor) if load else None
+        weight = lighter(top, factor) if load else None
         parts = []
         if weight is not None:
             parts.append(f"charge −{round((1 - factor) * 100)} %")
@@ -344,7 +344,7 @@ def suggest_next(
             n_sets,
             low,
             "deload",
-            f"Récupération basse aujourd'hui ({readiness:.0f}/100) : {what}.",
+            f"Préparation basse aujourd'hui ({readiness:.0f}/100) : {what}.",
         )
 
     all_top = all(r >= high for r in reps)
@@ -395,7 +395,7 @@ def suggest_next(
         )
     if below and failure:
         return make(
-            _lighter(top, 0.95),
+            lighter(top, 0.95),
             sets,
             low,
             "decrease",

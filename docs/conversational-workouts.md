@@ -16,6 +16,16 @@ without invented durations or targets. A validation failure calls for correcting
 the full prescription; a description-only edit does not fulfill a step change.
 These are coach instructions, not server-side insertion into explicit prescriptions.
 
+Typed steps reach the model through one tool,
+`set_session_prescription(session_id, revision, prescription)`. Creation, single
+updates and grouped previews carry no prescription, so the step schema (inlined to
+the allowed repeat depth) is bound once per model call instead of three times.
+Running, cycling, swimming, strength and other sports all take steps this way, which
+is why a running-only notation could not replace it. A described tempo or interval
+created without steps is saved with a `steps_required` notice and stays
+unexportable until its steps are set: a structured creation costs one more model
+request than before.
+
 ## Execution and UI
 
 - A local acknowledgement requires no model request. Created sessions and export
@@ -89,8 +99,31 @@ are not a usability study and do not validate the 100/200 ms design targets or I
 steps through the existing grammar, including specified rests and optional weights.
 A title alone is rejected before persistence. The coach may compose a requested
 future workout; logging performed sets uses one `save_workout` call, rejecting any incomplete parse without saving a partial session.
-Optional `prescription` must preserve the grammar-verified sets and may specify
-exact Garmin exercise names. Only explicit catalog equivalents are mapped; unknown
+`set_session_prescription` may then group those sets into repeats or specify exact
+Garmin exercise names; its sets must equal the ones already read from `strength_text`. Only explicit catalog equivalents are mapped; unknown
 exercises fail conversion without a remote write. `export_garmin_sessions` uses the
 same durable reservation, scheduling, verification and optional device-transfer
 workflow as other sports. No automatic retry of an ambiguous write is added.
+
+A strength exercise step ends on reps or, for timed work (a plank, a station
+worked for a minute), on seconds; never on a distance. A step with no exercise
+ends on the lap button and must name its station in its notes: Garmin has no
+SkiErg nor burpee broad jump, and a distance (25 m of sled push in a timed
+test) stays in the notes rather than becoming a guessed duration. Hyrox and
+hybrid plans (`services/hybrid_strength.py`) write their strength sessions and
+station circuits this way, with loads from the strength history and the
+official HYROX station loads of the goal's division and category. An effort
+lap step whose notes name an exercise Garmin has (« Squat 5x5 », « Wall
+Ball ») is refused: that exercise is chosen with its reps or duration
+instead. Notes starting with a distance, and warm-up or cool-down notes,
+are not checked.
+
+Sandbag lunges (« Fentes avec sac de sable ») became their own catalog
+exercise without a data migration: sandbag lunges logged earlier stay under
+lunges, with their records and trend; new ones count separately.
+
+Known limit: the coach edits a strength session's steps through
+`strength_text`, whose grammar check (`strength_sets`) reads reps only. A
+generated circuit or upper-body session (timed planks and stations, lap
+steps) cannot have its steps rewritten from chat; moving its date or status
+still works, and Planning's step editor edits it directly.

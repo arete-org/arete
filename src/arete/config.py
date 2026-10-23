@@ -43,6 +43,12 @@ class Config:
         """Calendar rides on Clerk: the signed-in Google account holds the grant."""
         return self.auth_provider == "clerk" and bool(self.clerk_secret_key)
 
+    @property
+    def serverless(self) -> bool:
+        """On Vercel Functions (its system variable ``VERCEL=1``): a function
+        stops at ``maxDuration``, so scheduled model runs stop before it."""
+        return _env("VERCEL", "") == "1"
+
     # --- storage -----------------------------------------------------------
     @property
     def db_target(self) -> str:
@@ -195,26 +201,16 @@ class Config:
     def stt_max_audio_mb(self) -> int:
         return int(_env("STT_MAX_AUDIO_MB", "10") or 10)
 
-    # --- Strava ------------------------------------------------------------
-    @property
-    def strava_client_id(self) -> str:
-        return _env("STRAVA_CLIENT_ID", "") or ""
-
-    @property
-    def strava_client_secret(self) -> str:
-        return _env("STRAVA_CLIENT_SECRET", "") or ""
-
-    @property
-    def strava_redirect_uri(self) -> str:
-        return (
-            _env("STRAVA_REDIRECT_URI", "http://localhost:8000/strava/callback") or ""
-        )
-
     @property
     def frontend_url(self) -> str:
         return _env("FRONTEND_URL", "http://localhost:3080") or ""
 
     # --- background jobs / logging -----------------------------------------
+    @property
+    def automation_worker(self) -> bool:
+        """Docker polls the shared queue even when Vercel owns daily sync."""
+        return (_env("ARETE_AUTOMATION_WORKER", "false") or "").lower() == "true"
+
     @property
     def auto_sync_hour(self) -> int | None:
         """Hour (0-23) on each athlete's clock from which the daily sync runs.

@@ -1,7 +1,7 @@
 """Coaching agent REST surface: POST /agent/chat.
 
-The only writer of ``panel_context``. Stateless v1: the client sends the full message
-history each call; persistence lands later if needed.
+The only writer of ``panel_context``. The client supplies each invocation's history;
+the conversation API archives settled snapshots independently of graph execution.
 """
 
 from __future__ import annotations
@@ -10,15 +10,17 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import aclosing
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from arete.agent.runtime.context import (
     MAX_PANEL_CONTEXT_CHARS,
+    MESSAGE_SENT_AT_KEY,
     PANEL_CONTEXT_KEY,
     PANEL_PAGES,
     AgentContext,
@@ -26,6 +28,7 @@ from arete.agent.runtime.context import (
 from arete.api.agent_feedback import TraceReceipt, chat_trace
 from arete.api.agent_feedback import router as feedback_router
 from arete.api.auth import clerk_account
+from arete.api.conversations import router as conversations_router
 from arete.services.memory import NOTES_LEDGER, SESSIONS_LEDGER, read_file
 
 if TYPE_CHECKING:
@@ -53,9 +56,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(feedback_router)
 
+router.include_router(conversations_router)
+
 
 class SystemSkillOut(BaseModel):
     name: str
+    display_name: str = Field(min_length=1, max_length=80)
     description: str
     path: str
 
@@ -79,6 +85,7 @@ class ChatMessageIn(BaseModel):
 
     role: str = Field(..., pattern="^(user|assistant)$")
     content: str = Field(..., min_length=1, max_length=MAX_MESSAGE_CHARS)
+    sent_at: AwareDatetime | None = None
 
 
 class ChatRequest(BaseModel):
@@ -106,16 +113,23 @@ class ChatMessageOut(BaseModel):
 
 class ChatResponse(BaseModel):
     message: ChatMessageOut
+    sent_at: str
     trace: TraceReceipt | None = None
     cards: list[dict] = Field(default_factory=list)
+    charts: list[dict] = Field(default_factory=list)
 
 
-def _to_langchain(role: str, content: str) -> LangchainMessage:
+def _to_langchain(
+    role: str, content: str, sent_at: str | None = None
+) -> LangchainMessage:
     from langchain_core.messages import AIMessage, HumanMessage
 
     if role == "assistant":
         return AIMessage(content=content)
-    return HumanMessage(content=content)
+    return HumanMessage(
+        content=content,
+        additional_kwargs={MESSAGE_SENT_AT_KEY: sent_at} if sent_at else {},
+    )
 
 
 def _panel_context_source(request: ChatRequest) -> dict[str, str]:
@@ -143,23 +157,44 @@ def _panel_context_source(request: ChatRequest) -> dict[str, str]:
     return {PANEL_CONTEXT_KEY: raw}
 
 
-def _to_agent_context(
-    source: dict[str, str],
-    thread_id: UUID | None = None,
-    *,
-    account_id: str = "",
-) -> AgentContext:
-    """Coerce the raw source dict into the declared context schema.
+@dataclass
+class _PreparedRun:
+    context: AgentContext
+    document_state: dict = field(default_factory=dict)
+    graph: Any = None
+    # Raised where the route reports run failures (HTTP status or SSE error event).
+    error: Exception | None = None
+
+
+def _prepare_run(
+    body: ChatRequest, source: dict[str, str], account_id: str
+) -> _PreparedRun:
+    """Everything blocking before a run, in one AnyIO worker hop.
+
+    The athlete clock (``AgentContext``'s default) and attachments are database
+    reads; the cached graph reads the rollout flag and may wait for a compile
+    under a thread lock. None of them may run on the event loop.
 
     ``create_agent(context_schema=AgentContext)`` does NOT coerce a plain dict
     passed at invoke time (verified: ``request.runtime.context`` arrives as
     ``None``), so the router builds the dataclass itself.
     """
-    return AgentContext(
+    context = AgentContext(
         source=source,
-        thread_id=str(thread_id) if thread_id else None,
+        thread_id=str(body.thread_id) if body.thread_id else None,
         account_id=account_id,
+        document_ids=(
+            tuple(str(i) for i in body.document_ids)
+            if body.document_ids is not None
+            else None
+        ),
     )
+    try:
+        document_state = _document_state(context)
+        # Attachments are checked before any agent is composed.
+        return _PreparedRun(context, document_state, get_agent())
+    except Exception as exc:
+        return _PreparedRun(context, error=exc)
 
 
 def _document_state(context: AgentContext) -> dict:
@@ -181,6 +216,8 @@ def _document_state(context: AgentContext) -> dict:
 @router.post("/chat", response_model=ChatResponse)
 async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     """Run the coaching agent over the client-provided history."""
+    from anyio import to_thread
+
     from arete.agent.context.builder import ContextBudgetExceeded
     from arete.agent.context.skills import SkillSelectionError
     from arete.agent.runtime.execution import (
@@ -190,26 +227,25 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     )
     from arete.services.documents import DocumentError
 
-    history = [_to_langchain(m.role, m.content) for m in body.messages]
     source = _panel_context_source(body)
-    from anyio import to_thread
-
-    context = _to_agent_context(
-        source,
-        body.thread_id,
-        account_id=clerk_account(request),
+    prepared = await to_thread.run_sync(
+        _prepare_run, body, source, clerk_account(request)
     )
-    context.document_ids = (
-        tuple(str(i) for i in body.document_ids)
-        if body.document_ids is not None
-        else None
-    )
+    context = prepared.context
+    history = [
+        _to_langchain(
+            m.role,
+            m.content,
+            m.sent_at.isoformat(timespec="seconds") if m.sent_at else None,
+        )
+        for m in body.messages
+    ]
     try:
-        document_state = await to_thread.run_sync(_document_state, context)
-        graph = get_agent()
+        if prepared.error is not None:
+            raise prepared.error
         result = await invoke_agent(
-            graph,
-            {"messages": history, **document_state},
+            prepared.graph,
+            {"messages": history, **prepared.document_state},
             context=context,
         )
     except DocumentError as exc:
@@ -237,7 +273,9 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 
     final = messages[-1]
     return ChatResponse(
+        sent_at=context.current_datetime.isoformat(timespec="seconds"),
         cards=[card for message in messages if (card := coach_card(message))],
+        charts=[card.model_dump() for card in context.chart_cards.values()],
         trace=chat_trace(context.run_id, context.thread_id, context.account_id),
         message=ChatMessageOut(
             role="assistant",
@@ -249,15 +287,16 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 class StreamRequest(ChatRequest):
     """Body of POST /agent/chat/stream — same contract, SSE response."""
 
-    # Cached clients reject unknown SSE events; only spend a model call when
-    # the caller can consume the optional draft.
+    supports_chart_cards: bool = Field(default=False, strict=True)
 
 
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
-async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str]:
+async def _sse_stream(
+    body: StreamRequest, prepared: _PreparedRun
+) -> AsyncIterator[str]:
     """Messages, tool activity and failures are separate UI events."""
     from arete.agent.runtime.execution import (
         LIMIT_MESSAGE,
@@ -267,27 +306,25 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
     )
     from arete.agent.runtime.streaming import MAX_STREAM_EVENTS, StreamProjection
 
-    projection = StreamProjection()
-    from anyio import to_thread
-
+    projection = StreamProjection(supports_chart_cards=body.supports_chart_cards)
+    context = prepared.context
     try:
-        history = [_to_langchain(m.role, m.content) for m in body.messages]
-        context = _to_agent_context(
-            _panel_context_source(body),
-            body.thread_id,
-            account_id=account_id,
-        )
-        context.document_ids = (
-            tuple(str(i) for i in body.document_ids)
-            if body.document_ids is not None
-            else None
-        )
-        document_state = await to_thread.run_sync(_document_state, context)
-        graph = get_agent()
+        if prepared.error is not None:
+            raise prepared.error
+        history = [
+            _to_langchain(
+                m.role,
+                m.content,
+                m.sent_at.isoformat(timespec="seconds") if m.sent_at else None,
+            )
+            for m in body.messages
+        ]
         event_count = 0
         async with aclosing(
             stream_agent(
-                graph, {"messages": history, **document_state}, context=context
+                prepared.graph,
+                {"messages": history, **prepared.document_state},
+                context=context,
             )
         ) as stream:
             async for part in stream:
@@ -320,11 +357,22 @@ async def _sse_stream(body: StreamRequest, account_id: str) -> AsyncIterator[str
 @router.post("/chat/stream")
 async def chat_stream(body: StreamRequest, request: Request) -> StreamingResponse:
     """Stream a run; validate page context before sending HTTP 200."""
-    _panel_context_source(body)
+    from anyio import to_thread
+
+    source = _panel_context_source(body)
+    prepared = await to_thread.run_sync(
+        _prepare_run, body, source, clerk_account(request)
+    )
     return StreamingResponse(
-        _sse_stream(body, clerk_account(request)),
+        _sse_stream(body, prepared),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Arete-Sent-At": prepared.context.current_datetime.isoformat(
+                timespec="seconds"
+            ),
+        },
     )
 
 
