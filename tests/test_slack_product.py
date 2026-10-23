@@ -109,6 +109,7 @@ def test_classifier_typed_and_measured(jev_api, surface, private, outbound, capl
     assert len(jev_api.requests) == 1
     body = json.loads(jev_api.requests[0].content)
     assert body["provider"]["max_price"] == {"prompt": 0.042, "completion": 0}
+    assert body["provider"]["data_collection"] == "deny"
     assert "input_tokens" in caplog.text and "cost" in caplog.text
     assert jev_api.transport.call_args.kwargs == {"retries": 0}
 

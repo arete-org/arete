@@ -120,7 +120,9 @@ the SHA-256 of a versioned tuple of trusted athlete id, profile and thread id
 its key across user turns; different athletes, profiles and conversations do not
 share it. No new conversation state or local provider cache is introduced.
 Both free and paid OpenRouter policies use `provider.sort: "latency"` without
-`provider.order`, which would override sticky routing. Other providers receive
+`provider.order`, which would override sticky routing. Every OpenRouter request
+carries athlete data, so these policies, Jev's and voice transcription's also
+send `provider.data_collection: "deny"`: no provider that trains on prompts. Other providers receive
 neither this identifier nor OpenRouter-specific routing settings. Pricing caps,
 reasoning and existing request settings are preserved. This is best-effort
 provider affinity, not a promise of cached tokens or a latency bound; check usage
