@@ -159,7 +159,13 @@ def test_a_triathlon_summary_names_its_sports_and_its_bricks():
         training_days=6,
         rest_days=frozenset({0}),
     )
-    rules = tri_plan.tri_rules("intermediate", "olympic", acwr_above=1.5, tsb_below=-30)
+    rules = tri_plan.tri_rules(
+        "intermediate",
+        "olympic",
+        rest_days=frozenset({0}),
+        acwr_above=1.5,
+        tsb_below=-30,
+    )
     lines = weekly_summary(tri_plan.generate_tri_plan(inp, rules), tri_name)
     assert [line.split(" :")[0] for line in lines] == [
         "Semaine type (base)",

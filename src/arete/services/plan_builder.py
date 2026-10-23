@@ -311,7 +311,11 @@ class _Plan:
 def _tri_plan(goal: Goal, today: date | None) -> _Plan:
     tri = tri_inputs(goal, today)
     rules = tri_plan.tri_rules(
-        tri.level, tri.distance, acwr_above=ACWR_REST_AT, tsb_below=TSB_EASE_AT
+        tri.level,
+        tri.distance,
+        rest_days=tri.rest_days,
+        acwr_above=ACWR_REST_AT,
+        tsb_below=TSB_EASE_AT,
     )
     weeks = tri_plan.generate_tri_plan(tri, rules)
     swim, bike, run = tri_plan.SPLIT[tri.distance]

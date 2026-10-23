@@ -70,7 +70,13 @@ def _inputs(**kw) -> TriInputs:
 
 
 def _rules(inp: TriInputs):
-    return tri_rules(inp.level, inp.distance, acwr_above=1.5, tsb_below=-20)
+    return tri_rules(
+        inp.level,
+        inp.distance,
+        rest_days=inp.rest_days,
+        acwr_above=1.5,
+        tsb_below=-20,
+    )
 
 
 def _plan(**kw) -> tuple[TriInputs, list[WeekPlan]]:
@@ -98,9 +104,16 @@ def _kinds(week: WeekPlan) -> list[str]:
     list(
         product(
             ("sprint", "olympic", "half", "full"),
-            ("novice", "intermediate", "advanced"),
-            (frozenset({0}), frozenset({0, 4}), frozenset()),
-            (6, 5, 0),
+            ("novice", "advanced"),
+            # No rest, Monday, two apart, two in a row midweek, Thursday and Saturday.
+            (
+                frozenset(),
+                frozenset({0}),
+                frozenset({0, 4}),
+                frozenset({1, 2}),
+                frozenset({3, 5}),
+            ),
+            range(7),
         )
     ),
 )
@@ -133,6 +146,35 @@ def test_no_plan_breaks_a_rule_or_the_declared_hours(
         assert kinds.count(ACTIVATION) <= 3
     race_sessions = [s for s in _sessions(weeks) if RACE in s.tags]
     assert [s.date for s in race_sessions] == [race]
+
+
+def test_the_last_loading_week_before_the_taper_still_fits():
+    """A Monday race with Tuesday and Thursday off: the last loading week
+    reaches into the taper's days, where no long session may go, and its
+    long sessions had no room left before them. They become endurance
+    sessions rather than failing the plan."""
+    race = date(2027, 2, 8)  # a Monday
+    inp, weeks = _plan(
+        start=date(2026, 11, 4),
+        race_date=race,
+        distance="olympic",
+        level="advanced",
+        hours_per_week=12.19,
+        weekly_minutes_now=600,
+        training_days=3,
+        rest_days=frozenset({1, 3}),
+        paces=None,
+        ftp_w=None,
+        css_sec_100m=None,
+        hr_reference=True,
+        pool_length_m=50,
+        acwr=1.6,
+    )
+    assert plan_violations(weeks, _rules(inp), race) == []
+    taper_from = race - timedelta(days=TAPER_DAYS["olympic"])
+    assert not any("long" in s.tags and s.date > taper_from for s in _sessions(weeks))
+    last_loading = _loading(weeks)[-1]
+    assert {TAPER_RIDE, TAPER_RUN} & set(_kinds(last_loading))
 
 
 def test_a_24_week_ironman_on_few_days_is_placed_quickly():
@@ -327,6 +369,23 @@ def test_a_weekend_long_block_is_followed_by_an_easy_day(distance):
         assert not any(s.tags & {HARD, "long"} for s in after), after
     assert blocks >= len(_loading(weeks)) - 2  # nearly every loading week
     assert plan_violations(weeks, _rules(inp), inp.race_date) == []
+
+
+def test_without_two_free_midweek_days_the_long_days_stay_apart():
+    """Tuesday to Thursday off: a weekend block would leave its Monday and
+    Friday for two keys and lose a week in two; the long days stay apart."""
+    inp, weeks = _plan(distance="half", rest_days=frozenset({1, 2, 3}), training_days=7)
+    rules = _rules(inp)
+    assert not rules.after_block
+    assert [g.id for g in rules.grouping] == ["hard_days", "long_days"]
+    assert plan_violations(weeks, rules, inp.race_date) == []
+    longs = sorted(s.date for s in _sessions(weeks) if "long" in s.tags)
+    assert all((b - a).days != 1 for a, b in zip(longs, longs[1:], strict=False))
+    # Every loading week keeps its keys.
+    for week in _loading(weeks):
+        assert {BIKE_KEY, KEY_RUN} <= {kind_of(s.tags) for s in week.sessions} | {
+            BIKE_KEY if any(BRICK_BIKE in s.tags for s in week.sessions) else ""
+        }
 
 
 def test_the_day_after_a_long_block_refuses_hard_and_long_sessions():

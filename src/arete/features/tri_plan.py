@@ -268,21 +268,45 @@ def tri_level(minutes_per_week: float, weekly_sports: int) -> Level:
     return "intermediate"
 
 
+#: Tuesday to Friday: a weekend long block needs two of them free for the
+#: keys, its Monday holding nothing hard or long.
+_MIDWEEK = frozenset({1, 2, 3, 4})
+
+
 def tri_rules(
-    level: Level, distance: TriDistance, *, acwr_above: float, tsb_below: float
+    level: Level,
+    distance: TriDistance,
+    *,
+    rest_days: frozenset[int],
+    acwr_above: float,
+    tsb_below: float,
 ) -> Rules:
     """The interference rules: no hard ride the day before or the day of the
     key run, no long run the day before it, at most three hard days (two for
     a novice) and two in a row. The long ride and the long run may make a
     weekend block (Saturday then Sunday); the day after holds nothing hard
-    or long. The deload thresholds are injected."""
+    or long. Without two training days from Tuesday to Friday, that Monday
+    would leave the keys no room: the long days then stay apart. The deload
+    thresholds are injected."""
+    if len(_MIDWEEK - rest_days) >= 2:
+        long_days: dict[str, Any] = {
+            "after_block": (
+                AfterBlock("after_long_block", LONG, 2, frozenset({HARD, LONG})),
+            )
+        }
+        grouping: tuple[Grouping, ...] = ()
+    else:
+        long_days = {}
+        grouping = (Grouping("long_days", LONG, 2, 1),)
     return Rules(
         spacing=(
             Spacing("bike_key_before_key_run", BIKE_KEY, KEY_RUN, 2, "never"),
             Spacing("long_run_before_key_run", LONG_RUN, KEY_RUN, 2, "never"),
         ),
-        grouping=(Grouping("hard_days", HARD, 2 if level == "novice" else 3, 2),),
-        after_block=(AfterBlock("after_long_block", LONG, 2, frozenset({HARD, LONG})),),
+        grouping=(
+            Grouping("hard_days", HARD, 2 if level == "novice" else 3, 2),
+            *grouping,
+        ),
         deload=Deload("deload", acwr_above, tsb_below),
         taper=Taper(
             "taper",
@@ -291,6 +315,7 @@ def tri_rules(
             LONG,
             LAST_HARD_DAYS[distance],
         ),
+        **long_days,
     )
 
 
@@ -1309,10 +1334,17 @@ class _Item:
 
 
 def _loading_items(
-    inp: TriInputs, phase: Phase, minutes: float, recovery: bool, week: int
+    inp: TriInputs,
+    phase: Phase,
+    minutes: float,
+    recovery: bool,
+    week: int,
+    endurance_longs: bool = False,
 ) -> list[_Item]:
     """A base, build, specific or taper week's sessions, sized from its
-    minutes split between the sports."""
+    minutes split between the sports. ``endurance_longs``: the long ride and
+    run take their taper form (not long), and a brick joins the bike key."""
+    longs: Phase = "taper" if endurance_longs else phase
     swim_m, bike_m, run_m = (minutes * share for share in SPLIT[inp.distance])
     novice = inp.level == "novice"
 
@@ -1328,21 +1360,26 @@ def _loading_items(
     )
     bike_key = _bike_key(inp, phase, recovery, week, bike_m)
     long_ride = _long_ride(
-        inp, phase, recovery, _long_minutes("bike", bike_m, inp.distance)
+        inp, longs, recovery, _long_minutes("bike", bike_m, inp.distance)
     )
     key_run = _key_run(inp, phase, recovery, week, run_m)
     long_run = _long_run(
-        inp, phase, recovery, _long_minutes("run", run_m, inp.distance)
+        inp, longs, recovery, _long_minutes("run", run_m, inp.distance)
     )
 
     brick: str | None = None  # the bike session the brick joins
     if phase in ("build", "specific"):
-        on_long = phase == "specific" and inp.distance in ("half", "full")
+        on_long = (
+            phase == "specific"
+            and inp.distance in ("half", "full")
+            and not endurance_longs
+        )
         brick = LONG_RIDE if on_long else BIKE_KEY
     brick_run = _brick_run(inp, phase, recovery) if brick else None
 
     items = [_Item(SWIM_KEY, (swim_key,)), _Item(SWIM_EASY, (swim_easy,))]
-    for kind, bike in ((BIKE_KEY, bike_key), (LONG_RIDE, long_ride)):
+    ride = TAPER_RIDE if endurance_longs else LONG_RIDE
+    for kind, bike in ((BIKE_KEY, bike_key), (ride, long_ride)):
         if brick == kind and brick_run is not None:
             items.append(
                 _Item(
@@ -1354,7 +1391,8 @@ def _loading_items(
             )
         else:
             items.append(_Item(kind, (bike,)))
-    items += [_Item(KEY_RUN, (key_run,)), _Item(LONG_RUN, (long_run,))]
+    run_kind = TAPER_RUN if endurance_longs else LONG_RUN
+    items += [_Item(KEY_RUN, (key_run,)), _Item(run_kind, (long_run,))]
     if not novice:
         bike_left = (
             bike_m - (bike_key.duration_min or 0) - (long_ride.duration_min or 0)
@@ -1540,6 +1578,74 @@ def _within_days(
     return left, gone
 
 
+def _place_week(
+    inp: TriInputs,
+    rules: Rules,
+    monday: date,
+    phase: Phase,
+    minutes: float,
+    recovery: bool,
+    index: int,
+    kept: list[DraftSession],
+    previous: WeekPlan | None,
+    *,
+    full_days: int,
+    drops: tuple[str, ...],
+    endurance_longs: bool,
+) -> WeekPlan | None:
+    """The week's sessions placed under the rules, or None when even giving
+    up what ``drops`` allows leaves no assignment."""
+    if phase == "race":
+        items = _race_week_items(inp, minutes, monday)
+    else:
+        items = _loading_items(inp, phase, minutes, recovery, index, endurance_longs)
+        items += _activation_items(inp, monday)
+    items, crowded = _within_slots(items)
+    items, short = _within_hours(items, inp.hours_per_week * 60)
+    items, kept_others, partner_days, brick_notes = _with_kept_bricks(items, kept)
+    slots = without_kept_kinds(
+        [TRI.slot(*i.drafts, prefs=i.prefs) for i in items],
+        # A kept race, even moved off race day, is the race: never a second.
+        [*kept_others, *(k for k in inp.kept if RACE in k.tags and k not in kept)],
+        TRI,
+    )
+    assert len(slots) <= MAX_SLOTS, f"{len(slots)} sessions in one week"
+    open_days = _available(monday, inp)
+    # A kept bike half's day stays open to its regenerated run only.
+    kept_days = {k.date.weekday() for k in kept} - partner_days
+    days = [d for d in open_days if d not in kept_days]
+    max_days = min(full_days, len(days) + len(kept_days) + (phase == "race"))
+    slots, crowded_days = _within_days(slots, kept, max_days, drops)
+    fitted = fit_week(
+        WeekPlan(start=monday, phase=phase, minutes=0, recovery=recovery),
+        slots,
+        days,
+        max_days,
+        rules,
+        TRI,
+        drops=drops,
+        keep_tag=None,
+        fixed=kept,
+        ahead=[
+            k
+            for k in inp.kept
+            if monday + timedelta(days=7) <= k.date <= monday + timedelta(days=13)
+        ],
+        previous=previous,
+        race_date=inp.race_date,
+    )
+    if fitted is None:
+        return None
+    week, gone = fitted
+    return replace(
+        week,
+        dropped=brick_notes
+        + TRI.dropped(crowded, _ACTIVATIONS)
+        + TRI.dropped(short, _NO_TIME)
+        + TRI.dropped_slots([*crowded_days, *gone], _NO_ROOM),
+    )
+
+
 def generate_tri_plan(inp: TriInputs, rules: Rules) -> list[WeekPlan]:
     """The weeks to race day; raises ``PlanError``."""
     if inp.race_date < inp.start:
@@ -1573,7 +1679,6 @@ def generate_tri_plan(inp: TriInputs, rules: Rules) -> list[WeekPlan]:
                 "déplace-la ou supprime-la avant de générer le plan."
             )
     usual = len([d for d in range(7) if d not in inp.rest_days])
-    cap = inp.hours_per_week * 60
 
     weeks: list[WeekPlan] = []
     previous: WeekPlan | None = None
@@ -1582,64 +1687,51 @@ def generate_tri_plan(inp: TriInputs, rules: Rules) -> list[WeekPlan]:
     ):
         if index < past:
             continue
-        if phase == "race":
-            items = _race_week_items(inp, minutes, monday)
-        else:
-            items = _loading_items(inp, phase, minutes, recovery, index)
-            items += _activation_items(inp, monday)
-        items, crowded = _within_slots(items)
-        items, short = _within_hours(items, cap)
         kept = [k for k in inp.kept if monday <= k.date <= monday + timedelta(days=6)]
-        items, kept_others, partner_days, brick_notes = _with_kept_bricks(items, kept)
-        slots = without_kept_kinds(
-            [TRI.slot(*i.drafts, prefs=i.prefs) for i in items],
-            # A kept race, even moved off race day, is the race: never a second.
-            [*kept_others, *(k for k in inp.kept if RACE in k.tags and k not in kept)],
-            TRI,
-        )
-        assert len(slots) <= MAX_SLOTS, f"{len(slots)} sessions in one week"
         open_days = _available(monday, inp)
-        # A kept bike half's day stays open to its regenerated run only.
-        kept_days = {k.date.weekday() for k in kept} - partner_days
-        days = [d for d in open_days if d not in kept_days]
         tapering = phase in ("taper", "race")
-        partial = len(open_days) < usual
-        loose = partial or bool(kept)
-        drops = _TAPER_DROPS if tapering else _PARTIAL_DROPS if loose else _FULL_DROPS
-        max_days = min(full_days, len(days) + len(kept_days) + (phase == "race"))
-        slots, crowded_days = _within_days(slots, kept, max_days, drops)
-        fitted = fit_week(
-            WeekPlan(start=monday, phase=phase, minutes=0, recovery=recovery),
-            slots,
-            days,
-            max_days,
-            rules,
-            TRI,
-            drops=drops,
-            keep_tag=None,
-            fixed=kept,
-            ahead=[
-                k
-                for k in inp.kept
-                if monday + timedelta(days=7) <= k.date <= monday + timedelta(days=13)
-            ],
-            previous=previous,
-            race_date=inp.race_date,
-        )
-        if fitted is None:
+        loose = len(open_days) < usual or bool(kept)
+        taper_from = inp.race_date - timedelta(days=rules.taper.days)
+        reaches_taper = any(monday + timedelta(days=d) > taper_from for d in open_days)
+        # The usual week first; a loading week reaching into the taper's days
+        # then tries its long sessions as shorter endurance ones (no long
+        # session in the taper); last, any session but the race may go.
+        attempts: list[tuple[bool, tuple[str, ...] | None]] = [(False, None)]
+        if not tapering and reaches_taper:
+            attempts.append((True, None))
+        if not tapering and not loose:
+            attempts.append((False, _PARTIAL_DROPS))
+        week = None
+        for endurance, wider in attempts:
+            week = _place_week(
+                inp,
+                rules,
+                monday,
+                phase,
+                minutes,
+                recovery,
+                index,
+                kept,
+                previous,
+                full_days=full_days,
+                drops=wider
+                or (
+                    _TAPER_DROPS
+                    if tapering
+                    else _PARTIAL_DROPS
+                    if loose
+                    else _FULL_DROPS
+                ),
+                endurance_longs=endurance,
+            )
+            if week is not None:
+                break
+        if week is None:
             raise PlanError(
                 f"Impossible de placer la semaine du {monday:%d/%m} en respectant "
                 "les règles d'enchaînement : libère un jour d'entraînement ou "
                 "retire un jour de repos."
             )
-        week, gone = fitted
-        week = replace(
-            week,
-            dropped=brick_notes
-            + TRI.dropped(crowded, _ACTIVATIONS)
-            + TRI.dropped(short, _NO_TIME)
-            + TRI.dropped_slots([*crowded_days, *gone], _NO_ROOM),
-        )
         weeks.append(week)
         previous = week
     cap_taper(weeks, rules.taper, inp.race_date, TRI)

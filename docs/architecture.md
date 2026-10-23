@@ -822,7 +822,10 @@ grammar's notation. From the build phase a brick (a run straight off the bike)
 is two sessions on one day, the bike written first; a kept bike half gets its
 run back after it, a kept run keeps its day alone. The long ride and the long
 run make a weekend block (Saturday, Sunday); the day after holds nothing hard
-or long (`AfterBlock`). Race week keeps one activation per sport. Swim and bike keys
+or long (`AfterBlock`); without two training days from Tuesday to Friday
+they stay apart instead. A loading week reaching into the taper's days, where
+no long session goes, takes shorter endurance forms of them when the long ones
+find no room. Race week keeps one activation per sport. Swim and bike keys
 carry prescriptions that export to Garmin; the race is `sport='other'`, and
 without a target time its projected load is 80 to 780 minutes by format.
 
