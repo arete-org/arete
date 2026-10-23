@@ -30,7 +30,7 @@ jobs:
       - name: Already checked on the pull request
         if: github.event_name == 'merge_group'
         run: echo "The pull request carried its Linear identifier."
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         if: github.event_name == 'pull_request'
         with:
           sparse-checkout: scripts/ci

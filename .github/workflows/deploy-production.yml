@@ -37,7 +37,7 @@ jobs:
       PRODUCTION_URL: https://arete-arete15.vercel.app
       MAIN_PREVIEW_ALIAS: arete-main-arete15.vercel.app
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           # Equivalence requires ancestry and the full diff from the serving SHA.
           fetch-depth: 0
@@ -54,7 +54,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
       - run: npm install --global vercel@63.1.2
