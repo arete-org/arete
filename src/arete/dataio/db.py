@@ -94,11 +94,13 @@ def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
     idle = _idle.get()
     if idle is None or read_only:
         return _open(read_only)
-    con = idle.take(_owner())
+    owner = _owner()
+    con = idle.take(owner)
     if con is None:
         con = _open(read_only)
-    # Read after the open: the first one opens the shared MotherDuck connection.
-    return cast(duckdb.DuckDBPyConnection, _Lease(con, idle, _owner()))
+        # The first open creates the shared MotherDuck connection it belongs to.
+        owner = _owner()
+    return cast(duckdb.DuckDBPyConnection, _Lease(con, idle, owner))
 
 
 def _open(read_only: bool) -> duckdb.DuckDBPyConnection:
@@ -128,6 +130,10 @@ def configure_athlete(con: duckdb.DuckDBPyConnection) -> None:
 
 #: Most idle connections one run keeps: nested calls rarely hold more than two.
 MAX_IDLE_CONNECTIONS = 4
+#: An idle connection older than this is closed rather than reused: a new
+#: MotherDuck cursor's ``USE`` notices a lost connection and reconnects first
+#: (``_remote_cursor``), and a model step leaves the idle ones for minutes.
+MAX_IDLE_SECONDS = 30.0
 #: Statements that change a connection's session for whoever uses it next.
 _SESSION_CHANGES = ("SET", "RESET", "PRAGMA", "USE", "ATTACH", "DETACH", "LOAD")
 _SEARCH_PATH = re.compile(r"SET\s+search_path\s*=\s*'app'\s*;?\s*$", re.IGNORECASE)
@@ -143,50 +149,81 @@ def _owner() -> _Owner:
     return database_athlete_id(), _remote if config.is_remote_db else None
 
 
+def _close_quietly(con: duckdb.DuckDBPyConnection) -> None:
+    """Close a connection that may already be lost."""
+    try:
+        con.close()
+    except duckdb.Error:
+        logger.debug("Closing a lost connection failed", exc_info=True)
+
+
 class _Idle:
-    """The connections a run's callers closed cleanly, with their owner."""
+    """The connections a run's callers closed cleanly: owner, time, connection."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._connections: list[tuple[_Owner, duckdb.DuckDBPyConnection]] = []
+        self._connections: list[tuple[_Owner, float, duckdb.DuckDBPyConnection]] = []
         self._closed = False
 
     def take(self, owner: _Owner) -> duckdb.DuckDBPyConnection | None:
+        """The owner's most recent idle connection; drops the stale ones (too
+        old, or on a MotherDuck connection replaced since)."""
+        now = time.monotonic()
+        found, stale, kept = None, [], []
         with self._lock:
-            for i, ((athlete, parent), con) in enumerate(self._connections):
-                if athlete == owner[0] and parent is owner[1]:
-                    del self._connections[i]
-                    return con
-        return None
+            for entry in self._connections:
+                (athlete, parent), since, con = entry
+                if now - since >= MAX_IDLE_SECONDS or parent is not owner[1]:
+                    stale.append(con)
+                elif found is None and athlete == owner[0]:
+                    found = con
+                else:
+                    kept.append(entry)
+            self._connections = kept
+        for con in stale:
+            _close_quietly(con)
+        return found
 
     def give_back(self, owner: _Owner, con: duckdb.DuckDBPyConnection) -> None:
         with self._lock:
             if not self._closed and len(self._connections) < MAX_IDLE_CONNECTIONS:
-                self._connections.append((owner, con))
+                self._connections.insert(0, (owner, time.monotonic(), con))
                 return
-        con.close()
+        _close_quietly(con)
 
     def drop(self, *, closing: bool = False) -> None:
         with self._lock:
             self._closed = self._closed or closing
             connections, self._connections = self._connections, []
-        for _, con in connections:
-            con.close()
+        for _, _, con in connections:
+            _close_quietly(con)
 
 
 _idle: ContextVar[_Idle | None] = ContextVar("arete_idle_connections", default=None)
+
+
+def _restore_session(con: duckdb.DuckDBPyConnection) -> None:
+    """Undo the repositories' ``SET search_path``, back to a new connection's.
+
+    A MotherDuck cursor starts in the in-memory catalog and is moved by
+    ``USE`` (``_remote_cursor``); ``RESET`` would send it back there.
+    """
+    if config.is_remote_db:
+        con.execute(f"USE {remote_database()}")
+    else:
+        con.execute("RESET search_path")
 
 
 class _Lease:
     """One caller's use of a reusable connection, until it closes it.
 
     ``close`` hands the connection back only as a new one would be: no
-    transaction left open, no failed statement (it may come from a lost
+    transaction left open, no failed call (it may come from a lost
     connection, so every idle one is closed with it), no session setting
-    changed. The repositories' ``SET search_path = 'app'`` is reset on the
-    way back; any other change closes the connection. Each ``connect`` gets
-    its own lease: closing it twice cannot hand back a connection that another
-    caller took since.
+    changed but the repositories' ``SET search_path = 'app'``, which is
+    undone on the way back (``_restore_session``); any other change closes
+    the connection. Each ``connect`` gets its own lease: closing it twice
+    cannot hand back a connection that another caller took since.
     """
 
     __slots__ = (
@@ -213,13 +250,15 @@ class _Lease:
             raise duckdb.ConnectionException("Connection already closed!")
         return self._con
 
-    def _run(self, method: str, sql: str, args: Any, kwargs: Any) -> _Lease:
-        con = self._open_con()
+    def _call(self, method: Any, *args: Any, **kwargs: Any) -> Any:
         try:
-            getattr(con, method)(sql, *args, **kwargs)
+            return method(*args, **kwargs)
         except BaseException:
             self._failed = True
             raise
+
+    def _run(self, method: str, sql: str, args: Any, kwargs: Any) -> _Lease:
+        self._call(getattr(self._open_con(), method), sql, *args, **kwargs)
         statement = sql.strip()
         head = statement.split(None, 1)[0].upper() if statement else ""
         if head == "BEGIN":
@@ -239,17 +278,17 @@ class _Lease:
         return self._run("executemany", sql, args, kwargs)
 
     def begin(self) -> _Lease:
-        self._open_con().begin()
+        self._call(self._open_con().begin)
         self._in_transaction = True
         return self
 
     def commit(self) -> _Lease:
-        self._open_con().commit()
+        self._call(self._open_con().commit)
         self._in_transaction = False
         return self
 
     def rollback(self) -> _Lease:
-        self._open_con().rollback()
+        self._call(self._open_con().rollback)
         self._in_transaction = False
         return self
 
@@ -258,7 +297,7 @@ class _Lease:
         if con is None:
             return
         if self._failed:
-            con.close()
+            _close_quietly(con)
             self._idle.drop()
             return
         if self._in_transaction or self._changed:
@@ -266,9 +305,9 @@ class _Lease:
             return
         if self._search_path:
             try:
-                con.execute("RESET search_path")
+                _restore_session(con)
             except duckdb.Error:
-                con.close()
+                _close_quietly(con)
                 self._idle.drop()
                 return
         self._idle.give_back(self._owner, con)
@@ -280,7 +319,15 @@ class _Lease:
         self.close()
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(self._open_con(), name)
+        value = getattr(self._open_con(), name)
+        if not callable(value):
+            return value
+
+        def call(*args: Any, **kwargs: Any) -> Any:
+            # A failed fetch may come from a lost connection too.
+            return self._call(value, *args, **kwargs)
+
+        return call
 
 
 @contextmanager
@@ -290,12 +337,14 @@ def reuse_connections() -> Iterator[None]:
     For a scheduled run's long sequence of short calls: a new connection costs
     its setup statements (``USE`` and the athlete's variable on MotherDuck,
     the PRAGMAs locally), about two thirds of the daily run's (ARE-105). Each
-    caller still gets a connection of its own, with no transaction open, the
-    default session and the current athlete's variable; read-only ones are
-    never reused. A MotherDuck connection lost while idle is found by the
-    next caller's first statement, which fails as it would have on a cursor
-    opened just before the loss; the cursors after it reconnect. The idle ones
-    close when the block ends.
+    caller still gets a connection of its own, with no transaction open, a new
+    connection's catalog and search path, and the current athlete's variable;
+    read-only ones are never reused. A connection idle for
+    ``MAX_IDLE_SECONDS`` is not reused: a MotherDuck connection lost meanwhile
+    is then reopened before the next statement, as without reuse. One lost
+    within that time fails the next caller's statement, as it would on a
+    cursor opened just before the loss, and the idle ones are closed with it.
+    The idle ones close when the block ends.
     """
     idle = _Idle()
     token = _idle.set(idle)

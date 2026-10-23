@@ -491,10 +491,10 @@ The daily run logs one `Daily sync timings:` line per athlete (`scheduler._run_a
 `observability/steps.py`): each step's duration, statements and database time, on
 the cron request's counter or on its own outside a request, failed runs included.
 Within that run, `dataio.db.reuse_connections` hands a connection a call closed
-cleanly (no open transaction, no failed statement, the default session: the
-repositories' search path is reset) to the next call of the same athlete, which
-skips a new connection's setup statements; read-only connections and everything
-outside the run open as before.
+cleanly (no open transaction, no failed call, a new connection's session: the
+repositories' search path is undone, by `USE` on MotherDuck) to the next call of
+the same athlete within `MAX_IDLE_SECONDS`, which skips a new connection's setup
+statements; read-only connections and everything outside the run open as before.
 
 Completed chat answers carry their `trace_id` and a signed feedback receipt
 in both HTTP and SSE `done`. The runtime supplies that UUID as the graph's

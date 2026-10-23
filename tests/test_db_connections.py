@@ -140,19 +140,50 @@ def test_an_unfinished_or_failed_connection_is_not_reused(monkeypatch):
             third.fetchall()
 
 
-def test_a_reused_connection_has_the_default_session(monkeypatch):
+SESSION = "SELECT current_database(), current_schema(), current_setting('search_path')"
+
+
+def test_a_reused_connection_has_a_new_ones_session(monkeypatch):
     opened = _opened(monkeypatch)
     with reuse_connections():
         with db_connection() as con:
+            fresh = con.execute(SESSION).fetchone()
             con.execute("SET search_path = 'app'")
+            assert con.execute(SESSION).fetchone() != fresh
         with db_connection() as con:
-            path = con.execute("SELECT current_setting('search_path')").fetchone()[0]
-            assert path != "app"
+            assert con.execute(SESSION).fetchone() == fresh
             con.execute("SET threads = 2")
         with db_connection():
             pass
-    # The repositories' search path is reset; any other setting closes it.
+    # The repositories' search path is undone; any other setting closes it.
     assert len(opened) == 2
+
+
+def test_a_connection_idle_too_long_is_not_reused(monkeypatch):
+    from arete.dataio import db
+
+    opened = _opened(monkeypatch)
+    with reuse_connections():
+        db_connection().__enter__().close()
+        monkeypatch.setattr(db, "MAX_IDLE_SECONDS", 0.0)
+        with db_connection():
+            pass
+    assert len(opened) == 2
+
+
+def test_a_failed_fetch_is_not_reused():
+    from unittest.mock import MagicMock
+
+    from arete.dataio.db import _Idle, _Lease
+
+    con, idle, owner = MagicMock(), _Idle(), (1, None)
+    con.fetchone.side_effect = duckdb.ConnectionException("lost")
+    lease = _Lease(con, idle, owner)
+    with pytest.raises(duckdb.ConnectionException):
+        lease.fetchone()
+    lease.close()
+    con.close.assert_called_once()
+    assert idle.take(owner) is None
 
 
 def test_a_connection_serves_only_its_athlete(monkeypatch):
