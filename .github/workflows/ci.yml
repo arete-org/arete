@@ -188,7 +188,13 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium webkit
+      - name: Install Playwright browsers and system dependencies
+        timeout-minutes: 8
+        # The Azure mirror can trickle packages for the entire job timeout.
+        # Keep the runner's official Ubuntu archive and security fallbacks.
+        run: |
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          npx playwright install --with-deps chromium webkit
       # Planning E2E starts the real API against a disposable DuckDB database.
       # Jobs have separate filesystems: the backend job's .venv is not available here.
       - uses: astral-sh/setup-uv@v6
