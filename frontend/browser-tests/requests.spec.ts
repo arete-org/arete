@@ -58,7 +58,7 @@ test('the coach reads its workout cards once and not again when reopened', async
   // The stored thread was never archived: the page saves it once, a second
   // after mounting, whatever the panel does. Wait for that write so it cannot
   // land in the reopen window below.
-  const archived = page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/agent/conversations/t1');
+  const archived = page.waitForResponse(r => r.request().method() === 'PUT' && new URL(r.url()).pathname === '/api/agent/conversations/t1', { timeout: 10_000 });
   await page.goto('/planning?date=2027-01-12');
   await expect(page.getByTestId('workout-109')).toBeVisible();
   const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
