@@ -505,22 +505,51 @@ def test_a_moved_key_run_is_not_planned_twice():
     assert plan_violations(weeks, _rules(inp), inp.race_date) == []
 
 
-@pytest.mark.parametrize("half", [BRICK_BIKE, BRICK_RUN])
-def test_a_kept_brick_half_gets_its_partner_alone_that_day(half):
-    inp, plain = _plan(distance="olympic", hours_per_week=10)
+def _brick_week(**kw):
+    inp, plain = _plan(distance="olympic", hours_per_week=10, **kw)
     week = next(w for w in plain if w.phase == "build" and not w.recovery)
-    kept_half = next(s for s in week.sessions if half in s.tags)
-    kept = _kept(kept_half, description="modifiée")
+    bike = next(s for s in week.sessions if BRICK_BIKE in s.tags)
+    run = next(s for s in week.sessions if BRICK_RUN in s.tags)
+    return inp, week, bike, run
+
+
+def test_a_kept_brick_bike_gets_its_run_after_it_that_day():
+    inp, week, bike, _ = _brick_week()
+    kept = _kept(bike, description="modifiée")
     _, weeks = _plan(distance="olympic", hours_per_week=10, kept=(kept,))
     again = next(w for w in weeks if w.start == week.start)
     day = [s for s in again.sessions if s.date == kept.date]
-    partner = BRICK_RUN if half == BRICK_BIKE else BRICK_BIKE
-    assert kept in day and len(day) == 2
-    assert any(partner in s.tags and KEPT not in s.tags for s in day)
-    # The bike is done first whichever half was kept.
-    assert BRICK_BIKE in day[0].tags
+    assert len(day) == 2 and day[0] == kept
+    assert BRICK_RUN in day[1].tags and KEPT not in day[1].tags
     assert sum(1 for s in again.sessions if BRICK_BIKE in s.tags) == 1
     assert plan_violations(weeks, _rules(inp), inp.race_date) == []
+
+
+def test_a_kept_brick_run_stays_alone_and_its_bike_is_not_recreated():
+    inp, week, _, run = _brick_week()
+    kept = _kept(run, description="modifiée")
+    _, weeks = _plan(distance="olympic", hours_per_week=10, kept=(kept,))
+    again = next(w for w in weeks if w.start == week.start)
+    assert [s for s in again.sessions if s.date == kept.date] == [kept]
+    assert not any(BRICK_BIKE in s.tags for s in again.sessions)
+    # Its ride is not planned as a plain bike key either.
+    assert not any(BIKE_KEY in s.tags for s in again.sessions)
+    assert again.dropped[0] == (
+        "Vélo de l'enchaînement non recréé : tu as modifié la course qui le suit."
+    )
+    assert plan_violations(weeks, _rules(inp), inp.race_date) == []
+
+
+@pytest.mark.parametrize("order", ["bike-run", "run-bike"])
+def test_both_kept_brick_halves_stay_as_they_are(order):
+    inp, week, bike, run = _brick_week()
+    halves = (_kept(bike), _kept(run))
+    kept = halves if order == "bike-run" else halves[::-1]
+    _, weeks = _plan(distance="olympic", hours_per_week=10, kept=kept)
+    again = next(w for w in weeks if w.start == week.start)
+    assert [s for s in again.sessions if s.date == bike.date] == list(halves)
+    assert sum(1 for s in again.sessions if s.tags & {BRICK_BIKE, BRICK_RUN}) == 2
+    assert again.dropped == [] or "Vélo de l'enchaînement" not in again.dropped[0]
 
 
 def test_a_kept_session_on_race_day_is_refused():

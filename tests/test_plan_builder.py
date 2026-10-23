@@ -556,18 +556,47 @@ def test_a_triathlon_plan_is_written_brick_bike_first(tri):
     assert point["tss"] == round(planned_tss("race", 160), 1)
 
 
-def test_a_kept_brick_half_is_rejoined_by_its_partner(tri):
+def test_a_kept_brick_bike_is_rejoined_by_its_run_written_after_it(tri):
+    repo = GarminRepository()
+    plan_builder.apply(tri.id, TODAY)
+    bike = next(s for s in _plan_sessions(tri.id) if s.plan_kind == "brick_bike")
+    assert repo.update_planned_session_fields(
+        bike.id or 0, expected_revision=1, description="Vélo modifié"
+    )
+    again = plan_builder.apply(tri.id, TODAY)
+    assert bike.date.isoformat() not in again["skipped_days"]
+    day = sorted(
+        (s for s in _plan_sessions(tri.id) if s.date == bike.date),
+        key=lambda s: s.id or 0,
+    )
+    assert [(s.plan_kind, s.description) for s in day][0] == (
+        "brick_bike",
+        "Vélo modifié",
+    )
+    assert [s.plan_kind for s in day] == ["brick_bike", "brick_run"]
+
+
+def test_a_kept_brick_run_keeps_its_day_alone(tri):
     repo = GarminRepository()
     plan_builder.apply(tri.id, TODAY)
     run = next(s for s in _plan_sessions(tri.id) if s.plan_kind == "brick_run")
     assert repo.update_planned_session_fields(
-        run.id or 0, expected_revision=1, description="Enchaînement modifié"
+        run.id or 0, expected_revision=1, description="Course modifiée"
     )
-    again = plan_builder.apply(tri.id, TODAY)
-    assert run.date.isoformat() not in again["skipped_days"]
+    preview = plan_builder.preview(tri.id, TODAY)
+    week = next(
+        w
+        for w in preview["weeks"]
+        if w["start"]
+        <= run.date.isoformat()
+        < str(date.fromisoformat(w["start"]) + timedelta(days=7))
+    )
+    assert "Vélo de l'enchaînement non recréé" in week["dropped"][0]
+    plan_builder.apply(tri.id, TODAY)
     day = [s for s in _plan_sessions(tri.id) if s.date == run.date]
-    assert {s.plan_kind for s in day} == {"brick_bike", "brick_run"}
-    assert any(s.description == "Enchaînement modifié" for s in day)
+    assert [(s.plan_kind, s.description) for s in day] == [
+        ("brick_run", "Course modifiée")
+    ]
 
 
 def test_a_triathlon_s_sessions_keep_the_usual_rpe(tri):

@@ -373,6 +373,9 @@ _BUDGET_DROPS = (EASY_RUN, BIKE_EASY, SWIM_EASY)
 _NO_ROOM = "pas de jour libre sans enfreindre les règles d'enchaînement"
 _NO_TIME = "pas assez d'heures disponibles cette semaine"
 _ACTIVATIONS = "la semaine garde les activations d'avant-course"
+_BIKE_NOT_RECREATED = (
+    "Vélo de l'enchaînement non recréé : tu as modifié la course qui le suit."
+)
 
 #: Triathlon session kinds, as ``week_placement`` places them.
 TRI = Catalog(
@@ -1447,32 +1450,33 @@ def _available(monday: date, inp: TriInputs) -> list[int]:
 
 def _with_kept_bricks(
     items: list[_Item], kept: Sequence[DraftSession]
-) -> tuple[list[_Item], list[DraftSession]]:
-    """A kept brick half leaves the week's brick to its partner alone, on the
-    kept half's day; the other kept sessions are returned for their kinds."""
-    others = []
-    for session in kept:
-        half = (
-            BRICK_BIKE
-            if BRICK_BIKE in session.tags
-            else (BRICK_RUN if BRICK_RUN in session.tags else None)
-        )
-        brick = next((i for i in items if i.kind == BRICK_BIKE), None)
-        if half is None:
-            others.append(session)
-            continue
-        if brick is None:
-            continue  # no brick this week: the kept half stays alone
-        partner = brick.drafts[1] if half == BRICK_BIKE else brick.drafts[0]
-        items = [i for i in items if i is not brick]
-        items.append(
-            _Item(
-                BRICK_RUN if half == BRICK_BIKE else BRICK_BIKE,
-                (partner,),
-                (session.date.weekday(),),
-            )
-        )
-    return items, others
+) -> tuple[list[_Item], list[DraftSession], set[int], list[str]]:
+    """The week's brick around the athlete's edits, the other kept sessions
+    (returned for their kinds), the weekdays a regenerated partner joins a
+    kept half on, and what the preview says of a brick not recreated.
+
+    A kept bike half gets the brick's run alone, after it on its day. A kept
+    run half keeps its day alone: its bike is not recreated, since a new
+    session would be written after it and read as done before it. Both
+    halves kept, or no brick this week: nothing is generated for it.
+    """
+    bikes = [k for k in kept if BRICK_BIKE in k.tags]
+    runs = [k for k in kept if BRICK_RUN in k.tags]
+    others = [k for k in kept if not k.tags & {BRICK_BIKE, BRICK_RUN}]
+    brick = next(
+        (i for i in items if BRICK_BIKE in i.drafts[0].tags and len(i.drafts) == 2),
+        None,
+    )
+    if brick is None or not (bikes or runs):
+        return items, others, set(), []
+    items = [i for i in items if i is not brick]
+    if bikes and not runs:
+        day = bikes[0].date.weekday()
+        items.append(_Item(BRICK_RUN, (brick.drafts[1],), (day,)))
+        return items, others, {day}, []
+    if runs and not bikes:
+        return items, others, set(), [_BIKE_NOT_RECREATED]
+    return items, others, set(), []
 
 
 def _within_days(
@@ -1551,7 +1555,7 @@ def generate_tri_plan(inp: TriInputs, rules: Rules) -> list[WeekPlan]:
         items, crowded = _within_slots(items)
         items, short = _within_hours(items, cap)
         kept = [k for k in inp.kept if monday <= k.date <= monday + timedelta(days=6)]
-        items, kept_others = _with_kept_bricks(items, kept)
+        items, kept_others, partner_days, brick_notes = _with_kept_bricks(items, kept)
         slots = without_kept_kinds(
             [TRI.slot(*i.drafts, prefs=i.prefs) for i in items],
             # A kept race, even moved off race day, is the race: never a second.
@@ -1560,10 +1564,7 @@ def generate_tri_plan(inp: TriInputs, rules: Rules) -> list[WeekPlan]:
         )
         assert len(slots) <= MAX_SLOTS, f"{len(slots)} sessions in one week"
         open_days = _available(monday, inp)
-        # A kept brick half's day stays open to its regenerated partner only.
-        partner_days = {
-            k.date.weekday() for k in kept if k.tags & {BRICK_BIKE, BRICK_RUN}
-        }
+        # A kept bike half's day stays open to its regenerated run only.
         kept_days = {k.date.weekday() for k in kept} - partner_days
         days = [d for d in open_days if d not in kept_days]
         tapering = phase in ("taper", "race")
@@ -1599,7 +1600,8 @@ def generate_tri_plan(inp: TriInputs, rules: Rules) -> list[WeekPlan]:
         week, gone = fitted
         week = replace(
             week,
-            dropped=TRI.dropped(crowded, _ACTIVATIONS)
+            dropped=brick_notes
+            + TRI.dropped(crowded, _ACTIVATIONS)
             + TRI.dropped(short, _NO_TIME)
             + TRI.dropped_slots([*crowded_days, *gone], _NO_ROOM),
         )
