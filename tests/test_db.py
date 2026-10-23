@@ -69,6 +69,44 @@ def test_a_dead_remote_connection_is_reopened(opened):
     assert cursor._con is opened[1].cursor.return_value
 
 
+def test_a_run_reuses_cursors_of_the_current_remote_connection_only(opened):
+    with db.reuse_connections():
+        db.connect().close()
+        db.connect().close()
+        assert opened[0].cursor.call_count == 1
+        db.reset_remote()  # lost and reopened by another caller
+        db.connect().close()
+    assert len(opened) == 2 and opened[1].cursor.call_count == 1
+
+
+def test_a_reused_remote_cursor_is_in_the_database_as_a_new_one(remote, tmp_path):
+    """A real DuckDB stands in for MotherDuck: a cursor starts in the in-memory
+    catalog until ``USE``, which the repositories' search path must not undo."""
+    session = (
+        "SELECT current_database(), current_schema(), current_setting('search_path')"
+    )
+    parent = duckdb.connect()
+    parent.execute(f"ATTACH '{tmp_path / 'arete_v2.duckdb'}' AS arete_v2")
+    parent.execute("CREATE SCHEMA arete_v2.app")
+    parent.execute("CREATE TABLE arete_v2.app.t (x INTEGER)")
+    parent.execute("USE arete_v2")
+    with (
+        patch.object(db, "_open_remote", return_value=parent),
+        patch.object(db, "_remote_cursor", wraps=db._remote_cursor) as cursors,
+        db.reuse_connections(),
+    ):
+        con = db.connect()
+        fresh = con.execute(session).fetchone()
+        assert fresh[0] == "arete_v2"
+        con.execute("SET search_path = 'app'")
+        con.close()
+        con = db.connect()
+        assert cursors.call_count == 1
+        assert con.execute(session).fetchone() == fresh
+        assert con.execute("SELECT count(*) FROM app.t").fetchone() == (0,)
+        con.close()
+
+
 def test_a_remote_that_stays_down_raises(opened):
     db.connect()
     opened[0].cursor.side_effect = duckdb.ConnectionException("gone")

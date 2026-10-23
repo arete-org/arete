@@ -23,7 +23,8 @@ from time import monotonic, sleep
 import duckdb
 
 from arete.config import config
-from arete.dataio.db import db_connection, write_idempotent
+from arete.dataio.db import db_connection, reuse_connections, write_idempotent
+from arete.observability.steps import measure_steps, step_done
 from arete.services import consent
 from arete.services.athlete_scope import athlete_scope, current_athlete_id
 from arete.services.settings import (
@@ -120,6 +121,9 @@ def daily_sync() -> dict[str, str]:
             status["garmin_activities"] = f"failed: {e}"
     else:
         status["garmin"] = "no tokens"
+    # The refresh marks its health and conditions; the rest of it (claim, state,
+    # sessions read back, or all of it when it stopped) counts as activities.
+    step_done("garmin_activities")
 
     # After the health data, before the briefing that explains it. Runs without
     # Garmin too: the readiness then comes from the load model.
@@ -131,27 +135,32 @@ def daily_sync() -> dict[str, str]:
         status["plan"] = f"{len(decisions)} decisions ({kinds})"
     except Exception as e:  # noqa: BLE001 - background job must not die
         status["plan"] = f"failed: {e}"
+    step_done("plan")
 
     # After the decisions, so a session they changed goes out changed.
     if garmin.has_tokens():
         from arete.services.plan_adaptation import push_today
 
         status["garmin_push"] = push_today(garmin)
+        step_done("garmin_push")
 
     # After the imports and the rest decisions: the dashboard then reads the
     # settled progression without a projection request of its own.
     if (game := settle_game()) is not None:
         status["gamification"] = game
+    step_done("gamification")
 
     # After every plan change of the run (adaptation, completed sessions).
     from arete.calendar import sync_training_plan
     from arete.services.calendar_plan import DAILY
 
     status["google_calendar"] = sync_training_plan(DAILY)
+    step_done("google_calendar")
 
     from arete.services.coach_followup import prepare as prepare_followup
 
     prepare_followup()
+    step_done("followup")
 
     # Before the briefing that reads the journal the feedback files; after the
     # bounded calendar run, so a slow model cannot starve it.
@@ -168,6 +177,7 @@ def daily_sync() -> dict[str, str]:
         status["feedback_pending"] = f"failed: {type(exc).__name__}"
     if feedback_ids:
         status["feedback"], feedback = write_sync_feedback(feedback_ids)
+    step_done("feedback")
 
     # Garmin sessions are announced with their feedback, once. After a failed
     # run the push counts all of this sync's imports; after one that stored no
@@ -186,6 +196,7 @@ def daily_sync() -> dict[str, str]:
         unannounced = len(set(synced_ids) - done)
     if (announced := announce_sync(feedback or [], unannounced, imported)) is not None:
         status["notification"] = announced
+    step_done("notification")
     logger.info("Daily sync: %s", status)
     _last_status[current_athlete_id()] = dict(status)
     return status
@@ -644,7 +655,8 @@ def _claim(
 def _run_athlete(
     athlete_id: int, started: float, claimed_at: datetime, zone: str | None
 ) -> dict:
-    with athlete_scope(athlete_id):
+    # One athlete's calls reuse the connections they close (``reuse_connections``).
+    with athlete_scope(athlete_id), measure_steps() as steps, reuse_connections():
         from arete.dataio import mirror
 
         # The briefing's wait for the dashboard ends at the model deadline, a
@@ -654,6 +666,7 @@ def _run_athlete(
         try:
             if config.is_remote_db:
                 mirror.hydrate()
+            step_done("hydrate")
             status = daily_sync()
             tz = zone_of(zone)
             claim_day = claimed_at.astimezone(tz).date()
@@ -679,10 +692,12 @@ def _run_athlete(
                     status[step] = "skipped: consent withdrawn"
                 else:
                     status[step] = write()
+                step_done(step)
             # Self-hosted status marker (``/sync/status``): server clock on purpose.
             record_run(datetime.now())
             if config.is_remote_db:
                 mirror.flush()
+            step_done("flush")
             # Dated by the claim: a run that ends past midnight is the day's.
             # Rerun on a conflict with another writer of the athlete's row: the
             # day's work is done and a lost stamp would keep the lease all day.
@@ -698,9 +713,11 @@ def _run_athlete(
                     athlete_id,
                 ],
             )
+            step_done("stamp")
             # Stamped: an answer given from now on replans on its own.
             if (settled := settle_checkin()) is not None:
                 status["checkin"] = settled
+            step_done("checkin")
         except Exception:
             logger.exception(
                 "Scheduled work failed for athlete %s; lease kept until tomorrow",
@@ -710,6 +727,8 @@ def _run_athlete(
         finally:
             _run_deadline.reset(run_token)
             _model_deadline.reset(model_token)
+            # Durations and counts only: one line per athlete, failed runs included.
+            logger.info("Daily sync timings: athlete=%s %s", athlete_id, steps.line())
     return status
 
 

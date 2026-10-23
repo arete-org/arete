@@ -489,6 +489,15 @@ threads inherit. A response whose length is known also carries `Server-Timing`
 (`auth`, `hydrate`, `db` with its statement count, `app`, `total`); a stream is only
 logged, so it is never buffered.
 
+The daily run logs one `Daily sync timings:` line per athlete (`scheduler._run_athlete`,
+`observability/steps.py`): each step's duration, statements and database time, on
+the cron request's counter or on its own outside a request, failed runs included.
+Within that run, `dataio.db.reuse_connections` hands a connection a call closed
+cleanly (no open transaction, no failed call, a new connection's session: the
+repositories' search path is undone, by `USE` on MotherDuck) to the next call of
+the same athlete within `MAX_IDLE_SECONDS`, which skips a new connection's setup
+statements; read-only connections and everything outside the run open as before.
+
 Completed chat answers carry their `trace_id` and a signed feedback receipt
 in both HTTP and SSE `done`. The runtime supplies that UUID as the graph's
 `RunnableConfig.run_id`; it is distinct from the browser thread and child model
