@@ -88,8 +88,8 @@ const POOLS: { value: TriathlonDetails['pool_length_m']; label: string }[] = [
 /** Weekly hours a triathlon goal accepts (services/goals.py TriDetails). */
 const MIN_HOURS = 4;
 const MAX_HOURS = 25;
-/** « Minimum 4 h (S), 4 h (M), 6 h (70.3), 8 h (Ironman) ». */
-const HOURS_HINT = `Minimum ${TRI_FORMATS.map((f) => `${f.minHours} h (${f.value === 'full' ? 'Ironman' : f.label})`).join(', ')}. Le plan ne les dépasse jamais.`;
+/** « Minimum 4 h (S), 4 h (M), 6 h (70.3), 8 h (distance Ironman) »: a distance, never the brand's race. */
+const HOURS_HINT = `Minimum ${TRI_FORMATS.map((f) => `${f.minHours} h (${f.value === 'full' ? 'distance Ironman' : f.label})`).join(', ')}. Le plan ne les dépasse jamais.`;
 
 const CHIP = 'px-3 py-1.5 rounded text-xs font-sans transition-all border disabled:opacity-40 disabled:cursor-not-allowed';
 const CHIP_IDLE = 'bg-abyss border-text-muted/30 text-text-muted hover:border-text-muted/50';

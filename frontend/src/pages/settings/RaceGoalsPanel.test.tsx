@@ -544,7 +544,7 @@ it('creates a triathlon with its format, weekly hours and pool', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Distance Ironman' }));
   expect(screen.getByText('Natation · vélo · course à pied : 3,8 km · 180 km · 42,2 km')).toBeTruthy();
   expect(
-    screen.getByText('Minimum 4 h (S), 4 h (M), 6 h (70.3), 8 h (Ironman). Le plan ne les dépasse jamais.')
+    screen.getByText('Minimum 4 h (S), 4 h (M), 6 h (70.3), 8 h (distance Ironman). Le plan ne les dépasse jamais.')
   ).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Ajouter le triathlon' }));
   expect(screen.getByRole('alert').textContent).toBe('Heures disponibles par semaine : entre 4 et 25.');
