@@ -419,7 +419,8 @@ test('page round trips preserve a live stream, draft and files', async ({ page }
     stream.send({ type: 'done', message: { role: 'assistant', content: 'Dimanche reste libre.' } });
     await expect(panel.getByText('Dimanche reste libre.', { exact: true })).toBeVisible();
     await panel.getByRole('button', { name: 'Retour à la page' }).click();
-    await expect(page.getByRole('button', { name: 'Demander à Chiron', exact: true })).toBeFocused();
+    // The navigation button opened this conversation; restore that same entry.
+    await expect(page.getByRole('button', { name: 'Ouvrir le coach' })).toBeFocused();
     await page.getByRole('button', { name: 'Demander à Chiron', exact: true }).click();
     await expect(input).toHaveValue('Garde mon dimanche libre.');
     await page.reload();
