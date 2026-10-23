@@ -56,6 +56,8 @@ class JevClient:
                 "provider": {
                     "sort": "latency",
                     "allow_fallbacks": False,
+                    # Facts are athlete data: no provider that trains on them.
+                    "data_collection": "deny",
                     "max_price": {"prompt": 0.05, "completion": 0},
                 },
                 "session_id": session_id,

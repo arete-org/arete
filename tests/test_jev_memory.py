@@ -70,6 +70,7 @@ def test_wire_contract_price_cap_and_no_chat_only_parameters():
         body = json.loads(request.content)
         assert body["model"] == JEV_MODEL
         assert body["provider"]["max_price"] == {"prompt": 0.05, "completion": 0}
+        assert body["provider"]["data_collection"] == "deny"
         assert not body["provider"]["allow_fallbacks"]
         assert "temperature" not in body and "max_tokens" not in body
         assert body["questions"]["memory"]["criteria"] == CHOICES
