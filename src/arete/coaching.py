@@ -4,6 +4,12 @@ Only this composition root imports the agent factory. Domain producers receive
 plain callbacks, so they remain usable and testable without an agent framework.
 """
 
+# ruff: noqa: E402
+# The clock starts before the imports so the first run can report their cost.
+from time import perf_counter
+
+_IMPORT_STARTED = perf_counter()
+
 import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import aclosing
@@ -49,6 +55,7 @@ from arete.agent.runtime.context import AgentContext, read_athlete_clock
 from arete.agent.runtime.execution import invoke_agent_sync
 from arete.calendar import get_calendar_service
 from arete.config import config
+from arete.observability.agent import record_stack_ready
 from arete.services import (
     briefing,
     coaching_rules,
@@ -60,6 +67,10 @@ from arete.services.athlete_scope import current_athlete_id, resolve_athlete_id
 from arete.services.coaching_repository import Briefing
 from arete.services.feature_flags import get_feature_flags, glm_flash_available
 from arete.services.system_skills import publish_bundle
+
+_IMPORT_MS = round((perf_counter() - _IMPORT_STARTED) * 1000)
+# Never released: only the process's first successful assembly logs.
+_stack_ready_unlogged = Lock()
 
 AGENT_RECURSION_LIMIT = MAX_GRAPH_STEPS
 SYSTEM_SKILLS_ROOT = Path(__file__).parent / "agent" / "skills" / "system"
@@ -132,6 +143,7 @@ def _assemble(
     checkpointer=None,
 ):
     _off_loop()
+    started = perf_counter()
     profile = get_profile(profile_id)
     calendar = None
     if profile_id == "chat" and calendar_enabled and config.google_calendar_configured:
@@ -237,6 +249,11 @@ def _assemble(
             else None
         ),
     )
+    if _stack_ready_unlogged.acquire(blocking=False):
+        record_stack_ready(
+            import_ms=_IMPORT_MS,
+            compile_ms=round((perf_counter() - started) * 1000),
+        )
     return graph.with_config(
         metadata={"model": route.model, "model_policy": route.openrouter_policy}
     )
