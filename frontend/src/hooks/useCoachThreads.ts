@@ -42,6 +42,7 @@ const SESSION_WRITE_TOOLS = new Set([
   'reconcile_garmin_session',
   'sync_garmin_activities',
   'update_planned_session',
+  'set_session_prescription',
   'delete_planned_session',
   'save_workout',
 ]);

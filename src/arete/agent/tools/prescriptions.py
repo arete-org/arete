@@ -1,7 +1,7 @@
 """Finite provider schema over the domain's validated recursive prescription."""
 
 from copy import deepcopy
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import WithJsonSchema
 
@@ -38,7 +38,30 @@ def _schema() -> dict:
         return item
 
     schema["properties"]["steps"]["items"] = step(0)
-    return schema
+    compacted = _compact(schema)
+    assert isinstance(compacted, dict)
+    assert "anyOf" not in compacted["properties"]["steps"]
+    return compacted
+
+
+def _compact(node: object) -> Any:
+    """Drop what Pydantic repeats in every inlined step without telling the model
+    anything: titles, empty defaults and nullable wrappers (omission means unset)."""
+    if isinstance(node, list):
+        return [_compact(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    # A property named "title" is a dict; only the string annotation goes.
+    result = {
+        key: _compact(value)
+        for key, value in node.items()
+        if not (key == "title" and isinstance(value, str))
+        and not (key == "default" and value in (None, ""))
+    }
+    options = result.get("anyOf")
+    if options and len(options) == 2 and options[1] == {"type": "null"}:
+        result = {**options[0], **{k: v for k, v in result.items() if k != "anyOf"}}
+    return result
 
 
 PrescriptionInput = Annotated[Prescription, WithJsonSchema(_schema())]

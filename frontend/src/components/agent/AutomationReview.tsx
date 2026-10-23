@@ -13,7 +13,7 @@ const labels: Record<string, string> = {
   target_duration_min: 'Durée (min)', target_distance_km: 'Distance (km)', target_intensity: 'Intensité', target_hr_zone: 'Zone',
   description: 'Description', changes: 'Modification', text: 'Séance', notes: 'Note', rpe: 'Ressenti', revision: 'Révision',
   apply_plan_changes: 'Ajuster le planning ensemble', preview_plan_changes: 'Préparer un ajustement',
-  create_planned_session: 'Ajouter une séance', update_planned_session: 'Ajuster la séance', delete_planned_session: 'Supprimer la séance',
+  create_planned_session: 'Ajouter une séance', update_planned_session: 'Ajuster la séance', set_session_prescription: 'Modifier les étapes', delete_planned_session: 'Supprimer la séance',
   save_workout: 'Enregistrer la séance', update_workout: 'Corriger la séance', append_journal: 'Compléter le journal',
   export_garmin_sessions: 'Envoyer vers Garmin', sync_garmin_activities: 'Importer depuis Garmin',
 };
