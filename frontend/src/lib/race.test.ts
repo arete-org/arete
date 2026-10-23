@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { parseLocalDate } from './dates';
-import { blockStart, formatKm, formatRaceTime, goalCountdown, hybridEnd, parseRaceTime, resizedBlockEnd } from './race';
+import {
+  blockStart,
+  formatKm,
+  formatRaceTime,
+  goalCountdown,
+  hybridEnd,
+  hyroxDetails,
+  parseRaceTime,
+  resizedBlockEnd,
+  triDetails,
+  triLabel,
+} from './race';
 
 describe('race formatting', () => {
   it('writes distances with French decimals and no trailing zeros', () => {
@@ -68,5 +79,31 @@ describe('hybrid block dates', () => {
     // A start the window no longer allows is clamped to its nearest end.
     expect(resizedBlockEnd('2026-10-26', 8, '2026-11-03')).toBe('2027-01-03');
     expect(resizedBlockEnd('2027-01-04', 8, '2026-10-20')).toBe('2027-01-03');
+  });
+});
+
+describe('triathlon goals', () => {
+  const tri = {
+    name: 'Triathlon de Paris',
+    distance_km: 51.5,
+    days_left: 80,
+    race_date: '2027-06-06',
+    goal_type: 'triathlon' as const,
+    details: { distance: 'olympic' as const, hours_per_week: 8, pool_length_m: 25 as const },
+  };
+
+  it('names a triathlon by its format, the longest as a distance', () => {
+    expect(goalCountdown(tri)).toBe('J-80 · Triathlon de Paris (Triathlon M)');
+    expect(triLabel({ distance: 'full' })).toBe('Triathlon distance Ironman');
+    expect(triLabel({ distance: 'half' })).toBe('Triathlon 70.3');
+    expect(triLabel(null)).toBe('Triathlon');
+  });
+
+  it('reads each goal type its own details only', () => {
+    expect(triDetails(tri)?.hours_per_week).toBe(8);
+    expect(hyroxDetails(tri)).toBeNull();
+    const hyrox = { goal_type: 'hyrox' as const, details: { division: 'pro' as const, format: 'solo' as const, category: 'men' as const, equipment: ['none' as const], weeks: 12 as const } };
+    expect(hyroxDetails(hyrox)?.division).toBe('pro');
+    expect(triDetails(hyrox)).toBeNull();
   });
 });

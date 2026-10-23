@@ -1,5 +1,5 @@
 import { parseLocalDate, toLocalISODate } from '@/lib/dates';
-import type { Goal, GoalDetails, RaceKey } from '@/types';
+import type { Goal, GoalDetails, RaceKey, TriathlonDetails, TriDistance } from '@/types';
 
 /** "21,1" from 21.1, "42,195" from 42.195: French decimals, no trailing zeros. */
 export function formatKm(km: number): string {
@@ -72,6 +72,37 @@ export function longDate(iso: string, withYear = false): string {
   });
 }
 
+/** A Hyrox goal's or hybrid block's details; null for any other goal. */
+export function hyroxDetails(goal: Partial<Pick<Goal, 'goal_type' | 'details'>> | null | undefined): GoalDetails | null {
+  if (!goal?.details || (goal.goal_type !== 'hyrox' && goal.goal_type !== 'hybrid')) return null;
+  return goal.details as GoalDetails;
+}
+
+/** A triathlon goal's details; null for any other goal. */
+export function triDetails(goal: Partial<Pick<Goal, 'goal_type' | 'details'>> | null | undefined): TriathlonDetails | null {
+  if (!goal?.details || goal.goal_type !== 'triathlon') return null;
+  return goal.details as TriathlonDetails;
+}
+
+/**
+ * The four triathlon formats (features/tri_plan.py): their name, legs and
+ * the weekly hours a plan needs at least. « Distance Ironman » names a
+ * distance, not the brand's race.
+ */
+export const TRI_FORMATS: { value: TriDistance; label: string; legs: string; minHours: number }[] = [
+  { value: 'sprint', label: 'S', legs: '750 m · 20 km · 5 km', minHours: 3 },
+  { value: 'olympic', label: 'M', legs: '1,5 km · 40 km · 10 km', minHours: 4 },
+  { value: 'half', label: '70.3', legs: '1,9 km · 90 km · 21,1 km', minHours: 6 },
+  { value: 'full', label: 'Distance Ironman', legs: '3,8 km · 180 km · 42,2 km', minHours: 8 },
+];
+
+/** "Triathlon M", "Triathlon distance Ironman". */
+export function triLabel(details: Pick<TriathlonDetails, 'distance'> | null | undefined): string {
+  const format = TRI_FORMATS.find((f) => f.value === details?.distance);
+  if (!format) return 'Triathlon';
+  return `Triathlon ${format.value === 'full' ? 'distance Ironman' : format.label}`;
+}
+
 /** "Hyrox Pro · Duo": the division, and the format when it is not solo. */
 export function hyroxLabel(details: Pick<GoalDetails, 'division' | 'format'> | null | undefined): string {
   const division = details?.division === 'pro' ? 'Pro' : 'Open';
@@ -80,10 +111,11 @@ export function hyroxLabel(details: Pick<GoalDetails, 'division' | 'format'> | n
 
 type Described = Pick<Goal, 'distance_km' | 'race_date'> & Partial<Pick<Goal, 'goal_type' | 'details'>>;
 
-/** What a goal is, after its name: "21,1 km", "Hyrox Open", "Bloc hybride · fin le 17 janvier". */
+/** What a goal is, after its name: "21,1 km", "Hyrox Open", "Triathlon M", "Bloc hybride · fin le 17 janvier". */
 export function goalKind(goal: Described): string {
   if (goal.goal_type === 'hybrid') return `Bloc hybride · fin le ${longDate(goal.race_date)}`;
-  if (goal.goal_type === 'hyrox') return hyroxLabel(goal.details);
+  if (goal.goal_type === 'hyrox') return hyroxLabel(hyroxDetails(goal));
+  if (goal.goal_type === 'triathlon') return triLabel(triDetails(goal));
   return `${formatKm(goal.distance_km)} km`;
 }
 

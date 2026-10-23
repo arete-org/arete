@@ -11,12 +11,12 @@ function paceToText(seconds: number | null): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-/** 257 from "4:17"; null when the text is not a pace. */
-function textToPace(text: string): number | null {
+/** 257 from "4:17"; null when the text is not a pace within [min, max] seconds. */
+function textToPace(text: string, min = 120, max = 900): number | null {
   const match = text.trim().match(/^(\d{1,2})[:'.](\d{1,2})$/);
   if (!match) return null;
   const seconds = Number(match[1]) * 60 + Number(match[2]);
-  return seconds >= 120 && seconds <= 900 ? seconds : null;
+  return seconds >= min && seconds <= max ? seconds : null;
 }
 
 function numberOrNull(value: string, min: number, max: number): number | null {
@@ -152,6 +152,27 @@ export function GoalsTab({ settings, updateSetting }: SettingsTabProps) {
                 placeholder="4:17"
                 defaultValue={paceToText(settings.threshold_pace_sec_km)}
                 onBlur={(e) => updateSetting('threshold_pace_sec_km', textToPace(e.target.value))}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <Field label="FTP vélo (W)" hint="Puissance tenue environ une heure : les séances de vélo d’un plan triathlon en découlent">
+              <Input
+                type="number"
+                min={50}
+                max={600}
+                placeholder="230"
+                value={settings.ftp_w ?? ''}
+                onChange={(e) => updateSetting('ftp_w', numberOrNull(e.target.value, 50, 600))}
+              />
+            </Field>
+            <Field label="CSS natation (m:ss /100 m)" hint="Vitesse critique : (temps au 400 m − temps au 200 m) ÷ 2, les deux à fond">
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="1:45"
+                defaultValue={paceToText(settings.css_sec_100m)}
+                onBlur={(e) => updateSetting('css_sec_100m', textToPace(e.target.value, 60, 300))}
               />
             </Field>
           </div>

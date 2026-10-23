@@ -114,7 +114,7 @@ export const PHASE_LABEL: Record<string, string> = {
 
 export const phaseLabel = (phase: string): string => PHASE_LABEL[phase] ?? phase;
 
-/** Session kinds of a Hyrox or hybrid plan (features/hybrid_plan.py, services/plan_summary.py). */
+/** Session kinds of a Hyrox, hybrid or triathlon plan (features/hybrid_plan.py, features/tri_plan.py). */
 export const PLAN_KIND_LABEL: Record<string, string> = {
   race: 'course',
   key_run: 'course clé',
@@ -125,6 +125,16 @@ export const PLAN_KIND_LABEL: Record<string, string> = {
   station: 'circuit stations',
   activation: 'activation',
   benchmark: 'test de fin de bloc',
+  // A triathlon plan's kinds (features/tri_plan.py).
+  swim_key: 'natation clé',
+  swim_easy: 'natation endurance',
+  bike_key: 'vélo clé',
+  long_ride: 'sortie longue vélo',
+  bike_easy: 'vélo facile',
+  long_run: 'sortie longue',
+  easy_run: 'footing',
+  brick_bike: 'vélo avant enchaînement',
+  brick_run: 'course enchaînée',
 };
 
 /** The athlete's level a Hyrox or hybrid plan is sized for. */

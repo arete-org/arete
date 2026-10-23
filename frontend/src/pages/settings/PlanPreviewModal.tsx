@@ -33,7 +33,7 @@ function weekEnd(start: string): string {
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** A Hyrox or hybrid session by its kind ("Course clé"), any other by its type ("Fractionné"). */
+/** A Hyrox, hybrid or triathlon session by its kind ("Course clé"), any other by its type ("Fractionné"). */
 function sessionLabel(s: PlanSessionDraft): string {
   if (s.kind && PLAN_KIND_LABEL[s.kind]) return capitalized(PLAN_KIND_LABEL[s.kind]);
   return SESSION_TYPE_LABEL[s.session_type] ?? s.session_type;
@@ -90,24 +90,62 @@ export function PlanWeekList({ weeks }: { weeks: PlanWeek[] }) {
 
 const restDays = (days: number[]) => (days.length > 0 ? ` · repos ${days.map((d) => WEEKDAYS[d]).join(', ')}` : '');
 const vdot = (value: number | null) => (value != null ? ` · VDOT ${value.toLocaleString('fr-FR')}` : '');
+const percent = (share: number) => `${Math.round(share * 100)} %`;
+const hoursText = (minutes: number) => `${(Math.round(minutes / 6) / 10).toLocaleString('fr-FR')} h`;
 
 /**
- * What a Hyrox or hybrid plan is built from and how its weeks run: the
- * athlete's level and days, a first lighter week, the structure per phase,
- * then the sessions the athlete edited, which regeneration keeps.
+ * A triathlon plan's volume and targets: its split by sport, its peak within
+ * the declared hours, and what the bike and the swim aim at without an FTP
+ * or a CSS.
+ */
+function TriathlonInputs({ inputs }: { inputs: PlanPreview['inputs'] }) {
+  const { split } = inputs;
+  if (!split) return null;
+  const css = inputs.css_sec_100m;
+  const bike =
+    inputs.ftp_w != null
+      ? `FTP ${inputs.ftp_w} W`
+      : inputs.hr_reference
+        ? 'Sans FTP : vélo à la fréquence cardiaque'
+        : 'Sans FTP ni FC de référence : vélo au ressenti';
+  const swim =
+    css != null ? `CSS ${Math.floor(css / 60)}:${String(css % 60).padStart(2, '0')}/100 m` : 'Sans CSS : natation au ressenti';
+  return (
+    <div className="space-y-1 text-xs font-sans text-text-muted">
+      <p>
+        Répartition : natation {percent(split.swimming)} · vélo {percent(split.cycling)} · course à pied{' '}
+        {percent(split.running)}
+        {inputs.peak_minutes != null && ` · pic ${hoursText(inputs.peak_minutes)}/sem`}
+        {inputs.hours_per_week != null &&
+          ` (${inputs.hours_per_week.toLocaleString('fr-FR')} h disponibles)`}
+      </p>
+      <p>
+        {bike} · {swim}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * What a Hyrox, hybrid or triathlon plan is built from and how its weeks
+ * run: the athlete's level and days, a first lighter week, the structure per
+ * phase, then the sessions the athlete edited, which regeneration keeps.
  */
 export function HybridPlanOverview({ preview }: { preview: PlanPreview }) {
   const { inputs, summary = [] } = preview;
   const kept = inputs.kept ?? [];
+  // A triathlon's recent volume adds the three sports up.
+  const current = inputs.split ? 'volume actuel' : 'course actuelle';
   return (
     <div className="space-y-3">
       <p className="text-xs font-sans text-text-muted">
         {inputs.level && `Niveau ${LEVEL_LABEL[inputs.level] ?? inputs.level} · `}
         {inputs.training_days != null && `${inputs.training_days} jours d’entraînement/sem · `}
-        {inputs.sessions_per_week} séances/sem · course actuelle {inputs.weekly_minutes_now} min/sem
+        {inputs.sessions_per_week} séances/sem · {current} {inputs.weekly_minutes_now} min/sem
         {restDays(inputs.rest_days)}
         {vdot(inputs.vdot)}
       </p>
+      <TriathlonInputs inputs={inputs} />
       {inputs.deload && (
         <p role="note" className="ui-inset px-3 py-2 text-xs text-success-green">
           Ta charge récente est élevée : le plan commence par une semaine allégée.
@@ -168,7 +206,7 @@ export function PlanPreviewModal({ goal, onClose }: { goal: Goal; onClose: () =>
   });
   const busy = write.isPending || remove.isPending;
   const inputs = preview.data?.inputs;
-  const hybrid = goal.goal_type === 'hyrox' || goal.goal_type === 'hybrid';
+  const structured = goal.goal_type === 'hyrox' || goal.goal_type === 'hybrid' || goal.goal_type === 'triathlon';
 
   return createPortal(
     <Modal
@@ -194,7 +232,7 @@ export function PlanPreviewModal({ goal, onClose }: { goal: Goal; onClose: () =>
 
       {preview.data && inputs && (
         <div className="space-y-4">
-          {hybrid ? (
+          {structured ? (
             <HybridPlanOverview preview={preview.data} />
           ) : (
             <p className="text-xs font-sans text-text-muted">

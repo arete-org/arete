@@ -44,8 +44,10 @@ export function GoalCard({ goal, day, ready }: { goal: Goal | null; day: string 
         <span className="font-semibold">{goal.name}</span>
         <span className="text-neon-gold">{goal.days_left > 0 ? `J-${goal.days_left}` : 'Jour J'}</span>
         <span className="text-xs text-text-muted">
-          {/* A race's distance; a Hyrox's division and date; a block's end (goalKind). */}
-          {goal.goal_type === 'hyrox' ? `${goalKind(goal)} · ${longDate(goal.race_date)}` : goalKind(goal)}
+          {/* A race's distance; a Hyrox's division or a triathlon's format, and its date; a block's end (goalKind). */}
+          {goal.goal_type === 'hyrox' || goal.goal_type === 'triathlon'
+            ? `${goalKind(goal)} · ${longDate(goal.race_date)}`
+            : goalKind(goal)}
         </span>
       </h2>
       {curve.isError ? (

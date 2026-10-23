@@ -13,13 +13,26 @@ import {
   formatKm,
   formatRaceTime,
   hybridEnd,
+  hyroxDetails,
   hyroxLabel,
   longDate,
   parseRaceTime,
   resizedBlockEnd,
+  TRI_FORMATS,
+  triDetails,
+  triLabel,
 } from '@/lib/race';
 import { cn, readableError } from '@/lib/utils';
-import type { Goal, GoalDetails, GoalPriority, GoalStatus, GoalType, HyroxEquipment } from '@/types';
+import type {
+  Goal,
+  GoalDetails,
+  GoalPriority,
+  GoalStatus,
+  GoalType,
+  HyroxEquipment,
+  TriathlonDetails,
+  TriDistance,
+} from '@/types';
 import { PlanPreviewModal } from './PlanPreviewModal';
 
 const DISTANCES = [5, 10, 21.1, 42.195];
@@ -36,6 +49,7 @@ const STATUS_LABEL: Record<GoalStatus, string> = {
 const GOAL_TYPES: { value: GoalType; label: string }[] = [
   { value: 'race', label: 'Course' },
   { value: 'hyrox', label: 'Hyrox' },
+  { value: 'triathlon', label: 'Triathlon' },
   { value: 'hybrid', label: 'Bloc hybride' },
 ];
 const DIVISIONS: { value: GoalDetails['division']; label: string }[] = [
@@ -64,8 +78,16 @@ const POSTPONE_WEEKS = [0, 1, 2];
 const SUBMIT_LABEL: Record<GoalType, string> = {
   race: 'Ajouter la course',
   hyrox: 'Ajouter le Hyrox',
+  triathlon: 'Ajouter le triathlon',
   hybrid: 'Créer le bloc',
 };
+const POOLS: { value: TriathlonDetails['pool_length_m']; label: string }[] = [
+  { value: 25, label: '25 m' },
+  { value: 50, label: '50 m' },
+];
+/** Weekly hours a triathlon goal accepts (services/goals.py TriDetails). */
+const MIN_HOURS = 3;
+const MAX_HOURS = 25;
 
 const CHIP = 'px-3 py-1.5 rounded text-xs font-sans transition-all border disabled:opacity-40 disabled:cursor-not-allowed';
 const CHIP_IDLE = 'bg-abyss border-text-muted/30 text-text-muted hover:border-text-muted/50';
@@ -79,6 +101,12 @@ function parseKm(text: string): number | null {
   return text.trim() && km >= 1 && km <= 250 ? km : null;
 }
 
+/** 7.5 from "7,5"; null outside the server's 3–25 hours. */
+function parseHours(text: string): number | null {
+  const hours = Number(text.trim().replace(',', '.'));
+  return text.trim() && hours >= MIN_HOURS && hours <= MAX_HOURS ? hours : null;
+}
+
 /** "Aucun" excludes the rest; an empty choice is "Aucun". Kept in display order. */
 function toggleEquipment(current: Equipment, item: HyroxEquipment | 'none'): Equipment {
   if (item === 'none') return ['none'];
@@ -89,7 +117,7 @@ function toggleEquipment(current: Equipment, item: HyroxEquipment | 'none'): Equ
 
 /** A block whose first Monday has come: its length is fixed, its end moves later only. */
 function blockStarted(goal: Goal, today: string): boolean {
-  const weeks = goal.details?.weeks ?? 12;
+  const weeks = hyroxDetails(goal)?.weeks ?? 12;
   return blockStart(goal.race_date, weeks) <= today;
 }
 
@@ -184,17 +212,21 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
   const [distance, setDistance] = useState(storedDistance);
   const [target, setTarget] = useState(goal?.target_time_sec != null ? formatRaceTime(goal.target_time_sec) : '');
   const [priority, setPriority] = useState<GoalPriority>(goal?.priority ?? 'A');
-  const [division, setDivision] = useState<GoalDetails['division']>(goal?.details?.division ?? 'open');
-  const [format, setFormat] = useState<GoalDetails['format']>(goal?.details?.format ?? 'solo');
+  const stored = hyroxDetails(goal);
+  const [division, setDivision] = useState<GoalDetails['division']>(stored?.division ?? 'open');
+  const [format, setFormat] = useState<GoalDetails['format']>(stored?.format ?? 'solo');
   // A stored mixed category the form no longer allows (Pro, Solo) is not
   // shown selected but disabled: it is cleared, and the hint says why.
   const [category, setCategory] = useState<GoalDetails['category']>(() => {
-    const stored = goal?.details?.category ?? null;
-    const mixedAllowed = goal?.details?.division !== 'pro' && goal?.details?.format === 'doubles';
-    return stored === 'mixed' && !mixedAllowed ? null : stored;
+    const mixedAllowed = stored?.division !== 'pro' && stored?.format === 'doubles';
+    return stored?.category === 'mixed' && !mixedAllowed ? null : (stored?.category ?? null);
   });
-  const [equipment, setEquipment] = useState<Equipment>(goal?.details?.equipment ?? ['none']);
-  const storedWeeks = goal?.details?.weeks;
+  const [equipment, setEquipment] = useState<Equipment>(stored?.equipment ?? ['none']);
+  const storedWeeks = stored?.weeks;
+  const storedTri = triDetails(goal);
+  const [triDistance, setTriDistance] = useState<TriDistance>(storedTri?.distance ?? 'olympic');
+  const [hours, setHours] = useState(storedTri ? String(storedTri.hours_per_week).replace('.', ',') : '');
+  const [pool, setPool] = useState<TriathlonDetails['pool_length_m']>(storedTri?.pool_length_m ?? 25);
   const [weeks, setWeeks] = useState<8 | 12>(storedWeeks ?? 12);
   const [postpone, setPostpone] = useState(0);
   const [invalid, setInvalid] = useState<string | null>(null);
@@ -250,13 +282,23 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
       if (category == null) return setInvalid('Choisis la catégorie : Hommes, Femmes ou Mixte.');
       if (target.trim() && targetSec == null) return setInvalid('Temps visé au format h:mm:ss.');
       setInvalid(null);
-      const details = { ...goal?.details, division, format, category, equipment };
+      const details = { ...stored, division, format, category, equipment };
       const fields = { name: label, race_date: raceDate, target_time_sec: targetSec, priority, details };
       return editing ? update.mutate(fields) : create.mutate({ ...fields, goal_type: 'hyrox' });
     }
+    if (type === 'triathlon') {
+      const hoursPerWeek = parseHours(hours);
+      if (!label || !raceDate) return setInvalid('Nom et date du triathlon requis.');
+      if (hoursPerWeek == null) return setInvalid(`Heures disponibles par semaine : entre ${MIN_HOURS} et ${MAX_HOURS}.`);
+      if (target.trim() && targetSec == null) return setInvalid('Temps visé au format h:mm:ss.');
+      setInvalid(null);
+      const details: TriathlonDetails = { distance: triDistance, hours_per_week: hoursPerWeek, pool_length_m: pool };
+      const fields = { name: label, race_date: raceDate, target_time_sec: targetSec, priority, details };
+      return editing ? update.mutate(fields) : create.mutate({ ...fields, goal_type: 'triathlon' });
+    }
     if (!label) return setInvalid('Nom du bloc requis.');
     setInvalid(null);
-    const details = { ...goal?.details, weeks, equipment, category: blockCategory };
+    const details = { ...stored, weeks, equipment, category: blockCategory };
     if (!goal) return create.mutate({ name: label, race_date: blockEnd, goal_type: 'hybrid', details });
     // Only a moved end is sent: an equipment edit leaves the block's dates be.
     return update.mutate({ name: label, details, ...(blockEnd !== goal.race_date && { race_date: blockEnd }) });
@@ -342,6 +384,46 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Temps visé (facultatif)" hint="Format h:mm:ss" gap="sm">
             <Input inputMode="numeric" placeholder="1:15:00" value={target} onChange={(e) => setTarget(e.target.value)} />
+          </Field>
+          <PriorityChips value={priority} onChange={setPriority} />
+        </div>
+      </>
+    );
+  } else if (type === 'triathlon') {
+    const chosen = TRI_FORMATS.find((f) => f.value === triDistance) ?? TRI_FORMATS[1];
+    fields = (
+      <>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Nom du triathlon" gap="sm">
+            <Input value={name} maxLength={120} placeholder="Triathlon de Paris" onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Date" gap="sm">
+            <Input type="date" aria-label="Date du triathlon" min={today} value={raceDate} onChange={(e) => setRaceDate(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Format" hint={`Natation · vélo · course à pied : ${chosen.legs}`} gap="sm">
+          <Chips
+            label="Format"
+            options={TRI_FORMATS.map((f) => ({ value: f.value, label: f.label, title: f.legs }))}
+            value={triDistance}
+            onChange={setTriDistance}
+          />
+        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field
+            label="Heures disponibles par semaine"
+            hint={`Au moins ${chosen.minHours} h pour ce format. Le plan ne les dépasse jamais.`}
+            gap="sm"
+          >
+            <Input inputMode="decimal" placeholder="8" value={hours} onChange={(e) => setHours(e.target.value)} />
+          </Field>
+          <Field label="Bassin" hint="Les séances de natation comptent des longueurs entières." gap="sm">
+            <Chips label="Bassin" options={POOLS} value={pool} onChange={setPool} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Temps visé (facultatif)" hint="Format h:mm:ss" gap="sm">
+            <Input inputMode="numeric" placeholder="2:30:00" value={target} onChange={(e) => setTarget(e.target.value)} />
           </Field>
           <PriorityChips value={priority} onChange={setPriority} />
         </div>
@@ -445,13 +527,19 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
 function goalLine(goal: Goal): string {
   const target = goal.target_time_sec != null ? ` · objectif ${formatRaceTime(goal.target_time_sec)}` : '';
   if (goal.goal_type === 'hybrid') {
-    const weeks = goal.details?.weeks;
+    const weeks = hyroxDetails(goal)?.weeks;
     return `Bloc hybride${weeks ? ` · ${weeks} semaines` : ''} · fin le ${longDate(goal.race_date, true)}`;
   }
   const date = longDate(goal.race_date, true);
   if (goal.goal_type === 'hyrox') {
-    const category = goal.details?.category ? ` · ${CATEGORY_LABEL[goal.details.category]}` : '';
-    return `${date} · ${hyroxLabel(goal.details)}${category}${target}`;
+    const details = hyroxDetails(goal);
+    const category = details?.category ? ` · ${CATEGORY_LABEL[details.category]}` : '';
+    return `${date} · ${hyroxLabel(details)}${category}${target}`;
+  }
+  if (goal.goal_type === 'triathlon') {
+    const details = triDetails(goal);
+    const hours = details ? ` · ${String(details.hours_per_week).replace('.', ',')} h/sem` : '';
+    return `${date} · ${triLabel(details)}${hours}${target}`;
   }
   return `${date} · ${formatKm(goal.distance_km)} km${target}`;
 }
@@ -504,7 +592,7 @@ function GoalRow({
   );
 }
 
-/** Goals: races, Hyrox races and hybrid blocks; they act at once, apart from the settings form's save button. */
+/** Goals: races, Hyrox races, triathlons and hybrid blocks; they act at once, apart from the settings form's save button. */
 export function RaceGoalsPanel() {
   const queryClient = useQueryClient();
   const goals = useQuery({ queryKey: qk.goalList, queryFn: () => goalsApi.list() });
@@ -550,7 +638,8 @@ export function RaceGoalsPanel() {
         )}
         {goals.data?.length === 0 && !adding && (
           <p className="text-sm text-text-muted">
-            Aucun objectif prévu. Ajoute une course, un Hyrox ou un bloc hybride pour construire ton plan.
+            Aucun objectif prévu. Ajoute une course, un Hyrox, un triathlon ou un bloc hybride pour construire ton
+            plan.
           </p>
         )}
         {goals.data && goals.data.length > 0 && (

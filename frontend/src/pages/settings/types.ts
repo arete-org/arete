@@ -42,4 +42,6 @@ export const DEFAULT_SETTINGS: LocalSettings = {
   },
   coach_evening_enabled: false,
   coach_evening_hour: 20,
+  ftp_w: null,
+  css_sec_100m: null,
 };

@@ -530,3 +530,129 @@ it('clears the deleted goal notice once another goal is opened', async () => {
   expect(screen.queryByRole('status')).toBeNull();
   client.clear();
 });
+
+it('creates a triathlon with its format, weekly hours and pool', async () => {
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([]);
+  const create = vi.spyOn(goalsApi, 'create').mockResolvedValue({ ...goal, goal_type: 'triathlon' });
+  const client = renderPanel();
+  fireEvent.click(await screen.findByRole('button', { name: /Ajouter un objectif/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Triathlon' }));
+  fireEvent.change(screen.getByPlaceholderText('Triathlon de Paris'), { target: { value: 'Triathlon de Nice' } });
+  fireEvent.change(screen.getByLabelText('Date du triathlon'), { target: { value: '2027-06-27' } });
+  // M is chosen first; the format names its legs and the hours it needs.
+  expect(screen.getByRole('button', { name: 'M' }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(screen.getByRole('button', { name: 'Distance Ironman' }));
+  expect(screen.getByText('Natation · vélo · course à pied : 3,8 km · 180 km · 42,2 km')).toBeTruthy();
+  expect(screen.getByText('Au moins 8 h pour ce format. Le plan ne les dépasse jamais.')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Ajouter le triathlon' }));
+  expect(screen.getByRole('alert').textContent).toBe('Heures disponibles par semaine : entre 3 et 25.');
+  fireEvent.change(screen.getByPlaceholderText('8'), { target: { value: '12,5' } });
+  fireEvent.click(screen.getByRole('button', { name: '50 m' }));
+  fireEvent.change(screen.getByPlaceholderText('2:30:00'), { target: { value: '11:30:00' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Ajouter le triathlon' }));
+  await waitFor(() =>
+    expect(create.mock.calls[0][0]).toEqual({
+      name: 'Triathlon de Nice',
+      race_date: '2027-06-27',
+      target_time_sec: 41400,
+      priority: 'A',
+      goal_type: 'triathlon',
+      details: { distance: 'full', hours_per_week: 12.5, pool_length_m: 50 },
+    })
+  );
+  client.clear();
+});
+
+it('shows the server’s French refusal of too few hours under the form', async () => {
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([]);
+  vi.spyOn(goalsApi, 'create').mockRejectedValue(
+    new ApiError(422, JSON.stringify({ detail: 'Prévois au moins 6 h par semaine pour un 70.3.' }))
+  );
+  const client = renderPanel();
+  fireEvent.click(await screen.findByRole('button', { name: /Ajouter un objectif/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Triathlon' }));
+  fireEvent.change(screen.getByPlaceholderText('Triathlon de Paris'), { target: { value: 'Half' } });
+  fireEvent.change(screen.getByLabelText('Date du triathlon'), { target: { value: '2027-06-27' } });
+  fireEvent.click(screen.getByRole('button', { name: '70.3' }));
+  fireEvent.change(screen.getByPlaceholderText('8'), { target: { value: '5' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Ajouter le triathlon' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('Prévois au moins 6 h par semaine pour un 70.3.');
+  client.clear();
+});
+
+it('lists a triathlon by its format and hours, and edits it prefilled', async () => {
+  const tri: Goal = {
+    ...goal,
+    id: 4,
+    name: 'Triathlon de Nice',
+    race_date: '2027-06-27',
+    distance_km: 113,
+    target_time_sec: null,
+    goal_type: 'triathlon',
+    details: { distance: 'half', hours_per_week: 9.5, pool_length_m: 50 },
+  };
+  vi.spyOn(goalsApi, 'list').mockResolvedValue([tri]);
+  const update = vi.spyOn(goalsApi, 'update').mockResolvedValue(tri);
+  const client = renderPanel();
+  expect(await screen.findByText('27 juin 2027 · Triathlon 70.3 · 9,5 h/sem')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Modifier Triathlon de Nice' }));
+  expect(screen.getByRole('button', { name: '70.3' }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('button', { name: '50 m' }).getAttribute('aria-pressed')).toBe('true');
+  expect((screen.getByPlaceholderText('8') as HTMLInputElement).value).toBe('9,5');
+  fireEvent.change(screen.getByPlaceholderText('8'), { target: { value: '11' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await waitFor(() =>
+    expect(update.mock.calls[0][1]).toEqual({
+      name: 'Triathlon de Nice',
+      race_date: '2027-06-27',
+      target_time_sec: null,
+      priority: 'A',
+      details: { distance: 'half', hours_per_week: 11, pool_length_m: 50 },
+    })
+  );
+  client.clear();
+});
+
+it('previews a triathlon plan: split, peak, thresholds and its sessions by kind', () => {
+  const tri: PlanPreview = {
+    ...preview,
+    goal: { ...goal, goal_type: 'triathlon' },
+    inputs: {
+      ...preview.inputs,
+      sessions_per_week: 8,
+      deload: false,
+      kept: [],
+      weekly_minutes_now: 410,
+      hours_per_week: 8,
+      peak_minutes: 480,
+      split: { swimming: 0.2, cycling: 0.45, running: 0.35 },
+      ftp_w: null,
+      css_sec_100m: 100,
+      hr_reference: true,
+    },
+    summary: ['Semaine type (développement) : mar. vélo clé + course enchaînée · lun. repos'],
+    weeks: [
+      {
+        ...preview.weeks[0],
+        dropped: [],
+        sessions: [
+          { ...preview.weeks[0].sessions[0], kind: 'brick_bike', tags: ['bike', 'brick_bike'], description: 'Vélo sweet spot' },
+          { ...preview.weeks[0].sessions[0], kind: 'brick_run', tags: ['run', 'brick_run'], description: 'Course en enchaînement' },
+        ],
+      },
+    ],
+  };
+  render(
+    <>
+      <HybridPlanOverview preview={tri} />
+      <PlanWeekList weeks={tri.weeks} />
+    </>
+  );
+  expect(screen.getByText(/8 séances\/sem · volume actuel 410 min\/sem/)).toBeTruthy();
+  expect(
+    screen.getByText('Répartition : natation 20 % · vélo 45 % · course à pied 35 % · pic 8 h/sem (8 h disponibles)')
+  ).toBeTruthy();
+  expect(screen.getByText('Sans FTP : vélo à la fréquence cardiaque · CSS 1:40/100 m')).toBeTruthy();
+  expect(screen.getByText('Vélo avant enchaînement')).toBeTruthy();
+  expect(screen.getByText('Course enchaînée')).toBeTruthy();
+});

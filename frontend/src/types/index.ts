@@ -808,11 +808,21 @@ export interface Goal {
   created_at: string | null;
   /** A hybrid block has no race and no distance; its race_date is its end. */
   goal_type?: GoalType;
-  /** Hyrox and hybrid goals only. */
-  details?: GoalDetails | null;
+  /** Hyrox, hybrid and triathlon goals only: read them with lib/race's hyroxDetails and triDetails. */
+  details?: GoalDetails | TriathlonDetails | null;
 }
 
-export type GoalType = 'race' | 'hyrox' | 'hybrid';
+export type GoalType = 'race' | 'hyrox' | 'hybrid' | 'triathlon';
+/** S, M, 70.3 and the Ironman distance (services/goals.py TriDetails). */
+export type TriDistance = 'sprint' | 'olympic' | 'half' | 'full';
+
+/** A triathlon goal's details; its distance_km follows the format. */
+export interface TriathlonDetails {
+  distance: TriDistance;
+  /** Hours a week the athlete can train: the plan never goes past them. */
+  hours_per_week: number;
+  pool_length_m: 25 | 50;
+}
 export type HyroxEquipment = 'sled' | 'ski_erg' | 'rower' | 'wall_ball';
 
 /** A Hyrox goal's or hybrid block's details (services/goals.py GoalDetails). */
@@ -837,18 +847,18 @@ export interface GoalCreate {
   /** The server defaults to A; a hybrid block, never the next race, sends none. */
   priority?: GoalPriority;
   goal_type?: GoalType;
-  details?: Partial<GoalDetails>;
+  details?: Partial<GoalDetails> | TriathlonDetails;
 }
 
 /** PATCH /goals/{id}: a goal's type never changes, a block's details are sent whole. */
 export interface GoalUpdate {
   name?: string;
   race_date?: string;
-  /** A race's only: a Hyrox or hybrid goal's distance is refused. */
+  /** A race's only: a Hyrox, hybrid or triathlon goal's distance is refused. */
   distance_km?: number;
   target_time_sec?: number | null;
   priority?: GoalPriority;
-  details?: Partial<GoalDetails>;
+  details?: Partial<GoalDetails> | TriathlonDetails;
 }
 
 export type PlanPhase = "base" | "build" | "specific" | "taper" | "race";
@@ -861,10 +871,12 @@ export interface PlanSessionDraft {
   intensity: string | null;
   description: string;
   distance_km: number | null;
-  /** Hyrox and hybrid plans: what the rules read; 'kept' marks the athlete's edit. */
+  /** Hyrox, hybrid and triathlon plans: what the rules read; 'kept' marks the athlete's edit. */
   tags?: string[];
-  /** Hyrox and hybrid plans: key_run, compromised, easy, heavy_lower… (null on a road plan). */
+  /** Hyrox, hybrid and triathlon plans: key_run, swim_key, brick_run… (null on a road plan). */
   kind?: string | null;
+  /** running, cycling, swimming, strength, or other for a Hyrox or a triathlon. */
+  sport?: string;
 }
 
 export interface PlanWeek {
@@ -896,8 +908,17 @@ export interface PlanPreview {
     deload?: boolean;
     /** Sessions the athlete edited, kept as they are. */
     kept?: { date: string; description: string }[];
+    /** Triathlon plans only, from here on: the declared hours and the volume's peak. */
+    hours_per_week?: number;
+    peak_minutes?: number;
+    /** Share of the weekly volume by sport. */
+    split?: { swimming: number; cycling: number; running: number };
+    ftp_w?: number | null;
+    css_sec_100m?: number | null;
+    /** A threshold or maximum heart rate is set: rides target zones without an FTP. */
+    hr_reference?: boolean;
   };
-  /** Hyrox and hybrid plans: the weekly structure per phase, in French; empty for a race. */
+  /** Hyrox, hybrid and triathlon plans: the weekly structure per phase, in French; empty for a race. */
   summary?: string[];
   weeks: PlanWeek[];
 }

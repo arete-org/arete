@@ -595,6 +595,10 @@ export interface UserSettings {
   coach_evening_enabled: boolean;
   /** From this hour (18 to 21) on the athlete's clock. */
   coach_evening_hour: number;
+  /** Cycling functional threshold power (W): a triathlon plan's bike targets. */
+  ftp_w: number | null;
+  /** Swimming critical speed, seconds per 100 m: a triathlon plan's swim paces. */
+  css_sec_100m: number | null;
 }
 
 /** Mirrors services/settings.NotificationKind; `soon` kinds in CoachTab are not sent yet. */
