@@ -304,20 +304,89 @@ def test_two_sessions_share_a_day_only_as_a_brick_or_with_a_swim():
             assert len(same) == 2
             kinds = {kind_of(s.tags) for s in same}
             swims = [s for s in same if s.sport == "swimming"]
-            assert kinds == {BRICK_BIKE, BRICK_RUN} or (
+            assert kinds in ({BRICK_BIKE, BRICK_RUN}, {BRICK_LONG_RIDE, BRICK_RUN}) or (
                 len(swims) == 1
                 and not any(s.tags & {LONG_RIDE, LONG_RUN, RACE} for s in same)
             )
 
 
-def test_the_long_ride_and_the_long_run_are_never_on_consecutive_days():
-    _, weeks = _plan(distance="half", hours_per_week=12)
-    longs = sorted(
-        s.date
-        for s in _sessions(weeks)
-        if s.tags & {LONG_RIDE, LONG_RUN} and "long" in s.tags
+@pytest.mark.parametrize("distance", ["sprint", "olympic", "half", "full"])
+def test_a_weekend_long_block_is_followed_by_an_easy_day(distance):
+    """Long ride on Saturday, long run on Sunday; the Monday after holds a
+    swim, an easy session or rest, never a hard or long one."""
+    inp, weeks = _plan(distance=distance, hours_per_week=12, rest_days=frozenset())
+    blocks = 0
+    for week in _loading(weeks):
+        rides = [s.date for s in week.sessions if LONG_RIDE in s.tags]
+        runs = [s.date for s in week.sessions if LONG_RUN in s.tags]
+        if [d.weekday() for d in rides + runs] != [5, 6]:
+            continue
+        blocks += 1
+        monday = runs[0] + timedelta(days=1)
+        after = [s for w in weeks for s in w.sessions if s.date == monday]
+        assert not any(s.tags & {HARD, "long"} for s in after), after
+    assert blocks >= len(_loading(weeks)) - 2  # nearly every loading week
+    assert plan_violations(weeks, _rules(inp), inp.race_date) == []
+
+
+def test_the_day_after_a_long_block_refuses_hard_and_long_sessions():
+    from arete.features.week_placement import violations
+
+    inp = _inputs()
+    rules = _rules(inp)
+    monday = date(2026, 11, 2)
+
+    def week(*sessions):
+        return WeekPlan(
+            start=monday,
+            phase="build",
+            minutes=0,
+            recovery=False,
+            sessions=[
+                DraftSession(
+                    monday + timedelta(days=d),
+                    "endurance",
+                    60,
+                    None,
+                    None,
+                    "",
+                    tags=frozenset(t),
+                )
+                for d, t in sessions
+            ],
+        )
+
+    block = [(5, {"long", LONG_RIDE}), (6, {"long", LONG_RUN})]
+    nxt = WeekPlan(
+        start=monday + timedelta(weeks=1), phase="build", minutes=0, recovery=False
     )
-    assert all((b - a).days != 1 for a, b in zip(longs, longs[1:], strict=False))
+    for tags, broken in (
+        ({KEY_RUN, HARD}, True),
+        ({"long", LONG_RUN}, True),
+        ({SWIM_KEY}, False),
+    ):
+        after = replace(
+            nxt,
+            sessions=[
+                DraftSession(
+                    nxt.start, "tempo", 45, None, None, "", tags=frozenset(tags)
+                )
+            ],
+        )
+        found = [v.rule for v in violations(after, rules, previous=week(*block))]
+        assert ("after_long_block" in found) == broken
+    # A single long day leaves the next one free.
+    alone = replace(
+        nxt,
+        sessions=[
+            DraftSession(
+                nxt.start, "tempo", 45, None, None, "", tags=frozenset({KEY_RUN, HARD})
+            )
+        ],
+    )
+    assert "after_long_block" not in [
+        v.rule for v in violations(alone, rules, previous=week(block[1]))
+    ]
 
 
 # --------------------------------------------------------------------------- #

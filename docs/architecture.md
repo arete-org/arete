@@ -819,8 +819,10 @@ phase: CSS-based swim repeats (whole pool lengths, pace in step notes, since
 Garmin refuses swim targets), bike intervals in % of FTP (heart-rate zones 2 to
 4 without one, effort without either), runs at VDOT paces in the running
 grammar's notation. From the build phase a brick (a run straight off the bike)
-is two sessions on one day, the bike written first; a kept half gets its partner
-alone that day. Race week keeps one activation per sport. Swim and bike keys
+is two sessions on one day, the bike written first; a kept bike half gets its
+run back after it, a kept run keeps its day alone. The long ride and the long
+run make a weekend block (Saturday, Sunday); the day after holds nothing hard
+or long (`AfterBlock`). Race week keeps one activation per sport. Swim and bike keys
 carry prescriptions that export to Garmin; the race is `sport='other'`, and
 without a target time its projected load is 80 to 780 minutes by format.
 

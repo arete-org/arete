@@ -40,6 +40,7 @@ from arete.features.week_placement import (
     KEPT,
     MAX_SLOTS,
     RACE,
+    AfterBlock,
     Catalog,
     Deload,
     Grouping,
@@ -271,18 +272,17 @@ def tri_rules(
     level: Level, distance: TriDistance, *, acwr_above: float, tsb_below: float
 ) -> Rules:
     """The interference rules: no hard ride the day before or the day of the
-    key run, no long run the day before it, the long ride and the long run
-    never on consecutive days (a brick is one day), at most three hard days
-    (two for a novice) and two in a row; the deload thresholds are injected."""
+    key run, no long run the day before it, at most three hard days (two for
+    a novice) and two in a row. The long ride and the long run may make a
+    weekend block (Saturday then Sunday); the day after holds nothing hard
+    or long. The deload thresholds are injected."""
     return Rules(
         spacing=(
             Spacing("bike_key_before_key_run", BIKE_KEY, KEY_RUN, 2, "never"),
             Spacing("long_run_before_key_run", LONG_RUN, KEY_RUN, 2, "never"),
         ),
-        grouping=(
-            Grouping("hard_days", HARD, 2 if level == "novice" else 3, 2),
-            Grouping("long_days", LONG, 2, 1),
-        ),
+        grouping=(Grouping("hard_days", HARD, 2 if level == "novice" else 3, 2),),
+        after_block=(AfterBlock("after_long_block", LONG, 2, frozenset({HARD, LONG})),),
         deload=Deload("deload", acwr_above, tsb_below),
         taper=Taper(
             "taper",
@@ -1628,9 +1628,9 @@ def generate_tri_plan(inp: TriInputs, rules: Rules) -> list[WeekPlan]:
         )
         if fitted is None:
             raise PlanError(
-                f"Impossible de placer la semaine du {monday:%d/%m} sans enchaîner "
-                "deux séances dures ou deux sorties longues : libère un jour "
-                "d'entraînement ou retire un jour de repos."
+                f"Impossible de placer la semaine du {monday:%d/%m} en respectant "
+                "les règles d'enchaînement : libère un jour d'entraînement ou "
+                "retire un jour de repos."
             )
         week, gone = fitted
         week = replace(

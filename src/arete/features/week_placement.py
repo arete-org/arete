@@ -2,7 +2,8 @@
 
 A plan generator (``hybrid_plan``, ``tri_plan``) decides which sessions a
 week holds; this module decides their days. Interference rules are data
-(``Spacing``, ``Grouping``, ``Deload``, ``Taper``), read by ``violations``.
+(``Spacing``, ``Grouping``, ``AfterBlock``, ``Deload``, ``Taper``), read by
+``violations``.
 Sessions carry tags; a week is placed by a deterministic search over
 weekdays that returns the first assignment without any violation. Every
 rule is monotone (adding a session never removes a violation), so partial
@@ -69,6 +70,18 @@ class Grouping:
 
 
 @dataclass(frozen=True)
+class AfterBlock:
+    """After ``length`` consecutive days holding a ``tag`` session (a weekend
+    of long ride then long run), the next day holds no session tagged with
+    any of ``forbidden``: it is easy, a swim, or rest."""
+
+    id: str
+    tag: str
+    length: int
+    forbidden: frozenset[str]
+
+
+@dataclass(frozen=True)
 class Deload:
     """Start with a lighter week when the load is already too high; the
     thresholds are the daily readiness rules' (``services.adaptation``)."""
@@ -102,6 +115,7 @@ class Rules:
     grouping: tuple[Grouping, ...]
     deload: Deload
     taper: Taper
+    after_block: tuple[AfterBlock, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -158,6 +172,18 @@ def violations(
             run = run + 1 if k and (day - days[k - 1]).days == 1 else 1
             if run > group.max_consecutive and day >= week.start:
                 out.append(Violation(group.id, day))
+    for block in rules.after_block:
+        days = sorted({s.date for s, _, _ in items if block.tag in s.tags})
+        run = 0
+        for k, day in enumerate(days):
+            run = run + 1 if k and (day - days[k - 1]).days == 1 else 1
+            after = day + timedelta(days=1)
+            # Reported in the week of the day after: never twice.
+            if run != block.length or after < week.start:
+                continue
+            for s, _, _ in items:
+                if s.date == after and s.tags & block.forbidden:
+                    out.append(Violation(block.id, after))
     if race_date is not None:
         taper = rules.taper
         for s in week.sessions:
