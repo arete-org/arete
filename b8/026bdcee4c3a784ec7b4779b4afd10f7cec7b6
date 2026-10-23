@@ -1,0 +1,57 @@
+src/arete/agent/tools/planning.py
+  s_72017905dd888c::t_1cb6be5736fc47 11,70-72,91-92,145,148-150,155-169,186
+src/arete/services/automation_execution.py
+  s_72017905dd888c::t_62c2d07ba65c5e 113-117
+src/arete/services/planning.py
+  s_72017905dd888c::t_1d7f29f0da2d20 50-52,424,426-427,429,432
+  s_72017905dd888c::t_58042820bff4fe 36,44,47,232-233,236,238,241-247,390-394,398-404,415-423,425,428,430-431,433-438
+  s_72017905dd888c::t_f76bf09229fa38 48-49,439-440
+frontend/src/components/agent/AutomationReview.tsx
+  s_72017905dd888c::t_62c2d07ba65c5e 16
+src/arete/services/slack.py
+  s_72017905dd888c::t_62c2d07ba65c5e 104
+tests/test_document_imports.py
+  s_72017905dd888c::t_c0a2566bd8e89f 802
+  s_72017905dd888c::t_15949388ff4cf2 580-596,623,743-758
+src/arete/garmin/workout_structure.py
+  s_72017905dd888c::t_62c2d07ba65c5e 107
+src/arete/agent/tools/prescriptions.py
+  s_72017905dd888c::t_816517f9998cd0 48-49,51,55-56,58-59,61-64
+  s_72017905dd888c::t_071d88daadc12c 41-44
+  s_72017905dd888c::t_ec2bc855fbdeeb 47
+  s_72017905dd888c::t_cdf8cfb71dd656 45-46,50,52-54,57,60
+  s_72017905dd888c::t_df8d56116a6d59 4
+docs/conversational-workouts.md
+  s_72017905dd888c::t_0a7b269d1a9dd0 19-28,102-103
+tests/test_garmin_export.py
+  s_72017905dd888c::t_67c36ec1c73c89 799,808,812,1544-1547,1555-1569,1576,1583,1612
+  s_72017905dd888c::t_62c2d07ba65c5e 1433
+frontend/src/hooks/useCoachThreads.ts
+  s_72017905dd888c::t_62c2d07ba65c5e 45
+src/arete/agent/capabilities/registry.py
+  s_72017905dd888c::t_43e51934dbb0e5 29,31-33
+  s_72017905dd888c::t_62c2d07ba65c5e 160
+frontend/src/lib/agentActivity.ts
+  s_72017905dd888c::t_62c2d07ba65c5e 28
+tests/test_agent_toolkits.py
+  s_72017905dd888c::t_7ebb49b017a09e 161,296-518,521,531,533-537
+  s_72017905dd888c::t_856eeb45562e73 5-6,18-23,29-33,106-117,143,190,232-233,235,237-239
+  s_72017905dd888c::t_26d429e14493b1 240-252
+  s_72017905dd888c::t_a595d5772cdc52 24,234,236,519-520,522-530,532
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8026bdcee4c3a784ec7b4779b4afd10f7cec7b6",
+  "prompts": {},
+  "sessions": {
+    "s_72017905dd888c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3241aabb-938e-48dc-b14d-d28e3b96df3b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nicolas Edmond <nicolas@mac-1.home>"
+    }
+  }
+}
