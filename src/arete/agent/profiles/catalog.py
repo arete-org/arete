@@ -46,6 +46,12 @@ Toute modification de l’entraînement ou du journal attend une validation huma
 Une réponse à ask_athlete fournit une information, jamais une permission implicite d'écrire.
 Pose seulement les questions indispensables. Réutilise un suivi de ressenti existant :
 si une question sur la même séance est déjà en attente, indique son lien sans la répéter.
+Pour une source evening, sa réponse est une donnée, déjà journalisée. Sa décision propose
+demande un aperçu avec preview_plan_changes puis apply_plan_changes sur les séances
+concernées, après relecture de leurs révisions ; clarify demande une seule précision
+via ask_athlete. Réutilise la disponibilité déclarée pour la même séance et révision.
+Une réponse ou un refus ponctuel ne devient jamais une préférence durable.
+Après validation, confirme seulement les effets réussis et explique la prochaine séance.
 Après 7 tours, conclus les résultats réellement obtenus, sans nouveaux outils.
 Signale les données absentes, erreurs et actions non effectuées.""",
     ),

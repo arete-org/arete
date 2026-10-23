@@ -144,6 +144,27 @@ def populated(tmp_path, monkeypatch) -> None:
             "VALUES (?, ?, 'Bilan.', ?, '[]', ?)",
             REVIEWS,
         )
+        for athlete, day, status, answered, deleted in (
+            (ANA, "2026-10-06", "ok", True, False),
+            (BEN, "2026-10-07", "ok", False, False),
+            (CYD, "2026-10-08", "failed", False, False),
+            (GONE, "2026-10-06", "ok", True, False),
+            (ANA, "2026-10-08", "ok", True, True),
+        ):
+            con.execute(
+                "INSERT INTO app.coach_evening_messages "
+                "(athlete_id,date,status,text,question,answer,answered_at,deleted_at,created_at) "
+                "VALUES (?,?,?,'Demain ?','Disponible ?',?,?,?,?)",
+                [
+                    athlete,
+                    day,
+                    status,
+                    "25 minutes" if answered else None,
+                    ts(day, 20) if answered else None,
+                    ts(day, 21) if deleted else None,
+                    ts(day, 18),
+                ],
+            )
         # OLD's thread, started the day after the migration, last continued
         # on 8 September.
         con.execute(
@@ -209,6 +230,8 @@ def test_engagement_ratios_count_live_athletes_only(kpis):
     assert week["briefings_reacted"] == (2, 3, 0.6667)
     # ANA accepted, BEN did not; CYD's was never written.
     assert week["weekly_reviews_accepted"] == (1, 2, 0.5)
+    # Written evenings only: exclude failure, erased message and closed athlete.
+    assert week["evening_replies"] == (1, 2, 0.5)
 
 
 def test_an_athlete_counts_only_once_it_exists(kpis):

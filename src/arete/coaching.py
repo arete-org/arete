@@ -716,6 +716,7 @@ def _automation_setup(run: dict) -> tuple[AgentContext, Any]:
 
 
 async def _run_automation(run: dict) -> None:
+    import json
     from time import monotonic
 
     from anyio import to_thread
@@ -728,6 +729,7 @@ async def _run_automation(run: dict) -> None:
     started = monotonic()
     identifier = run["id"]
     result, interrupts, error = None, [], None
+    notify = True
     try:
         # Inside the try: a failed settings read still finishes the run.
         context, graph = await to_thread.run_sync(_automation_setup, run)
@@ -750,12 +752,39 @@ async def _run_automation(run: dict) -> None:
                 raise RuntimeError("Aucune décision nouvelle pour cette reprise")
             state = Command(resume=answers)
         else:
+            definition = json.loads(run["definition_json"])
+            source = definition.get("source")
+            if source and source.get("kind") == "evening":
+                from arete.agent.runtime.evening import (
+                    DECISION_TIMEOUT_SECONDS,
+                    decide_reply,
+                )
+                from arete.services.jev import JEV_MODEL, JevService
+
+                await to_thread.run_sync(execution.validate_evening_source, identifier)
+                decision = await decide_reply(
+                    JevService(
+                        api_key=SecretStr(config.openrouter_api_key),
+                        model=JEV_MODEL,
+                        timeout=DECISION_TIMEOUT_SECONDS,
+                    ),
+                    source,
+                    context,
+                    config.llm_context_tokens,
+                )
+                definition = await to_thread.run_sync(
+                    execution.record_evening_decision, identifier, decision.model_dump()
+                )
+                if decision.action == "record_only":
+                    result = "Ta réponse est enregistrée. Aucun ajustement demandé."
+                    notify = False
+                    return
             state = {
                 "messages": [
                     {
                         "role": "user",
                         "content": "Mission planifiée à exécuter maintenant :\n"
-                        + run["definition_json"]
+                        + json.dumps(definition, ensure_ascii=False)
                         + "\nSéance concernée : "
                         + str(run["session_key"] or "aucune"),
                     }
@@ -786,5 +815,6 @@ async def _run_automation(run: dict) -> None:
                 result=result,
                 interrupts=interrupts,
                 error=error,
+                notify=notify,
             )
         )

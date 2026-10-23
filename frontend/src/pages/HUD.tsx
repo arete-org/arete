@@ -1,4 +1,5 @@
 import { CoachingAttention } from '@/components/agent/CoachingAttention';
+import { useCoachingAttention } from '@/hooks/useCoachingAttention';
 import { BriefingCard } from '@/components/BriefingCard';
 import { PlayerSummary } from '@/components/PlayerSummary';
 import { RpePicker } from '@/components/RpePicker';
@@ -300,6 +301,7 @@ export function DashboardPage() {
   // The coach card and the briefing read their own keys, which the dashboard
   // seeds: they ask the server themselves only once it has answered or failed.
   const boardSettled = !plannedPending && !boardFetching;
+  const coordinated = useCoachingAttention(boardSettled).data?.enabled === true;
   const { data: boardDay } = useDashboard((d) => d.date);
 
   // Unknown until the dashboard answers: no Garmin call to action meanwhile.
@@ -414,7 +416,9 @@ export function DashboardPage() {
           )}
         </header>
 
-        {/* The race leads once the dashboard says whether there is one. */}
+        {coordinated && <CoachingAttention enabled={boardSettled} hero />}
+
+        {/* The goal supports the coach's current priority. */}
         {nextGoal !== undefined && (
           <Suspense fallback={<Skeleton label="Chargement de l’objectif" lines={1} className="glass-panel px-4 py-3" />}>
             <GoalCard goal={nextGoal} day={boardDay} ready={boardSettled} />
@@ -495,8 +499,8 @@ export function DashboardPage() {
               )}
             </Panel>
 
-            <CoachingAttention enabled={boardSettled} />
-
+            {/* Keep the existing source cards in place while the pilot is off. */}
+            {!coordinated && <CoachingAttention enabled={boardSettled} />}
           </div>
           <div className="dashboard-secondary">
             {/* Block 2: Player Status */}

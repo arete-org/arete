@@ -45,7 +45,11 @@ for (const width of [1440, 390]) {
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await panel.getByLabel('Message au coach').fill('Mon brouillon attend.');
     await panel.getByRole('button', { name: 'Masquer le coach' }).click();
-    await page.getByRole('link', { name: /Quel ressenti après ta sortie/ }).click();
+    const priority = page.getByRole('region', { name: 'Ta priorité avec le coach' });
+    await expect(priority).toBeVisible();
+    expect((await priority.boundingBox())!.y).toBeLessThan(400);
+    await page.screenshot({ path: `../.context/arete-coach-home-${width}.png` });
+    await priority.getByRole('button', { name: 'Répondre au coach' }).click();
     await expect(page).toHaveURL(/followup=42/);
     await expect(panel.getByText('Quel ressenti après ta sortie ?', { exact: true })).toBeVisible();
     await panel.getByLabel('Effort ressenti', { exact: true }).selectOption('7');

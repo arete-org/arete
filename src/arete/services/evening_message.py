@@ -60,7 +60,6 @@ MAX_ANSWER_CHARS = 1_000
 #: A race this close, or closer, is worth a word on a rest day too.
 RACE_SOON_DAYS = 7
 #: The push: its question, opening the coach on this message.
-PUSH_TITLE = "Chiron, pour demain"
 JOURNAL_TITLE = "Question du soir"
 _REASONS_FR = {
     "session": "une séance est prévue demain",
@@ -485,7 +484,13 @@ def write(produce: Callable[[str], str], evening: Survey) -> EveningMessage | No
 def announcement(message: EveningMessage) -> tuple[str, str, str]:
     """The push's title, body (the question) and the link opening the coach."""
     assert message.question is not None
-    return PUSH_TITLE, message.question, f"/follow-up?evening={message.id}"
+    from arete.services.coach_identity import subject
+
+    return (
+        f"{subject()}, pour demain",
+        message.question,
+        f"/follow-up?evening={message.id}",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -515,11 +520,28 @@ def answer(message_id: int, text: str) -> dict[str, Any]:
                 ) from exc
     assert message is not None
     journal = _file(message)
+    from arete.services import automations
+
+    continuation_error = None
+    try:
+        automations.prepare_evening_replies()
+    except (duckdb.Error, ValueError) as exc:
+        # The answer is already committed. Report queue failure separately;
+        # the dispatcher can recover the missing occurrence, never replay a run.
+        logger.warning("Evening continuation unavailable: %s", type(exc).__name__)
+        continuation_error = "Réponse enregistrée ; préparation du suivi indisponible."
     return {
-        **message.to_dict(),
+        **present(message),
         "journaled": journal != "failed",
         "journal": journal,
+        "continuation_error": continuation_error,
     }
+
+
+def present(message: EveningMessage) -> dict[str, Any]:
+    from arete.services.automations import evening_followup
+
+    return {**message.to_dict(), "continuation": evening_followup(message.id)}
 
 
 def read(message_id: int) -> EveningMessage | None:

@@ -25,7 +25,7 @@ import duckdb
 from arete.config import config
 from arete.dataio.db import db_connection, reuse_connections, write_idempotent
 from arete.observability.steps import measure_steps, step_done
-from arete.services import consent
+from arete.services import coach_identity, consent
 from arete.services.athlete_scope import athlete_scope, current_athlete_id
 from arete.services.settings import (
     QuietHours,
@@ -1120,7 +1120,7 @@ def write_evening_message(
         followup = coaching_attention.pending_effort() if coordinated else None
         if followup is not None:
             result = notify(
-                "Chiron attend ton ressenti",
+                f"{coach_identity.subject()} attend ton ressenti",
                 followup.title,
                 followup.url,
                 kind="post_session",
