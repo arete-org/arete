@@ -120,7 +120,7 @@ def _kinds(week: WeekPlan) -> list[str]:
 def test_no_plan_breaks_a_rule_or_the_declared_hours(
     distance, level, rest_days, race_weekday
 ):
-    hours = {"sprint": 3, "olympic": 7, "half": 10, "full": 16}[distance]
+    hours = {"sprint": 4, "olympic": 7, "half": 10, "full": 16}[distance]
     race = START + timedelta(weeks=MAX_WEEKS[distance] - 1, days=race_weekday)
     inp, weeks = _plan(
         distance=distance,
@@ -300,6 +300,21 @@ def test_a_novice_week_holds_six_sessions_the_others_eight():
         ]
     )
     assert not any(s.sport == "strength" for s in _sessions(novice + others))
+
+
+@pytest.mark.parametrize("race_weekday", range(7))
+def test_a_novice_sprint_on_its_minimum_hours_keeps_both_swims(race_weekday):
+    inp, weeks = _plan(
+        distance="sprint",
+        level="novice",
+        hours_per_week=4,
+        weekly_minutes_now=0,
+        training_days=5,
+        race_date=START + timedelta(weeks=11, days=race_weekday),
+    )
+    for week in _loading(weeks):
+        assert week.minutes <= 240
+        assert {SWIM_KEY, SWIM_EASY} <= set(_kinds(week)), week.dropped
 
 
 def _brick_days(week: WeekPlan) -> list[date]:

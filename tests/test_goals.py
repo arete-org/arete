@@ -384,19 +384,20 @@ class TestGoalTypes:
             ({"hours_per_week": 6}, "S, M, 70.3 ou distance Ironman"),
             ({"distance": "ultra", "hours_per_week": 6}, "S, M, 70.3"),
             ({"distance": "sprint"}, "heures disponibles"),
-            ({"distance": "sprint", "hours_per_week": 26}, "de 3 à 25"),
-            ({"distance": "sprint", "hours_per_week": 2}, "de 3 à 25"),
+            ({"distance": "sprint", "hours_per_week": 26}, "de 4 à 25"),
+            # Four hours for a sprint too, so a novice keeps both swims.
+            ({"distance": "sprint", "hours_per_week": 3.5}, "de 4 à 25"),
             (
                 {"distance": "full", "hours_per_week": 7.5},
                 "Prévois au moins 8 h par semaine pour une distance Ironman.",
             ),
             ({"distance": "half", "hours_per_week": 5}, "au moins 6 h .* un 70.3"),
-            ({"distance": "olympic", "hours_per_week": 3}, "au moins 4 h"),
+            ({"distance": "olympic", "hours_per_week": 3}, "de 4 à 25"),
             (
-                {"distance": "sprint", "hours_per_week": 3, "pool_length_m": 33},
+                {"distance": "sprint", "hours_per_week": 4, "pool_length_m": 33},
                 "25 ou 50 m",
             ),
-            ({"distance": "sprint", "hours_per_week": 3, "weeks": 8}, "Détail inconnu"),
+            ({"distance": "sprint", "hours_per_week": 4, "weeks": 8}, "Détail inconnu"),
             (None, "S, M, 70.3"),
         ],
     )

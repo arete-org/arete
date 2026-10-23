@@ -72,7 +72,8 @@ TRI_DISTANCE_KM: dict[TriDistance, float] = {
     "full": 226.0,
 }
 #: Hours a week a plan needs at least, by distance.
-MIN_HOURS: dict[TriDistance, int] = {"sprint": 3, "olympic": 4, "half": 6, "full": 8}
+#: Four for a sprint too: below, a novice week would lose a swim.
+MIN_HOURS: dict[TriDistance, int] = {"sprint": 4, "olympic": 4, "half": 6, "full": 8}
 MAX_HOURS = 25
 #: How the plan names each distance, in French; never a trademark claim.
 TRI_LABEL: dict[TriDistance, str] = {

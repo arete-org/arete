@@ -543,9 +543,11 @@ it('creates a triathlon with its format, weekly hours and pool', async () => {
   expect(screen.getByRole('button', { name: 'M' }).getAttribute('aria-pressed')).toBe('true');
   fireEvent.click(screen.getByRole('button', { name: 'Distance Ironman' }));
   expect(screen.getByText('Natation · vélo · course à pied : 3,8 km · 180 km · 42,2 km')).toBeTruthy();
-  expect(screen.getByText('Au moins 8 h pour ce format. Le plan ne les dépasse jamais.')).toBeTruthy();
+  expect(
+    screen.getByText('Minimum 4 h (S), 4 h (M), 6 h (70.3), 8 h (Ironman). Le plan ne les dépasse jamais.')
+  ).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Ajouter le triathlon' }));
-  expect(screen.getByRole('alert').textContent).toBe('Heures disponibles par semaine : entre 3 et 25.');
+  expect(screen.getByRole('alert').textContent).toBe('Heures disponibles par semaine : entre 4 et 25.');
   fireEvent.change(screen.getByPlaceholderText('8'), { target: { value: '12,5' } });
   fireEvent.click(screen.getByRole('button', { name: '50 m' }));
   fireEvent.change(screen.getByPlaceholderText('2:30:00'), { target: { value: '11:30:00' } });

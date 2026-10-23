@@ -86,8 +86,10 @@ const POOLS: { value: TriathlonDetails['pool_length_m']; label: string }[] = [
   { value: 50, label: '50 m' },
 ];
 /** Weekly hours a triathlon goal accepts (services/goals.py TriDetails). */
-const MIN_HOURS = 3;
+const MIN_HOURS = 4;
 const MAX_HOURS = 25;
+/** « Minimum 4 h (S), 4 h (M), 6 h (70.3), 8 h (Ironman) ». */
+const HOURS_HINT = `Minimum ${TRI_FORMATS.map((f) => `${f.minHours} h (${f.value === 'full' ? 'Ironman' : f.label})`).join(', ')}. Le plan ne les dépasse jamais.`;
 
 const CHIP = 'px-3 py-1.5 rounded text-xs font-sans transition-all border disabled:opacity-40 disabled:cursor-not-allowed';
 const CHIP_IDLE = 'bg-abyss border-text-muted/30 text-text-muted hover:border-text-muted/50';
@@ -101,7 +103,7 @@ function parseKm(text: string): number | null {
   return text.trim() && km >= 1 && km <= 250 ? km : null;
 }
 
-/** 7.5 from "7,5"; null outside the server's 3–25 hours. */
+/** 7.5 from "7,5"; null outside the server's 4–25 hours. */
 function parseHours(text: string): number | null {
   const hours = Number(text.trim().replace(',', '.'));
   return text.trim() && hours >= MIN_HOURS && hours <= MAX_HOURS ? hours : null;
@@ -412,7 +414,7 @@ function GoalForm({ goal, onDone }: { goal?: Goal; onDone: () => void }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field
             label="Heures disponibles par semaine"
-            hint={`Au moins ${chosen.minHours} h pour ce format. Le plan ne les dépasse jamais.`}
+            hint={HOURS_HINT}
             gap="sm"
           >
             <Input inputMode="decimal" placeholder="8" value={hours} onChange={(e) => setHours(e.target.value)} />

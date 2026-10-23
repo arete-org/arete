@@ -90,7 +90,7 @@ export function triDetails(goal: Partial<Pick<Goal, 'goal_type' | 'details'>> | 
  * distance, not the brand's race.
  */
 export const TRI_FORMATS: { value: TriDistance; label: string; legs: string; minHours: number }[] = [
-  { value: 'sprint', label: 'S', legs: '750 m · 20 km · 5 km', minHours: 3 },
+  { value: 'sprint', label: 'S', legs: '750 m · 20 km · 5 km', minHours: 4 },
   { value: 'olympic', label: 'M', legs: '1,5 km · 40 km · 10 km', minHours: 4 },
   { value: 'half', label: '70.3', legs: '1,9 km · 90 km · 21,1 km', minHours: 6 },
   { value: 'full', label: 'Distance Ironman', legs: '3,8 km · 180 km · 42,2 km', minHours: 8 },
