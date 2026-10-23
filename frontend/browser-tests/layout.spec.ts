@@ -23,8 +23,8 @@ test('desktop uses the approved page gutters and reflows beside the coach', asyn
   await page.goto('/');
   const heading = page.getByRole('heading', { name: 'Bonjour, HUNTER' });
   await expect(heading).toBeVisible();
-  // Settled: the form curve's lazy read has answered (no load in this fixture).
-  await expect(page.getByText(/Pas encore de charge enregistrée/)).toBeVisible();
+  // The compact home is settled without fetching the detailed form curve.
+  await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Terminer ma configuration' })).toHaveCount(0);
   await page.emulateMedia({ reducedMotion: 'reduce' });
 
@@ -32,36 +32,35 @@ test('desktop uses the approved page gutters and reflows beside the coach', asyn
     await page.setViewportSize({ width, height: 1000 });
     const brand = (await page.getByRole('link', { name: 'Arete · Accueil' }).boundingBox())!;
     const title = (await heading.boundingBox())!;
-    const grid = (await page.locator('.dashboard-grid').boundingBox())!;
-    const primary = (await page.locator('.dashboard-primary').boundingBox())!;
-    const secondary = (await page.locator('.dashboard-secondary').boundingBox())!;
+    const grid = (await page.locator('.dashboard-overview').first().boundingBox())!;
+    const primary = (await page.locator('.dashboard-overview > .glass-panel').nth(0).boundingBox())!;
+    const secondary = (await page.locator('.dashboard-overview > .glass-panel').nth(1).boundingBox())!;
     // The compact navbar and page have distinct gutters in the retained redesign.
     expect(brand.x).toBe(20);
-    const gutter = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.page-shell')!).paddingLeft));
-    expect(title.x).toBe(gutter);
-    expect(grid.width).toBe(width - 2 * gutter);
+    expect(title.x).toBe((width - 960) / 2);
+    expect(grid.width).toBe(960);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(Math.abs(primary.y - secondary.y)).toBeLessThan(1);
     expect(secondary.x).toBeGreaterThan(primary.x + primary.width);
     await expect(page.getByRole('link', { name: 'Saisir une séance', exact: true })).toBeInViewport();
-    await expect(page.getByRole('heading', { name: 'Préparation', exact: true })).toBeInViewport();
+    await expect(page.getByRole('heading', { name: 'Tes repères', exact: true })).toBeInViewport();
   }
 
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1280, height: 1000 });
   await page.getByRole('button', { name: 'Ouvrir le coach' }).filter({ visible: true }).click();
   const panel = page.getByRole('complementary', { name: 'Coach IA' });
   await panel.getByLabel('Message au coach').fill('Mon brouillon reste ici.');
-  const content = (await page.locator('.dashboard-grid').boundingBox())!;
+  const content = (await page.locator('.dashboard-overview').first().boundingBox())!;
   const coach = (await panel.boundingBox())!;
   expect(content.x + content.width).toBeLessThan(coach.x);
-  const primary = (await page.locator('.dashboard-primary').boundingBox())!;
-  const secondary = (await page.locator('.dashboard-secondary').boundingBox())!;
+  const primary = (await page.locator('.dashboard-overview > .glass-panel').nth(0).boundingBox())!;
+  const secondary = (await page.locator('.dashboard-overview > .glass-panel').nth(1).boundingBox())!;
   expect(secondary.y).toBeGreaterThanOrEqual(primary.y + primary.height);
 
   // A larger screen can retain both columns even with the same 520 px coach.
   await page.setViewportSize({ width: 1920, height: 1000 });
-  const widePrimary = (await page.locator('.dashboard-primary').boundingBox())!;
-  const wideSecondary = (await page.locator('.dashboard-secondary').boundingBox())!;
+  const widePrimary = (await page.locator('.dashboard-overview > .glass-panel').nth(0).boundingBox())!;
+  const wideSecondary = (await page.locator('.dashboard-overview > .glass-panel').nth(1).boundingBox())!;
   expect(Math.abs(widePrimary.y - wideSecondary.y)).toBeLessThan(1);
   expect(wideSecondary.x).toBeGreaterThan(widePrimary.x + widePrimary.width);
 

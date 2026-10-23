@@ -8,7 +8,8 @@ silently empty.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+import json
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
@@ -42,6 +43,18 @@ Reaction = Literal["up", "down"]
 HISTORY_LIMIT = 7
 
 
+# The discussion shows a short, immutable snapshot, never today's live metrics.
+MAX_BRIEFING_FACTS = 3
+
+
+@dataclass(frozen=True)
+class BriefingFact:
+    label: str
+    value: str
+    source: str
+    measured_on: str
+
+
 @dataclass(frozen=True)
 class Briefing:
     """One day's briefing, as stored."""
@@ -64,12 +77,15 @@ class Briefing:
     reaction_comment: str | None = None
     #: When the day's first usable briefing was written (``get_for_day``).
     first_created_at: datetime | None = None
+    evidence: tuple[BriefingFact, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "date": self.date.isoformat(),
             "text": self.text,
+            # Referenced chat context must explain the same dated facts the UI shows.
+            "evidence": [asdict(fact) for fact in self.evidence],
             "priority": self.priority,
             "source": self.source,
             "status": self.status,
@@ -85,7 +101,7 @@ class Briefing:
 
 _COLUMNS = (
     "id, date, text, priority, source, status, error, trigger, created_at,"
-    " facts_digest, reaction, reaction_comment"
+    " facts_digest, reaction, reaction_comment, evidence_json"
 )
 
 
@@ -103,6 +119,7 @@ def _row_to_briefing(row: tuple) -> Briefing:
         facts_digest=row[9],
         reaction=row[10],
         reaction_comment=row[11],
+        evidence=tuple(BriefingFact(**fact) for fact in json.loads(row[12] or "[]")),
     )
 
 
@@ -126,7 +143,9 @@ class BriefingRepository:
         trigger: str = "api",
         user_id: int | None = None,
         facts_digest: str | None = None,
+        evidence: tuple[BriefingFact, ...] = (),
     ) -> int:
+        assert len(evidence) <= MAX_BRIEFING_FACTS
         user_id = resolve_athlete_id(user_id)
         conn = self._get_connection()
         try:
@@ -134,8 +153,8 @@ class BriefingRepository:
                 """
                 INSERT INTO coach_briefings
                     (user_id, date, text, priority, source, status, error,
-                     trigger, created_at, facts_digest)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     trigger, created_at, facts_digest, evidence_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 """,
                 [
@@ -149,6 +168,7 @@ class BriefingRepository:
                     trigger,
                     naive_utc_now(),
                     facts_digest,
+                    json.dumps([asdict(fact) for fact in evidence], ensure_ascii=False),
                 ],
             ).fetchone()
         finally:
@@ -188,7 +208,7 @@ class BriefingRepository:
         if row is None:
             return None
         return replace(
-            _row_to_briefing(row), revised=bool(row[12]), first_created_at=row[13]
+            _row_to_briefing(row), revised=bool(row[13]), first_created_at=row[14]
         )
 
     def get(self, briefing_id: int) -> Briefing | None:

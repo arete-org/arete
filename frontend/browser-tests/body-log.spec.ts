@@ -81,6 +81,7 @@ for (const { width, height } of [{ width: 390, height: 844 }, { width: 1440, hei
     await page.setViewportSize({ width, height });
     const { requests, bodies } = await serve(page);
     await page.goto('/');
+    await page.getByRole('button', { name: 'Détails de ma forme' }).click();
     const card = page.getByRole('heading', { name: 'Douleur ou poids' }).locator('xpath=ancestor::div[contains(@class,"glass-panel")][1]');
     await card.getByRole('button', { name: 'Signaler une douleur' }).click();
     const form = card.getByRole('form', { name: 'Signaler une douleur' });

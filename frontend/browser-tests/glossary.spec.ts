@@ -116,6 +116,7 @@ for (const width of [1440, 390, 320]) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await stubApi(page);
     await page.goto('/');
+    await page.getByRole('button', { name: 'Détails de ma forme' }).click();
     await expect(page.getByText('1,27', { exact: true })).toBeVisible();
     // Each bar's "?" names its bar: the readiness is linked from three places.
     await expect(page.getByRole('link', { name: 'Qu’est-ce que la préparation ? (barre Préparation)' })).toBeVisible();

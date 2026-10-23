@@ -12,9 +12,11 @@ import { useCoachWords } from '@/lib/coachName';
 export function CoachingAttention({
   enabled = true,
   compact = false,
+  home = false,
 }: {
   enabled?: boolean;
   compact?: boolean;
+  home?: boolean;
 }) {
   const client = useQueryClient();
   const query = useCoachingAttention(enabled);
@@ -39,11 +41,25 @@ export function CoachingAttention({
       unavailable
     ) : (
       <>
-        <CoachTodayPanel enabled={enabled} refetchOnFocus={false} />
-        <InboxPriority />
+        <CoachTodayPanel enabled={enabled} refetchOnFocus={false} home={home} />
+        {!home && <InboxPriority />}
         {unavailable}
       </>
     );
+  }
+  if (home) {
+    const actions = query.data.items.filter(item => item.kind !== 'recap');
+    const first = actions[0];
+    const remaining = actions.length + query.data.remaining - (first ? 1 : 0);
+    return <section aria-label="À suivre avec le coach" className="flex flex-wrap items-center justify-between gap-3 border-t border-border py-4">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{first ? (first.kind === 'approval' ? 'Une proposition à examiner' : 'Ton retour est attendu') : 'Aucune réponse attendue'}</p>
+        <p className="mt-1 text-sm text-text-secondary">{first?.title ?? 'Retrouve tes bilans et les points précédents dans le suivi.'}</p>
+        {remaining > 0 && <p className="mt-1 text-xs text-text-muted">{remaining} autre(s) point(s) dans le suivi.</p>}
+      </div>
+      <Link to={first?.url ?? '/follow-up'} data-variant="outline" className="ui-button inline-flex min-h-11 items-center rounded border border-text-muted/30 px-4 py-2 text-sm">{first ? 'Examiner' : 'Voir le suivi'}</Link>
+      {unavailable}
+    </section>;
   }
   return (
     <Panel title={`À suivre avec ${coach.the}`}>

@@ -9,7 +9,9 @@ from pydantic import BaseModel, Field, model_validator
 
 from arete.services import coaching_rules as rules
 from arete.services.coaching_repository import (
+    MAX_BRIEFING_FACTS,
     Briefing,
+    BriefingFact,
     BriefingRepository,
     Reaction,
     SessionFeedbackRepository,
@@ -105,6 +107,9 @@ class ReactionResponse(BaseModel):
 
 
 class BriefingHistoryItem(BaseModel):
+    evidence: list[BriefingFact] = Field(
+        default_factory=list, max_length=MAX_BRIEFING_FACTS
+    )
     id: int
     date: date
     tip: str
@@ -116,6 +121,7 @@ class BriefingHistoryItem(BaseModel):
 
 def _briefing_item(b: Briefing) -> BriefingHistoryItem:
     return BriefingHistoryItem(
+        evidence=list(b.evidence),
         id=b.id,
         date=b.date,
         tip=b.text,

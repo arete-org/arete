@@ -168,7 +168,8 @@ test('a first install, with no page controlled yet, announces nothing', async ({
 test('readiness, HRV and stress say their status in words, not only in colour', async ({ page }) => {
   await mockApi(page);
   await page.goto('/');
-  await expect(page.getByText('48', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Détails de ma forme' }).click();
+  await expect(page.getByText('50', { exact: true })).toBeVisible();
   await expect(page.getByText('Préparation basse')).toBeVisible();
   await expect(page.getByText('VFC basse')).toBeVisible();
   await expect(page.getByText('Stress élevé')).toBeVisible();

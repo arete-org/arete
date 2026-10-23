@@ -105,7 +105,7 @@ test('opening the briefing brings its offer; enabling subscribes this device onc
   await pushDevice(page);
   const requests = await mockApi(page);
   await page.goto('/');
-  const entry = page.getByRole('button', { name: /^Briefing du jour/ });
+  const entry = page.getByRole('button', { name: 'En parler au coach' });
   await expect(entry).toBeEnabled();
   await expect(page.getByRole('region', BRIEFING_OFFER)).toHaveCount(0);
   // Nothing asked of the server before the moment comes.
@@ -122,7 +122,7 @@ test('opening the briefing brings its offer; enabling subscribes this device onc
   // Every kind is on by default: the settings are not rewritten.
   expect(requests).not.toContain('PUT /api/settings');
   await page.reload();
-  await expect(page.getByRole('button', { name: /^Briefing du jour/ })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'En parler au coach' })).toBeEnabled();
   await expect(page.getByRole('region', BRIEFING_OFFER)).toHaveCount(0);
 });
 
@@ -132,7 +132,7 @@ test('a device already subscribed is never offered, and asks nothing', async ({ 
   const requests = await mockApi(page, { actual: [done] });
   await page.goto('/');
   await expect(page.getByText('Footing du matin')).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Briefing du jour/ })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'En parler au coach' })).toBeEnabled();
   await expect(page.getByRole('region', SESSION_OFFER)).toHaveCount(0);
   await expect(page.getByRole('region', BRIEFING_OFFER)).toHaveCount(0);
   expect(requests).not.toContain('GET /api/notifications/vapid-public-key');

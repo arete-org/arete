@@ -628,3 +628,13 @@ body:has(.coach-panel) .install-invitation, body:has([aria-modal='true']) .insta
   .health-report .report-table { overflow: visible; }
   .health-report .report-bar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
+
+/* Briefings use the chat's neutral surfaces, with a readable measure on both widths. */
+.briefing-copy .coach-markdown { font-size: 1rem; line-height: 1.625; }
+.dashboard-home { max-width: 960px; margin-inline: auto; }
+.dashboard-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.dashboard-panel { padding: 16px; min-width: 0; }
+@container (min-width: 720px) {
+  .dashboard-overview { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+  .dashboard-panel { padding: 24px; }
+}

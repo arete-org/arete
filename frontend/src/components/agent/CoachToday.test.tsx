@@ -138,3 +138,19 @@ it('declines a missed session’s drop in one tap', async () => {
   await waitFor(() => expect(respond).toHaveBeenCalledWith(9, 1, 'keep', []));
   expect((await screen.findByRole('status')).textContent).toBe('C’est noté : rien ne change.');
 });
+
+it('home exposes the reason before review and preserves the grouped apply contract', async () => {
+  const { MemoryRouter } = await import('react-router-dom');
+  const respond = vi.spyOn(coachApi, 'proposal').mockResolvedValue({ ...key, state: 'applied' });
+  client.setQueryData(coachTodayKey, { date: key.date, items: [{ kind: 'proposal', record: key, group: [key, rest], members: [{ id: key.id, revision: 2 }, { id: rest.id, revision: 3 }] }], remaining: 2, briefing: null });
+  render(<MemoryRouter><QueryClientProvider client={client}><CoachTodayPanel enabled={false} home /></QueryClientProvider></MemoryRouter>);
+  expect(screen.getByText('Une proposition à examiner')).toBeTruthy();
+  expect(screen.getAllByText(key.reason).length).toBeGreaterThan(0);
+  expect(respond).not.toHaveBeenCalled();
+  const review = document.querySelector('details')!;
+  review.open = true;
+  expect(screen.getByText('Fractionné · 60 min → Récupération · 30 min · Z1')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Appliquer' }));
+  await waitFor(() => expect(respond).toHaveBeenCalledWith(7, 2, 'apply', [{ id: 8, revision: 3 }]));
+  expect(screen.getByRole('link', { name: 'Voir le suivi' }).getAttribute('href')).toBe('/follow-up');
+});

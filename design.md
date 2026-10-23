@@ -426,12 +426,25 @@ débordement. Consulter ou décider n’effectue aucun appel modèle depuis le n
 
 [Proposition UX éditable : aperçu, nouveau fil, échange](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=166-632).
 
-Le briefing est une entrée vers le coach. Le tableau de bord montre un titre
-Inter actionnable, un aperçu limité à trois lignes et l’heure d’écriture.
-« Briefing du jour » et « En parler avec Chiron » ouvrent une **nouvelle
-conversation**, avec le briefing complet visible avant les échanges. Les anciens
-briefings utilisent le même parcours. Le texte complet n’est jamais tronqué dans
-la conversation ni dans le contexte envoyé au modèle.
+Le briefing est une entrée vers le coach. Sur l’accueil, sa surface neutre reprend
+celle du chat ; le texte entier utilise Inter 16 px / 26 px, sur 65 caractères
+maximum par ligne. « En parler au coach » (ou « En parler avec Chiron » en RPG)
+est son unique action de discussion et ouvre une **nouvelle conversation**.
+Le titre reste un titre. Les anciens briefings utilisent le même parcours.
+
+[La révision ARE-210](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=434-17218)
+aligne « Tes séances » et « Tes repères » sur bureau et les empile sur mobile.
+Les séances terminées montrent durée, distance, RPE et statut ; leur ligne ouvre
+le détail existant du journal. Préparation canonique, ressenti des jambes et
+charge hebdomadaire restent visibles avec leur provenance. « Détails de ma forme »
+déplie les métriques et charge la courbe à la demande. Le suivi ne répète plus
+le briefing ; une proposition conserve sa raison et son examen avant toute action.
+
+Dans la discussion, « Repères au moment du briefing » affiche au plus trois
+mesures enregistrées avec le texte (préparation, jambes, équilibre de charge),
+avec source et date. Un ancien briefing sans ces mesures le signale ; les chiffres
+du jour ne remplacent jamais ses faits historiques. Les titres, séparateurs et
+avis utilisent les mêmes retraits ; la saisie reste celle du chat.
 
 - L’ouverture ne lance aucun appel modèle et ne remplit pas la saisie. Le brouillon,
   les pièces jointes et une réponse en cours restent dans leur fil d’origine.

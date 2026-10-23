@@ -85,6 +85,7 @@ for (const { width, height, name } of [
     await page.setViewportSize({ width, height });
     const { requests, answers } = await evening(page);
     await page.goto('/');
+    await page.locator('summary').filter({ hasText: 'Une proposition à examiner' }).click();
     const card = page.getByRole('article').filter({ hasText: 'Séance manquée' });
     await expect(card).toBeVisible();
     await expect(card).toContainText('Proposé : Déplacée à jeudi 15 octobre');
@@ -119,6 +120,7 @@ test('mobile light: decline a missed session’s replanning in one tap', async (
   await page.setViewportSize({ width: 375, height: 812 });
   const { answers } = await evening(page, 'pierre');
   await page.goto('/');
+  await page.locator('summary').filter({ hasText: 'Une proposition à examiner' }).click();
   const card = page.getByRole('article').filter({ hasText: 'Séance manquée' });
   await expect(card).toBeVisible();
   await expect(card.getByRole('button', { name: 'Pas maintenant' })).toHaveCount(0);

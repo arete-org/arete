@@ -351,6 +351,7 @@ CREATE TABLE IF NOT EXISTS app.coach_briefings (
     error        VARCHAR,                    -- why the agent run failed, when it did
     trigger      VARCHAR NOT NULL DEFAULT 'api',    -- 'scheduler', 'api'
     created_at   TIMESTAMP DEFAULT now(),
+    evidence_json VARCHAR,                   -- original dated metrics, not live values
     facts_digest VARCHAR,                    -- SHA-256 of the facts it was written from
     reaction     VARCHAR,                    -- the athlete's 'up' or 'down', once per briefing
     reaction_comment VARCHAR,                -- their optional word with it
@@ -1297,6 +1298,13 @@ def _m62_strava_values_off_garmin_rows(con) -> None:
     con.execute("DELETE FROM app.strava_tokens")
 
 
+def _m67_briefing_evidence(con) -> None:
+    """Keep the discussion's facts with its text, including after a later sync."""
+    con.execute(
+        "ALTER TABLE app.coach_briefings ADD COLUMN IF NOT EXISTS evidence_json VARCHAR"
+    )
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -1347,6 +1355,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (64, _m64_goal_types),
     (65, _m65_best_efforts),
     (66, _m66_body_log),
+    (67, _m67_briefing_evidence),
 ]
 
 

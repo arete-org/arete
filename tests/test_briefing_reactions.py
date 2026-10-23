@@ -353,3 +353,70 @@ def test_thread_reads_the_selected_briefing_without_generating_one(db, client):
         private = _write(db, athlete_today(), "Private.")
     for unavailable in (private, failed, 999_999):
         assert client.get(f"/tips/briefings/{unavailable}").status_code == 404
+
+
+def test_discussion_keeps_its_dated_evidence_after_a_rewrite(db, client):
+    from arete.services.coaching_repository import BriefingFact
+
+    today = athlete_today()
+    original = BriefingFact(
+        "Préparation", "18 / 100", "Préparation Garmin", today.isoformat()
+    )
+    first = _write(db, today, "Repos.", evidence=(original,))
+    _write(
+        db,
+        today,
+        "La récupération progresse.",
+        evidence=(
+            BriefingFact(
+                "Préparation", "62 / 100", "Préparation Garmin", today.isoformat()
+            ),
+        ),
+    )
+    response = client.get(f"/tips/briefings/{first}")
+    assert response.status_code == 200
+    assert response.json()["evidence"] == [
+        {
+            "label": "Préparation",
+            "value": "18 / 100",
+            "source": "Préparation Garmin",
+            "measured_on": today.isoformat(),
+        }
+    ]
+    client.put(f"/tips/briefings/{first}/reaction", json={"reaction": "up"})
+    assert (
+        client.get(f"/tips/briefings/{first}").json()["evidence"]
+        == response.json()["evidence"]
+    )
+    from arete.services.coach_today import reference
+
+    assert (
+        reference(f"briefing:{first}")["record"]["evidence"]
+        == response.json()["evidence"]
+    )
+    # Old rows remain readable: no current metrics are substituted for missing evidence.
+    legacy = _write(db, today - timedelta(days=1), "Ancien briefing.")
+    assert client.get(f"/tips/briefings/{legacy}").json()["evidence"] == []
+    assert client.get("/tips/history").json()[0]["evidence"] == []
+
+
+def test_evidence_stays_private_and_bounded(db, client):
+    from arete.services.coaching_repository import MAX_BRIEFING_FACTS, BriefingFact
+    from arete.services.users import upsert_user
+
+    evidence = BriefingFact(
+        "Jambes", "2 / 5", "Ton ressenti", athlete_today().isoformat()
+    )
+    other = upsert_user(
+        "evidence-other", "evidence-other@example.com", "Other", verified=True
+    )
+    with athlete_scope(other.athlete_id):
+        theirs = _write(db, athlete_today(), "Leur briefing.", evidence=(evidence,))
+    assert client.get(f"/tips/briefings/{theirs}").status_code == 404
+    with pytest.raises(AssertionError):
+        _write(
+            db,
+            athlete_today(),
+            "Too many facts",
+            evidence=(evidence,) * (MAX_BRIEFING_FACTS + 1),
+        )

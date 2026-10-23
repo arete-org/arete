@@ -45,7 +45,7 @@ for (const width of [1440, 390]) {
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await panel.getByLabel('Message au coach').fill('Mon brouillon attend.');
     await panel.getByRole('button', { name: 'Masquer le coach' }).click();
-    await page.getByRole('link', { name: /Quel ressenti après ta sortie/ }).click();
+    await page.getByRole('link', { name: 'Examiner', exact: true }).click();
     await expect(page).toHaveURL(/followup=42/);
     await expect(panel.getByText('Quel ressenti après ta sortie ?', { exact: true })).toBeVisible();
     await panel.getByLabel('Effort ressenti', { exact: true }).selectOption('7');

@@ -114,7 +114,7 @@ for (const theme of ['encre', 'pierre']) {
     const card = page.getByRole('region', { name: 'Check-in du matin' });
     await expect(card).toBeVisible();
     await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
-    await expect(page.getByText('Pas encore d’objectif de course.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Fixer un objectif' })).toBeVisible();
     await page.screenshot({ path: `../.context/checkin/${theme}-before.png`, animations: 'disabled' });
     await card.getByRole('radio', { name: '3 sur 5 — moyen', exact: true }).click();
     await card.getByRole('radio', { name: '2 sur 5 — lourdes', exact: true }).click();

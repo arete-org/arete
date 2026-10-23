@@ -97,8 +97,9 @@ for (const width of [320, 390, 430]) {
     await dialog.getByRole('button', { name: 'Fermer' }).tap();
     await nav.getByRole('link', { name: 'Tableau de bord' }).tap();
     // The RPG is off: the day's form reads in plain words, with no game tag nor level.
-    const form = page.locator('.dashboard-secondary');
-    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
+    await page.getByRole('button', { name: 'Détails de ma forme' }).tap();
+    const form = page.locator('#dashboard-details');
+    await expect(page.getByRole('heading', { name: 'Tes repères' })).toBeVisible();
     await expect(form.getByText('Charge de la semaine')).toBeVisible();
     await expect(form.getByText(/^(HP|MP|XP|TSS)$/)).toHaveCount(0);
     await expect(form.getByText(/joueur|niveau/i)).toHaveCount(0);
@@ -384,7 +385,7 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
     const chromium = info.project.name === 'mobile-chromium';
     if (entry === 'launcher') {
       await page.goto('/');
-      await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Tes repères' })).toBeVisible();
       await page.waitForLoadState('networkidle');
       await page.evaluate(() => window.scrollTo(0, 300));
       await expect.poll(pageY).toBe(300);
@@ -472,7 +473,7 @@ for (const [width, height] of [[844, 390], [1280, 800]] as const) for (const not
     if (!notice) await page.route('**/api/garmin/sync/ensure', route => route.fulfill({ json: { state: 'fresh' } }));
     const ensured = page.waitForResponse('**/api/garmin/sync/ensure');
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tes repères' })).toBeVisible();
     await ensured;
     const status = page.getByRole('status').filter({ hasText: 'Garmin' });
     if (notice) await expect(status).toBeVisible();
@@ -512,7 +513,7 @@ for (const [width, locked] of [[767, true], [768, false], [1024, false]] as cons
     await page.setViewportSize({ width, height: 844 });
     await fixture(page);
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tes repères' })).toBeVisible();
     await openCoach(page);
     await expect(page.getByRole('complementary', { name: 'Coach IA' })).toBeVisible();
     if (locked) await expect(page.locator('html')).toHaveCSS('overflow-y', 'hidden');
@@ -541,7 +542,7 @@ test('touch: closing the session entry opened from Home returns Home, and its da
   await fixture(page);
   await page.goto('/');
   await safeArea(page);
-  const briefing = page.getByRole('heading', { name: 'Ma forme du jour' });
+  const briefing = page.getByRole('heading', { name: 'Tes repères' });
   await expect(briefing).toBeVisible();
   await page.getByRole('link', { name: 'Saisir une séance', exact: true }).tap();
   const dialog = page.getByRole('dialog');

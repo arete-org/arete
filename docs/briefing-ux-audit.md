@@ -3,6 +3,21 @@
 Ticket : [ARE-210](https://linear.app/arete-app/issue/ARE-210/audit-coaching-messages-and-design-a-clearer-briefing-led-home),
 projet « Performance & engagement — audit Oct 2026 », jalon « UX 1 — quick wins ».
 
+## Intégration ARE-210
+
+L’application reprend la hiérarchie des maquettes : briefing complet sur surface
+neutre, séances lisibles, trois repères sourcés, suivi compact, détails à la demande.
+La discussion réutilise le fil, les avis et la saisie du chat. La migration 67
+conserve jusqu’à trois faits datés avec chaque nouveau briefing, à partir des
+faits déjà lus ; elle n’ajoute aucun appel au modèle. Les anciens briefings restent
+consultables et indiquent l’absence de mesures historiques.
+
+Le mode de coordination existant et ses préférences restent respectés. En repli,
+« Tes bilans et échanges » donne accès au suivi sans annoncer un nombre d’actions
+que cette source ne sait pas garantir. La cadence des notifications proposée dans
+cet audit reste une décision distincte ; cette intégration ne modifie pas les
+préférences de notification des comptes.
+
 ## Recommandation
 
 L’accueil doit répondre à trois questions : **« Que faire maintenant ? »**,

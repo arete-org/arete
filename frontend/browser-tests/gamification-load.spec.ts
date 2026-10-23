@@ -40,6 +40,7 @@ test('loading pages reads the RPG snapshot and logging a session syncs it once',
   });
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'Détails de ma forme' }).click();
   await expect(page.getByText('Niveau 6 · Adepte')).toBeVisible();
   await page.goto('/profile');
   await expect(page.getByRole('heading', { name: 'Niveau 6 · Adepte' })).toBeVisible();
@@ -54,6 +55,7 @@ test('loading pages reads the RPG snapshot and logging a session syncs it once',
   // The journal's summary shows the sync's answer: the cache holds it before the reload.
   await expect(page.getByText('Dernier reçu : Séance sans montre')).toBeVisible();
   await page.goto('/');
+  await page.getByRole('button', { name: 'Détails de ma forme' }).click();
   await expect(page.getByText('Dernier reçu : Séance sans montre')).toBeVisible();
   expect(syncs).toHaveLength(1);
 });

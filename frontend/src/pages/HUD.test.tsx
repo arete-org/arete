@@ -8,6 +8,8 @@ import { coachApi } from '@/lib/coachToday';
 import type { DashboardData } from '@/lib/dashboard';
 import { formCurveApi } from '@/lib/formCurve';
 import { gameApi, type Player } from '@/lib/gamification';
+import { toLocalISODate } from '@/lib/dates';
+import { qk } from '@/lib/queryKeys';
 import { weeksAtGoalText } from '@/lib/fr';
 import { DashboardPage } from './HUD';
 
@@ -93,7 +95,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function mount(rpg: boolean) {
+async function mount(rpg: boolean, details = false) {
   vi.spyOn(gameApi, 'preference').mockResolvedValue({ enabled: rpg, opted_in: rpg, available: true, version: 1 });
   render(
     <QueryClientProvider client={client}>
@@ -102,13 +104,18 @@ async function mount(rpg: boolean) {
       </MemoryRouter>
     </QueryClientProvider>
   );
-  await screen.findByText('Charge de la semaine');
+  await vi.waitFor(() => expect(client.getQueryData<DashboardData>(qk.dashboard(toLocalISODate()))).toBeDefined());
+  await screen.findByText(/Objectif 300 TSS/);
+  if (details || rpg) fireEvent.click(screen.getByRole('button', { name: 'Détails de ma forme' }));
   if (rpg) await screen.findByText('Niveau 6 · Adepte');
   else await vi.waitFor(() => expect(client.getQueryState(['game-preference'])?.status).toBe('success'));
 }
 
 it('speaks plain words without the RPG: no HP, MP, XP, player nor level', async () => {
   await mount(false);
+  expect(screen.queryByRole('heading', { name: 'Ma forme du jour' })).toBeNull();
+  expect(formCurveApi.get).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Détails de ma forme' }));
   expect(screen.getByRole('heading', { name: 'Ma forme du jour' })).toBeTruthy();
   // Per element: the page's joined text would hide a tag between two words.
   expect(screen.queryAllByText(/^(HP|MP|XP|TSS)$/)).toHaveLength(0);
@@ -116,8 +123,8 @@ it('speaks plain words without the RPG: no HP, MP, XP, player nor level', async 
   expect(screen.queryAllByText(/joueur/i)).toHaveLength(0);
   expect(screen.queryAllByText(/niveau/i)).toHaveLength(0);
   // Each bar names itself and keeps its detail on screen (a title never shows on a phone).
-  for (const label of ['Préparation', 'Charge de la semaine']) expect(screen.getByText(label, { selector: ':not(h2)' })).toBeTruthy();
-  expect(screen.getByText('Objectif 300 TSS · 6 séances')).toBeTruthy();
+  for (const label of ['Préparation', 'Charge de la semaine']) expect(screen.getAllByText(label, { selector: ':not(h2)' }).length).toBeGreaterThan(0);
+  expect(within(document.getElementById('dashboard-details')!).getByText('Objectif 300 TSS · 6 séances')).toBeTruthy();
   expect(screen.getByText('Préparation à l’entraînement Garmin (ce matin)')).toBeTruthy();
   expect(document.querySelector('[title]')).toBeNull();
   // Plain label first, the acronym as a secondary line, French decimals. TSB is
@@ -166,16 +173,15 @@ it('offers one way to log a session and no duplicate quick links', async () => {
   // Planning a session is another action than logging one.
   expect(screen.getByRole('link', { name: '+ Planifier une séance' }).getAttribute('href')).toBe('/planning?new=1');
   expect(screen.queryByRole('link', { name: /Voir le planning/ })).toBeNull();
-  const refresh = screen.getByRole('button', { name: 'Actualiser le suivi' });
-  expect(refresh.getAttribute('aria-describedby')).toBe('coach-prepare-hint');
-  expect(within(document.body).getByText(/Rien ne change sans ton accord/)).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Actualiser le suivi' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Voir le suivi' }).getAttribute('href')).toBe('/follow-up');
 });
 
 it('leads with the briefing, today\'s session right below it', async () => {
   await mount(false);
   const headings = screen.getAllByRole('heading').map((h) => h.textContent);
   expect(headings.indexOf('Briefing du jour')).toBeGreaterThanOrEqual(0);
-  expect(headings.indexOf('Briefing du jour') + 1).toBe(headings.indexOf('Séance du jour'));
+  expect(headings.indexOf('Briefing du jour') + 1).toBe(headings.indexOf('Tes séances'));
   const briefing = screen.getByText(written.tip!);
   const session = screen.getByText('Repos — aucune séance prévue');
   expect(briefing.compareDocumentPosition(session) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -205,15 +211,17 @@ it('says when the sync rewrote the briefing, and when it was first written', asy
   expect(screen.getByText('Écrit à 7 h 12 · mis à jour après la synchro de 8 h 05')).toBeTruthy();
 });
 
-it('leads with the race goal above the briefing, and the one form curve in plain words', async () => {
+it('keeps the goal inline and loads the shared projection only after opening details', async () => {
   board.next_goal = {
     id: 3, name: 'Semi de Lyon', race_date: '2026-11-23', distance_km: 21.1, target_time_sec: null,
     priority: 'A', status: 'active', days_left: 40, created_at: null,
   };
   await mount(false);
-  const goal = screen.getByRole('region', { name: 'Objectif de course' });
+  expect(formCurveApi.get).not.toHaveBeenCalled();
+  const goal = screen.getByRole('link', { name: /Semi de Lyon/ });
   const briefing = screen.getByRole('heading', { name: 'Briefing du jour' });
   expect(goal.compareDocumentPosition(briefing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Détails de ma forme' }));
   expect(await screen.findByText('entre +3 et +13')).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Courbe de forme' })).toBeTruthy();
   expect(await screen.findByText(/Aujourd’hui : fatigue 36, fraîcheur \+4\./)).toBeTruthy();
@@ -230,7 +238,7 @@ it('offers to set a goal when there is none', async () => {
 it('says this morning is not synced yet when the recovery still comes from Garmin', async () => {
   board.fitness = { ...board.fitness, readiness_source: 'garmin', readiness_measured_on: '2026-10-13' };
   board.player_stats = { ...stats, hp: { ...stats.hp, source: 'garmin_previous', detail: 'Garmin, mesure du 13/10' } };
-  await mount(false);
+  await mount(false, true);
   expect(screen.getByText(/Pas encore synchronisé ce matin/)).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Reconnecter Garmin' })).toBeTruthy();
   expect(screen.queryByRole('link', { name: 'Connecter Garmin' })).toBeNull();
@@ -243,11 +251,11 @@ it('shows this morning when it is in, even without Arete’s own score (HRV miss
     date: '2026-10-14', readiness_score: null, training_readiness_score: 64, hrv_last_night: null, hrv_status: null,
     sleep_score: 78, sleep_duration_sec: 25200, stress_avg: 22, steps: 4100,
   } as unknown as DashboardData['health'];
-  await mount(false);
+  await mount(false, true);
   expect(screen.queryByText(/Pas encore synchronisé ce matin/)).toBeNull();
   expect(screen.queryByText(/Pas de données santé/)).toBeNull();
   expect(screen.getByText('64/100')).toBeTruthy();
-  expect(screen.getByText('64')).toBeTruthy();
+  expect(screen.getByText('62')).toBeTruthy(); // The canonical score, not the raw health row.
 });
 
 it('still says not synced when an early sync wrote the day’s row empty', async () => {
@@ -257,14 +265,14 @@ it('still says not synced when an early sync wrote the day’s row empty', async
     date: '2026-10-14', readiness_score: null, training_readiness_score: null, hrv_last_night: null, hrv_status: null,
     sleep_score: null, sleep_duration_sec: null, stress_avg: null, steps: 0,
   } as unknown as DashboardData['health'];
-  await mount(false);
+  await mount(false, true);
   expect(screen.getByText(/Pas encore synchronisé ce matin/)).toBeTruthy();
-  expect(screen.queryByText('—')).toBeNull();
+  expect(screen.getByText('62 / 100')).toBeTruthy();
 });
 
 it('draws the curve after months off, when rounded fitness reads zero', async () => {
   board.fitness = { ...fitness, ctl: 0, atl: 0, tsb: 0, days_analyzed: 0 };
-  await mount(false);
+  await mount(false, true);
   expect(await screen.findByText(/Aujourd’hui : fatigue/)).toBeTruthy();
   expect(screen.queryByText(/Pas encore de charge enregistrée/)).toBeNull();
 });

@@ -49,6 +49,9 @@ test('with a race, the goal card leads and the curve projects to race day in pla
   const requests: string[] = [];
   await fixture(page, true, requests);
   await page.goto('/');
+  expect(requests).not.toContain('/api/dashboard/form-curve');
+  const goal = page.getByRole('link', { name: /Semi de Lyon/ });
+  await page.getByRole('button', { name: 'Détails de ma forme' }).click();
   const card = page.getByRole('region', { name: 'Objectif de course' });
   await expect(card.getByText('Semi de Lyon')).toBeVisible();
   await expect(card.getByText('J-40')).toBeVisible();
@@ -56,7 +59,7 @@ test('with a race, the goal card leads and the curve projects to race day in pla
   await expect(card.getByRole('link', { name: /Séance clé : .* Fractionné · 60 min/ })).toHaveAttribute('href', `/planning?date=${localDay(2)}`);
   // On a phone: the greeting, then the race, then the briefing.
   const greeting = (await page.getByRole('heading', { name: 'Bonjour, HUNTER' }).boundingBox())!;
-  const race = (await card.boundingBox())!;
+  const race = (await goal.boundingBox())!;
   const briefing = (await page.getByRole('heading', { name: 'Briefing du jour' }).boundingBox())!;
   expect(greeting.y).toBeLessThan(race.y);
   expect(race.y).toBeLessThan(briefing.y);
@@ -84,6 +87,7 @@ test('without a race, a compact call to set one, and the curve read only once on
   await page.waitForLoadState('networkidle');
   // Below the fold on a phone: nothing read yet.
   expect(requests).not.toContain('/api/dashboard/form-curve');
+  await page.getByRole('button', { name: 'Détails de ma forme' }).click();
   await page.getByRole('heading', { name: 'Courbe de forme' }).scrollIntoViewIfNeeded();
   await expect(page.locator('figcaption')).toContainText('Sur 12 semaines, ta forme de fond est passée de 32 à 40.');
   expect(requests.filter(p => p === '/api/dashboard/form-curve')).toHaveLength(1);

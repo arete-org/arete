@@ -22,17 +22,17 @@ function mount(value = tip, writing = false, rpg = false) {
   return render(<MemoryRouter><QueryClientProvider client={client}><BriefingCard tip={value} writing={writing} stalled={false} refresh={() => {}} /></QueryClientProvider></MemoryRouter>);
 }
 
-it('opens a briefing from its title or action, without writing feedback or sending a message', () => {
+it('opens a briefing from one clear action, without writing feedback or sending a message', () => {
   const react = vi.spyOn(tipsApi, 'react');
   const asked = vi.fn();
   window.addEventListener('arete:coach-discuss', asked);
   mount();
   expect(screen.getByText('Écrit à 7 h · calculé à partir de tes métriques')).toBeTruthy();
   expect(screen.queryByRole('group', { name: /avis/ })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: /^Briefing du jour/ }));
+  expect(screen.queryByRole('button', { name: /^Briefing du jour/ })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'En parler au coach' }));
   window.removeEventListener('arete:coach-discuss', asked);
-  expect(asked).toHaveBeenCalledTimes(2);
+  expect(asked).toHaveBeenCalledTimes(1);
   expect((asked.mock.calls[0][0] as CustomEvent).detail).toEqual({ kind: 'briefing', id: 41 });
   expect(react).not.toHaveBeenCalled();
 });
@@ -53,7 +53,7 @@ it('reads history on demand and opens the selected historical briefing', async (
 
 it('does not open a thread before a stored briefing is ready', () => {
   mount({ ...tip, id: null, tip: null, status: 'pending' }, true);
-  expect((screen.getByRole('button', { name: /^Briefing du jour/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole('button', { name: 'En parler au coach' })).toBeNull();
   expect(screen.getByRole('status').textContent).toContain('Le coach écrit');
 });
 
