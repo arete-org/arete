@@ -64,6 +64,7 @@ const queryClient = new QueryClient({
 keepPersistedQueries(queryClient);
 
 const revalidateRestored = () => queryClient.invalidateQueries();
+const FOCUS_RESTORE_TIMEOUT_MS = 2000;
 
 /** A session that ends takes the query cache with it; the page reloads right after. */
 const dropQueryCache = () => queryClient.clear();
@@ -122,6 +123,8 @@ function ProductShell() {
     else if (location.state?.coachFrom) navigate(-1);
     else navigate('/');
   }, [agentOpen, location, navigate]);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const pageEntryOpened = useRef(false);
   const openCoachRef = useRef(setAgentOpen);
   useLayoutEffect(() => { openCoachRef.current = setAgentOpen; }, [setAgentOpen]);
   useEffect(preloadAgentMarkdownWhenIdle, []);
@@ -129,15 +132,16 @@ function ProductShell() {
     const discuss = (event: Event) => {
       const reference: unknown = (event as CustomEvent).detail;
       if (!isCoachReference(reference)) return;
+      triggerRef.current = null;
+      pageEntryOpened.current = false;
       openCoachRef.current(true);
     };
-    const open = () => openCoachRef.current(true);
+    const open = () => { triggerRef.current = null; pageEntryOpened.current = false; openCoachRef.current(true); };
     window.addEventListener('arete:coach-open', open);
     window.addEventListener('arete:coach-discuss', discuss);
     return () => { window.removeEventListener('arete:coach-discuss', discuss); window.removeEventListener('arete:coach-open', open); };
   }, []);
   const [agentBusy, setAgentBusy] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const restoreCoachFocus = useRef(false);
   const closeAgent = useCallback(() => {
@@ -150,8 +154,32 @@ function ProductShell() {
       // The page entry is mounted again only after returning from the conversation.
       const launcher = launcherRef.current;
       const desktopTrigger = document.querySelector<HTMLButtonElement>('nav[aria-label="Navigation principale"] button[aria-controls="coach-panel"]');
-      const target = launcher?.getClientRects().length ? launcher : desktopTrigger ?? triggerRef.current;
-      target?.focus({ preventScroll: true });
+      const target = triggerRef.current?.isConnected ? triggerRef.current : launcher?.getClientRects().length ? launcher : desktopTrigger;
+      // Returning from the page entry must reveal its restored focus, even when
+      // the source page grew while the conversation was open.
+      target?.focus({ preventScroll: !pageEntryOpened.current });
+      if (!target || !pageEntryOpened.current) return;
+      // Lazy route content can push the entry below the viewport after focus.
+      // Follow that layout briefly, but never override a person's next action.
+      const observer = new ResizeObserver(() => {
+        if (document.activeElement !== target) { stop(); return; }
+        target.scrollIntoView({ block: 'center', behavior: 'instant' });
+      });
+      const stop = () => {
+        observer.disconnect();
+        clearTimeout(timer);
+        window.removeEventListener('touchstart', stop);
+        window.removeEventListener('wheel', stop);
+        window.removeEventListener('keydown', stop);
+        target.removeEventListener('blur', stop);
+      };
+      const timer = setTimeout(stop, FOCUS_RESTORE_TIMEOUT_MS);
+      observer.observe(document.body);
+      window.addEventListener('touchstart', stop, { passive: true });
+      window.addEventListener('wheel', stop, { passive: true });
+      window.addEventListener('keydown', stop);
+      target.addEventListener('blur', stop);
+      return stop;
     }
   }, [agentOpen]);
 
@@ -165,6 +193,7 @@ function ProductShell() {
         agentBusy={agentBusy}
         onToggleAgent={(event) => {
           triggerRef.current = event.currentTarget;
+          pageEntryOpened.current = false;
           setAgentOpen((v) => !v);
         }}
       />
@@ -249,7 +278,7 @@ function ProductShell() {
         <OutsideOnboarding>{!agentOpen && <div className="coach-entry">
           <button ref={launcherRef} className="ui-button inline-flex min-h-11 items-center gap-2 border border-border bg-abyss px-4 text-sm"
             aria-controls="coach-panel" aria-expanded={false}
-            onClick={event => { triggerRef.current = event.currentTarget; setAgentOpen(true); }}
+            onClick={event => { triggerRef.current = event.currentTarget; pageEntryOpened.current = true; setAgentOpen(true); }}
             onPointerEnter={preloadAgentMarkdown} onFocus={preloadAgentMarkdown}
           ><AreteMark size={18} /><CoachLauncherLabel busy={agentBusy} /></button>
         </div>}</OutsideOnboarding>

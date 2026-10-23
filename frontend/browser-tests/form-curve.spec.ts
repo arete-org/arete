@@ -53,6 +53,8 @@ test('with a race, the goal card leads and the curve projects to race day in pla
   const goal = page.getByRole('link', { name: /Semi de Lyon/ });
   await page.getByRole('button', { name: 'Détails de ma forme' }).click();
   const card = page.getByRole('region', { name: 'Objectif de course' });
+  // Details retain their lazy read: opening them does not put this card on screen.
+  await card.scrollIntoViewIfNeeded();
   await expect(card.getByText('Semi de Lyon')).toBeVisible();
   await expect(card.getByText('J-40')).toBeVisible();
   await expect(card.getByText('entre +3 et +13')).toBeVisible();

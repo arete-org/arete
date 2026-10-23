@@ -147,6 +147,7 @@ test('embedded coach preserves the source page, draft and keyboard space', async
     window.visualViewport!.dispatchEvent(new Event('resize'));
   });
   await panel.getByRole('button', { name: 'Retour à la page' }).tap();
+  await expect(launcher).toBeFocused();
   await expect(launcher).toBeInViewport();
   await page.reload();
   await launcher.tap();
