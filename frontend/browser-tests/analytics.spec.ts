@@ -277,12 +277,24 @@ for (const width of [1440, 390]) {
       .filter({ has: page.getByRole('heading', { name: 'Sommeil', exact: true }) });
     await sleep.scrollIntoViewIfNeeded();
     await expect(sleep).toContainText('7 h 30');
+    if (width < 768) {
+      // Scrolling through the charts must free the space taken by the mobile header.
+      await expect.poll(() => page.locator('.analytics-banner').evaluate(
+        (element) => element.getBoundingClientRect().bottom,
+      )).toBeLessThanOrEqual(0);
+    }
     const path = await sleep.locator('.recharts-area-curve').getAttribute('d');
     expect((path?.match(/M/g) ?? []).length).toBe(2); // A real gap, not a line across the absent sample.
     await page
       .getByRole('navigation', { name: 'Sections des analyses' })
       .getByRole('button', { name: 'Prêt ?', exact: true })
       .click();
+    await expect.poll(() => section('pret').evaluate((element) => {
+      const banner = document.querySelector('.analytics-banner')!;
+      const style = getComputedStyle(banner);
+      const expectedTop = style.position === 'sticky' ? banner.getBoundingClientRect().bottom + 8 : 8;
+      return Math.abs(element.getBoundingClientRect().top - expectedTop);
+    })).toBeLessThanOrEqual(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
