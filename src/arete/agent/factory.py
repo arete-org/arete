@@ -62,6 +62,18 @@ def build_agent(
     checkpointer=None,
 ):
     assert len(fallback_models) <= MAX_MODEL_FALLBACKS, "Too many fallback models"
+    interactive = profile.id == "chat" and checkpointer is not None
+    if interactive:
+        from arete.agent.middlewares.human_input import (
+            ChatBudgetMiddleware,
+            ChatEffectsMiddleware,
+            ChatRequestBudgetMiddleware,
+            HumanQuestionMiddleware,
+            chat_hitl,
+            reviewable,
+        )
+
+        filesystem.tools = [reviewable(tool) for tool in filesystem.tools]
     middleware = [
         ProfilePolicyMiddleware(profile.id, profile=profile, calendar=calendar),
         *(
@@ -77,15 +89,30 @@ def build_agent(
         )
 
         middleware.append(ConversationTitleMiddleware(title_generator))
+    if interactive:
+        middleware.extend(
+            [
+                ChatBudgetMiddleware(),
+                chat_hitl(),
+                HumanQuestionMiddleware(),
+                ChatEffectsMiddleware(),
+            ]
+        )
     if profile.id == "automation":
         from arete.agent.middlewares.automation import (
             AutomationBudgetMiddleware,
             AutomationEffectsMiddleware,
             hitl,
         )
+        from arete.agent.middlewares.human_input import HumanQuestionMiddleware
 
         middleware.extend(
-            [AutomationBudgetMiddleware(), hitl(profile), AutomationEffectsMiddleware()]
+            [
+                AutomationBudgetMiddleware(),
+                hitl(profile),
+                HumanQuestionMiddleware(),
+                AutomationEffectsMiddleware(),
+            ]
         )
     if profile.filesystem_tools:
         # Offload only after inner hooks classify domain errors and extract UI
@@ -150,16 +177,25 @@ def build_agent(
         from arete.agent.middlewares.automation import AutomationRequestBudgetMiddleware
 
         middleware.append(AutomationRequestBudgetMiddleware())
+    if interactive:
+        middleware.append(ChatRequestBudgetMiddleware())
     middleware.append(ProviderAffinityMiddleware())
     middleware.append(ModelTelemetryMiddleware())
     middleware.append(ModelResponseMiddleware())
     from arete.agent.tools.automations import ask_athlete
 
+    if interactive:
+        for adapter in middleware:
+            if adapter.tools:
+                adapter.tools = [reviewable(tool) for tool in adapter.tools]
     return create_agent(
         model,
         tools=[
-            *authorized_tools(profile),
-            *([ask_athlete] if profile.id == "automation" else []),
+            *(
+                reviewable(tool) if interactive else tool
+                for tool in authorized_tools(profile)
+            ),
+            *([ask_athlete] if profile.id == "automation" or interactive else []),
             *([respond_coach_followup] if profile.journal_tools else []),
         ],
         middleware=middleware,

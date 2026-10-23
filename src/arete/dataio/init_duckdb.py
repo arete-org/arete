@@ -12,6 +12,8 @@ from arete.dataio.coaching_coordination_schema import DDL as COORDINATION_DDL
 from arete.dataio.conversation_schema import DDL as CONVERSATION_DDL
 from arete.dataio.conversation_schema import migrate as migrate_conversations
 from arete.dataio.db import connect
+from arete.dataio.run_schema import DDL as RUN_DDL
+from arete.dataio.run_schema import migrate as migrate_runs
 
 logger = logging.getLogger(__name__)
 
@@ -1259,7 +1261,7 @@ def _m66_body_log(con) -> None:
         raise
 
 
-DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
+DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL + RUN_DDL
 
 
 def _m62_strava_values_off_garmin_rows(con) -> None:
@@ -1347,6 +1349,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (64, _m64_goal_types),
     (65, _m65_best_efforts),
     (66, _m66_body_log),
+    (68, migrate_runs),
 ]
 
 

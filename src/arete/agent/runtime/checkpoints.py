@@ -22,10 +22,15 @@ def _config(thread, namespace, identifier):
     }
 
 
-class AutomationSaver(BaseCheckpointSaver):
+class RunCheckpointSaver(BaseCheckpointSaver):
+    def __init__(self, *, family="automation"):
+        super().__init__()
+        assert family in {"automation", "chat"}
+        self.family = family
+
     def list(self, config, *, filter=None, before=None, limit=None):
         if config is None:
-            raise ValueError("An owned automation thread is required")
+            raise ValueError("An owned execution thread is required")
         values = config["configurable"]
         thread, namespace = values["thread_id"], values.get("checkpoint_ns", "")
         bound = repository.MAX_CHECKPOINTS if limit is None else limit
@@ -33,7 +38,12 @@ class AutomationSaver(BaseCheckpointSaver):
             raise ValueError("Invalid checkpoint page size")
         prior = before["configurable"].get("checkpoint_id") if before else None
         for row, writes in repository.read(
-            thread, namespace, values.get("checkpoint_id"), before=prior, limit=bound
+            thread,
+            namespace,
+            values.get("checkpoint_id"),
+            before=prior,
+            limit=bound,
+            family=self.family,
         ):
             identifier, parent, kind, blob, meta_kind, meta_blob = row
             metadata = self.serde.loads_typed((meta_kind, meta_blob))
@@ -63,6 +73,7 @@ class AutomationSaver(BaseCheckpointSaver):
             values.get("checkpoint_id"),
             self.serde.dumps_typed(checkpoint),
             self.serde.dumps_typed(metadata),
+            family=self.family,
         )
         return _config(thread, namespace, checkpoint["id"])
 
@@ -82,10 +93,11 @@ class AutomationSaver(BaseCheckpointSaver):
                 for index, (channel, value) in enumerate(writes)
             ],
             task_path,
+            family=self.family,
         )
 
     def delete_thread(self, thread_id):
-        repository.delete(thread_id)
+        repository.delete(thread_id, family=self.family)
 
     async def aget_tuple(self, config):
         return await to_thread.run_sync(self.get_tuple, config)
@@ -109,3 +121,7 @@ class AutomationSaver(BaseCheckpointSaver):
 
     async def adelete_thread(self, thread_id):
         await to_thread.run_sync(self.delete_thread, thread_id)
+
+
+# Existing automation callers retain their default storage family and formats.
+AutomationSaver = RunCheckpointSaver

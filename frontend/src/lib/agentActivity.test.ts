@@ -7,8 +7,8 @@ describe('memory outcomes', () => {
     ['updated', 'Information corrigée'],
     ['already_present', 'Information déjà mémorisée'],
     ['needs_clarification', 'Souvenir à clarifier'],
-  ])('reports %s truthfully', (action, label) => {
-    expect(toolLabel({ name: 'remember_fact', status: 'done', output: { text: JSON.stringify({ action }), truncated: false } })).toBe(label);
+  ])('does not infer %s from a preview', (action) => {
+    expect(toolLabel({ name: 'remember_fact', status: 'done', output: { text: JSON.stringify({ action }), truncated: false } })).toBe('Vérification mémoire terminée');
   });
   it('does not turn errors into success or crash on a truncated preview', () => {
     expect(toolLabel({ name: 'remember_fact', status: 'error', output: { text: '{"action":"created"}', truncated: false } })).toBe('Action non aboutie');

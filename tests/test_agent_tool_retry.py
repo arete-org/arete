@@ -166,15 +166,17 @@ def test_reconciliation_error_keeps_card_and_emits_failed_tool_event(monkeypatch
     monkeypatch.setattr(garmin_export, "inspect_session", lambda *a, **k: dict(view))
 
     async def collect():
-        return [
-            part["data"]
-            async for part in stream_agent(
-                graph_for("reconcile_garmin_session", {"session_id": 113}),
-                {"messages": [HumanMessage("Vérifie.")]},
-                context=AgentContext(current_datetime=CLOCK),
-            )
-            if part["type"] == "custom"
-        ]
+        from arete.agent.runtime.streaming import StreamProjection
+
+        projection = StreamProjection()
+        events = []
+        async for part in stream_agent(
+            graph_for("reconcile_garmin_session", {"session_id": 113}),
+            {"messages": [HumanMessage("Vérifie.")]},
+            context=AgentContext(current_datetime=CLOCK),
+        ):
+            events.extend(projection.events(part))
+        return events
 
     events = asyncio.run(collect())
     assert reconcile.call_count == 1

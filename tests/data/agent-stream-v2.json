@@ -1,0 +1,144 @@
+[
+  {
+    "type": "run_status",
+    "state": "running",
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 1
+  },
+  {
+    "type": "activity",
+    "id": "composition",
+    "label": "Préparation du coach",
+    "state": "running",
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 2
+  },
+  {
+    "type": "token",
+    "id": "m1",
+    "text": "Je consulte.",
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 3
+  },
+  {
+    "type": "tool_start",
+    "id": "a",
+    "name": "read_file",
+    "args": {
+      "text": "{}",
+      "truncated": false
+    },
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 4
+  },
+  {
+    "type": "tool_start",
+    "id": "b",
+    "name": "list_planned",
+    "args": {
+      "text": "{}",
+      "truncated": false
+    },
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 5
+  },
+  {
+    "type": "tool_end",
+    "id": "b",
+    "name": "list_planned",
+    "output": {
+      "text": "[]",
+      "truncated": false
+    },
+    "elapsed_ms": 3,
+    "status": "done",
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 6
+  },
+  {
+    "type": "tool_end",
+    "id": "a",
+    "name": "read_file",
+    "output": {
+      "text": "Méthode",
+      "truncated": false
+    },
+    "elapsed_ms": 5,
+    "status": "done",
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 7
+  },
+  {
+    "type": "activity",
+    "id": "skill:a",
+    "label": "Méthode consultée : Planification",
+    "state": "done",
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 8
+  },
+  {
+    "type": "memory_receipt",
+    "id": "mem",
+    "action": "already_present",
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 9
+  },
+  {
+    "type": "context_compaction",
+    "phase": "error",
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 10
+  },
+  {
+    "type": "interrupt",
+    "interrupt": {
+      "id": "q",
+      "revision": 1,
+      "payload": {
+        "type": "question",
+        "name": "ask_athlete",
+        "args": {
+          "question": "Quel ressenti ?"
+        },
+        "description": "Quel ressenti ?"
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "rpe": {
+            "type": "number",
+            "title": "Ressenti",
+            "minimum": 0,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "rpe"
+        ],
+        "additionalProperties": false
+      },
+      "decision": null,
+      "expires_at": "2099-01-01T00:00:00Z"
+    },
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 11
+  },
+  {
+    "type": "run_status",
+    "state": "waiting",
+    "stream_version": 2,
+    "run_id": "11111111-1111-4111-8111-111111111111",
+    "seq": 12
+  }
+]

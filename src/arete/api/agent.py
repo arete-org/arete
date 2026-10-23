@@ -11,7 +11,8 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from functools import partial
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
@@ -27,6 +28,7 @@ from arete.agent.runtime.context import (
 )
 from arete.api.agent_feedback import TraceReceipt, chat_trace
 from arete.api.agent_feedback import router as feedback_router
+from arete.api.agent_runs import router as runs_router
 from arete.api.auth import clerk_account
 from arete.api.conversations import router as conversations_router
 from arete.services.memory import NOTES_LEDGER, SESSIONS_LEDGER, read_file
@@ -57,6 +59,8 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 router.include_router(feedback_router)
 
 router.include_router(conversations_router)
+
+router.include_router(runs_router)
 
 
 class SystemSkillOut(BaseModel):
@@ -192,6 +196,19 @@ def _prepare_run(
     try:
         document_state = _document_state(context)
         # Attachments are checked before any agent is composed.
+        if getattr(body, "stream_version", 1) == 2:
+            from arete.services import coaching_runs
+
+            if not context.thread_id:
+                raise ValueError("Un fil est requis pour une exécution reprenable.")
+            context.execution_id = coaching_runs.create(
+                context.thread_id,
+                {
+                    "source": source,
+                    "document_ids": context.document_ids,
+                },
+            )
+            return _PreparedRun(context, document_state)
         return _PreparedRun(context, document_state, get_agent())
     except Exception as exc:
         return _PreparedRun(context, error=exc)
@@ -279,7 +296,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         trace=chat_trace(context.run_id, context.thread_id, context.account_id),
         message=ChatMessageOut(
             role="assistant",
-            content=final.text() if hasattr(final, "text") else str(final.content),
+            content=final.text if hasattr(final, "text") else str(final.content),
         ),
     )
 
@@ -288,15 +305,16 @@ class StreamRequest(ChatRequest):
     """Body of POST /agent/chat/stream — same contract, SSE response."""
 
     supports_chart_cards: bool = Field(default=False, strict=True)
+    stream_version: Literal[1, 2] = 1
 
 
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
-async def _sse_stream(
-    body: StreamRequest, prepared: _PreparedRun
-) -> AsyncIterator[str]:
+async def _sse_events(
+    body: StreamRequest, prepared: _PreparedRun, *, resume=None
+) -> AsyncIterator[dict]:
     """Messages, tool activity and failures are separate UI events."""
     from arete.agent.runtime.execution import (
         LIMIT_MESSAGE,
@@ -311,6 +329,22 @@ async def _sse_stream(
     try:
         if prepared.error is not None:
             raise prepared.error
+        if prepared.graph is None:
+            from anyio import to_thread
+
+            yield {
+                "type": "activity",
+                "id": "composition",
+                "label": "Préparation du coach",
+                "state": "running",
+            }
+            prepared.graph = await to_thread.run_sync(_interactive_graph, context)
+            yield {
+                "type": "activity",
+                "id": "composition",
+                "label": "Coach prêt",
+                "state": "done",
+            }
         history = [
             _to_langchain(
                 m.role,
@@ -323,7 +357,9 @@ async def _sse_stream(
         async with aclosing(
             stream_agent(
                 prepared.graph,
-                {"messages": history, **prepared.document_state},
+                resume
+                if resume is not None
+                else {"messages": history, **prepared.document_state},
                 context=context,
             )
         ) as stream:
@@ -332,26 +368,138 @@ async def _sse_stream(
                 if event_count > MAX_STREAM_EVENTS:
                     raise ValueError("Le stream dépasse la limite d'événements.")
                 for event in projection.events(part):
-                    yield _sse(event)
+                    yield event
+        if context.interruptions:
+            return
         done = projection.done()
         trace = chat_trace(context.run_id, context.thread_id, context.account_id)
         if trace is not None:
             done["trace"] = trace.model_dump(mode="json")
-        yield _sse(done)
+        yield done
     except TimeoutError:
-        yield _sse(
-            {
-                "type": "error",
-                "detail": TIMEOUT_MESSAGE,
-            }
-        )
+        yield {
+            "type": "error",
+            "detail": TIMEOUT_MESSAGE,
+        }
     except RUN_LIMIT_ERRORS:
-        yield _sse({"type": "error", "detail": LIMIT_MESSAGE})
+        yield {"type": "error", "detail": LIMIT_MESSAGE}
     except ValueError as exc:
-        yield _sse({"type": "error", "detail": str(exc)})
+        yield {"type": "error", "detail": str(exc)}
     except Exception:
         logger.exception("Agent stream failed")
-        yield _sse({"type": "error", "detail": "Agent run failed"})
+        yield {"type": "error", "detail": "Agent run failed"}
+
+
+def _interactive_graph(context):
+    from arete.coaching import get_interactive_agent
+    from arete.services import coaching_runs
+
+    graph = get_interactive_agent()
+    policy = json.dumps(graph.config.get("metadata", {}), sort_keys=True, default=str)
+    coaching_runs.bind_policy(context.execution_id, policy)
+    return graph
+
+
+async def _sse_stream(body, prepared, *, resume=None):
+    from time import monotonic
+
+    from anyio import to_thread
+
+    from arete.agent.runtime.activity import RunRecorder
+    from arete.services import coaching_runs
+
+    context = prepared.context
+    recorder = (
+        RunRecorder(context.execution_id, "chat", context.thread_id)
+        if context.execution_id
+        else None
+    )
+    started = monotonic()
+    finished = False
+    failed = False
+    sent_bytes = 0
+
+    async def emit(event):
+        nonlocal sent_bytes
+        if recorder:
+            from arete.api.agent_protocol import EVENT
+
+            event = await recorder.record(event)
+            EVENT.validate_python(event)
+        frame = _sse(event)
+        sent_bytes += len(frame.encode())
+        if sent_bytes > 2_000_000:
+            raise ValueError("Le flux dépasse la limite de 2 Mo.")
+        return frame
+
+    try:
+        if recorder:
+            if resume is not None:
+                await recorder.restore()
+            yield await emit({"type": "run_status", "state": "running"})
+        async with aclosing(_sse_events(body, prepared, resume=resume)) as events:
+            async for event in events:
+                if not recorder and event["type"] in {
+                    "activity",
+                    "interrupt",
+                    "run_status",
+                    "memory_receipt",
+                }:
+                    continue
+                if (
+                    not recorder
+                    and event["type"] == "context_compaction"
+                    and event["phase"] == "error"
+                ):
+                    continue
+                failed = failed or event["type"] == "error"
+                if recorder and event["type"] in {"done", "error"}:
+                    state = await to_thread.run_sync(
+                        partial(
+                            coaching_runs.finish,
+                            context.execution_id,
+                            monotonic() - started,
+                            failed=failed,
+                        )
+                    )
+                    finished = True
+                    if state != "completed" and event["type"] == "done":
+                        event = {
+                            "type": "error",
+                            "detail": "Exécution arrêtée ; vérifie les actions déjà effectuées.",
+                        }
+                yield await emit(event)
+        if recorder and context.interruptions and not finished:
+            state = await to_thread.run_sync(
+                coaching_runs.finish,
+                context.execution_id,
+                monotonic() - started,
+                context.interruptions,
+            )
+            finished = True
+            run = await to_thread.run_sync(coaching_runs.get, context.execution_id)
+            for item in run["interrupts"]:
+                if item["decision"] is None:
+                    yield await emit({"type": "interrupt", "interrupt": item})
+            yield await emit({"type": "run_status", "state": state})
+    finally:
+        if recorder and not finished:
+            # Closing a transport never replays a write. Persist the uncertain
+            # outcome even when cancellation closes the streaming task.
+            import anyio
+
+            with anyio.CancelScope(shield=True):
+                state = await to_thread.run_sync(
+                    partial(
+                        coaching_runs.finish,
+                        context.execution_id,
+                        monotonic() - started,
+                        failed=True,
+                    )
+                )
+
+                recorder.status = state
+                await recorder.flush()
 
 
 @router.post("/chat/stream")

@@ -88,13 +88,15 @@ def test_native_discovery_and_tools_read_db_snapshot_but_cannot_change_it(
     model = Model(
         messages=iter(
             [
-                AIMessage(
-                    content="",
-                    tool_calls=[
-                        {"name": name, "args": args, "id": str(i)}
-                        for i, (name, args) in enumerate(calls)
-                    ],
-                ),
+                # New filesystem middleware rejects competing mutations of one
+                # path. Exercise each permission boundary in its own tool turn.
+                *[
+                    AIMessage(
+                        content="",
+                        tool_calls=[{"name": name, "args": args, "id": str(i)}],
+                    )
+                    for i, (name, args) in enumerate(calls)
+                ],
                 AIMessage(content="Fin."),
             ]
         )

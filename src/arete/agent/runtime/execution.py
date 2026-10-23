@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
-from contextlib import aclosing
 from functools import partial
 from time import monotonic
 from typing import Any, cast
@@ -79,7 +78,9 @@ def run_config(
         result["run_id"] = context.run_id
     if context and context.thread_id is not None:
         result["metadata"]["thread_id"] = context.thread_id
-        result["configurable"] = {"thread_id": context.thread_id}
+        result["configurable"] = {
+            "thread_id": context.execution_id or context.thread_id
+        }
     return result
 
 
@@ -188,20 +189,36 @@ async def stream_agent(
                             "state": context.garmin_freshness.get("state", "failed"),
                         },
                     }
-                stream = graph.astream(
+                from langgraph.stream.transformers import (
+                    CustomTransformer,
+                    UpdatesTransformer,
+                )
+
+                stream = await graph.astream_events(
                     state,
                     context=context,
                     config=run_config(context=context, graph=graph),
-                    stream_mode=["messages", "updates", "custom", "values"],
-                    version="v2",
+                    transformers=[
+                        CustomTransformer,
+                        UpdatesTransformer,
+                    ],
+                    version="v3",
                 )
-                async with aclosing(stream):
+                async with stream:
                     async for part in stream:
                         if context.stats.first_token_ms is None and _is_answer_text(
                             part
                         ):
                             context.stats.first_token_ms = _elapsed_ms(started)
                         yield part
+                    context.interruptions = [
+                        {
+                            "id": item.id,
+                            "value": item.value,
+                            "schema": item.response_schema,
+                        }
+                        for item in await stream.interrupts()
+                    ]
                 if context.stats.first_result_ms is None:
                     context.stats.first_result_ms = _elapsed_ms(started)
     except BaseException as exc:
@@ -222,6 +239,19 @@ async def stream_agent(
 
 def _is_answer_text(part: dict) -> bool:
     """A streamed text chunk from the coach's own model node."""
+    if "method" in part:
+        params = part["params"]
+        if part["method"] != "messages" or params["namespace"]:
+            return False
+        chunk, meta = params["data"]
+        return (
+            meta.get("langgraph_node") == "model"
+            and meta.get("lc_source") not in {"summarization", "conversation_title"}
+            and "conversation_title" not in meta.get("tags", [])
+            and isinstance(chunk, dict)
+            and chunk.get("delta", {}).get("type") == "text-delta"
+            and bool(chunk["delta"].get("text"))
+        )
     if part.get("type") != "messages" or part.get("ns"):
         return False
     chunk, meta = part["data"]

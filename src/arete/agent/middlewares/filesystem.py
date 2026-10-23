@@ -49,8 +49,8 @@ def build_filesystem_middleware(
         tool_token_limit_before_evict=(20_000 if offload_tool_results else None),
         human_message_token_limit_before_evict=50_000 if offload_tool_results else None,
         grep_max_count=100,
-        # Pinned Deep Agents 0.7.4 exposes permissions through this argument.
-        _permissions=permissions,
+        # Use the public permission API; deny rules also remain enforced by backends.
+        permissions=permissions,
     )
     schemas: dict[str, type[BaseModel]] = {
         "glob": PortableGlob,

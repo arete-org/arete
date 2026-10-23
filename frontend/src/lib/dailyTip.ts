@@ -1,3 +1,4 @@
+import type { RunSnapshot } from './coachingRuns';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tipsApi, type DailyTip } from '@/lib/api';
@@ -21,6 +22,7 @@ export function useDailyTip({ enabled = true, day: serverDay }: { enabled?: bool
   // Reads of the day's briefing while it was pending: the polls spent.
   const [spent, setSpent] = useState({ day, polls: 0 });
   const polls = spent.day === day ? spent.polls : 0;
+  const observation = useQuery<RunSnapshot>({ queryKey: ['coaching-activity','briefing','current'], enabled: false });
   const query = useQuery({
     queryKey: key,
     queryFn: ({ queryKey }) => {
@@ -32,7 +34,7 @@ export function useDailyTip({ enabled = true, day: serverDay }: { enabled?: bool
     enabled,
     staleTime: 1000 * 60 * 30,
     refetchInterval: ({ state }) =>
-      state.data?.status === 'pending' ? TIP_POLL_DELAYS_MS[polls] ?? false : false,
+      state.data?.status === 'pending' && observation.data?.state !== 'running' ? TIP_POLL_DELAYS_MS[polls] ?? false : false,
   });
   const { mutate, isPending: posting } = useMutation({
     // Idempotent: the server answers the stored briefing or pending, or writes it.
@@ -58,6 +60,7 @@ export function useDailyTip({ enabled = true, day: serverDay }: { enabled?: bool
     day,
     tip: query.data && !pending ? query.data : undefined,
     writing: query.isLoading || (!enabled && query.isPending) || pending,
+    generating: pending,
     stalled: pending && polls >= TIP_POLL_DELAYS_MS.length,
     refresh: () => {
       if (!posting) mutate(day);

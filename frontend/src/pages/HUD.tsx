@@ -377,7 +377,7 @@ export function DashboardPage() {
     [setParams],
   );
 
-  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
+  const { tip, writing: tipWriting, generating: tipGenerating, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
     day: boardDay,
   });
@@ -438,7 +438,7 @@ export function DashboardPage() {
             {/* The coach's briefing leads (on a phone, right after the greeting); the first
                 visit of the day may wait for the coach. */}
             <Panel className="p-4">
-              <BriefingCard tip={tip} writing={tipWriting} stalled={tipStalled} refresh={refreshTip} />
+              <BriefingCard tip={tip} writing={tipWriting} generating={tipGenerating} stalled={tipStalled} refresh={refreshTip} />
             </Panel>
 
             {/* Today's plan, right below the briefing */}

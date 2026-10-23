@@ -211,6 +211,21 @@ READ_TOOL_NAMES = frozenset({"read_file", "ls", "glob", "grep"}).union(
 )
 
 
+# Semantic proposal hints never grant tool permissions. Calendar owns its approval.
+REVIEW_TOOLS = frozenset(
+    {
+        "delete",
+        "forget_fact",
+        "delete_planned_session",
+        "apply_plan_changes",
+        "export_garmin_sessions",
+        "create_automation",
+        "set_automation_state",
+        "delete_automation",
+    }
+)
+
+
 def validate_registry() -> None:
     names = set(
         FACT_MEMORY_TOOL_NAMES
@@ -236,3 +251,5 @@ def validate_registry() -> None:
         for tool in tk.tools:
             assert tool.name not in names, f"Duplicate tool name: {tool.name}"
             names.add(tool.name)
+
+    assert names >= REVIEW_TOOLS, "Unknown reviewable tools"

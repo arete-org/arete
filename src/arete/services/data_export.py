@@ -62,6 +62,10 @@ TABLES: tuple[ExportTable, ...] = (
         for name in (
             "automations",
             "automation_runs",
+            "chat_runs",
+            "chat_interrupts",
+            "chat_effects",
+            "coaching_run_activity",
             "automation_interrupts",
             "automation_effects",
             "notifications",
@@ -266,6 +270,10 @@ OPT_IN: frozenset[str] = frozenset(
         "game_events",
         "game_ledger",
         "automation_runs",
+        "chat_runs",
+        "chat_interrupts",
+        "chat_effects",
+        "coaching_run_activity",
         "automation_interrupts",
         "automation_effects",
         # before/after copies of the plan for every proposal

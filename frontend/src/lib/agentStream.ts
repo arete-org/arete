@@ -1,3 +1,4 @@
+import { isInterrupt, type HumanInterrupt } from "./humanInput";
 import { isWorkoutUpdate, type WorkoutUpdate } from './workouts';
 import { authFetch } from './auth';
 import { CHART_CONTRACT, chartPart, isChartCard, type ChartCardData, type ChartCardPart } from './chartCards';
@@ -32,7 +33,13 @@ export interface CalendarActionPart {
 }
 export interface CoachCardPart { kind: 'coach_card'; id: string; ref_kind: 'fact' | 'followup'; ref_id: number }
 export type ChatPart = ToolPart | TextPart | CalendarActionPart | CoachCardPart | ChartCardPart;
+export interface ActivityStep { id: string; label: string; state: 'running' | 'done' | 'error' }
 export interface ChatMessage {
+  runId?: string;
+  runState?: string;
+  sequence?: number;
+  activity?: ActivityStep[];
+  interrupts?: HumanInterrupt[];
   /** Server-stamped local ISO time, replayed unchanged with this human message. */
   sentAt?: string;
   syncStatus?: string;
@@ -55,11 +62,16 @@ export interface ContextWindowUsage {
   window_tokens: number;
 }
 
-export type StreamEvent =
+export type StreamEvent = StreamPayload & { stream_version?: 2; run_id?: string; seq?: number };
+export type StreamPayload =
+  | { type: 'memory_receipt'; id: string; action: 'created' | 'already_present' | 'needs_clarification' | 'updated' }
+  | { type: 'run_status'; state: 'running' | 'waiting' | 'ready' | 'completed' | 'failed' | 'cancelled' | 'expired' | 'interrupted' }
+  | { type: 'activity'; id: string; label: string; state: 'running' | 'done' | 'error' }
+  | { type: 'interrupt'; interrupt: HumanInterrupt }
   | ({ type: 'chart_card' } & ChartCardData)
   | { type: "thread_title"; thread_id: string; title: string }
   | { type: 'values'; context_window_usage: ContextWindowUsage }
-  | { type: 'context_compaction'; phase: 'start' | 'done' }
+  | { type: 'context_compaction'; phase: 'start' | 'done' | 'error' }
   | { type: 'sync_status'; state: string }
   | WorkoutUpdate
   | { type: 'calendar_action'; id: string }
@@ -119,12 +131,16 @@ function isPreview(value: unknown): value is Preview {
 }
 
 /** Fail on malformed required events; retired optional events are ignored. */
-export function parseEvent(data: string): StreamEvent | null {
+function parsePayload(data: string): StreamPayload | null {
   const e: unknown = JSON.parse(data);
   if (!record(e)) throw new Error('Événement du coach invalide.');
-  if (e.type === 'values' && isContextWindowUsage(e.context_window_usage))
+  if (e.type === 'memory_receipt' && typeof e.id === 'string' && ['created','already_present','needs_clarification','updated'].includes(String(e.action))) return e as StreamPayload;
+  if (e.type === 'run_status' && ['running','waiting','ready','completed','failed','cancelled','expired','interrupted'].includes(String(e.state))) return e as StreamPayload;
+  if (e.type === 'activity' && typeof e.id === 'string' && typeof e.label === 'string' && ['running','done','error'].includes(String(e.state))) return e as StreamPayload;
+  if (e.type === 'interrupt' && isInterrupt(e.interrupt)) return { type:'interrupt',interrupt:e.interrupt };
+  if (e.type === 'values'  && isContextWindowUsage(e.context_window_usage))
     return { type: 'values', context_window_usage: e.context_window_usage };
-  if (e.type === 'context_compaction' && (e.phase === 'start' || e.phase === 'done'))
+  if (e.type === 'context_compaction' && (e.phase === 'start' || e.phase === 'done' || e.phase === 'error'))
     return { type: 'context_compaction', phase: e.phase };
   if (e.type === 'thread_title' && typeof e.thread_id === 'string' && typeof e.title === 'string' && e.title.length > 0 && e.title.length <= 120) return e as StreamEvent;
   if (isWorkoutUpdate(e)) return e;
@@ -173,6 +189,14 @@ export function parseEvent(data: string): StreamEvent | null {
   throw new Error('Événement du coach invalide.');
 }
 
+export function parseEvent(data: string): StreamEvent | null {
+  const raw: unknown = JSON.parse(data);
+  const event = parsePayload(data);
+  if (!event || !record(raw) || raw.stream_version === undefined) return event;
+  if (raw.stream_version !== 2 || typeof raw.run_id !== 'string' || !raw.run_id || !Number.isSafeInteger(raw.seq) || Number(raw.seq) < 1) throw new Error('Enveloppe du coach invalide.');
+  return { ...event, stream_version: 2, run_id: raw.run_id, seq: Number(raw.seq) };
+}
+
 export function settleMessage(
   message: ChatMessage,
   error?: string,
@@ -196,7 +220,20 @@ export function applyEvent(
   message: ChatMessage,
   event: StreamEvent
 ): ChatMessage {
-  if (event.type === 'thread_title' || event.type === 'values' || event.type === 'context_compaction') return message;
+  if (event.run_id) {
+    if (message.runId && message.runId !== event.run_id) throw new Error('Événement reçu pour une autre exécution.');
+    if (event.seq !== undefined && event.seq <= (message.sequence ?? 0)) return message;
+    message = { ...message, runId: event.run_id, sequence: event.seq };
+  }
+  if (event.type === 'run_status') return { ...message, runState: event.state, pending: event.state === 'running' };
+  if (event.type === 'interrupt') return { ...message, interrupts: [...(message.interrupts ?? []).filter(i => i.id !== event.interrupt.id), event.interrupt] };
+  if (event.type === 'memory_receipt') {
+    const label = { created: 'Information enregistrée', updated: 'Information corrigée', already_present: 'Information déjà mémorisée', needs_clarification: 'Souvenir à clarifier' }[event.action];
+    return { ...message, activity: [...(message.activity ?? []).filter(a => a.id !== `memory:${event.id}`), { id: `memory:${event.id}`, label, state: 'done' }] };
+  }
+  if (event.type === 'activity') return { ...message, activity: [...(message.activity ?? []).filter(a => a.id !== event.id), { id:event.id, label:event.label, state:event.state }] };
+  if (event.type === 'context_compaction') return { ...message, activity: [...(message.activity ?? []).filter(a => a.id !== 'context-compaction'), { id: 'context-compaction', state: event.phase === 'start' ? 'running' : event.phase, label: event.phase === 'start' ? 'Compaction du contexte' : event.phase === 'done' ? 'Contexte compacté' : 'Échec de la compaction' }] };
+  if (event.type === 'thread_title' || event.type === 'values') return message;
   if (event.type === 'sync_status') return { ...message, syncStatus: event.state };
   if (event.type === 'workout_update') {
     const current = message.workouts ?? [];
@@ -207,7 +244,7 @@ export function applyEvent(
   }
   if (event.type === 'error') return settleMessage(message, event.detail);
   if (event.type === 'done')
-    return settleMessage({ ...message, content: event.message.content, trace: event.trace });
+    return settleMessage({ ...message, content: event.message.content, trace: event.trace, runState: 'completed', interrupts: [] });
   const parts = [...(message.parts ?? [])];
   if (event.type === 'chart_card') {
     const existing = parts.find(part => part.kind === 'chart_card' && part.id === event.id);
@@ -319,7 +356,7 @@ export async function consumeStream(
         if (!event) continue;
         if (event.type === 'error') throw new Error(event.detail);
         onEvent(event);
-        if (event.type === 'done') return;
+        if (event.type === 'done' || (event.type === 'run_status' && event.state !== 'running')) return;
       }
     }
     throw new Error('Le stream dépasse la limite de lecture.');
@@ -352,6 +389,7 @@ export async function runAgentStream(
       messages: history.map(({ role, content, sentAt }) => ({ role, content, ...(sentAt ? { sent_at: sentAt } : {}) })),
       thread_id: threadId,
       supports_chart_cards: true,
+      stream_version: 2,
       ...(documentIds !== undefined ? { document_ids: documentIds } : {}),
       panel_context,
     }),

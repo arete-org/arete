@@ -10,7 +10,7 @@ const TOOL_LABELS: Record<string, [running: string, done: string]> = {
   edit_file: ['Mise à jour de tes notes', 'Notes mises à jour'],
   delete: ['Suppression dans tes notes', 'Suppression terminée'],
   append_journal: ['Mise à jour du journal', 'Journal à jour'],
-  remember_fact: ['Mise à jour de ton profil', 'Information enregistrée'],
+  remember_fact: ['Mise à jour de ton profil', 'Vérification mémoire terminée'],
   get_workload: ['Analyse de la charge', 'Charge analysée'],
   get_fitness: ['Analyse de la forme de fond et de la fraîcheur', 'Forme de fond et fraîcheur analysées'],
   get_training_advice: ['Préparation des recommandations', 'Analyse terminée'],
@@ -31,15 +31,6 @@ const TOOL_LABELS: Record<string, [running: string, done: string]> = {
 
 export function toolLabel(tool: Pick<ToolPart, 'name' | 'status'> & Partial<Pick<ToolPart, 'output'>>): string {
   if (tool.status === 'error') return 'Action non aboutie';
-  if (tool.name === 'remember_fact' && tool.status === 'done' && tool.output) {
-    if (tool.output.truncated) return 'Vérification mémoire terminée';
-    try {
-      const result = JSON.parse(tool.output.text);
-      if (result.action === 'already_present') return 'Information déjà mémorisée';
-      if (result.action === 'needs_clarification') return 'Souvenir à clarifier';
-      if (result.action === 'updated') return 'Information corrigée';
-    } catch { return 'Vérification mémoire terminée'; }
-  }
   return TOOL_LABELS[tool.name]?.[tool.status === 'done' ? 1 : 0]
     ?? (tool.status === 'done' ? 'Action terminée' : 'Action en cours');
 }

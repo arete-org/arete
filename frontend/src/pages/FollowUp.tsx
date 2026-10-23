@@ -1,3 +1,4 @@
+import { GenerationPreview } from '@/components/agent/GenerationPreview';
 import { ThreadHistory } from '@/components/agent/ThreadHistory';
 import { conversationsApi, openConversation } from '@/lib/conversations';
 import { conversationsKey } from '@/hooks/useConversationArchive';
@@ -132,7 +133,7 @@ export function FollowUpPage() {
     <nav className="suivi-tabs" aria-label="Suivi et routines"><Button variant="ghost" aria-current={tab === 'inbox' ? 'page' : undefined} onClick={() => setParams({})}>Suivi{query.data?.unread ? ` · ${query.data.unread}` : ''}</Button><Button variant="ghost" aria-current={tab === 'automations' ? 'page' : undefined} onClick={() => setParams({ tab: 'automations' })}>Routines</Button><Button variant="ghost" aria-current={tab === "conversations" ? "page" : undefined} onClick={() => setParams({ tab: "conversations" })}>Conversations</Button></nav>
     <div className="suivi-grid"><div className="suivi-stack">{tab === 'conversations' ? <ConversationArchive /> : tab === 'automations' ? <AutomationList /> : <>
       <div className="suivi-actions" aria-label="Filtres">{[['todo', 'À traiter'], ['all', 'Tout'], ['archives', 'Archives']].map(([value, label]) => <Button variant="ghost" key={value} aria-pressed={filter === value} onClick={() => { setFilter(value); setOffset(0); }}>{label}</Button>)}</div>
-      {filter === 'todo' && <CoachingAttention compact />}
+      {filter === 'todo' && <><GenerationPreview kind="evening" activeOnly /><CoachingAttention compact /></>}
       {filter === 'todo' && !attention.data?.enabled && coaching.data?.items.map(item => <article className="suivi-row" key={`${item.kind}-${item.record.id}`}><div className="flex-1"><h2>{item.kind === 'followup' ? item.record.question : 'Une proposition pour ton entraînement'}</h2><p className="suivi-note">{coach.The} attend ton retour</p></div><Button variant="ghost" onClick={() => discussWithCoach({ kind: item.kind, id: item.record.id })}>En parler ↗</Button></article>)}
       {query.isPending && <p role="status">Chargement du suivi…</p>}<ErrorText error={query.error} />
       {query.data?.items.length === 0 && (filter !== 'todo' || (!attention.data?.enabled && coaching.data?.items.length === 0)) && <div className="suivi-empty"><h2>{filter === 'archives' ? 'Aucune archive' : 'Le suivi est à jour'}</h2><p>Les prochaines questions et notifications apparaîtront ici.</p></div>}

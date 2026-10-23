@@ -1,3 +1,4 @@
+import { GenerationPreview } from './agent/GenerationPreview';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, BookOpen, ChevronDown, Sunrise } from 'lucide-react';
@@ -48,9 +49,10 @@ function BriefingHistory({ onOpen }: { onOpen: () => void }) {
 }
 
 /** Dashboard entry point. The conversation owns the full briefing and its feedback. */
-export function BriefingCard({ tip, writing, stalled, refresh }: {
+export function BriefingCard({ tip, writing, generating = false, stalled, refresh }: {
   tip: DailyTip | undefined;
   writing: boolean;
+  generating?: boolean;
   stalled: boolean;
   refresh: () => void;
 }) {
@@ -88,6 +90,7 @@ export function BriefingCard({ tip, writing, stalled, refresh }: {
         </span>
       </div>
     </>}
+    {generating && <GenerationPreview kind="briefing" />}
     {history && <BriefingHistory onOpen={markRead} />}
     {read && <PushOffer moment="briefing" />}
   </div>;

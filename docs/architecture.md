@@ -290,9 +290,10 @@ native Deep Agents summarization within an invocation; the browser still sends
 the last 30 messages and archives its complete thread on the server after each settled exchange. The model profile
 uses this configured window for the native 85% trigger and 10% retained tail.
 Raw messages remain in graph state and compacted history remains readable under
-`/conversation_history/`. Browser chat has no checkpointer: summaries and ephemeral files
-are not carried into the next browser request, so long threads may summarize
-again. Durable facts and the transactional journal are long-term memory;
+`/conversation_history/`. Each suspendable browser execution has its own checkpoint
+identity, distinct from the browser thread. Its summaries and ephemeral files only
+survive explicit resumption of that execution. A subsequent browser request starts
+from the browser-composed history, so long threads may summarize again. Durable facts and the transactional journal are long-term memory;
 `data/agent/memory` is only a legacy import source.
 
 ## Scheduled automations
@@ -1277,12 +1278,12 @@ async and concurrency tests; thresholds, counting, retention, offloading and
 overflow recovery remain native. No provider-usage correction or extra token
 count is added for the UI. A model without a known window emits no percentage.
 
-The native summary call emits custom `context_compaction` events with `start`
-and `done` phases, including failure/cancellation via `finally`. Streaming adds
+The native summary call emits custom `context_compaction` events with `start`,
+`done` and `error` phases. Failure/cancellation never emits a successful completion. Streaming adds
 `values`; its projection exposes only changed counters, never the rest of state.
 The existing browser thread store saves counters locally; compaction activity is
 ephemeral, scoped to its originating thread and cleared on every stream closure.
-Browser conversations still have no server checkpointer. The composer hides the gauge below 85%
+Checkpoints belong to suspendable executions, never to browser conversation archives. The composer hides the gauge below 85%
 unless `contextGaugeAlways` is present in the URL (even with value `false`).
 No counters means no gauge. Compaction with counters is always visible. The
 percentage updates after model calls and may retain the pre-compaction count
@@ -1477,3 +1478,72 @@ truncated or cancelled title keeps the provisional label and is not retried.
 `FollowUp` adds the Conversations tab and reuses `ThreadHistory` inside Chiron.
 The editable [Figma proposal](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=271-3203)
 extends the Suivi reference with Pierre/Prune desktop/mobile variants.
+
+
+## Native streaming and suspendable chat
+
+`runtime/execution.py` consumes one `astream_events(version="v3")` flow. Native
+message, tool and lifecycle events feed `StreamProjection`; application events
+supply confirmed business receipts, skill reads, context preparation and actual
+compaction. Neither tool argument deltas nor observation endpoints execute tools.
+Final messages reconcile provisional text; fallback attempts replace their own
+partial text. Summarization and conversation-title messages remain internal.
+
+`api/agent_protocol.py` owns the public discriminated SSE union. Clients negotiate
+`stream_version=2`; version 1 remains the default for existing clients. Every v2
+event has an execution ID and ordered sequence; message/tool IDs provide local
+correlation. No graph state, prompt or checkpoint is serialized into this union.
+The JSON fixture in `tests/data/agent-stream-v2.json` is validated in Python and
+TypeScript. Stream bounds remain 12,000 events, 64,000 text characters and 2 MB.
+`X-Arete-Sent-At`, trace receipts and existing chart/calendar permissions remain.
+
+Middleware state belongs to its declaring `state_schema` (for example
+`ContextState.context_window_usage`). Invocation context holds rebuilt dependencies,
+identity, deadlines and telemetry; it is not an execution checkpoint.
+`RunRecorder` is an observation projection, not another agent state. It coalesces
+text in memory and publishes at most once every two seconds, except immediate
+interruptions and terminal states. Observers read one bounded snapshot per poll;
+they never invoke, schedule or resume a model. Each subscription lasts at most
+150 observations / 300 seconds / 2 MB, with 16 concurrent subscribers per worker.
+
+The shared `RunActivity`, `HumanInputCard` and `GenerationPreview` components adapt
+the same contract to chat, automation review and generated content. Browser token
+updates are batched per animation frame. Memory success comes from typed receipts,
+not JSON parsed from truncated previews. A successful system skill `read_file`
+produces its localized method receipt. Model completion is not persistence success:
+the owning service must finish saving before a generation is marked recorded.
+Grouped feedback only publishes session text after its association is known;
+rule-derived fallback replaces provisional model output and names its provenance.
+
+`RunCheckpointSaver` reuses the existing athlete-scoped saver contract; the
+`AutomationSaver` compatibility name keeps automation storage and defaults.
+Migration 68 adds separate chat execution, interruption, effect and checkpoint
+tables plus shared activity snapshots. Existing automation identifiers and
+checkpoint/decision schemas are unchanged. The browser remains authoritative for
+history, drafts, attachments and page references.
+
+The chat uses native per-call HITL for sensitive proposals and typed `interrupt()`
+for `ask_athlete`. Question types are server-defined: text, choice(s), number, date
+and boolean, at most eight fields/options and 4,000 text characters. The response
+schema drives the form and server validation; unsupported form schemas fail
+explicitly. `requires_review` is a model intent hint, not permission: server
+profile and filesystem policy still authorize tools. Calendar retains its own
+approval path. Edited approvals cannot change the tool name.
+
+`GET /agent/runs/{id}` and `/events` only recover/observe the owned execution.
+`POST /interrupts/{interrupt_id}` saves a revisioned decision; identical repeats
+return the same decision, different answers conflict. `POST /resume` explicitly
+claims one execution lease; `POST /cancel` closes it. Before resume, attachment
+access, model route, profile/SDK fingerprint and relevant business revisions are
+revalidated. A committed tool result is reused by tool-call ID. An uncertain write
+is never automatically replayed. Model attempts (including fallback), tool calls
+and active time are cumulative: 24, 96 and 300 seconds, at most four resumes.
+Human waiting consumes no active time. Eight pending executions per athlete and
+one per browser thread are enforced by storage constraints. Waiting expires after
+48 hours. Closure purges checkpoints/context; a final observation projection is
+retained for 24 hours. Account export includes execution/decision/effect/activity
+records; account deletion also removes opaque checkpoint storage.
+
+The editable design review is [Chiron streaming and decisions](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=473-18056),
+on the retained unified-experience page. Its examples distinguish native events
+from application receipts and provisional text from saved results.

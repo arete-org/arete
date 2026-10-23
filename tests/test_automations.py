@@ -312,6 +312,7 @@ async def test_composed_mission_waits_and_resumes_with_cumulative_budgets(monkey
             return self
 
     model = Model(
+        disable_streaming=True,
         messages=iter(
             [
                 AIMessage(
@@ -326,7 +327,7 @@ async def test_composed_mission_waits_and_resumes_with_cumulative_budgets(monkey
                 ),
                 AIMessage(content="Ressenti reçu, aucune séance modifiée."),
             ]
-        )
+        ),
     )
     monkeypatch.setattr(coaching, "build_chat_model", lambda **kwargs: model)
     monkeypatch.setattr("arete.services.inbox.publish", lambda *args: None)
@@ -479,6 +480,7 @@ async def test_grouped_preview_needs_no_approval_but_application_waits_once(
             return await super()._agenerate(messages, **kwargs)
 
     model = Model(
+        disable_streaming=True,
         messages=iter(
             [
                 AIMessage(
@@ -502,7 +504,7 @@ async def test_grouped_preview_needs_no_approval_but_application_waits_once(
                 ),
                 AIMessage(content="Planning enregistré."),
             ]
-        )
+        ),
     )
     monkeypatch.setattr(coaching, "build_chat_model", lambda **kwargs: model)
     monkeypatch.setattr("arete.services.inbox.publish", lambda *args: None)

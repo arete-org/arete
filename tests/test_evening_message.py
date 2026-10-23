@@ -739,23 +739,29 @@ def test_a_concurrent_journal_write_is_retried_once(db, monkeypatch):
     assert _notes().count("Question du soir") == 1
 
 
-def test_the_run_stops_before_the_platform_kills_the_function(evening, monkeypatch):
+@pytest.mark.anyio
+async def test_the_run_stops_before_the_platform_kills_the_function(
+    evening, monkeypatch
+):
     from time import monotonic
 
     from arete import coaching, scheduler
 
     seen = []
 
-    def invoke(graph, state, *, context):
+    async def invoke(graph, state, *, context):
         seen.append(context.deadline)
         raise TimeoutError
+        yield  # pragma: no cover
 
     _plan(1)
     started = monotonic()
     monkeypatch.setattr(coaching, "run_evening", evening[0]["real_run_evening"])
-    monkeypatch.setattr(coaching, "invoke_agent_sync", invoke)
+    monkeypatch.setattr("arete.agent.runtime.execution.stream_agent", invoke)
     monkeypatch.setattr(coaching, "build_evening_agent", lambda: object())
-    outcome = scheduler.write_evening_message(started)
+    from anyio import to_thread
+
+    outcome = await to_thread.run_sync(scheduler.write_evening_message, started)
     assert outcome == "failed: TimeoutError"
     (deadline,) = seen
     assert deadline == pytest.approx(started + scheduler.SCHEDULE_RUN_SECONDS, abs=1)

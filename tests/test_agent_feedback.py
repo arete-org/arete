@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from langsmith.utils import LangSmithConnectionError, LangSmithNotFoundError
+from stream_fakes import StreamGraph
 
 from arete.api.agent import router
 from arete.api.agent_feedback import chat_trace
@@ -237,7 +238,7 @@ def test_http_receipt_identifies_the_graph_root_per_turn(
 
     roots = []
 
-    class Graph:
+    class Graph(StreamGraph):
         async def ainvoke(self, state, *, context, config):
             roots.append(config["run_id"])
             return {"messages": [AIMessage(content="Réponse")]}

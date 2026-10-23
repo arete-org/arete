@@ -94,6 +94,7 @@ def _file(evidence: SessionEvidence, facts: str, text: str, source: Source) -> N
         append_entry(SESSIONS_LEDGER, evidence.title, body, when=evidence.date)
     except OSError:
         logger.warning("Could not file the session in the journal", exc_info=True)
+        raise
 
 
 def enrich_session_feedback(

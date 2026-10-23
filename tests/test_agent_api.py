@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import HumanMessage
+from stream_fakes import FakeEventStream, StreamGraph
 
 from arete.agent.context import sections
 from arete.agent.context.sections import page_section
@@ -201,6 +202,7 @@ class _FakeFinal:
     def __init__(self):
         self.content = "Réponse du coach."
 
+    @property
     def text(self):
         return self.content
 
@@ -311,7 +313,7 @@ def test_middleware_wraps_handler_without_context():
 # ---------------------------------------------------------------------------
 
 
-def test_tool_event_middleware_emits_start_and_end():
+def test_tool_event_middleware_does_not_duplicate_native_lifecycle():
     from arete.agent.middlewares.events import ToolEventMiddleware
 
     events: list[dict] = []
@@ -327,21 +329,14 @@ def test_tool_event_middleware_emits_start_and_end():
             "args": {"start_date": "2027-01-01"},
         }
 
-    with patch("langgraph.config.get_stream_writer", return_value=_FakeWriter()):
+    with patch(
+        "arete.agent.middlewares.events.get_stream_writer", return_value=_FakeWriter()
+    ):
         middleware = ToolEventMiddleware()
         result = middleware.wrap_tool_call(_Request(), lambda _r: "result")
 
     assert result == "result"
-    assert events[0] == {
-        "type": "tool_start",
-        "id": "call-1",
-        "name": "list_planned",
-        "args": {"text": '{"start_date": "2027-01-01"}', "truncated": False},
-    }
-    assert events[1]["id"] == "call-1"
-    assert events[1]["status"] == "done"
-    assert events[1]["output"]["text"] == "result"
-    assert events[1]["elapsed_ms"] >= 0
+    assert events == []
 
 
 def test_chat_stream_endpoint_sse(client):
@@ -351,7 +346,7 @@ def test_chat_stream_endpoint_sse(client):
         def __init__(self, data):
             self.data = data
 
-    def _fake_astream(self, _input, **_kwargs):
+    async def _fake_astream(self, _input, **_kwargs):
         async def _gen():
             yield {
                 "type": "custom",
@@ -368,9 +363,11 @@ def test_chat_stream_endpoint_sse(client):
                 "data": (AIMessageChunk(content="Salut"), {"langgraph_node": "model"}),
             }
 
-        return _gen()
+        return FakeEventStream(_gen())
 
-    with patch("langgraph.graph.state.CompiledStateGraph.astream", _fake_astream):
+    with patch(
+        "langgraph.graph.state.CompiledStateGraph.astream_events", _fake_astream
+    ):
         response = client.post(
             "/agent/chat/stream",
             json={"messages": [{"role": "user", "content": "salut"}], "page": "log"},
@@ -391,14 +388,16 @@ def test_chat_stream_endpoint_sse(client):
 def test_chat_stream_endpoint_error_event(client):
     import json as _json
 
-    def _fake_astream(self, _input, **_kwargs):
+    async def _fake_astream(self, _input, **_kwargs):
         async def _gen():
             raise RuntimeError("boom")
             yield  # pragma: no cover
 
-        return _gen()
+        return FakeEventStream(_gen())
 
-    with patch("langgraph.graph.state.CompiledStateGraph.astream", _fake_astream):
+    with patch(
+        "langgraph.graph.state.CompiledStateGraph.astream_events", _fake_astream
+    ):
         response = client.post(
             "/agent/chat/stream",
             json={"messages": [{"role": "user", "content": "salut"}]},
@@ -740,7 +739,7 @@ def test_chat_routes_preserve_thread_id(client, endpoint):
 
     thread_id = "dfe771b8-661a-46af-9cee-dce80e6bc304"
 
-    class Graph:
+    class Graph(StreamGraph):
         async def ainvoke(self, state, *, context, config):
             assert context.thread_id == thread_id
             assert config["metadata"]["thread_id"] == thread_id
@@ -772,7 +771,7 @@ def test_chat_clock_roundtrips_history_and_returns_server_timestamp(client, endp
     sent_at = "2026-10-15T23:59:59+02:00"
     observed = []
 
-    class Graph:
+    class Graph(StreamGraph):
         async def ainvoke(self, state, *, context, config):
             assert (
                 state["messages"][0].additional_kwargs[MESSAGE_SENT_AT_KEY] == sent_at
@@ -1148,7 +1147,7 @@ def test_the_athlete_clock_is_never_read_on_the_event_loop(client, endpoint):
             return datetime(2026, 10, 17, 22, 30, tzinfo=UTC)
         raise AssertionError("athlete_now ran on the event loop")
 
-    class Graph:
+    class Graph(StreamGraph):
         async def ainvoke(self, state, *, context=None, config=None):
             return {"messages": [*state["messages"], AIMessage(content="ok")]}
 
@@ -1168,7 +1167,7 @@ def test_the_athlete_clock_is_never_read_on_the_event_loop(client, endpoint):
     assert '"type": "error"' not in response.text
 
 
-class _ChatGraph:
+class _ChatGraph(StreamGraph):
     async def ainvoke(self, state, *, context=None, config=None):
         from langchain_core.messages import AIMessage
 

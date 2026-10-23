@@ -22,12 +22,13 @@ class ProfilePolicyMiddleware(AgentMiddleware):
         self.profile = profile
         self.calendar = calendar
 
-    def before_agent(self, state, runtime):
-        context = runtime.context
+    def _prepare(self, context):
         assert isinstance(context, AgentContext), "Server invocation context required"
         assert context.profile == self.profile_id, (
             "Invocation profile differs from compiled policy"
         )
+        if context.policy_prepared:
+            return
         context.resolved_profile = (
             slack_policy(context) if self.profile_id == "slack" else self.profile
         )
@@ -38,7 +39,28 @@ class ProfilePolicyMiddleware(AgentMiddleware):
             if self.calendar and context.account_id
             else None
         )
-        return None
+        context.policy_prepared = True
+
+    def before_agent(self, state, runtime):
+        self._prepare(runtime.context)
 
     async def abefore_agent(self, state, runtime):
         return self.before_agent(state, runtime)
+
+    # Resuming a checkpoint can start at ToolNode and skip before_agent entirely.
+    # Dependencies remain invocation-local and must exist before that first tool.
+    def wrap_tool_call(self, request, handler):
+        self._prepare(request.runtime.context)
+        return handler(request)
+
+    async def awrap_tool_call(self, request, handler):
+        self._prepare(request.runtime.context)
+        return await handler(request)
+
+    def wrap_model_call(self, request, handler):
+        self._prepare(request.runtime.context)
+        return handler(request)
+
+    async def awrap_model_call(self, request, handler):
+        self._prepare(request.runtime.context)
+        return await handler(request)

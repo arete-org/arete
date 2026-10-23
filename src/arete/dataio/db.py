@@ -480,5 +480,13 @@ def transaction() -> Iterator[duckdb.DuckDBPyConnection]:
             yield con
             con.execute("COMMIT")
         except BaseException:
-            con.execute("ROLLBACK")
+            try:
+                con.execute("ROLLBACK")
+            except duckdb.TransactionException as rollback_error:
+                # DuckDB can already abort a transaction on a commit conflict.
+                # Preserve that original conflict so its owner can handle it.
+                if "no transaction is active" not in str(rollback_error):
+                    logger.exception("Transaction rollback failed")
+                else:
+                    logger.debug("Transaction already aborted by DuckDB")
             raise
