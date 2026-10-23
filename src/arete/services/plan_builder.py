@@ -4,11 +4,14 @@
 ``features.hybrid_plan`` a Hyrox race's or a hybrid block's and
 ``features.tri_plan`` a triathlon's; this module supplies what they need
 (recent volume and frequency by sport, strength sessions, rest days, VDOT
-paces, FTP and CSS, the load's ACWR and TSB) and owns the write rules: generated sessions are ``source='plan'`` and linked to the goal;
+paces, FTP and CSS, the load's ACWR and TSB) and owns the write rules:
+generated sessions are ``source='plan'`` and linked to the goal;
 regenerating, removing the plan or deleting its goal takes back only the
 goal's future pending sessions the athlete never touched (``revision = 1``:
 every edit goes through the repository, which increments it); a day that
-already holds another planned session is left alone.
+already holds another planned session is left alone, except a day holding
+exactly the kept sessions the plan pairs a new one with (a triathlon
+brick's run after its edited ride).
 """
 
 from __future__ import annotations
@@ -160,13 +163,17 @@ def _kept(con, goal: Goal, start: date) -> list[PlannedSession]:
             ascending=True,
             connection=con,
         )
-        if s.goal_id == goal.id
-        and s.plan_kind is not None
-        and (
-            s.status == SessionStatus.MODIFIED
-            or (s.status == SessionStatus.PENDING and s.revision > 1)
-        )
+        if s.goal_id == goal.id and _kept_row(s.status, s.revision, s.plan_kind)
     ]
+
+
+def _kept_row(status: str, revision: int, plan_kind: str | None) -> bool:
+    """A goal's session regeneration keeps (``_kept``): one of a known kind
+    the athlete edited or the daily adaptation changed."""
+    return plan_kind is not None and (
+        status == SessionStatus.MODIFIED
+        or (status == SessionStatus.PENDING and revision > 1)
+    )
 
 
 def hybrid_inputs(goal: Goal, today: date | None = None) -> HybridInputs:
@@ -496,8 +503,15 @@ def _delete_future(goal_id: int, start: date) -> Removal:
 
 def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
     """Write the goal's plan, replacing its own future sessions still to do
-    that the athlete left untouched; those they edited stay, and a Hyrox or
-    hybrid plan is placed around them.
+    that the athlete left untouched; those they edited stay, and a Hyrox,
+    hybrid or triathlon plan is placed around them.
+
+    A generated session never lands on a day already holding a planned
+    session, with one exception: a day the plan pairs a session with the
+    athlete's kept ones on purpose (a brick's run after its edited ride),
+    and only when that day holds exactly those kept sessions. A session
+    ``_delete_future`` could not take back (an export in progress, an edit
+    landing meanwhile) keeps its day taken, never three sessions on it.
 
     A narrow race remains: a session edited after the plan read the kept
     sessions and before ``_delete_future`` is kept by the revision guard but
@@ -510,18 +524,27 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
     con = connect()
     try:
         rows = con.execute(
-            "SELECT DISTINCT date, goal_id IS NOT DISTINCT FROM ? FROM app.visible_planned_sessions WHERE date BETWEEN ? AND ? AND status <> 'skipped'",
+            "SELECT date, goal_id IS NOT DISTINCT FROM ?, status, revision, plan_kind FROM app.visible_planned_sessions WHERE date BETWEEN ? AND ? AND status <> 'skipped'",
             [goal.id, plan.start, goal.race_date],
         ).fetchall()
     finally:
         con.close()
-    # The plan pairs a session with a kept one on purpose (a brick's other
-    # half): that day stays open to it; any other session's day is taken.
+    # A day the plan pairs a new session with kept ones stays open to it only
+    # while it holds exactly those kept sessions, nothing else of any goal.
     sessions = [s for w in plan.weeks for s in w.sessions]
-    paired = {s.date for s in sessions if KEPT in s.tags} & {
-        s.date for s in sessions if KEPT not in s.tags
+    kept_on: dict[date, int] = {}
+    for s in sessions:
+        if KEPT in s.tags:
+            kept_on[s.date] = kept_on.get(s.date, 0) + 1
+    paired = set(kept_on) & {s.date for s in sessions if KEPT not in s.tags}
+    held: dict[date, list[bool]] = {}
+    for day, own, status, revision, plan_kind in rows:
+        held.setdefault(day, []).append(own and _kept_row(status, revision, plan_kind))
+    taken = {
+        day
+        for day, kept in held.items()
+        if not (day in paired and all(kept) and len(kept) == kept_on[day])
     }
-    taken = {day for day, own in rows if not (own and day in paired)}
     repo = GarminRepository()
     created, skipped = 0, []
     for week in plan.weeks:

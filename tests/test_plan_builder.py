@@ -576,6 +576,33 @@ def test_a_kept_brick_bike_is_rejoined_by_its_run_written_after_it(tri):
     assert [s.plan_kind for s in day] == ["brick_bike", "brick_run"]
 
 
+def test_a_brick_day_holding_an_undeletable_session_gets_no_third(tri):
+    """The plan pairs a new run with the kept ride; the old run, which an
+    export in progress kept from being taken back, keeps the day taken."""
+    repo = GarminRepository()
+    plan_builder.apply(tri.id, TODAY)
+    sessions = _plan_sessions(tri.id)
+    bike = next(s for s in sessions if s.plan_kind == "brick_bike")
+    run = next(
+        s for s in sessions if s.plan_kind == "brick_run" and s.date == bike.date
+    )
+    assert repo.update_planned_session_fields(
+        bike.id or 0, expected_revision=1, description="Vélo modifié"
+    )
+    real_delete = GarminRepository.delete_planned_session
+
+    def exporting(self, session_id, *args, **kwargs):
+        if session_id == run.id:
+            raise ValueError("export en cours")
+        return real_delete(self, session_id, *args, **kwargs)
+
+    with patch.object(GarminRepository, "delete_planned_session", exporting):
+        again = plan_builder.apply(tri.id, TODAY)
+    assert bike.date.isoformat() in again["skipped_days"]
+    day = [s for s in _plan_sessions(tri.id) if s.date == bike.date]
+    assert sorted(s.id or 0 for s in day) == sorted([bike.id or 0, run.id or 0])
+
+
 def test_a_kept_brick_run_keeps_its_day_alone(tri):
     repo = GarminRepository()
     plan_builder.apply(tri.id, TODAY)
