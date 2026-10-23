@@ -276,13 +276,24 @@ class Catalog:
         ]
 
 
-def _as_week(template: WeekPlan, placed: list[tuple[int, Slot]]) -> WeekPlan:
+def _as_week(
+    template: WeekPlan,
+    placed: list[tuple[int, Slot]],
+    dated: dict[tuple[int, int], tuple[DraftSession, ...]] | None = None,
+) -> WeekPlan:
+    """The week holding ``placed``; ``dated`` caches each slot's sessions
+    dated on a day, which a search otherwise rebuilds at every node."""
+    cache = {} if dated is None else dated
+
+    def on(d: int, s: Slot) -> tuple[DraftSession, ...]:
+        key = (id(s), d)
+        if key not in cache:
+            day = template.start + timedelta(days=d)
+            cache[key] = tuple(replace(draft, date=day) for draft in s.drafts)
+        return cache[key]
+
     ordered = sorted(placed, key=lambda p: (p[0], p[1].rank))
-    sessions = [
-        replace(draft, date=template.start + timedelta(days=d))
-        for d, s in ordered
-        for draft in s.drafts
-    ]
+    sessions = [draft for d, s in ordered for draft in on(d, s)]
     return replace(
         template,
         sessions=sessions,
@@ -329,8 +340,10 @@ def place_week(
         for s in ahead
     ]
 
+    dated: dict[tuple[int, int], tuple[DraftSession, ...]] = {}
+
     def broken(placed: list[tuple[int, Slot]]) -> Counter[Violation]:
-        week = _as_week(template, [*placed, *later])
+        week = _as_week(template, [*placed, *later], dated)
         return Counter(violations(week, rules, previous=previous, race_date=race_date))
 
     baseline = broken(pinned)
