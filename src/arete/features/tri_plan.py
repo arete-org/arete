@@ -19,6 +19,7 @@ the interference rules below. Pure: no I/O, no clock.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
@@ -1562,10 +1563,10 @@ def _within_hours(
             if item.kind != kind or total() <= cap:
                 continue
             draft = item.drafts[0]
-            over = total() - cap
-            shorter = max(
-                EASY_MIN[sport], (draft.duration_min or 0) - _round5(over + 2)
-            )
+            # Whole 5 minutes, rounded up: a fractional cap overshot by a
+            # minute or two is still met.
+            cut = 5 * math.ceil((total() - cap) / 5)
+            shorter = max(EASY_MIN[sport], (draft.duration_min or 0) - cut)
             if shorter < (draft.duration_min or 0) and draft.prescription is None:
                 items[k] = replace(item, drafts=(replace(draft, duration_min=shorter),))
     for k, item in enumerate(items):
@@ -1632,9 +1633,14 @@ def _within_days(
     kept brick half shares its day with its partner): a week holding more of
     them than days gives up the least important ones ``drops`` allows before
     the search, which would otherwise try every way to fail."""
+    # Why before: ``fit_week`` tries subsets of droppable slots, and a search
+    # that cannot succeed explores its whole tree each time; counting days
+    # first spares those searches (a 24-week Ironman on four days went from
+    # seconds to a tenth).
 
     def solo(slot: Slot) -> bool:
-        partner = len(slot.drafts) == 1 and slot.kind in (BRICK_BIKE, BRICK_RUN)
+        # A brick's run regenerated beside its kept ride takes no day.
+        partner = len(slot.drafts) == 1 and slot.kind == BRICK_RUN
         return SWIM not in slot.tags and not partner
 
     taken = len({k.date for k in kept if SWIM not in k.tags})
@@ -1806,12 +1812,3 @@ def generate_tri_plan(inp: TriInputs, rules: Rules) -> list[WeekPlan]:
         previous = week
     cap_taper(weeks, rules.taper, inp.race_date, TRI)
     return weeks
-
-
-def sport_minutes(week: WeekPlan) -> dict[str, int]:
-    """A week's planned minutes by sport (the race apart)."""
-    out = {"swimming": 0, "cycling": 0, "running": 0}
-    for s in week.sessions:
-        if s.sport in out:
-            out[s.sport] += s.duration_min or 0
-    return out

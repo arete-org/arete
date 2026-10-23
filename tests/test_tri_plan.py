@@ -37,7 +37,6 @@ from arete.features.tri_plan import (
     generate_tri_plan,
     kept_tags,
     kind_of,
-    sport_minutes,
     tri_level,
     tri_rules,
 )
@@ -90,6 +89,15 @@ def _sessions(weeks):
 
 def _loading(weeks):
     return [w for w in weeks if w.phase in ("base", "build", "specific")]
+
+
+def sport_minutes(week: WeekPlan) -> dict[str, int]:
+    """A week's planned minutes by sport (the race apart)."""
+    out = {"swimming": 0, "cycling": 0, "running": 0}
+    for s in week.sessions:
+        if s.sport in out:
+            out[s.sport] += s.duration_min or 0
+    return out
 
 
 def _kinds(week: WeekPlan) -> list[str]:
@@ -193,6 +201,30 @@ def test_a_24_week_ironman_on_few_days_is_placed_quickly():
     assert plan_violations(weeks, _rules(inp), inp.race_date) == []
     for week in weeks:
         assert len({s.date for s in week.sessions}) <= 4
+
+
+def test_a_fraction_of_an_hour_over_shortens_a_long_session_rather_than_drop():
+    """Declared hours with a fraction (4 h 05.4) overshot by under a minute:
+    the long run loses five minutes, the swim key stays."""
+    from arete.features.tri_plan import _Item, _within_hours
+
+    def draft(kind, minutes):
+        return DraftSession(
+            date.min, "endurance", minutes, None, None, kind, tags=frozenset({kind})
+        )
+
+    items = [
+        _Item(SWIM_KEY, (draft(SWIM_KEY, 30),)),
+        _Item(LONG_RUN, (draft(LONG_RUN, 40),)),
+        _Item(KEY_RUN, (draft(KEY_RUN, 175),)),
+    ]
+    kept, gone = _within_hours(items, 244.6)
+    assert gone == []
+    assert [(i.kind, i.minutes) for i in kept] == [
+        (SWIM_KEY, 30),
+        (LONG_RUN, 35),
+        (KEY_RUN, 175),
+    ]
 
 
 def test_the_same_inputs_give_the_same_plan():
