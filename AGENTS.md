@@ -130,8 +130,9 @@ do not add tests that merely repeat an implementation.
 - A PR body fills every section of `.github/pull_request_template.md`, in order,
   including when an agent passes `--body` or `--body-file` to `gh pr create`, which
   skips GitHub's prefill.
-- The real data lives in the MotherDuck database `arete_v2`, shared by Vercel and the
-  Docker stack (`ARETE_DB=md:arete_v2`). Read it through the HTTP API rather than
+- The real data lives in the MotherDuck database `arete_v2`, used by Vercel production.
+  The Docker stack defaults to `md:arete_preview_v2`; production is an explicit
+  `ARETE_DB=md:arete_v2` opt-in. Read it through the HTTP API rather than
   scripts. A local DuckDB file (`make dev`, tests) allows one writer: a script that
   opens it while a backend runs makes the API answer 500.
 - Deployment is described in `docs/deployment.md`. In short: a PR labelled

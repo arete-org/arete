@@ -54,11 +54,31 @@ def remote_database() -> str:
     return config.db_target.removeprefix("md:") or "my_db"
 
 
+def _database_name() -> str:
+    """The name only: a connection string's options may carry a token."""
+    return remote_database().split("?", 1)[0].lower()
+
+
+def warn_production_database() -> None:
+    """Outside Vercel, a database not named for previews is production's: this
+    process writes real athletes' data and its scheduler runs their daily jobs."""
+    if config.serverless:
+        return
+    if not config.is_remote_db:
+        return
+    name = _database_name()
+    if "preview" in name:
+        return
+    logger.warning(
+        "ARETE_DB names %s, not a preview database: this process writes production data",
+        name,
+    )
+
+
 def _refuse_wrong_database() -> None:
     """A retired database anywhere; on a preview, any database not named for
     previews (production's name has changed once already)."""
-    # The name only: a connection string's options may carry a token.
-    name = remote_database().split("?", 1)[0].lower()
+    name = _database_name()
     if name in RETIRED_DATABASES:
         raise RuntimeError(f"{name} is retired: point ARETE_DB at its _v2 copy")
     if os.getenv("VERCEL_ENV") == "preview" and "preview" not in name:
