@@ -101,6 +101,7 @@ TOOL_LABELS = {
     "sync_garmin_activities": "Synchronisation Garmin",
     "create_planned_session": "Création d’une séance",
     "update_planned_session": "Modification d’une séance",
+    "set_session_prescription": "Modification des étapes",
     "delete_planned_session": "Suppression d’une séance",
 }
 

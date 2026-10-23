@@ -796,42 +796,20 @@ def test_invalid_batch_is_rejected_before_remote_io(ids, planned):
 def test_prescription_edit_checks_revision_and_dirties_export(planned):
     garmin = Garmin()
     service.export(planned, client=garmin)
-    from arete.agent.tools.planning import update_planned_session
+    from arete.agent.tools.planning import set_session_prescription
 
     args = dict(
         session_id=planned,
         revision=1,
-        date_str="2027-01-13",
-        description="40 minutes",
         prescription={
             "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 2400}]
         },
     )
-    result = json.loads(
-        update_planned_session.invoke(
-            {
-                "session_id": args["session_id"],
-                "revision": args["revision"],
-                "changes": {
-                    k: v for k, v in args.items() if k not in {"session_id", "revision"}
-                },
-            }
-        )
-    )
+    result = json.loads(set_session_prescription.invoke(args))
     assert result["session"]["revision"] == 2
     assert service.inspect_session(planned)["export"]["state"] == "dirty"
     count = len(garmin.calls)
-    assert json.loads(
-        update_planned_session.invoke(
-            {
-                "session_id": args["session_id"],
-                "revision": args["revision"],
-                "changes": {
-                    k: v for k, v in args.items() if k not in {"session_id", "revision"}
-                },
-            }
-        )
-    )["error"]
+    assert json.loads(set_session_prescription.invoke(args))["error"]
     assert len(garmin.calls) == count
 
 
@@ -1452,7 +1430,7 @@ def test_described_structured_session_never_reaches_garmin_as_the_template(
     # The template stays visible, labelled as an estimate, but cannot be sent.
     assert view["derived"] and view["needs_steps"] and view["prescription"]
     assert not view["exportable"]
-    assert "prescription.steps via update_planned_session" in view["reason"]
+    assert "coach : set_session_prescription" in view["reason"]
     garmin = Garmin()
     with pytest.raises(DocumentError, match="Séance décrite sans étapes"):
         service.export(planned, client=garmin)
@@ -1563,31 +1541,46 @@ def test_template_still_exports_when_nothing_contradicts_it(
 
 
 @pytest.mark.parametrize("sport", ["running", "cycling"])
-def test_coach_cannot_create_structured_session_without_steps(planned, sport):
+def test_coach_creation_without_steps_is_flagged_until_its_steps_are_set(
+    planned, sport
+):
+    from arete.agent.tools.planning import set_session_prescription
     from arete.services import planning
 
-    before = planning.list_planned("2027-01-01", "2027-01-31")
     result = json.loads(
         planning.create_planned_session(
             "2027-01-15", "intervals", UNREAD, sport=sport, target_duration_min=50
         )
     )
-    assert "prescription.steps" in result["error"]
-    assert planning.list_planned("2027-01-01", "2027-01-31") == before
+    assert "set_session_prescription" in result["steps_required"]
+    session = result["session"]
+    assert not service.inspect_session(session["id"])["session"]["exportable"]
+    steps = {"steps": [{"kind": "effort", "duration_kind": "seconds", "value": 600}]}
+    updated = json.loads(
+        set_session_prescription.invoke(
+            {
+                "session_id": session["id"],
+                "revision": session["revision"],
+                "prescription": steps,
+            }
+        )
+    )
+    assert updated["updated"], updated
+    assert service.inspect_session(session["id"])["session"]["exportable"]
     # Without a description the template is the session itself.
     result = json.loads(
         planning.create_planned_session(
             "2027-01-15", "intervals", sport=sport, target_duration_min=50
         )
     )
-    assert result["created"]
+    assert result["created"] and "steps_required" not in result
     # A run description the grammar reads entirely is its own steps.
     result = json.loads(
         planning.create_planned_session(
             "2027-01-15", "intervals", READ, sport=sport, target_duration_min=50
         )
     )
-    assert ("created" in result) == (sport == "running"), result
+    assert ("steps_required" in result) == (sport == "cycling"), result
 
 
 @pytest.mark.parametrize(
@@ -1616,7 +1609,7 @@ def test_coach_update_is_judged_on_the_session_it_would_save(
     if allowed:
         assert result["updated"], result
     else:
-        assert "prescription.steps" in result["error"]
+        assert "set_session_prescription" in result["error"]
         assert session.description == description and session.revision == 1
 
 

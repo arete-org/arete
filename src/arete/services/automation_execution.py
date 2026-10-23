@@ -110,7 +110,11 @@ def _snapshot(con, call):
         args = call["args"]
         identifier = args.get("session_id")
         names = {
-            "planned_sessions": {"update_planned_session", "delete_planned_session"},
+            "planned_sessions": {
+                "update_planned_session",
+                "set_session_prescription",
+                "delete_planned_session",
+            },
             "strength_sessions": {"update_workout"},
         }
         predicate = (

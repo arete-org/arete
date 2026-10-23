@@ -26,11 +26,11 @@ PLANNING_INSTRUCTIONS = """Planning :
 - Avant de modifier le planning d'après une séance faite, lis les séances réalisées (`done_sessions` de la page Planning, sinon `list_recent_sessions`) ; ne conclus jamais qu'elle manque sans les avoir lues."""
 
 PLANNING_INSTRUCTIONS += """
-- Une demande de création suffit : create_planned_session enregistre exactement UNE séance et renvoie son id. Pour plusieurs séances, appelle cet outil pour chacune ; seuls les ids des résultats réussis sont créés. prescription est un objet typé, jamais une chaîne JSON.
+- Une demande de création suffit : create_planned_session enregistre exactement UNE séance et renvoie son id. Pour plusieurs séances, appelle cet outil pour chacune ; seuls les ids des résultats réussis sont créés. Fixe ensuite ses étapes avec set_session_prescription (id et revision renvoyés) ; prescription est un objet typé, jamais une chaîne JSON.
 - Pour préparer une musculation, utilise create_planned_session avec sport="strength" et strength_text (ex. « Squat 3x10 20kg ») : exercices et séries sont requis, un titre seul ne suffit pas. Tu peux composer une séance demandée ; distingue tes prescriptions des performances réellement déclarées. Sans charge connue, laisse-la non précisée.
-- strength_text porte aussi les repos (ex. r1'30). prescription est optionnel pour des blocs répétés ou un nom Garmin exact (exercise, garmin_exercise, weight_kg) ; ses séries doivent correspondre au texte.
-- update_planned_session modifie date, statut, métadonnées ou prescription avec la révision lue. Pour les étapes, consulte inspect_planned_session ; pour un déplacement, la révision de list_planned suffit.
-- Pour ajuster plusieurs séances existantes ensemble, preview_plan_changes conserve un avant/après (sept séances maximum, 48 h au plus). Présente son lien url ; la proposition seule ne modifie rien. apply_plan_changes exige une demande explicite d’appliquer cette proposition. En mission planifiée, une seule approbation couvre le groupe ; Garmin reste séparé.
+- strength_text porte aussi les repos (ex. r1'30). set_session_prescription est optionnel ensuite pour des blocs répétés ou un nom Garmin exact (exercise, garmin_exercise, weight_kg) ; ses séries doivent correspondre au texte.
+- update_planned_session modifie date, statut, métadonnées ou strength_text avec la révision lue ; set_session_prescription remplace les étapes. Pour les étapes, consulte inspect_planned_session ; pour un déplacement, la révision de list_planned suffit.
+- Pour ajuster plusieurs séances existantes ensemble, preview_plan_changes conserve un avant/après sans changer les étapes (sept séances maximum, 48 h au plus). Présente son lien url ; la proposition seule ne modifie rien. apply_plan_changes exige une demande explicite d’appliquer cette proposition. En mission planifiée, une seule approbation couvre le groupe ; Garmin reste séparé.
 - À toi de traduire la séance en prescription.steps, sans demander à l’athlète le format technique. « 20x300 r100 » en course signifie 20 répétitions de 300 m d’effort / 100 m de récupération ; une récupération notée en secondes ou minutes garde cette unité.
 - Un bloc répété contient kind="repeat", repeat (nombre) et steps (effort puis récupération). Exemple : {"kind":"repeat","repeat":20,"steps":[{"kind":"effort","duration_kind":"meters","value":300},{"kind":"recovery","duration_kind":"meters","value":100}]}. Les distances/durées appartiennent aux sous-étapes, pas au bloc.
 - Pour une prescription cardio, conserve l’échauffement et le retour au calme existants ; s’ils manquent, ajoute par défaut un warmup au début et un cooldown à la fin, sauf demande contraire. Sans durée précisée, duration_kind="lap", sans value ni cible inventée. La récupération entre répétitions reste dans le bloc repeat.
@@ -157,6 +157,7 @@ Aucun accès aux conversations conservées uniquement dans les navigateurs ni au
             {
                 "create_planned_session",
                 "update_planned_session",
+                "set_session_prescription",
                 "apply_plan_changes",
                 "delete_planned_session",
             }

@@ -25,6 +25,7 @@ const TOOL_LABELS: Record<string, [running: string, done: string]> = {
   sync_garmin_activities: ['Synchronisation Garmin', 'Synchronisation terminée'],
   create_planned_session: ['Création d’une séance', 'Séance créée'],
   update_planned_session: ['Modification d’une séance', 'Séance mise à jour'],
+  set_session_prescription: ['Modification des étapes', 'Étapes mises à jour'],
   delete_planned_session: ['Suppression d’une séance', 'Séance supprimée'],
 };
 
