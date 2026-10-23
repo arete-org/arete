@@ -456,3 +456,147 @@ def test_strength_history_counts_logged_days(goal):
     finally:
         con.execute("DELETE FROM app.strength_sessions WHERE name = 'test-plan'")
         con.close()
+
+
+TRI_SETTINGS = {
+    **SETTINGS,
+    "weekly_training_goal": 6,
+    "ftp_w": 250,
+    "css_sec_100m": 100,
+    "lthr": 170,
+}
+
+
+@pytest.fixture
+def tri(goal):
+    """An olympic triathlon 10 weeks out; swims and rides join the runs."""
+    g = goals.create_goal(
+        name="test-tri",
+        race_date=TODAY + timedelta(weeks=10),
+        goal_type="triathlon",
+        details={"distance": "olympic", "hours_per_week": 8, "pool_length_m": 50},
+    )
+    con = connect()
+    for i in range(2, 28, 4):  # 7 swims of 45 min and 7 rides of 90 min
+        con.execute(
+            "INSERT INTO app.actual_sessions (user_id, date, sport, duration_sec, source)"
+            " VALUES (1, ?, 'lap_swimming', 2700, 'test-plan'),"
+            " (1, ?, 'cycling', 5400, 'test-plan')",
+            [TODAY - timedelta(days=i), TODAY - timedelta(days=i + 1)],
+        )
+    con.close()
+    facts = SimpleNamespace(acwr=None, tsb=None)
+    with (
+        patch("arete.services.coaching_rules.rule_facts", return_value=facts),
+        patch(
+            "arete.services.plan_builder.get_user_settings", return_value=TRI_SETTINGS
+        ),
+    ):
+        yield g
+
+
+def test_triathlon_inputs_read_three_sports_and_the_thresholds(tri):
+    inputs = plan_builder.tri_inputs(tri, TODAY)
+    # 175 running + 78.75 swimming + 157.5 cycling minutes a week, all weekly.
+    assert round(inputs.weekly_minutes_now) == 411
+    assert inputs.level == "intermediate"
+    assert (inputs.distance, inputs.hours_per_week, inputs.pool_length_m) == (
+        "olympic",
+        8.0,
+        50,
+    )
+    assert (inputs.ftp_w, inputs.css_sec_100m, inputs.hr_reference) == (250, 100, True)
+    assert inputs.training_days == 6 and inputs.rest_days == frozenset({0})
+
+
+def test_a_triathlon_preview_names_its_kinds_and_its_split(tri):
+    body = plan_builder.preview(tri.id, TODAY)
+    inputs = body["inputs"]
+    assert inputs["split"] == {"swimming": 0.2, "cycling": 0.45, "running": 0.35}
+    assert (inputs["ftp_w"], inputs["css_sec_100m"], inputs["hours_per_week"]) == (
+        250,
+        100,
+        8.0,
+    )
+    assert inputs["sessions_per_week"] == 8 and inputs["peak_minutes"] == 480
+    kinds = {s["kind"] for w in body["weeks"] for s in w["sessions"]}
+    assert {
+        "swim_key",
+        "long_ride",
+        "key_run",
+        "brick_bike",
+        "brick_run",
+        "race",
+    } <= kinds
+    summary = body["summary"]
+    assert summary[0].startswith("Semaine type (base) : ")
+    assert "natation clé" in summary[0] and "sortie longue vélo" in summary[0]
+    assert any("course enchaînée" in line for line in summary)
+    assert summary[-1].startswith("Semaine de course : ")
+    assert "triathlon" in summary[-1]
+    assert _plan_sessions(tri.id) == []
+
+
+def test_a_triathlon_plan_is_written_brick_bike_first(tri):
+    result = plan_builder.apply(tri.id, TODAY)
+    sessions = _plan_sessions(tri.id)
+    assert result["created"] == len(sessions) > 0 and result["skipped_days"] == []
+    assert {s.sport for s in sessions} == {"swimming", "cycling", "running", "other"}
+    assert all(s.plan_kind for s in sessions)
+    swims = [s for s in sessions if s.prescription and s.sport == "swimming"]
+    assert swims and all(s.prescription["pool_length_m"] == 50 for s in swims)
+    bikes = {s.date: s for s in sessions if s.plan_kind == "brick_bike"}
+    runs = [s for s in sessions if s.plan_kind == "brick_run"]
+    assert runs and all((bikes[r.date].id or 0) < (r.id or 0) for r in runs)
+    race = sessions[-1]
+    assert (race.session_type, race.sport) == (SessionType.RACE, "other")
+    # Race day weighs 160 minutes (no target time), not 51.5 km of running.
+    series = plan_builder.projection(tri.id, TODAY)["series"]
+    point = next(p for p in series if p["date"] == tri.race_date.isoformat())
+    assert point["tss"] == round(planned_tss("race", 160), 1)
+
+
+def test_a_kept_brick_half_is_rejoined_by_its_partner(tri):
+    repo = GarminRepository()
+    plan_builder.apply(tri.id, TODAY)
+    run = next(s for s in _plan_sessions(tri.id) if s.plan_kind == "brick_run")
+    assert repo.update_planned_session_fields(
+        run.id or 0, expected_revision=1, description="Enchaînement modifié"
+    )
+    again = plan_builder.apply(tri.id, TODAY)
+    assert run.date.isoformat() not in again["skipped_days"]
+    day = [s for s in _plan_sessions(tri.id) if s.date == run.date]
+    assert {s.plan_kind for s in day} == {"brick_bike", "brick_run"}
+    assert any(s.description == "Enchaînement modifié" for s in day)
+
+
+def test_a_triathlon_s_sessions_keep_the_usual_rpe(tri):
+    own = PlannedSession(
+        date=TODAY + timedelta(days=3),
+        sport="cycling",
+        session_type=SessionType.TEMPO,
+        target_duration_min=60,
+        goal_id=tri.id,
+    )
+    assert plan_builder.session_tss(own, tri, 60) == planned_tss("tempo", 60)
+
+
+@pytest.mark.parametrize(
+    ("distance", "minutes"),
+    [("sprint", 80), ("olympic", 160), ("half", 330), ("full", 780)],
+)
+def test_a_triathlon_without_a_target_time_lasts_its_format(distance, minutes):
+    g = goals.Goal(
+        1,
+        "x",
+        TODAY,
+        51.5,
+        None,
+        "A",
+        "active",
+        None,
+        "triathlon",
+        {"distance": distance},
+    )
+    assert plan_builder._race_minutes(g) == minutes
+    assert plan_builder._race_minutes(replace(g, target_time_sec=3600)) == 60

@@ -143,3 +143,34 @@ def test_a_hyrox_plan_ends_on_its_race_week_and_a_block_on_its_benchmark():
         "Dernière semaine (allégée) : mer. footing · jeu. haut du corps · "
         "sam. test de fin de bloc · lun., mar., ven. et dim. repos"
     )
+
+
+def test_a_triathlon_summary_names_its_sports_and_its_bricks():
+    from arete.features import tri_plan
+    from arete.services.plan_summary import tri_name
+
+    inp = tri_plan.TriInputs(
+        start=date(2026, 10, 19),
+        race_date=date(2027, 2, 7),  # a Sunday, 16 weeks out
+        distance="olympic",
+        level="intermediate",
+        hours_per_week=8,
+        weekly_minutes_now=360,
+        training_days=6,
+        rest_days=frozenset({0}),
+    )
+    rules = tri_plan.tri_rules("intermediate", "olympic", acwr_above=1.5, tsb_below=-30)
+    lines = weekly_summary(tri_plan.generate_tri_plan(inp, rules), tri_name)
+    assert [line.split(" :")[0] for line in lines] == [
+        "Semaine type (base)",
+        "Semaine type (développement)",
+        "Semaine type (spécifique)",
+        "Semaine type (affûtage)",
+        "Semaine de course",
+    ]
+    assert "natation clé" in lines[0] and "lun. repos" in lines[0]
+    assert "course enchaînée" not in lines[0]
+    # From the build phase, the bike key is followed by its brick run.
+    assert "vélo clé + course enchaînée" in lines[1]
+    assert "jeu. activation · ven. activation · sam. activation" in lines[-1]
+    assert "dim. triathlon" in lines[-1]

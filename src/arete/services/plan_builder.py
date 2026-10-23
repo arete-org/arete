@@ -1,10 +1,10 @@
 """A goal's periodised plan: read the athlete, generate, write, take back.
 
-``features.plan_generator`` builds a road race's weeks and
-``features.hybrid_plan`` a Hyrox race's or a hybrid block's; this module
-supplies what they need (recent running volume and frequency, strength
-sessions, rest days, VDOT paces, the load's ACWR and TSB) and owns the write
-rules: generated sessions are ``source='plan'`` and linked to the goal;
+``features.plan_generator`` builds a road race's weeks,
+``features.hybrid_plan`` a Hyrox race's or a hybrid block's and
+``features.tri_plan`` a triathlon's; this module supplies what they need
+(recent volume and frequency by sport, strength sessions, rest days, VDOT
+paces, FTP and CSS, the load's ACWR and TSB) and owns the write rules: generated sessions are ``source='plan'`` and linked to the goal;
 regenerating, removing the plan or deleting its goal takes back only the
 goal's future pending sessions the athlete never touched (``revision = 1``:
 every edit goes through the repository, which increments it); a day that
@@ -13,6 +13,7 @@ already holds another planned session is left alone.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from typing import Any, NamedTuple
@@ -20,8 +21,14 @@ from typing import Any, NamedTuple
 import duckdb
 
 from arete.dataio.db import connect
-from arete.dataio.queries import RUNNING_SPORTS, sql_in
+from arete.dataio.queries import (
+    CYCLING_SPORTS,
+    RUNNING_SPORTS,
+    SWIMMING_SPORTS,
+    sql_in,
+)
 from arete.dataio.settings import get_user_settings
+from arete.features import tri_plan
 from arete.features.hybrid_plan import (
     HYBRID_PLANNED_RPE,
     KEPT,
@@ -46,8 +53,8 @@ from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services import hybrid_strength
 from arete.services.adaptation import ACWR_REST_AT, TSB_EASE_AT
-from arete.services.goals import Goal, GoalDetails, get_goal
-from arete.services.plan_summary import weekly_summary
+from arete.services.goals import Goal, GoalDetails, TriDetails, get_goal
+from arete.services.plan_summary import hyrox_name, tri_name, weekly_summary
 from arete.services.prescriptions import Prescription
 from arete.services.settings import athlete_today
 
@@ -70,13 +77,13 @@ DEFAULT_WEEKLY_SESSIONS = 6
 HYBRID_RULES = default_rules(acwr_above=ACWR_REST_AT, tsb_below=TSB_EASE_AT)
 
 
-def _recent_running(con, today: date) -> tuple[float, int]:
-    """(running minutes per week, running sessions per week) over 4 weeks."""
+def _recent(con, today: date, sports: tuple[str, ...]) -> tuple[float, int]:
+    """(minutes per week, sessions per week) of ``sports`` over 4 weeks."""
     row = con.execute(
         f"""
         SELECT COALESCE(SUM(duration_sec), 0) / 60.0, COUNT(*)
         FROM app.visible_actual_sessions
-        WHERE user_id = getvariable('arete_athlete_id') AND sport IN ({sql_in(RUNNING_SPORTS)})
+        WHERE user_id = getvariable('arete_athlete_id') AND sport IN ({sql_in(sports)})
           AND date >= ? AND date < ?
         """,
         [today - timedelta(days=HISTORY_DAYS), today],
@@ -119,7 +126,7 @@ def plan_inputs(goal: Goal, today: date | None = None) -> PlanInputs:
     settings = get_user_settings() or {}
     con = connect()
     try:
-        minutes, runs = _recent_running(con, today)
+        minutes, runs = _recent(con, today, RUNNING_SPORTS)
         vdot = current_vdot(con)
     finally:
         con.close()
@@ -172,7 +179,7 @@ def hybrid_inputs(goal: Goal, today: date | None = None) -> HybridInputs:
     settings = get_user_settings() or {}
     con = connect()
     try:
-        minutes, runs = _recent_running(con, today)
+        minutes, runs = _recent(con, today, RUNNING_SPORTS)
         strength = _recent_strength(con, today)
         vdot = current_vdot(con)
         kept = _kept(con, goal, start)
@@ -222,11 +229,120 @@ def hybrid_inputs(goal: Goal, today: date | None = None) -> HybridInputs:
     )
 
 
+def tri_inputs(goal: Goal, today: date | None = None) -> tri_plan.TriInputs:
+    from arete.services.coaching_rules import rule_facts
+    from arete.services.metrics import current_vdot
+
+    assert goal.goal_type == "triathlon", goal.goal_type
+    today = today or athlete_today()
+    start = today + timedelta(days=1)  # today belongs to the daily adaptation
+    settings = get_user_settings() or {}
+    con = connect()
+    try:
+        recent = [
+            _recent(con, today, sports)
+            for sports in (SWIMMING_SPORTS, CYCLING_SPORTS, RUNNING_SPORTS)
+        ]
+        vdot = current_vdot(con)
+        kept = _kept(con, goal, start)
+    finally:
+        con.close()
+    facts = rule_facts(today)  # the readiness rules' ACWR and TSB
+    details = TriDetails.model_validate(goal.details or {})
+    minutes = sum(m for m, _ in recent)
+    # A sport practised at least once a week on average counts.
+    weekly_sports = sum(1 for _, sessions in recent if sessions >= 1)
+    return tri_plan.TriInputs(
+        start=start,
+        race_date=goal.race_date,
+        distance=details.distance,
+        level=tri_plan.tri_level(minutes, weekly_sports),
+        hours_per_week=details.hours_per_week,
+        weekly_minutes_now=minutes,
+        training_days=int(
+            settings.get("weekly_training_goal") or DEFAULT_WEEKLY_SESSIONS
+        ),
+        rest_days=_rest_days(settings),
+        paces=training_paces(vdot[0]) if vdot else None,
+        ftp_w=settings.get("ftp_w"),
+        css_sec_100m=settings.get("css_sec_100m"),
+        hr_reference=bool(settings.get("lthr") or settings.get("max_hr")),
+        pool_length_m=details.pool_length_m,
+        race_name=goal.name,
+        acwr=facts.acwr,
+        tsb=facts.tsb,
+        kept=tuple(
+            DraftSession(
+                s.date,
+                s.session_type.value,
+                s.target_duration_min,
+                s.target_hr_zone,
+                s.target_intensity,
+                s.description or "",
+                s.target_distance_km,
+                sport=s.sport,
+                tags=tags,
+            )
+            for s in kept
+            if (
+                tags := tri_plan.kept_tags(
+                    s.plan_kind or "",
+                    s.sport,
+                    s.session_type.value,
+                    s.target_intensity,
+                )
+            )
+            is not None
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class _Plan:
     start: date  # the first day it may fill
     weeks: list[WeekPlan]
     inputs: dict[str, Any]  # what the preview shows it was built from
+    #: The kind a session is stored with (``plan_kind``), from its tags.
+    kind_of: Callable[[frozenset[str]], str] = kind_of
+    #: How the preview's weekly summary names a session.
+    name: Callable[[DraftSession], str] = hyrox_name
+
+
+def _tri_plan(goal: Goal, today: date | None) -> _Plan:
+    tri = tri_inputs(goal, today)
+    rules = tri_plan.tri_rules(
+        tri.level, tri.distance, acwr_above=ACWR_REST_AT, tsb_below=TSB_EASE_AT
+    )
+    weeks = tri_plan.generate_tri_plan(tri, rules)
+    swim, bike, run = tri_plan.SPLIT[tri.distance]
+    return _Plan(
+        tri.start,
+        weeks,
+        {
+            "weekly_minutes_now": round(tri.weekly_minutes_now),
+            # The sessions of a loading week, a brick's two counted once.
+            "sessions_per_week": 6 if tri.level == "novice" else 8,
+            "training_days": tri.training_days,
+            "rest_days": sorted(tri.rest_days),
+            "vdot": round(tri.paces.vdot, 1) if tri.paces else None,
+            "level": tri.level,
+            "deload": bool(weeks)
+            and weeks[0].recovery
+            and rules.deload.triggered(tri.acwr, tri.tsb),
+            "kept": [
+                {"date": k.date.isoformat(), "description": k.description}
+                for k in tri.kept
+            ],
+            "hours_per_week": tri.hours_per_week,
+            "peak_minutes": round(tri_plan.peak_minutes(tri)),
+            "split": {"swimming": swim, "cycling": bike, "running": run},
+            "ftp_w": tri.ftp_w,
+            "css_sec_100m": tri.css_sec_100m,
+            "hr_reference": tri.hr_reference,
+        },
+        kind_of=tri_plan.kind_of,
+        name=tri_name,
+    )
 
 
 def _generate(goal: Goal, today: date | None) -> _Plan:
@@ -243,6 +359,8 @@ def _generate(goal: Goal, today: date | None) -> _Plan:
                 "vdot": round(inputs.paces.vdot, 1) if inputs.paces else None,
             },
         )
+    if goal.goal_type == "triathlon":
+        return _tri_plan(goal, today)
     hybrid = hybrid_inputs(goal, today)
     weeks = hybrid_strength.prescribe(
         generate_hybrid_plan(hybrid, HYBRID_RULES),
@@ -274,7 +392,9 @@ def _generate(goal: Goal, today: date | None) -> _Plan:
     )
 
 
-def _weeks_to_dict(weeks: list[WeekPlan]) -> list[dict[str, Any]]:
+def _weeks_to_dict(
+    weeks: list[WeekPlan], kind: Callable[[frozenset[str]], str]
+) -> list[dict[str, Any]]:
     return [
         {
             "start": w.start.isoformat(),
@@ -287,7 +407,7 @@ def _weeks_to_dict(weeks: list[WeekPlan]) -> list[dict[str, Any]]:
                     "date": s.date.isoformat(),
                     "tags": sorted(s.tags),
                     # What the preview names it; a road plan's sessions have no tags.
-                    "kind": kind_of(s.tags) if s.tags else None,
+                    "kind": kind(s.tags) if s.tags else None,
                 }
                 for s in w.sessions
             ],
@@ -311,9 +431,12 @@ def preview(goal_id: int, today: date | None = None) -> dict[str, Any]:
     return {
         "goal": goal.to_dict(today),
         "inputs": plan.inputs,
-        # A Hyrox or hybrid plan's weekly structure, one French line per phase.
-        "summary": [] if goal.goal_type == "race" else weekly_summary(plan.weeks),
-        "weeks": _weeks_to_dict(plan.weeks),
+        # A Hyrox, hybrid or triathlon plan's weekly structure, one French
+        # line per phase.
+        "summary": []
+        if goal.goal_type == "race"
+        else weekly_summary(plan.weeks, plan.name),
+        "weeks": _weeks_to_dict(plan.weeks, plan.kind_of),
     }
 
 
@@ -382,15 +505,19 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
     replaced = _delete_future(goal.id, plan.start).deleted
     con = connect()
     try:
-        taken = {
-            r[0]
-            for r in con.execute(
-                "SELECT DISTINCT date FROM app.visible_planned_sessions WHERE date BETWEEN ? AND ? AND status <> 'skipped'",
-                [plan.start, goal.race_date],
-            ).fetchall()
-        }
+        rows = con.execute(
+            "SELECT DISTINCT date, goal_id IS NOT DISTINCT FROM ? FROM app.visible_planned_sessions WHERE date BETWEEN ? AND ? AND status <> 'skipped'",
+            [goal.id, plan.start, goal.race_date],
+        ).fetchall()
     finally:
         con.close()
+    # The plan pairs a session with a kept one on purpose (a brick's other
+    # half): that day stays open to it; any other session's day is taken.
+    sessions = [s for w in plan.weeks for s in w.sessions]
+    paired = {s.date for s in sessions if KEPT in s.tags} & {
+        s.date for s in sessions if KEPT not in s.tags
+    }
+    taken = {day for day, own in rows if not (own and day in paired)}
     repo = GarminRepository()
     created, skipped = 0, []
     for week in plan.weeks:
@@ -418,7 +545,7 @@ def apply(goal_id: int, today: date | None = None) -> dict[str, Any]:
                     source="plan",
                     status=SessionStatus.PENDING,
                     goal_id=goal.id,
-                    plan_kind=kind_of(draft.tags) if draft.tags else None,
+                    plan_kind=plan.kind_of(draft.tags) if draft.tags else None,
                 )
             )
             created += 1
@@ -444,15 +571,23 @@ def remove(goal_id: int, today: date | None = None) -> Removal:
 FALLBACK_RACE_PACE_SEC_KM = 360
 #: A Hyrox without a target time: its 8 km of running are not the race.
 HYROX_FALLBACK_MIN = 90
+#: A triathlon without a target time, by distance: never its kilometres run.
+TRI_FALLBACK_MIN: dict[str, float] = {
+    "sprint": 80,
+    "olympic": 160,
+    "half": 330,
+    "full": 780,
+}
 
 
 def session_tss(session: PlannedSession, goal: Goal, minutes: float) -> float:
     """A planned session's load: a Hyrox or hybrid goal's own sessions weigh
     strength and station circuits by that plan's RPE, every other one as
-    before (``PLANNED_RPE``). The table follows the goal being projected, not
-    each session's own goal: another goal's sessions in the window, and
-    manual ones, keep ``PLANNED_RPE`` even when that goal is a Hyrox."""
-    hybrid = goal.goal_type != "race" and session.goal_id == goal.id
+    before (``PLANNED_RPE``), a triathlon's included. The table follows the
+    goal being projected, not each session's own goal: another goal's
+    sessions in the window, and manual ones, keep ``PLANNED_RPE`` even when
+    that goal is a Hyrox."""
+    hybrid = goal.goal_type in ("hyrox", "hybrid") and session.goal_id == goal.id
     table = HYBRID_PLANNED_RPE if hybrid else PLANNED_RPE
     return planned_tss(session.session_type.value, minutes, table)
 
@@ -465,6 +600,9 @@ def _race_minutes(goal: Goal, con=None) -> float:
         return goal.target_time_sec / 60
     if goal.goal_type == "hyrox":
         return HYROX_FALLBACK_MIN
+    if goal.goal_type == "triathlon":
+        distance = (goal.details or {}).get("distance", "olympic")
+        return TRI_FALLBACK_MIN.get(distance, TRI_FALLBACK_MIN["olympic"])
     vdot = current_vdot(con)
     if vdot:
         return race_time_sec(vdot[0], goal.distance_km * 1000) / 60

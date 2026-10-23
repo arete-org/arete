@@ -1,4 +1,5 @@
-"""A Hyrox or hybrid plan's weekly structure, one French line per phase.
+"""A Hyrox, hybrid or triathlon plan's weekly structure, one French line
+per phase.
 
 The goals panel's preview reads it before the weeks: « Semaine type (base) :
 mar. course clé + bas du corps (après) · mer. footing · … · lun. repos ».
@@ -7,9 +8,10 @@ Pure and deterministic: it reads the generated weeks' tags, nothing else.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 
+from arete.features import tri_plan
 from arete.features.hybrid_plan import (
     BENCHMARK,
     HEAVY_LOWER,
@@ -19,7 +21,7 @@ from arete.features.hybrid_plan import (
     STATION,
     kind_of,
 )
-from arete.features.plan_generator import WeekPlan
+from arete.features.plan_generator import DraftSession, WeekPlan
 
 WEEKDAYS = ("lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim.")
 #: Each session kind a Hyrox or hybrid plan writes, as the preview names it.
@@ -33,6 +35,20 @@ KIND_LABEL = {
     "station": "circuit stations",
     "activation": "activation",
     "benchmark": "test de fin de bloc",
+}
+#: Each session kind a triathlon plan writes, as the preview names it.
+TRI_KIND_LABEL = {
+    tri_plan.RACE: "triathlon",
+    tri_plan.SWIM_KEY: "natation clé",
+    tri_plan.SWIM_EASY: "natation endurance",
+    tri_plan.BIKE_KEY: "vélo clé",
+    tri_plan.LONG_RIDE: "sortie longue vélo",
+    tri_plan.BIKE_EASY: "vélo facile",
+    tri_plan.KEY_RUN: "course clé",
+    tri_plan.LONG_RUN: "sortie longue",
+    tri_plan.EASY_RUN: "footing",
+    tri_plan.BRICK_RUN: "course enchaînée",
+    tri_plan.ACTIVATION: "activation",
 }
 PHASE_LABEL = {
     "base": "base",
@@ -49,7 +65,22 @@ def _french_list(items: Sequence[str]) -> str:
     return f"{', '.join(items[:-1])} et {items[-1]}"
 
 
-def describe_week(week: WeekPlan) -> str:
+def hyrox_name(session: DraftSession) -> str:
+    """A Hyrox or hybrid session's name in the summary."""
+    return KIND_LABEL.get(kind_of(session.tags), session.session_type)
+
+
+def tri_name(session: DraftSession) -> str:
+    """A triathlon session's name; a brick's ride is its key or long ride."""
+    if tri_plan.BRICK_BIKE in session.tags:
+        long = tri_plan.LONG_RIDE in session.tags
+        return TRI_KIND_LABEL[tri_plan.LONG_RIDE if long else tri_plan.BIKE_KEY]
+    return TRI_KIND_LABEL.get(tri_plan.kind_of(session.tags), session.session_type)
+
+
+def describe_week(
+    week: WeekPlan, name: Callable[[DraftSession], str] = hyrox_name
+) -> str:
     """Each training day's sessions in order, then the rest days. Heavy legs
     or stations on the key run's day are done after it: « (après) ». A race
     week stops on race day."""
@@ -64,7 +95,7 @@ def describe_week(week: WeekPlan) -> str:
             continue
         key_day = any(KEY_RUN in s.tags for s in sessions)
         names = [
-            KIND_LABEL.get(kind_of(s.tags), s.session_type)
+            name(s)
             + (
                 " (après)"
                 if key_day
@@ -98,9 +129,12 @@ def _has(week: WeekPlan, tag: str) -> bool:
     return any(tag in s.tags for s in week.sessions)
 
 
-def weekly_summary(weeks: Sequence[WeekPlan]) -> list[str]:
+def weekly_summary(
+    weeks: Sequence[WeekPlan], name: Callable[[DraftSession], str] = hyrox_name
+) -> list[str]:
     """One line per phase, in plan order: its typical week, then the race
-    week (Hyrox) or the block's final deload with its benchmark (hybrid)."""
+    week (Hyrox, triathlon) or the block's final deload with its benchmark
+    (hybrid). ``name`` names each session (``hyrox_name``, ``tri_name``)."""
     lines: list[str] = []
     phases: dict[str, list[WeekPlan]] = {}
     for week in weeks:
@@ -109,10 +143,11 @@ def weekly_summary(weeks: Sequence[WeekPlan]) -> list[str]:
         phases.setdefault(week.phase, []).append(week)
     for phase, members in phases.items():
         label = PHASE_LABEL.get(phase, phase)
-        lines.append(f"Semaine type ({label}) : {describe_week(_typical(members))}")
+        typical = describe_week(_typical(members), name)
+        lines.append(f"Semaine type ({label}) : {typical}")
     for week in weeks:
         if week.phase == "race":
-            lines.append(f"Semaine de course : {describe_week(week)}")
+            lines.append(f"Semaine de course : {describe_week(week, name)}")
         elif _has(week, BENCHMARK):
-            lines.append(f"Dernière semaine (allégée) : {describe_week(week)}")
+            lines.append(f"Dernière semaine (allégée) : {describe_week(week, name)}")
     return lines

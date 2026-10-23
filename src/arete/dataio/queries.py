@@ -39,6 +39,12 @@ CYCLING_SPORTS: tuple[str, ...] = (
     "indoor_cycling",
     "mountain_biking",
 )
+SWIMMING_SPORTS: tuple[str, ...] = (
+    "swim",
+    "swimming",
+    "lap_swimming",
+    "open_water_swimming",
+)
 SPORT_GROUPS: dict[str, tuple[str, ...]] = {
     "running": RUNNING_SPORTS,
     "cycling": CYCLING_SPORTS,
