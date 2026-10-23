@@ -142,6 +142,7 @@ def test_sdk_sends_stable_hash_and_keeps_caps_on_each_fallback_attempt(provider,
         assert "tools" in body
         assert body["provider"]["sort"] == "latency"
         assert "order" not in body["provider"]
+        assert body["provider"]["data_collection"] == "deny"
         assert body["provider"]["max_price"] == (
             {"prompt": 0, "completion": 0}
             if body["model"] == "unavailable"

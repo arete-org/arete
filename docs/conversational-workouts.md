@@ -16,6 +16,16 @@ without invented durations or targets. A validation failure calls for correcting
 the full prescription; a description-only edit does not fulfill a step change.
 These are coach instructions, not server-side insertion into explicit prescriptions.
 
+Typed steps reach the model through one tool,
+`set_session_prescription(session_id, revision, prescription)`. Creation, single
+updates and grouped previews carry no prescription, so the step schema (inlined to
+the allowed repeat depth) is bound once per model call instead of three times.
+Running, cycling, swimming, strength and other sports all take steps this way, which
+is why a running-only notation could not replace it. A described tempo or interval
+created without steps is saved with a `steps_required` notice and stays
+unexportable until its steps are set: a structured creation costs one more model
+request than before.
+
 ## Execution and UI
 
 - A local acknowledgement requires no model request. Created sessions and export
@@ -89,8 +99,8 @@ are not a usability study and do not validate the 100/200 ms design targets or I
 steps through the existing grammar, including specified rests and optional weights.
 A title alone is rejected before persistence. The coach may compose a requested
 future workout; logging performed sets uses one `save_workout` call, rejecting any incomplete parse without saving a partial session.
-Optional `prescription` must preserve the grammar-verified sets and may specify
-exact Garmin exercise names. Only explicit catalog equivalents are mapped; unknown
+`set_session_prescription` may then group those sets into repeats or specify exact
+Garmin exercise names; its sets must equal the ones already read from `strength_text`. Only explicit catalog equivalents are mapped; unknown
 exercises fail conversion without a remote write. `export_garmin_sessions` uses the
 same durable reservation, scheduling, verification and optional device-transfer
 workflow as other sports. No automatic retry of an ambiguous write is added.

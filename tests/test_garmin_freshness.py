@@ -56,7 +56,9 @@ def activity(i, day="2026-10-12"):
 def scripted_import(monkeypatch, *, fail=None):
     imported = set()
     monkeypatch.setattr(
-        GarminSyncClient, "_is_already_synced", lambda self, sid: sid in imported
+        GarminSyncClient,
+        "already_synced",
+        lambda self, ids: {str(i) for i in ids if i in imported},
     )
 
     def work(self, *, activity_batch, sync_result, checkpoint, download_fit=True):
@@ -473,7 +475,9 @@ def progressing_import(monkeypatch):
 
     imported = set()
     monkeypatch.setattr(
-        GarminSyncClient, "_is_already_synced", lambda self, sid: sid in imported
+        GarminSyncClient,
+        "already_synced",
+        lambda self, ids: {str(i) for i in ids if i in imported},
     )
 
     def work(self, *, activity_batch, sync_result, checkpoint, download_fit=True):

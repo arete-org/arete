@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import os
+import re
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import duckdb
 import pytest
+import yaml
 
 from arete.config import config
 from arete.dataio import db
@@ -64,6 +67,44 @@ def test_a_dead_remote_connection_is_reopened(opened):
     cursor = db.connect()
     assert len(opened) == 2
     assert cursor._con is opened[1].cursor.return_value
+
+
+def test_a_run_reuses_cursors_of_the_current_remote_connection_only(opened):
+    with db.reuse_connections():
+        db.connect().close()
+        db.connect().close()
+        assert opened[0].cursor.call_count == 1
+        db.reset_remote()  # lost and reopened by another caller
+        db.connect().close()
+    assert len(opened) == 2 and opened[1].cursor.call_count == 1
+
+
+def test_a_reused_remote_cursor_is_in_the_database_as_a_new_one(remote, tmp_path):
+    """A real DuckDB stands in for MotherDuck: a cursor starts in the in-memory
+    catalog until ``USE``, which the repositories' search path must not undo."""
+    session = (
+        "SELECT current_database(), current_schema(), current_setting('search_path')"
+    )
+    parent = duckdb.connect()
+    parent.execute(f"ATTACH '{tmp_path / 'arete_v2.duckdb'}' AS arete_v2")
+    parent.execute("CREATE SCHEMA arete_v2.app")
+    parent.execute("CREATE TABLE arete_v2.app.t (x INTEGER)")
+    parent.execute("USE arete_v2")
+    with (
+        patch.object(db, "_open_remote", return_value=parent),
+        patch.object(db, "_remote_cursor", wraps=db._remote_cursor) as cursors,
+        db.reuse_connections(),
+    ):
+        con = db.connect()
+        fresh = con.execute(session).fetchone()
+        assert fresh[0] == "arete_v2"
+        con.execute("SET search_path = 'app'")
+        con.close()
+        con = db.connect()
+        assert cursors.call_count == 1
+        assert con.execute(session).fetchone() == fresh
+        assert con.execute("SELECT count(*) FROM app.t").fetchone() == (0,)
+        con.close()
 
 
 def test_a_remote_that_stays_down_raises(opened):
@@ -190,3 +231,58 @@ def test_a_refusal_names_the_database_without_its_options(monkeypatch):
         db.connect()
     assert "arete_v2" in str(refused.value)
     assert "secret" not in str(refused.value)
+
+
+def compose_database_default() -> str:
+    compose = yaml.safe_load(
+        (Path(__file__).parents[1] / "docker-compose.yml").read_text()
+    )
+    entries = compose["services"]["backend"]["environment"]
+    (entry,) = [e for e in entries if e.startswith("ARETE_DB=")]
+    match = re.fullmatch(r"ARETE_DB=\$\{ARETE_DB:-(.+)\}", entry)
+    assert match, f"the shell or .env must still override it: {entry}"
+    return match.group(1)
+
+
+def test_the_env_example_leaves_the_compose_default_in_place():
+    # Compose interpolation reads .env, which `make docker` copies from here.
+    lines = (Path(__file__).parents[1] / ".env.example").read_text().splitlines()
+    assert not [line for line in lines if line.startswith("ARETE_DB=")]
+
+
+def test_the_docker_stack_defaults_to_the_preview_database(monkeypatch, caplog):
+    default = compose_database_default()
+    assert default != "md:arete_v2"
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setenv("ARETE_DB", default)
+    db.warn_production_database()
+    assert config.is_remote_db is True
+    assert caplog.records == []
+
+
+def test_production_outside_vercel_logs_a_warning(monkeypatch, caplog):
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setenv("ARETE_DB", "md:arete_v2?motherduck_token=secret")
+    db.warn_production_database()
+    (record,) = caplog.records
+    assert record.levelname == "WARNING"
+    assert "arete_v2" in record.getMessage()
+    assert "secret" not in record.getMessage()
+
+
+@pytest.mark.parametrize(
+    ("vercel", "target"),
+    [
+        ("1", "md:arete_v2"),
+        (None, "md:Arete_Preview_v2"),
+        (None, "data/arete.duckdb"),
+    ],
+)
+def test_no_production_warning_elsewhere(monkeypatch, caplog, vercel, target):
+    if vercel:
+        monkeypatch.setenv("VERCEL", vercel)
+    else:
+        monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setenv("ARETE_DB", target)
+    db.warn_production_database()
+    assert caplog.records == []

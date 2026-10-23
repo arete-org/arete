@@ -453,7 +453,7 @@ class TestBuildChatModel:
                 monkeypatch.setenv(name, value)
 
     @pytest.mark.parametrize("configured_model", [None, ""])
-    def test_openrouter_default_sends_its_fallback_list(
+    def test_openrouter_default_sends_its_model_chain(
         self, monkeypatch, configured_model
     ):
         from arete.agent.models.providers import build_chat_model
@@ -469,12 +469,13 @@ class TestBuildChatModel:
         payload = self._payload(model)
         assert payload["model"] == DEFAULT_OPENROUTER_MODEL
         assert payload["tools"][0]["function"]["name"] == "list_planned"
-        assert payload["extra_body"]["models"] == [
-            DEFAULT_OPENROUTER_MODEL,
-            *DEFAULT_OPENROUTER_FALLBACKS,
-        ]
+        # A single default model sends no `models` list.
+        chain = [DEFAULT_OPENROUTER_MODEL, *DEFAULT_OPENROUTER_FALLBACKS]
+        assert payload["extra_body"].get("models") == (
+            chain if DEFAULT_OPENROUTER_FALLBACKS else None
+        )
         # The free router once answered a briefing with a safety classifier.
-        assert "openrouter/free" not in payload["extra_body"]["models"]
+        assert "openrouter/free" not in chain
 
     def test_free_only_routing_requires_the_openrouter_host(self, monkeypatch):
         from dataclasses import replace
@@ -486,15 +487,13 @@ class TestBuildChatModel:
         lookalike = replace(
             resolve_route(), base_url="https://openrouter.ai.example.com/api/v1"
         )
-        assert (
-            "provider"
-            not in self._payload(build_chat_model(route=lookalike))["extra_body"]
-        )
+        payload = self._payload(build_chat_model(route=lookalike))
+        assert "provider" not in (payload.get("extra_body") or {})
 
     def test_only_auxiliary_openrouter_calls_disable_reasoning(self, monkeypatch):
         from arete import coaching
 
-        self._openrouter(monkeypatch)
+        self._openrouter(monkeypatch, "a/one:free", "b/two:free,c/three:free")
         with patch.object(coaching, "build_agent") as assemble:
             coaching._assemble("chat")
         models = assemble.call_args.kwargs
@@ -541,6 +540,7 @@ class TestBuildChatModel:
                 "sort": "latency",
                 "allow_fallbacks": True,
                 "require_parameters": True,
+                "data_collection": "deny",
                 "max_price": {"prompt": 0.15, "completion": 0.5},
             },
             "reasoning": {"effort": "low"},
@@ -585,8 +585,36 @@ class TestBuildChatModel:
         payload = self._payload(build_chat_model())
         assert payload["extra_body"]["provider"] == {
             "sort": "latency",
+            "data_collection": "deny",
             "max_price": {"prompt": 0, "completion": 0},
         }
+
+    @pytest.mark.parametrize("glm_flash", [False, True])
+    def test_every_athlete_request_denies_data_collection(self, monkeypatch, glm_flash):
+        # Each profile's requests carry athlete data: coach, fallbacks, titles
+        # and summaries alike must skip providers that train on prompts.
+        from arete import coaching
+        from arete.agent.profiles.catalog import PROFILES
+
+        self._openrouter(monkeypatch, "a/one:free", "b/two:free,c/three:free")
+        built = []
+        original = coaching.build_chat_model
+
+        def record(**kwargs):
+            built.append(original(**kwargs))
+            return built[-1]
+
+        with (
+            patch.object(coaching, "build_chat_model", side_effect=record),
+            patch.object(coaching, "build_agent"),
+        ):
+            for profile in PROFILES:
+                coaching._assemble(profile, glm_flash=glm_flash)
+        # At least one coach model per profile, plus chat's title and summary.
+        assert len(built) >= len(PROFILES) + 2
+        for model in built:
+            provider = self._payload(model)["extra_body"]["provider"]
+            assert provider["data_collection"] == "deny"
 
     def test_a_pinned_model_takes_explicit_fallbacks_in_order(self, monkeypatch):
         from arete.agent.models.providers import build_chat_model

@@ -120,7 +120,9 @@ the SHA-256 of a versioned tuple of trusted athlete id, profile and thread id
 its key across user turns; different athletes, profiles and conversations do not
 share it. No new conversation state or local provider cache is introduced.
 Both free and paid OpenRouter policies use `provider.sort: "latency"` without
-`provider.order`, which would override sticky routing. Other providers receive
+`provider.order`, which would override sticky routing. Every OpenRouter request
+carries athlete data, so these policies, Jev's and voice transcription's also
+send `provider.data_collection: "deny"`: no provider that trains on prompts. Other providers receive
 neither this identifier nor OpenRouter-specific routing settings. Pricing caps,
 reasoning and existing request settings are preserved. This is best-effort
 provider affinity, not a promise of cached tokens or a latency bound; check usage
@@ -247,12 +249,15 @@ The Log selection includes the selected strength session or the cardio detail di
 The Planning read adds the sessions done since its window's start (at most 15).
 Domain actions invalidate this invocation-local cache for the next model call; reads
 reuse it. There is no page-context tool. A
-question about the screen therefore needs no tool call. The journal is read again
-for each model call, so writes within a turn are visible on the next call; older
-entries remain accessible through filesystem tools. Sections marked unstable (Garmin
-freshness, the open page, the Slack surface and its clock, the last-call budget
-notice) follow every stable one, in declaration order, so provider prompt caches
-keep the stable prefix. Contributions do not mutate
+question about the screen therefore needs no tool call. Facts, the journal excerpt,
+recent follow-ups and retrieval are read once per message and cached on the
+invocation's context, like the page. Every tool outside the read set (`READ_TOOL_NAMES`)
+clears that cache, even when it raises, so the coach's own writes are visible on the
+next model call; writes from elsewhere during an invocation are seen at the next
+message. Older entries remain accessible through filesystem tools. Sections marked
+unstable (Garmin freshness, the open page, the Slack surface and its clock, the
+last-call budget notice) follow every stable one, in declaration order, so provider
+prompt caches keep the stable prefix. Contributions do not mutate
 stored message content. `RuntimeContextMiddleware` owns the clock: once before
 each chat run, it stamps the new human message's `additional_kwargs.arete_sent_at`
 from the invocation's athlete-local instant. It renders date, time, UTC offset
@@ -486,6 +491,15 @@ so `execute`/`executemany` count in a request-local ContextVar, which AnyIO work
 threads inherit. A response whose length is known also carries `Server-Timing`
 (`auth`, `hydrate`, `db` with its statement count, `app`, `total`); a stream is only
 logged, so it is never buffered.
+
+The daily run logs one `Daily sync timings:` line per athlete (`scheduler._run_athlete`,
+`observability/steps.py`): each step's duration, statements and database time, on
+the cron request's counter or on its own outside a request, failed runs included.
+Within that run, `dataio.db.reuse_connections` hands a connection a call closed
+cleanly (no open transaction, no failed call, a new connection's session: the
+repositories' search path is undone, by `USE` on MotherDuck) to the next call of
+the same athlete within `MAX_IDLE_SECONDS`, which skips a new connection's setup
+statements; read-only connections and everything outside the run open as before.
 
 Completed chat answers carry their `trace_id` and a signed feedback receipt
 in both HTTP and SSE `done`. The runtime supplies that UUID as the graph's
@@ -1202,7 +1216,8 @@ coach use optimistic revisions, and deleting a fact removes its history.
 Chat adds bounded BM25 retrieval of existing facts, journals and session text
 through the central context builder. Document blocks remain accessible through
 filesystem tools rather than being injected again as retrieved system context. Reads run in
-workers, with a fresh corpus at each model boundary and no extra model request.
+workers, once per question and invocation (again after a write tool), with no
+extra model request.
 Optional traversal follows only authoritative source links and remains disabled
 in production. See [personal memory](personal-memory.md) for contracts, bounds
 and migration compatibility.
@@ -1298,6 +1313,49 @@ and saved conversations are therefore exported only on request.
 and fitness series, and its records from `app.best_efforts`, with no model
 request. Both are plain HTTP reads
 (`api/data_export.py`, `api/year_review.py`); the coach never receives them.
+
+### Pain, body weight and the physio report
+
+`services/body_log.py` owns the pain and body weight the athlete records
+(ARE-62, migration 66): `app.pain_entries` (a day, an area from a fixed list,
+an optional side, 0 to 10 and a short note, several a day) and
+`app.weight_entries` (one weight a day, entered again to correct it). Both are
+health data (GDPR art. 9): private relations behind the consent gate, in the
+default export, erased with the account, physically deleted entry by entry
+and never logged with a value. Text written from an entry before its deletion
+keeps its copy: a decision's reason (intensity and ACWR only, never the area),
+a briefing, a conversation, the coach's journal. The routes are `/body` (the trend),
+`/body/pain`, `/body/weight/{day}` and `/body/report`; the browser offers a
+quick entry on the dashboard and on a session page, and the **Santé** page
+(`/sante`).
+
+The coach reads them through the existing owners only: the context builder
+adds the last two weeks of pain and the latest weight to every personal
+profile (`body_log.context_block`, empty when nothing is recorded), the
+**Santé** page is a page-data read (`health`), and the rule facts carry pain at
+4/10 or more within three days. With an ACWR above its safe zone (1.3), such a
+pain on an area the session's sport loads (`adaptation.LOADED_AREAS`: lower
+limbs and back for running, plus the neck and wrists for cycling, upper limbs
+and back for swimming; an « autre » pain counts for every sport) lowers the
+day's readiness band. It
+shares one penalty with a low morning check-in (one band in total, never two),
+and pain alone stops at the recovery replacement, never rest. The reason gives
+the intensity and the ACWR, not the area. Without a readiness the check-in
+decides nothing, but such a pain still does, from the top band (the ACWR
+rest rule then does not apply): a hard session is eased, an easy one kept. The briefing's facts list the pain of the last
+three days (area, intensity, day; the notes come with the context section) and
+the signal when it holds for a session planned that day the rules can adapt, without claiming an outcome: the day's decision says
+what happened. Weight is shown, never used
+to normalise a pace or a power, and no Garmin weigh-in is imported yet.
+
+`services/body_report.py` builds the report for a physio or a sports doctor
+from stored data, without a model: eight calendar weeks ending today, weekly
+sessions, time, distance, the shared TSS estimate and the ACWR at each week's
+end, the sessions (sport and numbers, never their titles or notes), the pain
+with its notes, the weight, Garmin's readiness and the check-ins' answers
+(never their notes). `/sante/rapport`
+renders it and the browser prints it or saves it as PDF on light ink whatever
+the theme; no PDF library is added.
 
 ## Slack product and private administration
 

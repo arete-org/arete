@@ -19,6 +19,7 @@ from arete.api.athlete_facts import router as athlete_facts_router
 from arete.api.auth import AuthMiddleware, auth_misconfigured
 from arete.api.auth import router as auth_router
 from arete.api.automations import router as automations_router
+from arete.api.body_log import router as body_log_router
 from arete.api.checkins import router as checkins_router
 from arete.api.coach import router as coach_router
 from arete.api.dashboard import router as dashboard_router
@@ -41,7 +42,7 @@ from arete.api.slack import router as slack_router
 from arete.api.strength import router as strength_router
 from arete.api.year_review import router as year_review_router
 from arete.config import config
-from arete.dataio.db import db_connection
+from arete.dataio.db import db_connection, warn_production_database
 from arete.dataio.init_duckdb import SchemaInitializationError, pending_migrations
 from arete.dataio.init_duckdb import main as init_schema
 from arete.dataio.mirror import MirrorMiddleware
@@ -80,6 +81,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         from arete.observability.tracing import get_tracing_client
 
         get_tracing_client()
+    warn_production_database()
     try:
         init_schema()
         _app.state.schema_initialization = {"status": "ready"}
@@ -255,6 +257,7 @@ for router in (
     onboarding_router,
     automations_router,
     checkins_router,
+    body_log_router,
     coach_router,
     dashboard_router,
     gamification_router,

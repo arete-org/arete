@@ -577,14 +577,28 @@ def test_concurrent_threads_keep_their_own_attachment_context(
     asyncio.run(concurrent_runs())
 
 
+FOOTING = {"steps": [{"kind": "effort", "duration_kind": "seconds", "value": 1800}]}
+
+
+def set_footing(session):
+    from arete.agent.tools.planning import set_session_prescription
+
+    return json.loads(
+        set_session_prescription.invoke(
+            {
+                "session_id": session["id"],
+                "revision": session["revision"],
+                "prescription": FOOTING,
+            }
+        )
+    )
+
+
 def creation_args(doc):
     return {
         "date_str": "2027-01-12",
         "session_type": "endurance",
         "description": "Footing 30 minutes",
-        "prescription": {
-            "steps": [{"kind": "effort", "duration_kind": "seconds", "value": 1800}]
-        },
         "provenance": [
             {
                 "document_id": doc["id"],
@@ -606,6 +620,7 @@ def test_direct_creation_keeps_verified_sources_after_document_deletion(document
         )
     )
     assert result["created"]
+    assert set_footing(result["session"])["updated"]
     documents.delete_documents(document_db)
     saved = GarminRepository().get_planned_session(result["session"]["id"])
     assert saved.prescription["steps"][0]["value"] == 1800
@@ -725,7 +740,22 @@ def test_document_request_creates_and_exports_without_import_approval(
         result = next(
             m for m in seen[-1] if m.type == "tool" and m.tool_call_id == "create"
         )
-        session_id = json.loads(result.content)["session"]["id"]
+        session = json.loads(result.content)["session"]
+        yield AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "set_session_prescription",
+                    "args": {
+                        "session_id": session["id"],
+                        "revision": session["revision"],
+                        "prescription": FOOTING,
+                    },
+                    "id": "steps",
+                }
+            ],
+        )
+        session_id = session["id"]
         yield AIMessage(
             content="",
             tool_calls=[
@@ -769,7 +799,7 @@ def test_document_request_creates_and_exports_without_import_approval(
     assert "Séance créée" in response.text
     assert "import_preview" not in response.text
     assert len(exported) == 1
-    assert len(seen) == 3 + int(invalid_first)
+    assert len(seen) == 4 + int(invalid_first)
     with db_connection() as con:
         assert con.execute("SELECT count(*) FROM app.planned_sessions").fetchone() == (
             1,

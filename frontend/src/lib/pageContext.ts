@@ -29,6 +29,8 @@ export function pageFromPath(pathname: string): string {
       return 'profile';
     case 'settings':
       return 'settings';
+    case 'sante':
+      return 'health';
     default:
       // Legacy redirects (/forge, /quest-log…) never settle here — they
       // immediately <Navigate> to a canonical route.

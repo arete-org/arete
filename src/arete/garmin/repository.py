@@ -720,6 +720,22 @@ class GarminRepository:
         finally:
             conn.close()
 
+    def present_garmin_activities(self, activity_ids: list[int]) -> set[str]:
+        """Those of ``activity_ids`` in the athlete's archive, as stored (text)."""
+        if not activity_ids:
+            return set()
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "SELECT DISTINCT garmin_activity_id FROM visible_actual_sessions "
+                "WHERE source != 'strava' AND garmin_activity_id IN "
+                f"({', '.join(['?'] * len(activity_ids))})",
+                [str(activity_id) for activity_id in activity_ids],
+            ).fetchall()
+        finally:
+            conn.close()
+        return {row[0] for row in rows}
+
     def has_garmin_activity(self, activity_id: int) -> bool:
         """Check the athlete's entire archive without loading their sessions."""
         conn = self._get_connection()

@@ -132,6 +132,25 @@ class TestTranscribe:
         assert payload["language"] == "fr"
         assert payload["input_audio"]["data"]
 
+    @pytest.mark.parametrize(
+        ("base_url", "provider"),
+        [
+            ("https://openrouter.ai/api/v1", {"data_collection": "deny"}),
+            ("http://localhost:8000/v1", None),
+        ],
+    )
+    def test_only_openrouter_is_told_to_deny_data_collection(
+        self, monkeypatch, base_url, provider
+    ):
+        # A dictation is athlete data; a local server knows no routing object.
+        monkeypatch.setenv("STT_BASE_URL", base_url)
+        with patch("arete.llm.transcription.httpx.Client") as client:
+            mock = client_returning(response({"text": "squat 3 séries de 5"}))
+            client.return_value = mock
+            transcribe(AUDIO, filename="d.webm")
+        payload = mock.__enter__.return_value.post.call_args.kwargs["json"]
+        assert payload.get("provider") == provider
+
     def test_read_timeout_comes_from_the_configuration(self, monkeypatch):
         monkeypatch.setenv("STT_TIMEOUT_S", "17")
         with patch("arete.llm.transcription.httpx.Client") as client:

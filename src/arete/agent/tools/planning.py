@@ -8,6 +8,7 @@ from uuid import UUID
 from langchain.tools import ToolRuntime
 from langchain_core.tools import BaseTool
 from pydantic import Field, WithJsonSchema
+from pydantic.json_schema import SkipJsonSchema
 
 from arete.agent.tools.garmin import (
     inspect_planned_session,
@@ -61,16 +62,14 @@ def create_planned_session(
         float, Field(ge=0, le=1000, allow_inf_nan=False)
     ] = 0.0,
     target_intensity: ClearableIntensity = "",
-    prescription: PrescriptionInput | None = None,
     strength_text: Annotated[str, Field(max_length=4000)] = "",
     provenance: Annotated[list[Provenance] | None, Field(max_length=20)] = None,
 ) -> str:
     """Create one session directly in Planning and return its real id.
 
-    date_str is an ISO date. prescription is a structured object, never JSON text.
-    Use prescription.steps for workout structure, not description alone.
-    For strength, strength_text supplies exercises, sets and rests to the grammar;
-    any supplied prescription must match those sets. Zero targets mean unspecified.
+    date_str is an ISO date. Workout steps go in set_session_prescription after.
+    For strength, strength_text supplies exercises, sets and rests to the grammar.
+    Zero targets mean unspecified.
     Cite document cells/quotes in provenance when using an attachment.
     Read existing sessions first if absent from context; reuse their ids for export.
     """
@@ -82,7 +81,6 @@ def create_planned_session(
         target_duration_min=target_duration_min,
         target_distance_km=target_distance_km,
         target_intensity=target_intensity,
-        prescription=prescription,
         strength_text=strength_text,
         provenance=provenance,
         thread_id=runtime.context.thread_id,
@@ -90,8 +88,8 @@ def create_planned_session(
 
 
 class SessionChangesInput(service.SessionChanges):
-    # Finite schema preserves nested step types through provider conversion.
-    prescription: PrescriptionInput | None = None
+    # Steps have one model-facing door, set_session_prescription.
+    prescription: SkipJsonSchema[None] = None
     target_intensity: ClearableIntensity | None = None
     target_hr_zone: ClearableZone | None = None
 
@@ -144,14 +142,29 @@ def update_planned_session(
     revision: Annotated[int, Field(ge=1)],
     changes: SessionChangesInput,
 ) -> str:
-    """Modify date, status, metadata or steps of one existing session, preserving its id.
+    """Modify date, status, metadata or strength_text of one session, preserving its id.
 
     Use the revision from list_planned or inspect_planned_session. Omitted fields stay
-    unchanged (omit them, never null); zero/empty clears a scalar target. To change
-    workout steps, supply the complete prescription, not just description or scalar
-    targets. Never delete/recreate or export implicitly.
+    unchanged (omit them, never null); zero/empty clears a scalar target. Workout
+    steps change only through set_session_prescription. Never delete/recreate or
+    export implicitly.
     """
     return service.update_planned_session(session_id, revision, changes)
+
+
+@typed_tool
+def set_session_prescription(
+    session_id: Annotated[int, Field(gt=0)],
+    revision: Annotated[int, Field(ge=1)],
+    prescription: PrescriptionInput,
+) -> str:
+    """Replace the workout steps of one existing session, preserving its id.
+
+    prescription is a structured object, never JSON text, and the complete workout.
+    Use the revision the creation or last read returned. For strength, its sets must
+    match those read from strength_text. Never export implicitly.
+    """
+    return service.set_session_prescription(session_id, revision, prescription)
 
 
 @typed_tool
@@ -170,6 +183,7 @@ PLANNING_TOOLS: list[BaseTool] = [
     inspect_planned_session,
     create_planned_session,
     update_planned_session,
+    set_session_prescription,
     preview_plan_changes,
     apply_plan_changes,
     delete_planned_session,

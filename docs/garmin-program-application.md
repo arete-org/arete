@@ -99,21 +99,37 @@ the consent screen's backfill option, if the athlete ticks it.
 The coach's answers, briefings and session feedback are produced by language
 models reached through OpenRouter. Requests carry the training and health facts
 the answer needs (Garmin data included). Arete itself does not train models on
-them. The default routes are free models
-(`agent/models/registry.py`: `max_price` 0, no other provider restriction);
-a paid model is used only when an administrator turns it on. Arete does not
-send OpenRouter's `data_collection: "deny"` preference, so the providers
-OpenRouter routes free requests to may retain prompts or use them for
-training under their own terms. The privacy policy only holds a placeholder
-on this (`[À COMPLÉTER]` on retention and training by free providers), still
+them. The default route is a free model, Google Gemma 4 31B
+(`agent/models/registry.py`: `max_price` 0); a paid model (Z.ai GLM 5.3 Flash,
+capped at $0.15/M input and $0.50/M output tokens) is used only when an
+administrator turns it on. Every OpenRouter request that carries athlete data
+(coach, briefings, feedback, weekly review, evening message, conversation
+titles, summaries, memory and Slack classification, voice transcription)
+sends `provider.data_collection: "deny"`, so OpenRouter routes it only to
+providers whose published policy is not to train on prompts. That filter does
+not cover retention: on 2026-10-23 the free Gemma endpoint (Google AI Studio)
+kept prompts 55 days, according to the data policy OpenRouter publishes for
+each endpoint (its best knowledge, not the provider's own terms). The default
+route has no free fallback: when that endpoint is down or rate limited, free
+requests fail until an administrator turns on the paid model. Garmin data never reaches the voice transcription,
+which only receives the athlete's own dictation. The privacy policy still
+holds a placeholder on providers, retention and training (`[À COMPLÉTER]`),
 to be completed (ARE-161).
 
-**[OWNER]** two questions before submitting: (1) whether Garmin's API licence
+Measured on 2026-10-23 from the endpoint data policies on OpenRouter's public
+model pages (`openrouter.ai/<model>/providers`): of 16 free
+tool-calling models, 6 have a free endpoint that does not train on prompts.
+The two Nemotron models Arete used by default were free only on NVIDIA's
+endpoint, which trains on prompts, so Gemma 4 31B became the only default.
+GLM 5.3 Flash, the memory model (Jev) and the transcription model (Whisper)
+keep endpoints that do not train within their price caps. Requiring zero
+retention as well (`zdr`) would leave only one free tool-calling model.
+
+**[OWNER]** questions before submitting: (1) whether Garmin's API licence
 allows Garmin data in AI-generated coaching at all (the Strava agreement of
 1 June 2026 forbade it, which is why Strava was retired as a source); (2)
-whether to send `data_collection: "deny"` (and accept fewer free providers, or
-paid ones) so that no provider may retain or train on Garmin-derived prompts,
-which Garmin is likely to require.
+whether a 55-day retention by the free provider is acceptable, or whether
+Garmin-derived prompts need zero-retention (paid) providers.
 
 ### Storage and isolation
 

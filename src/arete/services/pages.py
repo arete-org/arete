@@ -273,6 +273,42 @@ def _profile() -> dict[str, Any]:
     }
 
 
+#: Entries of each kind a Santé page read lists (pain newest first).
+HEALTH_PAGE_ENTRIES = 60
+
+
+def _health() -> dict[str, Any]:
+    """The Santé page and its report: eight weeks of pain and weight, by area.
+
+    Entry timestamps stay out: the dates say when; the report's training
+    tables are the analytics and planning toolkits' to read. The newest
+    ``HEALTH_PAGE_ENTRIES`` pain and weight entries are listed, the areas
+    summarise them all.
+    """
+    from arete.services.body_log import trend
+
+    data = trend(56)
+    latest = data["weight"]["latest"]
+    return {
+        "body_log": {
+            **data,
+            "weight": {
+                **data["weight"],
+                "latest": latest
+                and {"date": latest["date"], "weight_kg": latest["weight_kg"]},
+            },
+            "pain": [
+                {k: v for k, v in p.items() if k not in {"created_at", "updated_at"}}
+                for p in data["pain"][:HEALTH_PAGE_ENTRIES]
+            ],
+            "weights": [
+                {"date": w["date"], "weight_kg": w["weight_kg"]}
+                for w in data["weights"][-HEALTH_PAGE_ENTRIES:]
+            ],
+        }
+    }
+
+
 def _follow_up() -> dict[str, Any]:
     from arete.services import automations, inbox
 
@@ -286,6 +322,7 @@ _PAGE_FETCHERS = {
     "planning": _planning,
     "log": _log,
     "settings": _settings,
+    "health": _health,
 }
 
 

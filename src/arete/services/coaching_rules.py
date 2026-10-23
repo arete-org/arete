@@ -35,6 +35,7 @@ from arete.strength.repository import StrengthRepository
 
 if TYPE_CHECKING:
     from arete.garmin.models import ActualSession
+    from arete.services.body_log import PainEntry
     from arete.services.checkins import Checkin
     from arete.strength.models import StrengthSession
 
@@ -147,6 +148,9 @@ class RuleFacts:
     #: The day's morning check-in, None when unanswered (it lowers, never
     #: raises, the day's decision: ``adaptation.declared_fatigue``).
     checkin: Checkin | None = None
+    #: Pain at 4/10 or more declared in the last three days, newest first
+    #: (``body_log.recent_pain``): with a high ACWR it lowers the decision.
+    pain: tuple[PainEntry, ...] = ()
 
     @property
     def is_empty(self) -> bool:
@@ -165,8 +169,8 @@ class RuleFacts:
 
 def rule_facts(target_date: date | None = None) -> RuleFacts:
     """ACWR over 28 days, form over the whole history, the readiness every
-    surface shows (Garmin first), the morning check-in and the athlete's own
-    thresholds."""
+    surface shows (Garmin first), the morning check-in, the recent declared
+    pain and the athlete's own thresholds."""
     from arete.services.metrics import load_form
 
     target_date = target_date or athlete_today()
@@ -190,7 +194,7 @@ def rule_facts(target_date: date | None = None) -> RuleFacts:
         complete = False
         logger.warning("Failed to compute fitness metrics for tip", exc_info=True)
 
-    from arete.services import checkins
+    from arete.services import body_log, checkins
 
     checkin = None
     try:
@@ -198,6 +202,13 @@ def rule_facts(target_date: date | None = None) -> RuleFacts:
     except Exception:
         complete = False
         logger.warning("Failed to read the morning check-in", exc_info=True)
+
+    pain: tuple[PainEntry, ...] = ()
+    try:
+        pain = tuple(body_log.recent_pain(target_date))
+    except Exception:
+        complete = False
+        logger.warning("Failed to read the declared pain", exc_info=True)
 
     settings = get_user_settings(user_id=resolve_athlete_id()) or {}
     return RuleFacts(
@@ -212,6 +223,7 @@ def rule_facts(target_date: date | None = None) -> RuleFacts:
         readiness_measured_on=readiness.measured_on if readiness else None,
         complete=complete,
         checkin=checkin,
+        pain=pain,
     )
 
 

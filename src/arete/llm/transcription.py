@@ -18,6 +18,7 @@ import re
 from dataclasses import dataclass
 from pathlib import PurePath
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -129,6 +130,10 @@ def transcribe(
         },
         "language": language,
     }
+    if urlsplit(config.stt_base_url).hostname == "openrouter.ai":
+        # A dictation is athlete data: no provider that trains on it. Other
+        # OpenAI-compatible servers do not know OpenRouter's routing object.
+        payload["provider"] = {"data_collection": "deny"}
     data = _post(payload)
 
     text = str(data.get("text") or "").strip()

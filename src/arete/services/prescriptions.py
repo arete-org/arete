@@ -200,9 +200,9 @@ def prescription_from_description(text: str, sport: str) -> Prescription | None:
 
 def strength_sets(
     prescription: Prescription,
-) -> list[tuple[str, float | None, float | None]]:
+) -> list[tuple[str, float | None, float | None, bool]]:
     """Expand bounded groups for comparison; rests and Garmin names add no sets."""
-    result: list[tuple[str, float | None, float | None]] = []
+    result: list[tuple[str, float | None, float | None, bool]] = []
 
     def visit(steps: list[Step]) -> None:
         for step in steps:
@@ -214,7 +214,14 @@ def strength_sets(
                     raise ValueError(
                         "La musculation doit préciser les répétitions de chaque série."
                     )
-                result.append((step.exercise.casefold(), step.value, step.weight_kg))
+                result.append(
+                    (
+                        step.exercise.casefold(),
+                        step.value,
+                        step.weight_kg,
+                        step.kind == "warmup",
+                    )
+                )
                 assert len(result) <= MAX_EXPANDED_STEPS
 
     visit(prescription.steps)

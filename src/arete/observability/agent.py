@@ -59,6 +59,13 @@ def record_decision_call(
     )
 
 
+def record_stack_ready(*, import_ms: int, compile_ms: int) -> None:
+    """Once per process: what a cold instance pays before its first agent run."""
+    assert import_ms >= 0
+    assert compile_ms >= 0
+    logger.info("Coach stack ready: import_ms=%d compile_ms=%d", import_ms, compile_ms)
+
+
 def record_run(
     *, profile: str, stats: Any, total_ms: int, error: str | None = None
 ) -> None:

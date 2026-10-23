@@ -23,18 +23,22 @@ AGENT_STREAM_CHUNK_TIMEOUT_SEC = 30
 #: Lightning (writes its reasoning into the answer), `openrouter/free` (routed
 #: a tool-less request to a content-safety classifier that replied "User
 #: Safety: safe"), Ling 3.1 Flash (priced 0 but not free under a price cap).
-#: Free availability changes weekly: LLM_MODEL and LLM_MODEL_FALLBACKS
-#: override both.
-DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
-DEFAULT_OPENROUTER_FALLBACKS = (
-    "google/gemma-4-31b-it:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-)
+#: On 2026-10-23 both Nemotron models were free only on NVIDIA's trial
+#: endpoint, which trains on prompts: under `data_collection: "deny"` Gemma 4
+#: 31B (Google AI Studio: no training, 55-day retention) is the only measured
+#: free model left. Free availability changes weekly: LLM_MODEL and
+#: LLM_MODEL_FALLBACKS override both.
+DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
+DEFAULT_OPENROUTER_FALLBACKS: tuple[str, ...] = ()
 #: Default OpenRouter policy: a model that stops being free is skipped
 #: instead of billed. Only the explicit admin GLM rollout permits paid chat
 #: requests; Jev surface and memory decisions have separately bounded paid routes.
+#: Every policy denies data collection: each request carries athlete data, so
+#: OpenRouter must skip providers that train on prompts. It does not filter
+#: on retention (that would be `zdr`).
 OPENROUTER_FREE_ONLY = {
     "sort": "latency",
+    "data_collection": "deny",
     "max_price": {"prompt": 0, "completion": 0},
 }
 #: Opt-in admin experiment. Provider fallback stays on this model and cannot
@@ -44,6 +48,7 @@ OPENROUTER_GLM_FLASH = {
     "sort": "latency",
     "allow_fallbacks": True,
     "require_parameters": True,
+    "data_collection": "deny",
     "max_price": {"prompt": 0.15, "completion": 0.5},
 }
 #: OpenRouter rejects a longer `models` list with HTTP 400.

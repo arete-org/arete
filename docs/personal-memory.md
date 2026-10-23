@@ -160,8 +160,8 @@ source block, and journal → typed session reference. Server feedback now recor
 **Graph expansion is disabled in production.** Enablement requires behavior-level
 evidence, not just better source recall.
 
-The context builder runs synchronous reads in an AnyIO worker. Each model
-boundary rebuilds a disposable corpus, including after memory writes; there is
+The context builder runs synchronous reads in an AnyIO worker. Each question
+builds a disposable corpus once per invocation, rebuilt after any write tool; there is
 no process-global index to become stale after correction or deletion. The database
 corpus uses one read transaction. Existing filesystem journal synchronization is
 unchanged. No automatic reload/replay of an agent run is introduced.

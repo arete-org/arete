@@ -1,6 +1,9 @@
 """Exercise runtime bounds and mission policy through actual compiled graphs."""
 
 import asyncio
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -25,6 +28,7 @@ from arete.agent.runtime.execution import (
     run_config,
     stream_agent,
 )
+from arete.services.personal_context import SearchResult
 
 
 class Model(GenericFakeChatModel):
@@ -308,6 +312,152 @@ def test_async_tool_concurrency_is_bounded_and_contexts_are_independent():
         assert peak == 4
 
     asyncio.run(run())
+
+
+@pytest.fixture
+def ledger(monkeypatch):
+    """A fake ledger behind the context builder, counting each read."""
+    entries = ["Objectif : semi en 1h35"]
+    reads: Counter[str] = Counter()
+
+    def block(name):
+        def read(*_args):
+            reads[name] += 1
+            return f"{name} : " + " | ".join(entries)
+
+        return read
+
+    for name, attribute in (
+        ("facts", "facts_block"),
+        ("body", "body_block"),
+        ("journal", "journal_block"),
+        ("followups", "followup_block"),
+    ):
+        monkeypatch.setattr(f"arete.agent.context.builder.{attribute}", block(name))
+
+    def search(*_args):
+        reads["search"] += 1
+        return SearchResult((), 0, 0, False, 0.0)
+
+    monkeypatch.setattr("arete.agent.context.builder.search_personal_context", search)
+    return SimpleNamespace(entries=entries, reads=reads)
+
+
+def ledger_graph(name, func, prompts, runs=1):
+    """Each run: a call to `name`, then an answer."""
+
+    class Capture(Model):
+        def _generate(self, messages, *args, **kwargs):
+            prompts.append(messages[0].text)
+            return super()._generate(messages, *args, **kwargs)
+
+    return create_agent(
+        Capture(
+            messages=iter([call(name, {})] * runs + [AIMessage(content="Fin.")] * runs)
+        ),
+        tools=[tool(name, description="Outil de test.")(func)],
+        middleware=[ToolkitMiddleware(), ContextBuilderMiddleware()],
+        context_schema=AgentContext,
+    )
+
+
+@pytest.mark.parametrize("async_mode", [False, True])
+def test_a_read_tool_reuses_the_ledger_read_by_the_first_call(ledger, async_mode):
+    prompts: list[str] = []
+    graph = ledger_graph("list_planned", lambda: "[]", prompts)
+    state = {"messages": [HumanMessage("Prépare ma semaine")]}
+    context = AgentContext(current_datetime=CLOCK)
+    if async_mode:
+        asyncio.run(graph.ainvoke(state, context=context))
+    else:
+        graph.invoke(state, context=context)
+    assert len(prompts) == 2 and prompts[0] == prompts[1]
+    assert ledger.reads == {
+        "facts": 1,
+        "body": 1,
+        "journal": 1,
+        "followups": 1,
+        "search": 1,
+    }
+    assert context.stats.memory_searches == 1
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "append_journal",
+        "remember_fact",
+        "forget_fact",
+        "edit_file",
+        "delete",
+        "respond_coach_followup",
+        "create_planned_session",
+    ],
+)
+@pytest.mark.parametrize("fails", [False, True])
+def test_a_write_tool_refreshes_the_ledger_for_the_next_call(ledger, name, fails):
+    prompts: list[str] = []
+
+    def write():
+        ledger.entries.append("Douleur au mollet")
+        if fails:
+            # A write may commit before its tool raises.
+            raise ConnectionError("Réponse perdue")
+        return "ok"
+
+    graph = ledger_graph(name, write, prompts)
+    state = {"messages": [HumanMessage("Note ma douleur")]}
+    if fails:
+        context = AgentContext(current_datetime=CLOCK)
+        with pytest.raises(ConnectionError):
+            graph.invoke(state, context=context)
+        assert context.ledger_sections == {}
+        assert context.memory_results == {}
+        return
+    graph.invoke(state, context=AgentContext(current_datetime=CLOCK))
+    assert "Douleur au mollet" not in prompts[0]
+    assert "journal : Objectif : semi en 1h35 | Douleur au mollet" in prompts[1]
+    assert ledger.reads == {
+        "facts": 2,
+        "body": 2,
+        "journal": 2,
+        "followups": 2,
+        "search": 2,
+    }
+
+
+def test_overlapping_invocations_of_one_graph_keep_their_own_ledger_reads(ledger):
+    prompts: list[str] = []
+    both_read = Barrier(2, timeout=10)
+
+    def read():
+        # Both runs hold a cached ledger before either one continues.
+        both_read.wait()
+        return "[]"
+
+    graph = ledger_graph("list_planned", read, prompts, runs=2)
+    contexts = [AgentContext(current_datetime=CLOCK) for _ in range(2)]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(
+            pool.map(
+                lambda context: graph.invoke(
+                    {"messages": [HumanMessage("Ma forme ?")]}, context=context
+                ),
+                contexts,
+            )
+        )
+    assert contexts[0].ledger_sections is not contexts[1].ledger_sections
+    assert all(
+        set(c.ledger_sections) == {"facts", "body", "journal", "followups"}
+        for c in contexts
+    )
+    assert ledger.reads == {
+        "facts": 2,
+        "body": 2,
+        "journal": 2,
+        "followups": 2,
+        "search": 2,
+    }
 
 
 def test_chat_misconfiguration_is_an_actionable_error(router_client, monkeypatch):

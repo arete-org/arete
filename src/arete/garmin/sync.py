@@ -802,6 +802,11 @@ class GarminSyncClient:
             return self.presence.pop(activity_id)
         return self.repository.has_garmin_activity(activity_id)
 
+    def already_synced(self, activity_ids: list[int]) -> set[str]:
+        """Those of ``activity_ids`` already in the database, as text: a page's
+        at once."""
+        return self.repository.present_garmin_activities(activity_ids)
+
     def _enrich_from_fit(
         self, session: ActualSession, fit_path: Path
     ) -> tuple[ActualSession, ActivityStreams | None]:

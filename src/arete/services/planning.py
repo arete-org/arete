@@ -33,6 +33,7 @@ from arete.services.prescriptions import (
     StrictModel,
     conversation_prescription,
     describe,
+    strength_sets,
 )
 from arete.services.settings import athlete_today, get_settings, utc_now, zone_of
 
@@ -40,10 +41,15 @@ _MAX_LIST = 50
 _HORIZON_DAYS = 120
 _MAX_SOURCE_HINTS = 5
 _STEPS_REQUIRED = (
-    "Un tempo ou un fractionné décrit, en course ou à vélo, exige prescription.steps "
+    "Un tempo ou un fractionné décrit, en course ou à vélo, exige des étapes "
     "(échauffement, blocs ou répétitions avec récupérations, retour au calme) : "
     "sans elles, la montre recevrait un modèle générique et non la séance décrite. "
-    "Réessaie avec la prescription complète."
+    "Fixe la prescription complète avec set_session_prescription."
+)
+
+_STRENGTH_SETS_DIFFER = (
+    "Les séries doivent correspondre à celles lues dans strength_text : "
+    "modifie d’abord strength_text avec update_planned_session."
 )
 
 
@@ -223,19 +229,22 @@ def create_planned_session(
         prescription=prescription.model_dump(mode="json") if prescription else None,
         provenance=sources or None,
     )
+    # Steps arrive in a second call, so a described tempo is saved and flagged;
+    # Garmin export keeps refusing it until then.
     try:
         ensure_template_fits(planned)
+        steps_required = None
     except NotPushable:
-        return json.dumps({"error": _STEPS_REQUIRED}, ensure_ascii=False)
+        steps_required = _STEPS_REQUIRED
     session_id = _repo().create_planned_session(planned)
     created = _repo().get_planned_session(session_id)
-    return json.dumps(
-        {
-            "created": True,
-            "session": _session_to_dict(created) if created else {"id": session_id},
-        },
-        ensure_ascii=False,
-    )
+    result: dict[str, Any] = {
+        "created": True,
+        "session": _session_to_dict(created) if created else {"id": session_id},
+    }
+    if steps_required is not None:
+        result["steps_required"] = steps_required
+    return json.dumps(result, ensure_ascii=False)
 
 
 class SessionChanges(StrictModel):
@@ -378,11 +387,21 @@ def apply_session_changes(
 
 
 def update_planned_session(
-    session_id: int, revision: int, changes: SessionChanges
+    session_id: int,
+    revision: int,
+    changes: SessionChanges,
+    *,
+    require_strength_source: bool = True,
 ) -> str:
     """Adapt domain errors and the updated workout to the coaching tool contract."""
     try:
-        apply_session_changes(session_id, revision, changes, require_steps=True)
+        apply_session_changes(
+            session_id,
+            revision,
+            changes,
+            require_strength_source=require_strength_source,
+            require_steps=True,
+        )
         from arete.services.garmin_export import inspect_session
 
         return json.dumps(
@@ -391,6 +410,38 @@ def update_planned_session(
         )
     except ValueError as exc:
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
+
+
+def set_session_prescription(
+    session_id: int, revision: int, prescription: Prescription
+) -> str:
+    """Replace a session's steps; strength keeps the sets its grammar already read."""
+    current = _repo().get_planned_session(session_id)
+    if current is None:
+        return json.dumps({"error": "Séance introuvable."}, ensure_ascii=False)
+    if current.revision != revision:
+        return json.dumps(
+            {"error": "La séance a changé ou n’existe plus. Recharge le planning."},
+            ensure_ascii=False,
+        )
+    if current.sport == "strength":
+        if current.prescription is None:
+            return json.dumps({"error": _STRENGTH_SETS_DIFFER}, ensure_ascii=False)
+        # The revision check at write time rejects a session changed since this read.
+        try:
+            matches = strength_sets(
+                Prescription.model_validate(current.prescription)
+            ) == strength_sets(prescription)
+        except ValueError:  # a set without repetitions
+            matches = False
+        if not matches:
+            return json.dumps({"error": _STRENGTH_SETS_DIFFER}, ensure_ascii=False)
+    return update_planned_session(
+        session_id,
+        revision,
+        SessionChanges(prescription=prescription),
+        require_strength_source=False,
+    )
 
 
 def delete_planned_session(session_id: int) -> str:

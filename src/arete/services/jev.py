@@ -25,6 +25,8 @@ JEV_MAX_CRITERIA = 64
 JEV_PROVIDER = {
     "sort": "latency",
     "allow_fallbacks": False,
+    # Classified messages are athlete data: no provider that trains on them.
+    "data_collection": "deny",
     "max_price": {"prompt": 0.042, "completion": 0},
 }
 Probability = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]

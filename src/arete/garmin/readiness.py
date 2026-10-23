@@ -214,34 +214,37 @@ def _score(day: dict | None, baseline: dict | None) -> int | None:
     return final
 
 
-def update_readiness_for_date(target_date: date) -> int | None:
-    """Compute readiness and write to DB. Returns the score or None."""
-    score = compute_readiness(target_date)
-    if score is None:
-        return None
+def update_readiness_range(start: date, end: date) -> int:
+    """Recompute readiness for a range. Returns count of days updated.
+
+    One read of the range with its baselines and one write for all its days:
+    each day's score is ``compute_readiness``'s, and none reads a readiness.
+    """
+    if start > end:
+        return 0
     con = connect()
     try:
+        rows = fetch_window(con, end, (end - start).days + BASELINE_DAYS)
+        scores = []
+        for offset in range((end - start).days + 1):
+            day = start + timedelta(days=offset)
+            score = compute_readiness(day, window=rows)
+            if score is not None:
+                scores.append((day, score))
+        if not scores:
+            return 0
+        values = ", ".join(["(CAST(? AS DATE), ?)"] * len(scores))
         con.execute(
-            """
+            f"""
             UPDATE app.daily_metrics
-            SET readiness_score = ?
-            WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (user_id = getvariable('arete_athlete_id') AND date = ?)
+            SET readiness_score = scored.score
+            FROM (VALUES {values}) AS scored(day, score)
+            WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND date = scored.day
             RETURNING date
             """,
-            [score, target_date],
+            [value for pair in scores for value in pair],
         )
         con.commit()
     finally:
         con.close()
-    return score
-
-
-def update_readiness_range(start: date, end: date) -> int:
-    """Recompute readiness for a range. Returns count of days updated."""
-    n = 0
-    cur = start
-    while cur <= end:
-        if update_readiness_for_date(cur) is not None:
-            n += 1
-        cur += timedelta(days=1)
-    return n
+    return len(scores)

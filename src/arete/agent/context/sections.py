@@ -32,6 +32,7 @@ _PAGE_LABELS = {
     "log": "Journal d'entraînement",
     "settings": "Réglages",
     "profile": "Mon profil",
+    "health": "Santé (douleurs et poids)",
 }
 
 

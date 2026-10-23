@@ -46,6 +46,10 @@ const YearReviewPage = lazy(importChunk(() =>
 const GlossaryPage = lazy(importChunk(() =>
   import('@/pages/Glossary').then((m) => ({ default: m.GlossaryPage })),
 ));
+const HealthPage = lazy(importChunk(() => import('@/pages/Health').then((m) => ({ default: m.HealthPage }))));
+const HealthReportPage = lazy(importChunk(() =>
+  import('@/pages/HealthReport').then((m) => ({ default: m.HealthReportPage })),
+));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -205,6 +209,8 @@ function App() {
                           </Suspense>
                         }
                       />
+                      <Route path="/sante" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><HealthPage /></Suspense>} />
+                      <Route path="/sante/rapport" element={<Suspense fallback={<LoadingState message="Chargement du rapport…" />}><HealthReportPage /></Suspense>} />
                       <Route path="/profile" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><ProfilePage /></Suspense>} />
                       <Route path="/settings" element={<SettingsPage />} />
                       {/* Legacy redirects */}
