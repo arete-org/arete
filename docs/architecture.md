@@ -468,7 +468,10 @@ athlete. Run logs include skill read count, latency and approximate result token
 from model calls. Provider usage logs
 retain reported cache/input/output details and model timing without logging the
 athlete's prompts. Opt-in LangSmith traces include full inputs, outputs and tool
-results; setup and exported data are described in the
+results, so `config.langsmith_tracing` turns them off for a process holding
+production data unless the owner's bounded `LANGSMITH_PRODUCTION_WINDOW` is
+open; `agent_tracing()` then disables every span, whatever the environment
+says. Setup and exported data are described in the
 [deployment runbook](deployment.md#langsmith-agent-tracing). Missing usage remains
 unknown, not zero.
 Each invocation also logs one `Agent run:` line (`RunStats` on the run context):

@@ -81,6 +81,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         from arete.observability.tracing import get_tracing_client
 
         get_tracing_client()
+    elif config.langsmith_tracing_requested:
+        logger.info(
+            "LangSmith tracing off: production data outside LANGSMITH_PRODUCTION_WINDOW"
+        )
     warn_production_database()
     try:
         init_schema()

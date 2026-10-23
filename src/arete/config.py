@@ -7,11 +7,15 @@ each access (no caching) so tests can patch ``os.environ`` freely.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+#: Longest window during which production runs may be exported to LangSmith.
+LANGSMITH_PRODUCTION_WINDOW_MAX = timedelta(days=7)
 
 
 def _env(name: str, default: str | None = None) -> str | None:
@@ -140,11 +144,55 @@ class Config:
 
     # --- Agent tracing (independent of inference credentials) --------------
     @property
-    def langsmith_tracing(self) -> bool:
+    def langsmith_tracing_requested(self) -> bool:
         raw = (_env("LANGSMITH_TRACING", "false") or "false").lower().strip()
         if raw not in ("true", "false"):
             raise ValueError("LANGSMITH_TRACING must be true or false")
         return raw == "true"
+
+    @property
+    def langsmith_tracing(self) -> bool:
+        """Requested and allowed: traces carry athletes' journal, health and
+        Garmin data, so a process holding production data exports nothing
+        outside the owner's ``LANGSMITH_PRODUCTION_WINDOW``."""
+        if not self.langsmith_tracing_requested:
+            return False
+        if not self.production_data:
+            return True
+        window = self.langsmith_production_window
+        return window is not None and window[0] <= datetime.now(UTC) < window[1]
+
+    @property
+    def production_data(self) -> bool:
+        """Real athletes' data: Vercel production, or any MotherDuck database
+        not named for previews (the rule ``dataio/db.py`` warns by)."""
+        if _env("VERCEL_ENV") == "production":
+            return True
+        name = self.db_target.removeprefix("md:").split("?", 1)[0].lower()
+        return self.is_remote_db and "preview" not in name
+
+    @property
+    def langsmith_production_window(self) -> tuple[datetime, datetime] | None:
+        """``<start>/<end>``, ISO 8601 instants with offsets, at most a week
+        apart. A window left behind expires; it can never trace indefinitely."""
+        raw = _env("LANGSMITH_PRODUCTION_WINDOW")
+        if raw is None:
+            return None
+        try:
+            start, end = (datetime.fromisoformat(part) for part in raw.split("/"))
+        except ValueError:
+            raise ValueError(
+                "LANGSMITH_PRODUCTION_WINDOW must be <start>/<end> in ISO 8601"
+            ) from None
+        if (
+            start.tzinfo is None
+            or end.tzinfo is None
+            or not start < end <= start + LANGSMITH_PRODUCTION_WINDOW_MAX
+        ):
+            raise ValueError(
+                "LANGSMITH_PRODUCTION_WINDOW needs UTC offsets and at most 7 days"
+            )
+        return start, end
 
     @property
     def langsmith_api_key(self) -> str:

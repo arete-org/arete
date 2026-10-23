@@ -58,6 +58,14 @@ def get_tracing_client() -> Client | None:
             # Register after Client's own exit handler so our bounded close
             # drains first, including in short-lived scripts.
             atexit.register(close_tracing)
+            if config.production_data:
+                # Only an open window reaches here; leave an audit line.
+                window = config.langsmith_production_window
+                assert window is not None
+                logger.warning(
+                    "LangSmith exports production runs until %s",
+                    window[1].isoformat(),
+                )
         return _client
 
 
