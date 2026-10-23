@@ -147,7 +147,7 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     await expect(page.getByRole('alert').filter({ hasText: 'Enregistrement non confirmé' })).toBeVisible();
     await expect(page.getByText('3 séance(s) par semaine')).toBeVisible();
     await page.getByRole('button', { name: 'Réessayer l’enregistrement' }).click();
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
     await expect(panel.getByRole('region', { name: 'Ton point de départ' })).toContainText('Le mercredi est réservé aux enfants.');
     await expect(panel.getByLabel('Message au coach')).toHaveValue('');
     expect(chats).toEqual([]);
@@ -167,7 +167,7 @@ for (const [index, [theme, width]] of ([['pierre', 390], ['prune', 390], ['pierr
     expect(active.reference).toEqual({ kind: 'onboarding', id: 1 });
     expect(active.messages).toEqual([]);
     await page.reload();
-    await page.getByRole('button', { name: 'Demander au coach', exact: true }).click();
+    await expect(page).toHaveURL(/\/coach$/);
     await expect(panel.getByRole('region', { name: 'Ton point de départ' })).toContainText('Camille');
     expect(chats).toEqual([]);
     await page.screenshot({ path: `../.context/onboarding/chiron-${theme}-${width}.png` });

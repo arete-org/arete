@@ -162,12 +162,13 @@ nécessaires pour comprendre le conseil sont lisibles dès l’accueil.
 ### Lire et répondre
 
 L’entrée du briefing ouvre un nouveau fil avec sa référence, sans requête modèle.
-Sur bureau, le panneau du coach reste à côté de l’accueil ; sur mobile, la lecture
-dispose d’une surface large. Un seul compositeur, les contrôles de feedback existants,
+Sur bureau comme sur mobile, `/coach` est une page intégrée au contenu principal,
+selon les écrans Chiron `338:434` et `340:867` de la proposition unifiée :
+historique, conversation et méthodes sur bureau ; fil pleine largeur et retour sur mobile. Un seul compositeur, les contrôles de feedback existants,
 aucun message envoyé automatiquement et aucun brouillon rempli à la place de l’utilisateur.
 Le contexte du briefing reste dans ce fil après rechargement et ne passe pas dans un autre.
 La discussion affiche les faits enregistrés avec ce briefing, leurs sources et
-leurs heures. Elle ne mélange pas silencieusement ces faits historiques avec les
+leurs dates. Elle ne mélange pas silencieusement ces faits historiques avec les
 mesures courantes de l’accueil. La justification est visible avant toute question.
 
 Le nom « Coach » est celui du mode classique visible dans la capture ; « Chiron »

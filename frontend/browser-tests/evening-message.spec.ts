@@ -62,7 +62,7 @@ for (const width of [375, 1440]) {
     const { requests, answers } = await evening(page);
     // The service worker opens the push's link.
     await page.goto('/follow-up?evening=7');
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
     const card = panel.getByRole('region', { name: 'Message du soir dans cette conversation' });
     await expect(card.getByRole('heading')).toHaveText('Pour demain, samedi 17 octobre');
     await expect(card.getByText(message.question, { exact: true })).toBeVisible();
@@ -82,7 +82,7 @@ for (const width of [375, 1440]) {
     await page.screenshot({ path: `${SCREENS}/answered-${width}.png`, animations: 'disabled' });
 
     // The inbox item leads back to the same conversation, answered once.
-    await page.getByRole('button', { name: 'Masquer le coach', exact: true }).filter({ visible: true }).first().click();
+    await page.getByRole('button', { name: 'Retour à la page', exact: true }).filter({ visible: true }).first().click();
     const item = page.getByRole('link', { name: /Chiron, pour demain/ });
     await expect(item).toContainText(message.question);
     await page.screenshot({ path: `${SCREENS}/inbox-${width}.png`, fullPage: true, animations: 'disabled' });

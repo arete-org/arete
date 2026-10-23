@@ -4,6 +4,7 @@ import type { CoachDisplay } from '@/hooks/useCoachDisplay';
 import { useCoachWords } from '@/lib/coachName';
 
 type Props = {
+  embedded?: boolean;
   mode: CoachDisplay;
   onChange: (mode: CoachDisplay) => void;
   onHistory: () => void;
@@ -11,7 +12,7 @@ type Props = {
   onCreate: () => void;
 };
 
-export function CoachDisplayOptions({ mode, onChange, onHistory, onMemory, onCreate }: Props) {
+export function CoachDisplayOptions({ mode, onChange, onHistory, onMemory, onCreate, embedded = false }: Props) {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -78,18 +79,18 @@ export function CoachDisplayOptions({ mode, onChange, onHistory, onMemory, onCre
     <button ref={trigger} type="button" aria-label="Options du coach" aria-expanded={open} aria-controls={open ? id : undefined}
       className="flex size-11 items-center justify-center rounded-lg text-text-muted hover:bg-text-muted/10"
       onClick={() => setOpen(value => !value)}>
-      {mode === 'floating' ? <Ellipsis size={17} /> : <PanelsTopLeft size={17} />}
+      {embedded || mode === 'floating' ? <Ellipsis size={17} /> : <PanelsTopLeft size={17} />}
     </button>
     {open && <div ref={popover} id={id} className="absolute right-0 z-50 w-64 max-w-[calc(100vw-48px)] overflow-y-auto rounded-xl border border-text-muted/20 bg-abyss p-2 text-sm shadow-xl">
-      <fieldset>
+      {!embedded && <fieldset>
         <legend className="px-2 py-2 text-[11px] text-text-muted">Affichage du coach</legend>
         {([['sidebar', 'Panneau latéral classique'], ['floating', 'Chat flottant'], ['expanded', 'Conversation élargie']] as const).map(([value, label]) =>
           <label key={value} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-2 hover:bg-text-muted/10">
             <input type="radio" name={id} value={value} checked={mode === value} onChange={() => choose(() => onChange(value))} className="accent-neon-cyan" />
             {label}
           </label>)}
-      </fieldset>
-      {mode === 'floating' && <div className="mt-1 border-t border-text-muted/15 pt-1">
+      </fieldset>}
+      {(embedded || mode === 'floating') && <div>
         {actions.map(({ action, label }) =>
           <button key={label} type="button" onClick={() => choose(action)} className="block min-h-11 w-full rounded-lg px-2 text-left hover:bg-text-muted/10">{label}</button>)}
       </div>}

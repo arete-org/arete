@@ -42,9 +42,9 @@ for (const width of [1440, 390]) {
     });
     await page.goto('/');
     await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
     await panel.getByLabel('Message au coach').fill('Mon brouillon attend.');
-    await panel.getByRole('button', { name: 'Masquer le coach' }).click();
+    await panel.getByRole('button', { name: 'Retour à la page' }).click();
     await page.getByRole('link', { name: 'Examiner', exact: true }).click();
     await expect(page).toHaveURL(/followup=42/);
     await expect(panel.getByText('Quel ressenti après ta sortie ?', { exact: true })).toBeVisible();

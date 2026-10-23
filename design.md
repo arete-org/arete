@@ -176,35 +176,34 @@ et `frontend/browser-tests/design-system.spec.ts` pour les quatre thèmes à 390
 débordement horizontal, retour à la préférence enregistrée après rechargement,
 contrastes AA, « Système » qui suit l’appareil et migration d’un thème retiré.
 
-## Chiron : chat compact optionnel
+## Chiron : conversation intégrée au produit
 
-La [maquette compacte approuvée](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=62-143)
-et ses [états de croissance et de changement de mode](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=82-324)
-prolongent la même identité. Le chat flottant devient le mode par défaut.
-Dans « Options du coach », le mode choisi est une préférence locale au navigateur ;
-« Panneau latéral classique » permet de revenir au mode précédent, même pendant une réponse.
-Si le stockage est indisponible, le choix fonctionne pour la session avec une explication visible.
+La discussion occupe `/coach`, dans le contenu principal, selon la [maquette Chiron de la proposition unifiée](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=338-434)
+et sa [lecture mobile](https://www.figma.com/design/tYBFziSyBC4pfdAqiaDT4X/Arete?node-id=340-867).
+Sur bureau : historique à gauche, conversation au centre, méthodes à droite ;
+largeur maximale de 1296 px et marges de 5 % à 1440 px. Sur mobile : le fil
+occupe la largeur disponible, la navigation principale cède la place au retour. L’entrée du briefing et le bouton de navigation
+ouvrent cette page ; aucune fenêtre flottante ni colonne latérale ne recouvre le produit.
+La demande ARE-210 applique la proposition unifiée `334:81` et remplace les anciens modes flottant/latéral.
 
-- Chat flottant de 360 px, à 24 px du bas et du bord droit sur bureau. Sur mobile,
-  marges latérales de 12 px, dégagement de la navigation, prise en compte du clavier visuel.
-- Hauteur naturelle : la réponse fait grandir la fenêtre jusqu’à 560 px, plafonnée à
-  65 % de la hauteur mobile et à l’espace visible. Ensuite, seul le fil défile.
-  Lire les anciens messages suspend le suivi ; « Derniers messages » le rétablit.
-- Surface à 90 % d’opacité et flou de 18 px ; texte opaque, bordure fine et rayon de 16 px.
-  Cette transparence est réservée au chat flottant, les autres surfaces restent opaques.
-- En-tête réduit au laurier, à Chiron en Cormorant, au contexte et aux commandes.
-  Deux amorces fixes liées à la page ; aucun appel de suggestion supplémentaire.
-- Champ de saisie, ajout de fichier et envoi sur une ligne ; croissance du brouillon
-  plafonnée à 144 px. Le contour de focus appartient au composite, sans rectangle imbriqué.
-- Un même propriétaire de conversation et les mêmes composants de saisie et de documents
-  servent les deux modes. Le changement de mode ne relance pas de requête et conserve
-  le brouillon, les pièces jointes et la réponse en cours.
+- En-tête en Cormorant, contexte, historique/mémoire dans les options et retour
+  explicite à la page d’origine. Les amorces restent fixes, sans appel de suggestion.
+- Briefing, repères historiques sourcés, avis et messages dans la carte de conversation.
+  La saisie commune reste visible en bas, au-dessus du clavier. Les méthodes utilisent
+  le sélecteur existant, sans modifier le brouillon avant une sélection explicite.
+- Un seul propriétaire de conversation reste monté dans `App`. Naviguer hors du
+  coach masque sa vue, sans arrêter le flux ni effacer brouillons ou pièces jointes.
+- La page d’origine et ses paramètres restent dans l’historique du navigateur,
+  également après rechargement. La référence de briefing appartient toujours au fil.
+- Le fil est un défilement borné à l’espace disponible ; lire les messages précédents
+  suspend le suivi automatique, et « Derniers messages » le rétablit.
+- Les contrôles de saisie, feedback, documents et couleurs restent partagés.
+  Les anciens choix locaux de présentation ne réactivent pas une fenêtre flottante.
 
-Propriétaires : `useCoachDisplay` pour la préférence locale, `App` pour l’espace réservé
-et le lanceur, `AgentSidePanel` pour la présentation, `index.css` pour les surfaces et limites.
-Les contrôles Playwright de `chiron.spec.ts` utilisent un flux SSE local contrôlé pour
-vérifier la croissance, le plafond, le défilement manuel et le changement de mode en cours
-de réponse, puis le retour au choix sauvegardé après rechargement.
+Propriétaires : `App` pour la navigation, `AgentSidePanel` pour le rendu de la
+conversation, `useCoachThreads` pour les fils, `pageContext` pour la page d’origine,
+`index.css` pour la géométrie. `briefing.spec.ts`, `chiron.spec.ts` et
+`mobile-ux.spec.ts` vérifient ces limites avec des flux contrôlés.
 
 ## Chiron — cartes de graphiques
 
@@ -216,7 +215,7 @@ suivent les quatre thèmes, y compris après réception ou rechargement d’une 
 L’iframe isolée reçoit les polices Inter locales embarquées et les tokens du thème.
 Le modèle ne choisit ni CSS, ni police, ni couleur littérale. Une carte invalide
 conserve son résumé et signale l’échec. Les cartes suivent le fil et son ordre de
-réception dans les modes flottant et latéral ; aucun téléchargement n’est proposé.
+réception dans la conversation intégrée ; aucun téléchargement n’est proposé.
 
 `chart-cards.spec.ts` vérifie courbes et barres à 390 et 1440 px, les quatre thèmes,
 le rechargement, le changement de fil pendant une réponse et l’isolation du rendu.
@@ -304,7 +303,7 @@ La proposition A mobile (`111:175`) reste la référence du contenu Planning.
 La navigation commune comporte six entrées, dans cet ordre : Accueil, Planning,
 Analyses, Journal, Profil, Réglages. Profil reste accessible sans gamification
 et explique alors comment l’activer. Chiron n’est plus un onglet mobile :
-« Demander à Chiron » est un lanceur flottant actionnable au toucher et au clavier.
+« Demander à Chiron » est une entrée dans la page, actionnable au toucher et au clavier.
 Les liens contextuels vers une discussion restent disponibles.
 
 Les maquettes Figma A et B réutilisent désormais les mêmes composants de navigation :
@@ -363,10 +362,8 @@ Planning ne possède aucune variante de navigation propre à sa page.
   Sept colonnes apparaissent au-delà de 1050 px disponibles. Sur les plus petites
   largeurs (moins de 308 px de contenu), les sept jours passent sur deux lignes
   pour conserver des cibles de 44 px sans masquer le dimanche.
-- La préférence locale Chiron passe à `arete.coach-display.v2` : les anciens choix
-  sont réinitialisés une seule fois vers le flottant ; les choix explicites
-  suivants sont conservés. Le lanceur mobile reste présent en mode latéral.
-  Ouvrir, fermer ou déplacer le chat ne crée aucun appel modèle.
+- Chiron ouvre la route `/coach`. Les anciens choix locaux de disposition ne
+  changent plus ce parcours. Ouvrir ou quitter la discussion ne crée aucun appel modèle.
 - Les invitations d’installation restent au-dessus du lanceur et s’effacent
   temporairement devant un dialogue ou le coach. Les notifications sont aussi proposées
   dans la page, aux deux moments où elles servent (`PushOffer`) : sous une séance
@@ -465,7 +462,7 @@ avis utilisent les mêmes retraits ; la saisie reste celle du chat.
 - Une erreur de lecture reste visible, avec nouvelle tentative explicite. Un avis
   non confirmé bloque les autres votes jusqu’à vérification par lecture.
 - La limite de 30 conversations échoue explicitement, sans effacer un brouillon.
-  Les modes flottant et latéral réutilisent la même conversation et le même contexte.
+  La page intégrée réutilise la même conversation et le même contexte lors des retours.
 
 Garde-fous : tests de restauration et d’isolation dans `agentThreads.test.ts` et
 `useCoachThreads.test.tsx`, lectures privées dans `test_briefing_reactions.py`,
