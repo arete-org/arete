@@ -1,0 +1,29 @@
+tests/test_agent_context.py
+  s_d0930b4ebc69e6::t_ba9b6dbf439bc7 100-107,110-117,120-123,125-173
+  s_d0930b4ebc69e6::t_ec127ee04191fd 108-109,118-119,124
+docs/architecture.md
+  s_d0930b4ebc69e6::t_60ac1f9ec9c92f 255
+  s_d0930b4ebc69e6::t_ab6044195abe7f 252,254
+  s_d0930b4ebc69e6::t_ec127ee04191fd 253
+src/arete/services/journal.py
+  s_d0930b4ebc69e6::t_9b9ce8e5623351 27
+src/arete/agent/context/builder.py
+  s_d0930b4ebc69e6::t_d2e2c8dbea81b6 158-169,171-172
+  s_d0930b4ebc69e6::t_ec127ee04191fd 157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d3ad45d0f010b2159b0f362b0abcee9d05117d62",
+  "prompts": {},
+  "sessions": {
+    "s_d0930b4ebc69e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1be212b7-2731-4ceb-83c9-70ff41a5cf83",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
