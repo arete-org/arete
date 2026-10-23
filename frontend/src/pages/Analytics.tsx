@@ -42,7 +42,7 @@ function useActiveSection(): string {
         const visible = entries.filter((e) => e.isIntersecting);
         if (visible.length) setActive(visible[0].target.id);
       },
-      // Below the sticky banner, which covers the top quarter of the screen
+      // Sample the upper content area, below the sticky banner on desktop.
       { rootMargin: '-30% 0px -60% 0px' }
     );
     for (const s of SECTIONS) {
@@ -79,18 +79,19 @@ export function AnalyticsPage() {
   const previousLabel = PREVIOUS_LABEL[period];
   const state = { loading: isLoading, error: isError, bucket, previousLabel };
 
-  /** Scroll a section just below the sticky banner, whatever its height. */
+  /** Reserve the banner's height only when it stays pinned above the section. */
   const jump = (id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
     const b = banner.current;
-    const offset = b ? parseFloat(getComputedStyle(b).top) + b.offsetHeight + 8 : 0;
+    const style = b ? getComputedStyle(b) : null;
+    const offset = b && style ? parseFloat(style.top) + (style.position === 'sticky' ? b.offsetHeight : 0) + 8 : 0;
     window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
   };
 
   return (
     <div className="page-shell analytics-page">
-      {/* Stays under the app's tab bar (57 px, desktop only) while the page scrolls */}
+      {/* Desktop pins the banner under the app navigation; mobile scrolls it away. */}
       <div
         ref={banner}
         className="analytics-banner"
@@ -107,7 +108,7 @@ export function AnalyticsPage() {
             )}
           </div>
           <div className="flex shrink-0 gap-2">
-            {/* From 640 px only: on a phone this button would push the sticky banner onto a
+            {/* From 640 px only: on a phone this button would push the banner onto a
                 second row (and overflow it at 320 px); the link at the end of the page serves there. */}
             <div className="hidden sm:block">
               <Link to="/analytics/lexique" className="ui-button analytics-year-link gap-2">

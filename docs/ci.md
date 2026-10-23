@@ -29,6 +29,12 @@ executes that exact file list; the main preview workflow consumes that same
 run's deployment decision and verifies its SHA. No changed-file API pagination
 or model judgment is involved.
 
+PR runs share a concurrency group. Only a `synchronize` event (a new head commit)
+cancels the run in progress. `opened`, `reopened` and `labeled` events queue
+instead: GitHub may deliver `labeled` before `opened` when a PR starts with the
+`preview` label, and cancelling that first run leaves cancelled checks on the
+same commit. Main, merge-queue and manually dispatched runs also finish.
+
 ## Selection policy
 
 | Changed surface | Checks | Preview |

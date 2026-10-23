@@ -1,6 +1,7 @@
 /* The approved charts share the app's semantic palette; no sample data belongs here. */
 .analytics-page { display: flex; flex-direction: column; gap: 32px; container-type: inline-size; }
-.analytics-banner { display: flex; flex-direction: column; gap: 12px; position: sticky; top: var(--safe-top); z-index: 20; padding-block: 4px 12px; background: var(--color-void); }
+/* Let the header leave the phone viewport so charts can use its full height. */
+.analytics-banner { display: flex; flex-direction: column; gap: 12px; top: var(--safe-top); padding-block: 4px 12px; background: var(--color-void); }
 .analytics-year-link { display: inline-flex; align-items: center; flex-shrink: 0; min-height: 44px; padding: 10px 16px; border-radius: var(--radius-control); background: var(--color-shadow); color: var(--color-neon-cyan); font-size: 13px; }
 .analysis-card { min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px; background: var(--color-abyss); border: 1px solid var(--color-border); border-radius: var(--radius-panel); }
 .analysis-insight { padding: 12px; border-radius: var(--radius-control); background: var(--color-void); font-size: 12px; line-height: 1.6; }
@@ -39,7 +40,7 @@
 /* The focus a "?" moves here shows as the keyboard ring does, after a tap or click too. */
 .glossary-entry h3:focus { outline: 2px solid var(--color-neon-cyan); outline-offset: 3px; }
 @media (min-width: 768px) {
-  .analytics-banner { top: calc(var(--safe-top) + 56px); }
+  .analytics-banner { position: sticky; top: calc(var(--safe-top) + 56px); z-index: 20; }
   .analysis-card { padding: 24px; }
   .glossary-entry { scroll-margin-top: calc(var(--safe-top) + 72px); }
 }
