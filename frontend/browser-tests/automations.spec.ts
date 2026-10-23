@@ -89,6 +89,15 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
     await expect(page.getByRole('button', { name: 'Créer une routine' })).toBeVisible();
     expect(creations).toHaveLength(1);
     expect(creations[0]).toMatchObject({ trigger: { kind: 'session', session_key: 'planned:42' }, activate: true });
+    const presets = page.getByRole('region', { name: 'Routines proposées' });
+    await expect(presets.getByRole('button', { name: 'Configurer' })).toHaveCount(3);
+    await presets.locator('article').filter({ hasText: 'Donner suite à mes réponses du soir' }).getByRole('button', { name: 'Configurer' }).click();
+    await expect(page.getByLabel('Déclencheur', { exact: true })).toHaveValue('evening');
+    await expect(page.getByText(/Après ta prochaine réponse au message du soir/)).toBeVisible();
+    expect(creations).toHaveLength(1);
+    await page.getByRole('button', { name: 'Activer ce suivi', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Créer une routine' })).toBeVisible();
+    expect(creations[1]).toMatchObject({ title: 'Donner suite à mes réponses du soir', trigger: { kind: 'evening' }, activate: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }

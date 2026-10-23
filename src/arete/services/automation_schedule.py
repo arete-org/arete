@@ -19,6 +19,7 @@ MAX_DISPATCH_SECONDS = 270
 MAX_DISPATCH_RUNS = 2
 MAX_SCAN = 500
 MAX_SCHEDULE_DAYS = 366
+MAX_EVENING_SESSIONS = 7
 
 
 class StrictModel(BaseModel):
@@ -65,7 +66,13 @@ class AfterSession(StrictModel):
     delay_minutes: int = Field(default=0, ge=0, le=7 * 24 * 60)
 
 
-Trigger = Annotated[Once | Recurring | AfterSession, Field(discriminator="kind")]
+class AfterEvening(StrictModel):
+    kind: Literal["evening"]
+
+
+Trigger = Annotated[
+    Once | Recurring | AfterSession | AfterEvening, Field(discriminator="kind")
+]
 
 
 class AutomationInput(StrictModel):
@@ -100,7 +107,7 @@ def local_instant(day: date, clock: str, zone: str) -> datetime:
 
 def next_due(definition: AutomationInput, after: datetime) -> datetime | None:
     trigger = definition.trigger
-    if isinstance(trigger, AfterSession):
+    if isinstance(trigger, AfterSession | AfterEvening):
         return None
     if isinstance(trigger, Once):
         return trigger.at if trigger.at > after else None

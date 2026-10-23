@@ -1,3 +1,4 @@
+import { SourceStatus } from '@/components/SourceStatus';
 import { useState } from 'react';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -425,6 +426,8 @@ export function PlanningPage() {
             </div>
           )}
         </details>
+        <nav aria-label="Préparer mon entraînement" className="flex flex-wrap gap-4 text-sm text-accent"><Link className="min-h-11 inline-flex items-center" to="/planning/objectifs">Objectifs et allures →</Link><Link className="min-h-11 inline-flex items-center" to="/follow-up?tab=automations">Mes routines →</Link></nav>
+        <SourceStatus />
         {detail && !editor && !moving && (
           <SessionDetail
             session={detail.session}

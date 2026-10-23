@@ -82,7 +82,7 @@ test('without a race, a compact call to set one, and the curve read only once on
   const requests: string[] = [];
   await fixture(page, false, requests);
   await page.goto('/');
-  await expect(page.getByRole('link', { name: 'Fixer un objectif' })).toHaveAttribute('href', '/settings?tab=goals');
+  await expect(page.getByRole('link', { name: 'Fixer un objectif' })).toHaveAttribute('href', '/planning/objectifs');
   await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
   await page.waitForLoadState('networkidle');
   // Below the fold on a phone: nothing read yet.

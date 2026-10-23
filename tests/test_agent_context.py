@@ -104,7 +104,15 @@ class _Request(SimpleNamespace):
         return _Request(**{**vars(self), **changes})
 
 
-_STABLE = ("harness", "profile", "system_skills", "capabilities", "facts", "journal")
+_STABLE = (
+    "harness",
+    "profile",
+    "system_skills",
+    "capabilities",
+    "facts",
+    "body",
+    "journal",
+)
 _STABLE += ("followups", "attachments")
 _UNSTABLE = ("garmin_freshness", "page", "surface", "execution_budget")
 
@@ -120,7 +128,15 @@ _UNSTABLE = ("garmin_freshness", "page", "surface", "execution_budget")
         ),
         (
             "briefing",
-            ("harness", "profile", "capabilities", "facts", "journal", "followups")
+            (
+                "harness",
+                "profile",
+                "capabilities",
+                "facts",
+                "body",
+                "journal",
+                "followups",
+            )
             + ("garmin_freshness", "surface", "execution_budget"),
         ),
     ],
@@ -139,6 +155,7 @@ def test_unstable_sections_follow_the_cacheable_prefix(
         "system_skills_section": "system_skills",
         "tool_instructions_suffix": "capabilities",
         "facts_block": "facts",
+        "body_block": "body",
         "journal_block": "journal",
         "followup_block": "followups",
         "attachment_section": "attachments",

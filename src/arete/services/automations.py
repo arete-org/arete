@@ -17,17 +17,19 @@ from arete.services.automation_schedule import (
     MAX_ACTIVE_AUTOMATIONS,
     MAX_ACTIVE_SECONDS,
     MAX_DAILY_RUNS,
+    MAX_EVENING_SESSIONS,
     MAX_RESUMES,
     MAX_SCAN,
     MAX_SCHEDULE_DAYS,
     SEGMENT_SECONDS,
+    AfterEvening,
     AfterSession,
     AutomationInput,
     Once,
     StrictModel,
     next_due,
 )
-from arete.services.settings import utc_now
+from arete.services.settings import utc_now, zone_of
 
 OWNER = "athlete_id=getvariable('arete_athlete_id') AND deleted_at IS NULL"
 TERMINAL = frozenset(
@@ -116,6 +118,19 @@ def _capacity(con, excluding: str = "") -> None:
         )
 
 
+def _evening_owner(con, spec: AutomationInput, excluding: str = "") -> None:
+    # One active owner prevents two routines from answering the same evening.
+    if (
+        isinstance(spec.trigger, AfterEvening)
+        and con.execute(
+            "SELECT 1 FROM app.visible_automations WHERE state='active' AND id<>? "
+            "AND json_extract_string(trigger_json,'$.kind')='evening' LIMIT 1",
+            [excluding],
+        ).fetchone()
+    ):
+        raise ValueError("Une routine suit déjà tes réponses du soir.")
+
+
 def create(
     spec: AutomationInput, *, activate: bool = False, now: datetime | None = None
 ) -> dict:
@@ -134,6 +149,7 @@ def create(
         )
         if activate:
             _capacity(con)
+            _evening_owner(con, spec)
         con.execute(
             "INSERT INTO app.automations (id,title,mission,trigger_json,timezone,state,created_at,activated_at,next_due_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
             [
@@ -192,10 +208,15 @@ def _cancel_pending(con, identifier: str, now: datetime) -> None:
 def update(identifier: str, change: Update) -> dict:
     now = utc_now()
     with transaction() as con:
+        con.execute(
+            "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id') RETURNING id"
+        )
         old = _get(con, "automations", identifier)
         if old["revision"] != change.revision:
             raise Conflict("Ce suivi a changé. Rechargez-le.")
         _validate_session(con, change)
+        if old["state"] == "active":
+            _evening_owner(con, change, identifier)
         due = next_due(change, now)
         if isinstance(change.trigger, Once) and (
             due is None or due > now + timedelta(days=MAX_SCHEDULE_DAYS)
@@ -233,6 +254,7 @@ def set_state(identifier: str, revision: int, state: str) -> dict:
         due = next_due(spec, now)
         if state == "active":
             _capacity(con, identifier)
+            _evening_owner(con, spec, identifier)
             _validate_session(con, spec)
             if isinstance(spec.trigger, Once) and due is None:
                 raise ValueError("Modifiez l’échéance passée avant de réactiver.")
@@ -266,6 +288,8 @@ def _insert_run(
     *,
     state: str = "queued",
     session_key: str | None = None,
+    source: dict | None = None,
+    expires_at: datetime | None = None,
 ) -> None:
     try:
         stored = definition(record).model_dump(mode="json")
@@ -280,8 +304,10 @@ def _insert_run(
             "trigger": record["trigger_json"],
         }
     snapshot = {**stored, "revision": record["revision"]}
+    if source is not None:
+        snapshot["source"] = source
     con.execute(
-        "INSERT INTO app.automation_runs (id,automation_id,occurrence_key,definition_json,session_key,due_at,state,created_at,finished_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
+        "INSERT INTO app.automation_runs (id,automation_id,occurrence_key,definition_json,session_key,due_at,state,created_at,finished_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
         [
             str(uuid4()),
             record["id"],
@@ -292,8 +318,106 @@ def _insert_run(
             state,
             now,
             now if state in TERMINAL else None,
+            expires_at,
         ],
     )
+
+
+def _evenings(con, record: dict, now: datetime, since: datetime | None) -> None:
+    # The source date belongs to the athlete, even if a routine was configured
+    # on a device in another timezone. Its expiry must follow that same day.
+    zone = zone_of((get_user_settings() or {}).get("timezone"))
+    today = now.astimezone(zone).date()
+    after = max(record["activated_at"], since) if since else record["activated_at"]
+    answers = rows(
+        con.execute(
+            "SELECT e.id,e.date,e.question,e.answer,e.answered_at FROM app.visible_coach_evening_messages e "
+            "WHERE status='ok' AND answer IS NOT NULL AND answered_at>=? AND answered_at<=? "
+            "AND date BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM app.visible_automation_runs r "
+            "WHERE r.occurrence_key='evening:'||e.id) ORDER BY answered_at,id LIMIT ?",
+            [
+                after.astimezone(UTC).replace(tzinfo=None),
+                now.astimezone(UTC).replace(tzinfo=None),
+                today - timedelta(days=1),
+                today,
+                MAX_SCAN + 1,
+            ],
+        )
+    )
+    if len(answers) > MAX_SCAN:
+        raise ValueError("Trop de réponses du soir à examiner.")
+    for answer in answers:
+        day = answer["date"] + timedelta(days=1)
+        sessions = rows(
+            con.execute(
+                "SELECT id,revision,date,sport,description,target_duration_min FROM app.visible_planned_sessions "
+                "WHERE date=? AND status IN ('pending','modified') ORDER BY id LIMIT ?",
+                [day, MAX_EVENING_SESSIONS + 1],
+            )
+        )
+        if len(sessions) > MAX_EVENING_SESSIONS:
+            raise ValueError("Plus de sept séances concernées par la réponse du soir.")
+        _insert_run(
+            con,
+            record,
+            answer["answered_at"].replace(tzinfo=UTC),
+            f"evening:{answer['id']}",
+            now,
+            source={
+                "kind": "evening",
+                "id": answer["id"],
+                "for_date": day.isoformat(),
+                "question": answer["question"],
+                "answer": answer["answer"],
+                "sessions": [{**s, "date": s["date"].isoformat()} for s in sessions],
+            },
+            expires_at=datetime.combine(
+                day + timedelta(days=1), datetime.min.time(), zone
+            ),
+        )
+
+
+def prepare_evening_replies(now: datetime | None = None) -> None:
+    """Queue replies for the athlete's explicitly activated routine; no model I/O."""
+    from arete.services import coaching_attention, consent
+
+    if not coaching_attention.enabled():
+        return
+    now = now or utc_now()
+    with transaction() as con:
+        since = None
+        if consent.required():
+            expression, params = consent.in_force_since_sql(
+                "getvariable('arete_athlete_id')"
+            )
+            row = con.execute(f"SELECT {expression}", params).fetchone()
+            if row is None or row[0] is None:
+                return
+            since = row[0].replace(tzinfo=UTC)
+        # Serializes answer retries and dispatcher passes across workers.
+        con.execute(
+            "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id') RETURNING id"
+        )
+        records = rows(
+            con.execute(
+                "SELECT * FROM app.visible_automations WHERE state='active' "
+                "AND json_extract_string(trigger_json,'$.kind')='evening' LIMIT 2"
+            )
+        )
+        assert len(records) <= 1
+        for record in records:
+            _evenings(con, record, now, since)
+
+
+def evening_followup(message_id: int) -> dict | None:
+    with db_connection() as con:
+        found = rows(
+            con.execute(
+                "SELECT id,state,result,error FROM app.visible_automation_runs WHERE occurrence_key=? ORDER BY created_at DESC LIMIT 1",
+                [f"evening:{message_id}"],
+            )
+        )
+    return public(found[0]) if found else None
 
 
 def _disable_invalid(con, record: dict, now: datetime, exc: ValueError) -> None:
@@ -442,6 +566,9 @@ def prepare(
     consent was missing, never triggers a session automation."""
     now = now or utc_now()
     with transaction() as con:
+        con.execute(
+            "UPDATE app.athletes SET id=id WHERE id=getvariable('arete_athlete_id') RETURNING id"
+        )
         active = rows(
             con.execute(
                 "SELECT * FROM app.visible_automations WHERE state='active' ORDER BY updated_at,id LIMIT ?",
@@ -452,6 +579,12 @@ def prepare(
         for record in active:
             spec = definition(record)
             try:
+                if isinstance(spec.trigger, AfterEvening):
+                    from arete.services import coaching_attention
+
+                    if coaching_attention.enabled():
+                        _evenings(con, record, now, sessions_since)
+                    continue
                 if isinstance(spec.trigger, AfterSession):
                     _sessions(con, record, now, sessions_since)
                     continue
@@ -493,7 +626,7 @@ def prepare(
             [now, now],
         )
         con.execute(
-            f"UPDATE app.automation_runs SET state='expired',finished_at=?,revision=revision+1 WHERE {OWNER} AND state IN ('waiting','ready') AND expires_at<=? RETURNING id",
+            f"UPDATE app.automation_runs SET state='expired',finished_at=?,revision=revision+1 WHERE {OWNER} AND state IN ('queued','waiting','ready') AND expires_at<=? RETURNING id",
             [now, now],
         )
         # Delete an entire terminated checkpoint chain, never prune an ancestor
@@ -518,6 +651,11 @@ def claim(identifier: str, now: datetime | None = None) -> dict | None:
             ):
                 return None
             owner = _get(con, "automations", run["automation_id"])
+            if isinstance(definition(owner).trigger, AfterEvening):
+                from arete.services import coaching_attention
+
+                if not coaching_attention.enabled():
+                    return None
             if (
                 owner["state"] != "active"
                 or owner["revision"] != json.loads(run["definition_json"])["revision"]

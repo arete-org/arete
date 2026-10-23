@@ -154,6 +154,7 @@ def test_product_indicators_are_admin_only_bounded_and_anonymous(client, athlete
         "weekly_reviews_accepted",
         "first_action_hours",
         "retention_30d",
+        "evening_replies",
     }
     assert set(weeks[0]["indicators"]["active_accounts"]) == {
         "numerator",

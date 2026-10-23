@@ -480,3 +480,27 @@ Ouvrir un résultat reprend le fil sans appel modèle ni remplissage du brouillo
 La saisie reste celle de `AgentSidePanel` ; les réponses en cours et les brouillons
 restent dans leur fil d’origine. Une erreur de sauvegarde est visible et conserve
 la copie locale. La limite de 30 devient une taille de page, pas une rétention.
+
+## Component migration and review
+
+The [component inventory](docs/component-inventory.md) maps shared owners to the
+current Figma screens and browser coverage. It distinguishes reference screens
+from published component bindings; missing bindings remain design work.
+
+For each migration, keep one component owner and move its callers together. Use
+semantic tokens from `index.css`, `font-sans` for interface text and `font-display`
+for headings; do not introduce page-local copies of shared controls. Preserve
+keyboard behavior, 44 px touch targets and existing loading, error and disabled
+states. Coaching surfaces reuse the shared composer and feedback components.
+
+Add changed shared states to the development-only `/design-system` gallery and
+verify Pierre, Prune, Odyssey and Encre. Run the relevant desktop/mobile browser
+journey for interactions and draft preservation; keep screenshots in `.context/`.
+The gallery complements those journeys rather than replacing their behavior
+checks. Complete `make check` before review. New visual behavior needs an explicit
+Figma reference or a recorded design gap; a screen link is not a component binding.
+
+Migrate legacy aliases separately, with before/after screenshots across all four
+themes. Remove an alias only when its callers have moved, so unrelated screens
+retain their appearance during the migration. CI's browser image comes from the
+lockfile; see [CI and code review](docs/ci.md) for local and hosted checks.

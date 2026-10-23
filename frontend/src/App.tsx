@@ -28,6 +28,8 @@ const FollowUpPage = lazy(importChunk(() => import('@/pages/FollowUp').then(m =>
 const NotFoundPage = lazy(importChunk(() => import('@/pages/NotFound').then(m => ({ default: m.NotFoundPage }))));
 const OnboardingPage = lazy(importChunk(() => import('@/pages/Onboarding').then(m => ({ default: m.OnboardingPage }))));
 
+const DesignSystemPage = import.meta.env.DEV ? lazy(() => import('@/pages/DesignSystem')) : null;
+
 const PlanningPage = lazy(importChunk(loadPlanningPage));
 const LogPage = lazy(importChunk(loadLogPage));
 const WeekReviewPage = lazy(importChunk(loadWeekReviewPage));
@@ -175,6 +177,8 @@ function ProductShell() {
               <Route path="/coach" element={null} />
               <Route path="/" element={<><OnboardingEntry /><DashboardPage /></>} />
               <Route path="/onboarding" element={<Suspense fallback={<LoadingState message="Chargement de ta configuration…" />}><OnboardingPage /></Suspense>} />
+              {DesignSystemPage && <Route path="/design-system" element={<Suspense fallback={<LoadingState />}><DesignSystemPage /></Suspense>} />}
+              <Route path="/planning/objectifs" element={<SettingsPage planningGoals />} />
               <Route path="/follow-up" element={<FollowUpPage />} />
               <Route path="/planning" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><PlanningPage /></Suspense>} />
               <Route path="/planning/semaine" element={<Suspense fallback={<LoadingState message="Chargement de la page…" />}><WeekReviewPage /></Suspense>} />

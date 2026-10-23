@@ -1,4 +1,5 @@
 import { CoachingAttention } from '@/components/agent/CoachingAttention';
+import { useCoachingAttention } from '@/hooks/useCoachingAttention';
 import { BriefingCard } from '@/components/BriefingCard';
 import { PlayerSummary } from '@/components/PlayerSummary';
 import { useGamePreference } from '@/lib/gamification';
@@ -300,6 +301,7 @@ export function DashboardPage() {
   // The coach card and the briefing read their own keys, which the dashboard
   // seeds: they ask the server themselves only once it has answered or failed.
   const boardSettled = !plannedPending && !boardFetching;
+  const coordinated = useCoachingAttention(boardSettled).data?.enabled === true;
   const { data: boardDay } = useDashboard((d) => d.date);
 
   // Unknown until the dashboard answers: no Garmin call to action meanwhile.
@@ -396,8 +398,8 @@ export function DashboardPage() {
               Bonjour, <span className="text-neon-cyan">{userSettings?.display_name || 'Athlète'}</span>
             </h1>
             <p className="mt-2 text-sm text-text-secondary">
-              {nextGoal ? <Link className="inline-flex min-h-11 items-center hover:text-neon-cyan" to="/settings?tab=goals">{nextGoal.name} · {nextGoal.days_left > 0 ? `J-${nextGoal.days_left}` : 'Jour J'}</Link>
-                : nextGoal === null ? <Link className="inline-flex min-h-11 items-center hover:text-neon-cyan" to="/settings?tab=goals">Fixer un objectif</Link> : null}
+              {nextGoal ? <Link className="inline-flex min-h-11 items-center hover:text-neon-cyan" to="/planning/objectifs">{nextGoal.name} · {nextGoal.days_left > 0 ? `J-${nextGoal.days_left}` : 'Jour J'}</Link>
+                : nextGoal === null ? <Link className="inline-flex min-h-11 items-center hover:text-neon-cyan" to="/planning/objectifs">Fixer un objectif</Link> : null}
             </p>
             <UpdatedAgo at={plannedAt} />
           </div>
@@ -419,6 +421,8 @@ export function DashboardPage() {
             </div>
           )}
         </header>
+
+        {coordinated && <CoachingAttention enabled={boardSettled} hero />}
 
         {/* Ten seconds before the briefing: the answer feeds the day's decision. */}
         {checkin === null && boardDay && (
@@ -493,7 +497,7 @@ export function DashboardPage() {
 
           <DailyMarkers fitness={fitness} checkin={checkin} stats={playerStats} day={boardDay} expanded={detailsOpen} onDetails={() => setDetailsOpen(open => !open)} />
         </div>
-        <CoachingAttention enabled={boardSettled} home />
+        {!coordinated && <CoachingAttention enabled={boardSettled} home />}
         <div id="dashboard-details">
         {detailsOpen && <div className="dashboard-overview">
             {nextGoal && <Suspense fallback={<Skeleton label="Chargement de l’objectif" lines={1} />}>

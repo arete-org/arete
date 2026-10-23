@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { coachApi, eveningKey } from '@/lib/coachToday';
+import { coachApi, discussWithCoach, eveningKey } from '@/lib/coachToday';
+import { Button } from '@/components/ui';
+import { stateLabel } from '@/lib/automations';
 import { parseLocalDate } from '@/lib/dates';
 import { frenchClock } from '@/lib/fr';
 import { readableError } from '@/lib/utils';
@@ -34,5 +36,13 @@ export function EveningDiscussion({ id }: { id: number }) {
           ? `Réponds dans le champ ci-dessous : ta réponse est notée dans le journal ${coach.of} pour le briefing de demain, sans réponse immédiate.`
           : `Cette question est close : écris ${coach.to} si tu veux en parler.`}
     </p>
+    {message.continuation && <div className="ui-inset p-3 space-y-2">
+      <p className="text-sm font-medium">La suite de ton échange</p>
+      <p className="text-xs text-text-secondary">{stateLabel[message.continuation.state]}</p>
+      {message.continuation.result && <p className="text-sm whitespace-pre-wrap">{message.continuation.result}</p>}
+      {message.continuation.error && <p role="alert" className="text-sm text-danger-red">{message.continuation.error}</p>}
+      <Button size="sm" onClick={() => discussWithCoach({ kind: 'automation_run', id: message.continuation!.id, eveningId: id })}>Voir le suivi</Button>
+      <p className="text-xs text-text-muted">Tout ajustement attend ton accord.</p>
+    </div>}
   </section>;
 }

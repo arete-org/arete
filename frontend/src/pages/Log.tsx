@@ -89,6 +89,7 @@ export function LogPage() {
             <Sparkles className="w-4 h-4" />
             Saisir une séance
           </Button>
+          <p className="text-xs text-ink-secondary">Saisie libre ou dictée vocale, puis aperçu avant enregistrement.</p>
         </div>
 
         <PlayerSummary />

@@ -10,6 +10,7 @@ export const KPI_LABELS: Record<KpiKey, { label: string; detail: string }> = {
   weekly_reviews_accepted: { label: 'Contrats du dimanche acceptés', detail: 'bilans acceptés / bilans écrits' },
   first_action_hours: { label: 'Délai avant la 1re action', detail: 'médiane des nouveaux comptes' },
   retention_30d: { label: 'Rétention à 30 jours', detail: 'revenus après 30 jours / inscrits de la semaine' },
+  evening_replies: { label: 'Réponses au message du soir', detail: 'messages répondus / messages écrits' },
 };
 
 const PERCENT = new Intl.NumberFormat('fr-FR', { style: 'percent', maximumFractionDigits: 0 });
@@ -17,13 +18,15 @@ const HOURS = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
 const WEEK = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 /** The headline figure: a percentage, or hours for the median delay; « — » when nothing is counted. */
-export function kpiValue(key: KpiKey, cell: KpiCell): string {
+export function kpiValue(key: KpiKey, cell: KpiCell | undefined): string {
+  if (!cell) return 'Indisponible';
   if (cell.value === null) return '—';
   return key === 'first_action_hours' ? `${HOURS.format(cell.value)} h` : PERCENT.format(cell.value);
 }
 
 /** The counts behind it. */
-export function kpiCounts(key: KpiKey, cell: KpiCell): string {
+export function kpiCounts(key: KpiKey, cell: KpiCell | undefined): string {
+  if (!cell) return 'Indisponible';
   return key === 'first_action_hours'
     ? `${cell.numerator} sur ${cell.denominator} comptes`
     : `${cell.numerator} / ${cell.denominator}`;
@@ -52,7 +55,7 @@ export function kpisCsv(weeks: KpiWeek[]): string {
     const row: (string | number | null)[] = [week.week_start, week.current ? 'oui' : 'non'];
     for (const key of KPI_KEYS) {
       const cell = week.indicators[key];
-      row.push(cell.value, cell.numerator, cell.denominator);
+      row.push(cell?.value ?? null, cell?.numerator ?? null, cell?.denominator ?? null);
     }
     return row;
   });

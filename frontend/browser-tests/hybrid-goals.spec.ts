@@ -102,6 +102,8 @@ for (const width of [1440, 390]) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await stubApi(page, created, written);
     await page.goto('/settings?tab=goals');
+    await expect(page).toHaveURL(/\/planning\/objectifs$/);
+    await expect(page.getByRole('heading', { name: 'Objectifs', exact: true, level: 1 })).toBeVisible();
 
     await page.getByRole('button', { name: 'Ajouter un objectif', exact: true }).click();
     await page.getByRole('group', { name: 'Type d’objectif' }).getByRole('button', { name: 'Hyrox' }).click();

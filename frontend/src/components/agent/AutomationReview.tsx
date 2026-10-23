@@ -7,6 +7,9 @@ import { discussWithCoach } from '@/lib/coachToday';
 import { PlanChangeReview } from './PlanChangeReview';
 import { readableError } from '@/lib/utils';
 import { useCoachWords } from '@/lib/coachName';
+import { invalidateAfterSession } from '@/lib/queryKeys';
+
+const LIVE_STATES = new Set(['queued', 'running', 'waiting', 'ready']);
 
 const labels: Record<string, string> = {
   date_str: 'Date', date: 'Date', session_id: 'Séance', session_ids: 'Séances', session_type: 'Type', sport: 'Sport',
@@ -68,11 +71,22 @@ function Decision({ runId, item }: { runId: string; item: Interrupt }) {
 /** The existing Chiron shell owns navigation, focus, size and the preserved chat draft. */
 export function AutomationReview({ id }: { id: string }) {
   const coach = useCoachWords();
-  const query = useQuery({ queryKey: ['automation-run', id], queryFn: () => automationApi.run(id), refetchInterval: 15000 });
+  const client = useQueryClient();
+  const query = useQuery({ queryKey: ['automation-run', id], queryFn: () => automationApi.run(id), retry: false, refetchInterval: query => query.state.data && LIVE_STATES.has(query.state.data.state) ? 15000 : false });
+  const settled = query.data && !LIVE_STATES.has(query.data.state);
+  useEffect(() => {
+    if (!settled) return;
+    // A worker can finish while Planning is cached in this tab. Refresh the
+    // facts and source card when its receipt arrives, including partial failures.
+    invalidateAfterSession(client);
+    void client.invalidateQueries({ queryKey: ['coaching-attention'] });
+    void client.invalidateQueries({ queryKey: ['coachEvening'] });
+  }, [client, id, settled]);
   if (query.isPending) return <p role="status" className="p-4 text-sm">Chargement du suivi…</p>;
   if (!query.data) return <p role="alert" className="p-4 text-sm text-danger-red">{readableError(query.error)}</p>;
   const run = query.data;
   return <div className="min-h-0 overflow-y-auto p-4 space-y-4">
+    {query.isError && <p role="alert" className="text-sm text-danger-red">Actualisation du suivi indisponible : {readableError(query.error)}</p>}
     <p className="text-xs text-text-secondary">{run.definition.title} · {stateLabel[run.state] ?? run.state}</p>
     {run.result && <p className="whitespace-pre-wrap text-sm leading-relaxed">{run.result}</p>}
     {run.error && <p role="alert" className="text-sm text-danger-red">{run.error}</p>}

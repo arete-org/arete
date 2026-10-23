@@ -511,6 +511,7 @@ export const KPI_KEYS = [
   "weekly_reviews_accepted",
   "first_action_hours",
   "retention_30d",
+  "evening_replies",
 ] as const;
 
 export type KpiKey = (typeof KPI_KEYS)[number];
