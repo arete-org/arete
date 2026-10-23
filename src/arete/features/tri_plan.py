@@ -197,8 +197,13 @@ BIKE_EASY = "bike_easy"
 KEY_RUN = "key_run"
 LONG_RUN = "long_run"
 EASY_RUN = "easy_run"
+#: A brick's ride: the bike key, or the long ride (``BRICK_LONG_RIDE``).
 BRICK_BIKE = "brick_bike"
+BRICK_LONG_RIDE = "brick_long_ride"
 BRICK_RUN = "brick_run"
+#: A taper week's endurance ride and run: shorter, never long.
+TAPER_RIDE = "taper_ride"
+TAPER_RUN = "taper_run"
 ACTIVATION = "activation"
 KINDS: tuple[str, ...] = (
     SWIM_KEY,
@@ -210,13 +215,18 @@ KINDS: tuple[str, ...] = (
     LONG_RUN,
     EASY_RUN,
     BRICK_BIKE,
+    BRICK_LONG_RIDE,
     BRICK_RUN,
+    TAPER_RIDE,
+    TAPER_RUN,
     ACTIVATION,
     RACE,
 )
 _SPORT_TAG = {"swimming": SWIM, "cycling": BIKE, "running": RUN}
 
-#: Each kind a plan writes (``planned_sessions.plan_kind``) and its tags.
+#: Each kind a plan writes (``planned_sessions.plan_kind``) and its tags,
+#: exactly those of the sessions generated as that kind (``kept_tags`` reads
+#: an edited session back with them).
 _KIND_TAGS: dict[str, frozenset[str]] = {
     SWIM_KEY: frozenset({SWIM, SWIM_KEY}),
     SWIM_EASY: frozenset({SWIM, SWIM_EASY}),
@@ -226,8 +236,12 @@ _KIND_TAGS: dict[str, frozenset[str]] = {
     KEY_RUN: frozenset({RUN, KEY_RUN, HARD}),
     LONG_RUN: frozenset({RUN, LONG_RUN, LONG}),
     EASY_RUN: frozenset({RUN, EASY_RUN}),
-    BRICK_BIKE: frozenset({BIKE, BRICK_BIKE}),
+    BRICK_BIKE: frozenset({BIKE, BRICK_BIKE, BIKE_KEY, HARD}),
+    BRICK_LONG_RIDE: frozenset({BIKE, BRICK_BIKE, BRICK_LONG_RIDE, LONG_RIDE, LONG}),
+    # Hard when run at race pace (a tempo): ``kept_tags`` adds it.
     BRICK_RUN: frozenset({RUN, BRICK_RUN}),
+    TAPER_RIDE: frozenset({BIKE, TAPER_RIDE}),
+    TAPER_RUN: frozenset({RUN, TAPER_RUN}),
     ACTIVATION: frozenset({ACTIVATION}),
     RACE: frozenset({RACE, HARD}),
 }
@@ -297,7 +311,7 @@ def _may_share(same: Sequence[Slot], slot: Slot) -> bool:
     if len(swims) != 1:
         return False
     other = next(t for t in tags if SWIM not in t)
-    return not other & {LONG_RIDE, LONG_RUN}
+    return not other & {LONG_RIDE, LONG_RUN, TAPER_RIDE, TAPER_RUN}
 
 
 _RANK = {
@@ -305,8 +319,11 @@ _RANK = {
     # Pinned to their days before the others choose theirs.
     ACTIVATION: 0,
     BRICK_BIKE: 1,
+    BRICK_LONG_RIDE: 1,
     LONG_RIDE: 1,
+    TAPER_RIDE: 1,
     LONG_RUN: 2,
+    TAPER_RUN: 2,
     BIKE_KEY: 3,
     KEY_RUN: 4,
     SWIM_KEY: 5,
@@ -318,8 +335,12 @@ _RANK = {
 }
 _PREFS: dict[str, tuple[int, ...]] = {
     LONG_RIDE: (5, 6, 4, 3, 2, 1, 0),
+    BRICK_LONG_RIDE: (5, 6, 4, 3, 2, 1, 0),
+    TAPER_RIDE: (5, 6, 4, 3, 2, 1, 0),
     LONG_RUN: (6, 4, 3, 2, 1, 0, 5),
+    TAPER_RUN: (6, 4, 3, 2, 1, 0, 5),
     BIKE_KEY: (1, 2, 3, 4, 0, 5, 6),
+    BRICK_BIKE: (1, 2, 3, 4, 0, 5, 6),
     KEY_RUN: (3, 2, 4, 1, 5, 0, 6),
     SWIM_KEY: (0, 2, 4, 1, 3, 5, 6),
     SWIM_EASY: (0, 2, 4, 1, 3, 5, 6),
@@ -336,7 +357,10 @@ _LABELS = {
     LONG_RUN: "Sortie longue course",
     EASY_RUN: "Footing",
     BRICK_BIKE: "Enchaînement vélo-course",
+    BRICK_LONG_RIDE: "Enchaînement sortie longue-course",
     BRICK_RUN: "Course en enchaînement",
+    TAPER_RIDE: "Sortie vélo d'endurance",
+    TAPER_RUN: "Footing long",
     ACTIVATION: "Activation",
 }
 #: What a week may give up when the rules leave no room, least important
@@ -352,9 +376,12 @@ _PARTIAL_DROPS = (
     ACTIVATION,
     KEY_RUN,
     BIKE_KEY,
+    TAPER_RUN,
     LONG_RUN,
     BRICK_BIKE,
+    TAPER_RIDE,
     LONG_RIDE,
+    BRICK_LONG_RIDE,
 )
 _TAPER_DROPS = (
     BIKE_KEY,
@@ -363,6 +390,8 @@ _TAPER_DROPS = (
     BIKE_EASY,
     SWIM_EASY,
     SWIM_KEY,
+    TAPER_RUN,
+    TAPER_RIDE,
     LONG_RUN,
     LONG_RIDE,
     ACTIVATION,
@@ -382,10 +411,13 @@ TRI = Catalog(
     kinds=(
         RACE,
         ACTIVATION,
+        BRICK_LONG_RIDE,
         BRICK_BIKE,
         BRICK_RUN,
         LONG_RIDE,
         LONG_RUN,
+        TAPER_RIDE,
+        TAPER_RUN,
         BIKE_KEY,
         KEY_RUN,
         SWIM_KEY,
@@ -878,7 +910,7 @@ def _long_ride(
             "easy",
             f"Sortie vélo d'endurance {_hm(minutes)} ({_endurance_watts(inp)})",
             sport="cycling",
-            tags=frozenset({BIKE, LONG_RIDE}),
+            tags=_KIND_TAGS[TAPER_RIDE],
         )
     tags = _KIND_TAGS[LONG_RIDE]
     description = f"Sortie longue vélo {_hm(minutes)} ({_endurance_watts(inp)})"
@@ -902,9 +934,10 @@ def _long_ride(
             },
         ]
         text = _intensity_text(inp, power, zone, "allure course")
+        # An endurance ride holding its race power (68-75 % FTP), not a hard one.
         return DraftSession(
             date.min,
-            "tempo",
+            "endurance",
             minutes,
             "Z2",
             "moderate",
@@ -1045,7 +1078,7 @@ def _long_run(
             "Z2",
             "easy",
             paced(f"Footing long {_hm(minutes)}", inp.paces, "easy"),
-            tags=frozenset({RUN, LONG_RUN}),
+            tags=_KIND_TAGS[TAPER_RUN],
         )
     description = paced(f"Sortie longue {_hm(minutes)}", inp.paces, "easy")
     if (
@@ -1098,9 +1131,11 @@ def _brick_run(inp: TriInputs, phase: Phase, recovery: bool) -> DraftSession:
     if phase == "specific" and not recovery and inp.distance in ("sprint", "olympic"):
         content = f"{minutes}' dont 5' {_race_pace_label(inp, run_km)} au départ"
         session_type, intensity = "tempo", "moderate"
+        tags = _KIND_TAGS[BRICK_RUN] | {HARD}  # race pace off the bike
     else:
         content = paced(f"{minutes}' facile", inp.paces, "easy")
         session_type, intensity = "endurance", "easy"
+        tags = _KIND_TAGS[BRICK_RUN]
     return DraftSession(
         date.min,
         session_type,
@@ -1108,15 +1143,15 @@ def _brick_run(inp: TriInputs, phase: Phase, recovery: bool) -> DraftSession:
         "Z2",
         intensity,
         f"Course en enchaînement, juste après le vélo : {content}",
-        tags=_KIND_TAGS[BRICK_RUN],
+        tags=tags,
     )
 
 
-def _as_brick_bike(bike: DraftSession) -> DraftSession:
+def _as_brick_bike(bike: DraftSession, long: bool) -> DraftSession:
     return replace(
         bike,
         description=f"{bike.description}, puis enchaînement course à pied",
-        tags=bike.tags | {BRICK_BIKE},
+        tags=bike.tags | {BRICK_BIKE} | ({BRICK_LONG_RIDE} if long else set()),
     )
 
 
@@ -1311,8 +1346,8 @@ def _loading_items(
         if brick == kind and brick_run is not None:
             items.append(
                 _Item(
-                    BRICK_BIKE,
-                    (_as_brick_bike(bike), brick_run),
+                    BRICK_LONG_RIDE if kind == LONG_RIDE else BRICK_BIKE,
+                    (_as_brick_bike(bike, kind == LONG_RIDE), brick_run),
                     _PREFS[kind],
                     solo=(kind, bike),
                 )

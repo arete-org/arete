@@ -133,8 +133,11 @@ export const PLAN_KIND_LABEL: Record<string, string> = {
   bike_easy: 'vélo facile',
   long_run: 'sortie longue',
   easy_run: 'footing',
-  brick_bike: 'vélo avant enchaînement',
+  brick_bike: 'vélo clé avant enchaînement',
+  brick_long_ride: 'sortie longue vélo avant enchaînement',
   brick_run: 'course enchaînée',
+  taper_ride: 'sortie vélo d’endurance',
+  taper_run: 'footing long',
 };
 
 /** The athlete's level a Hyrox or hybrid plan is sized for. */

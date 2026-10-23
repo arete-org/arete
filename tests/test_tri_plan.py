@@ -16,6 +16,7 @@ from arete.features.tri_plan import (
     BIKE_EASY,
     BIKE_KEY,
     BRICK_BIKE,
+    BRICK_LONG_RIDE,
     BRICK_RUN,
     EASY_RUN,
     KEY_RUN,
@@ -30,6 +31,8 @@ from arete.features.tri_plan import (
     SWIM_EASY,
     SWIM_KEY,
     TAPER_DAYS,
+    TAPER_RIDE,
+    TAPER_RUN,
     TriInputs,
     generate_tri_plan,
     kept_tags,
@@ -484,13 +487,23 @@ def _kept(session: DraftSession, **changes) -> DraftSession:
     return replace(session, tags=tags, prescription=None, **changes)
 
 
-def test_every_generated_kind_reads_back_as_itself():
-    _, weeks = _plan(distance="half", hours_per_week=12)
+@pytest.mark.parametrize("distance", ["sprint", "olympic", "half", "full"])
+@pytest.mark.parametrize("level", ["novice", "intermediate", "advanced"])
+@pytest.mark.parametrize("ftp", [None, 250])
+def test_every_generated_session_reads_back_with_its_exact_tags(distance, level, ftp):
+    """What regeneration reads back from a stored kind is what the rules saw:
+    a long brick stays long, a taper ride is not long, the Ironman's race
+    power ride stays easy."""
+    _, weeks = _plan(distance=distance, level=level, ftp_w=ftp, hours_per_week=14)
+    seen = set()
     for s in _sessions(weeks):
-        tags = kept_tags(kind_of(s.tags), s.sport, s.session_type, s.intensity)
-        assert tags is not None and KEPT in tags
-        assert kind_of(tags) == kind_of(s.tags)
-        assert (HARD in tags) == (HARD in s.tags)
+        kind = kind_of(s.tags)
+        seen.add(kind)
+        assert kept_tags(kind, s.sport, s.session_type, s.intensity) == s.tags | {KEPT}
+    assert {BRICK_RUN, ACTIVATION, RACE} <= seen
+    # A sprint's taper is its race week: no taper week, no taper ride.
+    assert ({TAPER_RIDE, TAPER_RUN} <= seen) == (distance != "sprint")
+    assert (BRICK_LONG_RIDE in seen) == (distance in ("half", "full"))
     assert kept_tags("compromised", "running", "tempo", None) is None
 
 

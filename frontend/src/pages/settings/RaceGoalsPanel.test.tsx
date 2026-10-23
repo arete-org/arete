@@ -653,6 +653,6 @@ it('previews a triathlon plan: split, peak, thresholds and its sessions by kind'
     screen.getByText('Répartition : natation 20 % · vélo 45 % · course à pied 35 % · pic 8 h/sem (8 h disponibles)')
   ).toBeTruthy();
   expect(screen.getByText('Sans FTP : vélo à la fréquence cardiaque · CSS 1:40/100 m')).toBeTruthy();
-  expect(screen.getByText('Vélo avant enchaînement')).toBeTruthy();
+  expect(screen.getByText('Vélo clé avant enchaînement')).toBeTruthy();
   expect(screen.getByText('Course enchaînée')).toBeTruthy();
 });

@@ -47,7 +47,11 @@ TRI_KIND_LABEL = {
     tri_plan.KEY_RUN: "course clé",
     tri_plan.LONG_RUN: "sortie longue",
     tri_plan.EASY_RUN: "footing",
+    tri_plan.BRICK_BIKE: "vélo clé",
+    tri_plan.BRICK_LONG_RIDE: "sortie longue vélo",
     tri_plan.BRICK_RUN: "course enchaînée",
+    tri_plan.TAPER_RIDE: "sortie vélo d'endurance",
+    tri_plan.TAPER_RUN: "footing long",
     tri_plan.ACTIVATION: "activation",
 }
 PHASE_LABEL = {
@@ -72,9 +76,6 @@ def hyrox_name(session: DraftSession) -> str:
 
 def tri_name(session: DraftSession) -> str:
     """A triathlon session's name; a brick's ride is its key or long ride."""
-    if tri_plan.BRICK_BIKE in session.tags:
-        long = tri_plan.LONG_RIDE in session.tags
-        return TRI_KIND_LABEL[tri_plan.LONG_RIDE if long else tri_plan.BIKE_KEY]
     return TRI_KIND_LABEL.get(tri_plan.kind_of(session.tags), session.session_type)
 
 
