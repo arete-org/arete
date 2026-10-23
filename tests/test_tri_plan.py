@@ -68,6 +68,19 @@ def _inputs(**kw) -> TriInputs:
     return TriInputs(**values)
 
 
+#: An Ironman, Wednesday to Friday off, racing on a Friday: its last loading
+#: week reaches into the 21-day taper and takes its taper ride and run.
+IRONMAN_FALLBACK = {
+    "distance": "full",
+    "level": "advanced",
+    "hours_per_week": 17,
+    "weekly_minutes_now": 700,
+    "training_days": 4,
+    "rest_days": frozenset({2, 3, 4}),
+    "race_date": START + timedelta(weeks=23, days=4),
+}
+
+
 def _rules(inp: TriInputs):
     return tri_rules(
         inp.level,
@@ -183,6 +196,64 @@ def test_the_last_loading_week_before_the_taper_still_fits():
     assert not any("long" in s.tags and s.date > taper_from for s in _sessions(weeks))
     last_loading = _loading(weeks)[-1]
     assert {TAPER_RIDE, TAPER_RUN} & set(_kinds(last_loading))
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        IRONMAN_FALLBACK,
+        *(
+            {
+                "distance": d,
+                "rest_days": rest,
+                "race_date": START + timedelta(weeks=MAX_WEEKS[d] - 1, days=wd),
+            }
+            for d in ("olympic", "half", "full")
+            for rest in (frozenset({2, 3, 4}), frozenset({0}), frozenset({1, 3}))
+            for wd in (0, 4, 6)
+        ),
+    ],
+)
+def test_no_session_in_the_taper_outlasts_the_taper_s_own_endurance(kw):
+    """Inside the taper's days, nothing but the race lasts longer than the
+    taper weeks' own endurance ride or run, a loading week's fallback
+    included: sized as the taper sizes its own."""
+    inp, weeks = _plan(**{"hours_per_week": 14, **kw})
+    taper_from = inp.race_date - timedelta(days=TAPER_DAYS[inp.distance])
+    from arete.features.tri_plan import TAPER_SHARES, _long_minutes, peak_minutes
+
+    # The taper's own endurance ride and run as its first week sizes them,
+    # before its volume cap: from the plan's peak at the taper's share.
+    taper_minutes = peak_minutes(inp) * TAPER_SHARES[0]
+    _, bike, run = SPLIT[inp.distance]
+    own = [
+        _long_minutes("bike", taper_minutes * bike, inp.distance),
+        _long_minutes("run", taper_minutes * run, inp.distance),
+    ]
+    kept = [
+        s.duration_min or 0
+        for w in weeks
+        if w.phase == "taper"
+        for s in w.sessions
+        if s.tags & {TAPER_RIDE, TAPER_RUN}
+    ]
+    assert all(m <= max(own) for m in kept)
+    window = [s for s in _sessions(weeks) if s.date > taper_from and RACE not in s.tags]
+    assert all((s.duration_min or 0) <= max(own) for s in window), [
+        (s.description, s.duration_min)
+        for s in window
+        if (s.duration_min or 0) > max(own)
+    ]
+
+
+def test_the_fallback_week_keeps_its_key_run_before_long_endurance():
+    inp, weeks = _plan(**IRONMAN_FALLBACK)
+    fallback = next(
+        w for w in _loading(weeks) if {TAPER_RIDE, TAPER_RUN} & set(_kinds(w))
+    )
+    assert KEY_RUN in _kinds(fallback)
+    assert not any("Course clé" in d for d in fallback.dropped)
+    assert plan_violations(weeks, _rules(inp), inp.race_date) == []
 
 
 def test_a_24_week_ironman_on_few_days_is_placed_quickly():
@@ -625,7 +696,7 @@ def test_swims_are_whole_lengths_with_their_pace_in_the_notes(pool, css):
     assert ("CSS" in notes) == (css is not None)
 
 
-@pytest.mark.parametrize("distance", ["sprint", "olympic", "half", "full"])
+@pytest.mark.parametrize("distance", ["sprint", "olympic", "half", "full", "fallback"])
 @pytest.mark.parametrize("ftp", [None, 260])
 @pytest.mark.parametrize("hr_reference", [False, True])
 @pytest.mark.parametrize("paces", [None, PACES])
@@ -643,13 +714,19 @@ def test_every_generated_session_exports_to_garmin(distance, ftp, hr_reference, 
     from arete.services.garmin_export import described_prescription
 
     zones = [(0, 120), (120, 140), (140, 155), (155, 170), (170, None)]
+    # "fallback": the Ironman whose last loading week takes endurance forms.
+    shape = IRONMAN_FALLBACK if distance == "fallback" else {"distance": distance}
     _, weeks = _plan(
-        distance=distance,
-        ftp_w=ftp,
-        hr_reference=hr_reference,
-        paces=paces,
-        hours_per_week=14,
+        **{
+            "hours_per_week": 14,
+            **shape,
+            "ftp_w": ftp,
+            "hr_reference": hr_reference,
+            "paces": paces,
+        }
     )
+    if distance == "fallback":
+        assert any({TAPER_RIDE, TAPER_RUN} & set(_kinds(w)) for w in _loading(weeks))
     sessions = [s for s in _sessions(weeks) if RACE not in s.tags]
     assert {s.sport for s in sessions} == {"swimming", "cycling", "running"}
     for s in sessions:

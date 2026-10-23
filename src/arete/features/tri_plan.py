@@ -392,7 +392,8 @@ _LABELS = {
 }
 #: What a week may give up when the rules leave no room, least important
 #: first. A full week keeps its keys and long sessions; a partial week may
-#: lose anything but the race; a taper week loses its keys first.
+#: lose anything but the race; a taper week loses its bike key first, then
+#: its endurance ride and run before its key run.
 _FULL_DROPS = (EASY_RUN, BIKE_EASY, SWIM_EASY)
 _PARTIAL_DROPS = (
     EASY_RUN,
@@ -412,13 +413,14 @@ _PARTIAL_DROPS = (
 )
 _TAPER_DROPS = (
     BIKE_KEY,
+    # A taper keeps its run sharpness before its endurance volume.
+    TAPER_RUN,
+    TAPER_RIDE,
     KEY_RUN,
     EASY_RUN,
     BIKE_EASY,
     SWIM_EASY,
     SWIM_KEY,
-    TAPER_RUN,
-    TAPER_RIDE,
     LONG_RUN,
     LONG_RIDE,
     ACTIVATION,
@@ -945,7 +947,9 @@ def _long_ride(
     inp: TriInputs, phase: Phase, recovery: bool, minutes: int
 ) -> DraftSession:
     """The week's long ride; an Ironman's specific weeks hold race-power
-    blocks in it, a taper's is a shorter endurance ride (not long)."""
+    blocks in it. In the taper (a taper week, or a loading week reaching into
+    the taper's days) it is an endurance ride, not long, of the minutes the
+    caller sized for it."""
     if phase == "taper":
         return DraftSession(
             date.min,
@@ -1413,9 +1417,13 @@ def _loading_items(
     endurance_longs: bool = False,
 ) -> list[_Item]:
     """A base, build, specific or taper week's sessions, sized from its
-    minutes split between the sports. ``endurance_longs``: the long ride and
-    run take their taper form (not long), and a brick joins the bike key."""
+    minutes split between the sports. ``endurance_longs`` (a loading week
+    reaching into the taper's days): the long ride and run take their taper
+    form, sized as a taper week sizes its own (``TAPER_VOLUME_SHARE`` of the
+    week's minutes), the minutes they lose not moved to the easy sessions;
+    a brick joins the bike key."""
     longs: Phase = "taper" if endurance_longs else phase
+    taper_share = TAPER_VOLUME_SHARE if endurance_longs else 1.0
     swim_m, bike_m, run_m = (minutes * share for share in SPLIT[inp.distance])
     novice = inp.level == "novice"
 
@@ -1430,12 +1438,14 @@ def _loading_items(
         recovery,
     )
     bike_key = _bike_key(inp, phase, recovery, week, bike_m)
+    ride_min = _long_minutes("bike", bike_m, inp.distance)
     long_ride = _long_ride(
-        inp, longs, recovery, _long_minutes("bike", bike_m, inp.distance)
+        inp, longs, recovery, _long_minutes("bike", bike_m * taper_share, inp.distance)
     )
     key_run = _key_run(inp, phase, recovery, week, run_m)
+    run_min = _long_minutes("run", run_m, inp.distance)
     long_run = _long_run(
-        inp, longs, recovery, _long_minutes("run", run_m, inp.distance)
+        inp, longs, recovery, _long_minutes("run", run_m * taper_share, inp.distance)
     )
 
     brick: str | None = None  # the bike session the brick joins
@@ -1465,13 +1475,11 @@ def _loading_items(
     run_kind = TAPER_RUN if endurance_longs else LONG_RUN
     items += [_Item(KEY_RUN, (key_run,)), _Item(run_kind, (long_run,))]
     if not novice:
-        bike_left = (
-            bike_m - (bike_key.duration_min or 0) - (long_ride.duration_min or 0)
-        )
+        bike_left = bike_m - (bike_key.duration_min or 0) - ride_min
         run_left = (
             run_m
             - (key_run.duration_min or 0)
-            - (long_run.duration_min or 0)
+            - run_min
             - (brick_run.duration_min or 0 if brick_run else 0)
         )
         items.append(
@@ -1770,8 +1778,9 @@ def generate_tri_plan(inp: TriInputs, rules: Rules) -> list[WeekPlan]:
         taper_from = inp.race_date - timedelta(days=rules.taper.days)
         reaches_taper = any(monday + timedelta(days=d) > taper_from for d in open_days)
         # The usual week first; a loading week reaching into the taper's days
-        # then tries its long sessions as shorter endurance ones (no long
-        # session in the taper); last, any session but the race may go.
+        # then tries its long sessions as endurance ones sized as the taper
+        # sizes its own (no long session in the taper); last, any session but
+        # the race may go.
         attempts: list[tuple[bool, tuple[str, ...] | None]] = [(False, None)]
         if not tapering and reaches_taper:
             attempts.append((True, None))

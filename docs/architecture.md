@@ -824,8 +824,9 @@ run back after it, a kept run keeps its day alone. The long ride and the long
 run make a weekend block (Saturday, Sunday); the day after holds nothing hard
 or long (`AfterBlock`); without two training days from Tuesday to Friday
 they stay apart instead. A loading week reaching into the taper's days, where
-no long session goes, takes shorter endurance forms of them when the long ones
-find no room. Race week keeps one activation per sport. Every session but the
+no long session goes, takes endurance forms of them, sized as the taper sizes
+its own, when the long ones find no room; the taper's volume cap then gives up
+endurance before the key run. Race week keeps one activation per sport. Every session but the
 race exports to Garmin: swims, bike keys, activations and race-pace brick runs
 carry their steps, other runs are written as the running grammar reads them; the race is `sport='other'`, and
 without a target time its projected load is 80 to 780 minutes by format.

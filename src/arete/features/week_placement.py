@@ -71,9 +71,10 @@ class Grouping:
 
 @dataclass(frozen=True)
 class AfterBlock:
-    """After ``length`` consecutive days holding a ``tag`` session (a weekend
-    of long ride then long run), the next day holds no session tagged with
-    any of ``forbidden``: it is easy, a swim, or rest."""
+    """After ``length`` consecutive days holding a ``tag`` session, any days
+    of the week (a triathlete's long ride then long run, often on a
+    weekend), the next day holds no session tagged with any of
+    ``forbidden``: it is easy, a swim, or rest."""
 
     id: str
     tag: str
