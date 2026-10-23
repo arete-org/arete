@@ -20,6 +20,7 @@ from arete.garmin.repository import GarminRepository
 from arete.services.adaptation import (
     AdaptationInput,
     Decision,
+    DeclaredPain,
     describe,
     evaluate,
     one_recovery_per_day,
@@ -141,6 +142,7 @@ def adapt_today(
             fitness_goal=facts.fitness_goal,
             sleep=facts.checkin.sleep if facts.checkin else None,
             legs=facts.checkin.legs if facts.checkin else None,
+            pain=tuple(DeclaredPain(p.area, p.intensity) for p in facts.pain),
         )
         for session in pending
     ]

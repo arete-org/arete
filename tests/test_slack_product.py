@@ -469,6 +469,7 @@ def test_product_graph_executes_native_tool_without_personal_context(
 
     for name in (
         "facts_block",
+        "body_block",
         "journal_block",
         "followup_block",
         "search_personal_context",
@@ -870,7 +871,7 @@ def test_shared_graph_isolates_concurrent_intents_and_denies_unbound_tools(
 
     admin, _, service = setup
     captured = {}
-    for name in ("facts_block", "journal_block", "followup_block"):
+    for name in ("facts_block", "body_block", "journal_block", "followup_block"):
         monkeypatch.setattr(builder, name, lambda *a: "PERSONAL_SECRET")
     monkeypatch.setattr(builder, "personal_context_section", lambda *a: "MEMORY_SECRET")
 

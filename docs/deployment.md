@@ -200,6 +200,14 @@ disponible » nor hand over on load. If a rollback is unavoidable, rename the
 marker (`WAITS_MARKER`) in the next forward deploy so it replaces that worker
 at once, as the first deploy of ARE-133 did.
 
+**Rolling back across ARE-62 (migration 66) leaves health data unmanaged.** An
+older release does not know `app.pain_entries` and `app.weight_entries`: its
+account erasure leaves those rows behind and its export omits them, while the
+tables keep what athletes recorded. Prefer rolling forward. If a rollback is
+unavoidable, purge by hand the rows of any athlete erased meanwhile
+(`DELETE FROM app.pain_entries WHERE athlete_id NOT IN (SELECT id FROM
+app.athletes)`, likewise for `app.weight_entries`) before the next forward deploy.
+
 ## Migrations
 
 The schema lives in `src/arete/dataio/init_duckdb.py`: the DDL for a fresh

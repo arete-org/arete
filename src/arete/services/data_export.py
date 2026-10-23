@@ -3,9 +3,9 @@
 Only an allowlist of tables leaves the database: sessions done and planned
 with their feedback, terrain, weather and streams, daily health
 metrics, strength sessions, sets and exercises, goals, athlete facts and their
-revisions, morning check-ins, evening messages, briefings, plan decisions,
-follow-ups, weekly reviews, settings, the game, documents' names,
-saved conversations and the coach's journal files; the heavy ones
+revisions, morning check-ins, pain and body weight, evening messages,
+briefings, plan decisions, follow-ups, weekly reviews, settings, the game,
+documents' names, saved conversations and the coach's journal files; the heavy ones
 (``OPT_IN``) only on request. Credentials never do: Strava tokens, push
 subscriptions, accounts, calendar connections and actions and ``app.files``
 (which holds the Garmin session tokens) are not read at all. Neither are
@@ -128,6 +128,21 @@ TABLES: tuple[ExportTable, ...] = (
         "SELECT date, sleep, legs, mood, note, answered_at, updated_at "
         "FROM app.visible_daily_checkins "
         "WHERE athlete_id = getvariable('arete_athlete_id') AND answered_at IS NOT NULL",
+        "date",
+        "date",
+    ),
+    # Pain and body weight (ARE-62), as the athlete entered them.
+    ExportTable(
+        "pain_entries",
+        "SELECT id, date, area, side, intensity, note, created_at, updated_at "
+        "FROM app.visible_pain_entries WHERE athlete_id = getvariable('arete_athlete_id')",
+        "date",
+        "date, id",
+    ),
+    ExportTable(
+        "weight_entries",
+        "SELECT date, weight_kg, source, created_at, updated_at "
+        "FROM app.visible_weight_entries WHERE athlete_id = getvariable('arete_athlete_id')",
         "date",
         "date",
     ),

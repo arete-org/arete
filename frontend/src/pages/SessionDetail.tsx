@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Dumbbell } from 'lucide-react';
 import { EmptyState, ErrorState, LoadingState } from '@/components';
+import { BodyLogEntry } from '@/components/body/BodyLogEntry';
 import { GlossaryLink } from '@/components/GlossaryLink';
 import { Button, Modal, ModalHeader, Panel, RpeBadge } from '@/components/ui';
 import { analyticsApi, strengthApi } from '@/lib/api';
@@ -147,6 +148,10 @@ function SessionView({ detail }: { detail: ActivityDetail }) {
           source={session.source}
         />
       )}
+
+      <Panel title="Une douleur pendant ou après ?">
+        <BodyLogEntry painDate={session.date} weight={false} />
+      </Panel>
 
       {session.notes && (
         <Panel title="Notes">

@@ -329,6 +329,7 @@ def ledger(monkeypatch):
 
     for name, attribute in (
         ("facts", "facts_block"),
+        ("body", "body_block"),
         ("journal", "journal_block"),
         ("followups", "followup_block"),
     ):
@@ -371,7 +372,13 @@ def test_a_read_tool_reuses_the_ledger_read_by_the_first_call(ledger, async_mode
     else:
         graph.invoke(state, context=context)
     assert len(prompts) == 2 and prompts[0] == prompts[1]
-    assert ledger.reads == {"facts": 1, "journal": 1, "followups": 1, "search": 1}
+    assert ledger.reads == {
+        "facts": 1,
+        "body": 1,
+        "journal": 1,
+        "followups": 1,
+        "search": 1,
+    }
     assert context.stats.memory_searches == 1
 
 
@@ -410,7 +417,13 @@ def test_a_write_tool_refreshes_the_ledger_for_the_next_call(ledger, name, fails
     graph.invoke(state, context=AgentContext(current_datetime=CLOCK))
     assert "Douleur au mollet" not in prompts[0]
     assert "journal : Objectif : semi en 1h35 | Douleur au mollet" in prompts[1]
-    assert ledger.reads == {"facts": 2, "journal": 2, "followups": 2, "search": 2}
+    assert ledger.reads == {
+        "facts": 2,
+        "body": 2,
+        "journal": 2,
+        "followups": 2,
+        "search": 2,
+    }
 
 
 def test_overlapping_invocations_of_one_graph_keep_their_own_ledger_reads(ledger):
@@ -435,9 +448,16 @@ def test_overlapping_invocations_of_one_graph_keep_their_own_ledger_reads(ledger
         )
     assert contexts[0].ledger_sections is not contexts[1].ledger_sections
     assert all(
-        set(c.ledger_sections) == {"facts", "journal", "followups"} for c in contexts
+        set(c.ledger_sections) == {"facts", "body", "journal", "followups"}
+        for c in contexts
     )
-    assert ledger.reads == {"facts": 2, "journal": 2, "followups": 2, "search": 2}
+    assert ledger.reads == {
+        "facts": 2,
+        "body": 2,
+        "journal": 2,
+        "followups": 2,
+        "search": 2,
+    }
 
 
 def test_chat_misconfiguration_is_an_actionable_error(router_client, monkeypatch):

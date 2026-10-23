@@ -161,7 +161,9 @@ def briefing_facts(
     model requests and 99 s on the free tier — while the rule floor had just
     computed the same numbers. It never saw today's plan either. ``facts``
     are the floor's; without them the load section reads its own. The
-    morning check-in (today's and yesterday's) appears only once answered.
+    morning check-in (today's and yesterday's) appears only once answered,
+    the pain declared within three days only once declared, without its notes:
+    the coach's context section already carries them.
     """
     from arete.garmin.repository import GarminRepository
     from arete.services.analytics import list_sessions
@@ -277,6 +279,50 @@ def briefing_facts(
         logger.warning("Briefing facts: check-in unavailable", exc_info=True)
         declared = ["indisponible"]
     try:
+        from arete.garmin.repository import GarminRepository
+        from arete.services import body_log
+        from arete.services.adaptation import (
+            ADAPTABLE_SPORTS,
+            DeclaredPain,
+            pain_under_load,
+        )
+
+        days = {0: "aujourd'hui", 1: "hier", 2: "avant-hier"}
+        start = target_date - timedelta(days=body_log.PAIN_RECENT_DAYS - 1)
+        hurts = [
+            f"{days.get((target_date - p.date).days, p.date.isoformat())} : "
+            f"{p.label} {p.intensity}/10"
+            for p in body_log.list_pain(start, target_date)
+        ]
+        if hurts:
+            if facts is None:
+                facts = rule_facts(target_date)
+            # The fact only: the day's decision, listed below, says what it did.
+            # Only for a session the decision could adapt, on an area it loads.
+            sports = sorted(
+                {
+                    s.sport
+                    for s in GarminRepository().list_planned_sessions(
+                        start_date=target_date, end_date=target_date, status=None
+                    )
+                    if s.sport in ADAPTABLE_SPORTS
+                }
+            )
+            pains = [DeclaredPain(p.area, p.intensity) for p in facts.pain]
+            signal = next(
+                (
+                    said
+                    for sport in sports
+                    if (said := pain_under_load(pains, facts.acwr, sport))
+                ),
+                None,
+            )
+            if signal:
+                hurts.append(f"Signal pour la décision du jour : {signal}")
+    except Exception:
+        logger.warning("Briefing facts: declared pain unavailable", exc_info=True)
+        hurts = ["indisponible"]
+    try:
         from arete.services import evening_message
 
         # Last evening's question, once the athlete answered it (ARE-64).
@@ -294,6 +340,12 @@ def briefing_facts(
             *(
                 [bullet_block("Check-in déclaré par l'athlète", lambda: declared)]
                 if declared
+                else []
+            ),
+            # Only once declared, like the check-in.
+            *(
+                [bullet_block("Douleurs déclarées (3 derniers jours)", lambda: hurts)]
+                if hurts
                 else []
             ),
             *(

@@ -37,7 +37,16 @@ MAX_PANEL_CONTEXT_CHARS = 64_000
 #: Route names the frontend can send. Anything else is rejected at the API
 #: boundary before any server-side page read.
 PANEL_PAGES = frozenset(
-    {"dashboard", "follow_up", "planning", "analytics", "log", "settings", "profile"}
+    {
+        "dashboard",
+        "follow_up",
+        "planning",
+        "analytics",
+        "log",
+        "settings",
+        "profile",
+        "health",
+    }
 )
 
 
