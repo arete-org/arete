@@ -625,6 +625,13 @@ export interface PostSessionFeedback {
 }
 
 /** The day's briefing, or `pending` (no other field) while the coach writes it. */
+export interface BriefingFact {
+  label: string;
+  value: string;
+  source: string;
+  measured_on: string;
+}
+
 export interface DailyTip {
   status: "ready" | "pending";
   tip: string | null;
@@ -646,6 +653,7 @@ export type BriefingReaction = "up" | "down";
 
 /** One of the previous days' briefings (`GET /tips/history`, at most seven). */
 export interface PastBriefing {
+  evidence?: BriefingFact[];
   id: number;
   date: string;
   tip: string;

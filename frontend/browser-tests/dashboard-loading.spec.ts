@@ -57,6 +57,7 @@ test('the page frame shows at once, today’s session with the one answer, whate
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Bonjour, HUNTER' })).toBeVisible();
   await expect(page.getByRole('status', { name: 'Chargement de la séance du jour' })).toBeVisible();
+  await page.getByRole('button', { name: 'Détails de ma forme' }).click();
   await expect(page.getByRole('status', { name: 'Chargement des statistiques' })).toBeVisible();
   await board;
   await expect(page.getByText('Footing du jour')).toBeVisible({ timeout: 1_000 });
@@ -82,7 +83,7 @@ test('the dashboard loads with seven reads and one freshness check, attention wa
   await page.goto('/');
   await expect(page.getByText('Footing du jour')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Envoyer sur la montre' })).toBeVisible();
-  await expect(page.getByText('77', { exact: true })).toBeVisible();
+  await expect(page.getByText('50 / 100', { exact: true })).toBeVisible();
   await expect(page.getByText(/Semi de Lyon/)).toBeVisible();
   await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
   await page.waitForLoadState('networkidle');
@@ -92,9 +93,8 @@ test('the dashboard loads with seven reads and one freshness check, attention wa
     'POST /api/garmin/sync/ensure',
   ]);
   expect(requests.indexOf('GET /api/coach/attention')).toBeGreaterThan(requests.indexOf('GET /api/dashboard'));
-  // The form curve is the page's one lazy read: once, after the dashboard answered.
-  expect(requests.filter(r => r === CURVE)).toHaveLength(1);
-  expect(requests.indexOf(CURVE)).toBeGreaterThan(requests.indexOf('GET /api/dashboard'));
+  // No curve work until the athlete asks for the detailed form.
+  expect(requests.filter(r => r === CURVE)).toHaveLength(0);
 });
 
 test('today’s session goes to the watch through the export view and shows when', async ({ page }) => {
@@ -156,14 +156,14 @@ test('a repeat visit and a focus refresh stay within the budget, the coach card 
   const coach = { date: localDay(), items: [{ kind: 'followup', record: followup }], remaining: 0, briefing: null };
   await dashboard(page, () => 0, (_route, path) => (path === '/api/dashboard' ? dashboardAnswer({ planned: [session], coach }) : undefined));
   await page.goto('/');
-  await expect(page.getByText('Comment était la séance ?')).toBeVisible();
+  await expect(page.locator('summary').getByText('Comment était la séance ?')).toBeVisible();
   // Writes are throttled to one a second.
   await page.waitForTimeout(1_500);
   await page.unrouteAll({ behavior: 'ignoreErrors' });
   const requests = await dashboard(page, () => 0, (_route, path) => (path === '/api/dashboard' ? dashboardAnswer({ planned: [session], coach }) : undefined));
   await page.reload();
   await expect(page.getByText('Footing du jour')).toBeVisible();
-  await expect(page.getByText('Comment était la séance ?')).toBeVisible();
+  await expect(page.locator('summary').getByText('Comment était la séance ?')).toBeVisible();
   await page.waitForLoadState('networkidle');
   expect(eager(requests).sort(), requests.join('\n')).toEqual([
     'GET /api/coach/attention', 'GET /api/dashboard', 'GET /api/notifications', 'GET /api/onboarding', 'GET /api/settings', 'GET /api/settings/gamification', 'POST /api/garmin/sync/ensure',
@@ -205,6 +205,7 @@ test('a dashboard that fails says so with a retry, and the coach card and briefi
   });
   await page.goto('/');
   await expect(page.getByText('Séance du jour indisponible.')).toBeVisible();
+  await page.getByRole('button', { name: 'Détails de ma forme' }).click();
   await expect(page.getByText('Préparation indisponible.')).toBeVisible();
   await expect(page.getByText('Statistiques indisponibles.')).toBeVisible();
   await expect(page.getByText('Repos — aucune séance prévue')).toHaveCount(0);

@@ -11,13 +11,24 @@ export function DocumentAttachments({ threadId, disabled = false, ref, onBusy, o
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ['coach-documents', threadId], queryFn: () => documentsApi.list(threadId), retry: false });
   const controller = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [library, setLibrary] = useState(false);
   const [source, setSource] = useState<CoachDocument | null>(null);
-  useEffect(() => () => { controller.current?.abort(); onBusy(false); }, [onBusy]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      // Strict Mode replays effects after the panel appears. An immediate drop
+      // must survive that replay; only a lasting unmount cancels the upload.
+      queueMicrotask(() => {
+        if (!mounted.current) { controller.current?.abort(); onBusy(false); }
+      });
+    };
+  }, [onBusy]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['coach-documents', threadId] });
   const upload = async (files: File[]) => {
     if (disabled || controller.current || !files.length) return;

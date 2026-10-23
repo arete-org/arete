@@ -122,11 +122,11 @@ export function Navigation({
         </div>
       </nav>
 
-      <div className="md:hidden fixed right-4 top-3 z-40 rounded-lg bg-void"><InboxBell /></div>
+      {!agentOpen && <div className="md:hidden fixed right-4 top-3 z-40 rounded-lg bg-void"><InboxBell /></div>}
       {/* Mobile bottom tab bar — hidden on desktop */}
       <nav
         aria-label="Navigation mobile"
-        className="mobile-navigation md:hidden fixed bottom-0 left-0 right-0 z-50 bg-void/95 backdrop-blur-sm border-t border-text-muted/20"
+        className={cn('mobile-navigation md:hidden fixed bottom-0 left-0 right-0 z-50 bg-void/95 backdrop-blur-sm border-t border-text-muted/20', agentOpen && 'hidden')}
       >
         <div className="flex items-center justify-around h-16 px-2">
           {mobileItems.map((item) => (

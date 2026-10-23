@@ -6,7 +6,7 @@ async function openCoach(page: Page) {
   await page.goto('/planning?date=2026-10-10');
   const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first();
   await toggle.click();
-  const panel = page.getByRole('complementary', { name: 'Coach IA' });
+  const panel = page.getByRole('region', { name: 'Coach IA' });
   await expect(panel).toHaveCSS('opacity', '1');
   return panel;
 }
@@ -34,7 +34,6 @@ test('Chiron composer: inline file picker, draft removal and reuse before sendin
     await expect(attach).toBeVisible();
     await expect(composer.getByRole('button', { name: /Fichiers du fil/ })).toHaveCount(0);
     await composer.getByLabel('Message au coach').fill('Adapte ce programme à ma semaine.');
-    await panel.getByRole('button', { name: 'Agrandir la conversation' }).click();
     // The add action must sit beside the text, never in a separate toolbar.
     const expectInlineAttachment = async () => {
       const button = await attach.boundingBox();
@@ -99,7 +98,6 @@ test('Chiron: real SSE states, one motion cycle, immediate text and an interrupt
   try {
     await page.setViewportSize({ width: 1440, height: 900 });
     const panel = await openCoach(page);
-    await panel.getByRole('button', { name: 'Agrandir la conversation' }).click();
     await panel.getByLabel('Message au coach').fill('Supprime mon ancien objectif 10 km de mes notes.');
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await expect(panel.getByRole('status')).toHaveText('Chiron prépare sa réponse');
@@ -182,8 +180,8 @@ for (const theme of ['pierre', 'prune']) {
       expect(overflowing).toEqual([]);
       await expect(panel.getByRole('img')).toHaveCount(0); // Decorative avatar remains hidden to screen readers.
       const mark = panel.locator('header .arete-mark');
-      await expect(mark).toHaveCSS('width', '36px');
-      await expect(mark).toHaveCSS('height', '36px');
+      await expect(mark).toHaveCSS('width', '24px');
+      await expect(mark).toHaveCSS('height', '24px');
       await expect(mark).toHaveCSS('mask-image', /url\(/);
       await expect(panel.locator('.coach-confirmation')).toHaveCSS('animation-name', 'none');
       await page.screenshot({ path: `../.context/chiron-latency-${theme}-mobile.png`, animations: 'disabled' });
@@ -212,8 +210,7 @@ for (const theme of ['pierre', 'prune']) {
     await page.route('**/api/agent/threads/*/documents', route => route.fulfill({ json: [doc] }));
     try {
       const panel = await openCoach(page);
-      await panel.getByRole('button', { name: 'Agrandir la conversation' }).click();
-      await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
+        await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
       const composer = panel.locator('footer');
       const input = composer.getByLabel('Message au coach');
       const library = composer.getByRole('button', { name: 'Fichiers du fil (1)' });
@@ -236,7 +233,7 @@ for (const theme of ['pierre', 'prune']) {
         await input.fill('');
         await expect(input).toHaveCSS('overflow-y', 'hidden');
         // The archived-file count must not reserve a second row in an empty draft.
-        expect((await composer.boundingBox())!.height).toBeLessThan(84);
+        expect((await composer.locator('.coach-composer').boundingBox())!.height).toBeLessThan(84);
         const inputBox = (await input.boundingBox())!;
         const libraryBox = (await library.boundingBox())!;
         expect(libraryBox.y).toBeGreaterThanOrEqual(inputBox.y);
@@ -263,7 +260,6 @@ test('Arete: file drop, inline draft and active SSE survive tab navigation', asy
   try {
     const panel = await openCoach(page);
     const input = panel.getByLabel('Message au coach');
-    const inputNode = await input.elementHandle();
     await input.fill('Adapte ma semaine avec ce fichier.');
     const transfer = await page.evaluateHandle(() => {
       const data = new DataTransfer();
@@ -279,18 +275,18 @@ test('Arete: file drop, inline draft and active SSE survive tab navigation', asy
     const navigation = page.getByRole('navigation', { name: 'Navigation principale' });
     await navigation.getByRole('link', { name: 'Réglages', exact: true }).click();
     await expect(page).toHaveURL(/settings/);
+    await navigation.getByRole('button', { name: 'Ouvrir le coach' }).click();
     await expect(input).toHaveValue('Adapte ma semaine avec ce fichier.');
     await expect(panel.locator('footer').getByRole('button', { name: 'Fichiers du fil (1)' })).toHaveText('1');
-    expect(await inputNode!.evaluate(node => node === document.querySelector('[aria-label="Message au coach"]'))).toBe(true);
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await expect.poll(() => stream.requests()).toBe(1);
     stream.send({ type: 'tool_start', id: 'planning', name: 'read_file', args: preview });
     await input.fill('Garde mon dimanche libre.');
     await navigation.getByRole('link', { name: 'Planning', exact: true }).click();
     await expect(page).toHaveURL(/planning/);
+    await navigation.getByRole('button', { name: 'Ouvrir le coach' }).click();
     await expect(panel.getByRole('status')).toHaveText('Lecture d’un fichier');
     await expect(input).toHaveValue('Garde mon dimanche libre.');
-    expect(await inputNode!.evaluate(node => node === document.querySelector('[aria-label="Message au coach"]'))).toBe(true);
     stream.send({ type: 'tool_end', id: 'planning', name: 'read_file', status: 'done', output: preview, elapsed_ms: 80 });
     await expect(panel.locator('.activity-orbit')).toBeVisible();
     stream.send({ type: 'token', id: 'answer', text: 'Voici les ajustements proposés.' });
@@ -329,9 +325,11 @@ test('classic coach: one memory receipt, inline files, drafts and reload', async
     await expect(panel.getByRole('status')).toHaveCount(0);
     await expect(panel.getByText('RETENU', { exact: true })).toHaveCount(0);
     await panel.getByLabel('Message au coach').fill('Mon brouillon');
+    await panel.getByRole('button', { name: 'Options du coach' }).click();
     await panel.getByRole('button', { name: 'Ce que le coach sait de moi' }).click();
     await expect(panel.getByText('Ce que je retiens de toi')).toBeVisible();
     await expect(panel.getByLabel('Nouveau fait')).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Options du coach' }).click();
     await panel.getByRole('button', { name: 'Ce que le coach sait de moi' }).click();
     await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon');
     expect(stream.requests()).toBe(1);
@@ -346,9 +344,8 @@ test('classic coach: one memory receipt, inline files, drafts and reload', async
       await route.fulfill({ json: { enabled: false } });
     });
     await page.reload();
-    const toggle = page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first();
     releaseBootstrap();
-    await toggle.click();
+    await expect(page).toHaveURL(/\/coach$/);
     await expect(receipt).toHaveCount(1);
     await receipt.click();
     const saved = panel.locator('summary').filter({ hasText: fact.text });
@@ -360,23 +357,14 @@ test('classic coach: one memory receipt, inline files, drafts and reload', async
   } finally { await stream.close(); }
 });
 
-async function chooseDisplay(panel: ReturnType<Page['getByRole']>, label: string) {
-  await panel.getByRole('button', { name: 'Options du coach' }).click();
-  // The selected radio closes its popover, so assert the resulting panel mode.
-  await panel.getByRole('radio', { name: label, exact: true }).click();
-  await expect(panel).toHaveAttribute('data-display', label === 'Chat flottant' ? 'floating' : label === 'Conversation élargie' ? 'expanded' : 'sidebar');
-}
-
-test('floating chat grows with SSE, caps its height and respects reading older messages', async ({ page }) => {
+test('embedded chat bounds its scroller and respects reading older messages during SSE', async ({ page }) => {
   const stream = await fixture(page);
   try {
     const panel = await openCoach(page);
-    await expect(panel).toHaveAttribute('data-display', 'sidebar');
-    await chooseDisplay(panel, 'Chat flottant');
-    expect((await panel.boundingBox())!.height).toBeLessThan(270);
-    expect((await panel.boundingBox())!.width).toBe(360);
+    await expect(panel).toHaveAttribute('data-display', 'embedded');
+    expect((await panel.boundingBox())!.width).toBe(1296);
     await expect(page.locator('main')).toHaveCSS('margin-right', '0px');
-    await page.screenshot({ path: '../.context/chiron-floating-empty-app.png' });
+    await page.screenshot({ path: '../.context/chiron-embedded-empty-app.png' });
     const input = panel.getByLabel('Message au coach');
     await input.fill('Détaille ma semaine');
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
@@ -384,17 +372,15 @@ test('floating chat grows with SSE, caps its height and respects reading older m
     const heights: number[] = [];
     let text = '';
     for (let i = 0; i < 12; i++) {
-      const chunk = `Étape ${i + 1} : garde cette séance en endurance confortable, puis prévois une journée de récupération.\n\n`;
+      const chunk = `Étape ${i + 1} : ${"Garde cette séance en endurance confortable, puis prévois une journée de récupération. ".repeat(4)}\n\n`;
       text += chunk;
       stream.send({ type: 'token', id: 'answer', text: chunk });
       await expect(panel.locator('.coach-answer-part')).toContainText(`Étape ${i + 1}`);
       const box = (await panel.boundingBox())!;
       heights.push(Math.round(box.height));
-      expect(box.height).toBeLessThanOrEqual(560);
-      expect(Math.round(box.y + box.height)).toBe(1076);
+      expect(box.y + box.height).toBeLessThanOrEqual(1100);
     }
-    expect(new Set(heights).size).toBeGreaterThan(2);
-    expect(heights.at(-1)).toBe(560);
+    expect(new Set(heights).size).toBe(1);
     const thread = panel.locator('.coach-thread');
     await expect.poll(() => thread.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeLessThan(2);
     await thread.evaluate(el => { el.scrollTop = 0; });
@@ -406,11 +392,11 @@ test('floating chat grows with SSE, caps its height and respects reading older m
     await expect.poll(() => thread.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeLessThan(2);
     stream.send({ type: 'done', message: { role: 'assistant', content: text + 'Une dernière précision.' } });
     await expect(panel.getByRole('button', { name: 'Envoyer', exact: true })).toBeVisible();
-    await page.screenshot({ path: '../.context/chiron-floating-growth-app.png' });
+    await page.screenshot({ path: '../.context/chiron-embedded-growth-app.png' });
   } finally { await stream.close(); }
 });
 
-test('display opt-in and opt-out preserve a live stream, input node, draft and files', async ({ page }) => {
+test('page round trips preserve a live stream, draft and files', async ({ page }) => {
   const stream = await fixture(page);
   const doc = { id: '11111111-1111-4111-8111-111111111111', name: 'Plan.md', size: 18, sha256: '0'.repeat(64), status: 'ready' };
   await page.route('**/api/agent/threads/*/documents', route => route.fulfill({ json: [doc] }));
@@ -421,47 +407,43 @@ test('display opt-in and opt-out preserve a live stream, input node, draft and f
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await expect.poll(() => stream.requests()).toBe(1);
     await input.fill('Garde mon dimanche libre.');
-    const node = await input.elementHandle();
-    for (const label of ['Chat flottant', 'Conversation élargie', 'Panneau latéral classique', 'Chat flottant']) {
-      await chooseDisplay(panel, label);
+    for (const path of ['/settings', '/planning', '/log']) {
+      await page.getByRole('navigation', { name: 'Navigation principale' }).locator(`a[href="${path}"]`).click();
+      await expect(panel).toHaveCount(0);
+      await page.getByRole('button', { name: 'Ouvrir le coach' }).click();
       await expect(input).toHaveValue('Garde mon dimanche libre.');
-      expect(await node!.evaluate(el => el === document.querySelector('[aria-label="Message au coach"]'))).toBe(true);
       await expect(panel.getByRole('button', { name: 'Arrêter la réponse' })).toBeVisible();
       await expect(panel.getByRole('button', { name: 'Fichiers du fil (1)' })).toBeVisible();
     }
     stream.send({ type: 'token', id: 'answer', text: 'Dimanche reste libre.' });
     stream.send({ type: 'done', message: { role: 'assistant', content: 'Dimanche reste libre.' } });
     await expect(panel.getByText('Dimanche reste libre.', { exact: true })).toBeVisible();
-    await panel.getByRole('button', { name: 'Masquer le coach' }).click();
-    await expect(page.getByRole('button', { name: 'Demander à Chiron', exact: true })).toBeFocused();
+    await panel.getByRole('button', { name: 'Retour à la page' }).click();
+    // The navigation button opened this conversation; restore that same entry.
+    await expect(page.getByRole('button', { name: 'Ouvrir le coach' })).toBeFocused();
     await page.getByRole('button', { name: 'Demander à Chiron', exact: true }).click();
     await expect(input).toHaveValue('Garde mon dimanche libre.');
     await page.reload();
-    await page.getByRole('button', { name: 'Demander à Chiron', exact: true }).click();
-    await expect(panel).toHaveAttribute('data-display', 'floating');
+    await expect(page).toHaveURL(/\/coach$/);
+    await expect(panel).toHaveAttribute('data-display', 'embedded');
     await expect(input).toHaveValue('Garde mon dimanche libre.');
-    await chooseDisplay(panel, 'Panneau latéral classique');
-    await page.reload();
-    await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
-    await expect(panel).toHaveAttribute('data-display', 'sidebar');
-    await expect(page.locator('main')).toHaveCSS('margin-right', '520px');
+    await expect(page.locator('main')).toHaveCSS('margin-right', '0px');
     expect(stream.requests()).toBe(1);
   } finally { await stream.close(); }
 });
 
 for (const theme of ['pierre', 'prune']) {
-  test(`floating ${theme}: mobile bounds, shared focus and keyboard-accessible options`, async ({ page }) => {
+  test(`embedded ${theme}: mobile bounds, shared focus and keyboard-accessible options`, async ({ page }) => {
     const stream = await fixture(page, false);
     try {
       await page.setViewportSize({ width: 390, height: 844 });
       const panel = await openCoach(page);
-      await chooseDisplay(panel, 'Chat flottant');
       await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
       const box = (await panel.boundingBox())!;
       expect(box.x).toBeGreaterThanOrEqual(12);
       expect(box.x + box.width).toBeLessThanOrEqual(378);
-      expect(box.y + box.height).toBeLessThanOrEqual(764);
-      expect(box.height).toBeLessThanOrEqual(844 * 0.65);
+      expect(box.y + box.height).toBeLessThanOrEqual(844);
+      expect(box.height).toBeLessThanOrEqual(844);
       const input = panel.getByLabel('Message au coach');
       await input.focus();
       await expect(input).toHaveCSS('outline-style', 'none');
@@ -470,22 +452,21 @@ for (const theme of ['pierre', 'prune']) {
       await options.focus();
       await options.press('Enter');
       await options.press('Tab');
-      await expect(panel.getByRole('radio', { name: 'Chat flottant', exact: true })).toBeFocused();
+      await expect(panel.getByRole('button', { name: 'Nouvelle conversation', exact: true })).toBeFocused();
       await page.keyboard.press('Escape');
       await expect(options).toBeFocused();
       await expect(panel).toBeVisible();
       await expect(options).toHaveAttribute('aria-expanded', 'false');
-      await page.screenshot({ path: `../.context/chiron-floating-${theme}-mobile-app.png` });
+      await page.screenshot({ path: `../.context/chiron-embedded-${theme}-mobile-app.png` });
     } finally { await stream.close(); }
   });
 }
 
-test('floating mobile: long answers and menus stay inside a resized visual viewport', async ({ page }) => {
+test('embedded mobile: long answers and menus stay inside a resized visual viewport', async ({ page }) => {
   const stream = await fixture(page);
   try {
     await page.setViewportSize({ width: 390, height: 844 });
     const panel = await openCoach(page);
-    await chooseDisplay(panel, 'Chat flottant');
     await panel.getByLabel('Message au coach').fill('Détaille ma semaine.');
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await expect.poll(() => stream.requests()).toBe(1);
@@ -494,9 +475,9 @@ test('floating mobile: long answers and menus stay inside a resized visual viewp
     await expect(panel.locator('.coach-answer-part')).toContainText('Prévois une séance facile');
     stream.send({ type: 'done', message: { role: 'assistant', content: text } });
     await expect(panel.getByRole('button', { name: 'Envoyer', exact: true })).toBeVisible();
-    expect((await panel.boundingBox())!.height).toBeLessThanOrEqual(844 * 0.65);
+    expect((await panel.boundingBox())!.height).toBeLessThanOrEqual(844);
     await panel.getByRole('button', { name: 'Options du coach' }).click();
-    const menu = panel.locator('fieldset').locator('..');
+    const menu = panel.getByRole('button', { name: 'Nouvelle conversation', exact: true }).locator('..');
     expect((await menu.boundingBox())!.y).toBeGreaterThanOrEqual(0);
     await panel.getByRole('button', { name: 'Ce que Chiron sait de moi' }).click();
     await expect(panel.getByText('Ce que je retiens de toi')).toBeVisible();
@@ -512,14 +493,14 @@ test('floating mobile: long answers and menus stay inside a resized visual viewp
     expect(keyboardBox.y + keyboardBox.height).toBeLessThanOrEqual(400);
     await expect(panel.getByRole('button', { name: 'Envoyer', exact: true })).toBeVisible();
     expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    await page.screenshot({ path: '../.context/chiron-floating-keyboard-app.png' });
+    await page.screenshot({ path: '../.context/chiron-embedded-keyboard-app.png' });
   } finally { await stream.close(); }
 });
 
 // ARE-164 with a mouse: the Garmin notice above the bar pushes the navigation down,
-// including when it appears after the coach opened; the docked panel follows the bar.
+// including when it appears after opening; the page keeps the conversation below it.
 for (const notice of ['shown', 'absent', 'appearing after opening'] as const) {
-  test(`desktop: the docked coach starts at the navigation's bottom edge (Garmin notice ${notice})`, async ({ page }) => {
+  test(`desktop: the embedded coach starts below the navigation (Garmin notice ${notice})`, async ({ page }) => {
     const stream = await fixture(page);
     try {
       await page.setViewportSize({ width: 1280, height: 800 });
@@ -539,11 +520,11 @@ for (const notice of ['shown', 'absent', 'appearing after opening'] as const) {
       else await expect(status).toBeVisible();
       const nav = page.getByRole('navigation', { name: 'Navigation principale' });
       const navBottom = async () => { const bar = (await nav.boundingBox())!; return bar.y + bar.height; };
-      const gap = async () => (await panel.locator('header').boundingBox())!.y - await navBottom();
+      const gap = async () => (await panel.locator('.coach-page-heading').boundingBox())!.y - await navBottom();
       expect(await navBottom()).toBeGreaterThan(notice === 'absent' ? 50 : 80);
       await expect.poll(gap).toBeGreaterThanOrEqual(-0.5);
-      await expect.poll(gap).toBeLessThanOrEqual(1);
-      const close = panel.getByRole('button', { name: 'Masquer le coach' });
+      await expect.poll(gap).toBeLessThanOrEqual(48);
+      const close = panel.getByRole('button', { name: 'Retour à la page' });
       const box = (await close.boundingBox())!;
       expect(await close.evaluate((button, [x, y]) => button.contains(document.elementFromPoint(x, y)), [box.x + box.width / 2, box.y + box.height / 2])).toBe(true);
       await close.click();

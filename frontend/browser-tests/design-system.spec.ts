@@ -78,11 +78,11 @@ for (const width of [390, 430, 768, 1440]) {
     expect(counts.writes).toBe(0);
     expect(counts.refreshes).toBe(1);
     await page.getByRole('button', { name: /^(Ouvrir le coach|Demander au coach)$/ }).filter({ visible: true }).first().click();
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
     await expect(panel.locator('.coach-title')).toHaveCSS('font-family', /Cormorant Garamond/);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await panel.getByLabel('Message au coach').fill('Mon brouillon');
-    await panel.getByRole('button', { name: 'Masquer le coach' }).click();
+    await panel.getByRole('button', { name: 'Retour à la page' }).click();
     await choices.getByRole('button', { name: 'Prune', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'prune');
     await page.reload();

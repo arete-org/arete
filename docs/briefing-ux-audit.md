@@ -3,6 +3,21 @@
 Ticket : [ARE-210](https://linear.app/arete-app/issue/ARE-210/audit-coaching-messages-and-design-a-clearer-briefing-led-home),
 projet « Performance & engagement — audit Oct 2026 », jalon « UX 1 — quick wins ».
 
+## Intégration ARE-210
+
+L’application reprend la hiérarchie des maquettes : briefing complet sur surface
+neutre, séances lisibles, trois repères sourcés, suivi compact, détails à la demande.
+La discussion réutilise le fil, les avis et la saisie du chat. La migration 67
+conserve jusqu’à trois faits datés avec chaque nouveau briefing, à partir des
+faits déjà lus ; elle n’ajoute aucun appel au modèle. Les anciens briefings restent
+consultables et indiquent l’absence de mesures historiques.
+
+Le mode de coordination existant et ses préférences restent respectés. En repli,
+« Tes bilans et échanges » donne accès au suivi sans annoncer un nombre d’actions
+que cette source ne sait pas garantir. La cadence des notifications proposée dans
+cet audit reste une décision distincte ; cette intégration ne modifie pas les
+préférences de notification des comptes.
+
 ## Recommandation
 
 L’accueil doit répondre à trois questions : **« Que faire maintenant ? »**,
@@ -147,12 +162,13 @@ nécessaires pour comprendre le conseil sont lisibles dès l’accueil.
 ### Lire et répondre
 
 L’entrée du briefing ouvre un nouveau fil avec sa référence, sans requête modèle.
-Sur bureau, le panneau du coach reste à côté de l’accueil ; sur mobile, la lecture
-dispose d’une surface large. Un seul compositeur, les contrôles de feedback existants,
+Sur bureau comme sur mobile, `/coach` est une page intégrée au contenu principal,
+selon les écrans Chiron `338:434` et `340:867` de la proposition unifiée :
+historique, conversation et méthodes sur bureau ; fil pleine largeur et retour sur mobile. Un seul compositeur, les contrôles de feedback existants,
 aucun message envoyé automatiquement et aucun brouillon rempli à la place de l’utilisateur.
 Le contexte du briefing reste dans ce fil après rechargement et ne passe pas dans un autre.
 La discussion affiche les faits enregistrés avec ce briefing, leurs sources et
-leurs heures. Elle ne mélange pas silencieusement ces faits historiques avec les
+leurs dates. Elle ne mélange pas silencieusement ces faits historiques avec les
 mesures courantes de l’accueil. La justification est visible avant toute question.
 
 Le nom « Coach » est celui du mode classique visible dans la capture ; « Chiron »

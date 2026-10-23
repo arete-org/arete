@@ -187,7 +187,7 @@ test('« Autre… » opens the coach with the session selected, composer empty',
   await page.goto('/');
   await page.getByRole('button', { name: 'Modifier', exact: true }).click();
   await page.getByRole('button', { name: /Autre… en parler au coach/ }).click();
-  const panel = page.getByRole('complementary', { name: 'Coach IA' });
+  const panel = page.getByRole('region', { name: 'Coach IA' });
   await expect(panel.getByText('Séance du jour sélectionnée · prêt à en parler')).toBeVisible();
   await expect(panel.getByLabel('Message au coach')).toHaveValue('');
   expect(chosen).toEqual([]);

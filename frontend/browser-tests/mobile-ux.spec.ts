@@ -97,8 +97,9 @@ for (const width of [320, 390, 430]) {
     await dialog.getByRole('button', { name: 'Fermer' }).tap();
     await nav.getByRole('link', { name: 'Tableau de bord' }).tap();
     // The RPG is off: the day's form reads in plain words, with no game tag nor level.
-    const form = page.locator('.dashboard-secondary');
-    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
+    await page.getByRole('button', { name: 'Détails de ma forme' }).tap();
+    const form = page.locator('#dashboard-details');
+    await expect(page.getByRole('heading', { name: 'Tes repères' })).toBeVisible();
     await expect(form.getByText('Charge de la semaine')).toBeVisible();
     await expect(form.getByText(/^(HP|MP|XP|TSS)$/)).toHaveCount(0);
     await expect(form.getByText(/joueur|niveau/i)).toHaveCount(0);
@@ -112,18 +113,21 @@ for (const width of [320, 390, 430]) {
   });
 }
 
-test('floating default migrates once, survives navigation and fits the keyboard', async ({ page }, info) => {
+test('embedded coach preserves the source page, draft and keyboard space', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await fixture(page);
   await page.goto('/log');
   await safeArea(page);
   const launcher = page.getByRole('button', { name: 'Demander au coach', exact: true });
   await launcher.tap();
-  const panel = page.getByRole('complementary', { name: 'Coach IA' });
-  await expect(panel).toHaveAttribute('data-display', 'floating');
+  const panel = page.getByRole('region', { name: 'Coach IA' });
+  await expect(panel).toHaveAttribute('data-display', 'embedded');
   const input = panel.getByLabel('Message au coach');
   await input.fill('Ma séance : squats 3 × 8 à 60 kg');
+  await panel.getByRole('button', { name: 'Retour à la page' }).tap();
   await page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('link', { name: 'Planning' }).tap();
+  await expect(panel).toHaveCount(0);
+  await page.getByRole('button', { name: 'Demander au coach' }).tap();
   await expect(input).toHaveValue('Ma séance : squats 3 × 8 à 60 kg');
   await page.evaluate(() => {
     Object.defineProperty(window.visualViewport!, 'height', { configurable: true, value: 360 });
@@ -142,13 +146,12 @@ test('floating default migrates once, survives navigation and fits the keyboard'
     Object.defineProperty(window.visualViewport!, 'offsetTop', { configurable: true, value: 0 });
     window.visualViewport!.dispatchEvent(new Event('resize'));
   });
-  await panel.getByRole('button', { name: 'Options du coach' }).tap();
-  await panel.getByRole('radio', { name: 'Panneau latéral classique' }).tap();
-  await panel.getByRole('button', { name: 'Masquer le coach' }).tap();
+  await panel.getByRole('button', { name: 'Retour à la page' }).tap();
+  await expect(launcher).toBeFocused();
   await expect(launcher).toBeInViewport();
   await page.reload();
   await launcher.tap();
-  await expect(panel).toHaveAttribute('data-display', 'sidebar');
+  await expect(panel).toHaveAttribute('data-display', 'embedded');
   await expect(input).toHaveValue('Ma séance : squats 3 × 8 à 60 kg');
 });
 
@@ -279,14 +282,14 @@ test('375x812: settings, routine, watch and document selects are 44 px touch tar
   await page.screenshot({ path: `../.context/are-180/document-${info.project.name}.png` });
 });
 
-test('touch navigation and display changes preserve a live response and manual draft', async ({ page }, info) => {
+test('touch page navigation preserves a live response and manual draft', async ({ page }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const stream = await coachStream(page, false, 'floating');
   try {
     await page.goto('/planning');
     await expect(page.getByRole('heading', { name: 'Planning', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Demander au coach' }).tap();
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
     const input = panel.getByLabel('Message au coach');
     await input.fill('Comment adapter ma semaine ?');
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).tap();
@@ -294,19 +297,17 @@ test('touch navigation and display changes preserve a live response and manual d
     stream.send({ type: 'token', id: 'answer', text: 'Préserve une journée de récupération.' });
     await expect(panel.locator('.coach-answer-part')).toContainText('Préserve une journée');
     await input.fill('Garde mon dimanche libre.');
+    await panel.getByRole('button', { name: 'Retour à la page' }).tap();
     await page.getByRole('navigation', { name: 'Navigation mobile' }).getByRole('link', { name: 'Journal' }).tap();
     await expect(page.getByRole('heading', { name: 'Journal', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Le coach répond…' }).tap();
     await expect(input).toHaveValue('Garde mon dimanche libre.');
-    await panel.getByRole('button', { name: 'Options du coach' }).tap();
-    await panel.getByRole('radio', { name: 'Panneau latéral classique' }).tap();
-    await expect(panel).toHaveAttribute('data-display', 'sidebar');
+    await expect(panel).toHaveAttribute('data-display', 'embedded');
     await expect(input).toHaveValue('Garde mon dimanche libre.');
     stream.send({ type: 'token', id: 'answer', text: ' Dimanche reste libre.' });
     stream.send({ type: 'done', message: { role: 'assistant', content: 'Préserve une journée de récupération. Dimanche reste libre.' } });
     await expect(panel.getByRole('button', { name: 'Envoyer', exact: true })).toBeVisible();
     expect(stream.requests()).toBe(1);
-    await panel.getByRole('button', { name: 'Options du coach' }).tap();
-    await panel.getByRole('radio', { name: 'Chat flottant' }).tap();
     await noOverflow(page);
     await page.screenshot({ path: `../.context/mobile-chiron-live-${info.project.name}.png` });
   } finally { await stream.close(); }
@@ -325,7 +326,7 @@ test('landscape respects lateral safe areas and preserves the draft through rota
   await expect(page.getByRole('heading', { name: 'Planning', exact: true })).toBeVisible();
   expect((await page.getByRole('link', { name: 'Arete · Accueil' }).boundingBox())!.x).toBeGreaterThanOrEqual(47);
   await page.getByRole('button', { name: 'Demander au coach' }).tap();
-  const panel = page.getByRole('complementary', { name: 'Coach IA' });
+  const panel = page.getByRole('region', { name: 'Coach IA' });
   const input = panel.getByLabel('Message au coach');
   await input.fill('Brouillon en paysage');
   await expect(input).toHaveCSS('font-size', '16px');
@@ -357,7 +358,7 @@ async function swipe(page: Page, x: number, y: number, yDistance: number) {
   await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
 }
 
-/** The floating launcher, or the navigation's toggle where the layout hides it. */
+/** The navigation or the inline page entry opens the same embedded conversation. */
 const openCoach = (page: Page) => page.locator('button[aria-controls="coach-panel"]:visible').first().tap();
 
 // ARE-155 opens Chiron from the launcher on a long conversation; ARE-156 lands on
@@ -377,14 +378,14 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
       : route.fallback());
     await page.route('**/api/onboarding', route => route.fulfill({ json: { status: 'completed', revision: 1 } }));
     await page.route('**/api/onboarding/context', route => route.fulfill({ json: { revision: 1, forgotten: false, content: Array.from({ length: 30 }, (_, i) => `- Réponse ${i + 1} saisie pendant la configuration.`).join('\n') } }));
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
     const thread = panel.locator('.coach-thread');
     const pageY = () => page.evaluate(() => scrollY);
     const threadTop = () => thread.evaluate(el => el.scrollTop);
     const chromium = info.project.name === 'mobile-chromium';
     if (entry === 'launcher') {
       await page.goto('/');
-      await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Tes repères' })).toBeVisible();
       await page.waitForLoadState('networkidle');
       await page.evaluate(() => window.scrollTo(0, 300));
       await expect.poll(pageY).toBe(300);
@@ -393,30 +394,20 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
     } else {
       await page.goto('/onboarding');
       await page.getByRole('button', { name: 'Ouvrir le coach' }).tap();
-      await expect(page).toHaveURL(/\/$/);
+      await expect(page).toHaveURL(/\/coach$/);
       await expect(panel.getByRole('region', { name: 'Ton point de départ' })).toContainText('Réponse 30');
       await page.waitForLoadState('networkidle');
-      // The dashboard refetches after the hand-off: let its height settle, or scroll
-      // anchoring moves the page on its own. Then leave it mid-way, so a leak in
-      // either direction would move it.
-      await expect.poll(async () => {
-        const height = await page.evaluate(() => document.documentElement.scrollHeight);
-        await page.waitForTimeout(500);
-        return page.evaluate(previous => document.documentElement.scrollHeight === previous, height);
-      }).toBe(true);
-      await page.evaluate(() => window.scrollTo(0, 300));
-      await expect.poll(pageY).toBe(300);
     }
+    await expect(page).toHaveURL(/\/coach$/);
+    await expect(panel).toHaveAttribute('data-display', 'embedded');
+    await expect(panel).toHaveCSS('position', 'relative');
     const position = await pageY();
-    await expect(panel).toHaveAttribute('data-display', mode);
-    // The page beneath can scroll, so a position that does not move proves something.
-    expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 300)).toBe(true);
     // The thread is the bounded scroller: its content runs past the panel. Start mid-way,
     // whatever the recap or the follow mode left, so the first swipes have room both ways.
     expect(await thread.evaluate(el => el.scrollHeight > el.clientHeight + 200)).toBe(true);
     await thread.evaluate(el => { el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 2); });
     const box = (await thread.boundingBox())!;
-    const header = (await panel.locator('header').boundingBox())!;
+    const header = (await panel.locator('.coach-header').boundingBox())!;
     const composer = (await panel.locator('.coach-composer').boundingBox())!;
     if (chromium) {
       for (const pull of [100, -100]) {
@@ -443,13 +434,12 @@ for (const [width, height] of [[390, 844], [844, 390]] as const) for (const entr
       await expect(thread).toHaveCSS('overflow-y', 'auto');
       await expect(thread).toHaveCSS('overscroll-behavior-y', 'contain');
     }
-    await panel.getByRole('button', { name: 'Masquer le coach' }).tap();
+    await panel.getByRole('button', { name: 'Retour à la page' }).tap();
     await expect(panel).toBeHidden();
-    expect(await pageY()).toBe(position);
     await expect(page.locator('html')).not.toHaveCSS('overflow-y', 'hidden');
     if (chromium) {
       await swipe(page, width / 4, height * 0.6, -150);
-      await expect.poll(pageY).toBeGreaterThan(position);
+      await expect.poll(pageY).toBeGreaterThan(0);
     }
     // The conversation and its draft survive the round trip.
     await openCoach(page);
@@ -463,7 +453,7 @@ for (const [width, height] of [[844, 390], [1280, 800]] as const) for (const not
   test(`${width}x${height}: Chiron starts below the navigation (${notice ? 'with' : 'without'} the Garmin notice, ${mode})`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await fixture(page);
-    // A long conversation: the floating panel reaches its maximum height.
+    // A long conversation keeps the embedded thread bounded below the navigation.
     const messages = Array.from({ length: 24 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `Message ${i + 1}. ${'Une phrase pour allonger la conversation. '.repeat(4)}` }));
     await page.addInitScript(([display, seeded]) => {
       localStorage.setItem('arete.coach-display.v2', display);
@@ -472,32 +462,25 @@ for (const [width, height] of [[844, 390], [1280, 800]] as const) for (const not
     if (!notice) await page.route('**/api/garmin/sync/ensure', route => route.fulfill({ json: { state: 'fresh' } }));
     const ensured = page.waitForResponse('**/api/garmin/sync/ensure');
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tes repères' })).toBeVisible();
     await ensured;
     const status = page.getByRole('status').filter({ hasText: 'Garmin' });
     if (notice) await expect(status).toBeVisible();
     else await expect(status).toHaveCount(0);
     const nav = page.getByRole('navigation', { name: 'Navigation principale' });
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
-    const close = panel.getByRole('button', { name: 'Masquer le coach' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
+    const close = panel.getByRole('button', { name: 'Retour à la page' });
     const navBottom = async () => { const bar = (await nav.boundingBox())!; return bar.y + bar.height; };
-    const headerGap = async () => (await panel.locator('header').boundingBox())!.y - await navBottom();
+    const headerGap = async () => (await panel.boundingBox())!.y - await navBottom();
     const belowNavigation = async () => {
       await expect.poll(headerGap).toBeGreaterThanOrEqual(-0.5);
-      // A docked panel meets the bar, without a gap.
-      if (mode === 'sidebar') await expect.poll(headerGap).toBeLessThanOrEqual(1);
+      await expect.poll(headerGap).toBeLessThanOrEqual(width >= 1024 ? 48 : 24);
     };
     await openCoach(page);
-    await expect(panel).toHaveAttribute('data-display', mode);
+    await expect(panel).toHaveAttribute('data-display', 'embedded');
     const top = await navBottom();
     expect(top).toBeGreaterThan(notice ? 80 : 50);
     await belowNavigation();
-    if (width === 1280) {
-      // The page beneath scrolls here: the notice leaves and the bar sticks to the top.
-      await page.evaluate(() => window.scrollTo(0, 200));
-      if (notice) await expect.poll(navBottom).toBeLessThan(top - 20);
-      await belowNavigation();
-    }
     // Nothing covers the close button: a tap at its centre lands on it.
     const box = (await close.boundingBox())!;
     expect(await close.evaluate((button, [x, y]) => button.contains(document.elementFromPoint(x, y)), [box.x + box.width / 2, box.y + box.height / 2])).toBe(true);
@@ -512,9 +495,9 @@ for (const [width, locked] of [[767, true], [768, false], [1024, false]] as cons
     await page.setViewportSize({ width, height: 844 });
     await fixture(page);
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Ma forme du jour' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tes repères' })).toBeVisible();
     await openCoach(page);
-    await expect(page.getByRole('complementary', { name: 'Coach IA' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Coach IA' })).toBeVisible();
     if (locked) await expect(page.locator('html')).toHaveCSS('overflow-y', 'hidden');
     else await expect(page.locator('html')).not.toHaveCSS('overflow-y', 'hidden');
   });
@@ -541,7 +524,7 @@ test('touch: closing the session entry opened from Home returns Home, and its da
   await fixture(page);
   await page.goto('/');
   await safeArea(page);
-  const briefing = page.getByRole('heading', { name: 'Ma forme du jour' });
+  const briefing = page.getByRole('heading', { name: 'Tes repères' });
   await expect(briefing).toBeVisible();
   await page.getByRole('link', { name: 'Saisir une séance', exact: true }).tap();
   const dialog = page.getByRole('dialog');

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, BookOpen, ChevronDown, Sunrise } from 'lucide-react';
+import { ArrowUpRight, BookOpen, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { AretePresence } from '@/components/AreteBrand';
+import { AgentMarkdown } from '@/components/agent/AgentMarkdown';
+import { AreteMark, AretePresence } from '@/components/AreteBrand';
 import { PushOffer } from '@/components/PushOffer';
 import { Button } from '@/components/ui';
 import { tipsApi, type DailyTip } from '@/lib/api';
@@ -62,33 +63,26 @@ export function BriefingCard({ tip, writing, stalled, refresh }: {
   const ready = !writing && !!tip?.tip && tip.id != null;
   const open = () => { if (ready) { markRead(); discussWithCoach({ kind: 'briefing', id: tip.id! }); } };
   const times = tip && briefingTimes(tip);
-  return <div className="space-y-2 font-sans">
-    <h2>
-      <button type="button" className="briefing-entry flex min-h-11 w-full items-center gap-2 text-left text-sm font-medium text-text-primary"
-        disabled={!ready} onClick={open} aria-label={`Briefing du jour — ouvrir une nouvelle conversation avec ${coach.the}`}>
-        <Sunrise aria-hidden="true" className="size-4 text-neon-cyan" />
-        <span className="flex-1">Briefing du jour</span>
-        {ready && <ArrowUpRight aria-hidden="true" className="size-4 text-text-muted" />}
-      </button>
-    </h2>
+  return <section aria-label="Le point du coach" className="space-y-4 font-sans">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <span className="flex items-center gap-2 text-sm font-medium text-text-primary"><AreteMark size={22} />Le point {coach.of}</span>
+      <Button variant="ghost" size="sm" className="min-h-11" aria-expanded={history} onClick={() => setHistory(!history)}>Briefings précédents <ChevronDown aria-hidden="true" className="size-3.5" /></Button>
+    </div>
+    <h2 className="text-xl font-medium text-text-primary">Briefing du jour</h2>
     {writing ? <div role="status" className="flex items-center gap-2 text-sm text-text-muted">
       <AretePresence size={24} />{coach.The} écrit ton briefing…
       {stalled && <Button variant="ghost" className="ml-auto" onClick={refresh}>Actualiser</Button>}
-    </div> : !tip?.tip ? <p className="text-xs text-danger-red">Briefing indisponible. <Button variant="ghost" onClick={refresh}>Réessayer</Button></p> : <>
-      <p className={`text-sm leading-relaxed text-text-secondary ${ready ? 'line-clamp-3' : ''}`}>{tip.tip}</p>
-      {times && <p className="text-[11px] text-text-muted">{times}</p>}
-      <div className="flex flex-wrap items-center justify-between gap-1">
-        {ready && <Button variant="ghost" size="sm" className="min-h-11 px-0 text-neon-cyan" onClick={open}>{coach.discuss} <ArrowUpRight aria-hidden="true" className="size-3.5" /></Button>}
-        <span className="flex items-center gap-4">
-          {/* The briefing quotes ACWR, TSB, VFC…: their meaning is one tap away. */}
-          <Link to="/analytics/lexique" className="inline-flex min-h-11 items-center gap-1 text-xs text-text-muted hover:text-text-primary">
-            <BookOpen aria-hidden="true" className="size-3.5" />Lexique
-          </Link>
-          <Button variant="ghost" size="sm" className="min-h-11 px-0" aria-expanded={history} onClick={() => setHistory(!history)}>Briefings précédents <ChevronDown aria-hidden="true" className="size-3.5" /></Button>
-        </span>
+    </div> : !tip?.tip ? <p className="text-sm text-danger-red">Briefing indisponible. <Button variant="ghost" onClick={refresh}>Réessayer</Button></p> : <>
+      <div className="briefing-copy max-w-[65ch]"><AgentMarkdown text={tip.tip} /></div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {ready && <Button variant="outline" className="min-h-11" onClick={open}>{coach.discuss}</Button>}
+        {times && <p className="min-w-0 flex-1 text-xs leading-relaxed text-text-muted">{times}</p>}
+        <Link to="/analytics/lexique" className="inline-flex min-h-11 items-center gap-1 text-xs text-text-muted hover:text-text-primary">
+          <BookOpen aria-hidden="true" className="size-3.5" />Lexique
+        </Link>
       </div>
     </>}
     {history && <BriefingHistory onOpen={markRead} />}
     {read && <PushOffer moment="briefing" />}
-  </div>;
+  </section>;
 }

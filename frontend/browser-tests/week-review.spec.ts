@@ -150,7 +150,7 @@ test('mobile light: the screen, and « Ajuster » opens the coach with the revie
   await page.screenshot({ path: `${SCREENS}/ma-semaine-mobile-light.png`, fullPage: true, animations: 'disabled' });
 
   await page.getByRole('button', { name: 'Ajuster avec le coach' }).click();
-  const panel = page.getByRole('complementary', { name: 'Coach IA' });
+  const panel = page.getByRole('region', { name: 'Coach IA' });
   await expect(panel.getByText('Bilan de la semaine sélectionné · prêt à en parler')).toBeVisible();
   await expect(panel.getByLabel('Message au coach')).toHaveValue('');
   expect(accepted).toEqual([]);

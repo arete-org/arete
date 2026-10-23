@@ -5,7 +5,7 @@ import { dashboardAnswer, localDay } from './dashboardAnswer';
 const ANSWERED = { date: localDay(), sleep: 4, legs: 4, mood: null, note: null, answered_at: `${localDay()}T05:12:00+00:00`, updated_at: `${localDay()}T05:12:00+00:00` };
 
 // Local fixtures keep layout checks independent of training data or model calls.
-test('desktop uses the approved page gutters and reflows beside the coach', async ({ page }) => {
+test('desktop home and embedded coach share centered page gutters', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('arete.coach-display.v2', 'sidebar'));
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
@@ -23,8 +23,8 @@ test('desktop uses the approved page gutters and reflows beside the coach', asyn
   await page.goto('/');
   const heading = page.getByRole('heading', { name: 'Bonjour, HUNTER' });
   await expect(heading).toBeVisible();
-  // Settled: the form curve's lazy read has answered (no load in this fixture).
-  await expect(page.getByText(/Pas encore de charge enregistrée/)).toBeVisible();
+  // The compact home is settled without fetching the detailed form curve.
+  await expect(page.getByText('Prépare tes prochaines séances.')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Terminer ma configuration' })).toHaveCount(0);
   await page.emulateMedia({ reducedMotion: 'reduce' });
 
@@ -32,42 +32,45 @@ test('desktop uses the approved page gutters and reflows beside the coach', asyn
     await page.setViewportSize({ width, height: 1000 });
     const brand = (await page.getByRole('link', { name: 'Arete · Accueil' }).boundingBox())!;
     const title = (await heading.boundingBox())!;
-    const grid = (await page.locator('.dashboard-grid').boundingBox())!;
-    const primary = (await page.locator('.dashboard-primary').boundingBox())!;
-    const secondary = (await page.locator('.dashboard-secondary').boundingBox())!;
+    const grid = (await page.locator('.dashboard-overview').first().boundingBox())!;
+    const primary = (await page.locator('.dashboard-overview > .glass-panel').nth(0).boundingBox())!;
+    const secondary = (await page.locator('.dashboard-overview > .glass-panel').nth(1).boundingBox())!;
     // The compact navbar and page have distinct gutters in the retained redesign.
     expect(brand.x).toBe(20);
-    const gutter = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.page-shell')!).paddingLeft));
-    expect(title.x).toBe(gutter);
-    expect(grid.width).toBe(width - 2 * gutter);
+    expect(title.x).toBe((width - 960) / 2);
+    expect(grid.width).toBe(960);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(Math.abs(primary.y - secondary.y)).toBeLessThan(1);
     expect(secondary.x).toBeGreaterThan(primary.x + primary.width);
     await expect(page.getByRole('link', { name: 'Saisir une séance', exact: true })).toBeInViewport();
-    await expect(page.getByRole('heading', { name: 'Préparation', exact: true })).toBeInViewport();
+    await expect(page.getByRole('heading', { name: 'Tes repères', exact: true })).toBeInViewport();
   }
 
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1280, height: 1000 });
   await page.getByRole('button', { name: 'Ouvrir le coach' }).filter({ visible: true }).click();
-  const panel = page.getByRole('complementary', { name: 'Coach IA' });
+  const panel = page.getByRole('region', { name: 'Coach IA' });
   await panel.getByLabel('Message au coach').fill('Mon brouillon reste ici.');
-  const content = (await page.locator('.dashboard-grid').boundingBox())!;
-  const coach = (await panel.boundingBox())!;
-  expect(content.x + content.width).toBeLessThan(coach.x);
-  const primary = (await page.locator('.dashboard-primary').boundingBox())!;
-  const secondary = (await page.locator('.dashboard-secondary').boundingBox())!;
-  expect(secondary.y).toBeGreaterThanOrEqual(primary.y + primary.height);
-
-  // A larger screen can retain both columns even with the same 520 px coach.
-  await page.setViewportSize({ width: 1920, height: 1000 });
-  const widePrimary = (await page.locator('.dashboard-primary').boundingBox())!;
-  const wideSecondary = (await page.locator('.dashboard-secondary').boundingBox())!;
-  expect(Math.abs(widePrimary.y - wideSecondary.y)).toBeLessThan(1);
-  expect(wideSecondary.x).toBeGreaterThan(widePrimary.x + widePrimary.width);
+  await expect(page).toHaveURL(/\/coach$/);
+  await expect(panel).toHaveCSS('position', 'relative');
+  await expect(page.getByRole('main').getByRole('region', { name: 'Coach IA' })).toBeVisible();
+  await expect(heading).toHaveCount(0);
+  for (const width of [1280, 1920]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const coach = (await panel.boundingBox())!;
+    const expected = Math.min(width * .9, 1296);
+    expect(coach.width).toBe(expected);
+    expect(coach.x).toBe((width - expected) / 2);
+    const recent = (await panel.getByRole('complementary', { name: 'Conversations récentes' }).boundingBox())!;
+    const conversation = (await panel.locator('.coach-conversation').boundingBox())!;
+    const methods = (await panel.getByRole('complementary', { name: 'Méthodes utiles' }).boundingBox())!;
+    expect(Math.abs(recent.y - conversation.y)).toBeLessThan(1);
+    expect(Math.abs(methods.y - conversation.y)).toBeLessThan(1);
+    await expect(panel.getByLabel('Message au coach')).toBeInViewport();
+  }
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon reste ici.');
-  await panel.getByRole('button', { name: 'Masquer le coach' }).click();
+  await panel.getByRole('button', { name: 'Retour à la page' }).click();
   await expect(heading).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole('link', { name: 'Saisir une séance', exact: true })).toBeVisible();

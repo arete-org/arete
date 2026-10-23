@@ -27,7 +27,11 @@ from typing import TYPE_CHECKING
 from arete.dataio.settings import get_user_settings
 from arete.features.workload import format_acwr
 from arete.services.athlete_scope import resolve_athlete_id
-from arete.services.coaching_repository import Briefing, BriefingRepository
+from arete.services.coaching_repository import (
+    Briefing,
+    BriefingFact,
+    BriefingRepository,
+)
 from arete.services.plan_repository import MISSED_REPLAN
 from arete.services.settings import athlete_today
 
@@ -366,6 +370,46 @@ def briefing_facts(
     )
 
 
+def briefing_evidence(facts: RuleFacts | None, day: date) -> tuple[BriefingFact, ...]:
+    """Snapshot already-read evidence: no database or model round trip."""
+    if facts is None:
+        return ()
+    evidence = []
+    if facts.readiness_score is not None:
+        source = {
+            "garmin_training": "Préparation Garmin",
+            "garmin": "VFC et sommeil Garmin",
+            "model": "Estimation par la charge",
+        }[facts.readiness_source]
+        evidence.append(
+            BriefingFact(
+                label="Préparation",
+                value=f"{facts.readiness_score:.0f} / 100",
+                source=source,
+                measured_on=(facts.readiness_measured_on or day).isoformat(),
+            )
+        )
+    if facts.checkin is not None:
+        evidence.append(
+            BriefingFact(
+                label="Jambes",
+                value=f"{facts.checkin.legs} / 5",
+                source="Ton ressenti",
+                measured_on=facts.checkin.date.isoformat(),
+            )
+        )
+    if facts.acwr is not None:
+        evidence.append(
+            BriefingFact(
+                label="Équilibre de charge",
+                value=format_acwr(facts.acwr),
+                source="ACWR · 28 jours",
+                measured_on=day.isoformat(),
+            )
+        )
+    return tuple(evidence)
+
+
 def generate_briefing(
     *,
     produce: Callable[[str], str],
@@ -387,6 +431,7 @@ def generate_briefing(
     repo = BriefingRepository()
     rule_text, priority, facts = _rule_floor(target_date)
     digest: str | None = None
+    evidence = briefing_evidence(facts, target_date)
 
     def store(text: str, source: str, status: str, error: str | None) -> Briefing:
         repo.create(
@@ -399,6 +444,7 @@ def generate_briefing(
             trigger=trigger,
             user_id=user_id,
             facts_digest=digest,
+            evidence=evidence,
         )
         stored = repo.get_for_day(target_date, user_id=user_id)
         if stored is not None:
@@ -414,6 +460,7 @@ def generate_briefing(
             error=error,
             trigger=trigger,
             created_at=None,
+            evidence=evidence,
         )
 
     if not briefing_enabled(user_id):
