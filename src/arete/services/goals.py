@@ -1,9 +1,11 @@
 """Goals (``app.goals``): the dates a periodised plan is built towards.
 
 A goal is a road ``race``, a ``hyrox`` race (8 km of running, whatever the
-division) or a ``hybrid`` block without a race, whose ``race_date`` is the
-block's last day. Hyrox and hybrid goals carry their details (division,
-format, category, equipment, block length) as JSON.
+division), a ``hybrid`` block without a race, whose ``race_date`` is the
+block's last day, or a ``triathlon``. Hyrox and hybrid goals carry their
+details (division, format, category, equipment, block length) as JSON; a
+triathlon its distance, the hours a week the athlete can train and the pool
+it swims in.
 """
 
 from __future__ import annotations
@@ -13,15 +15,22 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from arete.dataio.db import connect
 from arete.features.hybrid_plan import HYROX_DISTANCE_KM, Division, Format
+from arete.features.tri_plan import (
+    MAX_HOURS,
+    MIN_HOURS,
+    TRI_DISTANCE_KM,
+    TriDistance,
+    too_few_hours,
+)
 from arete.services.settings import athlete_today
 
 PRIORITIES = ("A", "B", "C")
 STATUSES = ("active", "done", "cancelled")
-GOAL_TYPES = ("race", "hyrox", "hybrid")
+GOAL_TYPES = ("race", "hyrox", "hybrid", "triathlon")
 #: Weeks a hybrid block may wait before it starts, past its own length.
 HYBRID_LEAD_WEEKS = 2
 #: A hybrid block has no distance; the column requires one.
@@ -64,6 +73,39 @@ class GoalDetails(BaseModel):
         return value
 
 
+class TriDetails(BaseModel):
+    """A triathlon goal's details, as stored in ``details_json``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    distance: TriDistance
+    #: Hours a week the athlete can train: the plan's volume never exceeds it.
+    hours_per_week: float = Field(ge=min(MIN_HOURS.values()), le=MAX_HOURS)
+    pool_length_m: Literal[25, 50] = 25
+
+
+_TRI_ERRORS = {
+    "distance": "Le format doit être S, M, 70.3 ou distance Ironman.",
+    "hours_per_week": f"Les heures disponibles par semaine vont de "
+    f"{min(MIN_HOURS.values())} à {MAX_HOURS}.",
+    "pool_length_m": "Le bassin mesure 25 ou 50 m.",
+}
+
+
+def _tri_details(details: dict[str, Any] | None) -> str:
+    try:
+        parsed = TriDetails.model_validate(details or {})
+    except ValidationError as e:
+        field_name = str(e.errors()[0]["loc"][0]) if e.errors()[0]["loc"] else ""
+        raise ValueError(
+            _TRI_ERRORS.get(field_name, f"Détail inconnu : {field_name}.")
+        ) from None
+    short = too_few_hours(parsed.distance, parsed.hours_per_week)
+    if short:
+        raise ValueError(short)
+    return parsed.model_dump_json()
+
+
 #: What the goals panel's labels say: Open/Pro, Solo/Duo, Hommes/Femmes/Mixte.
 _DETAIL_ERRORS = {
     "division": "La division doit être Open ou Pro.",
@@ -79,13 +121,18 @@ _BLOCK_CATEGORY = "La catégorie d’un bloc hybride est Hommes ou Femmes."
 def validate_details(goal_type: str, details: dict[str, Any] | None) -> str | None:
     """``details_json`` for a goal of ``goal_type``; ValueError in French."""
     if goal_type not in GOAL_TYPES:
-        raise ValueError("Le type d’objectif doit être race, hyrox ou hybrid.")
+        raise ValueError(
+            "Le type d’objectif doit être race, hyrox, hybrid ou triathlon."
+        )
     if goal_type == "race":
         if details:
             raise ValueError(
-                "Les détails ne s’appliquent qu’aux objectifs Hyrox et hybrides."
+                "Les détails ne s’appliquent qu’aux objectifs Hyrox, hybrides "
+                "et triathlon."
             )
         return None
+    if goal_type == "triathlon":
+        return _tri_details(details)
     try:
         parsed = GoalDetails.model_validate(details or {})
     except ValidationError as e:
@@ -287,6 +334,9 @@ def create_goal(
     if goal_type == "hybrid":
         weeks = GoalDetails.model_validate(details or {}).weeks
         _check_hybrid_end(race_date, weeks, today or athlete_today())
+    if goal_type == "triathlon":
+        assert details_json is not None, "a triathlon has its details"
+        distance_km = _tri_distance_km(details_json)
     fields = {
         "name": name.strip(),
         "race_date": race_date,
@@ -315,6 +365,11 @@ def create_goal(
     return _from_row(row)
 
 
+def _tri_distance_km(details_json: str) -> float:
+    """A triathlon's stored distance: its format's three legs added up."""
+    return TRI_DISTANCE_KM[TriDetails.model_validate_json(details_json).distance]
+
+
 def update_goal(goal_id: int, **fields: Any) -> Goal | None:
     unknown = set(fields) - _EDITABLE
     if unknown:
@@ -326,14 +381,18 @@ def update_goal(goal_id: int, **fields: Any) -> Goal | None:
             return None
         if "distance_km" in fields and current.goal_type != "race":
             raise ValueError(
-                "La distance d’un objectif Hyrox ou hybride ne se modifie pas."
+                "La distance d’un objectif Hyrox, hybride ou triathlon ne se "
+                "modifie pas : elle suit son format."
             )
         weeks = (current.details or {}).get("weeks")
         if "details" in fields:
             details_json = validate_details(current.goal_type, fields.pop("details"))
             fields["details_json"] = details_json
-            if details_json:
+            # Only a hybrid block's details hold its length.
+            if details_json and current.goal_type == "hybrid":
                 weeks = json.loads(details_json)["weeks"]
+            if details_json and current.goal_type == "triathlon":
+                fields["distance_km"] = _tri_distance_km(details_json)
         end = fields.get("race_date", current.race_date)
         moved = end != current.race_date
         resized = weeks != (current.details or {}).get("weeks")

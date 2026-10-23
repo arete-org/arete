@@ -17,13 +17,15 @@ router = APIRouter(prefix="/goals", tags=["goals"])
 class GoalCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     race_date: date  # a hybrid block's last day
-    #: Required for a race; Hyrox is 8 km, a hybrid block has none.
+    #: Required for a race; Hyrox is 8 km, a hybrid block has none and a
+    #: triathlon's follows its format.
     distance_km: float | None = Field(default=None, ge=1, le=250)
     target_time_sec: int | None = Field(default=None, gt=0)
     priority: Literal["A", "B", "C"] = "A"
-    goal_type: Literal["race", "hyrox", "hybrid"] = "race"
+    goal_type: Literal["race", "hyrox", "hybrid", "triathlon"] = "race"
     #: Hyrox/hybrid: division, format, category, equipment, weeks
-    #: (``services.goals.GoalDetails``, validated there in French).
+    #: (``services.goals.GoalDetails``); triathlon: distance, hours a week,
+    #: pool (``TriDetails``); validated there in French.
     details: dict[str, Any] | None = None
 
 

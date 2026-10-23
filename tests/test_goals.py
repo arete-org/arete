@@ -349,6 +349,106 @@ class TestGoalTypes:
                 details=details,
             )
 
+    def test_a_triathlon_stores_its_format_s_distance_and_details(self):
+        g = goals.create_goal(
+            name="test-tri",
+            race_date=FAR,
+            distance_km=42.195,  # ignored: the format sets it
+            goal_type="triathlon",
+            details={"distance": "half", "hours_per_week": 9},
+        )
+        assert (g.goal_type, g.distance_km) == ("triathlon", 113.0)
+        assert g.details == {
+            "distance": "half",
+            "hours_per_week": 9.0,
+            "pool_length_m": 25,
+        }
+        assert goals.get_goal(g.id) == g
+        # Editing it: no block length to read, and the distance follows the format.
+        renamed = goals.update_goal(g.id, name="test-tri-2", race_date=FAR)
+        assert renamed is not None and renamed.name == "test-tri-2"
+        longer = goals.update_goal(
+            g.id,
+            details={"distance": "full", "hours_per_week": 12, "pool_length_m": 50},
+        )
+        assert longer is not None and longer.distance_km == 226.0
+        assert longer.details is not None and longer.details["pool_length_m"] == 50
+        with pytest.raises(ValueError, match="suit son format"):
+            goals.update_goal(g.id, distance_km=100)
+        with pytest.raises(ValueError, match="au moins 8 h par semaine"):
+            goals.update_goal(g.id, details={"distance": "full", "hours_per_week": 6})
+
+    @pytest.mark.parametrize(
+        ("details", "message"),
+        [
+            ({"hours_per_week": 6}, "S, M, 70.3 ou distance Ironman"),
+            ({"distance": "ultra", "hours_per_week": 6}, "S, M, 70.3"),
+            ({"distance": "sprint"}, "heures disponibles"),
+            ({"distance": "sprint", "hours_per_week": 26}, "de 3 à 25"),
+            ({"distance": "sprint", "hours_per_week": 2}, "de 3 à 25"),
+            (
+                {"distance": "full", "hours_per_week": 7.5},
+                "Prévois au moins 8 h par semaine pour une distance Ironman.",
+            ),
+            ({"distance": "half", "hours_per_week": 5}, "au moins 6 h .* un 70.3"),
+            ({"distance": "olympic", "hours_per_week": 3}, "au moins 4 h"),
+            (
+                {"distance": "sprint", "hours_per_week": 3, "pool_length_m": 33},
+                "25 ou 50 m",
+            ),
+            ({"distance": "sprint", "hours_per_week": 3, "weeks": 8}, "Détail inconnu"),
+            (None, "S, M, 70.3"),
+        ],
+    )
+    def test_invalid_triathlon_details_are_refused_in_french(self, details, message):
+        with pytest.raises(ValueError, match=message):
+            goals.validate_details("triathlon", details)
+
+    def test_each_type_validates_its_own_details(self):
+        hyrox = goals.validate_details("hyrox", {"category": "men"})
+        assert hyrox is not None and '"weeks":12' in hyrox
+        block = goals.validate_details("hybrid", {"category": "women", "weeks": 8})
+        assert block is not None and '"weeks":8' in block
+        # A triathlon's details are no Hyrox's, and the other way round.
+        with pytest.raises(ValueError, match="Détail inconnu : distance"):
+            goals.validate_details("hyrox", {"category": "men", "distance": "sprint"})
+        with pytest.raises(ValueError, match="Détail inconnu : category"):
+            goals.validate_details(
+                "triathlon",
+                {"distance": "sprint", "hours_per_week": 4, "category": "men"},
+            )
+
+    def test_the_routes_create_a_triathlon(self, router_client, monkeypatch):
+        from arete.api import goals as api
+        from arete.api.goals import router
+
+        monkeypatch.setattr(api, "athlete_today", lambda: FAR - timedelta(days=200))
+        client = router_client(router)
+        body = {"name": "test-api-tri", "race_date": FAR.isoformat()}
+        created = client.post(
+            "/goals",
+            json={
+                **body,
+                "goal_type": "triathlon",
+                "details": {"distance": "olympic", "hours_per_week": 6},
+            },
+        )
+        assert created.status_code == 201, created.text
+        assert (created.json()["goal_type"], created.json()["distance_km"]) == (
+            "triathlon",
+            51.5,
+        )
+        refused = client.post(
+            "/goals",
+            json={
+                **body,
+                "goal_type": "triathlon",
+                "details": {"distance": "full", "hours_per_week": 5},
+            },
+        )
+        assert refused.status_code == 422
+        assert "distance Ironman" in refused.json()["detail"]
+
     def test_a_hyrox_distance_cannot_be_edited(self):
         g = goals.create_goal(
             name="test-hyrox",

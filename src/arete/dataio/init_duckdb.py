@@ -474,8 +474,8 @@ CREATE TABLE IF NOT EXISTS app.goals (
     priority         VARCHAR NOT NULL DEFAULT 'A',      -- 'A', 'B', 'C'
     status           VARCHAR NOT NULL DEFAULT 'active', -- 'active', 'done', 'cancelled'
     created_at       TIMESTAMP DEFAULT now(),
-    goal_type        VARCHAR DEFAULT 'race',  -- 'race', 'hyrox', 'hybrid'
-    details_json     VARCHAR                  -- hyrox/hybrid: division, format, category, equipment, weeks
+    goal_type        VARCHAR DEFAULT 'race',  -- 'race', 'hyrox', 'hybrid', 'triathlon'
+    details_json     VARCHAR                  -- hyrox/hybrid: division, format, category, equipment, weeks, triathlon: distance, hours_per_week, pool_length_m
 );
 
 CREATE SEQUENCE IF NOT EXISTS app.athlete_facts_seq START 1;
