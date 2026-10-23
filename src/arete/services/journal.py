@@ -22,10 +22,8 @@ budget; and only the most recent entries of `sessions.md`, cut on entry
 headings so no entry is half-shown. Anything further back — older entries,
 the monthly archives — is still one `read_file` away, and the block says so.
 
-Read from disk on each model call rather than once per turn: two small files,
-and an entry the agent writes mid-turn shows up in its next call instead of
-contradicting what it just did. The block goes at the end of the system
-prompt so the stable part before it keeps the same prefix from call to call.
+The context builder caches this block for the invocation and invalidates it
+after writes, so an entry the agent writes mid-turn appears on its next call.
 """
 
 from __future__ import annotations

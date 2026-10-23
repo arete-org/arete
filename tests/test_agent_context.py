@@ -97,3 +97,77 @@ def test_attachment_manifest_keeps_bodies_out_of_system_and_preserves_full_state
             context_tokens=8192,
             output_tokens=4096,
         )
+
+
+class _Request(SimpleNamespace):
+    def override(self, **changes):
+        return _Request(**{**vars(self), **changes})
+
+
+_STABLE = ("harness", "profile", "system_skills", "capabilities", "facts", "journal")
+_STABLE += ("followups", "attachments")
+_UNSTABLE = ("garmin_freshness", "page", "surface", "execution_budget")
+
+
+@pytest.mark.parametrize(
+    ("profile", "expected"),
+    [
+        ("chat", _STABLE + _UNSTABLE),
+        (
+            "slack",
+            ("harness", "system_skills", "capabilities", "attachments", "page")
+            + ("surface", "execution_budget"),
+        ),
+        (
+            "briefing",
+            ("harness", "profile", "capabilities", "facts", "journal", "followups")
+            + ("garmin_freshness", "surface", "execution_budget"),
+        ),
+    ],
+)
+@pytest.mark.parametrize("final_call", [True, False])
+def test_unstable_sections_follow_the_cacheable_prefix(
+    monkeypatch, profile, expected, final_call
+):
+    from datetime import UTC, datetime
+
+    import arete.agent.context.builder as builder
+    from arete.agent.profiles.catalog import PROFILES
+    from arete.agent.runtime.budget import MAX_MODEL_CALLS
+
+    for function, name in {
+        "system_skills_section": "system_skills",
+        "tool_instructions_suffix": "capabilities",
+        "facts_block": "facts",
+        "journal_block": "journal",
+        "followup_block": "followups",
+        "attachment_section": "attachments",
+        "page_section": "page",
+        "surface_section": "surface",
+    }.items():
+        monkeypatch.setattr(builder, function, lambda *_, _name=name: f"<<{_name}>>")
+    monkeypatch.setattr(builder, "personal_context_section", lambda *_: "")
+    context = AgentContext(profile=profile, current_datetime=datetime.now(UTC))
+    context.resolved_profile = PROFILES[profile]
+    context.garmin_freshness = {"status": "<<garmin_freshness>>"}
+    request = _Request(
+        runtime=SimpleNamespace(context=context),
+        state={"run_model_call_count": MAX_MODEL_CALLS - (1 if final_call else 2)},
+        tools=[],
+        messages=[],
+        system_message=SystemMessage("<<harness>>"),
+    )
+    text = builder.build_context(request).system_message.text
+
+    anchors = {name: f"<<{name}>>" for name in _STABLE + _UNSTABLE}
+    anchors["profile"] = PROFILES[profile].instructions or "<<profile>>"
+    anchors["execution_budget"] = "Dernier appel du budget"
+    for anchor in anchors.values():
+        assert text.count(anchor) <= 1
+    present = sorted(
+        (text.index(anchor), name) for name, anchor in anchors.items() if anchor in text
+    )
+    if not final_call:
+        expected = tuple(name for name in expected if name != "execution_budget")
+    assert tuple(name for _, name in present) == expected
+    assert "\n\n\n\n" not in text

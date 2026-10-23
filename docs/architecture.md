@@ -254,7 +254,10 @@ recent follow-ups and retrieval are read once per message and cached on the
 invocation's context, like the page. Every tool outside the read set (`READ_TOOL_NAMES`)
 clears that cache, even when it raises, so the coach's own writes are visible on the
 next model call; writes from elsewhere during an invocation are seen at the next
-message. Older entries remain accessible through filesystem tools. Contributions do not mutate
+message. Older entries remain accessible through filesystem tools. Sections marked
+unstable (Garmin freshness, the open page, the Slack surface and its clock, the
+last-call budget notice) follow every stable one, in declaration order, so provider
+prompt caches keep the stable prefix. Contributions do not mutate
 stored message content. `RuntimeContextMiddleware` owns the clock: once before
 each chat run, it stamps the new human message's `additional_kwargs.arete_sent_at`
 from the invocation's athlete-local instant. It renders date, time, UTC offset
