@@ -118,7 +118,16 @@ def auth_enabled() -> bool:
 
 
 def auth_misconfigured() -> str | None:
-    """Why the enforced mode cannot work; None when it can (or is off)."""
+    """Why production cannot run safely, or the enforced mode cannot work.
+
+    Production always needs Clerk (docs/deployment.md: Vercel's own
+    protection stays off there) and a cron secret, regardless of what
+    ``ARETE_AUTH`` happens to be set to.
+    """
+    if config.is_production and config.auth_provider != "clerk":
+        return "ARETE_AUTH doit valoir clerk en production"
+    if config.is_production and not config.cron_secret:
+        return "CRON_SECRET manquante en production"
     if not auth_enabled():
         return None
     if not config.clerk_secret_key:
@@ -128,6 +137,11 @@ def auth_misconfigured() -> str | None:
     if config.clerk_jwt_key and not _jwt_key_is_usable(config.clerk_jwt_key):
         return "CLERK_JWT_KEY illisible (clé publique PEM RSA attendue)"
     return None
+
+
+def _without_api_prefix(path: str) -> str:
+    # The deployment keeps the "/api" prefix in front; locally there is none.
+    return path[4:] if path.startswith("/api/") else path
 
 
 @functools.lru_cache(maxsize=4)
@@ -151,15 +165,16 @@ def _jwt_key_is_usable(pem: str) -> bool:
 
 
 def is_public(path: str) -> bool:
-    if path.startswith("/api/"):  # the deployment keeps the prefix in front
-        path = path[4:]
+    path = _without_api_prefix(path)
     return path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES)
 
 
 def is_account_path(path: str) -> bool:
-    if path.startswith("/api/"):
-        path = path[4:]
-    return path in ACCOUNT_PATHS
+    return _without_api_prefix(path) in ACCOUNT_PATHS
+
+
+def is_health_path(path: str) -> bool:
+    return _without_api_prefix(path) == "/health"
 
 
 #: The one route an erased login still reaches, to finish its own deletion.
@@ -398,21 +413,29 @@ class AuthMiddleware:
         self.app = app
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
-        if scope["type"] != "http" or not auth_enabled():
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if is_public(path):
-            await self.app(scope, receive, send)
-            return
+        # Checked before the public-path exemption: a production instance
+        # that forgot ARETE_AUTH must still fail closed, not run open because
+        # auth_enabled() sees nothing to enforce.
         problem = auth_misconfigured()
-        if problem:
-            logger.error("Authentication enabled but unusable: %s", problem)
+        if problem and (
+            not is_public(path) or (config.is_production and is_health_path(path))
+        ):
+            logger.error("Refusing requests, auth misconfigured: %s", problem)
             response = JSONResponse(
                 {"detail": "Authentification mal configurée sur le serveur."},
                 status_code=503,
             )
             await response(scope, receive, send)
+            return
+        if not auth_enabled():
+            await self.app(scope, receive, send)
+            return
+        if is_public(path):
+            await self.app(scope, receive, send)
             return
         authorization = Headers(scope=scope).get("authorization")
         try:

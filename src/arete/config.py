@@ -30,6 +30,15 @@ class Config:
         return _env("VERCEL_ENV", "development") or "development"
 
     @property
+    def is_production(self) -> bool:
+        """True on Vercel's production environment, false everywhere else.
+
+        Production keeps Vercel's own protection off (see docs/deployment.md),
+        so a missing or wrong setting here would leave the API open.
+        """
+        return _env("VERCEL_ENV") == "production"
+
+    @property
     def google_calendar_configured(self) -> bool:
         """Calendar rides on Clerk: the signed-in Google account holds the grant."""
         return self.auth_provider == "clerk" and bool(self.clerk_secret_key)
