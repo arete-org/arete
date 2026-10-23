@@ -20,6 +20,26 @@ async function settingsWith(page: Page, theme: string) {
   return counts;
 }
 
+test('the component gallery previews four themes without changing saved preferences', async ({ page }) => {
+  const counts = await settingsWith(page, 'system');
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  await page.goto('/design-system');
+  const themes = page.getByRole('navigation', { name: 'Thème de la galerie' });
+  await expect(themes.getByRole('button')).toHaveCount(4);
+  for (const theme of THEMES) {
+    await themes.getByRole('button', { name: theme.label }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme.value);
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', theme.color);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `../.context/arete-components-${theme.value}.png`, fullPage: true });
+  }
+  await page.getByRole('navigation', { name: 'Navigation principale', exact: true }).getByRole('link', { name: 'Réglages', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'pierre');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'encre');
+  expect(counts.writes).toBe(0);
+});
+
 // Exercise the CSS cascade in a browser: jsdom does not resolve theme variables.
 for (const width of [390, 430, 768, 1440]) {
   test(`the kept themes preserve identity and usable appearance controls at ${width}px`, async ({ page }) => {

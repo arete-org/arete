@@ -133,7 +133,7 @@ def get_evening(message_id: int):
     message = evening_message.read(message_id)
     if message is None:
         raise HTTPException(404, "Message du soir introuvable")
-    return message.to_dict()
+    return evening_message.present(message)
 
 
 @router.post("/evening/{message_id}/answer")

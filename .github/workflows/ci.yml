@@ -35,6 +35,7 @@ jobs:
       backend: ${{ steps.select.outputs.backend }}
       frontend: ${{ steps.select.outputs.frontend }}
       preview: ${{ steps.select.outputs.preview }}
+      playwright_image: ${{ steps.browsers.outputs.image }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -60,6 +61,20 @@ jobs:
           fi
           python3 scripts/ci/select_checks.py "${mode[@]}" \
             --plan .context/ci-plan.json --summary "$GITHUB_STEP_SUMMARY" >> "$GITHUB_OUTPUT"
+      - name: Select the Playwright image from the lockfile
+        id: browsers
+        if: steps.select.outputs.frontend == 'true'
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import re
+          from pathlib import Path
+
+          lock = json.loads(Path("frontend/package-lock.json").read_text())
+          version = lock["packages"]["node_modules/@playwright/test"]["version"]
+          assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version), version
+          print(f"image=mcr.microsoft.com/playwright:v{version}-noble")
+          PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ci-plan
@@ -173,6 +188,10 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    # The lockfile selects the exact image, including after a dependency bump.
+    # Preinstalled browsers and libraries remove the apt mirror from this job.
+    container:
+      image: ${{ needs.lint.outputs.playwright_image }}
     needs: lint
     if: needs.lint.outputs.frontend == 'true'
     timeout-minutes: 25
@@ -187,10 +206,13 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+        timeout-minutes: 5
+      - name: Verify bundled browsers match the installed Playwright
+        timeout-minutes: 1
+        run: node -e "for (const browser of ['chromium', 'webkit']) require('node:fs').accessSync(require('@playwright/test')[browser].executablePath())"
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium webkit
       # Planning E2E starts the real API against a disposable DuckDB database.
       # Jobs have separate filesystems: the backend job's .venv is not available here.
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6

@@ -58,6 +58,7 @@ it('shows each week against each indicator, the current one first and on its own
     'Contrats du dimanche acceptés',
     'Délai avant la 1re action',
     'Rétention à 30 jours',
+    'Réponses au message du soir',
   ]);
   const [current, previous] = within(table).getAllByRole('row').slice(1);
   expect(text(within(current).getByRole('rowheader'))).toBe('12/10/2026 (en cours)');

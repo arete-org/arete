@@ -2,13 +2,18 @@ import { fetchAPI } from './api';
 import type { PlanDecision } from '@/types';
 
 /** What the athlete asks the coach about: the server reads it by id, the browser sends nothing else. */
-export type CoachReference = { kind: 'proposal' | 'followup' | 'briefing' | 'review' | 'session' | 'evening'; id: number } | { kind: 'onboarding'; id: 1 } | { kind: 'automation_run'; id: string; mode?: 'review' | 'discussion' };
+export type CoachReference = { kind: 'proposal' | 'followup' | 'briefing' | 'review' | 'session' | 'evening'; id: number } | { kind: 'onboarding'; id: 1 } | { kind: 'automation_run'; id: string; mode?: 'review' | 'discussion'; eveningId?: number };
 const MAX_COACH_REFERENCE_ID = 9_999_999_999; // Matches the server reference parser.
 export function isCoachReference(value: unknown): value is CoachReference {
   if (!value || typeof value !== 'object') return false;
   const ref = value as CoachReference;
   if (ref.kind === 'onboarding') return ref.id === 1;
-  if (ref.kind === 'automation_run') return typeof ref.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(ref.id) && (ref.mode === undefined || ref.mode === 'review' || ref.mode === 'discussion');
+  if (ref.kind === 'automation_run') {
+    const validRun = typeof ref.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(ref.id);
+    const validMode = ref.mode === undefined || ref.mode === 'review' || ref.mode === 'discussion';
+    const validSource = ref.eveningId === undefined || Number.isSafeInteger(ref.eveningId) && ref.eveningId > 0 && ref.eveningId <= MAX_COACH_REFERENCE_ID;
+    return validRun && validMode && validSource;
+  }
   return ['proposal', 'followup', 'briefing', 'review', 'session', 'evening'].includes(ref.kind) && Number.isSafeInteger(ref.id) && ref.id > 0 && ref.id <= MAX_COACH_REFERENCE_ID;
 }
 export interface Proposal extends PlanDecision {
@@ -45,11 +50,12 @@ export interface EveningMessage {
   answerable: boolean;
   /** Whether the answer reached the coach's journal (a failed filing is retried on read). */
   journaled: boolean;
+  continuation?: { id: string; state: string; result: string | null; error: string | null } | null;
 }
 /** The server's answer limit (services/evening_message.MAX_ANSWER_CHARS). */
 export const MAX_EVENING_ANSWER_CHARS = 1_000;
 /** `journal`: whether the answer reached the coach's journal now, already, or not yet. */
-export type EveningAnswer = EveningMessage & { journal: 'written' | 'already' | 'failed' };
+export type EveningAnswer = EveningMessage & { journal: 'written' | 'already' | 'failed'; continuation_error?: string | null };
 export const eveningKey = (id: number) => ['coachEvening', id] as const;
 export interface SeenRevision { id: number; revision: number }
 /**

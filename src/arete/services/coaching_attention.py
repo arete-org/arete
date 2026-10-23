@@ -463,6 +463,31 @@ def _coordinate_question(run_id: str, call_id: str, raw: dict) -> dict | None:
                     "Le planning a changé ; relis la séance avant de poser cette question."
                 )
             canonical = f"plan:{subject.id}:revision:{subject.revision}:{subject.kind}"
+            if subject.kind == "availability":
+                # Only a classified, explicit answer for one exact session can
+                # be reused. Another day/revision or ambiguous multi-session
+                # reply remains a separate question.
+                answered = con.execute(
+                    "SELECT e.id,e.answer FROM app.visible_automation_runs r "
+                    "JOIN app.visible_coach_evening_messages e ON e.id=try_cast(json_extract_string(r.definition_json,'$.source.id') AS INTEGER) "
+                    "WHERE json_extract_string(r.definition_json,'$.source.kind')='evening' "
+                    "AND json_extract_string(r.definition_json,'$.decision.availability')='true' "
+                    "AND json_array_length(r.definition_json,'$.source.sessions')=1 "
+                    "AND try_cast(json_extract_string(r.definition_json,'$.source.sessions[0].id') AS INTEGER)=? "
+                    "AND try_cast(json_extract_string(r.definition_json,'$.source.sessions[0].revision') AS INTEGER)=? "
+                    "AND e.answer=json_extract_string(r.definition_json,'$.source.answer') "
+                    "ORDER BY r.created_at DESC LIMIT 1",
+                    [subject.id, subject.revision],
+                ).fetchone()
+                if answered:
+                    return {
+                        "state": "answered",
+                        "answer": answered[1],
+                        "subject_key": canonical,
+                        "reference": f"evening:{answered[0]}",
+                        "url": f"/follow-up?evening={answered[0]}",
+                        "instruction": "Disponibilité déjà déclarée pour cette séance. Réutilise cette réponse sans reposer la question.",
+                    }
         source_ref = f"automation_run:{run_id}"
         prior = con.execute(
             "SELECT source_ref,question_call_id,expires_at FROM app.visible_coach_attention_claims WHERE subject_key=?",

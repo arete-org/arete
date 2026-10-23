@@ -53,7 +53,7 @@ export function GoalProjectionPanel() {
           {data.planned_sessions === 0 && (
             <p className="text-xs text-text-muted">
               Aucune séance prévue d’ici la course : la courbe suppose du repos.{' '}
-              <Link to="/settings?tab=goals" className="text-neon-cyan hover:underline">
+              <Link to="/planning/objectifs" className="text-neon-cyan hover:underline">
                 Générer le plan
               </Link>
             </p>

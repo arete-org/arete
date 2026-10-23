@@ -1,6 +1,6 @@
 import { lazy, Suspense, useLayoutEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { Check, Database, Dumbbell, Info, Palette, Save, Target, Terminal, User, Users, Watch, X } from 'lucide-react';
 import { AreteMark } from '@/components/AreteBrand';
 import { cn, readableError } from '@/lib/utils';
@@ -28,7 +28,6 @@ const AboutTab = lazy(importChunk(() => import('./settings/AboutTab').then((m) =
 
 const TABS = [
   { id: 'profile', label: 'Profil', icon: User },
-  { id: 'goals', label: 'Objectifs', icon: Target },
   { id: 'workout', label: 'Notation', icon: Dumbbell },
   { id: 'connections', label: 'Connexions', icon: Watch },
   { id: 'coach', label: 'Coach', icon: AreteMark },
@@ -42,7 +41,7 @@ const TABS = [
 const ADMIN_TAB = { id: 'admin', label: 'Administration', icon: Users } as const;
 
 type Tab = (typeof TABS)[number] | typeof ADMIN_TAB;
-type TabId = Tab['id'];
+type TabId = Tab['id'] | 'goals';
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -70,13 +69,19 @@ function keepEdits(form: LocalSettings, previous: UserSettings, server: LocalSet
 const isTabId = (tabs: readonly Tab[], value: string | null): value is TabId =>
   tabs.some((tab) => tab.id === value);
 
-export function SettingsPage() {
+export function SettingsPage({ planningGoals = false }: { planningGoals?: boolean }) {
+  const [params] = useSearchParams();
+  if (!planningGoals && params.get('tab') === 'goals') return <Navigate to="/planning/objectifs" replace />;
+  return <SettingsEditor planningGoals={planningGoals} />;
+}
+
+function SettingsEditor({ planningGoals }: { planningGoals: boolean }) {
   const { isAdmin } = useAuthState();
   // A tab missing from the list, the admin one included, opens the profile.
   const tabs: readonly Tab[] = isAdmin ? [...TABS, ADMIN_TAB] : TABS;
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const activeTab: TabId = isTabId(tabs, tabParam) ? tabParam : 'profile';
+  const activeTab: TabId = planningGoals ? 'goals' : isTabId(tabs, tabParam) ? tabParam : 'profile';
   const setActiveTab = (tab: TabId) => setSearchParams(tab === 'profile' ? {} : { tab }, { replace: true });
   const queryClient = useQueryClient();
 
@@ -159,7 +164,7 @@ export function SettingsPage() {
     <div className="page-shell bg-void">
       <div className="page-content">
         <header className="flex justify-between items-center mb-4 sm:mb-8 animate-fade-down">
-          <h1 className="page-title">Réglages</h1>
+          <div>{planningGoals && <Link to="/planning" className="inline-flex min-h-11 items-center text-sm text-accent">← Planning</Link>}<h1 className="page-title">{planningGoals ? 'Objectifs' : 'Réglages'}</h1></div>
           {hasChanges && (
             <Button
               variant="green"
@@ -180,7 +185,7 @@ export function SettingsPage() {
 
         {/* Below md the tabs become one scrolling row above the panel. */}
         <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-          <nav aria-label="Sections des réglages" className="settings-nav md:w-48 md:shrink-0 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto animate-fade-left">
+          {!planningGoals && <nav aria-label="Sections des réglages" className="settings-nav md:w-48 md:shrink-0 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto animate-fade-left">
             <div className="flex md:flex-col gap-1">
               {tabs.map((tab) => (
                 <button
@@ -201,7 +206,7 @@ export function SettingsPage() {
                 </button>
               ))}
             </div>
-          </nav>
+          </nav>}
 
           <div key={activeTab} className="flex-1 min-w-0 glass-panel p-4 sm:p-6 animate-fade-up">
             <Suspense fallback={<LoadingState />}>
