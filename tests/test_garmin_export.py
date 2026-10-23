@@ -263,6 +263,38 @@ def test_the_summary_reads_durations_and_paces_as_the_editor_shows_them():
     )
 
 
+def test_a_swim_summary_shows_each_step_s_notes_others_do_not():
+    swim = Prescription.model_validate(
+        {
+            "pool_length_m": 25,
+            "steps": [
+                {"kind": "warmup", "duration_kind": "meters", "value": 300},
+                {
+                    "kind": "repeat",
+                    "repeat": 10,
+                    "steps": [
+                        {
+                            "kind": "effort",
+                            "duration_kind": "meters",
+                            "value": 100,
+                            "stroke": "free",
+                            "notes": "allure CSS (1:40/100 m)",
+                        },
+                        {"kind": "rest", "duration_kind": "seconds", "value": 20},
+                    ],
+                },
+            ],
+        }
+    )
+    assert describe(swim) == (
+        "300 m · 10 × (100 m · allure CSS (1:40/100 m) / récupération 0:20)"
+    )
+    run = Prescription.model_validate(
+        {"steps": [{"kind": "effort", "duration_kind": "lap", "notes": "20 burpees"}]}
+    )
+    assert describe(run) == "jusqu’au tour manuel"
+
+
 def test_a_repeat_stored_before_the_skip_flag_exports_as_before():
     stored = Prescription.model_validate({"steps": [_INTERVALS]})
     payload = convert(1, "VMA", "running", stored)

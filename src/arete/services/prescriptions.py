@@ -272,7 +272,11 @@ def _span(low: str, high: str) -> str:
 
 
 def describe(prescription: Prescription) -> str:
-    """A bounded, literal summary; distance never invents a duration."""
+    """A bounded, literal summary; distance never invents a duration.
+
+    A swim carries no target Garmin accepts: its pace or effort lives in each
+    step's notes, which its summary shows (other sports' notes stay out)."""
+    swim = prescription.pool_length_m is not None
 
     def step_text(step: Step) -> str:
         if step.kind == "repeat":
@@ -306,6 +310,8 @@ def describe(prescription: Prescription) -> str:
                     "cadence_rpm": "tr/min",
                 }[target.kind]
                 amount += f" · {_span(f'{target.low:g}', f'{target.high:g}')} {unit}"
+        if swim and step.notes:
+            amount += f" · {step.notes}"
         if step.kind in {"recovery", "rest"}:
             amount = "récupération " + amount
         return amount
