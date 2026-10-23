@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from arete.agent.runtime.surface import SurfaceDecision
     from arete.services.calendar import CalendarService
     from arete.services.charts import ChartCard
+    from arete.services.personal_context import SearchResult
     from arete.services.slack_product import SlackProduct
 
 from arete.agent.runtime.budget import MAX_TOOL_CONCURRENCY
@@ -129,6 +130,14 @@ class AgentContext:
     stats: RunStats = field(default_factory=RunStats, init=False, repr=False)
     # The open page's data, cached per run and invalidated after domain actions.
     page_section: str | None = field(default=None, init=False, repr=False)
+    # Facts, journal, follow-ups and retrieval by query: read once per run,
+    # cleared after any write tool. Writes from elsewhere show at the next message.
+    ledger_sections: dict[str, str] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    memory_results: dict[str, SearchResult] = field(
+        default_factory=dict, init=False, repr=False
+    )
     garmin_freshness: dict | None = field(default=None, init=False, repr=False)
     # Paths only: skill bodies enter messages through read_file results.
     requested_skills: tuple[str, ...] = field(default=(), init=False)

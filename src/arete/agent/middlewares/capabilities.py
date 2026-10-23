@@ -12,7 +12,11 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.config import get_stream_writer
 
 from arete.agent.capabilities.discovery import _profile, tool_available
-from arete.agent.capabilities.registry import CAPABILITIES, validate_registry
+from arete.agent.capabilities.registry import (
+    CAPABILITIES,
+    READ_TOOL_NAMES,
+    validate_registry,
+)
 from arete.agent.middlewares.observability import run_stats
 from arete.agent.runtime.budget import MAX_TOOL_CALLS
 from arete.agent.runtime.events import enforce_tool_status, workout_updates
@@ -87,11 +91,16 @@ class ToolkitMiddleware(AgentMiddleware):
         return config, progress
 
     @staticmethod
-    def _invalidate_page(request, name):
+    def _invalidate(request, name):
         # A write may partially commit even when it raises. Re-read next model
-        # boundary; never let the cached page contradict the action's result.
+        # boundary; never let a cached read contradict the action's result.
         context = getattr(request.runtime, "context", None)
-        if context is not None and any(
+        if context is None:
+            return
+        if name not in READ_TOOL_NAMES:
+            context.ledger_sections = {}
+            context.memory_results = {}
+        if any(
             name in {t.name for t in tk.tools} and name not in tk.read_tools
             for tk in CAPABILITIES.values()
         ):
@@ -156,7 +165,7 @@ class ToolkitMiddleware(AgentMiddleware):
         try:
             return self._finish(request, handler(request), progress, started)
         finally:
-            self._invalidate_page(request, request.tool_call["name"])
+            self._invalidate(request, request.tool_call["name"])
 
     async def awrap_tool_call(self, request, handler):
         self._count(request)
@@ -168,4 +177,4 @@ class ToolkitMiddleware(AgentMiddleware):
         try:
             return self._finish(request, await handler(request), progress, started)
         finally:
-            self._invalidate_page(request, request.tool_call["name"])
+            self._invalidate(request, request.tool_call["name"])

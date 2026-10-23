@@ -303,7 +303,11 @@ def test_context_steering_is_independent_of_retrieval_and_refreshes():
     facts.update_fact(
         fact.id, text="Mercredi possible", expected_revision=1, evidence="explicit"
     )
-    second = build_context(request)
+    # A write from elsewhere reaches the next message, not the running one.
+    assert build_context(request).system_message.text == first.system_message.text
+    assert context.stats.memory_searches == 1
+    following = AgentContext(current_datetime=datetime.combine(TODAY, time(), UTC))
+    second = build_context(_request(following))
     mandatory = second.system_message.text.split("Souvenirs retrouvés")[0]
     assert "Mercredi possible" in mandatory and "Jamais le mercredi" not in mandatory
     assert request.system_message.text == "Instructions serveur"
@@ -325,8 +329,10 @@ def test_memory_budget_and_missing_memory_are_explicit(monkeypatch):
         raise OSError("unavailable")
 
     monkeypatch.setattr("arete.agent.context.builder.search_personal_context", fail)
+    context = AgentContext(current_datetime=datetime.combine(TODAY, time(), UTC))
     with pytest.raises(ValueError, match="mémoire indisponible"):
         personal_context_section(_request(context), context, 100)
+    assert context.memory_results == {}
 
 
 def test_background_missions_never_search_or_gain_tools(monkeypatch):
