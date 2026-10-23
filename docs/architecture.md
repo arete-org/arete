@@ -825,8 +825,9 @@ run make a weekend block (Saturday, Sunday); the day after holds nothing hard
 or long (`AfterBlock`); without two training days from Tuesday to Friday
 they stay apart instead. A loading week reaching into the taper's days, where
 no long session goes, takes shorter endurance forms of them when the long ones
-find no room. Race week keeps one activation per sport. Swim and bike keys
-carry prescriptions that export to Garmin; the race is `sport='other'`, and
+find no room. Race week keeps one activation per sport. Every session but the
+race exports to Garmin: swims, bike keys, activations and race-pace brick runs
+carry their steps, other runs are written as the running grammar reads them; the race is `sport='other'`, and
 without a target time its projected load is 80 to 780 minutes by format.
 
 ## Optional athlete RPG

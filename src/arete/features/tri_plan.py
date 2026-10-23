@@ -734,17 +734,35 @@ def _swim_key(
 
 
 def _swim_endurance(inp: TriInputs, minutes: int, recovery: bool) -> DraftSession:
+    """One continuous swim: the meters the minutes hold at an easy pace, in
+    whole hundreds (whole lengths of either pool), its pace in the notes."""
     pace = ""
     if inp.css_sec_100m is not None:
         pace = f" ({_swim_clock(inp.css_sec_100m + EASY_SWIM_OFFSET)}/100 m)"
+    easy = _swim_pace(inp) + EASY_SWIM_OFFSET
+    meters = max(100, round(minutes * 60 / easy) * 100)
+    note = f"nage continue facile{pace}"
+    step = {
+        "kind": "effort",
+        "duration_kind": "meters",
+        "value": _rounded_meters(meters, inp.pool_length_m),
+        "stroke": "free",
+        "notes": note,
+    }
     return DraftSession(
         date.min,
         "recovery" if recovery else "endurance",
         minutes,
         "Z2",
         "easy",
-        f"Natation endurance {minutes}' : nage continue facile{pace}",
+        f"Natation endurance {minutes}' ({meters} m) : {note}",
+        distance_km=meters / 1000,
         sport="swimming",
+        prescription={
+            "version": 1,
+            "pool_length_m": inp.pool_length_m,
+            "steps": [step],
+        },
         tags=_KIND_TAGS[SWIM_EASY],
     )
 
@@ -1153,10 +1171,31 @@ def _brick_run_minutes(inp: TriInputs, phase: Phase, recovery: bool) -> int:
 def _brick_run(inp: TriInputs, phase: Phase, recovery: bool) -> DraftSession:
     minutes = _brick_run_minutes(inp, phase, recovery)
     run_km = LEGS_KM[inp.distance][2]
+    prescription = None
     if phase == "specific" and not recovery and inp.distance in ("sprint", "olympic"):
         content = f"{minutes}' dont 5' {_race_pace_label(inp, run_km)} au départ"
         session_type, intensity = "tempo", "moderate"
         tags = _KIND_TAGS[BRICK_RUN] | {HARD}  # race pace off the bike
+        # The running grammar does not read this tempo: its steps are written.
+        fast: dict[str, Any] = {
+            "kind": "effort",
+            "duration_kind": "seconds",
+            "value": 300,
+        }
+        easy: dict[str, Any] = {
+            "kind": "effort",
+            "duration_kind": "seconds",
+            "value": (minutes - 5) * 60,
+            "notes": "facile",
+        }
+        if inp.paces is None:
+            fast["notes"] = "allure course"
+        else:
+            pace = round(race_time_sec(inp.paces.vdot, run_km * 1000) / run_km)
+            fast["target"] = {"kind": "pace_sec_km", "low": pace - 5, "high": pace + 5}
+            slow, quick = inp.paces.easy
+            easy["target"] = {"kind": "pace_sec_km", "low": quick, "high": slow}
+        prescription = {"version": 1, "steps": [fast, easy]}
     else:
         content = paced(f"{minutes}' facile", inp.paces, "easy")
         session_type, intensity = "endurance", "easy"
@@ -1168,6 +1207,7 @@ def _brick_run(inp: TriInputs, phase: Phase, recovery: bool) -> DraftSession:
         "Z2",
         intensity,
         f"Course en enchaînement, juste après le vélo : {content}",
+        prescription=prescription,
         tags=tags,
     )
 
@@ -1194,7 +1234,16 @@ def _activation(inp: TriInputs, sport: Sport) -> DraftSession:
             drills=4,
             cooldown_m=200,
         )
+    # Neither description is read by a grammar: their steps are written.
     if sport == "bike":
+        d = inp.distance
+        steps = [
+            {"kind": "warmup", "duration_kind": "seconds", "value": 15 * 60},
+            *_interval_steps(
+                inp, 3, 1, 2, RACE_POWER[d], RACE_ZONE[d], "allure course"
+            ),
+            {"kind": "cooldown", "duration_kind": "seconds", "value": 8 * 60},
+        ]
         return DraftSession(
             date.min,
             "intervals",
@@ -1204,8 +1253,27 @@ def _activation(inp: TriInputs, sport: Sport) -> DraftSession:
             "Activation vélo 30' facile avec 3×1' allure course ; vérifie ton vélo "
             "(pneus, freins, vitesses)",
             sport="cycling",
+            prescription={"version": 1, "steps": steps},
             tags=frozenset({BIKE, ACTIVATION}),
         )
+    steps = [
+        {"kind": "warmup", "duration_kind": "seconds", "value": 10 * 60},
+        {
+            "kind": "repeat",
+            "repeat": 4,
+            "skip_last_recovery": True,
+            "steps": [
+                {
+                    "kind": "effort",
+                    "duration_kind": "seconds",
+                    "value": 20,
+                    "notes": "accélération",
+                },
+                {"kind": "recovery", "duration_kind": "seconds", "value": 40},
+            ],
+        },
+        {"kind": "cooldown", "duration_kind": "seconds", "value": 100},
+    ]
     return DraftSession(
         date.min,
         "intervals",
@@ -1213,6 +1281,7 @@ def _activation(inp: TriInputs, sport: Sport) -> DraftSession:
         "Z3",
         "moderate",
         "Activation : 15' facile + 4 accélérations",
+        prescription={"version": 1, "steps": steps},
         tags=frozenset({RUN, ACTIVATION}),
     )
 

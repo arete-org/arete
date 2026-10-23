@@ -578,20 +578,56 @@ def test_swims_are_whole_lengths_with_their_pace_in_the_notes(pool, css):
     assert ("CSS" in notes) == (css is not None)
 
 
+@pytest.mark.parametrize("distance", ["sprint", "olympic", "half", "full"])
 @pytest.mark.parametrize("ftp", [None, 260])
 @pytest.mark.parametrize("hr_reference", [False, True])
-def test_every_prescribed_session_exports_to_garmin(ftp, hr_reference):
+@pytest.mark.parametrize("paces", [None, PACES])
+def test_every_generated_session_exports_to_garmin(distance, ftp, hr_reference, paces):
+    """Every session but the race reaches the watch as written: its own steps,
+    a description the running grammar reads, or an easy run or ride the
+    type's template describes faithfully."""
+    from arete.garmin.models import PlannedSession, SessionStatus, SessionType
+    from arete.garmin.workout_structure import (
+        PUSHABLE_SPORTS,
+        ensure_template_fits,
+        needs_explicit_steps,
+    )
     from arete.garmin.workouts import convert
+    from arete.services.garmin_export import described_prescription
 
     zones = [(0, 120), (120, 140), (140, 155), (155, 170), (170, None)]
     _, weeks = _plan(
-        distance="full", ftp_w=ftp, hr_reference=hr_reference, hours_per_week=14
+        distance=distance,
+        ftp_w=ftp,
+        hr_reference=hr_reference,
+        paces=paces,
+        hours_per_week=14,
     )
-    prescribed = [s for s in _sessions(weeks) if s.prescription is not None]
-    assert {s.sport for s in prescribed} == {"swimming", "cycling"}
-    for s in prescribed:
-        prescription = Prescription.model_validate(s.prescription)
-        payload = convert(1, s.description[:40], s.sport, prescription, hr_ranges=zones)
+    sessions = [s for s in _sessions(weeks) if RACE not in s.tags]
+    assert {s.sport for s in sessions} == {"swimming", "cycling", "running"}
+    for s in sessions:
+        planned = PlannedSession(
+            date=s.date,
+            sport=s.sport,
+            session_type=SessionType(s.session_type),
+            target_duration_min=s.duration_min,
+            target_hr_zone=s.hr_zone,
+            description=s.description,
+            prescription=s.prescription,
+            status=SessionStatus.PENDING,
+        )
+        ensure_template_fits(planned)  # raises NotPushable
+        steps = (
+            Prescription.model_validate(s.prescription)
+            if s.prescription
+            else described_prescription(planned)
+        )
+        if steps is None:
+            # The type's template: an easy run or ride, nothing it ignores.
+            assert s.sport in PUSHABLE_SPORTS, s.description
+            assert not needs_explicit_steps(s.sport, s.session_type), s.description
+            continue
+        payload = convert(1, s.description[:40], s.sport, steps, hr_ranges=zones)
         assert payload["workoutSegments"][0]["workoutSteps"]
 
 
