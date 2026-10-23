@@ -57,6 +57,8 @@ const ADMIN: AuthState = { ...AUTH_DISABLED, enabled: true, athleteId: 2, isOwne
 
 beforeEach(() => {
   vi.spyOn(adminApi, 'accounts').mockResolvedValue(ACCOUNTS);
+  vi.spyOn(adminApi, 'featureFlags').mockResolvedValue({ glm_flash: false, glm_flash_available: true });
+  vi.spyOn(adminApi, 'kpis').mockResolvedValue([]); // ProductKpisPanel.test.tsx
 });
 
 afterEach(() => {
@@ -81,6 +83,54 @@ async function findRow(text: string) {
 }
 
 const row = (text: string) => within(screen.getByRole('row', { name: new RegExp(text) }));
+
+it('waits for a confirmed save before switching the paid coach on, and can revert', async () => {
+  let confirm!: (value: { glm_flash: boolean; glm_flash_available: boolean }) => void;
+  const save = vi.spyOn(adminApi, 'setFeatureFlags').mockImplementationOnce(() => new Promise(resolve => { confirm = resolve; }));
+  mount(ADMIN);
+  const toggle = await screen.findByRole('checkbox', { name: 'Coach GLM Flash (payant)' });
+  fireEvent.click(toggle);
+  await waitFor(() => expect(save).toHaveBeenCalledWith(true, expect.anything()));
+  expect((toggle as HTMLInputElement).checked).toBe(false);
+  expect((toggle as HTMLInputElement).disabled).toBe(true);
+  confirm({ glm_flash: true, glm_flash_available: true });
+  await waitFor(() => expect((toggle as HTMLInputElement).checked).toBe(true));
+  save.mockResolvedValue({ glm_flash: false, glm_flash_available: true });
+  fireEvent.click(toggle);
+  await waitFor(() => expect((toggle as HTMLInputElement).checked).toBe(false));
+  expect(save).toHaveBeenLastCalledWith(false, expect.anything());
+});
+
+it('keeps the saved flag and displays a failed update', async () => {
+  vi.spyOn(adminApi, 'setFeatureFlags').mockRejectedValue(new ApiError(409, '{"detail":"OpenRouter indisponible."}'));
+  mount();
+  const toggle = await screen.findByRole('checkbox', { name: 'Coach GLM Flash (payant)' });
+  fireEvent.click(toggle);
+  expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'OpenRouter indisponible.');
+  expect((toggle as HTMLInputElement).checked).toBe(false);
+  expect((toggle as HTMLInputElement).disabled).toBe(false);
+});
+
+it('cannot enable an unavailable model but can disable a previously enabled flag', async () => {
+  vi.mocked(adminApi.featureFlags).mockResolvedValue({ glm_flash: false, glm_flash_available: false });
+  const view = mount();
+  expect(await screen.findByRole('checkbox', { name: 'Coach GLM Flash (payant)' })).toHaveProperty('disabled', true);
+  view.unmount();
+  vi.mocked(adminApi.featureFlags).mockResolvedValue({ glm_flash: true, glm_flash_available: false });
+  vi.spyOn(adminApi, 'setFeatureFlags').mockResolvedValue({ glm_flash: false, glm_flash_available: false });
+  mount();
+  const toggle = await screen.findByRole('checkbox', { name: 'Coach GLM Flash (payant)' });
+  expect(toggle).toHaveProperty('disabled', false);
+  fireEvent.click(toggle);
+  await waitFor(() => expect(toggle).toHaveProperty('checked', false));
+});
+
+it('does not show a false off switch when the flag cannot be read', async () => {
+  vi.mocked(adminApi.featureFlags).mockRejectedValue(new TypeError('offline'));
+  mount();
+  expect(await screen.findByText('Options indisponibles')).toBeTruthy();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+});
 
 it('lists each athlete with its role, state and sync status', async () => {
   mount();

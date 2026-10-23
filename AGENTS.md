@@ -1,7 +1,8 @@
 # Arete — coding-session instructions
 
-Arete is a self-hosted, single-athlete training assistant: FastAPI + DuckDB,
-React + Vite, Garmin/Strava sync, planning, strength logging and coaching.
+Arete is a self-hosted training assistant with a private athlete per account:
+FastAPI + DuckDB, React + Vite, Garmin sync and FIT import, planning, strength logging
+and coaching.
 Read [docs/architecture.md](docs/architecture.md) before changing the coaching stack.
 
 ## Architecture: give every behavior one owner
@@ -35,8 +36,10 @@ Read [docs/architecture.md](docs/architecture.md) before changing the coaching s
   versioned general/mission instructions. A client-supplied profile or page payload
   cannot grant permissions.
 - `services/` owns shared domain operations and their contracts. It may use the
-  existing `features/`, `dataio/`, `garmin/`, `strava/` and `strength/` modules. It
+  existing `features/`, `dataio/`, `garmin/` and `strength/` modules. It
   must not import FastAPI, LangChain, LangGraph, Deep Agents or agent composition.
+  `services/jev.py` owns reusable Jev decision requests, validation and provider I/O;
+  surface-specific questions and decision policy remain in the agent layer.
 - `api/` owns HTTP schemas and SSE projection; `observability/` owns measurements.
   Put schemas beside their owner. Avoid global `schemas/` or catch-all `shared/`.
 
@@ -62,6 +65,16 @@ responsibility a testable owner. Do not create empty architectural scaffolding.
   or an entire run with an ambiguous outcome.
 - `LLM_CONTEXT_TOKENS` is the deployment's configured window, not a guarantee from
   a provider router. Budget system text, schemas, history, page data and output.
+- The admin-only `glm_flash` flag is global, persisted and off by default. Read
+  it at invocation composition and key cached graphs by its effective value;
+  never change a running graph's route. Paid chat requests require the explicit
+  GLM price cap and low reasoning effort; disabling restores free-only chat routing.
+  Slack surface detection independently uses the paid Jev service, with its own
+  explicit price cap, one request, no retries and an LLM-type LangSmith span.
+  Reject truncated completions before executing their tool calls.
+- OpenRouter provider affinity is request-local: hash the trusted athlete,
+  profile and thread/run identity into `session_id`; never mutate cached clients.
+  Sort providers by latency without a manual order, preserving price caps.
 - Booting the app must not import the agent stack, Garmin's client or the
   workout grammars: `api/agent.py` and `api/ai_tips.py` import them inside their
   handlers, a cold serverless instance pays every top-level import before its
@@ -71,13 +84,17 @@ responsibility a testable owner. Do not create empty architectural scaffolding.
   database (a preview included) has recorded: take a fresh number.
 - Async model clients belong to the server event loop. Sync API/scheduler work uses
   AnyIO workers and `invoke_agent_sync`; never add a fresh `asyncio.run()` per job.
-- Empty threads use fixed page-aware starters. Interactive chat may make one bounded,
-  measured, tool-free auto-suggestion call after the answer and emit a `suggestion`
-  event for the editable draft. Never overwrite user typing or send it automatically.
-  Keep HTTP, SSE, parser and browser-storage contracts aligned.
+- Empty threads use fixed page-aware starters. Answers make no auxiliary suggestion
+  call and never fill the composer automatically. Preserve manual drafts and keep
+  HTTP, SSE, parser and browser-storage contracts aligned.
+- System skills expose metadata in SYSTEM and bodies through native read_file tool
+  results in MESSAGES. Attachments select document-planning for reading, not preloading.
+  Skills grant no permissions. Toolkits bind native tools by server profile, without
+  search/load tools or model-controlled loading state.
 - Preserve optional LangSmith tracing across async invocation and stream closure.
-  Forward callbacks to dynamically executed tools and retain thread metadata. The
-  context builder owns bounded journal injection and the current chat date.
+  Preserve native tool callbacks and retain thread metadata. The
+  context builder owns bounded journal injection. RuntimeContextMiddleware owns
+  per-message timestamps and runtime date rendering after native compaction.
 - Keep state local to the invocation. Compiled graphs are cached and multiple tabs
   or scheduled jobs may overlap. Cancellation cannot undo a committed write or
   forcibly stop a synchronous tool already running in a thread.
@@ -95,8 +112,7 @@ responsibility a testable owner. Do not create empty architectural scaffolding.
 Run `make check` before declaring implementation complete. It runs lint, formatting
 checks, mypy, backend/frontend tests and the frontend build. Mock external I/O in
 normal tests. Add behavior tests for changed boundaries, failures and concurrency;
-do not add tests that merely repeat an implementation. Live model evaluations in
-`tests/test_agent_evals.py` are opt-in and must use a database copy.
+do not add tests that merely repeat an implementation.
 
 ## Data, workflow and conventions
 
@@ -108,14 +124,21 @@ do not add tests that merely repeat an implementation. Live model evaluations in
   push, and a PR merges once CI passes (lint, test, typecheck, frontend). Open
   it with auto-merge armed: `gh pr create … && gh pr merge --auto --merge`.
 - Use Conventional Commits with an English subject and a body explaining why.
-- The real data lives in the MotherDuck database `arete`, shared by Vercel and the
-  Docker stack (`ARETE_DB=md:arete`). Read it through the HTTP API rather than
+- Every PR names its Linear ticket (`ARE-<n>`) in the branch name or the body, so
+  Linear links it; the `Linear` workflow fails otherwise (bots and OpenWiki
+  exempt) and checks again when the body is edited.
+- A PR body fills every section of `.github/pull_request_template.md`, in order,
+  including when an agent passes `--body` or `--body-file` to `gh pr create`, which
+  skips GitHub's prefill.
+- The real data lives in the MotherDuck database `arete_v2`, used by Vercel production.
+  The Docker stack defaults to `md:arete_preview_v2`; production is an explicit
+  `ARETE_DB=md:arete_v2` opt-in. Read it through the HTTP API rather than
   scripts. A local DuckDB file (`make dev`, tests) allows one writer: a script that
   opens it while a backend runs makes the API answer 500.
 - Deployment is described in `docs/deployment.md`. In short: a PR labelled
   `preview` gets a preview from CI when deployable inputs change; green CI on
   `main` with deployable changes deploys to https://arete-main-arete15.vercel.app (database
-  `md:arete_preview`); production ships in batches through the manual **Deploy
+  `md:arete_preview_v2`); production ships in batches through the manual **Deploy
   production** workflow, which requires a healthy ancestor preview with no
   deployable input changed since (documentation-only merges are allowed).
   The boot clones a MotherDuck database before migrating it, and
@@ -126,6 +149,15 @@ do not add tests that merely repeat an implementation. Live model evaluations in
 - `data/`, Garmin tokens, FIT files, `PROG_*.md` and `.context/` stay untracked.
   Secrets live in `.env`; use `.env.example` to discover configuration names.
 - UI text is French. Code, comments and commit messages are English.
+- UI identity follows [design.md](design.md): reuse the shared tokens and components;
+  `font-sans` is interface text, `font-display` is brand/headings, and `font-mono` is code.
+- Before changing a coaching UI, read `design.md` and the relevant Figma reference.
+  Reuse `FeedbackRating`, `MessageFeedback`, the shared composer and design tokens;
+  do not introduce standalone emoji vote buttons or a second comment composer.
+  Briefing entry points open a fresh Chiron thread without a model call. Context
+  belongs to the browser thread, survives reloads, and must not leak when switching
+  threads. Preserve drafts, attachments and in-flight work. Verify these boundaries
+  and the mobile/desktop flow in `frontend/browser-tests/briefing.spec.ts`.
 - Workout parsing uses the Lark grammars, not an LLM. A new spoken phrase needs a
   grammar change and an example in `tests/data/dictations.jsonl`.
 - Heart-rate zones come from the athlete's threshold refreshed by Garmin sync.

@@ -8,7 +8,7 @@ import { SkillInput } from './SkillInput';
 
 vi.mock('@/lib/documents', () => ({ documentRequest: vi.fn() }));
 const skills = [
-  { name: 'document-planning', description: 'Lire une prépa jointe.', path: '/skills/system/document-planning/SKILL.md' },
+  { name: 'document-planning', display_name: 'Préparer un plan depuis un document', description: 'Lire une prépa jointe.', path: '/skills/system/document-planning/SKILL.md' },
   { name: 'recovery', description: 'Préparer la récupération.', path: '/skills/system/recovery/SKILL.md' },
 ];
 const send = vi.fn();
@@ -37,7 +37,7 @@ it('lists skills before sending, selects with arrows and Enter, then sends the e
   const input = setup();
   expect(documentRequest).not.toHaveBeenCalled();
   fireEvent.change(input, { target: { value: '/' } });
-  await screen.findByRole('listbox', { name: 'Skills disponibles' });
+  await screen.findByRole('listbox', { name: 'Méthodes disponibles' });
   expect(screen.getAllByRole('option')).toHaveLength(2);
   fireEvent.keyDown(input, { key: 'ArrowDown' });
   expect(screen.getAllByRole('option')[1].getAttribute('aria-selected')).toBe('true');
@@ -103,8 +103,17 @@ it('shows catalog failures, allows retry, and never sends while loading or faile
 it('shows an empty result without inventing a skill or trapping Tab', async () => {
   const input = setup();
   fireEvent.change(input, { target: { value: '/unknown' } });
-  await screen.findByText('Aucun skill correspondant.');
+  await screen.findByText('Aucune méthode correspondante.');
   expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(true);
   fireEvent.keyDown(input, { key: 'Enter' });
   expect(send).not.toHaveBeenCalled();
+});
+
+it('rejects a long run of slash commands without backtracking exponentially', () => {
+  const input = setup();
+  const started = performance.now();
+  // The former pattern spent several seconds on this draft, growing exponentially with each repeat.
+  fireEvent.change(input, { target: { value: `/-${'  /-'.repeat(25)}!` } });
+  expect(performance.now() - started).toBeLessThan(1000);
+  expect(screen.queryByRole('listbox')).toBeNull();
 });

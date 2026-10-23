@@ -1,24 +1,21 @@
-"""Document/import boundaries: durable bytes, provenance and human-only writes."""
+"""Document boundaries: durable bytes, provenance and direct typed session creation."""
 
 import asyncio
 import hashlib
 import io
 import json
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from uuid import uuid4
 
-import duckdb
 import pytest
 from openpyxl import Workbook
+from pdf_samples import encrypted, text_pdf
 from PIL import Image
-from pypdf import PdfWriter
 
 from arete.dataio.db import db_connection
 from arete.dataio.init_duckdb import main
-from arete.services import documents, imports
+from arete.services import documents
 from arete.services.documents import DocumentError, Extraction, SourceBlock
-from arete.services.prescriptions import ImportedSession, Prescription, Provenance, Step
 
 
 @pytest.fixture
@@ -47,22 +44,6 @@ def uploaded(
             ],
         )
     return documents.finalize(thread, doc["id"], extraction)
-
-
-def session_for(doc):
-    return ImportedSession(
-        date=date(2027, 1, 12),
-        sport="running",
-        description="Footing",
-        prescription=Prescription(
-            steps=[Step(kind="effort", duration_kind="seconds", value=1800)]
-        ),
-        provenance=[
-            Provenance(
-                document_id=doc["id"], locator="lignes 1-1", quote="footing 30 minutes"
-            )
-        ],
-    )
 
 
 def test_upload_integrity_retry_and_thread_isolation(document_db):
@@ -161,72 +142,43 @@ def test_scanned_image_preserves_ocr_provenance_and_pdf_rejects_encryption(docum
         ),
     )
     assert documents.extraction_for(document_db, doc["id"]).blocks[0].confidence == 51
-    writer = PdfWriter()
-    writer.add_blank_page(width=100, height=100)
-    writer.encrypt("secret")
-    buffer = io.BytesIO()
-    writer.write(buffer)
+    raw = encrypted(text_pdf(""), "secret")
     with pytest.raises(DocumentError, match="chiffrés"):
-        uploaded(document_db, "locked.pdf", buffer.getvalue())
+        uploaded(document_db, "locked.pdf", raw)
 
 
-def test_preview_provenance_confirmation_and_deletion_preserve_sessions(document_db):
-    doc = uploaded(document_db)
-    proposal = session_for(doc)
-    assert imports.has_unvalidated_documents(document_db)
-    preview = imports.propose(document_db, [proposal])
-    with db_connection() as con:
-        assert (
-            con.execute("SELECT count(*) FROM app.planned_sessions").fetchone()[0] == 0
+def test_pdf_finalization_uses_server_text_and_retains_sources(document_db):
+    raw = text_pdf("Course 45 minutes")
+    untrusted = Extraction(
+        blocks=[SourceBlock(locator="page 1", text="Wrong browser text")]
+    )
+    doc = uploaded(document_db, "plan.pdf", raw, untrusted)
+    extraction = documents.extraction_for(document_db, doc["id"])
+    assert [(b.locator, b.text) for b in extraction.blocks] == [
+        ("page 1, ligne 1", "Course 45 minutes")
+    ]
+    assert (
+        "Course 45 minutes"
+        in documents.filesystem(document_db)[f"/attachments/{doc['id']}.md"]
+    )
+
+
+def test_pdf_failure_never_finalizes_partial_or_browser_text(document_db, monkeypatch):
+    def failed(raw):
+        raise DocumentError("OCR interrompu")
+
+    monkeypatch.setattr("arete.services.pdf_extraction.extract_pdf", failed)
+    with pytest.raises(DocumentError, match="OCR interrompu"):
+        uploaded(
+            document_db,
+            "scan.pdf",
+            b"pdf",
+            Extraction(blocks=[SourceBlock(locator="page 1", text="partial")]),
         )
-    with pytest.raises(DocumentError, match="Vérifie"):
-        imports.confirm(document_db, preview["draft_id"], 1, str(uuid4()), [0], False)
-    key = str(uuid4())
-    ids = imports.confirm(document_db, preview["draft_id"], 1, key, [0], True)
-    assert imports.confirm(document_db, preview["draft_id"], 1, key, [0], True) == ids
-    assert not imports.has_unvalidated_documents(document_db)
-    documents.delete_documents(document_db)
-    with db_connection() as con:
-        row = con.execute(
-            "SELECT prescription,provenance FROM app.planned_sessions WHERE id=?", ids
-        ).fetchone()
-    assert json.loads(row[0])["steps"][0]["value"] == 1800
-    assert json.loads(row[1])[0]["quote"] == "footing 30 minutes"
-
-
-def test_false_provenance_and_ambiguous_dates_cannot_commit(document_db):
-    doc = uploaded(document_db)
-    proposal = session_for(doc)
-    proposal.provenance[0].quote = "invented"
-    with pytest.raises(DocumentError, match="extrait"):
-        imports.propose(document_db, [proposal])
-    proposal = session_for(doc).model_copy(update={"date": None})
-    draft = imports.propose(document_db, [proposal])
-    with pytest.raises(DocumentError, match="problèmes"):
-        imports.confirm(document_db, draft["draft_id"], 1, str(uuid4()), [0], True)
-    imports.update_draft(document_db, draft["draft_id"], 1, [session_for(doc)])
-    with pytest.raises(DocumentError, match="version"):
-        imports.confirm(document_db, draft["draft_id"], 1, str(uuid4()), [0], True)
-
-
-def test_concurrent_confirmation_has_one_commit(document_db):
-    doc = uploaded(document_db)
-    preview = imports.propose(document_db, [session_for(doc)])
-    key = str(uuid4())
-
-    def run():
-        try:
-            return imports.confirm(document_db, preview["draft_id"], 1, key, [0], True)
-        except (DocumentError, duckdb.TransactionException):
-            return None
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(lambda _: run(), range(2)))
-    assert any(results)
-    with db_connection() as con:
-        assert (
-            con.execute("SELECT count(*) FROM app.planned_sessions").fetchone()[0] == 1
-        )
+    doc = documents.list_documents(document_db)[0]
+    assert doc["status"] == "uploading"
+    with pytest.raises(DocumentError, match="pas prêt"):
+        documents.extraction_for(document_db, doc["id"])
 
 
 def test_statebackend_reads_documents_and_rejects_writes(
@@ -236,11 +188,11 @@ def test_statebackend_reads_documents_and_rejects_writes(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.runtime.context import AgentContext
     from arete.api.agent import _document_state
+    from arete.coaching import build_agent_filesystem
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     doc = uploaded(document_db)
 
     class Model(GenericFakeChatModel):
@@ -261,8 +213,8 @@ def test_statebackend_reads_documents_and_rejects_writes(
         AIMessage(content="OK"),
     ]
     context = AgentContext(thread_id=document_db)
-    state, _ = _document_state(context)
-    filesystem = build_memory_filesystem()
+    state = _document_state(context)
+    filesystem = build_agent_filesystem()
     assert {t.name for t in filesystem.tools} == {
         "read_file",
         "ls",
@@ -284,7 +236,7 @@ def test_statebackend_reads_documents_and_rejects_writes(
     assert "footing 30 minutes" in next(
         m.content for m in result["messages"] if m.type == "tool"
     )
-    other, _ = _document_state(AgentContext(thread_id=str(uuid4())))
+    other = _document_state(AgentContext(thread_id=str(uuid4())))
     assert other["files"] == {}
 
 
@@ -297,10 +249,10 @@ def test_attachment_grep_returns_matching_lines_by_default(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.runtime.context import AgentContext
+    from arete.coaching import build_agent_filesystem
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
 
     class Model(GenericFakeChatModel):
         def bind_tools(self, tools, **kwargs):
@@ -327,13 +279,13 @@ def test_attachment_grep_returns_matching_lines_by_default(
                 ]
             )
         ),
-        middleware=[build_memory_filesystem()],
+        middleware=[build_agent_filesystem()],
         context_schema=AgentContext,
     )
     state = {
         "messages": [HumanMessage("Lis la semaine du 12 octobre")],
         "files": {
-            "/plan.md": create_file_data(
+            "/attachments/plan.md": create_file_data(
                 "[Feuil1!B40]\n2026-10-12\n[Feuil1!A43]\n2026-10-12"
             )
         },
@@ -351,42 +303,6 @@ def test_attachment_grep_returns_matching_lines_by_default(
     assert "incomplete" in outputs["content"].content
     assert path in outputs["files"].content
     assert "2026-10-12" not in outputs["files"].content
-
-
-def test_existing_planning_writes_blocked_during_import(document_db):
-    from types import SimpleNamespace
-
-    from arete.agent.capabilities.execution import _resolve_tool
-    from arete.agent.runtime.context import AgentContext
-
-    request = SimpleNamespace(
-        tool_call={"name": "create_planned_session", "id": "write"},
-        state={},
-        runtime=SimpleNamespace(
-            context=AgentContext(thread_id=document_db, document_import_pending=True)
-        ),
-    )
-    assert _resolve_tool(request).status == "error"
-
-
-def test_duplicate_batch_is_visible_and_discard_preserves_documents(document_db):
-    doc = uploaded(document_db)
-    preview = imports.propose(document_db, [session_for(doc), session_for(doc)])
-    draft = imports.list_drafts(document_db)[0]
-    assert draft["sessions"][0]["batch_duplicates"] == [2]
-    assert draft["sessions"][1]["batch_duplicates"] == [1]
-    imports.discard(document_db, preview["draft_id"], preview["version"])
-    assert documents.list_documents(document_db)
-    assert not imports.has_unvalidated_documents(document_db)
-    with pytest.raises(DocumentError, match="version"):
-        imports.confirm(
-            document_db,
-            preview["draft_id"],
-            preview["version"],
-            str(uuid4()),
-            [0],
-            True,
-        )
 
 
 def test_http_chunk_upload_and_thread_deletion(document_db):
@@ -430,34 +346,6 @@ def test_legacy_xls_retains_formula_and_missing_cache():
     assert any("fusionnées" in w for w in extraction.warnings)
 
 
-def test_import_tool_uses_server_thread_and_never_confirms(document_db):
-    from arete.agent.tools.imports import prepare_import
-
-    doc = uploaded(document_db)
-    session = session_for(doc)
-    assert "config" not in prepare_import.args
-    result = json.loads(
-        prepare_import.invoke(
-            {"sessions_json": json.dumps([session.model_dump(mode="json")])},
-            config={"configurable": {"thread_id": document_db}},
-        )
-    )
-    assert result["draft_id"] == imports.list_drafts(document_db)[0]["id"]
-    with db_connection() as con:
-        assert con.execute("SELECT count(*) FROM app.planned_sessions").fetchone() == (
-            0,
-        )
-    other = str(uuid4())
-    rejected = json.loads(
-        prepare_import.invoke(
-            {"sessions_json": json.dumps([session.model_dump(mode="json")])},
-            config={"configurable": {"thread_id": other}},
-        )
-    )
-    assert "error" in rejected
-    assert imports.list_drafts(other) == []
-
-
 def test_selected_documents_are_thread_scoped_and_never_silently_dropped(document_db):
     first = uploaded(document_db, "first.md", b"first")
     second = uploaded(document_db, "second.md", b"second")
@@ -484,12 +372,12 @@ def test_chat_hydrates_extraction_before_first_model_and_reads_mounted_file(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage
 
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.factory import build_agent
     from arete.agent.profiles.catalog import get_profile
     from arete.api.agent import router
+    from arete.coaching import build_agent_filesystem
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     if source == "xlsx":
         book = Workbook()
         book.active.append([date(2026, 10, 12), "Footing après le 11", "45 minutes"])
@@ -552,7 +440,7 @@ def test_chat_hydrates_extraction_before_first_model_and_reads_mounted_file(
         ),
         context_tokens=65_536,
         output_tokens=4096,
-        filesystem=build_memory_filesystem(),
+        filesystem=build_agent_filesystem(),
     )
     monkeypatch.setattr("arete.api.agent.get_agent", lambda: graph)
     client = router_client(router)
@@ -569,14 +457,13 @@ def test_chat_hydrates_extraction_before_first_model_and_reads_mounted_file(
     )
     assert response.status_code == 200
     assert "Le fichier contient" in response.text
-    # Even a model that answers without reading tools receives actual source
-    # evidence on its first call, including locators and OCR/cell provenance.
+    # SYSTEM exposes only the manifest; full source evidence enters as a tool result.
     assert path in seen[0][0].text
-    assert "Footing après le 11" in seen[0][0].text
-    assert locator in seen[0][0].text
+    assert "Footing après le 11" not in seen[0][0].text
     tool_result = next(m for m in seen[1] if m.type == "tool")
     assert tool_result.status == "success"
     assert "45 minutes" in tool_result.text
+    assert locator in tool_result.text
     assert len(seen) == 2
     client.post(
         endpoint,
@@ -635,12 +522,12 @@ def test_concurrent_threads_keep_their_own_attachment_context(
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from arete.agent.backends.memory import build_memory_filesystem
     from arete.agent.middlewares.context import ContextBuilderMiddleware
     from arete.agent.runtime.context import AgentContext
     from arete.api.agent import _document_state
+    from arete.coaching import build_agent_filesystem
 
-    monkeypatch.setattr("arete.agent.backends.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
     contexts = [
         AgentContext(thread_id=document_db),
         AgentContext(thread_id=str(uuid4())),
@@ -649,7 +536,7 @@ def test_concurrent_threads_keep_their_own_attachment_context(
     states = []
     for context, marker in zip(contexts, markers, strict=True):
         uploaded(context.thread_id, raw=marker.encode())
-        state, _ = _document_state(context)
+        state = _document_state(context)
         states.append({"messages": [HumanMessage(marker)], **state})
 
     async def concurrent_runs():
@@ -663,13 +550,16 @@ def test_concurrent_threads_keep_their_own_attachment_context(
                 await asyncio.wait_for(barrier.wait(), timeout=5)
                 own = messages[-1].text
                 other = next(marker for marker in markers if marker != own)
-                assert own in messages[0].text
-                assert other not in messages[0].text
+                own_path = contexts[markers.index(own)].attachment_paths[0]
+                other_path = contexts[markers.index(other)].attachment_paths[0]
+                assert own_path in messages[0].text
+                assert other_path not in messages[0].text
+                assert own not in messages[0].text and other not in messages[0].text
                 return self._generate(messages)
 
         graph = create_agent(
             Model(messages=iter([AIMessage(content="OK"), AIMessage(content="OK")])),
-            middleware=[build_memory_filesystem(), ContextBuilderMiddleware()],
+            middleware=[build_agent_filesystem(), ContextBuilderMiddleware()],
             context_schema=AgentContext,
         )
         results = await asyncio.wait_for(
@@ -685,3 +575,248 @@ def test_concurrent_threads_keep_their_own_attachment_context(
         assert results[1]["files"] == states[1]["files"]
 
     asyncio.run(concurrent_runs())
+
+
+FOOTING = {"steps": [{"kind": "effort", "duration_kind": "seconds", "value": 1800}]}
+
+
+def set_footing(session):
+    from arete.agent.tools.planning import set_session_prescription
+
+    return json.loads(
+        set_session_prescription.invoke(
+            {
+                "session_id": session["id"],
+                "revision": session["revision"],
+                "prescription": FOOTING,
+            }
+        )
+    )
+
+
+def creation_args(doc):
+    return {
+        "date_str": "2027-01-12",
+        "session_type": "endurance",
+        "description": "Footing 30 minutes",
+        "provenance": [
+            {
+                "document_id": doc["id"],
+                "locator": "lignes 1-1",
+                "quote": "footing 30 minutes",
+            }
+        ],
+    }
+
+
+def test_direct_creation_keeps_verified_sources_after_document_deletion(document_db):
+    from arete.agent.tools.planning import create_planned_session
+    from arete.garmin.repository import GarminRepository
+
+    doc = uploaded(document_db)
+    result = json.loads(
+        create_planned_session.invoke(
+            {**creation_args(doc), "runtime": tool_runtime(document_db)}
+        )
+    )
+    assert result["created"]
+    assert set_footing(result["session"])["updated"]
+    documents.delete_documents(document_db)
+    saved = GarminRepository().get_planned_session(result["session"]["id"])
+    assert saved.prescription["steps"][0]["value"] == 1800
+    assert saved.provenance[0]["quote"] == "footing 30 minutes"
+    with db_connection() as con:
+        assert con.execute("SELECT count(*) FROM app.coach_imports").fetchone() == (0,)
+
+
+@pytest.mark.parametrize(
+    "failure", ["wrong_thread", "missing_thread", "false_quote", "wrong_locator"]
+)
+def test_direct_creation_rejects_unverified_document_sources(document_db, failure):
+    from arete.agent.tools.planning import create_planned_session
+
+    doc = uploaded(document_db)
+    args = creation_args(doc)
+    thread = document_db
+    if failure == "wrong_thread":
+        thread = str(uuid4())
+    elif failure == "missing_thread":
+        thread = None
+    elif failure == "wrong_locator":
+        args["provenance"][0]["locator"] = "table"
+    else:
+        args["provenance"][0]["quote"] = "invented"
+    result = json.loads(
+        create_planned_session.invoke({**args, "runtime": tool_runtime(thread)})
+    )
+    assert "error" in result
+    with db_connection() as con:
+        assert con.execute("SELECT count(*) FROM app.planned_sessions").fetchone() == (
+            0,
+        )
+    if failure == "wrong_locator":
+        assert "lignes 1-1" in result["error"]
+        args["provenance"][0]["locator"] = "lignes 1-1"
+        corrected = json.loads(
+            create_planned_session.invoke({**args, "runtime": tool_runtime(thread)})
+        )
+        assert corrected["created"]
+
+
+@pytest.mark.parametrize("invalid_first", [False, True])
+@pytest.mark.parametrize("streaming", [False, True])
+def test_document_request_creates_and_exports_without_import_approval(
+    document_db, monkeypatch, tmp_path, router_client, streaming, invalid_first
+):
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    from arete.agent.factory import build_agent
+    from arete.agent.profiles.catalog import get_profile
+    from arete.api.agent import router
+    from arete.coaching import build_agent_filesystem
+    from arete.garmin.repository import GarminRepository
+
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
+    doc = uploaded(document_db)
+    seen = []
+    exported = []
+
+    def export(session_ids, device_id, **kwargs):
+        assert len(session_ids) == 1
+        saved = GarminRepository().get_planned_session(session_ids[0])
+        assert saved.prescription["steps"][0]["value"] == 1800
+        assert saved.provenance[0]["document_id"] == doc["id"]
+        exported.extend(session_ids)
+        return {
+            "results": [{"session_id": saved.id, "state": "scheduled"}],
+            "not_attempted": [],
+        }
+
+    monkeypatch.setattr("arete.services.garmin_export.export_batch", export)
+
+    class Model(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            names = {t.name if hasattr(t, "name") else t["name"] for t in tools}
+            assert "prepare_import" not in names and "inspect_import" not in names
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            seen.append(messages)
+            return super()._generate(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+
+    def responses():
+        if invalid_first:
+            yield AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "create_planned_session",
+                        "args": {**creation_args(doc), "date_str": "Monday"},
+                        "id": "invalid",
+                    }
+                ],
+            )
+            rejected = next(
+                m for m in seen[-1] if m.type == "tool" and m.tool_call_id == "invalid"
+            )
+            assert rejected.status == "error" and "date_str" in rejected.content
+            with db_connection() as con:
+                assert con.execute(
+                    "SELECT count(*) FROM app.planned_sessions"
+                ).fetchone() == (0,)
+        yield AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "create_planned_session",
+                    "args": creation_args(doc),
+                    "id": "create",
+                }
+            ],
+        )
+        result = next(
+            m for m in seen[-1] if m.type == "tool" and m.tool_call_id == "create"
+        )
+        session = json.loads(result.content)["session"]
+        yield AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "set_session_prescription",
+                    "args": {
+                        "session_id": session["id"],
+                        "revision": session["revision"],
+                        "prescription": FOOTING,
+                    },
+                    "id": "steps",
+                }
+            ],
+        )
+        session_id = session["id"]
+        yield AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "export_garmin_sessions",
+                    "args": {"session_ids": [session_id]},
+                    "id": "export",
+                }
+            ],
+        )
+        yield AIMessage(content="Séance créée et programmée dans Garmin Connect.")
+
+    graph = build_agent(
+        get_profile("chat"),
+        model=Model(messages=responses(), disable_streaming=True),
+        context_tokens=65_536,
+        output_tokens=4096,
+        filesystem=build_agent_filesystem(),
+    )
+    monkeypatch.setattr("arete.api.agent.get_agent", lambda: graph)
+    # Old pending rows are inert historical data, never a permission gate.
+    with db_connection() as con:
+        con.execute(
+            "INSERT INTO app.coach_imports (id,thread_id,version,status,sessions) VALUES (?,?,1,'draft','[]')",
+            [str(uuid4()), document_db],
+        )
+    response = router_client(router).post(
+        "/agent/chat/stream" if streaming else "/agent/chat",
+        json={
+            "thread_id": document_db,
+            "document_ids": [doc["id"]],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Crée la séance du document et envoie-la vers Garmin Connect.",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert "Séance créée" in response.text
+    assert "import_preview" not in response.text
+    assert len(exported) == 1
+    assert len(seen) == 4 + int(invalid_first)
+    with db_connection() as con:
+        assert con.execute("SELECT count(*) FROM app.planned_sessions").fetchone() == (
+            1,
+        )
+        assert con.execute("SELECT count(*) FROM app.coach_imports").fetchone() == (1,)
+
+
+def tool_runtime(thread_id):
+    from langchain.tools import ToolRuntime
+
+    from arete.agent.runtime.context import AgentContext
+
+    return ToolRuntime(
+        state={},
+        context=AgentContext(thread_id=thread_id),
+        config={},
+        stream_writer=lambda value: None,
+        tool_call_id="direct",
+        store=None,
+    )

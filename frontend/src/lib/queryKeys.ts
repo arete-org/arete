@@ -1,5 +1,6 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { strengthApi } from './api';
+import { syncGame } from './gamification';
 
 /**
  * Every react-query key of the app, in one place.
@@ -10,6 +11,10 @@ import { strengthApi } from './api';
  */
 export const qk = {
   settings: ['settings'] as const,
+  /** The dashboard's lazy form curve (lib/formCurve.ts), one per server day. */
+  formCurve: (day?: string) => (day ? (['form-curve', day] as const) : (['form-curve'] as const)),
+  /** `GET /dashboard`, one per day (lib/dashboard.ts); it seeds the keys of its slices. */
+  dashboard: (day?: string) => (day ? (['dashboard', day] as const) : (['dashboard'] as const)),
 
   planned: (start?: string, end?: string) =>
     start ? (['planned', start, end ?? start] as const) : (['planned'] as const),
@@ -20,6 +25,8 @@ export const qk = {
 
   strengthSessions: ['strengthSessions'] as const,
   strengthSession: (id: number) => ['strengthSession', id] as const,
+  /** Garmin strength activities awaiting their loads. */
+  strengthDrafts: ['strengthDrafts'] as const,
   muscleStats: (days?: number) =>
     days ? (['muscleStats', days] as const) : (['muscleStats'] as const),
   garminCandidates: (sessionId: number) => ['garminCandidates', sessionId] as const,
@@ -40,19 +47,19 @@ export const qk = {
   fitness: ['fitness'] as const,
   workload: ['workload'] as const,
   tipDaily: ['tip-daily'] as const,
+  /** The previous days' briefings: read when the athlete opens them, never kept offline. */
+  tipHistory: ['tip-history'] as const,
 
   health: ['garmin-health'] as const,
   healthDaily: (date: string) => ['garmin-health', 'daily', date] as const,
   healthStatus: ['garminHealthStatus'] as const,
   syncStatus: ['syncStatus'] as const,
-  stravaStatus: ['stravaStatus'] as const,
 
   planToday: ['plan', 'today'] as const,
-  /** Watch steps of a planned session; changes whenever the session is adapted. */
-  plannedStructure: (id?: number) =>
-    id == null ? (['plannedStructure'] as const) : (['plannedStructure', id] as const),
   /** Last week's review and its proposals. */
   weeklyReview: ['weeklyReview'] as const,
+  /** « Ma semaine »: the review with its week's numbers. */
+  reviewWeek: ['weeklyReview', 'week'] as const,
 
   /** Race goals: invalidating `goals` refreshes the list, the next race and projections. */
   goals: ['goals'] as const,
@@ -67,6 +74,8 @@ export const qk = {
 
   /** Every athlete and login of the instance (Settings › Administration). */
   adminAccounts: ['admin', 'accounts'] as const,
+  adminFeatureFlags: ['admin', 'feature-flags'] as const,
+  adminKpis: (weeks: number) => ['admin', 'kpis', weeks] as const,
 
   vapidKey: ['vapidPublicKey'] as const,
   /** This device's Web Push state (lib/push.ts), not a server answer. */
@@ -82,15 +91,27 @@ export const strengthSessionsQuery = {
   queryFn: () => strengthApi.getSessions(200),
 };
 
+export const strengthDraftsQuery = {
+  queryKey: qk.strengthDrafts,
+  queryFn: () => strengthApi.getDrafts(),
+};
+
+/** `keys` and the dashboard, whose one answer also carries their data (Garmin state, health, goals). */
+export function invalidateWithDashboard(queryClient: QueryClient, ...keys: QueryKey[]): void {
+  for (const key of [...keys, qk.dashboard()]) queryClient.invalidateQueries({ queryKey: key });
+}
+
 /** Everything that changes when a session is logged, uploaded, synced or matched. */
-export function invalidateAfterSession(queryClient: QueryClient): void {
+function invalidateSessionQueries(queryClient: QueryClient): void {
   for (const key of [
+    qk.dashboard(),
     ['workout'],
     ['garmin-exports'],
     qk.planned(),
     qk.actual(),
     qk.matchSummary(),
     qk.strengthSessions,
+    qk.strengthDrafts,
     qk.muscleStats(),
     qk.exercises,
     qk.strengthProgress(),
@@ -99,13 +120,30 @@ export function invalidateAfterSession(queryClient: QueryClient): void {
     qk.sessionDetail(),
     qk.analytics,
     qk.playerStats,
-    ['game'],
     qk.fitness,
     qk.workload,
     qk.planToday,
-    qk.plannedStructure(),
+    ['coaching-attention'],
+    ['coachToday'],
+    ['plan-change-set'],
     qk.goalProjection(),
+    qk.formCurve(),
   ]) {
     queryClient.invalidateQueries({ queryKey: key });
+  }
+}
+
+export function invalidateAfterSession(queryClient: QueryClient): void {
+  invalidateSessionQueries(queryClient);
+  // An explicit session write settles the RPG and replaces its snapshot.
+  syncGame(queryClient);
+}
+
+/** Refresh reads may have committed partial work, but must not start another write. */
+export function invalidateAfterGarminRefresh(queryClient: QueryClient, state?: string): void {
+  if (state && ['running', 'fresh', 'disconnected'].includes(state)) return;
+  invalidateSessionQueries(queryClient);
+  for (const key of [qk.syncStatus, qk.health, qk.healthStatus, qk.settings]) {
+    void queryClient.invalidateQueries({ queryKey: key });
   }
 }

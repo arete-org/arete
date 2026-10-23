@@ -1,4 +1,4 @@
-"""Analytics API: the overview bundle, personal records, session CRUD."""
+"""Analytics API: the overview bundle, session CRUD."""
 
 from __future__ import annotations
 
@@ -11,10 +11,21 @@ import pytest
 
 from arete.api.analytics import router
 from arete.dataio.db import connect
-from arete.dataio.queries import OverviewRow, daily_loads, daily_tss, overview_rows
-from arete.services import analytics
+from arete.dataio.queries import (
+    OverviewRow,
+    daily_loads,
+    daily_tss,
+    overview_rows,
+)
+from arete.services import analytics, settings
 
-TODAY = date.today()
+# TODAY is read at collection, the services read the clock when a test runs: a
+# run crossing the athlete's midnight saw two days (ARE-169). Every test runs at
+# the instant TODAY comes from (``_one_instant``).
+NOW = settings.utc_now()
+# The test athlete stores no timezone, so the services read the default one
+# (Europe/Paris): zone_of(None) is that zone.
+TODAY = NOW.astimezone(settings.zone_of(None)).date()
 
 CARD_KEYS = {
     "volume",
@@ -27,11 +38,18 @@ CARD_KEYS = {
     "cadence",
     "vam",
     "descent",
+    "risk",
+    "weeks",
     "readiness",
     "hrv",
     "sleep",
     "resting_hr",
 }
+
+
+@pytest.fixture(autouse=True)
+def _one_instant(monkeypatch):
+    monkeypatch.setattr(settings, "utc_now", lambda: NOW)
 
 
 @pytest.fixture
@@ -48,6 +66,9 @@ def stub_queries():
         "daily_metrics_range": [],
         "earliest_session_date": None,
         "terrain_rows": [],
+        "fetch_window": [],
+        "record_rows": [],
+        "lift_effort_rows": [],
     }
     patches = {
         name: patch(f"arete.services.analytics.{name}", return_value=value)
@@ -199,7 +220,7 @@ class TestOverview:
             if key != "vam"  # one point per climbing duration
         )
 
-    def test_overview_costs_five_statements_on_one_cursor(
+    def test_overview_costs_eight_statements_on_one_cursor(
         self, client, monkeypatch, statement_log
     ):
         real = analytics.db_connection
@@ -211,7 +232,8 @@ class TestOverview:
 
         monkeypatch.setattr(analytics, "db_connection", counting_connection)
         assert client.get("/analytics/overview?period=30d").status_code == 200
-        assert len(statement_log) == 5
+        # The cards' five, the readiness window, the best efforts and the lifts.
+        assert len(statement_log) == 8
 
 
 class TestOverviewSeries:
@@ -270,109 +292,11 @@ class TestOverviewSeries:
         assert analytics._daily_loads(rows, start, end) == daily_loads(con, start, end)
 
 
-class TestRecords:
-    @patch("arete.services.analytics.db_connection")
-    @patch("arete.services.analytics.best_effort_rows")
-    def test_keeps_the_fastest_per_distance(self, mock_rows, _con, client):
-        mock_rows.return_value = [
-            (
-                '[{"name": "1K", "elapsed_time": 240}, '
-                '{"name": "5K", "elapsed_time": 1250}]',
-                date(2026, 5, 1),
-                "Morning Run",
-                101,
-            ),
-            (
-                '[{"name": "1K", "elapsed_time": 234}]',
-                date(2026, 4, 20),
-                "Fast Run",
-                101,
-            ),
-        ]
-        records = client.get("/analytics/records?sport=running").json()["records"]
-        one_k = next(r for r in records if r["name"] == "1K")
-        assert one_k["time_sec"] == 234
-        assert one_k["activity_name"] == "Fast Run"
-        assert one_k["time_display"] == "3:54"
-
-    @patch("arete.services.analytics.db_connection")
-    @patch("arete.services.analytics.best_effort_rows")
-    def test_distance_names_match_whatever_case_the_source_wrote(
-        self, mock_rows, _con, client
-    ):
-        # Garmin writes "1K"/"5K"/"10K" but "1 mile" and "50k". Comparing
-        # spellings dropped every K distance from the card; the canonical
-        # name is what comes back, whatever went in.
-        mock_rows.return_value = [
-            (
-                '[{"name": "10k", "elapsed_time": 2926}, '
-                '{"name": "50K", "elapsed_time": 16852}, '
-                '{"name": "marathon", "elapsed_time": 13769}]',
-                date(2026, 5, 1),
-                "Ultra",
-                101,
-            )
-        ]
-        records = client.get("/analytics/records").json()["records"]
-        assert [r["name"] for r in records] == ["10K", "Marathon", "50K"]
-
-    @patch("arete.services.analytics.db_connection")
-    @patch("arete.services.analytics.best_effort_rows")
-    def test_records_come_back_ordered_by_distance(self, mock_rows, _con, client):
-        mock_rows.return_value = [
-            (
-                '[{"name": "Marathon", "elapsed_time": 13769}, '
-                '{"name": "400m", "elapsed_time": 88}, '
-                '{"name": "10 mile", "elapsed_time": 4956}, '
-                '{"name": "15K", "elapsed_time": 4618}, '
-                '{"name": "Half-Marathon", "elapsed_time": 6795}]',
-                date(2026, 5, 1),
-                "Long one",
-                101,
-            )
-        ]
-        records = client.get("/analytics/records").json()["records"]
-        assert [r["name"] for r in records] == [
-            "400m",
-            "15K",
-            "10 mile",
-            "Half-Marathon",
-            "Marathon",
-        ]
-
-    @patch("arete.services.analytics.db_connection")
-    @patch("arete.services.analytics.best_effort_rows")
-    def test_unknown_distance_is_ignored(self, mock_rows, _con, client):
-        mock_rows.return_value = [
-            (
-                '[{"name": "100m", "elapsed_time": 14}, '
-                '{"name": "5K", "elapsed_time": 1272}]',
-                date(2026, 5, 1),
-                "Track",
-                101,
-            )
-        ]
-        records = client.get("/analytics/records").json()["records"]
-        assert [r["name"] for r in records] == ["5K"]
-
-    @patch("arete.services.analytics.db_connection")
-    @patch("arete.services.analytics.best_effort_rows")
-    def test_long_efforts_display_hours(self, mock_rows, _con, client):
-        mock_rows.return_value = [
-            (
-                '[{"name": "Half-Marathon", "elapsed_time": 5535}]',
-                date(2026, 5, 1),
-                "Semi",
-                101,
-            )
-        ]
-        record = client.get("/analytics/records").json()["records"][0]
-        assert record["time_display"] == "1:32:15"
-
-    @patch("arete.services.analytics.db_connection")
-    @patch("arete.services.analytics.best_effort_rows", return_value=[])
-    def test_no_records(self, _rows, _con, client):
-        assert client.get("/analytics/records").json() == {"records": []}
+class TestRecordsEndpoint:
+    def test_the_records_endpoint_is_gone(self, client):
+        # Its best efforts all came from Strava (ARE-126); the records now come
+        # from Garmin streams, inside the overview (ARE-139).
+        assert client.get("/analytics/records").status_code == 404
 
 
 class TestSessionUpdate:
@@ -394,6 +318,27 @@ class TestSessionUpdate:
         sql, params = mock_conn.execute.call_args.args
         assert "rpe = ?" in sql and "notes" not in sql
         assert params == [None, 42]
+
+    def test_out_of_range_rpe_and_unknown_session_are_refused(self, client):
+        from arete.garmin.models import ActualSession
+        from arete.garmin.repository import GarminRepository
+
+        repo = GarminRepository()
+        own = repo.create_actual_session(
+            ActualSession(date=date(2031, 5, 6), sport="running", duration_sec=60)
+        )
+        try:
+            path = f"/analytics/sessions/{own}"
+            for rpe in (0, 11):
+                assert client.patch(path, json={"rpe": rpe}).status_code == 422
+            # Not this athlete's session (or none): nothing written, not a success.
+            missing = client.patch(
+                f"/analytics/sessions/{own + 10_000}", json={"rpe": 6}
+            )
+            assert missing.status_code == 404
+            assert client.patch(path, json={"rpe": 10}).json() == {"success": True}
+        finally:
+            repo.delete_actual_session(own)
 
     @patch("arete.services.analytics.connect")
     def test_update_empty_body(self, mock_connect, client):

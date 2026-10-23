@@ -61,3 +61,6 @@ skills-lock.json
 
 # Generated from pinned npm OCR packages.
 frontend/public/ocr/
+
+# Generated, checksum-verified server OCR language data.
+src/arete/tessdata/

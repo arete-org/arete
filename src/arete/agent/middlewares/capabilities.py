@@ -2,37 +2,34 @@
 
 import asyncio
 import logging
-from time import time_ns
+from dataclasses import replace
+from time import monotonic, time_ns
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitExceededError
 from langchain_core.messages import ToolMessage
-from langchain_core.tools import BaseTool
+from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.config import get_stream_writer
 
-from arete.agent.capabilities.execution import _resolve_tool
-from arete.agent.capabilities.registry import CAPABILITIES, validate_registry
+from arete.agent.capabilities.discovery import _profile, tool_available
+from arete.agent.capabilities.registry import (
+    CAPABILITIES,
+    READ_TOOL_NAMES,
+    validate_registry,
+)
 from arete.agent.middlewares.observability import run_stats
 from arete.agent.runtime.budget import MAX_TOOL_CALLS
 from arete.agent.runtime.events import enforce_tool_status, workout_updates
-from arete.agent.runtime.state import CoachState
-from arete.agent.tools.toolkits import META_TOOLS
 
 logger = logging.getLogger(__name__)
 
 
 class ToolkitMiddleware(AgentMiddleware):
-    """Progressive toolkit loading over ``CoachState.loaded_toolkits``."""
-
-    state_schema = CoachState
+    """Authorize and observe native ToolNode execution without invoking tools ourselves."""
 
     def __init__(self) -> None:
         super().__init__()
         validate_registry()
-        # Meta-tools registered for EXECUTION (middleware.tools contract): the
-        # ToolNode knows them statically and folds load_toolkit's Command into
-        # the graph state.
-        self.tools: list[BaseTool] = META_TOOLS
 
     @staticmethod
     def _count(request) -> None:
@@ -90,67 +87,94 @@ class ToolkitMiddleware(AgentMiddleware):
         config["configurable"] = {
             **config.get("configurable", {}),
             "workout_progress": progress,
-            "workout_deadline": getattr(context, "deadline", None),
-            # Dependencies and deadlines belong to invocation context, never model args.
-            "arete_context": context,
         }
         return config, progress
 
     @staticmethod
-    def _invalidate_page(request, name):
+    def _invalidate(request, name):
         # A write may partially commit even when it raises. Re-read next model
-        # boundary; never let the cached page contradict the action's result.
+        # boundary; never let a cached read contradict the action's result.
         context = getattr(request.runtime, "context", None)
-        if context is not None and any(
+        if context is None:
+            return
+        if name not in READ_TOOL_NAMES:
+            context.ledger_sections = {}
+            context.memory_results = {}
+        if any(
             name in {t.name for t in tk.tools} and name not in tk.read_tools
             for tk in CAPABILITIES.values()
         ):
             context.page_section = None
 
+    @staticmethod
+    def _denied(request):
+        name = request.tool_call["name"]
+        if not tool_available(_profile(request.runtime), name):
+            return ToolMessage(
+                content="Tool unavailable for this mission.",
+                name=name,
+                tool_call_id=request.tool_call["id"],
+                status="error",
+            )
+        return None
+
+    @staticmethod
+    def _finish(request, result, progress, started):
+        result = enforce_tool_status(result)
+        if isinstance(result, ToolMessage):
+            for update in workout_updates(result.content):
+                progress(update)
+        context = getattr(request.runtime, "context", None)
+        if (
+            context is not None
+            and context.started_at is not None
+            and context.stats.first_result_ms is None
+            and isinstance(result, ToolMessage)
+            and result.status == "success"
+            and any(
+                request.tool_call["name"] in {t.name for t in tk.tools}
+                for tk in CAPABILITIES.values()
+            )
+        ):
+            # Distinguish domain evidence from narration and preparatory file I/O.
+            context.stats.first_result_ms = round(
+                (monotonic() - context.started_at) * 1000
+            )
+        if (
+            context is not None
+            and request.tool_call["name"] == "read_file"
+            and str(request.tool_call.get("args", {}).get("file_path", "")).startswith(
+                "/skills/system/"
+            )
+        ):
+            context.stats.skill_reads += 1
+            context.stats.skill_read_ms += round((monotonic() - started) * 1000)
+            if isinstance(result, ToolMessage) and result.status == "success":
+                context.stats.skill_read_tokens_approx += int(
+                    count_tokens_approximately([result])
+                )
+        return result
+
     def wrap_tool_call(self, request, handler):
         self._count(request)
-        name = str(request.tool_call.get("name", ""))
-        tool = _resolve_tool(request)
-        if isinstance(tool, ToolMessage):
-            return tool
-        if tool is None:
-            return enforce_tool_status(handler(request))
+        if denied := self._denied(request):
+            return denied
         config, progress = self._config(request)
+        request = replace(request, runtime=replace(request.runtime, config=config))
+        started = monotonic()
         try:
-            result = tool.invoke(
-                dict(request.tool_call.get("args") or {}), config=config
-            )
+            return self._finish(request, handler(request), progress, started)
         finally:
-            self._invalidate_page(request, name)
-        for update in workout_updates(result):
-            progress(update)
-        return enforce_tool_status(
-            ToolMessage(
-                content=str(result), name=name, tool_call_id=request.tool_call["id"]
-            )
-        )
+            self._invalidate(request, request.tool_call["name"])
 
     async def awrap_tool_call(self, request, handler):
         self._count(request)
-        name = str(request.tool_call.get("name", ""))
-        tool = _resolve_tool(request)
-        if isinstance(tool, ToolMessage):
-            return tool
-        if tool is None:
-            return enforce_tool_status(await handler(request))
-        # ainvoke runs sync database tools off the event loop, allowing live
-        # progress and concurrent requests to keep flowing during execution.
+        if denied := self._denied(request):
+            return denied
         config, progress = self._config(request, loop=asyncio.get_running_loop())
+        request = replace(request, runtime=replace(request.runtime, config=config))
+        started = monotonic()
         try:
-            result = await tool.ainvoke(
-                dict(request.tool_call.get("args") or {}), config=config
-            )
+            return self._finish(request, await handler(request), progress, started)
         finally:
-            self._invalidate_page(request, name)
-        for update in workout_updates(result):
-            progress(update)
-        return enforce_tool_status(
-            ToolMessage(
-                content=str(result), name=name, tool_call_id=request.tool_call["id"]
-            )
-        )
+            self._invalidate(request, request.tool_call["name"])

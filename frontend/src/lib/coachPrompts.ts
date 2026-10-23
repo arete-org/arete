@@ -32,6 +32,11 @@ const BY_PAGE: Record<string, string[]> = {
     'Quel est mon prochain rang ?',
     'Comment respecter mon objectif cette semaine ?',
   ],
+  health: [
+    'Ma douleur doit-elle changer ma semaine ?',
+    'Comment évolue mon poids ?',
+    'Que dire à mon kiné de ces 8 semaines ?',
+  ],
   settings: [
     'Mes zones cardiaques sont-elles à jour ?',
     'Explique-moi mon seuil',

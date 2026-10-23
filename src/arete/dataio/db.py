@@ -16,14 +16,19 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
+import re
 import shutil
 import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, cast
 
 import duckdb
 
 from arete.config import config
+from arete.observability.requests import counted
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +46,66 @@ def get_db_path() -> pathlib.Path:
     return config.db_path
 
 
+#: Created during MotherDuck's trial: their 7-day snapshot retention makes the
+#: boot's backup clone fail on the current plan, so a migration can never run
+#: there. Kept untouched as backups of their ``_v2`` copies (docs/deployment.md).
+RETIRED_DATABASES = frozenset({"arete", "arete_preview"})
+
+
 def remote_database() -> str:
-    """``md:arete`` -> ``arete``; a bare ``md:`` means MotherDuck's default."""
+    """``md:arete_v2`` -> ``arete_v2``; a bare ``md:`` means MotherDuck's default."""
     return config.db_target.removeprefix("md:") or "my_db"
 
 
-def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
-    if os.getenv("VERCEL_ENV") == "preview" and config.db_target == "md:arete":
+def _database_name() -> str:
+    """The name only: a connection string's options may carry a token."""
+    return remote_database().split("?", 1)[0].lower()
+
+
+def warn_production_database() -> None:
+    """Outside Vercel, a database not named for previews is production's: this
+    process writes real athletes' data and its scheduler runs their daily jobs."""
+    if config.serverless:
+        return
+    if not config.is_remote_db:
+        return
+    name = _database_name()
+    if "preview" in name:
+        return
+    logger.warning(
+        "ARETE_DB names %s, not a preview database: this process writes production data",
+        name,
+    )
+
+
+def _refuse_wrong_database() -> None:
+    """A retired database anywhere; on a preview, any database not named for
+    previews (production's name has changed once already)."""
+    name = _database_name()
+    if name in RETIRED_DATABASES:
+        raise RuntimeError(f"{name} is retired: point ARETE_DB at its _v2 copy")
+    if os.getenv("VERCEL_ENV") == "preview" and "preview" not in name:
         raise RuntimeError(
-            "Preview requires a separate ARETE_DB; production md:arete is forbidden"
+            f"Preview requires a separate ARETE_DB named for previews; {name} is forbidden"
         )
+
+
+def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    idle = _idle.get()
+    if idle is None or read_only:
+        return _open(read_only)
+    owner = _owner()
+    con = idle.take(owner)
+    if con is None:
+        con = _open(read_only)
+        # The first open creates the shared MotherDuck connection it belongs to.
+        owner = _owner()
+    return cast(duckdb.DuckDBPyConnection, _Lease(con, idle, owner))
+
+
+def _open(read_only: bool) -> duckdb.DuckDBPyConnection:
     if config.is_remote_db:
+        _refuse_wrong_database()
         con = _remote_cursor()
         configure_athlete(con)
         return con
@@ -61,7 +115,7 @@ def connect(read_only: bool = False) -> duckdb.DuckDBPyConnection:
     # Concurrent opens can race DuckDB's instance-cache cleanup when the last
     # connection closes. Serialize opening only; queries keep separate connections.
     with _local_connect_lock:
-        con = duckdb.connect(str(db_path), read_only=read_only)
+        con = counted(duckdb.connect(str(db_path), read_only=read_only))
     con.execute("PRAGMA threads=4;")
     con.execute(f"PRAGMA temp_directory='{db_path.parent}';")
     configure_athlete(con)
@@ -72,6 +126,233 @@ def configure_athlete(con: duckdb.DuckDBPyConnection) -> None:
     from arete.services.athlete_scope import database_athlete_id
 
     con.execute("SET VARIABLE arete_athlete_id = ?", [database_athlete_id()])
+
+
+#: Most idle connections one run keeps: nested calls rarely hold more than two.
+MAX_IDLE_CONNECTIONS = 4
+#: An idle connection older than this is closed rather than reused: a new
+#: MotherDuck cursor's ``USE`` notices a lost connection and reconnects first
+#: (``_remote_cursor``), and a model step leaves the idle ones for minutes.
+MAX_IDLE_SECONDS = 30.0
+#: Statements that change a connection's session for whoever uses it next.
+_SESSION_CHANGES = ("SET", "RESET", "PRAGMA", "USE", "ATTACH", "DETACH", "LOAD")
+_SEARCH_PATH = re.compile(r"SET\s+search_path\s*=\s*'app'\s*;?\s*$", re.IGNORECASE)
+
+#: Whose connection it is: the athlete of its variable and, on MotherDuck, the
+#: shared connection its cursor belongs to (one replaced since is not reused).
+_Owner = tuple[int | None, object | None]
+
+
+def _owner() -> _Owner:
+    from arete.services.athlete_scope import database_athlete_id
+
+    return database_athlete_id(), _remote if config.is_remote_db else None
+
+
+def _close_quietly(con: duckdb.DuckDBPyConnection) -> None:
+    """Close a connection that may already be lost."""
+    try:
+        con.close()
+    except duckdb.Error:
+        logger.debug("Closing a lost connection failed", exc_info=True)
+
+
+class _Idle:
+    """The connections a run's callers closed cleanly: owner, time, connection."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._connections: list[tuple[_Owner, float, duckdb.DuckDBPyConnection]] = []
+        self._closed = False
+
+    def take(self, owner: _Owner) -> duckdb.DuckDBPyConnection | None:
+        """The owner's most recent idle connection; drops the stale ones (too
+        old, or on a MotherDuck connection replaced since)."""
+        now = time.monotonic()
+        found, stale, kept = None, [], []
+        with self._lock:
+            for entry in self._connections:
+                (athlete, parent), since, con = entry
+                if now - since >= MAX_IDLE_SECONDS or parent is not owner[1]:
+                    stale.append(con)
+                elif found is None and athlete == owner[0]:
+                    found = con
+                else:
+                    kept.append(entry)
+            self._connections = kept
+        for con in stale:
+            _close_quietly(con)
+        return found
+
+    def give_back(self, owner: _Owner, con: duckdb.DuckDBPyConnection) -> None:
+        with self._lock:
+            if not self._closed and len(self._connections) < MAX_IDLE_CONNECTIONS:
+                self._connections.insert(0, (owner, time.monotonic(), con))
+                return
+        _close_quietly(con)
+
+    def drop(self, *, closing: bool = False) -> None:
+        with self._lock:
+            self._closed = self._closed or closing
+            connections, self._connections = self._connections, []
+        for _, _, con in connections:
+            _close_quietly(con)
+
+
+_idle: ContextVar[_Idle | None] = ContextVar("arete_idle_connections", default=None)
+
+
+def _restore_session(con: duckdb.DuckDBPyConnection) -> None:
+    """Undo the repositories' ``SET search_path``, back to a new connection's.
+
+    A MotherDuck cursor starts in the in-memory catalog and is moved by
+    ``USE`` (``_remote_cursor``); ``RESET`` would send it back there.
+    """
+    if config.is_remote_db:
+        con.execute(f"USE {remote_database()}")
+    else:
+        con.execute("RESET search_path")
+
+
+class _Lease:
+    """One caller's use of a reusable connection, until it closes it.
+
+    ``close`` hands the connection back only as a new one would be: no
+    transaction left open, no failed call (it may come from a lost
+    connection, so every idle one is closed with it), no session setting
+    changed but the repositories' ``SET search_path = 'app'``, which is
+    undone on the way back (``_restore_session``); any other change closes
+    the connection. Each ``connect`` gets its own lease: closing it twice
+    cannot hand back a connection that another caller took since.
+    """
+
+    __slots__ = (
+        "_changed",
+        "_con",
+        "_failed",
+        "_idle",
+        "_in_transaction",
+        "_owner",
+        "_search_path",
+    )
+
+    def __init__(
+        self, con: duckdb.DuckDBPyConnection, idle: _Idle, owner: _Owner
+    ) -> None:
+        self._con: duckdb.DuckDBPyConnection | None = con
+        self._idle = idle
+        self._owner = owner
+        self._failed = self._in_transaction = False
+        self._changed = self._search_path = False
+
+    def _open_con(self) -> duckdb.DuckDBPyConnection:
+        if self._con is None:
+            raise duckdb.ConnectionException("Connection already closed!")
+        return self._con
+
+    def _call(self, method: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return method(*args, **kwargs)
+        except BaseException:
+            self._failed = True
+            raise
+
+    def _run(self, method: str, sql: str, args: Any, kwargs: Any) -> _Lease:
+        self._call(getattr(self._open_con(), method), sql, *args, **kwargs)
+        statement = sql.strip()
+        head = statement.split(None, 1)[0].upper() if statement else ""
+        if head == "BEGIN":
+            self._in_transaction = True
+        elif head in ("COMMIT", "ROLLBACK", "END", "ABORT"):
+            self._in_transaction = False
+        elif _SEARCH_PATH.match(statement):
+            self._search_path = True
+        elif head in _SESSION_CHANGES or statement.upper().startswith("CREATE TEMP"):
+            self._changed = True
+        return self
+
+    def execute(self, sql: str, *args: Any, **kwargs: Any) -> _Lease:
+        return self._run("execute", sql, args, kwargs)
+
+    def executemany(self, sql: str, *args: Any, **kwargs: Any) -> _Lease:
+        return self._run("executemany", sql, args, kwargs)
+
+    def begin(self) -> _Lease:
+        self._call(self._open_con().begin)
+        self._in_transaction = True
+        return self
+
+    def commit(self) -> _Lease:
+        self._call(self._open_con().commit)
+        self._in_transaction = False
+        return self
+
+    def rollback(self) -> _Lease:
+        self._call(self._open_con().rollback)
+        self._in_transaction = False
+        return self
+
+    def close(self) -> None:
+        con, self._con = self._con, None
+        if con is None:
+            return
+        if self._failed:
+            _close_quietly(con)
+            self._idle.drop()
+            return
+        if self._in_transaction or self._changed:
+            con.close()  # a transaction rolls back, as before
+            return
+        if self._search_path:
+            try:
+                _restore_session(con)
+            except duckdb.Error:
+                _close_quietly(con)
+                self._idle.drop()
+                return
+        self._idle.give_back(self._owner, con)
+
+    def __enter__(self) -> _Lease:
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
+
+    def __getattr__(self, name: str) -> Any:
+        value = getattr(self._open_con(), name)
+        if not callable(value):
+            return value
+
+        def call(*args: Any, **kwargs: Any) -> Any:
+            # A failed fetch may come from a lost connection too.
+            return self._call(value, *args, **kwargs)
+
+        return call
+
+
+@contextmanager
+def reuse_connections() -> Iterator[None]:
+    """Within this block, a connection a caller closed serves the next one.
+
+    For a scheduled run's long sequence of short calls: a new connection costs
+    its setup statements (``USE`` and the athlete's variable on MotherDuck,
+    the PRAGMAs locally), about two thirds of the daily run's (ARE-105). Each
+    caller still gets a connection of its own, with no transaction open, a new
+    connection's catalog and search path, and the current athlete's variable;
+    read-only ones are never reused. A connection idle for
+    ``MAX_IDLE_SECONDS`` is not reused: a MotherDuck connection lost meanwhile
+    is then reopened before the next statement, as without reuse. One lost
+    within that time fails the next caller's statement, as it would on a
+    cursor opened just before the loss, and the idle ones are closed with it.
+    The idle ones close when the block ends.
+    """
+    idle = _Idle()
+    token = _idle.set(idle)
+    try:
+        yield
+    finally:
+        _idle.reset(token)
+        idle.drop(closing=True)
 
 
 def _seed_extensions() -> None:
@@ -97,8 +378,10 @@ def _open_remote() -> duckdb.DuckDBPyConnection:
     """
     REMOTE_HOME.mkdir(parents=True, exist_ok=True)
     _seed_extensions()
-    # The MotherDuck extension also reads $HOME, which Vercel leaves empty.
-    if not os.environ.get("HOME"):
+    # The MotherDuck extension also reads $HOME, which Vercel leaves empty or,
+    # for a large function, points at a /home/vercel that does not exist.
+    home = os.environ.get("HOME", "")
+    if not (os.path.isdir(home) and os.access(home, os.W_OK)):
         os.environ["HOME"] = str(REMOTE_HOME)
     con = duckdb.connect()
     con.execute(f"SET home_directory='{REMOTE_HOME}'")
@@ -125,7 +408,7 @@ def _remote_cursor() -> duckdb.DuckDBPyConnection:
                 _remote = _open_remote()
             parent = _remote
         try:
-            cursor = parent.cursor()
+            cursor = counted(parent.cursor())
             cursor.execute(f"USE {database}")
             return cursor
         except duckdb.Error:
@@ -159,6 +442,33 @@ def db_connection(read_only: bool = False) -> Iterator[duckdb.DuckDBPyConnection
         yield con
     finally:
         con.close()
+
+
+#: Attempts of an idempotent write whose row a concurrent writer changed (ARE-150),
+#: and the wait before each rerun times its number: the conflict is raised while
+#: the other transaction may still be open, so an immediate rerun would hit it.
+IDEMPOTENT_WRITE_ATTEMPTS = 3
+IDEMPOTENT_WRITE_RETRY_SECONDS = 0.2
+
+
+def write_idempotent(sql: str, params: list) -> list[tuple]:
+    """Run one write, rerun on a write-write conflict; returns its rows.
+
+    Only for a write whose rerun is safe whatever committed in between: it sets
+    the same values, or its condition re-reads the row. The last conflict raises.
+    """
+    for attempt in range(1, IDEMPOTENT_WRITE_ATTEMPTS + 1):
+        try:
+            with db_connection() as con:
+                return con.execute(sql, params).fetchall()
+        except duckdb.TransactionException:
+            if attempt == IDEMPOTENT_WRITE_ATTEMPTS:
+                raise
+            logger.info(
+                "Write conflict, attempt %d of %d", attempt, IDEMPOTENT_WRITE_ATTEMPTS
+            )
+            time.sleep(IDEMPOTENT_WRITE_RETRY_SECONDS * attempt)
+    raise AssertionError("unreachable")
 
 
 @contextmanager

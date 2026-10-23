@@ -1,84 +1,103 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Trophy } from 'lucide-react';
-import { analyticsApi } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
+import type { Records } from '@/types';
 
-/** Sport groups the backend's /analytics/records accepts. */
-const RECORD_SPORTS = [
-  { value: 'running', label: 'COURSE' },
-  { value: 'cycling', label: 'VÉLO' },
-] as const;
-type RecordSport = (typeof RECORD_SPORTS)[number]['value'];
+const day = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' });
 
-/** All-time bests, independent of the selected period. */
-export function RecordsCard({ onOpen }: { onOpen?: (id: number) => void } = {}) {
-  const [sport, setSport] = useState<RecordSport>('running');
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['analytics', 'records', sport],
-    queryFn: () => analyticsApi.getRecords(sport),
-    staleTime: 5 * 60 * 1000,
-  });
-  const records = data?.records ?? [];
-
+/** All-time fastest runs and heaviest lifts, from the watch streams and the strength log. */
+export function RecordsCard({ records, loading, error }: { records?: Records; loading?: boolean; error?: boolean }) {
   return (
-    <section className="bg-abyss rounded-lg border border-text-muted/20 p-4 flex flex-col gap-3">
-      <header className="flex items-center gap-2">
-        <Trophy className="w-4 h-4 text-neon-gold" aria-hidden />
-        <h3 className="text-sm font-mono text-neon-cyan uppercase tracking-wider">Records</h3>
-        <div className="flex gap-1 ml-auto" role="group" aria-label="Sport des records">
-          {RECORD_SPORTS.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              onClick={() => setSport(s.value)}
-              aria-pressed={sport === s.value}
-              className={cn(
-                'px-2 py-0.5 text-[10px] font-mono rounded border transition-colors',
-                sport === s.value
-                  ? 'bg-neon-cyan/20 text-neon-cyan border-neon-cyan/50'
-                  : 'bg-abyss text-text-secondary border-text-muted/30'
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+    <section className="analysis-card">
+      <header>
+        <h3 className="text-[15px] font-medium text-text-primary">Records</h3>
       </header>
+      <p className="text-xs text-text-muted">Tes meilleurs chronos et tes charges les plus lourdes, depuis ta première séance.</p>
 
-      {isLoading ? (
+      {loading ? (
         <p className="text-sm text-text-muted animate-pulse py-6 text-center">Chargement…</p>
-      ) : isError ? (
+      ) : error || !records ? (
         <p className="text-sm text-danger-red py-6 text-center">Données indisponibles</p>
-      ) : records.length === 0 ? (
-        <p className="text-sm text-text-muted py-6 text-center">
-          Aucun record : les meilleurs efforts viennent des activités Strava.
-        </p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-text-muted font-mono">
-              <th className="text-left font-normal pb-1">Distance</th>
-              <th className="text-right font-normal pb-1">Temps</th>
-              <th className="text-right font-normal pb-1">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((r) => (
-              <tr key={r.name} className="border-t border-text-muted/10">
-                <td className="py-1.5 font-mono text-text-secondary">{r.name}</td>
-                <td className="py-1.5 text-right font-mono text-text-primary tabular-nums">{onOpen && r.activity_id ? <button className="min-h-11 text-neon-cyan underline underline-offset-4" aria-label={`Voir la séance du record ${r.name}`} onClick={() => onOpen(r.activity_id!)}>{r.time_display}</button> : r.time_display}</td>
-                <td className="py-1.5 text-right font-mono text-text-muted tabular-nums" title={r.activity_name}>
-                  {new Date(`${r.date}T00:00:00`).toLocaleDateString('fr-FR', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: '2-digit',
-                  })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <div className="analysis-records">
+            <h4 className="analysis-records-title">Course</h4>
+            {records.runs.length === 0 ? (
+              <p className="text-sm text-text-muted">
+                Aucun chrono : il faut une course d’au moins 1 km enregistrée avec la montre.
+              </p>
+            ) : (
+              <table className="analysis-records-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Distance</th>
+                    <th scope="col">Temps</th>
+                    <th scope="col">Allure</th>
+                    <th scope="col">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.runs.map((r) => (
+                    <tr key={r.name}>
+                      <th scope="row">{r.name}</th>
+                      <td>
+                        <Link
+                          to={`/log/sessions/${r.session_id}`}
+                          className="analysis-records-link"
+                          aria-label={`${r.name} en ${r.time_display}, voir la séance${r.session_name ? ` « ${r.session_name} »` : ''}`}
+                        >
+                          {r.time_display}
+                        </Link>
+                      </td>
+                      <td>{r.pace_display}</td>
+                      <td>{day(r.date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="analysis-records">
+            <h4 className="analysis-records-title">Force</h4>
+            {records.lifts.length === 0 ? (
+              <p className="text-sm text-text-muted">Aucune charge : enregistre une séance de force avec ses séries.</p>
+            ) : (
+              <table className="analysis-records-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Exercice</th>
+                    <th scope="col">1RM estimé</th>
+                    <th scope="col">Série</th>
+                    <th scope="col">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.lifts.map((l) => (
+                    <tr key={l.exercise_id}>
+                      <th scope="row">{l.exercise}</th>
+                      <td>
+                        <Link
+                          to={`/log?session=${l.session_id}`}
+                          className="analysis-records-link whitespace-nowrap"
+                          aria-label={`${l.exercise} : 1RM estimé ${l.e1rm_kg.toLocaleString('fr-FR')} kg, voir la séance`}
+                        >
+                          {l.e1rm_kg.toLocaleString('fr-FR')} kg
+                        </Link>
+                      </td>
+                      <td>{l.reps} × {l.weight_kg.toLocaleString('fr-FR')} kg</td>
+                      <td>{day(l.date)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <p className="text-xs text-text-muted">
+            Records de tous les temps : chronos mesurés par la montre sur chacune de tes courses, charges de chacune de
+            tes séances de force (séries d’échauffement exclues).
+          </p>
+        </>
       )}
     </section>
   );

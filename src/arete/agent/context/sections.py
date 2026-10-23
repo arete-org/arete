@@ -26,11 +26,13 @@ class ContextSection:
 
 _PAGE_LABELS = {
     "dashboard": "Tableau de bord",
+    "follow_up": "Suivi",
     "planning": "Planning",
     "analytics": "Analytics",
     "log": "Journal d'entraînement",
     "settings": "Réglages",
     "profile": "Mon profil",
+    "health": "Santé (douleurs et poids)",
 }
 
 
@@ -61,9 +63,13 @@ def _panel_payload(context) -> dict | None:
 
 def _page_data(page: str, params: dict) -> str:
     try:
-        rendered = json.dumps(
-            get_page_data(page, params=params), ensure_ascii=False, default=str
-        )
+        data = get_page_data(page, params=params)
+        raw = params.get("param_coach_ref")
+        if isinstance(raw, str):
+            from arete.services.coach_today import reference
+
+            data = {**data, "point_selectionne": reference(raw)}
+        rendered = json.dumps(data, ensure_ascii=False, default=str)
     except Exception as exc:
         # A failed read must not fail the turn: the coach can still answer,
         # or reach the data through its tools.
@@ -113,6 +119,25 @@ _SLACK_PARTICIPANTS = (
 
 def surface_section(context: AgentContext | None) -> str:
     """Where a Slack answer appears, so the coach measures what it discloses."""
+    if (
+        context
+        and context.slack_product
+        and context.resolved_profile
+        and not context.resolved_profile.personal_context
+    ):
+        from zoneinfo import ZoneInfo
+
+        service = context.slack_product
+        # The run's one instant, never a second clock, shown in the Slack
+        # profile's zone; the date instruction shows it in the settings' zone.
+        now = context.current_datetime.astimezone(ZoneInfo(service.timezone))
+        return (
+            f"Surface Slack administrateur ; visibilité : {context.slack_visibility}. "
+            f"Heure actuelle : {now.isoformat()}. Fuseau : {service.timezone} "
+            "(Europe/Paris si le profil Slack ne fournit pas de fuseau valide). "
+            "Les outils sont la seule source de confirmation des actions. "
+            + _SLACK_PARTICIPANTS
+        )
     visibility = getattr(context, "slack_visibility", None)
     if visibility == "public":
         return (

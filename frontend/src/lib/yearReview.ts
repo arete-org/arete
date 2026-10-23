@@ -1,3 +1,4 @@
+import type { LiftRecord, RunRecord } from '@/types';
 import { fetchAPI } from './api';
 
 /** GET /year-review (services/year_review.py). */
@@ -30,16 +31,13 @@ export interface YearMonth {
   strength_volume_kg: number;
 }
 
-export interface YearEffort {
-  name: string;
-  time_sec: number;
-  time_display: string;
-  date: string;
-  activity_name: string;
-  activity_id: number;
-  previous_best_sec: number | null;
+/** The year's best against every earlier year: seconds for a run, kg for a lift. */
+interface YearRecordFlag {
+  previous_best: number | null;
   is_pr: boolean;
 }
+export type YearRunRecord = RunRecord & YearRecordFlag;
+export type YearLiftRecord = LiftRecord & YearRecordFlag;
 
 export interface YearReview {
   year: number;
@@ -64,7 +62,7 @@ export interface YearReview {
     hardest: YearSession | null;
     biggest_climb: YearSession | null;
   };
-  best_efforts: YearEffort[];
+  records: { runs: YearRunRecord[]; lifts: YearLiftRecord[] };
   pr_count: number;
   fitness: {
     series: { date: string; ctl: number }[];

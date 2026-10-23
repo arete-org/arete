@@ -34,7 +34,7 @@ export function GoalProjectionPanel() {
         </span>
       }
     >
-      <p className="text-xs font-mono text-text-muted -mt-2 mb-3">{goalCountdown(goal)}</p>
+      <p className="text-xs font-sans text-text-muted -mt-2 mb-3">{goalCountdown(goal)}</p>
       {projection.isLoading && <p className="text-sm text-text-muted">Projection en cours…</p>}
       {projection.isError && <p className="text-sm text-danger-red">Projection indisponible.</p>}
       {data && (
@@ -42,12 +42,12 @@ export function GoalProjectionPanel() {
           <Suspense fallback={<div className="h-[220px]" />}>
             <ProjectionChart series={data.series} today={toLocalISODate()} />
           </Suspense>
-          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm font-mono">
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm font-sans">
             <span className="text-text-secondary">
-              Forme le jour J : <span className="text-neon-gold">TSB {data.race_day.tsb != null ? signed(data.race_day.tsb) : '—'}</span>
+              Fraîcheur le jour J : <span className="text-neon-gold">{data.race_day.tsb != null ? signed(data.race_day.tsb) : '—'}</span>
             </span>
             <span className="text-text-secondary">
-              Pic de forme (CTL) : <span className="text-neon-cyan">{data.peak_ctl != null ? Math.round(data.peak_ctl) : '—'}</span>
+              Pic de forme de fond : <span className="text-neon-cyan">{data.peak_ctl != null ? Math.round(data.peak_ctl) : '—'}</span>
             </span>
           </div>
           {data.planned_sessions === 0 && (

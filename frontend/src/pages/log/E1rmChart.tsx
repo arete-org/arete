@@ -19,7 +19,7 @@ export function E1rmChart({ points }: { points: { date: string; e1rm: number | n
           labelFormatter={(iso: string) => shortDate(iso)}
           formatter={(value: number) => [formatKg(Math.round(value * 10) / 10), '1RM estimé']}
         />
-        <Line type="monotone" dataKey="e1rm" stroke={COLORS.neonGold} strokeWidth={2} dot={{ r: 2 }} />
+        <Line isAnimationActive={false} type="monotone" dataKey="e1rm" stroke={COLORS.neonGold} strokeWidth={2} dot={{ r: 2 }} />
       </LineChart>
     </ResponsiveContainer>
   );

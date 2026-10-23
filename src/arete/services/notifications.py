@@ -4,6 +4,14 @@ Bounded and quiet by design: at most ``MAX_SUBSCRIPTIONS`` browsers, a
 10-second timeout per send, no retry, and a subscription the push service
 reports gone (404/410) is dropped. ``notify`` never raises: a notification is
 never worth failing the sync, the briefing or a decision for.
+
+Every scheduled push names its kind; the athlete can turn each kind off, and
+nothing is sent during their quiet hours (21:30-07:00 by default, in their
+timezone). A push that falls in quiet hours is dropped, not delayed: there is
+no durable queue to hold it, and each kind is either repeated in the app
+(briefing, review, decisions, imports) or obsolete by morning. The morning
+check-in checks ``withheld`` before it spends its one push of the day, so a
+later window sends it instead (``checkins.prompt``).
 """
 
 from __future__ import annotations
@@ -17,6 +25,12 @@ from datetime import datetime
 from arete.config import config
 from arete.dataio.db import connect
 from arete.dataio.settings import get_user_settings
+from arete.services.settings import (
+    NotificationKind,
+    stored_preferences,
+    utc_now,
+    zone_of,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +64,18 @@ def public_key() -> str | None:
 def subscribe(
     endpoint: str, p256dh: str, auth: str, user_agent: str | None = None
 ) -> None:
-    """Keep this browser's subscription, and only the newest few."""
+    """Keep this browser's subscription, and only the newest few.
+
+    Subscribing the same browser again renews its keys but keeps the date it
+    first subscribed: the administrators' indicators count from it.
+    """
     con = connect()
     try:
         con.execute(
             "INSERT INTO app.push_subscriptions (endpoint, p256dh, auth, user_agent) "
             "VALUES (?, ?, ?, ?) ON CONFLICT (athlete_id, endpoint) DO UPDATE SET "
             "p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, "
-            "user_agent = EXCLUDED.user_agent, created_at = now()",
+            "user_agent = EXCLUDED.user_agent RETURNING endpoint",
             [endpoint, p256dh, auth, (user_agent or "")[:300] or None],
         )
         con.execute(
@@ -90,16 +108,58 @@ def _subscriptions() -> list[tuple[str, str, str]]:
         con.close()
 
 
+def subscribed() -> bool:
+    """Whether the scoped athlete has a browser to reach."""
+    return bool(_subscriptions())
+
+
 def _status_of(error: Exception) -> int | None:
     response = getattr(error, "response", None)
     return getattr(response, "status_code", None)
 
 
-def notify(title: str, body: str, url: str = "/") -> NotifyResult:
-    """Send one notification to every subscribed browser. Never raises."""
+def withheld(settings: dict, kind: NotificationKind) -> str | None:
+    """Why the athlete's preferences hold this kind back now, None to send."""
+    prefs = stored_preferences(settings.get("notification_preferences"))
+    if not prefs.allows(kind):
+        return "type de notification désactivé"
+    local = utc_now().astimezone(zone_of(settings.get("timezone")))
+    if prefs.quiet_hours is not None and prefs.quiet_hours.covers(local.time()):
+        return "heures calmes"
+    return None
+
+
+def kind_allowed(kind: NotificationKind) -> bool:
+    """Whether the athlete's per-kind choice lets this kind out; never raises."""
     try:
-        if not bool((get_user_settings() or {}).get("notifications_enabled", True)):
+        settings = get_user_settings() or {}
+    except Exception as e:  # noqa: BLE001 - the send path reports it
+        logger.warning("Notification preferences unreadable: %s", e)
+        return True
+    return stored_preferences(settings.get("notification_preferences")).allows(kind)
+
+
+def _send(
+    title: str,
+    body: str,
+    url: str = "/",
+    *,
+    kind: NotificationKind | None,
+    event_key: str = "",
+    reference: dict | None = None,
+) -> NotifyResult:
+    """Send one notification to every subscribed browser. Never raises.
+
+    ``kind`` None is the athlete's own request (the test button): it ignores
+    the per-kind choice and quiet hours, never the master switch.
+    """
+    try:
+        settings = get_user_settings() or {}
+        if not bool(settings.get("notifications_enabled", True)):
             return NotifyResult(0, 0, "notifications désactivées")
+        reason = withheld(settings, kind) if kind is not None else None
+        if reason is not None:
+            return NotifyResult(0, 0, reason)
         if not configured():
             return NotifyResult(0, 0, "clés Web Push absentes du serveur")
         subscriptions = _subscriptions()
@@ -110,6 +170,19 @@ def notify(title: str, body: str, url: str = "/") -> NotifyResult:
         return NotifyResult(0, 0, "aucun appareil abonné")
 
     from pywebpush import WebPushException, webpush
+
+    if kind is not None:
+        from arete.services import coaching_attention
+
+        try:
+            reason = coaching_attention.reserve(
+                kind, event_key, url, reference, settings
+            )
+        except Exception:
+            logger.exception("Coaching delivery reservation failed; no push attempted")
+            return NotifyResult(0, 0, "coordination du suivi indisponible")
+        if reason is not None:
+            return NotifyResult(0, 0, reason)
 
     payload = json.dumps(
         {"title": title, "body": body[:300], "url": url}, ensure_ascii=False
@@ -143,13 +216,15 @@ def notify(title: str, body: str, url: str = "/") -> NotifyResult:
             con = connect()
             try:
                 con.execute(
-                    "UPDATE app.push_subscriptions SET last_success_at = ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (endpoint = ?) ",
+                    "UPDATE app.push_subscriptions SET last_success_at = ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (endpoint = ?) RETURNING endpoint",
                     [datetime.now(), endpoint],
                 )
             finally:
                 con.close()
         except Exception:  # noqa: BLE001
-            pass
+            logger.exception(
+                "Push succeeded but its device receipt could not be stored"
+            )
     return NotifyResult(sent, dropped)
 
 
@@ -158,3 +233,41 @@ def first_sentence(text: str, limit: int = 160) -> str:
     match = re.match(r"(.+?[.!?…])(\s|$)", text.strip(), re.DOTALL)
     sentence = match.group(1) if match else text.strip()
     return sentence if len(sentence) <= limit else sentence[: limit - 1].rstrip() + "…"
+
+
+def notify(
+    title: str,
+    body: str,
+    url: str = "/",
+    *,
+    kind: NotificationKind | None,
+    persist: bool = True,
+    event_key: str | None = None,
+    reference: dict | None = None,
+) -> NotifyResult:
+    from hashlib import sha256
+
+    from arete.services import inbox
+
+    identifier = None
+    key = (
+        event_key
+        or sha256(
+            json.dumps([kind, title, body, url, utc_now().date().isoformat()]).encode()
+        ).hexdigest()
+    )
+    if kind is not None and persist:
+        try:
+            identifier = inbox.record(key, kind, title, body, url, reference)
+            if identifier is None:
+                return NotifyResult(0, 0, "notification déjà enregistrée")
+        except Exception:
+            logger.exception("Inbox notification could not be stored")
+            return NotifyResult(0, 0, "suivi impossible à enregistrer")
+    result = _send(title, body, url, kind=kind, event_key=key, reference=reference)
+    if identifier:
+        try:
+            inbox.delivered(identifier, result.to_dict())
+        except Exception:
+            logger.exception("Push receipt could not be stored")
+    return result

@@ -54,8 +54,8 @@ function CalendarDay({ date, planned, actual, isToday, today, onClick }: Calenda
       )}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-mono text-text-muted tracking-wider">{dayOfWeek}.</span>
-        <span className={cn('text-sm font-mono font-medium', isToday ? 'text-neon-cyan' : 'text-text-secondary')}>
+        <span className="text-[10px] font-sans text-text-muted tracking-wider">{dayOfWeek}.</span>
+        <span className={cn('text-sm font-sans font-medium', isToday ? 'text-neon-cyan' : 'text-text-secondary')}>
           {dayNum}
         </span>
       </div>
@@ -75,7 +75,7 @@ function CalendarDay({ date, planned, actual, isToday, today, onClick }: Calenda
             return (
               <div
                 key={session.key}
-                className={cn('flex items-center gap-1.5 px-1.5 py-1 rounded text-[11px] font-mono', tone)}
+                className={cn('flex items-center gap-1.5 px-1.5 py-1 rounded text-[11px] font-sans', tone)}
                 title={session.title}
               >
                 <IconComponent
@@ -88,12 +88,12 @@ function CalendarDay({ date, planned, actual, isToday, today, onClick }: Calenda
             );
           })}
           {allSessions.length > 3 && (
-            <div className="text-[11px] text-text-muted font-mono text-center">+{allSessions.length - 3} autres</div>
+            <div className="text-[11px] text-text-muted font-sans text-center">+{allSessions.length - 3} autres</div>
           )}
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-[11px] font-mono text-text-muted tracking-wider">REPOS</span>
+          <span className="text-[11px] font-sans text-text-muted tracking-wider">Repos</span>
         </div>
       )}
     </div>

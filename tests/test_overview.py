@@ -97,7 +97,8 @@ class TestPmcCard:
         card = build_pmc_card(self.series(), window(), 1.1, "optimal")
         assert card["headline"]["value"] == 100.0  # 40 + 60
         assert card["secondary"][0]["value"] == 5.0  # tsb = ctl - atl
-        assert card["secondary"][2]["value"] == 1.1
+        assert len(card["secondary"]) == 2  # the ACWR is on the risk card
+        assert "ACWR" not in card["insight"]["text"]  # 1.1 needs no warning
 
     def test_previous_state_taken_at_prev_end(self):
         card = build_pmc_card(self.series(), window(), None, None)

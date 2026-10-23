@@ -8,6 +8,7 @@ from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
+from arete.agent.capabilities.discovery import authorized_tools
 from arete.agent.middlewares.capabilities import ToolkitMiddleware
 from arete.agent.middlewares.context import ContextBuilderMiddleware
 from arete.agent.middlewares.observability import ModelTelemetryMiddleware
@@ -23,6 +24,7 @@ class Model(GenericFakeChatModel):
 def _graph(*messages):
     return create_agent(
         Model(messages=iter(messages)),
+        tools=authorized_tools("chat"),
         middleware=[
             ToolkitMiddleware(),
             ContextBuilderMiddleware(),
@@ -36,9 +38,7 @@ def _search_then_answer():
     return _graph(
         AIMessage(
             content="",
-            tool_calls=[
-                {"name": "search_toolkits", "args": {"query": "forme"}, "id": "s"}
-            ],
+            tool_calls=[{"name": "get_fitness", "args": {}, "id": "s"}],
         ),
         AIMessage(
             content="Ta forme remonte.",
@@ -65,6 +65,8 @@ def test_a_run_logs_its_model_and_tool_calls(caplog):
     assert "profile=chat calls=2 tools=1" in line
     assert "models=['served/model:free']" in line
     assert "error=None" in line
+    assert context.stats.first_result_ms is not None
+    assert "first_result_ms=None" not in line
 
 
 class Down(Model):
@@ -76,6 +78,7 @@ def test_a_failed_run_still_logs_its_cost(caplog):
     caplog.set_level(logging.INFO, logger="arete.observability.agent")
     graph = create_agent(
         Down(messages=iter([])),
+        tools=authorized_tools("chat"),
         middleware=[ModelTelemetryMiddleware()],
         context_schema=AgentContext,
     )
@@ -87,6 +90,7 @@ def test_a_failed_run_still_logs_its_cost(caplog):
         )
     (line,) = _run_lines(caplog)
     assert "calls=1" in line and "error=ConnectionError" in line
+    assert "first_result_ms=None" in line
 
 
 def test_streaming_records_the_time_to_the_first_answer_token(caplog):
@@ -104,6 +108,8 @@ def test_streaming_records_the_time_to_the_first_answer_token(caplog):
 
     asyncio.run(consume())
     assert context.stats.first_token_ms is not None
+    assert context.stats.first_result_ms is not None
+    assert context.stats.first_result_ms >= context.stats.first_token_ms
     assert "ttft_ms=None" not in _run_lines(caplog)[0]
 
 
@@ -115,3 +121,34 @@ def test_a_streamed_model_name_is_not_repeated():
     name = "nvidia/nemotron-3-super-120b-a12b:free"
     message = SimpleNamespace(response_metadata={"model_name": name * 2})
     assert served_models(SimpleNamespace(result=[message])) == [name]
+
+
+def test_only_the_first_successful_assembly_reports_the_cold_start(monkeypatch, caplog):
+    from threading import Lock
+
+    from arete import coaching
+
+    def fail(**kwargs):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_MODEL", "test-coach")
+    monkeypatch.setattr(coaching, "_stack_ready_unlogged", Lock())
+    caplog.set_level(logging.INFO, logger="arete.observability.agent")
+
+    def ready_lines():
+        return [m for m in caplog.messages if m.startswith("Coach stack ready:")]
+
+    monkeypatch.setattr(coaching, "build_chat_model", fail)
+    with pytest.raises(RuntimeError, match="provider down"):
+        coaching._assemble("briefing")
+    assert ready_lines() == []
+
+    monkeypatch.setattr(
+        coaching, "build_chat_model", lambda **kwargs: Model(messages=iter([]))
+    )
+    coaching._assemble("briefing")
+    coaching._assemble("feedback")
+    (line,) = ready_lines()
+    assert line.startswith(f"Coach stack ready: import_ms={coaching._IMPORT_MS} ")
+    assert "compile_ms=" in line

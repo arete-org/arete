@@ -63,7 +63,48 @@ def test_overload_eases_the_hardest_session_and_shortens_the_long_run():
     assert [p.planned_session_id for p in proposals] == [2, 4]
     assert proposals[0].change["session_type"] == "endurance"
     assert proposals[1].change == {"target_duration_min": 75}
-    assert "1.45" in proposals[0].reason
+    assert [p.reason for p in proposals] == [
+        "Équilibre de charge 1,45 (au-dessus de 1,3) : "
+        "la séance la plus dure passe en endurance Z2.",
+        "Équilibre de charge 1,45 (au-dessus de 1,3) : "
+        "sortie longue raccourcie à 75 min.",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("facts", "shown"),
+    [
+        ({"acwr": 1.3004}, "Équilibre de charge 1,301 (au-dessus de 1,3)"),
+        ({"tsb": -20.4}, "Fraîcheur -20,4 (sous -20)"),
+        ({"readiness_avg": 49.6}, "Préparation moyenne 49,6/100 (sous 50)"),
+    ],
+)
+def test_a_value_just_past_its_threshold_never_reads_level_with_it(facts, shown):
+    proposals = wr.propose(_facts(**facts), UPCOMING)
+    assert proposals[0].reason == (
+        f"{shown} : la séance la plus dure passe en endurance Z2."
+    )
+
+
+@pytest.mark.parametrize(
+    ("facts", "reasons"),
+    [
+        (
+            {"tsb": -23.4, "readiness_avg": 42.0},
+            "Fraîcheur -23 (sous -20) et préparation moyenne 42/100 (sous 50)",
+        ),
+        (
+            {"acwr": 1.45, "tsb": -23.4, "readiness_avg": 42.0},
+            "Équilibre de charge 1,45 (au-dessus de 1,3), fraîcheur -23 (sous -20) "
+            "et préparation moyenne 42/100 (sous 50)",
+        ),
+    ],
+)
+def test_several_reasons_join_with_commas_and_a_final_et(facts, reasons):
+    proposals = wr.propose(_facts(**facts), UPCOMING)
+    assert proposals[0].reason == (
+        f"{reasons} : la séance la plus dure passe en endurance Z2."
+    )
 
 
 def test_a_missed_week_drops_the_shortest_easy_run():
@@ -78,6 +119,16 @@ def test_facts_text_lists_the_proposals_or_says_none():
     assert "aucune, rien à changer" in wr.facts_text(_facts(), [])
     text = wr.facts_text(_facts(acwr=1.45), wr.propose(_facts(acwr=1.45), UPCOMING))
     assert "endurance Z2" in text
+
+
+def test_facts_text_writes_decimals_with_a_comma_like_the_reasons():
+    """ARE-180: the model copies the facts' numbers into the French review."""
+    facts = _facts(acwr=1.45)
+    text = wr.facts_text(facts, wr.propose(facts, UPCOMING))
+    assert "Charge aiguë/chronique (ACWR, 28 jours) : 1,45." in text
+    assert "Équilibre de charge 1,45" in text  # the proposal's reason, unchanged
+    assert "1.45" not in text
+    assert "(ACWR, 28 jours) : indisponible." in wr.facts_text(_facts(acwr=None), [])
 
 
 @pytest.fixture
@@ -148,19 +199,33 @@ def test_an_empty_week_is_reviewed_by_the_rules_without_a_model_request(week):
     assert review.text.startswith("Semaine passée : 0 séances faites sur 0 prévues")
 
 
-def test_the_scheduler_reviews_on_mondays_only():
+def test_the_daily_run_falls_back_on_any_day_but_sunday():
     from arete import scheduler
 
-    assert scheduler.write_weekly_review(date(2026, 10, 13)) == "not monday"
+    # Sunday's daily run leaves the ending week to the evening's pass.
+    assert scheduler.write_weekly_review(date(2026, 10, 18)) == "sunday evening"
     with (
-        patch("arete.coaching.generate_weekly_review") as generate,
+        patch("arete.coaching.write_scheduled_review") as write,
+        patch("arete.scheduler._held", return_value=None),
+        patch.object(wr, "week_facts", return_value=_facts()),
         patch("arete.services.notifications.notify") as notify,
     ):
-        generate.return_value = wr.Review(
+        notify.return_value = Mock(skipped_reason=None, sent=1)
+        write.return_value = wr.Review(
             1, TODAY, "Semaine tenue. Bravo.", "agent", [], [], None, None
         )
-        assert scheduler.write_weekly_review(date(2026, 10, 12)) == "agent, 0 proposals"
-    notify.assert_called_once_with("Bilan de la semaine", "Semaine tenue.", "/planning")
+        assert (
+            scheduler.write_weekly_review(date(2026, 10, 12))
+            == "agent, 0 proposals; 1 sent"
+        )
+        notify.assert_called_once_with(
+            "Ta semaine est prête",
+            "Semaine tenue.",
+            "/planning/semaine",
+            kind="weekly_review",
+            reference={"kind": "review", "id": 1},
+        )
+        assert notify.call_count == 1
 
 
 def test_reviewed_prescriptions_are_left_alone():

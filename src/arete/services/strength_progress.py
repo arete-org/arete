@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
+from arete.services.settings import athlete_today
 from arete.strength.models import Exercise, ExerciseCategory
 from arete.strength.progression import (
     ExerciseSession,
@@ -115,7 +116,7 @@ def suggestions_for_parsed(
     )
     readiness = (
         today_readiness(parsed.date)
-        if history and parsed.date == date.today()
+        if history and parsed.date == athlete_today()
         else None
     )
     out: dict[str, dict[str, Any]] = {}

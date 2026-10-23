@@ -1,23 +1,99 @@
-import { type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { PlannedSession } from '@/types';
 import { exportApi } from '@/lib/documents';
-import { WorkoutSelection } from '@/components/WorkoutSelection';
 import { exportLabel } from '@/lib/workouts';
 import { useWorkoutActions } from '@/hooks/useWorkoutActions';
+import { Button } from '@/components/ui';
+import { readableError } from '@/lib/utils';
 
-export function GarminExportPanel({ sessions, children }: { sessions: PlannedSession[]; children?: (render: (id: number) => ReactNode) => ReactNode }) {
-  const statuses = useQuery({ queryKey: ['garmin-exports'], queryFn: exportApi.statuses, retry: false });
+/** Deleted sessions retain their cleanup controls until Garmin confirms removal. */
+export function GarminExportPanel() {
+  const statuses = useQuery({
+    queryKey: ['garmin-exports'],
+    queryFn: exportApi.statuses,
+    retry: false,
+  });
   const actions = useWorkoutActions();
-  return <section className="mb-6" aria-label="Envoi des séances vers Garmin">
-    <WorkoutSelection sessions={sessions.map(session => ({ session: { ...session, revision: session.revision ?? 1 }, export: statuses.data?.find(s => s.session_id === session.id) ?? null }))}>{children}</WorkoutSelection>
-    {statuses.error && <p role="alert" className="mt-2 text-xs text-danger-red">{statuses.error.message}</p>}
-    {statuses.data?.filter(s => s.deleted && s.state !== 'removed').map(state => <div key={state.session_id} className="mt-3 rounded-lg border border-warning-orange/30 p-3 text-sm">
-      <p>Séance supprimée #{state.session_id} · {exportLabel(state)}</p>
-      {state.error && <p className="text-danger-red">{state.error}</p>}
-      <button className="mr-4 min-h-11 text-neon-cyan" disabled={actions.busy} onClick={() => void actions.run({ kind: 'remove', session: { id: state.session_id, revision: 1, date: '', sport: '', description: '', status: 'deleted' } })}>Retirer de Garmin Connect</button>
-      <button className="min-h-11 text-neon-cyan" disabled={actions.busy} onClick={() => void actions.run({ kind: 'verify', session: { id: state.session_id, revision: 1, date: '', sport: '', description: '', status: 'deleted' } })}>Vérifier Garmin</button>
-    </div>)}
-    {actions.error && <p role="alert" className="text-xs text-danger-red">{actions.error}</p>}
-  </section>;
+  const pending =
+    statuses.data?.filter((state) => state.deleted && state.state !== 'removed') ?? [];
+  if (!pending.length && !statuses.error && !actions.error) return null;
+  return (
+    <section className="planning-cleanup glass-panel" aria-label="Retraits Garmin à terminer">
+      {statuses.error && (
+        <p role="alert" className="text-xs text-danger-red">
+          {readableError(statuses.error)}
+        </p>
+      )}
+      {pending.length > 0 && (
+        <>
+          <h2 className="text-[13px] font-semibold text-warning-orange">
+            {pending.length} retrait{pending.length > 1 ? 's' : ''} Garmin à terminer
+          </h2>
+          <p className="text-xs text-text-muted mt-2">
+            {pending.length === 1
+              ? 'La séance a été supprimée du planning.'
+              : 'Les séances ont été supprimées du planning.'}
+          </p>
+          <details className="mt-2">
+            <summary className="inline-flex items-center min-h-11 px-4 text-sm font-medium text-neon-cyan cursor-pointer">
+              Gérer le retrait{pending.length > 1 ? 's' : ''}
+            </summary>
+            <div className="space-y-3">
+              {pending.map((state) => (
+                <div key={state.session_id} className="border-t border-border pt-3 text-sm">
+                  <p>
+                    {state.description || `Séance #${state.session_id}`} · {exportLabel(state)}
+                  </p>
+                  {state.error && <p className="text-danger-red">{state.error}</p>}
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <Button
+                      disabled={actions.busy}
+                      onClick={() =>
+                        void actions.run({
+                          kind: 'remove',
+                          session: {
+                            id: state.session_id,
+                            revision: 1,
+                            date: '',
+                            sport: '',
+                            description: '',
+                            status: 'deleted',
+                          },
+                        })
+                      }
+                    >
+                      Retirer de Garmin Connect
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={actions.busy}
+                      onClick={() =>
+                        void actions.run({
+                          kind: 'verify',
+                          session: {
+                            id: state.session_id,
+                            revision: 1,
+                            date: '',
+                            sport: '',
+                            description: '',
+                            status: 'deleted',
+                          },
+                        })
+                      }
+                    >
+                      Vérifier Garmin
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </details>
+        </>
+      )}
+      {actions.error && (
+        <p role="alert" className="text-xs text-danger-red">
+          {actions.error}
+        </p>
+      )}
+    </section>
+  );
 }

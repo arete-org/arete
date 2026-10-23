@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 import type { Bucket, Card, HrZoneModel } from '@/types';
 import { CHART, HR_ZONE_COLORS } from '@/lib/chartTheme';
-import { cn } from '@/lib/utils';
 import { StatCard } from '../StatCard';
 import { ChartGrid, ChartTooltip, TooltipBox, bucketAxis } from '../chartParts';
 import { formatBucketLong } from '../types';
@@ -51,6 +50,7 @@ export function ZonesCard({
   return (
     <StatCard
       title="Zones cardiaques"
+      term="zones"
       question="Quelle part du temps passée en facile, et quelle part en dur ?"
       card={card}
       secondaryLabels={['Z4-Z5', 'Temps mesuré']}
@@ -64,21 +64,16 @@ export function ZonesCard({
             ? `Zones calculées sur ${model.basis === 'lthr' ? 'ton seuil' : 'ta FC max'} de ${model.reference} bpm`
             : ''}
         </p>
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="group" aria-label="Unité des zones">
         {(['min', 'pct'] as const).map((m) => (
           <button
             key={m}
             type="button"
             onClick={() => setMode(m)}
             aria-pressed={mode === m}
-            className={cn(
-              'px-2 py-0.5 text-[10px] font-mono rounded border transition-colors',
-              mode === m
-                ? 'bg-neon-cyan/20 text-neon-cyan border-neon-cyan/50'
-                : 'bg-abyss text-text-secondary border-text-muted/30'
-            )}
+            className="analysis-tab"
           >
-            {m === 'min' ? 'MINUTES' : '%'}
+            {m === 'min' ? 'Minutes' : '%'}
           </button>
         ))}
         </div>
@@ -111,7 +106,7 @@ export function ZonesCard({
             }}
           />
           {ZONES.map((z, i) => (
-            <Bar
+            <Bar isAnimationActive={false}
               key={z}
               dataKey={`${z}${suffix}`}
               name={ZONE_NAME[z]}

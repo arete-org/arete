@@ -86,7 +86,12 @@ def refresh_threshold(client: Any, user_id: int | None = None) -> dict[str, Any]
             "measured_on": stored_on.isoformat() if stored_on else None,
         }
 
-    payload = {k: v for k, v in settings.items() if k != "user_id"}
+    # The preferences come back parsed; omitted, the stored JSON is kept.
+    payload = {
+        k: v
+        for k, v in settings.items()
+        if k not in ("user_id", "notification_preferences")
+    }
     payload.update(
         lthr=reading.heart_rate or stored_hr,
         threshold_pace_sec_km=reading.pace_sec_km
@@ -94,12 +99,8 @@ def refresh_threshold(client: Any, user_id: int | None = None) -> dict[str, Any]
         lthr_measured_on=reading.measured_on,
     )
     upsert_user_settings(user_id, **payload)
-    logger.info(
-        "Threshold updated from Garmin: %s bpm, %s s/km, measured %s",
-        reading.heart_rate,
-        reading.pace_sec_km,
-        reading.measured_on,
-    )
+    # The values are health data: the logs only record that they changed.
+    logger.info("Threshold updated from Garmin, measured %s", reading.measured_on)
     return {
         # The values already matched: only the test date was missing.
         "updated": not same_value,

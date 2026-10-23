@@ -9,6 +9,8 @@ import { SyncOptionsForm } from './SyncOptionsForm';
 import { useGarminSync } from './useGarminSync';
 import { GarminSyncProgress } from './GarminSyncProgress';
 import { toLocalISODate } from '@/lib/dates';
+import { invalidateWithDashboard } from '@/lib/queryKeys';
+import { readableError } from '@/lib/utils';
 
 type Alert = { type: 'success' | 'error' | 'info'; message: string };
 
@@ -38,8 +40,8 @@ export function SystemTab() {
   const logoutMutation = useMutation({
     mutationFn: garminApi.logout,
     onSuccess: () => {
-      setAlert({ type: 'success', message: 'DÉCONNECTÉ DE GARMIN' });
-      queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+      setAlert({ type: 'success', message: 'Déconnecté de Garmin' });
+      invalidateWithDashboard(queryClient, ['syncStatus']);
     },
   });
 
@@ -50,13 +52,17 @@ export function SystemTab() {
         result.updated
           ? {
               type: 'success',
-              message: `SEUIL GARMIN : ${result.lthr} BPM (TEST DU ${result.measured_on})`,
+              message: `Seuil Garmin : ${result.lthr} bpm (test du ${result.measured_on})`,
             }
-          : { type: 'info', message: 'AUCUN TEST GARMIN PLUS RÉCENT' }
+          : { type: 'info', message: 'Aucun test Garmin plus récent' }
       );
       queryClient.invalidateQueries({ queryKey: ['settings'] });
     },
-    onError: (error) => setAlert({ type: 'error', message: `LECTURE DU SEUIL IMPOSSIBLE : ${error}` }),
+    onError: (error) => {
+      // Garmin may have refused the session: the status then asks to reconnect.
+      invalidateWithDashboard(queryClient, ['syncStatus']);
+      setAlert({ type: 'error', message: `Lecture du seuil impossible : ${readableError(error)}` });
+    },
   });
 
   const zonesMutation = useMutation({
@@ -68,11 +74,11 @@ export function SystemTab() {
           : `FC max ${result.model.reference} bpm`;
       setAlert({
         type: 'success',
-        message: `ZONES RECALCULÉES SUR ${basis.toUpperCase()} · ${result.from_fit} SÉANCES FIT, ${result.from_laps} PAR TOURS`,
+        message: `Zones recalculées sur ${basis} · ${result.from_fit} séances FIT, ${result.from_laps} par tours`,
       });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
     },
-    onError: (error) => setAlert({ type: 'error', message: `RECALCUL IMPOSSIBLE : ${error}` }),
+    onError: (error) => setAlert({ type: 'error', message: `Recalcul impossible : ${readableError(error)}` }),
   });
 
   const syncMutation = useGarminSync();
@@ -86,12 +92,14 @@ export function SystemTab() {
     onSuccess: (result) => {
       setAlert({
         type: result.days_failed ? 'error' : 'success',
-        message: `SANTÉ : ${result.days_synced} JOURS SYNCHRONISÉS${result.days_failed ? `, ${result.days_failed} EN ÉCHEC` : ''}`,
+        message: `Santé : ${result.days_synced} jours synchronisés${result.days_failed ? `, ${result.days_failed} en échec` : ''}`,
       });
-      queryClient.invalidateQueries({ queryKey: ['garminHealthStatus'] });
-      queryClient.invalidateQueries({ queryKey: ['garmin-health'] });
+      invalidateWithDashboard(queryClient, ['garminHealthStatus'], ['garmin-health']);
     },
-    onError: (error) => setAlert({ type: 'error', message: `SYNCHRO SANTÉ IMPOSSIBLE : ${error}` }),
+    onError: (error) => {
+      invalidateWithDashboard(queryClient, ['syncStatus']);
+      setAlert({ type: 'error', message: `Synchro santé impossible : ${readableError(error)}` });
+    },
   });
 
   const handleRefresh = () => {
@@ -102,7 +110,7 @@ export function SystemTab() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-sans text-text-primary">SYSTÈME</h2>
+        <h2 className="text-lg font-sans text-text-primary">Système</h2>
         <Button
           variant="outline"
           size="sm"
@@ -110,7 +118,7 @@ export function SystemTab() {
           className="text-text-secondary hover:border-neon-cyan/50 hover:text-neon-cyan"
         >
           <RefreshCw className="w-3 h-3" />
-          ACTUALISER
+          Actualiser
         </Button>
       </div>
 
@@ -120,7 +128,7 @@ export function SystemTab() {
         </div>
       )}
 
-      <Panel variant="inset" title="ÉTAT">
+      <Panel level={3} variant="inset" title="État">
         <div className="space-y-2">
           <StatusRow
             icon={<Server className="w-4 h-4" />}
@@ -140,17 +148,17 @@ export function SystemTab() {
         </div>
       </Panel>
 
-      <Panel variant="inset" title="SYNCHRONISATION GARMIN">
+      <Panel level={3} variant="inset" title="Synchronisation Garmin">
         {syncStatus?.garmin_authenticated ? (
           <div className="space-y-4">
-            <div className="p-3 rounded border border-success-green/30">
+            <div className="ui-inset p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-success-green font-mono flex items-center gap-2">
+                  <div className="text-sm text-success-green font-sans flex items-center gap-2">
                     <CheckCircle className="w-4 h-4" />
                     {syncStatus.user_email ? `Connecté en tant que ${syncStatus.user_email}` : 'Connecté'}
                   </div>
-                  <div className="text-xs text-text-muted mt-1 font-mono">
+                  <div className="text-xs text-text-muted mt-1 font-sans">
                     Dernière sync : {syncStatus.last_sync ? new Date(syncStatus.last_sync).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }) : 'jamais'}
                     {' · '}
                     Activités : {syncStatus.activities_synced}
@@ -174,10 +182,10 @@ export function SystemTab() {
 
             <SyncOptionsForm onSync={(options) => syncMutation.mutate(options)} isLoading={syncMutation.isPending} />
 
-            <div className="p-3 rounded border border-neon-purple/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="ui-inset p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="text-sm text-neon-purple font-mono">Données santé (VFC, sommeil, batterie corporelle)</div>
-                <div className="text-xs text-text-muted mt-1 font-mono">
+                <div className="text-sm text-neon-purple font-sans">Données santé (VFC, sommeil, batterie corporelle)</div>
+                <div className="text-xs text-text-muted mt-1 font-sans">
                   {healthStatus?.days_stored
                     ? `${healthStatus.days_stored} jours stockés, dernier le ${healthStatus.last_date}`
                     : 'Aucune donnée santé pour le moment'}
@@ -189,25 +197,25 @@ export function SystemTab() {
                 onClick={() => healthSyncMutation.mutate()}
                 loading={healthSyncMutation.isPending}
               >
-                {healthSyncMutation.isPending ? 'SYNCHRO…' : 'SYNCHRONISER 7 JOURS'}
+                {healthSyncMutation.isPending ? 'Synchro…' : 'Synchroniser 7 jours'}
               </Button>
             </div>
           </div>
         ) : (
           <div className="p-4 rounded border border-text-muted/30 text-center">
             <XCircle className="w-6 h-6 text-danger-red mx-auto mb-2" />
-            <div className="text-sm text-text-muted font-mono">NON CONNECTÉ</div>
+            <div className="text-sm text-text-muted font-sans">Non connecté</div>
             <Button className="mt-3" onClick={() => setShowLoginModal(true)}>
-              CONNECTER
+              Connecter
             </Button>
           </div>
         )}
       </Panel>
 
-      <Panel variant="inset" title="SEUIL ET ZONES">
+      <Panel level={3} variant="inset" title="Seuil et zones">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-4">
-            <p className="text-xs text-text-muted font-mono">
+            <p className="text-xs text-text-muted font-sans">
               Chaque synchro reprend le seuil mesuré par Garmin et l'applique aux séances suivantes.
             </p>
             <Button
@@ -216,15 +224,15 @@ export function SystemTab() {
               onClick={() => thresholdMutation.mutate()}
               loading={thresholdMutation.isPending}
             >
-              {thresholdMutation.isPending ? 'LECTURE…' : 'LIRE LE SEUIL'}
+              {thresholdMutation.isPending ? 'Lecture…' : 'Lire le seuil'}
             </Button>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-xs text-text-muted font-mono">
+            <p className="text-xs text-text-muted font-sans">
               Recalcule le temps par zone sur toutes les séances déjà enregistrées, seuil actuel compris.
             </p>
             <Button size="sm" onClick={() => zonesMutation.mutate()} loading={zonesMutation.isPending}>
-              {zonesMutation.isPending ? 'CALCUL…' : 'RECALCULER'}
+              {zonesMutation.isPending ? 'Calcul…' : 'Recalculer'}
             </Button>
           </div>
         </div>
@@ -235,8 +243,8 @@ export function SystemTab() {
         onClose={() => setShowLoginModal(false)}
         onSuccess={() => {
           setShowLoginModal(false);
-          setAlert({ type: 'success', message: 'GARMIN CONNECT AUTHENTIFIÉ' });
-          queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+          setAlert({ type: 'success', message: 'Garmin Connect authentifié' });
+          invalidateWithDashboard(queryClient, ['syncStatus']);
         }}
       />
     </div>

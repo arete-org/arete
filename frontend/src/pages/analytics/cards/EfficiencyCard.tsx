@@ -30,13 +30,15 @@ export function EfficiencyCard({
       question="Le cœur dérive-t-il quand la sortie s'allonge ?"
       card={card}
       secondaryLabels={['Coût cardiaque']}
+      term="decouplage"
+      secondaryTerms={['cout-cardiaque']}
       previousLabel={previousLabel}
       loading={loading}
       error={error}
     >
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
+          <CartesianGrid stroke={CHART.grid} vertical={false} />
           <XAxis {...bucketAxis(bucket)} />
           <YAxis
             yAxisId="d"
@@ -60,17 +62,17 @@ export function EfficiencyCard({
             ]}
           />
           <ReferenceLine yAxisId="d" y={5} stroke={CHART.green} strokeDasharray="4 4" />
-          <Line
+          <Line isAnimationActive={false}
             yAxisId="d"
             type="monotone"
             dataKey="decoupling_pct"
             name="Découplage"
             stroke={COLORS.neonCyan}
             strokeWidth={2}
-            connectNulls
+            connectNulls={false}
             dot={{ r: 3 }}
           />
-          <Line
+          <Line isAnimationActive={false}
             yAxisId="e"
             type="monotone"
             dataKey="efficiency"
@@ -78,7 +80,7 @@ export function EfficiencyCard({
             stroke={CHART.purple}
             strokeWidth={1.5}
             strokeDasharray="4 3"
-            connectNulls
+            connectNulls={false}
             dot={false}
           />
         </LineChart>

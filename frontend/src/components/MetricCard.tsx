@@ -1,6 +1,8 @@
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
-import { type ZoneKind, zoneLabel } from '@/lib/fr';
+import { capitalized, type ZoneKind, zoneLabel } from '@/lib/fr';
+import type { GlossaryId } from '@/lib/glossary';
 import { cn, getZoneColor } from '@/lib/utils';
+import { GlossaryLink } from './GlossaryLink';
 
 interface MetricCardProps {
   title: string;
@@ -9,47 +11,38 @@ interface MetricCardProps {
   zone: string | null | undefined;
   subtitle?: string;
   trend?: 'up' | 'down' | 'stable';
+  /** The glossary entry its "?" opens. */
+  term?: GlossaryId;
 }
 
-// Glow shadows use the theme colors (success-green, warning-orange, danger-red, neon-cyan) at 30%.
+// Status stays in the badge; the shared card surface remains visually quiet.
 const zoneColorMap = {
   green: {
-    border: 'border-success-green/50',
     badge: 'bg-success-green/20 text-success-green',
-    glow: 'hover:shadow-[0_0_20px_color-mix(in_srgb,var(--color-success-green)_30%,transparent)]',
   },
   orange: {
-    border: 'border-warning-orange/50',
     badge: 'bg-warning-orange/20 text-warning-orange',
-    glow: 'hover:shadow-[0_0_20px_color-mix(in_srgb,var(--color-warning-orange)_30%,transparent)]',
   },
   red: {
-    border: 'border-danger-red/50',
     badge: 'bg-danger-red/20 text-danger-red',
-    glow: 'hover:shadow-[0_0_20px_color-mix(in_srgb,var(--color-danger-red)_30%,transparent)]',
   },
   cyan: {
-    border: 'border-neon-cyan/50',
     badge: 'bg-neon-cyan/20 text-neon-cyan',
-    glow: 'hover:shadow-[0_0_20px_color-mix(in_srgb,var(--color-neon-cyan)_30%,transparent)]',
   },
 };
 
-export function MetricCard({ title, value, kind, zone, subtitle, trend }: MetricCardProps) {
+export function MetricCard({ title, value, kind, zone, subtitle, trend, term }: MetricCardProps) {
   const zoneColor = getZoneColor(kind, zone);
   const colors = zoneColorMap[zoneColor];
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
 
   return (
-    <div
-      className={cn(
-        'glass-panel p-4 transition-all duration-300 hover:scale-[1.02] animate-fade-up',
-        colors.border,
-        colors.glow
-      )}
-    >
+    <div className="glass-panel p-4 animate-fade-up">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-mono text-text-muted uppercase tracking-wider">{title}</span>
+        <span className="flex items-center gap-1 text-xs font-sans text-text-muted">
+          {title}
+          {term && <GlossaryLink term={term} />}
+        </span>
         {trend && (
           <TrendIcon
             className={cn(
@@ -62,12 +55,12 @@ export function MetricCard({ title, value, kind, zone, subtitle, trend }: Metric
         )}
       </div>
 
-      <div className="text-3xl font-mono font-bold text-text-primary mb-2">{value}</div>
+      <div className="text-3xl font-sans font-semibold tabular-nums text-text-primary mb-2">{value}</div>
 
       <div
-        className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono uppercase', colors.badge)}
+        className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-sans', colors.badge)}
       >
-        {zoneLabel(kind, zone)}
+        {capitalized(zoneLabel(kind, zone))}
         {zoneColor === 'green' && ' ✓'}
         {zoneColor === 'red' && ' ⚠'}
       </div>

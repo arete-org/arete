@@ -165,8 +165,9 @@ Migration 17 adds connection preferences and proposed actions with outcomes
 DuckDB. Each proposal is bounded to 10,000 characters and at most 100 live pending
 proposals exist per connection. Actions older than 30 days are removed when a new
 proposal is created. Browser threads persist only action IDs; cards fetch the
-server's authoritative snapshot/status after reload. Missing old cards cannot be
-approved. Calendar routes bypass the PWA API cache and return `Cache-Control:
+server's authoritative snapshot/status after reload, and again on each reopening of
+the coach until the outcome is final (succeeded, rejected, expired, invalidated,
+failed). Missing old cards cannot be approved. Calendar routes bypass the PWA API cache and return `Cache-Control:
 no-store`; an offline card cannot approve from a cached server response.
 Calendar tool inputs/results may appear in optional LangSmith traces,
 under the existing tracing policy.

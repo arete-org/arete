@@ -21,6 +21,7 @@ from arete.services import briefing as briefing_service
 from arete.services.athlete_scope import athlete_scope
 from arete.services.coaching_repository import BriefingRepository
 from arete.services.coaching_rules import RuleFacts
+from arete.services.memory import read_file as read_memory_file
 
 #: An athlete with a training history: there is something to coach on.
 TRAINED = RuleFacts(
@@ -329,6 +330,166 @@ class TestGetOrCreate:
             assert (stored.text, stored.source) == (text, "agent")
 
 
+class TestClaim:
+    """The stored claim stops a second instance from paying for the same day."""
+
+    def test_a_run_held_elsewhere_answers_none_without_a_model(
+        self, repo, clean_day, enabled
+    ):
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+        produce = Mock(return_value="jamais")
+        assert (
+            briefing_service.get_or_create_briefing(
+                produce=produce, target_date=clean_day
+            )
+            is None
+        )
+        produce.assert_not_called()
+
+    def test_a_stopped_run_is_settled_with_the_floor_not_replayed(
+        self, repo, clean_day, enabled
+    ):
+        # The function was stopped mid-run: its claim outlived the run bound.
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+        produce = Mock(return_value="jamais")
+        with (
+            patch.object(briefing_service, "CLAIM_EXPIRY", timedelta(0)),
+            patch(
+                "arete.services.briefing._rule_floor",
+                return_value=("floor", "info", TRAINED),
+            ),
+        ):
+            b = briefing_service.get_or_create_briefing(
+                produce=produce, target_date=clean_day
+            )
+        produce.assert_not_called()
+        assert (b.text, b.source) == ("floor", "rules")
+        statuses = [r.status for r in repo.list_recent() if r.date == clean_day]
+        assert sorted(statuses) == ["failed", "ok"]
+
+    def test_claims_are_dated_in_utc_whatever_the_instance_clock(
+        self, repo, clean_day, enabled
+    ):
+        # A live claim written by an instance on another clock (Vercel in UTC,
+        # Docker in Paris) must neither look stale nor block for hours.
+        from datetime import UTC, datetime
+
+        from arete.dataio.db import db_connection
+
+        utc_now = datetime.now(UTC).replace(tzinfo=None)
+        with db_connection() as con:
+            con.execute(
+                "INSERT INTO app.coach_briefings (user_id,date,text,status,source,trigger,created_at) "
+                "VALUES (getvariable('arete_athlete_id'), ?, '', 'pending', 'agent', 'api', ?)",
+                [clean_day, utc_now - timedelta(seconds=10)],
+            )
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5)) is None
+        with db_connection() as con:
+            con.execute(
+                "UPDATE app.coach_briefings SET created_at = ? WHERE date = ? AND status = 'pending'",
+                [utc_now - timedelta(minutes=6), clean_day],
+            )
+        claim = repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+        assert claim is not None and claim[1] is True  # the stopped run's claim
+
+    def test_the_claim_is_released_after_a_failed_run(self, repo, clean_day, enabled):
+        with patch(
+            "arete.services.briefing._rule_floor",
+            return_value=("floor", "info", TRAINED),
+        ):
+            briefing_service.get_or_create_briefing(
+                produce=Mock(side_effect=RuntimeError("model is away")),
+                target_date=clean_day,
+            )
+        assert "pending" not in [r.status for r in repo.list_recent()]
+        assert repo.claim(clean_day, trigger="api", expiry=timedelta(minutes=5))
+
+
+class TestSchedulerRewrite:
+    """The cron rewrites the dashboard's briefing only for data it lacked."""
+
+    def test_a_rewrite_is_marked_and_served(self, repo, clean_day, enabled):
+        earlier = None
+        with (
+            patch("arete.coaching.run_briefing", side_effect=["Avant.", "Après."]),
+            patch(
+                "arete.services.briefing._rule_floor",
+                return_value=("floor", "info", TRAINED),
+            ),
+        ):
+            earlier = get_or_create_briefing(target_date=clean_day)
+            assert get_or_create_briefing(target_date=clean_day).id == earlier.id
+            later = get_or_create_briefing(
+                target_date=clean_day, trigger="scheduler", replacing=earlier
+            )
+        assert earlier.revised is False
+        assert (later.text, later.trigger, later.revised) == (
+            "Après.",
+            "scheduler",
+            True,
+        )
+        assert repo.get_for_day(clean_day).id == later.id
+
+    def test_changed_facts_are_what_make_a_briefing_stale(
+        self, repo, clean_day, enabled
+    ):
+        from arete.dataio.db import db_connection
+
+        floor = patch(
+            "arete.services.briefing._rule_floor",
+            return_value=("floor", "info", TRAINED),
+        )
+        with floor, patch("arete.coaching.run_briefing", return_value="Écrit tôt."):
+            written = get_or_create_briefing(target_date=clean_day)
+        assert written.facts_digest
+        with floor:
+            assert not briefing_service.facts_changed(written)
+        # This sync's data: a decision, a session, the night's Garmin health.
+        with db_connection() as con:
+            con.execute(
+                "INSERT INTO app.daily_metrics (user_id, date, race_10k_sec) "
+                "VALUES (getvariable('arete_athlete_id'), ?, 2400)",
+                [clean_day],
+            )
+        try:
+            with floor:
+                assert briefing_service.facts_changed(written)
+        finally:
+            with db_connection() as con:
+                con.execute("DELETE FROM app.daily_metrics WHERE date = ?", [clean_day])
+
+    def test_a_briefing_without_a_digest_counts_as_changed(self, repo, clean_day):
+        repo.create(text="Avant ARE-39.", briefing_date=clean_day)
+        assert briefing_service.facts_changed(repo.get_for_day(clean_day))
+
+    def test_a_failed_rewrite_keeps_the_briefing_it_replaces(
+        self, repo, clean_day, enabled
+    ):
+        floor = patch(
+            "arete.services.briefing._rule_floor",
+            return_value=("floor", "info", TRAINED),
+        )
+        with floor, patch("arete.coaching.run_briefing", return_value="Le bon texte."):
+            written = get_or_create_briefing(target_date=clean_day)
+        with (
+            floor,
+            patch(
+                "arete.coaching.run_briefing", side_effect=RuntimeError("model is away")
+            ),
+        ):
+            kept = get_or_create_briefing(
+                target_date=clean_day, trigger="scheduler", replacing=written
+            )
+        assert kept == written
+        served = repo.get_for_day(clean_day)
+        assert (served.id, served.text, served.revised) == (
+            written.id,
+            "Le bon texte.",
+            False,
+        )
+        assert "failed" in [r.status for r in repo.list_recent() if r.date == clean_day]
+
+
 # ---------------------------------------------------------------------------
 # The journal the briefing writes into every morning must stay bounded
 # ---------------------------------------------------------------------------
@@ -367,13 +528,13 @@ class TestLedgerRotation:
         ledger.write_text(self._entries(60), encoding="utf-8")
         archive = rotate_sessions_ledger()
 
-        assert archive is not None and archive.exists()
-        kept = ledger.read_text(encoding="utf-8")
+        assert archive is not None
+        kept = read_memory_file("sessions.md").content
         assert len(kept) < MAX_SESSIONS_LEDGER_CHARS
         # Never mid-entry: half a session reads as a different session.
         assert kept.startswith("## ")
         # Nothing is lost, it just moved.
-        assert "séance 1\n" in archive.read_text(encoding="utf-8")
+        assert "séance 1\n" in read_memory_file(archive).content
 
     def test_rotation_is_idempotent(self, ledger):
         from arete.services.memory import rotate_sessions_ledger
@@ -426,7 +587,10 @@ class TestSessionFeedback:
 
         with patch("arete.coaching.run_feedback", return_value="ok") as run:
             enrich_session_feedback("Séance terminée.", [])
-        assert run.call_args[0][0] == "Séance terminée."
+        assert (
+            run.call_args[0][0]
+            == "Observation calculée (pas une déclaration) : Séance terminée."
+        )
 
     def test_an_overlong_answer_is_refused(self):
         from arete.coaching import run_feedback as _run_agent
@@ -447,7 +611,9 @@ class TestSessionFeedback:
         with (
             patch(
                 "arete.agent.factory.create_agent",
-                side_effect=lambda *a, **k: k["name"],
+                side_effect=lambda *a, **k: Mock(
+                    with_config=Mock(return_value=k["name"])
+                ),
             ),
             patch("arete.coaching.build_chat_model", return_value=object()),
         ):
@@ -482,7 +648,7 @@ class TestAppendEntry:
         assert append_entry(
             "sessions.md", "trail — sortie longue", "20 km", date(2026, 10, 9)
         )
-        assert (memory / "sessions.md").read_text() == (
+        assert read_memory_file("sessions.md").content == (
             "## 2026-10-09 — trail — sortie longue\n20 km\n"
         )
 
@@ -492,7 +658,7 @@ class TestAppendEntry:
         day = date(2026, 10, 9)
         append_entry("sessions.md", "footing", "8 km", day)
         assert not append_entry("sessions.md", "footing", "8 km encore", day)
-        assert (memory / "sessions.md").read_text().count("## 2026-10-09") == 1
+        assert read_memory_file("sessions.md").content.count("## 2026-10-09") == 1
 
     def test_a_note_is_one_dated_line(self, memory):
         from arete.services.memory import append_entry
@@ -500,14 +666,14 @@ class TestAppendEntry:
         append_entry(
             "notes.md", "genou", "gêne au genou gauche\nen descente", date(2026, 10, 9)
         )
-        assert (memory / "notes.md").read_text() == (
+        assert read_memory_file("notes.md").content == (
             "- 2026-10-09 — genou : gêne au genou gauche en descente\n"
         )
 
     def test_an_unknown_ledger_is_refused(self, memory):
         from arete.services.memory import append_entry
 
-        with pytest.raises(ValueError):
+        with pytest.raises(PermissionError):
             append_entry("other.md", "x", "y")
 
 
@@ -523,6 +689,7 @@ class TestBriefingFacts:
                 "target_duration_min": 45,
                 "target_hr_zone": "Z3",
                 "description": "3x10' tempo",
+                "status": type("S", (), {"value": "pending"})(),
             },
         )()
         with patch(
@@ -562,6 +729,8 @@ class TestBriefingFacts:
         assert "Préparation Garmin (VFC, sommeil, cette nuit) : 71/100" in garmin
         assert "Préparation estimée par la charge" in model
         assert garmin.count("Préparation") == 1
+        # The heading names what its lines hold, in the dashboard's words.
+        assert "Charge, fraîcheur et préparation :\n- Charge aiguë" in garmin
 
     def test_the_facts_carry_the_decision_and_its_reason(self, clean_day):
         from arete.services.briefing import briefing_facts
@@ -644,7 +813,8 @@ class TestBriefingFacts:
             generate_briefing(target_date=clean_day)
         assert facts.call_count == 1
         # The model reads the floor's numbers rather than a second computation.
-        assert "(ACWR, sur 28 jours) : 1.00" in run.call_args.args[0]
+        # With a decimal comma, which the French briefing copies.
+        assert "(ACWR, sur 28 jours) : 1,00" in run.call_args.args[0]
 
     def test_concurrent_first_requests_produce_once(self, clean_day, enabled):
         from concurrent.futures import ThreadPoolExecutor
@@ -683,9 +853,12 @@ class TestFeedbackFiling:
             )
         assert (text, source) == ("Belle séance.", "agent")
         assert "RPE ressenti : 7/10" in run.call_args.args[0]
-        ledger = (memory / "sessions.md").read_text()
+        ledger = read_memory_file("sessions.md").content
         assert ledger.startswith("## 2026-10-09 — trail — sortie longue\n")
-        assert "Retour du coach : Belle séance." in ledger
+        assert (
+            "Interprétation du coach (non confirmée, jamais une preuve) : Belle séance."
+            in ledger
+        )
 
     def test_a_repeated_request_files_nothing_more(self, memory):
         from arete.coaching import enrich_session_feedback
@@ -693,7 +866,7 @@ class TestFeedbackFiling:
         with patch("arete.coaching.run_feedback", return_value="ok"):
             enrich_session_feedback("20 km.", [], self._evidence())
             enrich_session_feedback("20 km.", [], self._evidence())
-        assert (memory / "sessions.md").read_text().count("## 2026-10-09") == 1
+        assert read_memory_file("sessions.md").content.count("## 2026-10-09") == 1
 
     def test_a_failed_model_still_files_the_facts(self, memory):
         from arete.coaching import enrich_session_feedback
@@ -701,5 +874,5 @@ class TestFeedbackFiling:
         with patch("arete.coaching.run_feedback", side_effect=RuntimeError("down")):
             text, source = enrich_session_feedback("20 km.", [], self._evidence())
         assert (text, source) == ("20 km.", "rules")
-        ledger = (memory / "sessions.md").read_text()
+        ledger = read_memory_file("sessions.md").content
         assert "20 km." in ledger and "Retour du coach" not in ledger

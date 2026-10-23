@@ -7,11 +7,13 @@ import { useAuthState } from '@/components/auth/authState';
 import { adminApi, ApiError, type AccountRole, type AdminAccount } from '@/lib/api';
 import { qk } from '@/lib/queryKeys';
 import { cn } from '@/lib/utils';
+import { ProductKpisPanel } from './ProductKpisPanel';
+import { useCoachWords } from '@/lib/coachName';
 
 /** The owner's athlete: nobody deactivates it. */
 const OWNER_ATHLETE_ID = 1;
 
-const COLUMNS = ['COMPTE', 'RÔLE', 'ÉTAT', 'DERNIÈRE ACTIVITÉ', 'DERNIÈRE SYNCHRO', 'SYNCHRO AUTO', 'ACTIONS'];
+const COLUMNS = ['Compte', 'Rôle', 'État', 'Dernière activité', 'Dernière synchro', 'Synchro auto', 'Actions'];
 
 const DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 const when = (iso: string | null) => (iso ? DATE_FORMAT.format(new Date(iso)) : 'jamais');
@@ -30,6 +32,60 @@ function leaseLabel(account: AdminAccount): string {
 
 const refusal = (error: Error) =>
   error instanceof ApiError ? (error.detail ?? 'Action impossible.') : 'Action impossible.';
+
+function FeatureFlagsPanel() {
+  const coach = useCoachWords();
+  const queryClient = useQueryClient();
+  const flags = useQuery({ queryKey: qk.adminFeatureFlags, queryFn: adminApi.featureFlags, retry: false });
+  const update = useMutation({
+    mutationFn: adminApi.setFeatureFlags,
+    onSuccess: (saved) => queryClient.setQueryData(qk.adminFeatureFlags, saved),
+  });
+
+  const attention = useMutation({ mutationFn: adminApi.setCoachingAttention, onSuccess: saved => queryClient.setQueryData(qk.adminFeatureFlags, saved) });
+  return (
+    <Panel variant="inset" className="space-y-3">
+      <h2 className="text-lg font-sans text-text-primary">Fonctionnalités expérimentales</h2>
+      {flags.isPending ? (
+        <LoadingState message="Chargement des options…" />
+      ) : flags.isError ? (
+        <ErrorState message="Options indisponibles" onRetry={() => void flags.refetch()} />
+      ) : (
+        <>
+          <label className="flex items-start gap-3 text-sm text-text-secondary">
+            <input
+              type="checkbox"
+              className="accent-neon-cyan mt-0.5"
+              checked={flags.data.glm_flash}
+              disabled={update.isPending || (!flags.data.glm_flash_available && !flags.data.glm_flash)}
+              onChange={(event) => update.mutate(event.target.checked)}
+              aria-describedby="glm-flash-description"
+            />
+            Coach GLM Flash (payant)
+          </label>
+          <p id="glm-flash-description" className="text-xs text-text-muted">
+            Active GLM 5.3 Flash pour tous les athlètes : chat, briefings et bilans.
+            Plafond : 0,15 $ en entrée et 0,50 $ en sortie par million de tokens.
+            Le changement s’applique aux prochaines demandes ; les réponses en cours continuent.
+            Désactiver rétablit le modèle configuré sur le serveur.
+          </p>
+          <label className="flex min-h-11 items-center gap-3 text-sm text-text-secondary">
+            <input type="checkbox" checked={flags.data.coaching_attention ?? false} disabled={attention.isPending} onChange={event => attention.mutate(event.target.checked)} />
+            Coordination proactive {coach.of}
+          </label>
+          <p className="text-xs text-text-muted">Active le plafond quotidien et la déduplication des questions pour les prochains envois. Désactivé : observation des priorités, comportement d’envoi existant.</p>
+          {attention.error && <p role="alert" className="text-xs text-danger-red">{refusal(attention.error)}</p>}
+          {!flags.data.glm_flash_available && (
+            <p className="text-xs text-warning-orange">OpenRouter et sa clé API doivent être configurés sur le serveur.</p>
+          )}
+        </>
+      )}
+      {update.isPending && <p role="status" className="text-xs text-text-muted">Enregistrement…</p>}
+      {update.isSuccess && <p role="status" className="text-xs text-success-green">Option enregistrée.</p>}
+      {update.isError && <p role="alert" className="text-xs text-danger-red">{refusal(update.error)}</p>}
+    </Panel>
+  );
+}
 
 /**
  * Every athlete and login of the instance, for admins. The buttons mirror the
@@ -84,8 +140,10 @@ export function AdminTab() {
 
   return (
     <div className="space-y-6">
+      <FeatureFlagsPanel />
+      <ProductKpisPanel />
       <div className="flex justify-between items-center gap-4">
-        <h2 className="text-lg font-sans text-text-primary">COMPTES ET ATHLÈTES</h2>
+        <h2 className="text-lg font-sans text-text-primary">Comptes et athlètes</h2>
         <Button
           variant="outline"
           size="sm"
@@ -93,7 +151,7 @@ export function AdminTab() {
           className="text-text-secondary hover:border-neon-cyan/50 hover:text-neon-cyan"
         >
           <RefreshCw className="w-3 h-3" />
-          ACTUALISER
+          Actualiser
         </Button>
       </div>
       <p className="text-xs text-text-muted">
@@ -103,21 +161,21 @@ export function AdminTab() {
       {notice && (
         <p
           role={notice.role}
-          className={cn('text-xs font-mono', notice.role === 'alert' ? 'text-danger-red' : 'text-success-green')}
+          className={cn('text-xs font-sans', notice.role === 'alert' ? 'text-danger-red' : 'text-success-green')}
         >
           {notice.text}
         </p>
       )}
 
       {accounts.isPending ? (
-        <LoadingState message="CHARGEMENT DES COMPTES…" />
+        <LoadingState message="Chargement des comptes…" />
       ) : accounts.isError ? (
-        <ErrorState message="COMPTES INDISPONIBLES" onRetry={() => void accounts.refetch()} />
+        <ErrorState message="Comptes indisponibles" onRetry={() => void accounts.refetch()} />
       ) : (
         <Panel variant="inset" className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="font-mono text-[11px] tracking-wider text-text-muted">
+              <tr className="font-sans text-[11px] tracking-wider text-text-muted">
                 {COLUMNS.map((column) => (
                   <th key={column} scope="col" className="pb-2 pr-4 font-normal whitespace-nowrap">
                     {column}
@@ -136,13 +194,13 @@ export function AdminTab() {
                         <span className="text-text-muted">Aucun compte (athlète {account.athlete_id})</span>
                       ) : (
                         <>
-                          <div className="font-mono text-text-primary whitespace-nowrap">{account.email}</div>
+                          <div className="font-sans text-text-primary whitespace-nowrap">{account.email}</div>
                           {account.name && <div className="text-text-muted">{account.name}</div>}
                         </>
                       )}
                     </td>
                     <td className="py-3 pr-4 whitespace-nowrap text-text-secondary">{roleLabel(account)}</td>
-                    {/* This cell and SYNCHRO AUTO wrap after "… le", never inside the date. */}
+                    {/* This cell and Synchro auto wrap after "… le", never inside the date. */}
                     <td
                       className={cn(
                         'py-3 pr-4 min-w-[8.5rem]',

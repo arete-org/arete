@@ -1,19 +1,24 @@
-"""Capability discovery and request-local loaded sets, independent of hooks."""
+"""Server-selected capabilities shared by binding, context and authorization."""
 
-import json
-import unicodedata
 from typing import Any
 
 from langchain_core.tools import BaseTool
 
 from arete.agent.capabilities.models import Toolkit
-from arete.agent.capabilities.registry import CAPABILITIES
+from arete.agent.capabilities.registry import (
+    CAPABILITIES,
+    FACT_MEMORY_TOOL_NAMES,
+    FILESYSTEM_TOOL_NAMES,
+    JOURNAL_TOOL_NAMES,
+)
 from arete.agent.runtime.context import AgentContext
 from arete.agent.runtime.policy import ProfileSpec, resolve_policy
 
 
 def _profile(runtime: Any) -> ProfileSpec:
     context = getattr(runtime, "context", None)
+    if isinstance(context, AgentContext) and context.profile == "slack":
+        assert context.resolved_profile is not None, "Slack invocation policy required"
     return (
         (context.resolved_profile or context.profile)
         if isinstance(context, AgentContext)
@@ -31,89 +36,28 @@ def _available_tools(tk: Toolkit, profile: ProfileSpec) -> list[BaseTool]:
     return [t for t in tk.tools if policy.can_execute(tk.id, t.name, tk.read_tools)]
 
 
-def _loaded(state: Any, profile: ProfileSpec) -> list[str]:
-    # The briefing always needs analytics: avoid search/load model round trips.
-    initial = list(resolve_policy(profile).profile.preloaded)
+def authorized_tools(profile: ProfileSpec) -> list[BaseTool]:
     return [
-        tid
-        for tid in dict.fromkeys(initial + loaded_toolkits(state))
-        if tid in _registry(profile)
+        tool
+        for tk in _registry(profile).values()
+        for tool in _available_tools(tk, profile)
     ]
 
 
-def loaded_toolkits(state: Any) -> list[str]:
-    """Toolkits loaded so far in this run, from the graph state.
-
-    Tolerant of a state that does not carry the key yet: the channel is unset
-    until the first ``load_toolkit``, and ``before_agent`` no longer seeds it.
-    """
-    if isinstance(state, dict):
-        return list(state.get("loaded_toolkits") or [])
-    return list(getattr(state, "loaded_toolkits", None) or [])
+def tool_instructions_suffix(profile: ProfileSpec) -> str:
+    return "\n\n".join(tk.instructions for tk in _registry(profile).values())
 
 
-def tool_instructions_suffix(loaded: list[str]) -> str:
-    """Pinned instructions of loaded toolkits, for the system prompt tail."""
-    return "\n\n".join(
-        CAPABILITIES[toolkit_id].instructions
-        for toolkit_id in loaded
-        if toolkit_id in CAPABILITIES
-    )
-
-
-def _catalog(hint: str, profile: ProfileSpec = "chat") -> str:
-    """The whole catalog, for a query that matched nothing."""
-    return json.dumps(
-        {
-            "results": [],
-            "available": [
-                {"toolkit_id": tid, "description": tk.description}
-                for tid, tk in _registry(profile).items()
-            ],
-            "hint": hint,
-        },
-        ensure_ascii=False,
-    )
-
-
-def _fold(text: str) -> str:
-    """Lowercased and stripped of accents.
-
-    A query typed in a hurry, or transcribed from speech, rarely carries them:
-    "enregistrer une seance" has to reach a toolkit described with "séance".
-    """
-    decomposed = unicodedata.normalize("NFD", text.lower())
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
-
-
-def _search_toolkits(
-    query: str, loaded: list[str], profile: ProfileSpec = "chat"
-) -> str:
-    """Find toolkits matching a capability query.
-
-    Token-based: every query token (>= 4 chars, stemmed-lite by stripping the
-    final 's') must hit the id or description. More forgiving than substring,
-    which misses "planifier une séance" vs "créer… des séances".
-    """
-    needle_tokens = [t.rstrip("s") for t in _fold(query).split() if len(t) >= 4]
-    if not needle_tokens:
-        # Empty/garbage query: return the catalog rather than everything-is-a-hit.
-        return _catalog("Requête vide; voici les toolkits disponibles.", profile)
-
-    hits = []
-    for tid, tk in _registry(profile).items():
-        haystack = _fold(tid + " " + tk.description)
-        hay_tokens = {t.rstrip("s") for t in haystack.split()}
-        if all(tok in haystack or tok in hay_tokens for tok in needle_tokens):
-            hits.append(
-                {
-                    "toolkit_id": tid,
-                    "description": tk.description,
-                    "loaded": tid in loaded,
-                }
-            )
-    if not hits:
-        return _catalog(
-            "Aucun toolkit pour cette requête; voici ceux qui existent.", profile
-        )
-    return json.dumps({"results": hits}, ensure_ascii=False)
+def tool_available(profile: ProfileSpec, name: str) -> bool:
+    """Use the same gate for model binding and execution, including ledger tools."""
+    policy = resolve_policy(profile)
+    if name in FACT_MEMORY_TOOL_NAMES:
+        return policy.profile.fact_memory_tools
+    if name in FILESYSTEM_TOOL_NAMES:
+        return policy.profile.filesystem_tools
+    if name in JOURNAL_TOOL_NAMES:
+        return policy.profile.journal_tools
+    domain_names = {t.name for tk in CAPABILITIES.values() for t in tk.tools}
+    if name in domain_names:
+        return name in {t.name for t in authorized_tools(profile)}
+    return policy.profile.id != "slack" or policy.profile.journal_tools

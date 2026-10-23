@@ -72,10 +72,10 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
             <>
               <Button variant="danger" strong onClick={recorder.stop}>
                 <Square className="w-4 h-4" />
-                ARRÊTER · {clock(recorder.elapsedMs)}
+                Arrêter · {clock(recorder.elapsedMs)}
               </Button>
               <Button variant="outline" size="sm" onClick={recorder.cancel}>
-                ANNULER
+                Annuler
               </Button>
               <span
                 className="w-2 h-2 rounded-full bg-danger-red animate-pulse motion-reduce:animate-none"
@@ -96,12 +96,12 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
             >
               <Mic className="w-4 h-4" />
               {sending
-                ? 'TRANSCRIPTION…'
+                ? 'Transcription…'
                 : recorder.status === 'requesting'
-                  ? 'AUTORISE LE MICRO…'
+                  ? 'Autorise le micro…'
                   : failure
-                    ? 'RÉESSAYER'
-                    : 'DICTER LA SÉANCE'}
+                    ? 'Réessayer'
+                    : 'Dicter la séance'}
             </Button>
           )}
 
@@ -111,7 +111,7 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
               size="sm"
               onClick={() => abortRef.current?.abort()}
             >
-              ANNULER
+              Annuler
             </Button>
           )}
         </div>
@@ -131,13 +131,13 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
         )}
 
         {recorder.autoStopped && !sending && (
-          <p className="text-xs text-warning-orange font-mono">
+          <p className="text-xs text-warning-orange font-sans">
             Enregistrement arrêté à 2 min.
           </p>
         )}
 
         {transcribeMutation.isSuccess && !sending && !failure && (
-          <p className={cn('text-xs font-mono text-success-green flex items-center gap-1')}>
+          <p className={cn('text-xs font-sans text-success-green flex items-center gap-1')}>
             <Check className="w-3 h-3" aria-hidden />
             Dictée transcrite
             {lastDurationMs ? ` · ${clock(lastDurationMs)}` : ''}
@@ -147,7 +147,7 @@ export const VoiceDictation = forwardRef<VoiceDictationHandle, VoiceDictationPro
         {failure && (
           <p
             role="alert"
-            className="text-xs font-mono text-danger-red flex items-center gap-1"
+            className="text-xs font-sans text-danger-red flex items-center gap-1"
           >
             <AlertCircle className="w-3 h-3 shrink-0" aria-hidden />
             {failure}

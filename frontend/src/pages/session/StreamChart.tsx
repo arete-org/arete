@@ -31,7 +31,7 @@ export function StreamChart({ rows, dataKey, label, color, format, reversed, are
   };
   const axes = (
     <>
-      <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
+      <CartesianGrid stroke={CHART.grid} vertical={false} />
       <XAxis
         dataKey="t"
         type="number"
@@ -58,8 +58,8 @@ export function StreamChart({ rows, dataKey, label, color, format, reversed, are
   );
   return (
     <figure>
-      <figcaption className="text-xs font-mono text-text-muted uppercase tracking-wider mb-1">{label}</figcaption>
-      <ResponsiveContainer width="100%" height={150}>
+      <figcaption className="text-sm font-medium text-text-secondary mb-2">{label}</figcaption>
+      <ResponsiveContainer width="100%" height={180}>
         {area ? (
           <AreaChart {...common}>
             {axes}

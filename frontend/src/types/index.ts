@@ -14,9 +14,13 @@ export interface PlayerStats {
   hp: StatBar;
   mp: StatBar;
   xp: StatBar;
+  /** Consecutive finished weeks at goal: older readers only, the dashboard shows `recent_*`. */
   level: number;
   weeks_at_goal: number;
   weekly_goal_tss: number;
+  /** Weeks at goal among the last `recent_weeks` finished (at most 12). */
+  recent_weeks_at_goal: number;
+  recent_weeks: number;
 }
 
 // Zone values sent by the backend (features/workload.py, features/fitness.py).
@@ -80,7 +84,8 @@ export interface PlannedSession {
 // DAILY ADAPTATION          //
 // ========================= //
 
-export type PlanDecisionKind = "keep" | "ease" | "replace_easy" | "rest";
+/** `move` comes from « Modifier » or a missed session's replanning, `drop` from the latter only. */
+export type PlanDecisionKind = "keep" | "ease" | "replace_easy" | "rest" | "move" | "drop";
 
 /** The morning rule engine's verdict on one planned session (GET /plan/today). */
 export interface PlanDecision {
@@ -91,7 +96,9 @@ export interface PlanDecision {
   /** French sentence with the figure that justifies the decision. */
   reason: string;
   readiness_score: number | null;
-  readiness_source: "garmin_training" | "garmin" | "model";
+  /** `athlete`: the athlete's own choice (« Modifier »); `missed`: the evening's
+   *  replanning of a missed session. No readiness behind either. */
+  readiness_source: "garmin_training" | "garmin" | "model" | "athlete" | "missed" | null;
   acwr: number | null;
   original: Record<string, unknown> | null;
   adapted: Record<string, unknown> | null;
@@ -100,25 +107,39 @@ export interface PlanDecision {
   created_at: string | null;
 }
 
+/** One reason of « Modifier » on today's session, with the rules' options (`GET /plan/today/sessions/{id}/options`). */
+export interface RenegotiationReason {
+  id: "tired" | "no_time" | "pain";
+  label: string;
+  options: { id: string; decision: Exclude<PlanDecisionKind, "keep">; label: string; detail: string }[];
+  /** Why an option is missing (no free day), or a caution (pain). */
+  note: string | null;
+}
+
+export interface RenegotiationMenu {
+  session_id: number;
+  date: string;
+  /** Sent back with the choice: anything changed since answers 409. */
+  version: string;
+  /** Why nothing can be offered (a proposal to answer, an adjusted session…). */
+  blocked: string | null;
+  reasons: RenegotiationReason[];
+}
+
+/** Garmin after the choice, as the server reports it; never a failed choice. */
+export type RenegotiationGarmin =
+  | "sent" | "withdrawn" | "failed" | "not_started" | "unchanged" | "disabled" | "disconnected";
+
+export interface Renegotiated {
+  decision: PlanDecision;
+  /** The session's day once written: a move changes it. */
+  date: string;
+  garmin: RenegotiationGarmin;
+}
+
 export interface PlanToday {
   date: string;
   decisions: PlanDecision[];
-}
-
-/** Whether a planned session can be sent to Garmin, and the steps it would carry. */
-export interface WorkoutStructure {
-  pushable: boolean;
-  /** e.g. "10' Z2 · 4×(3' Z5 / 2' Z1) · 10' Z1". */
-  text: string | null;
-  estimated_min: number | null;
-  /** French sentence when not pushable. */
-  reason: string | null;
-}
-
-export interface GarminPushResult {
-  garmin_workout_id: string;
-  garmin_schedule_id: string | null;
-  garmin_pushed_at: string;
 }
 
 export interface ActualSession {
@@ -146,6 +167,8 @@ export interface ActualSession {
   garmin_activity_id: string | null;
   strava_activity_id: string | null;
   adherence_score: number | null;
+  /** Exercises of the Muscu log behind this session, when there is one (browser-side). */
+  exercises?: string[];
 }
 
 export interface MatchSummary {
@@ -222,7 +245,48 @@ export interface StrengthSession {
   exercises_count?: number;
   muscles_worked?: string[];
   exercises?: SessionExercise[];
+  /** Exercise names in order; the list endpoint's light alternative to `exercises`. */
+  exercise_names?: string[];
+  /** actual_sessions.id of the Garmin activity this log was recorded with. */
   garmin_activity_id?: number | null;
+}
+
+/** An exercise Garmin recognised in a strength activity; `exercise_id` when the catalog did too. */
+export interface StrengthDraftExercise {
+  name: string;
+  exercise_id: string | null;
+  sets: number | null;
+  reps: number | null;
+}
+
+/** A Garmin strength activity awaiting its loads: not a session until completed. */
+export interface StrengthDraft {
+  id: number;
+  /** actual_sessions.id of the Garmin activity it completes. */
+  actual_session_id: number;
+  date: string;
+  name: string | null;
+  duration_min: number | null;
+  /** 'import' (Garmin sync) or 'journal' (opened by the athlete). */
+  origin: string;
+  exercises: StrengthDraftExercise[];
+  /** The completion screen's text: one line per catalog exercise (free-text ones are left out). */
+  notation: string;
+}
+
+/** The Journal's newest drafts and how many there are in all. */
+export interface StrengthDraftList {
+  items: StrengthDraft[];
+  total: number;
+}
+
+/** The Muscu log a completed draft became. */
+export interface DraftCompletion {
+  session_id: number;
+  message: string;
+  records: SessionRecord[];
+  unparsed_lines: string[];
+  dropped: string[];
 }
 
 export interface MuscleStat {
@@ -249,6 +313,7 @@ export interface MuscleStatsResponse {
 // ========================= //
 
 export interface SyncStatus {
+  freshness?: { state: string; activities_checked_at?: string | null; health_checked_at?: string | null; complete?: boolean; errors?: string[] };
   garmin_authenticated: boolean;
   user_email: string | null;
   last_sync: string | null;
@@ -263,6 +328,10 @@ export interface SyncResult {
   activities_skipped: number;
   errors: string[];
   last_activity_date: string | null;
+  next_history_offset?: number | null;
+  history_anchor?: number | null;
+  /** Only the activity cap stopped this import; the next refresh continues it. */
+  more_pending?: boolean;
 }
 
 // ========================= //
@@ -352,6 +421,8 @@ export interface ParsedExercise {
   exercise_matched: boolean;
   sets: ParsedSet[];
   notes: string | null;
+  /** Catalog candidates; the first is the exercise a matched name was read as. */
+  suggestions?: { exercise_id: string; name: string; name_fr?: string | null; score: number }[];
   /** What the history suggested for this session (preview only). */
   progression?: StrengthSuggestion | null;
 }
@@ -430,6 +501,8 @@ export type CardKey =
   | 'cadence'
   | 'vam'
   | 'descent'
+  | 'risk'
+  | 'weeks'
   | 'readiness'
   | 'hrv'
   | 'sleep'
@@ -449,7 +522,52 @@ export interface HrZoneModel {
   ranges: HrZoneRange[];
 }
 
+/** The four questions the Analyses page opens on (`features/answers.py`). */
+export type AnswerId = 'ready' | 'progress' | 'risk' | 'works';
+
+export interface Answer {
+  id: AnswerId;
+  question: string;
+  /** One sentence naming its period and its source. */
+  text: string;
+  tone: Tone;
+  period: string;
+  source: string;
+}
+
+/** Fastest run over a standard distance, measured on the watch streams. */
+export interface RunRecord {
+  name: string;
+  distance_m: number;
+  time_sec: number;
+  time_display: string;
+  pace_display: string;
+  date: string;
+  session_id: number;
+  session_name: string | null;
+}
+
+/** Best estimated 1RM of a logged exercise. */
+export interface LiftRecord {
+  exercise_id: number;
+  exercise: string;
+  e1rm_kg: number;
+  weight_kg: number;
+  reps: number;
+  date: string;
+  session_id: number;
+  sessions: number;
+}
+
+/** All-time records, from every run's streams and every strength log (app.best_efforts). */
+export interface Records {
+  runs: RunRecord[];
+  lifts: LiftRecord[];
+}
+
 export interface OverviewResponse {
+  answers: Answer[];
+  records: Records;
   hr_zone_model: HrZoneModel;
   period: Period;
   bucket: Bucket;
@@ -466,18 +584,6 @@ export interface SportSlice {
   hours: number;
   count: number;
   pct: number;
-}
-
-export interface PersonalRecord {
-  activity_id?: number;
-  name: string;
-  time_sec: number;
-  time_display: string;
-  date: string;
-  activity_name: string;
-}
-export interface RecordsResponse {
-  records: PersonalRecord[];
 }
 
 export interface CardioSession {
@@ -591,6 +697,10 @@ export interface ActivityWeather {
 }
 
 export interface ActivityDetail {
+  /** A strength activity's linked Muscu log (null without one, or for another sport). */
+  strength_log_id?: number | null;
+  /** Without a linked log: a Muscu log of that day linked to no activity, probably this session. */
+  strength_unlinked_log_id?: number | null;
   session: {
     id: number;
     date: string;
@@ -630,6 +740,51 @@ export interface ActivityDetail {
   feedback: { text: string; source: 'agent' | 'rules'; trigger: string; created_at: string | null } | null;
   terrain: ActivityTerrain | null;
   weather: ActivityWeather | null;
+  /** What the page opens with (services/activity_detail.SessionSummary). */
+  summary: ActivitySummary;
+}
+
+/** A planned session as the session page's « Face au plan » and « Demain » lines name it. */
+export interface PlannedBrief {
+  id: number;
+  date: string;
+  sport: string;
+  session_type: string;
+  description: string | null;
+  target_duration_min: number | null;
+  target_distance_km: number | null;
+  target_hr_zone: string | null;
+  status: 'pending' | 'modified' | 'completed' | 'skipped';
+}
+
+export interface ActivitySummary {
+  /** The rules' sentence, only when no feedback is stored. */
+  rule_feedback: string | null;
+  /** A linked Muscu log's working sets. */
+  strength: {
+    tonnage_kg: number;
+    sets: number;
+    /** The session's best 1RM estimate and that exercise's previous session. */
+    top_e1rm: { exercise: string; e1rm_kg: number; previous_kg: number | null; previous_date: string | null } | null;
+  } | null;
+  /** The planned session this one is linked to, and how it compared (garmin/matcher.plan_verdict). */
+  plan: {
+    planned: PlannedBrief;
+    /** Null when neither the duration nor the intensity could be compared. */
+    verdict: 'on_plan' | 'shorter' | 'longer' | 'harder' | 'easier' | null;
+    /** The planned zone's middle heart rate, which the intensity is read against. */
+    target_hr_bpm: number | null;
+  } | null;
+  /** The day after the session, while it is today or tomorrow. */
+  next_day: {
+    date: string;
+    relative: 'today' | 'tomorrow';
+    planned: PlannedBrief[];
+    /** That day's standing plan decisions (only today has any). */
+    proposals: { planned_session_id: number; decision: string; reason: string; state: string }[];
+    /** The first open session after that day, when that day has none. */
+    next: PlannedBrief | null;
+  } | null;
 }
 
 // ========================= //
@@ -651,14 +806,49 @@ export interface Goal {
   /** Days until race day, from the server's today. */
   days_left: number;
   created_at: string | null;
+  /** A hybrid block has no race and no distance; its race_date is its end. */
+  goal_type?: GoalType;
+  /** Hyrox and hybrid goals only. */
+  details?: GoalDetails | null;
+}
+
+export type GoalType = 'race' | 'hyrox' | 'hybrid';
+export type HyroxEquipment = 'sled' | 'ski_erg' | 'rower' | 'wall_ball';
+
+/** A Hyrox goal's or hybrid block's details (services/goals.py GoalDetails). */
+export interface GoalDetails {
+  division: 'open' | 'pro';
+  /** Mixed is run in doubles only. */
+  format: 'solo' | 'doubles';
+  /** Required for a Hyrox. */
+  category: 'men' | 'women' | 'mixed' | null;
+  /** The equipment available, or ['none']. */
+  equipment: (HyroxEquipment | 'none')[];
+  /** A hybrid block's length; its end is a Sunday. */
+  weeks: 8 | 12;
 }
 
 export interface GoalCreate {
   name: string;
   race_date: string;
-  distance_km: number;
+  /** Required for a race; the server sets a Hyrox's and a block's. */
+  distance_km?: number;
   target_time_sec?: number | null;
-  priority: GoalPriority;
+  /** The server defaults to A; a hybrid block, never the next race, sends none. */
+  priority?: GoalPriority;
+  goal_type?: GoalType;
+  details?: Partial<GoalDetails>;
+}
+
+/** PATCH /goals/{id}: a goal's type never changes, a block's details are sent whole. */
+export interface GoalUpdate {
+  name?: string;
+  race_date?: string;
+  /** A race's only: a Hyrox or hybrid goal's distance is refused. */
+  distance_km?: number;
+  target_time_sec?: number | null;
+  priority?: GoalPriority;
+  details?: Partial<GoalDetails>;
 }
 
 export type PlanPhase = "base" | "build" | "specific" | "taper" | "race";
@@ -671,6 +861,10 @@ export interface PlanSessionDraft {
   intensity: string | null;
   description: string;
   distance_km: number | null;
+  /** Hyrox and hybrid plans: what the rules read; 'kept' marks the athlete's edit. */
+  tags?: string[];
+  /** Hyrox and hybrid plans: key_run, compromised, easy, heavy_lower… (null on a road plan). */
+  kind?: string | null;
 }
 
 export interface PlanWeek {
@@ -680,7 +874,11 @@ export interface PlanWeek {
   minutes: number;
   recovery: boolean;
   sessions: PlanSessionDraft[];
+  /** Sessions the week gave up, and why, in French (Hyrox and hybrid plans). */
+  dropped?: string[];
 }
+
+export type AthleteLevel = 'novice' | 'intermediate' | 'advanced';
 
 /** POST /goals/{id}/plan/preview: the plan as it would be written. */
 export interface PlanPreview {
@@ -691,7 +889,16 @@ export interface PlanPreview {
     /** Monday is 0. */
     rest_days: number[];
     vdot: number | null;
+    /** Hyrox and hybrid plans only, from here on. */
+    level?: AthleteLevel;
+    training_days?: number;
+    /** The plan starts with a lighter week: the recent load is too high. */
+    deload?: boolean;
+    /** Sessions the athlete edited, kept as they are. */
+    kept?: { date: string; description: string }[];
   };
+  /** Hyrox and hybrid plans: the weekly structure per phase, in French; empty for a race. */
+  summary?: string[];
   weeks: PlanWeek[];
 }
 
@@ -797,4 +1004,39 @@ export interface WeeklyReview {
 export interface ReviewApplyResult {
   applied: number[];
   stale: number[];
+}
+
+/** « Ma semaine » (GET /plan/review/week): the reviewed week in numbers, read now. */
+export interface WeekRecap {
+  week_start: string;
+  week_end: string;
+  planned: number;
+  completed: number;
+  minutes_done: number;
+  minutes_planned: number;
+  /** Completed over planned, null without a session due. */
+  adherence: number | null;
+  tsb: number | null;
+}
+
+export interface ReviewWeek {
+  today: string;
+  review: WeeklyReview | null;
+  recap: WeekRecap | null;
+}
+
+/** One key session's Garmin outcome after « Accepter », as the server reports it. */
+export interface WeekPushSession {
+  planned_session_id: number;
+  date: string;
+  session_type: string;
+  outcome: "sent" | "already" | "withdrawn" | "skipped" | "failed" | "not_started";
+}
+
+/** `POST /plan/review/{id}/accept`: the plan is written whatever Garmin and the calendar say. */
+export interface ReviewAccepted extends ReviewApplyResult {
+  /** `unchanged`: nothing new accepted, nothing sent. */
+  garmin: { state: "done" | "disabled" | "disconnected" | "failed" | "unchanged"; sessions: WeekPushSession[] };
+  /** Training plan calendar sync: synced, partial, busy, failed, disabled, unchanged (several connections: joined). */
+  calendar: string;
 }

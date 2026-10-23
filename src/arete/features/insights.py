@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
+from arete.features.workload import format_acwr
+
 Tone = Literal["good", "neutral", "warn", "bad"]
 
 
@@ -55,17 +57,17 @@ def volume_insight(km: float, prev_km: float | None, hours: float) -> Insight:
 def pmc_insight(
     ctl: float, tsb: float, acwr: float | None, acwr_zone: str | None
 ) -> Insight:
-    head = f"Forme {ctl:.0f}, fraîcheur {tsb:+.0f}"
+    head = f"Forme de fond {ctl:.0f}, fraîcheur {tsb:+.0f}"
     if acwr is not None and acwr > 1.5:
         return _insight(
-            f"{head}. Charge aiguë très supérieure à la chronique (ACWR {acwr:.2f}) : risque de blessure.",
+            f"{head}. Charge aiguë très supérieure à la chronique (ACWR {format_acwr(acwr)}) : risque de blessure.",
             "bad",
         )
     if tsb < -25:
         return _insight(f"{head}. Fatigue lourde : prévois une décharge.", "bad")
     if acwr is not None and acwr > 1.3:
         return _insight(
-            f"{head}. Montée de charge rapide (ACWR {acwr:.2f}) : ne rajoute rien cette semaine.",
+            f"{head}. Montée de charge rapide (ACWR {format_acwr(acwr)}) : ne rajoute rien cette semaine.",
             "warn",
         )
     if tsb < -10:

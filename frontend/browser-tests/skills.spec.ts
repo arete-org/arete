@@ -7,6 +7,7 @@ for (const rpg of [false, true]) {
     let catalogs = 0;
     await page.route('**/api/**', route => {
       const path = new URL(route.request().url()).pathname;
+      if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
       if (path === '/api/auth/config') return route.fulfill({ json: { enabled: false } });
       if (path === '/api/settings') return route.fulfill({ json: { ...DEFAULT_SETTINGS, user_id: 1, theme: 'pierre' } });
       if (path === '/api/settings/gamification') return route.fulfill({ json: { enabled: rpg, opted_in: rpg, available: true, version: 1 } });
@@ -22,7 +23,7 @@ for (const rpg of [false, true]) {
       return route.fulfill({ json: [] });
     });
     await page.goto('/planning?date=2026-10-10');
-    const open = () => page.getByRole('button', { name: 'Ouvrir le coach' }).filter({ visible: true }).click();
+    const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     await open();
     const panel = page.getByRole('complementary', { name: 'Coach IA' });
     const input = panel.getByLabel('Message au coach');

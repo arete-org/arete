@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { gameApi, useGamePreference } from '@/lib/gamification';
 import { Button } from '@/components/ui';
+import { readableError } from '@/lib/utils';
 
 export function GamificationTab() {
   const preference = useGamePreference();
@@ -30,10 +31,10 @@ export function GamificationTab() {
   const p = preference.data;
   return (
     <section className="space-y-5">
-      <h2 className="text-lg font-bold">Profil RPG & Chiron</h2>
+      <h2 className="text-lg font-bold">Profil RPG</h2>
       <p className="text-sm text-text-secondary">
         Un personnage, des succès et des Éclats pour collectionner des tenues.
-        L’expérience inclut Chiron et les pièces jointes dans le message.
+        Ton coach y devient Chiron, un personnage ; les pièces jointes s’affichent dans le message.
       </p>
       <Button
         role="switch"
@@ -56,7 +57,7 @@ export function GamificationTab() {
       )}
       {save.error && (
         <p role="alert" className="text-danger-red text-sm">
-          {save.error.message}{' '}
+          {readableError(save.error)}{' '}
           <button className="underline" onClick={() => preference.refetch()}>
             Actualiser
           </button>

@@ -55,16 +55,16 @@ export function ElevationCard({
               name,
             ]}
           />
-          <Bar yAxisId="m" dataKey="run_m" name="Course" stackId="m" fill={COLORS.neonCyan} />
-          <Bar yAxisId="m" dataKey="walk_m" name="Marche, rando" stackId="m" fill={CHART.purple} radius={[2, 2, 0, 0]} />
-          <Line
+          <Bar isAnimationActive={false} yAxisId="m" dataKey="run_m" name="Course" stackId="m" fill={COLORS.neonCyan} />
+          <Bar isAnimationActive={false} yAxisId="m" dataKey="walk_m" name="Marche, rando" stackId="m" fill={CHART.purple} radius={[2, 2, 0, 0]} />
+          <Line isAnimationActive={false}
             yAxisId="ratio"
             type="monotone"
             dataKey="m_per_km"
             name="D+ par km couru"
             stroke={COLORS.neonGold}
             strokeWidth={2}
-            connectNulls
+            connectNulls={false}
             dot={false}
           />
         </ComposedChart>

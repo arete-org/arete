@@ -1,31 +1,81 @@
 """Server-selected profiles sharing one coaching runtime."""
 
+from dataclasses import replace
+
 from arete.agent.profiles.models import AgentProfile, ProfileId
 from arete.agent.prompts.briefing import BRIEFING_PROMPT
 from arete.agent.prompts.coach import CHAT_INSTRUCTIONS
+from arete.agent.prompts.evening import EVENING_PROMPT
+from arete.agent.prompts.product import SLACK_SYSTEM
 from arete.agent.prompts.session_feedback import FEEDBACK_PROMPT
 from arete.agent.prompts.weekly_review import REVIEW_PROMPT
 
+CHAT_PROFILE = AgentProfile(
+    "chat",
+    "arete_coach",
+    CHAT_INSTRUCTIONS,
+    (
+        "analytics",
+        "planning",
+        "strength",
+        "garmin",
+        "automations",
+        "conversations",
+        "visualization",
+    ),
+    # Native binding avoids discovery round trips. Permissions are still
+    # checked independently at execution, including cached graphs.
+    training_writes=True,
+    page_context=True,
+    filesystem_tools=True,
+    journal_tools=True,
+    fact_memory_tools=True,
+)
+
 PROFILES: dict[ProfileId, AgentProfile] = {
-    "chat": AgentProfile(
-        "chat",
-        "arete_coach",
-        CHAT_INSTRUCTIONS,
-        ("analytics", "planning", "strength", "garmin"),
-        # Loading a toolkit cost one model request per turn (the loaded set
-        # lives in the run's state); on a free tier requests are the budget,
-        # tokens are not. Binding is not authorization: RunPolicy still
-        # filters what each profile may execute.
-        preloaded=("analytics", "planning", "strength", "garmin"),
-        training_writes=True,
-        page_context=True,
-        journal_tools=True,
+    "chat": CHAT_PROFILE,
+    "automation": replace(
+        CHAT_PROFILE,
+        id="automation",
+        name="arete_automation",
+        capabilities=("analytics", "planning", "strength", "garmin"),
+        fact_memory_tools=False,
+        page_context=False,
+        instructions="""Exécute uniquement la mission planifiée avec les données actuelles.
+Toute modification de l’entraînement ou du journal attend une validation humaine. Ne contourne jamais une validation refusée.
+Une réponse à ask_athlete fournit une information, jamais une permission implicite d'écrire.
+Pose seulement les questions indispensables. Réutilise un suivi de ressenti existant :
+si une question sur la même séance est déjà en attente, indique son lien sans la répéter.
+Après 7 tours, conclus les résultats réellement obtenus, sans nouveaux outils.
+Signale les données absentes, erreurs et actions non effectuées.""",
+    ),
+    "slack": replace(
+        CHAT_PROFILE,
+        id="slack",
+        instructions="",
+        # Compilation includes every possible tool. Invocation policy narrows
+        # this envelope before context reads, model binding and execution.
+        capabilities=(
+            *(
+                capability
+                for capability in CHAT_PROFILE.capabilities
+                if capability not in {"visualization", "conversations"}
+            ),
+            "slack_product",
+            "admin_data",
+        ),
+        system_prompt=SLACK_SYSTEM,
+        personal_context=False,
+        external_write_tools=frozenset(
+            {"ping_slack_member", "schedule_slack_reminder", "cancel_slack_reminder"}
+        ),
     ),
     # Missions get their facts in the message and answer in one request:
     # no tool is bound, the server reads the data and files the journal.
     "briefing": AgentProfile("briefing", "arete_briefing", BRIEFING_PROMPT, ()),
     "feedback": AgentProfile("feedback", "arete_session_feedback", FEEDBACK_PROMPT, ()),
     "review": AgentProfile("review", "arete_weekly_review", REVIEW_PROMPT, ()),
+    "evening": AgentProfile("evening", "arete_evening_message", EVENING_PROMPT, ()),
 }
 
 

@@ -8,6 +8,8 @@ on:
     branches: [main]
     # `labeled`: adding the `preview` label deploys the PR's preview.
     types: [opened, synchronize, reopened, labeled]
+  # The merge queue checks each entry merged onto main before it lands.
+  merge_group:
   # Full verification remains available before opening a PR.
   workflow_dispatch:
 
@@ -16,9 +18,14 @@ permissions:
 
 # A new push to a PR supersedes its run in flight. A main run completes: the
 # "Deploy preview" workflow follows it (workflow_run) and needs its verdict.
+# A label leaves the commit unchanged, so its run queues behind the one in
+# flight instead: a run cancelled mid-flight leaves its required checks
+# CANCELLED on the commit, and GitHub may then block the PR although a later
+# run passed. A queued run replaced by a newer one never starts and leaves no
+# check. Dependabot opens its PRs without labels (`dependabot.yml`).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
 
 jobs:
   lint:
@@ -44,7 +51,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PUSH_BASE: ${{ github.event.before }}
         run: |
-          if [[ "$EVENT_NAME" == pull_request ]]; then
+          if [[ "$EVENT_NAME" == pull_request || "$EVENT_NAME" == merge_group ]]; then
             mode=(--base HEAD^1)
           elif [[ "$EVENT_NAME" == push && "$PUSH_BASE" != 0000000000000000000000000000000000000000 ]]; then
             mode=(--base "$PUSH_BASE" --full-tests)
@@ -80,26 +87,68 @@ jobs:
       - run: node --test scripts/openwiki/transport.test.mjs
         if: steps.select.outputs.transport == 'true'
 
-  test:
+  # The full suite took 14m49s in one job on 2026-10-17 (2 vCPU, 2 workers):
+  # three shards of whole files, balanced on scripts/ci/test_durations.json.
+  test-shard:
+    # The matrix is the only shard count: K/N comes from it.
+    name: test (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     needs: lint
     if: needs.lint.outputs.backend == 'true'
+    strategy:
+      # Every shard reports: one failure must not hide another's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
-        with:
-          version: "latest"
-          enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --frozen --extra dev
-      # Two bounded workers, each with its own temporary DuckDB from conftest.
-      # Keep each file together to preserve module fixtures and test ordering.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ci-plan
           path: .context
-      - run: python3 scripts/ci/check_changed.py --plan .context/ci-plan.json --run --tests-only
+      # A narrow change selects few files: an empty shard skips the setup.
+      - name: Count this shard's files
+        id: shard
+        run: >-
+          python3 scripts/ci/check_changed.py --plan .context/ci-plan.json
+          --shard "$SHARD" --count-only >> "$GITHUB_OUTPUT"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        if: steps.shard.outputs.files != '0'
+        with:
+          version: "latest"
+          enable-cache: true
+      - run: uv python install 3.12
+        if: steps.shard.outputs.files != '0'
+      - run: uv sync --frozen --extra dev
+        if: steps.shard.outputs.files != '0'
+      - run: python3 scripts/bundle_ocr_data.py
+        if: steps.shard.outputs.files != '0'
+      # Two bounded workers, each with its own temporary DuckDB from conftest.
+      # Keep each file together to preserve module fixtures and test ordering.
+      - run: >-
+          python3 scripts/ci/check_changed.py --plan .context/ci-plan.json --run
+          --tests-only --shard "$SHARD"
+        if: steps.shard.outputs.files != '0'
+
+  # The required check: green only when every shard passed, skipped with them
+  # when the backend is not selected. always(), not !cancelled(): a cancelled
+  # run must fail this check, since GitHub counts a skipped required check as
+  # passed.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [lint, test-shard]
+    if: ${{ always() && needs.lint.outputs.backend == 'true' }}
+    steps:
+      - name: Every shard passed
+        env:
+          SHARDS: ${{ needs.test-shard.result }}
+        run: |
+          echo "Shards: $SHARDS"
+          [[ "$SHARDS" == success ]]
 
   typecheck:
     runs-on: ubuntu-latest
@@ -126,7 +175,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     if: needs.lint.outputs.frontend == 'true'
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: frontend
@@ -141,8 +190,36 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
+      # Planning E2E starts the real API against a disposable DuckDB database.
+      # Jobs have separate filesystems: the backend job's .venv is not available here.
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "latest"
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+        working-directory: .
       - run: npm run test:browser
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: chiron-chart-previews
+          path: .context/chiron-chart-*.png
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: unified-experience-previews
+          path: |
+            .context/arete-*.png
+            .context/planning-a-*.png
+            .context/briefing-*.png
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
@@ -169,6 +246,10 @@ jobs:
       (needs.typecheck.result == 'success' || needs.typecheck.result == 'skipped') &&
       (needs.frontend.result == 'success' || needs.frontend.result == 'skipped')
     needs: [lint, test, typecheck, frontend]
+    # Closing a PR must wait for its deployment before deleting its preview.
+    concurrency:
+      group: pr-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -186,17 +267,28 @@ jobs:
       - name: Deploy the preview
         id: deploy
         run: |
+          # Cleanup may have finished while this job was waiting for CI.
+          state=$(gh pr view "$PR" --json state --jq .state)
+          case "$state" in
+            OPEN) ;;
+            CLOSED|MERGED) echo "PR $PR is closed; skipping preview."; exit 0 ;;
+            *) echo "Unexpected PR state: $state" >&2; exit 1 ;;
+          esac
           url=$(vercel deploy --archive=tgz --yes --token "$VERCEL_TOKEN" --meta pr="$PR")
           echo "url=$url" >> "$GITHUB_OUTPUT"
         env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
       - name: Remove the PR's superseded previews
+        if: steps.deploy.outputs.url != ''
         run: scripts/ci/prune_deployments.sh 1 meta-pr="$PR"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
       - name: Link the preview on the pull request
+        if: steps.deploy.outputs.url != ''
         run: |
           gh pr comment "$PR" --edit-last --create-if-none --body \
             "Preview de ${SHA::7} (branche fusionnée dans main) : $URL"

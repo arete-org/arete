@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import re
 from typing import TYPE_CHECKING, Any
 
 from arete.garmin.workout_structure import Block, Repeat, estimated_seconds
@@ -15,12 +17,61 @@ if TYPE_CHECKING:
 from arete.services.prescriptions import Prescription, Step, Target
 
 # Exact catalog equivalents only: fuzzy substitutions can change the exercise.
+#: Each maps back to its catalog id on import (``data/garmin_exercises.py``).
 _STRENGTH_NAMES = {
     "Back Squat": "Barbell Back Squat",
+    # The catalog's bench press is the barbell one; Garmin's generic "Bench
+    # Press" would not map back.
+    "Bench Press": "Barbell Bench Press",
     "Lunges": "Lunge",
     "Calf Raises": "Calf Raise",
     "Leg Extension": "Leg Extensions",
+    "Pull Ups": "Pull-up",
+    "Farmer Carry": "Farmer's Carry",
+    "Rowing Ergometer": "Rowing Machine",
+    # Garmin has no sled pull: its backward drag is the closest name, and a
+    # real backward drag imports as a sled pull.
+    "Sled Pull": "Sled Backward Drag",
+    "Sandbag Lunges": "Sandbag Lunge",
 }
+
+
+#: Notes starting with a distance (« 25 m de poussée de traîneau »): Garmin
+#: strength steps cannot end on one, so the lap step describes it.
+_LEADING_DISTANCE = re.compile(
+    r"^\s*\d+(?:[.,]\d+)?\s*(?:m|mètres?|km|kilomètres?)\b", re.IGNORECASE
+)
+#: Sets × reps (« 5x5 »): the strength log's notation.
+_SETS_REPS = re.compile(r"\d+\s*[x×]\s*\d+", re.IGNORECASE)
+
+
+def _names_an_exercise(notes: str) -> bool:
+    """Whether an effort lap step's notes stand for an exercise Garmin could
+    hold as such: an exact Garmin name, a catalog name or alias with a Garmin
+    equivalent (« Wall Ball », « planche »), or sets × reps the strength
+    grammar reads as one (« Squat 5x5 »). Notes starting with a distance
+    describe what no strength step can end on, and stay."""
+    from garminconnect.exercises import resolve
+
+    from arete.data.exercise_matcher import exact_exercise
+    from arete.data.exercises_catalog import EXERCISES_BY_ID
+
+    text = notes.strip()
+    if _LEADING_DISTANCE.match(text):
+        return False
+    if resolve(text):
+        return True
+    found = {exact_exercise(text)}
+    notation = _SETS_REPS.search(text)
+    if notation:
+        from arete.llm.workout_parser import parse_workout_text
+
+        # The whole notes, and up to the notation: « Squat 5x5 (10 m) ».
+        for part in (text, text[: notation.end()]):
+            with contextlib.suppress(ValueError):  # raised when it holds none
+                found |= {e.exercise_id for e in parse_workout_text(part).exercises}
+    names = [EXERCISES_BY_ID[i]["name"] for i in found if i is not None]
+    return any(resolve(_STRENGTH_NAMES.get(n, n)) is not None for n in names)
 
 
 def _target(target: Target, hr_ranges: list[tuple[int, int | None]] | None) -> dict:
@@ -94,6 +145,9 @@ def convert(
                 ).model_dump(exclude_none=True)
                 if step.notes:
                     group["description"] = step.notes
+                # Unset stays absent: an older copy on Garmin still matches.
+                if step.skip_last_recovery is not None:
+                    group["skipLastRestStep"] = step.skip_last_recovery
                 result.append(group)
                 continue
             if (
@@ -120,12 +174,34 @@ def convert(
                 raise ValueError(
                     "Un repos de musculation ne peut pas masquer un exercice ou une charge."
                 )
-            if sport == "strength" and step.kind not in {"rest", "recovery"}:
+            # A station Garmin has no exercise for (SkiErg, burpee broad
+            # jumps): a manual-lap step its notes name, nothing hidden in it.
+            station = (
+                sport == "strength"
+                and step.kind not in {"rest", "recovery"}
+                and step.duration_kind == "lap"
+                and not (step.exercise or step.garmin_exercise)
+                and step.weight_kg is None
+            )
+            if station and not step.notes.strip():
+                raise ValueError(
+                    "Une étape de musculation sans exercice doit nommer sa station dans ses notes."
+                )
+            if station and step.kind == "effort" and _names_an_exercise(step.notes):
+                raise ValueError(
+                    f"« {step.notes} » est un exercice Garmin : choisis-le avec ses "
+                    "répétitions ou sa durée plutôt que de le décrire en notes."
+                )
+            if (
+                sport == "strength"
+                and step.kind not in {"rest", "recovery"}
+                and not station
+            ):
                 name = step.garmin_exercise or step.exercise
                 entry = resolve(_STRENGTH_NAMES.get(name, name))
-                if not entry or step.duration_kind != "reps":
+                if not entry or step.duration_kind not in {"reps", "seconds"}:
                     raise ValueError(
-                        f"Choisis un exercice Garmin exact et un nombre de répétitions pour « {step.exercise} »."
+                        f"Choisis un exercice Garmin exact et un nombre de répétitions ou une durée pour « {step.exercise} »."
                     )
                 item = w.create_strength_exercise_step(
                     entry["category"],
@@ -134,6 +210,14 @@ def convert(
                     exercise_name=entry["exercise"],
                     weight_kg=step.weight_kg,
                 ).model_dump(exclude_none=True)
+                if step.duration_kind == "seconds":  # time-based station work
+                    item["endCondition"] = {
+                        "conditionTypeId": 2,
+                        "conditionTypeKey": "time",
+                        "displayOrder": 2,
+                        "displayable": True,
+                    }
+                    item["endConditionValue"] = float(step.value or 0)
                 if step.kind != "effort":
                     identifier = 1 if step.kind == "warmup" else 2
                     item["stepType"] = {

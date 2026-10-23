@@ -20,7 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
-from statistics import mean, stdev
+from statistics import StatisticsError, mean, stdev
 from typing import NamedTuple
 
 
@@ -258,6 +258,12 @@ def calculate_acwr(acute: float, chronic: float) -> float | None:
     return acute / chronic
 
 
+def format_acwr(acwr: float) -> str:
+    """« 1,45 »: an ACWR as the athlete's French texts write it (and as the
+    facts the models copy into theirs give it), two decimals after a comma."""
+    return f"{acwr:.2f}".replace(".", ",")
+
+
 def get_acwr_zone(acwr: float | None) -> ACWRZone:
     """Get risk zone for ACWR value.
 
@@ -345,7 +351,7 @@ def calculate_monotony(loads: Sequence[DailyLoad], target_date: date) -> float |
         if std == 0:
             return None
         return mean(all_days) / std
-    except Exception:
+    except StatisticsError:
         return None
 
 

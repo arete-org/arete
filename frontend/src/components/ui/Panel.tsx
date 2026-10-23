@@ -5,51 +5,56 @@ interface PanelProps {
   title?: ReactNode;
   children: ReactNode;
   className?: string;
-  /** Tailwind text color class for the title (default text-text-muted). */
+  /** Tailwind text color class for the title (default text-text-primary). */
   titleTone?: string;
-  /** glass = translucent card (pages), inset = darker inner block (settings). */
+  /** glass = primary card surface, inset = quieter nested surface. */
   variant?: 'glass' | 'inset';
   /** Entrance animation delay in seconds (0 disables the stagger). */
   delay?: number;
   animate?: boolean;
   style?: CSSProperties;
+  /** Heading level of the title: 2 under the page's h1, 3 inside a section that has its own h2. */
+  level?: 2 | 3;
 }
 
 /**
- * Titled card. `glass` replaces `<div className="glass-panel p-3 sm:p-4">` + h3,
- * `inset` replaces `<div className="p-4 bg-abyss/50 rounded border border-text-muted/20">` + h3.
+ * Titled card. `glass` replaces `<div className="glass-panel p-3 sm:p-4">` + h2,
+ * `inset` replaces `<div className="p-4 bg-abyss/50 rounded border border-text-muted/20">` + h2.
+ * The title is an h2: panels sit right under the page's h1.
  */
 export function Panel({
   title,
   children,
   className,
-  titleTone = 'text-text-muted',
+  titleTone = 'text-text-primary',
   variant = 'glass',
   delay = 0,
   animate = variant === 'glass',
   style,
+  level = 2,
 }: PanelProps) {
+  const Heading = level === 3 ? 'h3' : 'h2';
   return (
     <div
       className={cn(
         variant === 'glass'
-          ? 'glass-panel p-3 sm:p-4'
-          : 'p-4 bg-abyss/50 rounded border border-text-muted/20',
+          ? 'glass-panel p-4 sm:p-6'
+          : 'ui-inset p-4',
         animate && 'animate-fade-up',
         className
       )}
       style={delay ? { animationDelay: `${delay}s`, ...style } : style}
     >
       {title && (
-        <h3
+        <Heading
           className={cn(
-            'font-mono uppercase tracking-wider',
-            variant === 'glass' ? 'text-xs sm:text-sm mb-4' : 'text-xs mb-3',
+            'font-sans font-medium',
+            variant === 'glass' ? 'text-[15px] mb-4' : 'text-xs mb-3',
             titleTone
           )}
         >
           {title}
-        </h3>
+        </Heading>
       )}
       {children}
     </div>

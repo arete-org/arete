@@ -1,8 +1,9 @@
 """Explicit human actions for outbound workouts; no model invocation."""
 
 from datetime import date
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from arete.services import garmin_export
@@ -66,6 +67,17 @@ def exercises():
 @router.get("/planned/{session_id}/workout")
 def inspect_workout(session_id: int):
     return garmin_export.inspect_session(session_id)
+
+
+@router.get("/workouts")
+def inspect_workouts(
+    ids: Annotated[
+        list[Annotated[int, Field(gt=0)]],
+        Query(min_length=1, max_length=garmin_export.MAX_INSPECT_SESSIONS),
+    ],
+):
+    """The cards of a conversation or a week in one request (`?ids=1&ids=2`)."""
+    return garmin_export.inspect_sessions(ids)
 
 
 class BatchExportIn(BaseModel):

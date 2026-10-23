@@ -1,34 +1,16 @@
-"""Strength toolkit — read a dictated session, then save it. In that order.
-
-The first toolkit that writes training data, and the write is lossy by nature:
-the parser only saves exercises the catalog matched confidently, and drops the
-rest. A human filling the form sees that happen. An athlete dictating to a
-coach reads one sentence, so the drop has to be in the transcript before
-anything is written — hence two tools rather than one.
-
-``get_strength_progress`` is a plain read: trend, records and the
-deterministic next-session load of one exercise.
-
-``read_workout`` is the dry run: it parses, reports what matched and what did
-not, and touches nothing. ``save_workout`` writes. Both go through
-``strength.logging_service``, the same code the Log page posts to, so the
-athlete's abbreviations, the catalog matching and the planned-session
-completion cannot drift between the two entry points.
-
-Re-parsing in ``save_workout`` is deliberate: the parser is deterministic, so
-passing the text again is cheaper and safer than carrying a parse handle
-across turns.
-"""
+"""Record complete dictated workouts through the deterministic domain parser."""
 
 from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any
+from typing import Annotated, Any
 
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import BaseTool
+from pydantic import Field
 
 from arete.agent.runtime.budget import MAX_TOOL_OUTPUT_CHARS
+from arete.agent.tools.validation import typed_tool
 
 #: Enough for a long session; past it the text is not a workout.
 MAX_WORKOUT_TEXT_CHARS = 4_000
@@ -96,43 +78,17 @@ def _summarize(parsed: Any) -> dict[str, Any]:
     }
 
 
-@tool
-def read_workout(text: str, date_str: str = "") -> str:
-    """Read a dictated strength session WITHOUT saving it: what the parser
-    understood, and which exercises it did not recognise. Always call this
-    before save_workout, and tell the athlete about anything in
-    `not_recognised` or `unparsed_lines` — those would be lost on save.
+@typed_tool
+def save_workout(
+    text: Annotated[str, Field(min_length=1, max_length=4000)],
+    date_str: date | None = None,
+) -> str:
+    """Save a completed strength workout in one call, only if every line and exercise is recognized.
 
-    Args:
-        text: The session as the athlete described it, in their own words.
-        date_str: ISO date (YYYY-MM-DD) of the session; empty means today.
+    Pass the athlete's exact words. Missing date means today. A rejected parse writes nothing;
+    use its unparsed_lines and not_recognised suggestions to ask for a correction.
     """
-    checked = _checked(text, date_str)
-    if isinstance(checked, str):
-        return checked
-    workout_text, workout_date = checked
-    try:
-        from arete.strength.logging_service import parse_for_athlete
-
-        parsed = parse_for_athlete(workout_text, workout_date=workout_date)
-    except ValueError as exc:
-        return _error(f"Nothing readable as an exercise: {exc}")
-    except Exception as exc:
-        return _error(f"{type(exc).__name__}: {exc}")
-    return _out({"saved": False, **_summarize(parsed)})
-
-
-@tool
-def save_workout(text: str, date_str: str = "") -> str:
-    """Save a dictated strength session. Exercises the catalog does not match
-    are NOT saved — they come back in `not_recognised` and you must say so.
-    Read it with read_workout first.
-
-    Args:
-        text: The session as the athlete described it, in their own words.
-        date_str: ISO date (YYYY-MM-DD) of the session; empty means today.
-    """
-    checked = _checked(text, date_str)
+    checked = _checked(text, date_str.isoformat() if date_str else "")
     if isinstance(checked, str):
         return checked
     workout_text, workout_date = checked
@@ -143,15 +99,17 @@ def save_workout(text: str, date_str: str = "") -> str:
         )
 
         parsed = parse_for_athlete(workout_text, workout_date=workout_date)
-        outcome = save_parsed_session(parsed)
+        outcome = save_parsed_session(parsed, require_complete=True)
     except ValueError as exc:
         return _error(f"Nothing readable as an exercise: {exc}")
     except Exception as exc:
         return _error(f"{type(exc).__name__}: {exc}")
 
+    if outcome.session_id is None:
+        return _out({"error": outcome.message, "saved": False, **_summarize(parsed)})
     return _out(
         {
-            "saved": outcome.session_id is not None,
+            "saved": True,
             "session_id": outcome.session_id,
             "saved_exercises": outcome.saved,
             "message": outcome.message,
@@ -165,8 +123,69 @@ def save_workout(text: str, date_str: str = "") -> str:
     )
 
 
-@tool
-def get_strength_progress(exercise: str) -> str:
+@typed_tool
+def list_strength_sessions(date_str: date | None = None) -> str:
+    """Strength sessions already logged on one day: session_id, name and sets.
+
+    Missing date means today. Read it before correcting a logged session.
+    """
+    try:
+        from arete.strength.logging_service import logged_sessions
+
+        return _out({"sessions": logged_sessions(date_str)})
+    except Exception as exc:
+        return _error(f"{type(exc).__name__}: {exc}")
+
+
+@typed_tool
+def update_workout(
+    session_id: Annotated[int, Field(gt=0)],
+    text: Annotated[str, Field(min_length=1, max_length=4000)],
+) -> str:
+    """Correct a logged strength session in place: same id and date, no new session.
+
+    Pass the complete corrected session (every exercise and set): it replaces the
+    session's exercises. A rejected parse or an unknown session_id writes nothing.
+    """
+    checked = _checked(text, "")
+    if isinstance(checked, str):
+        return checked
+    try:
+        from arete.strength.logging_service import update_logged_session
+
+        outcome = update_logged_session(session_id, checked[0])
+    except ValueError as exc:
+        return _error(f"Nothing readable as an exercise: {exc}")
+    except Exception as exc:
+        return _error(f"{type(exc).__name__}: {exc}")
+
+    if outcome.session_id is None:
+        return _out(
+            {
+                "error": outcome.message,
+                "saved": False,
+                "not_recognised": [
+                    {"name": d.name, "did_you_mean": d.suggestions}
+                    for d in outcome.dropped
+                ],
+                "unparsed_lines": outcome.unparsed_lines,
+            }
+        )
+    return _out(
+        {
+            "saved": True,
+            "session_id": outcome.session_id,
+            "saved_exercises": outcome.saved,
+            "message": outcome.message,
+            "personal_records": [r.as_dict() for r in outcome.records],
+        }
+    )
+
+
+@typed_tool
+def get_strength_progress(
+    exercise: Annotated[str, Field(min_length=1, max_length=100)],
+) -> str:
     """Progression of one strength exercise: e1RM trend (last sessions),
     personal records and the next-session load. `next_session` is computed
     by fixed rules (double progression, RIR/RPE) and becomes a deload when
@@ -188,4 +207,9 @@ def get_strength_progress(exercise: str) -> str:
         return _error(f"{type(exc).__name__}: {exc}")
 
 
-STRENGTH_TOOLS: list[BaseTool] = [read_workout, save_workout, get_strength_progress]
+STRENGTH_TOOLS: list[BaseTool] = [
+    save_workout,
+    list_strength_sessions,
+    update_workout,
+    get_strength_progress,
+]

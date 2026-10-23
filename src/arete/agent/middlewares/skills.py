@@ -1,22 +1,11 @@
 """Native skills discovery with fail-closed validation of the server bundle."""
 
-import logging
-
 from deepagents.middleware.skills import SkillsMiddleware
 from langchain_core.messages import HumanMessage
 
 from arete.agent.backends.skills import SYSTEM_SKILLS_ROUTE
-from arete.agent.context.skills import (
-    MAX_PRELOADED_SKILLS,
-    preload_tokens,
-    prioritize_requested,
-    requested_skill_paths,
-    select_preloads,
-    skill_retriever,
-)
+from arete.agent.context.skills import requested_skill_paths
 from arete.agent.runtime.context import AgentContext
-
-logger = logging.getLogger(__name__)
 
 
 class SystemSkillsMiddleware(SkillsMiddleware):
@@ -44,69 +33,45 @@ class SystemSkillsMiddleware(SkillsMiddleware):
 
     def _prepare(self, state, runtime, update):
         context = getattr(runtime, "context", None)
-        if not isinstance(context, AgentContext):
-            return None
-        # The compiled middleware is shared by overlapping invocations. Never
-        # keep selection on self or accept a preload from conversation state.
-        context.preloaded_skills = {}
-        context.skills_preload_limited = False
-        question = next(
-            (
-                m
-                for m in reversed(state.get("messages", []))
-                if isinstance(m, HumanMessage)
-            ),
-            None,
-        )
-        if context.profile != "chat" or question is None:
-            return None
-        retriever = skill_retriever(
-            update["skills_metadata"], has_attachments=bool(context.attachment_paths)
-        )
-        return context, retriever, question.text
-
-    def _preload(self, context, matches, responses, required):
-        bodies, limited = select_preloads(matches, responses, required=required)
-        context.preloaded_skills = bodies
-        context.skills_preload_limited = limited
-        logger.info(
-            "System skills: matched=%d preloaded=%d tokens=%d limited=%s",
-            len(matches),
-            len(bodies),
-            preload_tokens(bodies) if bodies else 0,
-            context.skills_preload_limited,
-        )
+        if isinstance(context, AgentContext):
+            question = next(
+                (
+                    m
+                    for m in reversed(state.get("messages", []))
+                    if isinstance(m, HumanMessage)
+                ),
+                None,
+            )
+            context.requested_skills = (
+                requested_skill_paths(question.text, update["skills_metadata"])
+                if question is not None
+                else ()
+            )
+        return update
 
     def before_agent(self, state, runtime, config):
-        # Browser threads do not persist trusted discovery state. Always load
-        # from the server backend once per invocation, ignoring supplied metadata.
-        update = self._validated(super().before_agent({}, runtime, config))
-        prepared = self._prepare(state, runtime, update)
-        if prepared is not None:
-            context, retriever, query = prepared
-            required = requested_skill_paths(query, update["skills_metadata"])
-            matches = prioritize_requested(
-                retriever.invoke(query, config=config), required
-            )
-            paths = [doc.metadata["path"] for doc in matches[:MAX_PRELOADED_SKILLS]]
-            self._preload(
-                context,
-                matches,
-                self._backend.download_files(paths) if paths else [],
-                required,
-            )
-        return update
+        context = getattr(runtime, "context", None)
+        if (
+            context
+            and context.resolved_profile
+            and not context.resolved_profile.filesystem_tools
+        ):
+            return {"skills_metadata": []}
+        # Rediscover trusted metadata, never bodies or browser-supplied instructions.
+        return self._prepare(
+            state, runtime, self._validated(super().before_agent({}, runtime, config))
+        )
 
     async def abefore_agent(self, state, runtime, config):
-        update = self._validated(await super().abefore_agent({}, runtime, config))
-        prepared = self._prepare(state, runtime, update)
-        if prepared is not None:
-            context, retriever, query = prepared
-            required = requested_skill_paths(query, update["skills_metadata"])
-            matches = prioritize_requested(
-                await retriever.ainvoke(query, config=config), required
-            )
-            paths = [doc.metadata["path"] for doc in matches[:MAX_PRELOADED_SKILLS]]
-            responses = await self._backend.adownload_files(paths) if paths else []
-            self._preload(context, matches, responses, required)
-        return update
+        context = getattr(runtime, "context", None)
+        if (
+            context
+            and context.resolved_profile
+            and not context.resolved_profile.filesystem_tools
+        ):
+            return {"skills_metadata": []}
+        return self._prepare(
+            state,
+            runtime,
+            self._validated(await super().abefore_agent({}, runtime, config)),
+        )

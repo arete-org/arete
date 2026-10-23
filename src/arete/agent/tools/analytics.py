@@ -14,11 +14,14 @@ the function is called directly.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import BaseTool
+from pydantic import Field
 
 from arete.agent.runtime.budget import MAX_TOOL_OUTPUT_CHARS
+from arete.agent.tools.validation import typed_tool
+from arete.services.training_query import TrainingQuery
 
 #: Mirrors the routes' own Query bounds — see api/metrics.py.
 WORKLOAD_DAYS_RANGE = (7, 90)
@@ -93,8 +96,8 @@ def _guard(value: int, bounds: tuple[int, int], name: str) -> str | None:
     return None
 
 
-@tool
-def get_workload(days: int = 28) -> str:
+@typed_tool
+def get_workload(days: Annotated[int, Field(ge=7, le=90)] = 28) -> str:
     """Training load over a window: ACWR (injury-risk ratio), monotony, strain,
     acute and chronic load, each with its interpretation zone. ACWR needs at
     least 28 days of history and is omitted below that; monotony, strain and
@@ -117,8 +120,8 @@ def get_workload(days: int = 28) -> str:
         return _error(f"{type(exc).__name__}: {exc}")
 
 
-@tool
-def get_fitness(days: int = 42) -> str:
+@typed_tool
+def get_fitness(days: Annotated[int, Field(ge=14, le=120)] = 42) -> str:
     """Fitness-fatigue model over a window: CTL (fitness), ATL (fatigue),
     TSB (form) with its zone, readiness and the weekly CTL ramp rate.
 
@@ -139,8 +142,10 @@ def get_fitness(days: int = 42) -> str:
         return _error(f"{type(exc).__name__}: {exc}")
 
 
-@tool
-def get_training_advice(sport_type: str = "mixed") -> str:
+@typed_tool
+def get_training_advice(
+    sport_type: Literal["cardio", "strength", "mixed"] = "mixed",
+) -> str:
     """Rule-based training advice computed from the current workload and
     fitness: overall risk level, main concern, and prioritized recommendations
     with concrete actions. Deterministic, not LLM-generated — use it as a
@@ -154,34 +159,18 @@ def get_training_advice(sport_type: str = "mixed") -> str:
     try:
         from arete.services.metrics import get_recommendations
 
-        return _out(get_recommendations(sport_type=sport_type).model_dump(mode="json"))  # type: ignore[arg-type]
+        return _out(get_recommendations(sport_type=sport_type).model_dump(mode="json"))
     except (ConnectionError, TimeoutError):
         raise  # Read-only transient failures are retried by ToolRetryMiddleware.
     except Exception as exc:
         return _error(f"{type(exc).__name__}: {exc}")
 
 
-@tool
-def get_personal_records(sport: str = "running") -> str:
-    """Personal records (best efforts) are not available to the coach: they
-    come from Strava, whose data may not reach an AI. Call it to tell the
-    athlete where to find them (the Analytics page).
-
-    Args:
-        sport: Sport group, e.g. running or cycling (default running).
-    """
-    # Best efforts are imported from Strava, whose data may not reach a model.
-    return _out(
-        {
-            "records": [],
-            "unavailable": "Les records viennent de Strava, dont les données ne "
-            "peuvent pas être transmises au coach. Ils sont sur la page Analyses.",
-        }
-    )
-
-
-@tool
-def list_recent_sessions(limit: int = 20, offset: int = 0) -> str:
+@typed_tool
+def list_recent_sessions(
+    limit: Annotated[int, Field(ge=1, le=100)] = 20,
+    offset: Annotated[int, Field(ge=0)] = 0,
+) -> str:
     """Recent completed sessions, newest first: date, sport, name, duration,
     distance, average HR and pace, RPE and notes. Page backwards with offset
     to reach older sessions.
@@ -205,8 +194,8 @@ def list_recent_sessions(limit: int = 20, offset: int = 0) -> str:
         return _error(f"{type(exc).__name__}: {exc}")
 
 
-@tool
-def get_activity_detail(session_id: int) -> str:
+@typed_tool
+def get_activity_detail(session_id: Annotated[int, Field(gt=0)]) -> str:
     """One completed session in detail, by its id (from list_recent_sessions):
     summary, minutes per HR zone, laps, and the analysis of its recording —
     heart-rate drift and pace:HR decoupling, pace of each half and pace fade,
@@ -229,11 +218,37 @@ def get_activity_detail(session_id: int) -> str:
         return _error(f"{type(exc).__name__}: {exc}")
 
 
+@typed_tool
+def query_training(request: TrainingQuery) -> str:
+    """Filter training evidence or aggregate a dated period (inclusive, <=366 days).
+
+    Entities/fields: sessions (sport, name, distance_m, duration_sec, avg_hr,
+    avg_pace_sec_km, ascent_m, gap_sec_km, temperature_c, rpe, has_feedback),
+    days (sleep_duration_sec, hrv_last_night, resting_hr, sleep_score,
+    readiness_score), plans (sport, status, completed, target_distance_km,
+    target_duration_min), strength (name, duration_sec, rpe, volume_kg).
+    All have id/date. Daily fields can filter sessions, but aggregate them only
+    with days to avoid counting nights twice. Running/cycling filters include
+    their sport aliases. Omit metric for rows; otherwise sum/avg/min/max/count
+    one metric, optionally grouped by day/week/month/sport/status. count(id)
+    counts rows; avg(completed) is plan adherence. Compare periods with separate
+    calls. Results carry source IDs, units, missing counts and explicit limits.
+    Use get_activity_detail for streams, BM25 memory for narrative evidence,
+    and existing fitness/workload tools for CTL/ATL/ACWR (never recompute them).
+    """
+    from arete.services.training_query import query_training as query
+
+    try:
+        return _out(query(request))
+    except ValueError as exc:
+        return _error(str(exc))
+
+
 ANALYTICS_TOOLS: list[BaseTool] = [
     get_workload,
     get_fitness,
     get_training_advice,
-    get_personal_records,
     list_recent_sessions,
     get_activity_detail,
+    query_training,
 ]

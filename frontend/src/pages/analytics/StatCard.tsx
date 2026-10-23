@@ -2,20 +2,15 @@ import type { ReactNode } from 'react';
 import { Component, type ErrorInfo } from 'react';
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import type { Card, Headline, Tone } from '@/types';
+import type { GlossaryId } from '@/lib/glossary';
 import { cn } from '@/lib/utils';
+import { GlossaryLink } from '@/components/GlossaryLink';
 
 const TONE_CLASS: Record<Tone, string> = {
   good: 'text-success-green',
   neutral: 'text-text-secondary',
   warn: 'text-warning-orange',
   bad: 'text-danger-red',
-};
-
-const TONE_BORDER: Record<Tone, string> = {
-  good: 'border-l-success-green',
-  neutral: 'border-l-text-muted',
-  warn: 'border-l-warning-orange',
-  bad: 'border-l-danger-red',
 };
 
 /** Green when the change goes the way this metric wants, red when it does not. */
@@ -36,10 +31,8 @@ function DeltaBadge({ headline, previousLabel }: { headline: Headline; previousL
     <span
       title={`Par rapport ${previousLabel} : ${headline.previous}${headline.unit ? ` ${headline.unit}` : ''}`}
       className={cn(
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono',
-        tone === 'good' && 'bg-success-green/10 text-success-green',
-        tone === 'bad' && 'bg-danger-red/10 text-danger-red',
-        tone === 'neutral' && 'bg-shadow text-text-secondary'
+        'inline-flex shrink-0 items-center gap-1 text-xs font-sans tabular-nums',
+        TONE_CLASS[tone]
       )}
     >
       <Icon className="w-3 h-3" aria-hidden />
@@ -63,8 +56,9 @@ class CardErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
     if (this.state.error) {
       return (
         <div className="h-[220px] flex flex-col items-center justify-center gap-2 text-center px-4">
-          <span className="text-danger-red font-mono text-xs uppercase tracking-wider">Graphique en erreur</span>
-          <span className="text-text-muted text-xs font-mono">{this.state.error.message}</span>
+          <span className="text-danger-red font-sans text-sm">Graphique en erreur</span>
+          <span className="text-text-muted text-xs font-sans">Les valeurs de synthèse restent disponibles.</span>
+          <button className="ui-button min-h-11 px-3 text-neon-cyan" onClick={() => this.setState({ error: null })}>Réessayer le graphique</button>
         </div>
       );
     }
@@ -80,6 +74,10 @@ export interface StatCardProps {
   card?: Card;
   /** Labels for the secondary headlines, in the order the API sends them. */
   secondaryLabels?: string[];
+  /** The glossary entry the title's "?" opens. */
+  term?: GlossaryId;
+  /** The glossary entry of each secondary label, by position. */
+  secondaryTerms?: (GlossaryId | undefined)[];
   previousLabel: string;
   loading?: boolean;
   error?: boolean;
@@ -96,6 +94,8 @@ export function StatCard({
   question,
   card,
   secondaryLabels = [],
+  term,
+  secondaryTerms = [],
   previousLabel,
   loading,
   error,
@@ -105,43 +105,46 @@ export function StatCard({
   return (
     <section
       className={cn(
-        'bg-abyss rounded-lg border border-text-muted/20 p-4 flex flex-col gap-3',
+        'analysis-card',
         className
       )}
     >
       <header className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-mono text-neon-cyan uppercase tracking-wider">{title}</h3>
-          <p className="text-xs text-text-muted mt-0.5">{question}</p>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h3 className="text-[15px] font-medium text-text-primary">{title}</h3>
+          {term && <GlossaryLink term={term} />}
         </div>
         {card && <DeltaBadge headline={card.headline} previousLabel={previousLabel} />}
       </header>
+      <p className="text-xs text-text-muted">{question}</p>
 
       {loading ? (
-        <div className="h-[260px] flex items-center justify-center text-text-muted font-mono text-sm animate-pulse">
+        <div className="h-[260px] flex items-center justify-center text-text-muted font-sans text-sm animate-pulse">
           Chargement…
         </div>
       ) : error || !card ? (
-        <div className="h-[260px] flex items-center justify-center text-danger-red font-mono text-sm">
+        <div className="h-[260px] flex items-center justify-center text-danger-red font-sans text-sm">
           Données indisponibles
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-            <span className="text-3xl font-bold font-mono text-text-primary tabular-nums">
+          <div className="flex flex-col gap-3">
+            <span className="text-[32px] font-semibold text-text-primary tabular-nums break-words">
               {card.headline.display}
             </span>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
             {card.secondary.map((h, i) => (
-              <span key={secondaryLabels[i] ?? i} className="flex flex-col">
-                <span className="text-[10px] uppercase tracking-wider text-text-muted font-mono">
-                  {secondaryLabels[i] ?? ''}
-                </span>
-                <span className="text-base font-mono text-text-secondary tabular-nums">{h.display}</span>
+              <span key={secondaryLabels[i] ?? i} className="inline-flex items-center gap-1">
+                {secondaryLabels[i]}
+                {secondaryTerms[i] && <GlossaryLink term={secondaryTerms[i]} />}
+                {secondaryLabels[i] && ' · '}
+                <span className="tabular-nums">{h.display}</span>
               </span>
             ))}
+            </div>
           </div>
 
-          <p className={cn('text-sm border-l-2 pl-3 py-1', TONE_CLASS[card.insight.tone], TONE_BORDER[card.insight.tone])}>
+          <p className={cn('analysis-insight', TONE_CLASS[card.insight.tone])}>
             {card.insight.text}
           </p>
 

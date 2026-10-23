@@ -1,31 +1,14 @@
-"""Thread-scoped upload and human confirmation endpoints; imports stay lazy."""
+"""Thread-scoped document upload and extraction endpoints."""
 
-from datetime import date as Date
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from arete.services import documents, imports
-from arete.services.prescriptions import ImportedSession
+from arete.services import documents
 
 router = APIRouter(prefix="/agent/threads/{thread_id}", tags=["documents"])
-
-
-class StrengthRead(BaseModel):
-    text: str = Field(min_length=1, max_length=4000)
-    date: Date | None = None
-
-
-@router.post("/imports/parse-strength")
-def parse_strength(thread_id: UUID, body: StrengthRead):
-    from arete.services.prescriptions import strength_prescription
-
-    try:
-        return strength_prescription(body.text, body.date)
-    except ValueError as exc:
-        raise documents.DocumentError(str(exc)) from exc
 
 
 class UploadIn(BaseModel):
@@ -96,47 +79,3 @@ def delete_document(thread_id: UUID, document_id: UUID):
 def delete_thread(thread_id: UUID):
     documents.delete_documents(str(thread_id))
     return {"deleted": True}
-
-
-@router.get("/imports")
-def list_imports(thread_id: UUID):
-    return imports.list_drafts(str(thread_id))
-
-
-class DraftUpdate(BaseModel):
-    version: int = Field(ge=1)
-    sessions: list[ImportedSession] = Field(min_length=1, max_length=50)
-
-
-@router.put("/imports/{draft_id}")
-def update_import(thread_id: UUID, draft_id: UUID, body: DraftUpdate):
-    return imports.update_draft(
-        str(thread_id), str(draft_id), body.version, body.sessions
-    )
-
-
-class Confirmation(BaseModel):
-    version: int = Field(ge=1)
-    key: UUID
-    selected: list[int] = Field(min_length=1, max_length=50)
-    reviewed: bool
-
-
-@router.post("/imports/{draft_id}/confirm")
-def confirm_import(thread_id: UUID, draft_id: UUID, body: Confirmation):
-    return {
-        "session_ids": imports.confirm(
-            str(thread_id),
-            str(draft_id),
-            body.version,
-            str(body.key),
-            body.selected,
-            body.reviewed,
-        )
-    }
-
-
-@router.delete("/imports/{draft_id}")
-def discard_import(thread_id: UUID, draft_id: UUID, version: int):
-    imports.discard(str(thread_id), str(draft_id), version)
-    return {"discarded": True}

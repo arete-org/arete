@@ -116,9 +116,12 @@ class ParsedActivity:
     sub_sport: str | None = None
     name: str | None = None
 
-    # Timestamps
+    # Timestamps: UTC, without tzinfo (the FIT session's own clock)
     start_time: datetime | None = None
     end_time: datetime | None = None
+    #: The device's offset from UTC when the file says it (FIT ``activity``
+    #: local timestamp, an ISO offset in TCX/GPX), else None.
+    utc_offset_sec: int | None = None
 
     # Core metrics
     duration_sec: int = 0
@@ -158,6 +161,9 @@ class ParsedActivity:
 
     # Source file
     source_file: str | None = None
+    #: FIT ``session`` records with recorded time: a multisport file has
+    #: one per leg; an empty extra record (some exports write one) is not a leg.
+    session_count: int = 0
 
     # Detailed time series (only populated when parse_detailed=True)
     time_series: TimeSeriesData | None = None
@@ -316,7 +322,15 @@ class FITParser:
             record_type = record.name
 
             if record_type == "session":
-                self._parse_session_record(record, activity)
+                timer = next(
+                    (f.value for f in record.fields if f.name == "total_timer_time"),
+                    None,
+                )
+                # An empty session record must not overwrite the real one.
+                if timer:
+                    activity.session_count += 1
+                if timer or activity.session_count == 0:
+                    self._parse_session_record(record, activity)
             elif record_type == "activity":
                 self._parse_activity_record(record, activity)
             elif record_type == "lap" and detailed:
@@ -501,11 +515,19 @@ class FITParser:
             )
 
     def _parse_activity_record(self, record: Any, activity: ParsedActivity) -> None:
-        """Extract data from activity record."""
-        fields = {f.name: f.value for f in record.fields}
+        """The device's UTC offset, from the activity record's two clocks.
 
-        if "local_timestamp" in fields:
-            activity.start_time = fields["local_timestamp"]
+        That record closes the file: its local timestamp is the end, on the
+        watch's clock, so it gives the offset, never the start (which stays the
+        session's UTC start).
+        """
+        fields = {f.name: f.value for f in record.fields}
+        local, utc = fields.get("local_timestamp"), fields.get("timestamp")
+        if isinstance(local, datetime) and isinstance(utc, datetime):
+            # Time zones are whole quarter hours; the two stamps may differ by seconds.
+            offset = round((local - utc).total_seconds() / 900) * 900
+            if abs(offset) <= 14 * 3600:
+                activity.utc_offset_sec = offset
 
     def _extract_hr_from_record(
         self, record: Any

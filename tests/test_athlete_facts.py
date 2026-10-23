@@ -45,16 +45,14 @@ def test_no_fact_no_block_and_bad_input_refused():
         athlete_facts.add_fact("other", "x" * 301)
 
 
-def test_the_tool_records_corrects_and_closes():
-    from arete.agent.tools.journal import remember_fact
-
+def test_the_tool_records_corrects_and_closes(memory_tool):
     saved = json.loads(
-        remember_fact.invoke({"kind": "injury", "text": "Tendon d'Achille sensible"})
+        memory_tool({"kind": "injury", "text": "Tendon d'Achille sensible"})
     )
     fact_id = saved["fact"]["id"]
     assert saved["fact"]["source"] == "coach"
     closed = json.loads(
-        remember_fact.invoke(
+        memory_tool(
             {
                 "kind": "injury",
                 "text": "Tendon d'Achille guéri",
@@ -65,10 +63,10 @@ def test_the_tool_records_corrects_and_closes():
     )
     assert closed["fact"]["status"] == "resolved"
     assert "error" in json.loads(
-        remember_fact.invoke({"kind": "injury", "text": "x", "fact_id": 999999})
+        memory_tool({"kind": "injury", "text": "x", "fact_id": 999999})
     )
     assert "error" in json.loads(
-        remember_fact.invoke({"kind": "goal", "text": "x", "status": "resolved"})
+        memory_tool({"kind": "goal", "text": "x", "status": "resolved"})
     )
 
 
@@ -113,3 +111,35 @@ def test_the_routes(router_client):
         client.post("/athlete-facts", json={"kind": "mood", "text": "x"}).status_code
         == 422
     )
+
+
+def test_repeated_declaration_reuses_the_fact_without_inventing_more_evidence():
+    original = athlete_facts.add_fact(
+        "preference",
+        "Je préfère m’entraîner le matin",
+        evidence="explicit",
+        source_ref="message original",
+    )
+    repeated = athlete_facts.add_fact(
+        "preference",
+        "  je préfère m'entraîner  le matin ",
+        evidence="explicit",
+        source_ref="autre mention",
+    )
+    assert repeated.id == original.id
+    assert repeated.revision == 1
+    assert repeated.source_ref == "message original"
+    assert len(athlete_facts.list_facts()) == 1
+    hypothesis = athlete_facts.add_fact(
+        "preference", original.text, evidence="hypothesis"
+    )
+    assert hypothesis.id != original.id
+    assert hypothesis.evidence == "hypothesis"
+
+
+def test_resolved_fact_cannot_be_recreated_by_repeating_a_tool_call():
+    original = athlete_facts.add_fact("preference", "Matin", evidence="explicit")
+    athlete_facts.update_fact(original.id, status="resolved", expected_revision=1)
+    with pytest.raises(athlete_facts.FactConflict, match="désactivé"):
+        athlete_facts.add_fact("preference", "Matin", evidence="explicit")
+    assert len(athlete_facts.list_facts()) == 1

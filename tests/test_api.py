@@ -1,5 +1,6 @@
 """Tests for the API endpoints."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -21,6 +22,59 @@ class TestHealth:
         assert data["database"] == "connected"
         assert data["schema_version"] == MIGRATIONS[-1][0]
         assert data["pending_migrations"] == []
+        assert data["initialization"] == {"status": "ready"}
+
+    def test_failed_boot_is_diagnosable_without_exposing_the_error(
+        self, monkeypatch, caplog
+    ):
+        from arete.api import main as api_main
+        from arete.dataio.init_duckdb import SchemaInitializationError
+
+        attempts = []
+        private_error = "SQL failed with private-value and token=secret"
+
+        def fail_schema():
+            attempts.append(True)
+            raise SchemaInitializationError("migration:50", RuntimeError(private_error))
+
+        with monkeypatch.context() as patch:
+            patch.setattr(api_main, "init_schema", fail_schema)
+            patch.setattr(api_main, "pending_migrations", lambda con: [50])
+            patch.setattr(api_main.scheduler, "start", lambda: None)
+            with TestClient(api_main.app) as client:
+                caplog.clear()  # Startup logs alone cannot diagnose a warm instance.
+                for _ in range(2):
+                    response = client.get("/health")
+                    assert response.status_code == 503
+                    assert response.json()["initialization"] == {
+                        "status": "failed",
+                        "stage": "migration:50",
+                        "error_type": "RuntimeError",
+                    }
+                    assert "private-value" not in response.text
+                    assert "secret" not in response.text
+                assert len(attempts) == 1  # Probes never replay a failed write.
+                assert private_error in caplog.text
+
+        # A fresh lifespan must not keep an earlier boot's failure in memory.
+        with TestClient(api_main.app) as client:
+            response = client.get("/health")
+            assert response.status_code == 200
+            assert response.json()["initialization"] == {"status": "ready"}
+            assert api_main.app.state.schema_initialization_error is None
+
+    def test_health_distinguishes_an_unstarted_lifespan(self):
+        from fastapi import FastAPI
+
+        from arete.api.main import health
+
+        app = FastAPI()
+        app.add_api_route("/health", health)
+        # A bare ASGI client does not run startup, even when the DB is current.
+        client = TestClient(app)
+        assert client.get("/health").json()["initialization"] == {
+            "status": "not_started"
+        }
 
     def test_health_is_degraded_while_a_migration_is_pending(
         self, client: TestClient, monkeypatch
@@ -67,6 +121,7 @@ class TestCronDailySync:
 
         Several daily entries on the same path are its way to dispatch the
         sync more than once a day; each dispatch skips what is already done.
+        The morning check-in's push has its own windows, before the sync's.
         """
         import json
         import re
@@ -76,9 +131,43 @@ class TestCronDailySync:
             "crons"
         ]
         schedules = [cron["schedule"] for cron in crons]
-        assert {cron["path"] for cron in crons} == {"/api/cron/daily-sync"}
-        assert len(set(schedules)) == len(schedules) > 1
+        paths = {
+            "/api/cron/daily-sync",
+            "/api/cron/checkin",
+            "/api/cron/automations",
+            "/api/cron/evening",
+            "/api/cron/evening-message",
+        }
+        assert {cron["path"] for cron in crons} == paths
+        assert len({(c["path"], c["schedule"]) for c in crons}) == len(crons) > 1
         assert all(re.fullmatch(r"0 \d{1,2} \* \* \*", s) for s in schedules)
+        hours = {
+            path: [int(c["schedule"].split()[1]) for c in crons if c["path"] == path]
+            for path in paths
+        }
+        assert sorted(hours["/api/cron/automations"]) == list(range(24))
+        assert max(hours["/api/cron/checkin"]) < min(hours["/api/cron/daily-sync"])
+        # The evening's replanning: once, after the day's last sync window.
+        assert hours["/api/cron/evening"] == [18]
+        assert max(hours["/api/cron/daily-sync"]) < 18
+        # The evening message (ARE-64): its own windows, the replanning's kept.
+        assert sorted(hours["/api/cron/evening-message"]) == [18, 19, 20]
+
+
+def test_the_backend_bundle_ships_its_dependencies():
+    """Without a custom install command, Vercel's Python builder defers a
+    bundle over 225 MB with a ``uv.lock`` to a ``uv sync`` on every cold start
+    (3.5 s plus 13 wheel downloads). The command must install the lock as is.
+    """
+    import json
+    from pathlib import Path
+
+    backend = json.loads((Path(__file__).parents[1] / "vercel.json").read_text())[
+        "services"
+    ]["backend"]
+    command = backend["installCommand"].split()
+    assert command[:2] == ["uv", "sync"]
+    assert {"--frozen", "--no-dev"} <= set(command)
 
 
 def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
@@ -87,13 +176,16 @@ def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
     The agent stack (LangChain, LangGraph, Deep Agents, LangSmith) took 1.4 s
     of the 1.5 s, and every route paid for it, /health included. It loads on
     the first coach request; Garmin's client and the workout grammars on
-    their own routes.
+    their own routes. numpy and httpx (0.2 s together) load with the
+    analytics and the outbound HTTP calls that use them.
     """
     import os
     import subprocess
     import sys
 
     heavy = [
+        "pypdfium2",
+        "tesserocr",
         "deepagents",
         "langchain",
         "langchain_core",
@@ -109,6 +201,8 @@ def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
         "aiohttp",
         "clerk_backend_api",
         "jwt",
+        "numpy",
+        "httpx",
     ]
     code = (
         "import sys, arete.api.main; "
@@ -118,5 +212,25 @@ def test_booting_the_app_leaves_the_heavy_stacks_out(tmp_path):
     out = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, env=env
     )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "[]"
+
+
+@pytest.mark.skip(
+    reason="deepagents <= 0.7.30 imports langchain_anthropic from its package "
+    "__init__ and from deepagents.middleware's; enable once a release makes "
+    "both lazy and the pin is upgraded"
+)
+def test_the_coach_stack_leaves_the_anthropic_sdk_out():
+    """Arete never calls Anthropic, yet its SDK cost 3 s of a cold first chat."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, arete.coaching; "
+        "print(sorted({m.split('.')[0] for m in sys.modules} "
+        "& {'anthropic', 'langchain_anthropic'}))"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "[]"

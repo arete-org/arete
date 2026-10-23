@@ -240,3 +240,25 @@ class TestPerformanceModel:
         assert 0 <= model.readiness_score <= 100
         assert model.readiness_level in ReadinessLevel
         assert model.predicted_performance is not None
+
+    def test_coefficient_load_failure_falls_back_to_default_model(
+        self, monkeypatch, caplog
+    ) -> None:
+        """A DB failure loading Banister coefficients is logged, not swallowed."""
+        import arete.features.banister as banister
+
+        def _raise(*args: object, **kwargs: object) -> None:
+            raise RuntimeError("duckdb unavailable")
+
+        monkeypatch.setattr(banister, "load_coefficients", _raise)
+        today = date.today()
+        tss_values = [
+            DailyTSS(date=today - timedelta(days=i), tss=50 + (i % 20))
+            for i in range(60)
+        ]
+
+        with caplog.at_level("ERROR"):
+            model = compute_performance_model(tss_values, today)
+
+        assert "Could not load Banister coefficients" in caplog.text
+        assert model.predicted_performance is not None

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { documentRequest } from '@/lib/documents';
+import { Select } from '@/components/ui';
 
 interface Exercise {
   id: number;
@@ -30,13 +31,13 @@ export function StrengthRecords() {
   const r = records.data;
   return (
     <section className="border-t border-text-muted/20 pt-5 space-y-4">
-      <h3 className="font-bold">Records de force</h3>
+      <h2 className="font-bold">Records de force</h2>
       <label className="block text-xs text-text-muted">
         Exercice
-        <select
+        <Select
           value={id}
           onChange={(e) => setId(e.target.value)}
-          className="block mt-2 min-h-11 w-full rounded border border-text-muted/30 bg-abyss px-3 text-sm text-text-primary"
+          className="block mt-2 min-h-11 text-sm"
         >
           <option value="">Choisir un exercice</option>
           {exercises.data?.map((e) => (
@@ -44,7 +45,7 @@ export function StrengthRecords() {
               {e.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {(exercises.error || records.error) && (
         <p role="alert" className="text-danger-red text-sm">
@@ -57,7 +58,7 @@ export function StrengthRecords() {
         </p>
       )}
       {r && (
-        <dl className="font-mono text-sm space-y-3">
+        <dl className="font-sans text-sm space-y-3">
           <div>
             <dt className="text-text-muted text-xs">Série réalisée</dt>
             <dd>
@@ -91,7 +92,7 @@ export function StrengthRecords() {
       {id && (
         <Link
           to={`/log?exercise=${id}`}
-          className="inline-block font-mono text-xs text-neon-cyan"
+          className="inline-block font-sans text-xs text-neon-cyan"
         >
           Voir la progression →
         </Link>

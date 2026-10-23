@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   applyEvent,
+  parseEvent,
   consumeStream,
   REQUEST_WINDOW_MESSAGES,
   requestWindow,
@@ -13,6 +14,23 @@ import { restoreConversation } from './agentConversation';
 
 const empty: ChatMessage = { role: 'assistant', content: '', parts: [] };
 const preview = { text: '{}', truncated: false };
+
+it('validates context counters and compaction phases without adding message parts', () => {
+  for (const event of [
+    { type: 'values', context_window_usage: { used_tokens: 123, window_tokens: 1000 } },
+    { type: 'context_compaction', phase: 'start' },
+    { type: 'context_compaction', phase: 'done' },
+  ]) {
+    const parsed = parseEvent(JSON.stringify(event));
+    expect(parsed).toEqual(event);
+    expect(applyEvent(empty, parsed!)).toBe(empty);
+  }
+  for (const used of [-1, 1.5, '12', null]) {
+    expect(() => parseEvent(JSON.stringify({ type: 'values', context_window_usage: { used_tokens: used, window_tokens: 100 } }))).toThrow();
+  }
+  expect(() => parseEvent(JSON.stringify({ type: 'values', context_window_usage: { used_tokens: 1, window_tokens: 0 } }))).toThrow();
+  expect(() => parseEvent(JSON.stringify({ type: 'context_compaction', phase: 'unknown' }))).toThrow();
+});
 const done: StreamEvent = {
   type: 'done',
   message: { role: 'assistant', content: 'Réponse' },
@@ -30,6 +48,24 @@ function stream(text: string, split = 1) {
 }
 
 describe('SSE transport', () => {
+  it('replays stored timestamps and captures the server clock before a failed stream', async () => {
+    const previous = '2026-10-15T23:59:59+02:00';
+    const current = '2026-10-16T00:00:01+02:00';
+    const history = restoreConversation(JSON.stringify([{ role: 'user', content: 'Demain ?', sentAt: previous }]));
+    const stamped = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(stream(frame({ type: 'error', detail: 'Interrompu' })), { headers: { 'X-Arete-Sent-At': current } }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(runAgentStream(history, { page: 'planning', path: '/planning', params: {} }, () => {}, new AbortController().signal, 'thread', undefined, undefined, stamped)).rejects.toThrow('Interrompu');
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages).toEqual([{ role: 'user', content: 'Demain ?', sent_at: previous }]);
+      expect(stamped).toHaveBeenCalledExactlyOnceWith(current);
+      expect(history[0].sentAt).toBe(previous);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('rejects an ambiguous saved timestamp instead of redating history', () => {
+    expect(() => restoreConversation(JSON.stringify([{ role: 'user', content: 'Question', sentAt: '2026-10-15T14:32:00' }]))).toThrow('Horodatage');
+    expect(restoreConversation(JSON.stringify([{ role: 'user', content: 'Legacy' }]))[0].sentAt).toBeUndefined();
+  });
   it('sends the stable conversation ID without UI-only history fields', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(stream(frame(done))));
     vi.stubGlobal('fetch', fetchMock);
@@ -45,7 +81,7 @@ describe('SSE transport', () => {
         messages: [{ role: 'user', content: 'Demain ?' }],
         panel_context: { page: 'planning', path: '/planning' },
         thread_id: 'dfe771b8-661a-46af-9cee-dce80e6bc304',
-        supports_suggestions: true,
+        supports_chart_cards: true,
       });
     } finally {
       vi.unstubAllGlobals();
@@ -221,32 +257,19 @@ describe('request window', () => {
   });
 });
 
+describe('retired optional events', () => {
+  it('ignores a legacy suggestion without failing the answer or exposing a draft', async () => {
+    const events: StreamEvent[] = [];
+    await consumeStream(stream('data: {"type":"suggestion","text":"Une action inventée"}\n\n' + frame(done)), e => events.push(e));
+    expect(events).toEqual([done]);
+  });
+});
 
-describe('next-message suggestions', () => {
-  it('decodes a separate draft event without changing the coach answer', async () => {
-    const suggestion: StreamEvent = { type: 'suggestion', text: 'Oui, prépare la séance.' };
-    const events: StreamEvent[] = [];
-    await consumeStream(stream(frame(suggestion) + frame(done)), e => events.push(e));
-    expect(events).toEqual([suggestion, done]);
-    expect(applyEvent(empty, suggestion)).toBe(empty);
-  });
-  it('accepts the backend Unicode character limit across split UTF-8 chunks', async () => {
-    const suggestion: StreamEvent = { type: 'suggestion', text: '🏃'.repeat(300) };
-    const events: StreamEvent[] = [];
-    await consumeStream(stream(frame(suggestion) + frame(done)), e => events.push(e));
-    expect(events).toEqual([suggestion, done]);
-  });
-  it.each([null, '', ' ', 'x'.repeat(301), '🏃'.repeat(301), ['a', 'b']])('omits an invalid optional suggestion and still completes the answer: %j', async text => {
-    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      const events: StreamEvent[] = [];
-      const answer: StreamEvent = { type: 'message', id: 'answer', text: 'Réponse' };
-      await consumeStream(stream(frame(answer) + `data: ${JSON.stringify({ type: 'suggestion', text })}\n\n` + frame(done)), e => events.push(e));
-      expect(events).toEqual([answer, done]);
-      expect(events.reduce(applyEvent, empty)).toMatchObject({ content: 'Réponse', pending: false, error: undefined });
-      expect(warning).toHaveBeenCalledOnce();
-    } finally {
-      warning.mockRestore();
-    }
-  });
+it('keeps Garmin preflight progress separate from model text and tool calls', () => {
+  const event = parseEvent('{"type":"sync_status","state":"running"}');
+  expect(event).toEqual({ type: 'sync_status', state: 'running' });
+  const message = applyEvent({ role: 'assistant', content: '', pending: true }, event!);
+  expect(message.syncStatus).toBe('running');
+  expect(message.content).toBe('');
+  expect(message.parts).toBeUndefined();
 });

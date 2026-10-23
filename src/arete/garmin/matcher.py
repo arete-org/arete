@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import Literal
 
 from arete.features.hr_zones import ZoneModel
 from arete.garmin.models import (
@@ -19,6 +20,45 @@ from arete.garmin.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: Within this duration deviation a session earns full duration points.
+DURATION_ON_PLAN = 0.1
+#: Within this deviation from the planned zone's middle heart rate, full
+#: intensity points.
+INTENSITY_ON_PLAN = 0.1
+
+PlanVerdict = Literal["on_plan", "shorter", "longer", "harder", "easier"]
+
+
+def plan_verdict(
+    duration_dev: float | None, intensity_dev: float | None
+) -> PlanVerdict | None:
+    """How a session compared with its plan, on the score's own full-points bands.
+
+    Within both bands it was done as planned; otherwise the measure furthest
+    outside its band names the difference (duration on a tie). None when
+    neither can be measured (no target duration, no zone or no heart rate).
+    """
+    if duration_dev is None and intensity_dev is None:
+        return None
+    off: list[tuple[float, PlanVerdict]] = []
+    if duration_dev is not None and abs(duration_dev) > DURATION_ON_PLAN:
+        off.append(
+            (
+                abs(duration_dev) / DURATION_ON_PLAN,
+                "longer" if duration_dev > 0 else "shorter",
+            )
+        )
+    if intensity_dev is not None and abs(intensity_dev) > INTENSITY_ON_PLAN:
+        off.append(
+            (
+                abs(intensity_dev) / INTENSITY_ON_PLAN,
+                "harder" if intensity_dev > 0 else "easier",
+            )
+        )
+    if not off:
+        return "on_plan"
+    return max(off, key=lambda item: item[0])[1]
 
 
 @dataclass
@@ -156,7 +196,7 @@ class SessionMatcher:
         # Duration match (up to 30 points)
         duration_dev = self._calculate_duration_deviation(actual, planned)
         if duration_dev is not None:
-            if abs(duration_dev) <= 0.1:
+            if abs(duration_dev) <= DURATION_ON_PLAN:
                 score += 30
             elif abs(duration_dev) <= 0.25:
                 score += 20
@@ -190,7 +230,7 @@ class SessionMatcher:
         # Intensity match (10 points)
         intensity_dev = self._calculate_intensity_deviation(actual, planned)
         if intensity_dev is not None:
-            if abs(intensity_dev) <= 0.1:
+            if abs(intensity_dev) <= INTENSITY_ON_PLAN:
                 score += 10
             elif abs(intensity_dev) <= 0.2:
                 score += 5
@@ -201,6 +241,22 @@ class SessionMatcher:
             score += 5  # Neutral if no HR data
 
         return min(100, score), notes
+
+    def verdict(
+        self, actual: ActualSession, planned: PlannedSession
+    ) -> PlanVerdict | None:
+        """How ``actual`` compared with ``planned`` (``plan_verdict``)."""
+        return plan_verdict(
+            self._calculate_duration_deviation(actual, planned),
+            self._calculate_intensity_deviation(actual, planned),
+        )
+
+    def target_hr(self, planned: PlannedSession) -> float | None:
+        """The heart rate a planned zone's intensity is measured against."""
+        zone = (planned.target_hr_zone or "").upper()
+        if zone not in ("Z1", "Z2", "Z3", "Z4", "Z5"):
+            return None
+        return _zone_midpoint(self.zones, int(zone[1]) - 1)
 
     def _calculate_duration_deviation(
         self,
@@ -226,14 +282,9 @@ class SessionMatcher:
 
         Returns None if no HR data or planned zone.
         """
-        if not actual.avg_hr or not planned.target_hr_zone:
+        target_hr = self.target_hr(planned)
+        if not actual.avg_hr or target_hr is None:
             return None
-
-        planned_zone = planned.target_hr_zone.upper()
-        if planned_zone not in ("Z1", "Z2", "Z3", "Z4", "Z5"):
-            return None
-
-        target_hr = _zone_midpoint(self.zones, int(planned_zone[1]) - 1)
         return (actual.avg_hr - target_hr) / target_hr
 
     def _score_to_confidence(self, score: float) -> MatchConfidence:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -46,6 +47,24 @@ def test_subscribe_upserts_and_keeps_the_newest_ten():
     assert "https://push.test/3" not in _endpoints()
 
 
+def test_subscribing_again_renews_the_keys_and_keeps_the_first_date():
+    endpoint = "https://push.test/again"
+    notifications.subscribe(endpoint, "p", "a")
+    con = connect()
+    con.execute(
+        "UPDATE app.push_subscriptions SET created_at = TIMESTAMP '2026-09-01 08:00' "
+        "WHERE endpoint = ?",
+        [endpoint],
+    )
+    notifications.subscribe(endpoint, "p2", "a2")
+    stored = con.execute(
+        "SELECT p256dh, auth, created_at FROM app.push_subscriptions WHERE endpoint = ?",
+        [endpoint],
+    ).fetchall()
+    con.close()
+    assert stored == [("p2", "a2", datetime(2026, 9, 1, 8, 0))]
+
+
 def test_nothing_is_sent_without_keys_or_with_notifications_off(keys, monkeypatch):
     notifications.subscribe("https://push.test/a", "p", "a")
     with patch(
@@ -53,11 +72,12 @@ def test_nothing_is_sent_without_keys_or_with_notifications_off(keys, monkeypatc
         return_value={"notifications_enabled": False},
     ):
         assert (
-            notifications.notify("t", "b").skipped_reason == "notifications désactivées"
+            notifications.notify("t", "b", kind=None).skipped_reason
+            == "notifications désactivées"
         )
     monkeypatch.setenv("WEB_PUSH_VAPID_PRIVATE_KEY", "")
     assert (
-        notifications.notify("t", "b").skipped_reason
+        notifications.notify("t", "b", kind=None).skipped_reason
         == "clés Web Push absentes du serveur"
     )
 
@@ -82,7 +102,7 @@ def test_one_push_per_device_and_gone_devices_are_dropped(keys):
         patch("arete.services.notifications.get_user_settings", return_value={}),
         patch("pywebpush.webpush", side_effect=push),
     ):
-        result = notifications.notify("Briefing", "Footing 45' en Z2.", "/")
+        result = notifications.notify("Briefing", "Footing 45' en Z2.", "/", kind=None)
     assert (result.sent, result.dropped) == (1, 1)
     assert set(_endpoints()) == {"https://push.test/ok", "https://push.test/flaky"}
 

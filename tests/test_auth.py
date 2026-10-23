@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import time
+from typing import Any
+
 import pytest
 
 from arete.api import auth
 from arete.dataio.db import connect
-from arete.services import oauth_state, users
+from arete.services import users
 
 OWNER = "user_owner"
 OTHER = "user_other"
@@ -29,7 +33,7 @@ def _clean_users():
 
 
 @pytest.fixture
-def enforced(monkeypatch):
+def enforced(monkeypatch, consented):
     """Clerk mode with a fake verifier: no network, no real keys."""
     monkeypatch.setenv("ARETE_AUTH", "clerk")
     monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test_fake")
@@ -79,15 +83,13 @@ def test_enforced_mode_requires_a_credential(client, enforced):
         "publishable_key": "pk_test_fake",
     }
     assert client.get("/openapi.json").status_code == 200
-    # The Strava callback arrives from the provider's redirect, with no session:
-    # it keeps its own state check and must not be turned away at the door.
-    assert client.get("/strava/callback").status_code != 401
     # Slack events carry Slack's signature, checked by their own route.
     assert "www-authenticate" not in client.post("/slack/events").headers
 
 
 def test_each_account_gets_its_own_athlete(client, enforced):
     me = client.get("/auth/me", headers=_bearer("owner-token")).json()
+    assert me.pop("consent")["required"] is True  # test_consent.py covers it
     assert me == {
         "email": "owner@example.com",
         "name": "Greg",
@@ -122,6 +124,117 @@ def test_misconfiguration_fails_closed(client, monkeypatch):
     assert client.get("/health").status_code == 200
 
 
+def _rsa_key() -> tuple[Any, str]:
+    """A throwaway signing key and its PEM public key, as Clerk shows it."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = private.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return private, pem.decode()
+
+
+def _session_token(key: Any, subject: str = OWNER, **claims: Any) -> str:
+    import jwt
+
+    now = int(time.time())
+    payload = {"sub": subject, "iat": now, "nbf": now, "exp": now + 60, **claims}
+    return jwt.encode(payload, key, algorithm="RS256", headers={"kid": "ins_test"})
+
+
+@pytest.fixture
+def real_verifier(monkeypatch, consented):
+    """Clerk mode through the SDK's real verification; Clerk itself is a stub."""
+    from clerk_backend_api.security import verifytoken
+
+    monkeypatch.setenv("ARETE_AUTH", "clerk")
+    monkeypatch.setenv("CLERK_SECRET_KEY", f"sk_test_{time.time_ns()}")
+    monkeypatch.setenv("CLERK_PUBLISHABLE_KEY", "pk_test_fake")
+    monkeypatch.setenv("ARETE_OWNER_EMAIL", "owner@example.com")
+    for name in ("ARETE_API_KEY", "ARETE_AUTH_ORIGINS", "CLERK_JWT_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(auth, "_fetch_clerk_profile", lambda s: PROFILES[s])
+    jwks_fetches: list[Any] = []
+    monkeypatch.setattr(
+        verifytoken, "_fetch_jwks", lambda options: jwks_fetches.append(options)
+    )
+    return jwks_fetches
+
+
+def test_the_jwt_key_verifies_sessions_without_fetching_clerk(
+    client, real_verifier, monkeypatch
+):
+    signing, pem = _rsa_key()
+    monkeypatch.setenv("CLERK_JWT_KEY", pem)
+    token = _session_token(signing)
+    assert auth._verify_session_token(token)["sub"] == OWNER
+    me = client.get("/auth/me", headers=_bearer(token))
+    assert me.status_code == 200 and me.json()["is_owner"] is True
+    assert real_verifier == []  # no JWKS request, not even on a cold process
+    # Signed by another key (another Clerk instance, a forgery): refused.
+    forged = _session_token(_rsa_key()[0])
+    assert client.get("/settings", headers=_bearer(forged)).status_code == 401
+    # The authorized parties are still checked offline.
+    monkeypatch.setenv("ARETE_AUTH_ORIGINS", "https://arete.example")
+    assert client.get("/settings", headers=_bearer(token)).status_code == 401
+    allowed = _session_token(signing, azp="https://arete.example")
+    assert client.get("/settings", headers=_bearer(allowed)).status_code == 200
+    assert real_verifier == []
+
+
+def test_without_the_jwt_key_sessions_are_verified_against_clerk_jwks(
+    client, real_verifier, monkeypatch
+):
+    from clerk_backend_api.security import verifytoken
+    from jwt.algorithms import RSAAlgorithm
+
+    signing, _pem = _rsa_key()
+    jwk = {**RSAAlgorithm.to_jwk(signing.public_key(), as_dict=True), "kid": "ins_test"}
+
+    def jwks(options):
+        real_verifier.append(options)
+        return {"keys": [jwk]}
+
+    monkeypatch.setattr(verifytoken, "_fetch_jwks", jwks)
+    token = _session_token(signing)
+    assert client.get("/settings", headers=_bearer(token)).status_code == 200
+    assert len(real_verifier) == 1
+
+
+def test_an_unreadable_jwt_key_fails_closed(client, real_verifier, monkeypatch, caplog):
+    signing, pem = _rsa_key()
+    monkeypatch.setenv("CLERK_JWT_KEY", pem.replace("MII", "MIX", 1))
+    with caplog.at_level(logging.ERROR, logger="arete.api.auth"):
+        refused = client.get("/settings", headers=_bearer(_session_token(signing)))
+    assert refused.status_code == 503
+    assert "CLERK_JWT_KEY" in caplog.text
+    assert real_verifier == []
+    # The public paths stay up, so the fix can be deployed and probed.
+    assert client.get("/health").status_code == 200
+
+
+def test_a_private_jwt_key_is_reported_as_misconfigured(
+    client, real_verifier, monkeypatch, caplog
+):
+    from cryptography.hazmat.primitives import serialization
+
+    signing, _pem = _rsa_key()
+    private_pem = signing.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    monkeypatch.setenv("CLERK_JWT_KEY", private_pem)
+    with caplog.at_level(logging.ERROR, logger="arete.api.auth"):
+        refused = client.get("/settings", headers=_bearer(_session_token(signing)))
+    # The cause is named, not mistaken for an identity provider outage.
+    assert refused.status_code == 503
+    assert "CLERK_JWT_KEY illisible" in caplog.text
+    assert real_verifier == []
+
+
 def test_an_identity_provider_outage_is_a_503_not_a_leak(client, enforced, monkeypatch):
     def down(_token):
         raise RuntimeError("clerk unreachable")
@@ -134,6 +247,7 @@ def _expire_profiles() -> None:
     con = connect()
     con.execute("UPDATE app.users SET profile_synced_at = now() - INTERVAL 2 HOUR")
     con.close()
+    auth.forget_accounts()  # two hours later, no cached resolution is left
 
 
 def test_a_burst_of_stale_requests_refreshes_the_profile_once(enforced, monkeypatch):
@@ -217,17 +331,6 @@ class TestUsers:
         assert users.upsert_user("u4", "you@example.com", verified=True).athlete_id > 1
 
 
-class TestOAuthState:
-    def test_round_trip_tamper_and_expiry(self):
-        state = oauth_state.issue("secret", now=1_000_000)
-        assert oauth_state.verify("secret", state, now=1_000_100)
-        assert not oauth_state.verify("other", state, now=1_000_100)
-        assert not oauth_state.verify("secret", state + "x", now=1_000_100)
-        assert not oauth_state.verify("secret", state, now=1_000_000 + 601)
-        assert not oauth_state.verify("secret", None)
-        assert not oauth_state.verify("secret", "a.b")
-
-
 def test_http_workers_enforce_private_plans(client, enforced):
     first = _bearer("owner-token")
     second = _bearer("other-token")
@@ -266,3 +369,83 @@ def test_http_workers_enforce_private_plans(client, enforced):
         assert (
             client.delete(f"/garmin/planned/{own}", headers=headers).status_code == 200
         )
+
+
+class TestAccountCache:
+    """One account read per burst; revocation bounded by ACCOUNT_TTL_SECONDS."""
+
+    @pytest.fixture
+    def clock(self, monkeypatch):
+        now = [1000.0]
+        monkeypatch.setattr(auth, "_clock", lambda: now[0])
+        return now
+
+    def test_a_burst_of_requests_reads_the_account_once(
+        self, client, enforced, monkeypatch, statement_log
+    ):
+        auth.resolve_user("Bearer owner-token")  # provisioned from Clerk
+        auth.forget_accounts()
+        connect_ = users.connect
+        monkeypatch.setattr(users, "connect", lambda: statement_log.wrap(connect_()))
+        for _ in range(10):
+            response = client.get("/settings", headers=_bearer("owner-token"))
+            assert response.status_code == 200
+        # One query for the login and its athlete together, then the cache.
+        assert len(statement_log) == 1
+        assert "app.athletes" in statement_log[0]
+
+    def test_deactivation_applies_at_once_here_and_within_the_ttl_elsewhere(
+        self, client, enforced, clock
+    ):
+        owner, other = _bearer("owner-token"), _bearer("other-token")
+        athlete = client.get("/auth/me", headers=other).json()["athlete_id"]
+        client.get("/auth/me", headers=owner)
+        # Through this instance's administration: refused at the next request.
+        deactivate = f"/admin/athletes/{athlete}/deactivate"
+        assert client.post(deactivate, headers=owner).status_code == 204
+        assert client.get("/settings", headers=other).status_code == 403
+        reactivate = f"/admin/athletes/{athlete}/reactivate"
+        assert client.post(reactivate, headers=owner).status_code == 204
+        assert client.get("/settings", headers=other).status_code == 200
+        # Through another instance (a direct write here): within the TTL.
+        users.deactivate_athlete(athlete, actor=auth.resolve_user("Bearer owner-token"))
+        clock[0] += auth.ACCOUNT_TTL_SECONDS - 1
+        assert client.get("/settings", headers=other).status_code == 200
+        clock[0] += 1
+        assert client.get("/settings", headers=other).status_code == 403
+        assert auth.ACCOUNT_TTL_SECONDS <= 60
+
+    def test_the_cache_is_bounded_and_keeps_subjects_apart(
+        self, enforced, monkeypatch, statement_log
+    ):
+        monkeypatch.setitem(TOKENS, "third-token", "user_third")
+        monkeypatch.setitem(PROFILES, "user_third", ("third@example.com", None, True))
+        monkeypatch.setattr(auth, "ACCOUNT_CACHE_SIZE", 2)
+        owner = auth.resolve_user("Bearer owner-token")
+        other = auth.resolve_user("Bearer other-token")
+        assert owner.athlete_id == 1 and other.athlete_id not in (None, 1)
+        connect_ = users.connect
+        monkeypatch.setattr(users, "connect", lambda: statement_log.wrap(connect_()))
+        # Served from the cache, each subject its own account.
+        assert auth.resolve_user("Bearer other-token") == other
+        assert auth.resolve_user("Bearer owner-token") == owner
+        assert statement_log == []
+        auth.resolve_user("Bearer third-token")
+        # The least recently used (other) made room; the owner stayed.
+        assert list(auth._accounts) == [OWNER, "user_third"]
+
+    def test_a_read_overtaken_by_an_administration_change_is_not_kept(
+        self, enforced, monkeypatch
+    ):
+        auth.resolve_user("Bearer other-token")
+        auth.forget_accounts()
+        read = users.get_account
+
+        def overtaken(subject):
+            account = read(subject)
+            auth.forget_accounts()  # an admin acted while this read was in flight
+            return account
+
+        monkeypatch.setattr(users, "get_account", overtaken)
+        auth.resolve_user("Bearer other-token")
+        assert OTHER not in auth._accounts

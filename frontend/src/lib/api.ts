@@ -6,22 +6,28 @@ const API_BASE = "/api";
 export class ApiError extends Error {
   readonly status: number;
   readonly detail: string | null;
+  /** Machine-readable reason some answers carry beside the French detail. */
+  readonly code: string | null;
 
   constructor(status: number, body: string) {
     super(`API Error ${status}: ${body}`);
     this.status = status;
-    this.detail = parseDetail(body);
+    this.detail = parseField(body, "detail");
+    this.code = parseField(body, "code");
   }
 }
 
-function parseDetail(body: string): string | null {
+function parseField(body: string, field: "detail" | "code"): string | null {
   try {
-    const detail = (JSON.parse(body) as { detail?: unknown }).detail;
-    return typeof detail === "string" ? detail : null;
+    const value = (JSON.parse(body) as Record<string, unknown>)[field];
+    return typeof value === "string" ? value : null;
   } catch {
     return null;
   }
 }
+
+/** The `code` of an answer refusing a login whose account was erased (api/auth.py). */
+export const ACCOUNT_DELETED = "account_deleted";
 
 /** The record when the answer is one (an object with a numeric id), else null.
  *  "Nothing yet" endpoints answer null; anything else must not pass for a record. */
@@ -91,8 +97,14 @@ export const goalsApi = {
       body: JSON.stringify(goal),
     }),
 
-  /** Also deletes the goal's future generated sessions. */
-  remove: (id: number) => fetchAPI<void>(`/goals/${id}`, { method: "DELETE" }),
+  update: (id: number, fields: import("@/types").GoalUpdate) =>
+    fetchAPI<import("@/types").Goal>(`/goals/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(fields),
+    }),
+
+  /** Also deletes the goal's future sessions nobody changed; `kept` counts the others, which stay. */
+  remove: (id: number) => fetchAPI<{ kept: number }>(`/goals/${id}`, { method: "DELETE" }),
 
   previewPlan: (id: number) =>
     fetchAPI<import("@/types").PlanPreview>(`/goals/${id}/plan/preview`, {
@@ -105,8 +117,9 @@ export const goalsApi = {
       method: "POST",
     }),
 
+  /** Deletes the plan's future sessions nobody changed; `kept` counts the others, which stay. */
   deletePlan: (id: number) =>
-    fetchAPI<{ deleted: number }>(`/goals/${id}/plan`, { method: "DELETE" }),
+    fetchAPI<{ deleted: number; kept: number }>(`/goals/${id}/plan`, { method: "DELETE" }),
 
   getProjection: async (id: number) => {
     const data = await fetchAPI<import("@/types").GoalProjection>(`/goals/${id}/projection`);
@@ -148,6 +161,7 @@ export const athleteFactsApi = {
 // ========================= //
 
 export interface PlannedSessionCreate {
+  prescription?: import("./documents").Prescription | null;
   date: string;
   sport?: string;
   session_type: string;
@@ -218,23 +232,18 @@ export const garminApi = {
       body: JSON.stringify(session),
     }),
 
-  deletePlanned: (id: number) =>
-    fetchAPI<{ message: string }>(`/garmin/planned/${id}`, { method: "DELETE" }),
-
-  setPlannedStatus: (id: number, status: "pending" | "completed" | "skipped") =>
+  updatePlanned: (id: number, revision: number, session: Omit<PlannedSessionCreate, 'source' | 'sport'>) =>
     fetchAPI<import("@/types").PlannedSession>(`/garmin/planned/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status }),
+      method: "PUT", body: JSON.stringify({ ...session, revision }),
     }),
 
-  /** Lazy: only asked for today's sessions, when Garmin is connected. */
-  getStructure: (id: number) =>
-    fetchAPI<import("@/types").WorkoutStructure>(`/garmin/planned/${id}/structure`),
+  deletePlanned: (id: number, revision?: number) =>
+    fetchAPI<{ message: string }>(`/garmin/planned/${id}${revision ? `?revision=${revision}` : ''}`, { method: "DELETE" }),
 
-  /** Schedules the session on the Garmin calendar; the watch takes it at its next phone sync. */
-  pushToWatch: (id: number) =>
-    fetchAPI<import("@/types").GarminPushResult>(`/garmin/planned/${id}/push`, {
-      method: "POST",
+  setPlannedStatus: (id: number, status: "pending" | "completed" | "skipped", revision?: number) =>
+    fetchAPI<import("@/types").PlannedSession>(`/garmin/planned/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, revision }),
     }),
 
   getSummary: (startDate?: string, endDate?: string) => {
@@ -242,23 +251,6 @@ export const garminApi = {
     if (startDate) params.set("start_date", startDate);
     if (endDate) params.set("end_date", endDate);
     return fetchAPI<import("@/types").MatchSummary>(`/garmin/summary?${params}`);
-  },
-
-  uploadFit: async (file: File, autoMatch = true) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const response = await authFetch(
-      `${API_BASE}/garmin/upload-fit?auto_match=${autoMatch}`,
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Upload Error: ${error}`);
-    }
-    return response.json();
   },
 
   // Sync endpoints
@@ -321,6 +313,30 @@ export const strengthApi = {
       method: "POST",
       body: JSON.stringify({ text, date, save }),
     }),
+
+  /** Garmin strength activities awaiting their loads, newest first. */
+  getDrafts: () => fetchAPI<import("@/types").StrengthDraftList>("/strength/drafts"),
+
+  /** « Ajoute tes charges » on a strength activity: its draft, opened once. */
+  openDraft: (actualSessionId: number) =>
+    fetchAPI<import("@/types").StrengthDraft>("/strength/drafts", {
+      method: "POST",
+      body: JSON.stringify({ actual_session_id: actualSessionId }),
+    }),
+
+  /** The loads saved: the draft becomes the activity's Muscu log (409 when already done). */
+  completeDraft: (draftId: number, text: string) =>
+    fetchAPI<import("@/types").DraftCompletion>(`/strength/drafts/${draftId}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+
+  dismissDraft: (draftId: number) =>
+    fetchAPI<{ message: string }>(`/strength/drafts/${draftId}`, { method: "DELETE" }),
+
+  /** « Tout ignorer »: every listed draft, bounded server-side. */
+  dismissAllDrafts: () =>
+    fetchAPI<{ dismissed: number }>("/strength/drafts/dismiss-all", { method: "POST" }),
 
   getExercises: () =>
     fetchAPI<import("@/types").LibraryExercise[]>("/strength/exercises"),
@@ -390,8 +406,8 @@ export interface AuthConfig {
 
 export type AccountRole = "athlete" | "admin";
 
-/** The signed-in account; `athlete_id` stays null until the owner attaches an athlete. */
-export interface AuthMe {
+/** A login account; `athlete_id` stays null until the owner attaches an athlete. */
+export interface Account {
   email: string;
   name: string | null;
   athlete_id: number | null;
@@ -399,6 +415,42 @@ export interface AuthMe {
   role: AccountRole;
   /** The owner, or an account with the admin role. */
   is_admin: boolean;
+}
+
+/** The signed-in account and its athlete's consent. */
+export interface AuthMe extends Account {
+  consent: ConsentState;
+}
+
+/** The athlete's latest consent, in force or withdrawn (UTC ISO dates). */
+export interface ConsentRecord {
+  terms_version: string;
+  privacy_version: string;
+  health_data: boolean;
+  consented_at: string;
+  withdrawn_at: string | null;
+}
+
+/**
+ * Consent to the terms, the privacy policy and health data (GDPR art. 9).
+ * Until `current`, an account with `required` reaches nothing but its account.
+ */
+export interface ConsentState {
+  /** False on an instance without sign-in: nothing is asked. */
+  required: boolean;
+  /** A consent to the versions below is in force. */
+  current: boolean;
+  /** The versions to accept now. */
+  terms_version: string;
+  privacy_version: string;
+  latest: ConsentRecord | null;
+}
+
+export interface ConsentAnswer {
+  terms_version: string;
+  privacy_version: string;
+  terms_accepted: boolean;
+  health_data: boolean;
 }
 
 export const authApi = {
@@ -410,6 +462,16 @@ export const authApi = {
   },
 
   me: () => fetchAPI<AuthMe>("/auth/me"),
+
+  /** Erases the signed-in athlete for good; the server checks the typed confirmation. */
+  deleteMe: (confirmation: string) =>
+    fetchAPI<void>("/auth/me/delete", { method: "POST", body: JSON.stringify({ confirmation }) }),
+
+  giveConsent: (answer: ConsentAnswer) =>
+    fetchAPI<ConsentState>("/auth/consent", { method: "POST", body: JSON.stringify(answer) }),
+
+  /** The data stays; syncs, briefings, automations and the coach stop until consent is given again. */
+  withdrawConsent: () => fetchAPI<ConsentState>("/auth/consent/withdraw", { method: "POST" }),
 };
 
 // ========================= //
@@ -433,12 +495,55 @@ export interface AdminAccount {
 }
 
 /** Admins and the owner; the server enforces who may do what and answers a French `detail` otherwise. */
+export interface AdminFeatureFlags {
+  coaching_attention?: boolean;
+  glm_flash: boolean;
+  glm_flash_available: boolean;
+}
+
+/** The server's product indicators (services/product_kpis.py), in display order. */
+export const KPI_KEYS = [
+  "active_accounts",
+  "push_subscribers",
+  "strength_logged",
+  "checkins_answered",
+  "briefings_reacted",
+  "weekly_reviews_accepted",
+  "first_action_hours",
+  "retention_30d",
+] as const;
+
+export type KpiKey = (typeof KPI_KEYS)[number];
+
+/** `value` is numerator / denominator, or hours for `first_action_hours`; null when nothing is counted. */
+export interface KpiCell {
+  numerator: number;
+  denominator: number;
+  value: number | null;
+}
+
+/** One ISO week (Monday `week_start`), counted across athletes: no athlete is named. */
+export interface KpiWeek {
+  week_start: string;
+  current: boolean;
+  indicators: Record<KpiKey, KpiCell>;
+}
+
 export const adminApi = {
+  setCoachingAttention: (enabled: boolean) => fetchAPI<AdminFeatureFlags>("/admin/feature-flags", { method: 'PUT', body: JSON.stringify({ coaching_attention: enabled }) }),
+  featureFlags: () => fetchAPI<AdminFeatureFlags>("/admin/feature-flags"),
+  /** The current week first. */
+  kpis: (weeks: number) => fetchAPI<KpiWeek[]>(`/admin/kpis?weeks=${weeks}`),
+  setFeatureFlags: (glmFlash: boolean) =>
+    fetchAPI<AdminFeatureFlags>("/admin/feature-flags", {
+      method: "PUT",
+      body: JSON.stringify({ glm_flash: glmFlash }),
+    }),
   accounts: () => fetchAPI<AdminAccount[]>("/admin/accounts"),
 
   /** Owner only, never on an owner's row. */
   setRole: (userId: number, role: AccountRole) =>
-    fetchAPI<AuthMe>(`/admin/accounts/${userId}/role`, {
+    fetchAPI<Account>(`/admin/accounts/${userId}/role`, {
       method: "POST",
       body: JSON.stringify({ role }),
     }),
@@ -475,7 +580,7 @@ export interface UserSettings {
   auto_adapt_enabled: boolean;
   /** The morning sync sends today's cardio sessions to the Garmin calendar. */
   push_to_garmin_enabled: boolean;
-  theme: import('./theme').Theme;
+  theme: import('./theme').ThemePreference;
   exercise_abbreviations: Record<string, string>;
   weekly_volume_target_kg: number;
   /** Threshold heart rate: the reference the HR zones are built on. */
@@ -484,6 +589,31 @@ export interface UserSettings {
   threshold_pace_sec_km: number | null;
   /** Date of the Garmin test the threshold comes from; null when typed by hand. */
   lthr_measured_on: string | null;
+  /** Which pushes arrive (every kind spelled out) and the local quiet hours. */
+  notification_preferences: NotificationPreferences;
+  /** The coach's evening message about tomorrow (off by default). */
+  coach_evening_enabled: boolean;
+  /** From this hour (18 to 21) on the athlete's clock. */
+  coach_evening_hour: number;
+}
+
+/** Mirrors services/settings.NotificationKind; `soon` kinds in CoachTab are not sent yet. */
+export type NotificationKind =
+  | 'briefing'
+  | 'post_session'
+  | 'weekly_review'
+  | 'adapted_session'
+  | 'imports'
+  | 'checkin'
+  | 'evening'
+  | 'automation' | 'eve_reminder';
+
+export interface NotificationPreferences {
+  daily_limit?: number;
+  coordinated_coaching?: boolean;
+  kinds: Record<NotificationKind, boolean>;
+  /** "HH:MM" in the athlete's timezone; null sends at any hour. */
+  quiet_hours: { start: string; end: string } | null;
 }
 
 /** The coach's word on a finished session, or the rule engine's when it is away. */
@@ -493,15 +623,54 @@ export interface PostSessionFeedback {
   source: "agent" | "rules";
 }
 
+/** The day's briefing, or `pending` (no other field) while the coach writes it. */
+export interface DailyTip {
+  status: "ready" | "pending";
+  tip: string | null;
+  priority: "info" | "warning" | "alert" | null;
+  /** Who wrote it: the coaching agent, or the deterministic rule engine. */
+  source: "agent" | "rules" | null;
+  generated_at: string | null;
+  /** The daily sync rewrote a briefing written before its data. */
+  updated_after_sync: boolean;
+  /** The stored briefing (absent while pending), for a reaction or a question to the coach. */
+  id?: number | null;
+  /** When the day's first briefing was written, if this one replaced it. */
+  first_written_at?: string | null;
+  reaction?: BriefingReaction | null;
+  reaction_comment?: string | null;
+}
+
+export type BriefingReaction = "up" | "down";
+
+/** One of the previous days' briefings (`GET /tips/history`, at most seven). */
+export interface PastBriefing {
+  id: number;
+  date: string;
+  tip: string;
+  source: "agent" | "rules";
+  generated_at: string | null;
+  reaction: BriefingReaction | null;
+  reaction_comment: string | null;
+}
+
 export const tipsApi = {
-  getDaily: () =>
-    fetchAPI<{
-      tip: string;
-      priority: "info" | "warning" | "alert";
-      /** Who wrote it: the coaching agent, or the deterministic rule engine. */
-      source: "agent" | "rules";
-      generated_at: string;
-    }>("/tips/daily"),
+  briefing: (id: number) => fetchAPI<PastBriefing>(`/tips/briefings/${id}`),
+  /** Reads only: never runs the coach. */
+  getDaily: () => fetchAPI<DailyTip>("/tips/daily"),
+
+  /** Writes the day's briefing if it has none: a long request nobody waits on. */
+  writeDaily: () => fetchAPI<DailyTip>("/tips/daily", { method: "POST" }),
+
+  /** Idempotent: the same reaction again stores nothing new; `null` withdraws it. */
+  react: (briefingId: number, reaction: BriefingReaction | null, comment?: string) =>
+    fetchAPI<{ id: number; reaction: BriefingReaction | null; reaction_comment: string | null }>(
+      `/tips/briefings/${briefingId}/reaction`,
+      { method: "PUT", body: JSON.stringify({ reaction, comment: comment ?? null }) }
+    ),
+
+  /** The previous days' briefings, newest first. */
+  history: () => fetchAPI<PastBriefing[]>("/tips/history"),
 
   getPostSession: (
     sessionType: "strength" | "cardio",
@@ -518,37 +687,6 @@ export const tipsApi = {
 };
 
 // ========================= //
-// STRAVA API              //
-// ========================= //
-
-export const stravaApi = {
-  getStatus: () =>
-    fetchAPI<{
-      connected: boolean;
-      athlete_name: string | null;
-      athlete_id: number | null;
-    }>("/strava/status"),
-
-  getAuthorizeUrl: () =>
-    fetchAPI<{ url: string }>("/strava/authorize"),
-
-  sync: (days = 30) =>
-    fetchAPI<{
-      success: boolean;
-      imported: number;
-      merged: number;
-      skipped: number;
-      errors: string[];
-    }>("/strava/sync", {
-      method: "POST",
-      body: JSON.stringify({ days }),
-    }),
-
-  disconnect: () =>
-    fetchAPI<{ success: boolean }>("/strava/disconnect", { method: "DELETE" }),
-};
-
-// ========================= //
 // ANALYTICS API             //
 // ========================= //
 
@@ -556,10 +694,6 @@ export const analyticsApi = {
   getOverview: (period = "30d") =>
     fetchAPI<import("@/types").OverviewResponse>(
       `/analytics/overview?period=${period}`
-    ),
-  getRecords: (sport = "running") =>
-    fetchAPI<import("@/types").RecordsResponse>(
-      `/analytics/records?sport=${sport}`
     ),
   getSessions: (limit = 20, offset = 0) =>
     fetchAPI<import("@/types").CardioSessionsResponse>(
@@ -653,25 +787,50 @@ export const planApi = {
   adaptNow: () =>
     fetchAPI<import("@/types").PlanToday>("/plan/today/adapt", { method: "POST" }),
 
+  /** `garmin`: what Garmin did after it (absent from an older server). */
   revert: (decisionId: number) =>
-    fetchAPI<import("@/types").PlanDecision>(`/plan/decisions/${decisionId}/revert`, {
+    fetchAPI<import("@/types").PlanDecision & { garmin?: import("@/types").RenegotiationGarmin }>(`/plan/decisions/${decisionId}/revert`, {
       method: "POST",
+    }),
+
+  /** « Modifier »: the rules' options for today's session, read when the menu opens. */
+  renegotiationOptions: (sessionId: number, signal?: AbortSignal) =>
+    fetchAPI<import("@/types").RenegotiationMenu>(`/plan/today/sessions/${sessionId}/options`, { signal }),
+
+  /** One option; `version` is the menu's as read: a change since answers 409 and writes nothing. */
+  renegotiate: (sessionId: number, choice: { reason: string; option: string; version: string }) =>
+    fetchAPI<import("@/types").Renegotiated>(`/plan/today/sessions/${sessionId}/renegotiate`, {
+      method: "POST",
+      body: JSON.stringify(choice),
     }),
 
   /** Last week's review, or null when it was not written yet. */
   getReview: async () =>
     recordOrNull<import("@/types").WeeklyReview>(await fetchAPI<unknown>("/plan/review")),
 
-  /** Written once per week; `refresh` writes it again. May wait for the coach (~60 s). */
-  writeReview: (refresh = false) =>
-    fetchAPI<import("@/types").WeeklyReview>(`/plan/review?refresh=${refresh}`, {
+  /** Written once per week; `refresh` writes again the review shown (`reviewId`). May wait for the coach (~60 s). */
+  writeReview: (refresh = false, reviewId?: number) =>
+    fetchAPI<import("@/types").WeeklyReview>(
+      `/plan/review?refresh=${refresh}${reviewId != null ? `&review_id=${reviewId}` : ""}`,
+      { method: "POST" },
+    ),
+
+  /** « Ma semaine »: the current review and its week in numbers. */
+  getReviewWeek: () => fetchAPI<import("@/types").ReviewWeek>("/plan/review/week"),
+
+  /** Applies the ticked proposals, then the week's key sessions go to Garmin and the calendar. */
+  /** `createdAt`: the review's version as the page read it (required); a rewrite since answers 409. */
+  acceptReview: (reviewId: number, indices: number[], createdAt: string | null) =>
+    fetchAPI<import("@/types").ReviewAccepted>(`/plan/review/${reviewId}/accept`, {
       method: "POST",
+      body: JSON.stringify({ indices, created_at: createdAt }),
     }),
 
-  applyReview: (reviewId: number, indices: number[]) =>
+  /** `createdAt`: the review's version as the page read it (required); a rewrite since answers 409. */
+  applyReview: (reviewId: number, indices: number[], createdAt: string | null) =>
     fetchAPI<import("@/types").ReviewApplyResult>(`/plan/review/${reviewId}/apply`, {
       method: "POST",
-      body: JSON.stringify({ indices }),
+      body: JSON.stringify({ indices, created_at: createdAt }),
     }),
 };
 

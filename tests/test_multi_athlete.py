@@ -1,21 +1,23 @@
 """Exercise real shared storage with two unrelated authenticated athletes."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from arete.config import config
 from arete.dataio.db import connect
 from arete.dataio.init_duckdb import main as init_schema
-from arete.garmin.models import PlannedSession, SessionType
+from arete.garmin.models import PlannedSession, SessionStatus, SessionType
 from arete.garmin.repository import GarminRepository
 from arete.services.athlete_scope import athlete_scope, current_athlete_id
 from arete.services.users import upsert_user
 
 
 @pytest.fixture
-def athletes(tmp_path, monkeypatch):
+def athletes(tmp_path, monkeypatch, give_consent):
     monkeypatch.setenv("ARETE_DB", str(tmp_path / "tenants.duckdb"))
     monkeypatch.setenv("ARETE_DATA_DIR", str(tmp_path / "files"))
     monkeypatch.setenv("ARETE_OWNER_EMAIL", "first@example.com")
@@ -25,7 +27,32 @@ def athletes(tmp_path, monkeypatch):
     second = upsert_user("second", "second@example.com", "Second", verified=True)
     assert first.athlete_id == 1
     assert second.athlete_id != first.athlete_id
+    give_consent(first.athlete_id, second.athlete_id)
     return first, second
+
+
+#: Monday 10:00 UTC, noon in Paris (the default zone): every athlete is owed.
+NOON = datetime(2026, 10, 12, 10, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def frozen_dispatch(monkeypatch):
+    """The dispatch's clock, frozen at ``NOON``; set ``[0]`` to move it.
+
+    Vercel's mode: no ``ARETE_AUTO_SYNC_HOUR``, whatever the developer's .env.
+    """
+    from arete import scheduler
+    from arete.services import notifications
+
+    now = [NOON]
+    monkeypatch.setattr(scheduler, "utc_now", lambda: now[0])
+    monkeypatch.setattr(notifications, "utc_now", lambda: now[0])
+    monkeypatch.delenv("ARETE_AUTO_SYNC_HOUR", raising=False)
+    return now
+
+
+def _naive(moment: datetime) -> datetime:
+    return moment.astimezone(UTC).replace(tzinfo=None)
 
 
 def planned(label):
@@ -225,7 +252,7 @@ def test_cached_coaches_never_share_memory_roots(athletes, monkeypatch):
 
     first, second = athletes
     coaching.get_agent.cache_clear()
-    monkeypatch.setattr(coaching, "_assemble", lambda _profile: memory_root())
+    monkeypatch.setattr(coaching, "_assemble", lambda _profile, **kw: memory_root())
     try:
         with athlete_scope(first.athlete_id):
             first_graph = coaching.get_agent()
@@ -239,7 +266,7 @@ def test_cached_coaches_never_share_memory_roots(athletes, monkeypatch):
 
 
 def test_scheduler_dispatches_both_athletes_once_without_replaying(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from arete import scheduler
 
@@ -265,22 +292,6 @@ def test_email_refresh_preserves_athlete_identity(athletes):
     assert updated.email_verified_at is not None
 
 
-def test_oauth_state_binds_the_callback_to_its_athlete():
-    from arete.services import oauth_state
-
-    secret = "test-only-secret"
-    state = oauth_state.issue(secret, athlete_id=42)
-    assert oauth_state.athlete_for_state(secret, state) == 42
-    assert oauth_state.athlete_for_state(secret, state.replace("42~", "1~")) is None
-    assert oauth_state.athlete_for_state(secret, oauth_state.issue(secret)) is None
-    assert (
-        oauth_state.athlete_for_state(
-            secret, oauth_state.issue(secret, now=0, athlete_id=42)
-        )
-        is None
-    )
-
-
 def test_mirror_keeps_identical_paths_private(athletes):
     from arete.dataio import mirror
 
@@ -289,7 +300,7 @@ def test_mirror_keeps_identical_paths_private(athletes):
         for user in athletes:
             with athlete_scope(user.athlete_id):
                 assert mirror.hydrate() == 0
-                path = config.data_dir / "agent/memory/notes.md"
+                path = config.data_dir / "garmin_tokens/test.json"
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(user.email)
                 assert mirror.flush() == 1
@@ -299,14 +310,14 @@ def test_mirror_keeps_identical_paths_private(athletes):
             with athlete_scope(user.athlete_id):
                 assert mirror.hydrate() == 1
                 assert (
-                    config.data_dir / "agent/memory/notes.md"
+                    config.data_dir / "garmin_tokens/test.json"
                 ).read_text() == user.email
     finally:
         mirror.reset()
 
 
 def test_scheduler_failure_is_not_replayed_and_other_athletes_continue(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from arete import scheduler
 
@@ -343,23 +354,23 @@ def _stub_scheduled_work(monkeypatch, seen):
     monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
 
 
-def _set_lease(athlete_id, expression):
+def _set_lease(athlete_id, expression, *params):
     con = connect()
     con.execute(
         f"UPDATE app.athletes SET sync_lease_until = {expression} WHERE id=?",
-        [athlete_id],
+        [*params, athlete_id],
     )
     con.close()
 
 
 def test_scheduler_reclaims_a_lease_from_a_previous_day_but_not_today(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from arete import scheduler
 
     first, second = athletes
-    _set_lease(first.athlete_id, "current_timestamp - INTERVAL 1 DAY")
-    _set_lease(second.athlete_id, "current_timestamp + INTERVAL 15 MINUTE")
+    _set_lease(first.athlete_id, "?", _naive(NOON - timedelta(days=1)))
+    _set_lease(second.athlete_id, "?", _naive(NOON + timedelta(minutes=15)))
     seen: list[int] = []
     _stub_scheduled_work(monkeypatch, seen)
     result = scheduler.run_scheduled_batch()
@@ -368,8 +379,9 @@ def test_scheduler_reclaims_a_lease_from_a_previous_day_but_not_today(
     con = connect()
     rows = dict(
         con.execute(
-            "SELECT id, (sync_lease_until IS NULL "
-            "AND CAST(last_sync_at AS DATE) = current_date) FROM app.athletes"
+            "SELECT id, (sync_lease_until IS NULL AND last_sync_at = ?) "
+            "FROM app.athletes",
+            [_naive(NOON)],
         ).fetchall()
     )
     con.close()
@@ -377,7 +389,9 @@ def test_scheduler_reclaims_a_lease_from_a_previous_day_but_not_today(
     assert rows[second.athlete_id] is False
 
 
-def test_a_failed_athlete_is_retried_by_the_next_day_s_dispatch(athletes, monkeypatch):
+def test_a_failed_athlete_is_retried_by_the_next_day_s_dispatch(
+    athletes, monkeypatch, frozen_dispatch
+):
     from arete import scheduler
 
     first = athletes[0]
@@ -407,7 +421,7 @@ def test_a_failed_athlete_is_retried_by_the_next_day_s_dispatch(athletes, monkey
 
 
 def test_a_claim_lost_to_a_concurrent_dispatch_is_skipped_not_fatal(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from contextlib import contextmanager
 
@@ -423,10 +437,7 @@ def test_a_claim_lost_to_a_concurrent_dispatch_is_skipped_not_fatal(
             self.con = con
 
         def execute(self, sql, params=None):
-            if (
-                "SET sync_lease_until=current_timestamp" in sql
-                and params[1] == first.athlete_id
-            ):
+            if "SET sync_lease_until=?" in sql and params[1] == first.athlete_id:
                 raise duckdb.TransactionException("Conflict on update!")
             return self.con.execute(sql, params)
 
@@ -443,7 +454,9 @@ def test_a_claim_lost_to_a_concurrent_dispatch_is_skipped_not_fatal(
     assert list(result["athletes"]) == [str(second.athlete_id)]
 
 
-def test_model_steps_are_deferred_past_the_model_deadline(athletes, monkeypatch):
+def test_model_steps_are_deferred_past_the_model_deadline(
+    athletes, monkeypatch, frozen_dispatch
+):
     from itertools import chain, repeat
 
     from arete import scheduler
@@ -469,29 +482,293 @@ def test_model_steps_are_deferred_past_the_model_deadline(athletes, monkeypatch)
             }
         },
         "deferred": True,
+        # Not a Sunday evening: no review pass.
+        "reviews": {"athletes": {}, "deferred": False},
     }
     con = connect()
     assert con.execute(
-        "SELECT CAST(last_sync_at AS DATE) = current_date, sync_lease_until IS NULL "
+        "SELECT last_sync_at = ?, sync_lease_until IS NULL "
         "FROM app.athletes WHERE id=?",
-        [first.athlete_id],
+        [_naive(NOON), first.athlete_id],
     ).fetchone() == (True, True)
     con.close()
 
 
 def test_scheduler_defers_unclaimed_work_at_the_dispatch_deadline(
-    athletes, monkeypatch
+    athletes, monkeypatch, frozen_dispatch
 ):
     from arete import scheduler
 
     clock = iter([0, scheduler.SCHEDULE_DISPATCH_SECONDS])
     monkeypatch.setattr(scheduler, "monotonic", lambda: next(clock))
-    assert scheduler.run_scheduled_batch() == {"athletes": {}, "deferred": True}
+    assert scheduler.run_scheduled_batch() == {
+        "athletes": {},
+        "deferred": True,
+        "reviews": {"athletes": {}, "deferred": False},
+    }
     con = connect()
     assert con.execute(
         "SELECT count(*) FROM app.athletes WHERE sync_lease_until IS NOT NULL"
     ).fetchone() == (0,)
     con.close()
+
+
+#: UTC+3 and UTC-5 all year (no summer time).
+MOSCOW, BOGOTA = "Europe/Moscow", "America/Bogota"
+
+
+def _settle(athlete_id, zone, preferences=None):
+    con = connect()
+    con.execute(
+        "INSERT INTO app.user_settings (user_id, timezone, notification_preferences) "
+        "VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET "
+        "timezone=EXCLUDED.timezone, "
+        "notification_preferences=EXCLUDED.notification_preferences",
+        [athlete_id, zone, preferences],
+    )
+    con.close()
+
+
+def _run_the_day(monkeypatch, frozen_dispatch, hours):
+    """Dispatch at each UTC hour of Monday; who ran when, and the briefing push.
+
+    The briefing goes through the real preferences (quiet hours included); it
+    stops at the missing Web Push keys, after them.
+    """
+    from arete import scheduler
+    from arete.services.notifications import notify
+
+    runs: dict[int, list[tuple[int, str | None]]] = {}
+
+    def briefing():
+        result = notify("Briefing du coach", "Texte", "/", kind="briefing")
+        hour = frozen_dispatch[0].hour
+        runs.setdefault(current_athlete_id(), []).append((hour, result.skipped_reason))
+        return "rules"
+
+    monkeypatch.setattr(scheduler, "daily_sync", lambda: {"sync": "ok"})
+    monkeypatch.setattr(scheduler, "write_daily_briefing", briefing)
+    monkeypatch.setattr(scheduler, "write_weekly_review", lambda: "rules")
+    for hour in hours:
+        frozen_dispatch[0] = NOON.replace(hour=hour)
+        scheduler.run_scheduled_batch()
+    return runs
+
+
+def test_vercel_windows_run_each_athlete_once_out_of_quiet_hours(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """Cron windows from 07:00 UTC: 10:00 in Moscow, 02:00-07:00 in Bogota."""
+    first, second = athletes
+    _settle(first.athlete_id, MOSCOW)
+    _settle(second.athlete_id, BOGOTA)
+    runs = _run_the_day(monkeypatch, frozen_dispatch, _cron_hours())
+    # Bogota waits for the end of its quiet hours (07:00 local): its briefing
+    # push is sent, not dropped as "heures calmes".
+    assert runs == {
+        first.athlete_id: [(7, "clés Web Push absentes du serveur")],
+        second.athlete_id: [(12, "clés Web Push absentes du serveur")],
+    }
+
+
+def _cron_hours(path: str = "/api/cron/daily-sync") -> list[int]:
+    crons = json.loads((Path(__file__).parents[1] / "vercel.json").read_text())["crons"]
+    return sorted(int(c["schedule"].split()[1]) for c in crons if c["path"] == path)
+
+
+@pytest.mark.parametrize(
+    "zone",
+    [
+        "Europe/Moscow",
+        "Europe/Paris",
+        "America/New_York",
+        "America/Los_Angeles",
+        "America/Anchorage",
+    ],
+)
+def test_a_cron_window_reaches_every_zone_from_utc_minus_9_in_its_morning(zone):
+    """Default quiet hours end at 07:00 local: some window must fall after it."""
+    from arete import scheduler
+    from arete.services.settings import stored_preferences
+
+    quiet = stored_preferences(None).quiet_hours
+    day = datetime(2026, 1, 12, tzinfo=UTC)  # winter: the westernmost offsets
+    assert any(
+        scheduler.owed_today(
+            None,
+            None,
+            day.replace(hour=hour).timestamp(),
+            zone,
+            sync_hour=scheduler.DEFAULT_SYNC_HOUR,
+            quiet_hours=quiet,
+        )
+        for hour in _cron_hours()
+    )
+
+
+@pytest.mark.parametrize(
+    ("sync_hour", "moscow", "bogota"),
+    [
+        # 09:00 on each athlete's clock, wherever the Docker host is.
+        (9, 6, 14),
+        # Before the default quiet hours end: the run waits for 07:00 local.
+        (5, 4, 12),
+    ],
+)
+def test_docker_dispatcher_waits_for_the_hour_on_each_athlete_s_clock(
+    athletes, monkeypatch, frozen_dispatch, sync_hour, moscow, bogota
+):
+    first, second = athletes
+    _settle(first.athlete_id, MOSCOW)
+    _settle(second.athlete_id, BOGOTA)
+    # Both ran on Sunday; Monday 00:00 UTC is still Sunday 19:00 in Bogota.
+    sunday = _naive(datetime(2026, 10, 11, 18, 0, tzinfo=UTC))
+    con = connect()
+    con.execute("UPDATE app.athletes SET last_sync_at=?", [sunday])
+    con.close()
+    monkeypatch.setenv("ARETE_AUTO_SYNC_HOUR", str(sync_hour))
+    runs = _run_the_day(monkeypatch, frozen_dispatch, range(24))
+    assert runs == {
+        first.athlete_id: [(moscow, "clés Web Push absentes du serveur")],
+        second.athlete_id: [(bogota, "clés Web Push absentes du serveur")],
+    }
+
+
+def test_a_run_past_the_athlete_s_midnight_is_dated_by_its_claim(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """Claimed at 23:58 in Moscow, finished at 00:01: the next day still runs."""
+    from arete import scheduler
+
+    first, second = athletes
+    _settle(first.athlete_id, MOSCOW, '{"quiet_hours": null}')
+    _settle(second.athlete_id, MOSCOW, '{"quiet_hours": null}')
+    _set_lease(second.athlete_id, "?", datetime(2100, 1, 1))  # parked
+    monkeypatch.setenv("ARETE_AUTO_SYNC_HOUR", "7")
+    claim = datetime(2026, 10, 12, 20, 58, tzinfo=UTC)  # 23:58 in Moscow
+    seen: list[int] = []
+
+    def sync():
+        seen.append(current_athlete_id())
+        frozen_dispatch[0] += timedelta(minutes=3)  # 00:01 on Tuesday
+        return {"sync": "ok"}
+
+    def model_step():
+        written.append(frozen_dispatch[0])
+        return "rules"
+
+    written: list[datetime] = []
+    monkeypatch.setattr(scheduler, "daily_sync", sync)
+    monkeypatch.setattr(scheduler, "write_daily_briefing", model_step)
+    monkeypatch.setattr(scheduler, "write_weekly_review", model_step)
+    frozen_dispatch[0] = claim
+    # Tuesday's briefing is not written from Monday's data: Tuesday's run does.
+    assert scheduler.run_scheduled_batch()["athletes"] == {
+        str(first.athlete_id): {
+            "sync": "ok",
+            "briefing": "skipped: day ended",
+            "review": "skipped: day ended",
+        }
+    }
+    assert written == []
+    con = connect()
+    stored = con.execute(
+        "SELECT last_sync_at FROM app.athletes WHERE id=?", [first.athlete_id]
+    ).fetchone()
+    con.close()
+    assert stored == (_naive(claim),)
+    # Tuesday before the hour, then at it: the run is owed once more.
+    frozen_dispatch[0] = claim + timedelta(hours=7)  # 06:58 in Moscow
+    assert scheduler.run_scheduled_batch()["athletes"] == {}
+    frozen_dispatch[0] = claim + timedelta(hours=8)  # 07:58 in Moscow
+    assert list(scheduler.run_scheduled_batch()["athletes"]) == [str(first.athlete_id)]
+    assert seen == [first.athlete_id, first.athlete_id]
+    assert len(written) == 2  # Tuesday's briefing and review, on Tuesday's run
+
+
+def test_markers_compare_right_whatever_the_writer_s_session_timezone(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """A Tokyo session writes, a UTC session reads: the markers still agree.
+
+    Each connection inherits the database instance's default TimeZone, as a
+    process with another ``TZ`` would give it (Docker beside Vercel).
+    """
+    import duckdb
+
+    from arete import scheduler
+    from arete.services.users import list_accounts
+
+    first, second = athletes
+    keeper = duckdb.connect(str(config.db_path))
+    try:
+        keeper.execute("SET GLOBAL TimeZone='Asia/Tokyo'")
+        con = connect()
+        assert con.execute("SELECT current_setting('TimeZone')").fetchone() == (
+            "Asia/Tokyo",
+        )
+        con.close()
+        _stub_scheduled_work(monkeypatch, seen := [])
+        # 21:00 in Paris; Tokyo's wall clock already reads Tuesday 04:00.
+        evening = datetime(2026, 10, 12, 19, 0, tzinfo=UTC)
+        frozen_dispatch[0] = evening
+        scheduler.run_scheduled_batch()
+        assert seen == [first.athlete_id, second.athlete_id]
+        keeper.execute("SET GLOBAL TimeZone='UTC'")
+        # Tuesday 09:00 in Paris: a new day for both, read in UTC.
+        frozen_dispatch[0] = evening + timedelta(hours=12)
+        scheduler.run_scheduled_batch()
+        assert seen == [first.athlete_id, second.athlete_id] * 2
+        # Leases against the server's clock, back in Tokyo.
+        keeper.execute("SET GLOBAL TimeZone='Asia/Tokyo'")
+        utc_now = datetime.now(UTC)
+        _set_lease(first.athlete_id, "?", _naive(utc_now - timedelta(minutes=1)))
+        _set_lease(second.athlete_id, "?", _naive(utc_now + timedelta(minutes=10)))
+        stuck = {a.athlete_id: a.lease_stuck for a in list_accounts()}
+        assert (stuck[first.athlete_id], stuck[second.athlete_id]) == (True, False)
+        assert scheduler.release_sync_lease(second.athlete_id) is False
+        assert scheduler.release_sync_lease(first.athlete_id) is True
+    finally:
+        keeper.close()
+
+
+def test_the_scan_bound_defers_the_athletes_beyond_it(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """The least recently active come first; those past the bound wait."""
+    from arete import scheduler
+
+    first, second = athletes
+    # The first athlete ran yesterday; the second's run failed this morning.
+    con = connect()
+    con.execute(
+        "UPDATE app.athletes SET last_sync_at=? WHERE id=?",
+        [_naive(NOON - timedelta(days=1)), first.athlete_id],
+    )
+    con.execute(
+        "UPDATE app.athletes SET last_sync_at=?, sync_lease_until=? WHERE id=?",
+        [
+            _naive(NOON - timedelta(days=2)),
+            _naive(NOON - timedelta(hours=1)),
+            second.athlete_id,
+        ],
+    )
+    con.close()
+    seen: list[int] = []
+    _stub_scheduled_work(monkeypatch, seen)
+    monkeypatch.setattr(scheduler, "MAX_SCANNED_ATHLETES", 1)
+    assert scheduler.run_scheduled_batch() == {
+        "athletes": {
+            str(first.athlete_id): {
+                "sync": "ok",
+                "briefing": "rules",
+                "review": "rules",
+            }
+        },
+        "deferred": True,
+        # The review pass reads under the same bound.
+        "reviews": {"athletes": {}, "deferred": True},
+    }
 
 
 def test_garmin_connection_mfa_sync_and_logout_are_private(
@@ -559,7 +836,13 @@ def test_garmin_connection_mfa_sync_and_logout_are_private(
     monkeypatch.setattr(Garmin, "login", login)
     monkeypatch.setattr(Garmin, "resume_login", resume)
     monkeypatch.setattr(Client, "dump", dump)
-    monkeypatch.setattr(GarminSyncClient, "sync_activities", sync)
+
+    def stream_sync(sync_client, **kwargs):
+        # The fake token file belongs to the mocked login protocol, not the SDK.
+        sync_client.client.sync_budget = None
+        yield sync(sync_client, **kwargs)
+
+    monkeypatch.setattr(GarminSyncClient, "iter_sync_activities", stream_sync)
     monkeypatch.setattr(
         "arete.api.garmin_sync.write_sync_feedback", lambda *_: None, raising=False
     )
@@ -596,7 +879,9 @@ def test_garmin_connection_mfa_sync_and_logout_are_private(
             is True
         )
         response = client.post(
-            "/garmin/sync/activities", headers=who, json={"download_fit": False}
+            "/garmin/sync/activities",
+            headers=who,
+            json={"download_fit": False, "start_date": "2026-10-01"},
         )
         assert response.status_code == 200, response.text
     for who, name in zip(
@@ -638,12 +923,46 @@ def test_remote_token_store_revokes_stale_worker_files(athletes, tmp_path):
     with athlete_scope(athletes[1].athlete_id):
         assert token_store.hydrate(stale)
         assert stale.read_text() == athletes[1].email
-        token_store.delete()
+        token_store.delete(stale)
         assert token_store.hydrate(stale) is False
         assert not stale.exists()
     with athlete_scope(athletes[0].athlete_id):
         assert token_store.hydrate(stale)
         assert stale.read_text() == athletes[0].email
+
+
+def test_remote_session_status_reads_each_athletes_rows(
+    athletes, tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from arete.garmin import token_store
+
+    # Only the status's branch is remote; the database stays the local copy.
+    monkeypatch.setattr(token_store, "config", SimpleNamespace(is_remote_db=True))
+    first, second = (user.athlete_id for user in athletes)
+    with athlete_scope(first):
+        source = tmp_path / "garmin_tokens.json"
+        source.write_text("{}")
+        token_store.save(source)
+        token_store.save_account(source, "first@garmin.test", remote=True)
+        assert token_store.session_status() == (True, "first@garmin.test")
+        con = connect()
+        try:
+            # The dashboard's read, on the connection it already holds.
+            assert token_store.session_status(con) == (True, "first@garmin.test")
+        finally:
+            con.close()
+    with athlete_scope(second):
+        assert token_store.session_status() == (False, None)
+        con = connect()
+        try:
+            assert token_store.session_status(con) == (False, None)
+        finally:
+            con.close()
+    with athlete_scope(first):
+        token_store.delete(source)
+        assert token_store.session_status() == (False, None)
 
 
 @pytest.mark.parametrize("flow", ["portal", "ios", "widget"])
@@ -729,14 +1048,16 @@ def test_reactivation_restores_the_athlete_and_its_logins(athletes):
         assert repo.get_planned_session(identifier).description == "paused athlete"
 
 
-def test_a_released_lease_is_claimed_by_the_next_dispatch(athletes, monkeypatch):
+def test_a_released_lease_is_claimed_by_the_next_dispatch(
+    athletes, monkeypatch, frozen_dispatch
+):
     from arete import scheduler
 
     first, second = athletes
     con = connect()
     con.execute(
-        "UPDATE app.athletes SET sync_lease_until = current_timestamp - INTERVAL 1 SECOND "
-        "WHERE id=?",
+        "UPDATE app.athletes SET sync_lease_until = "
+        "(current_timestamp AT TIME ZONE 'UTC') - INTERVAL 1 SECOND WHERE id=?",
         [second.athlete_id],
     )
     con.close()
@@ -754,3 +1075,134 @@ def test_a_released_lease_is_claimed_by_the_next_dispatch(athletes, monkeypatch)
     assert scheduler.release_sync_lease(second.athlete_id) is False
     scheduler.run_scheduled_batch()
     assert seen == [first.athlete_id, second.athlete_id]
+
+
+def test_concurrent_memory_decisions_only_see_their_athletes(athletes):
+    import asyncio
+
+    from arete.services import athlete_facts as facts
+    from arete.services.fact_memory import FactDraft, MemoryDecision, remember
+
+    first, second = athletes
+    for user in athletes:
+        with athlete_scope(user.athlete_id):
+            facts.add_fact(
+                "preference", f"Private {user.athlete_id}", evidence="explicit"
+            )
+
+    async def task(user):
+        with athlete_scope(user.athlete_id):
+
+            async def decide(state, choices):
+                assert list(state["candidates"].values()) == [
+                    f"Private {user.athlete_id}"
+                ]
+                await asyncio.sleep(0)
+                return MemoryDecision(
+                    type="choice",
+                    choice="create",
+                    confidence=1.0,
+                    probabilities={key: float(key == "create") for key in choices},
+                )
+
+            return await remember(
+                FactDraft(
+                    "preference",
+                    f"New {user.athlete_id}",
+                    "explicit",
+                    "synthetic",
+                    date(2026, 10, 12),
+                    None,
+                ),
+                classify=decide,
+            )
+
+    async def run():
+        return await asyncio.gather(task(first), task(second))
+
+    results = asyncio.run(run())
+    assert all(r["action"] == "created" for r in results)
+    for user in athletes:
+        with athlete_scope(user.athlete_id):
+            assert {f.text for f in facts.list_facts()} == {
+                f"Private {user.athlete_id}",
+                f"New {user.athlete_id}",
+            }
+
+
+def test_another_athletes_session_cannot_be_renegotiated(athletes, monkeypatch):
+    from arete.services import renegotiation
+    from arete.services.coach_today import reference
+
+    first, second = athletes
+    day = date(2026, 10, 10)
+    monkeypatch.setattr(renegotiation, "athlete_today", lambda: day)
+    with athlete_scope(first.athlete_id):
+        session_id = GarminRepository().create_planned_session(planned("first's"))
+        version = renegotiation.options(session_id)["version"]
+    with athlete_scope(second.athlete_id):
+        for read in (
+            lambda: renegotiation.options(session_id),
+            lambda: renegotiation.apply(session_id, "pain", "rest", version),
+            lambda: reference(f"session:{session_id}"),
+        ):
+            with pytest.raises(LookupError):
+                read()
+    with athlete_scope(first.athlete_id):
+        session = GarminRepository().get_planned_session(session_id)
+        assert session is not None and session.status == SessionStatus.PENDING
+        assert renegotiation.options(session_id)["version"] == version
+
+
+def test_a_missed_session_is_replanned_in_its_athletes_scope_only(
+    athletes, monkeypatch
+):
+    from arete.services import missed_sessions
+
+    first, second = athletes
+    monkeypatch.setattr(
+        "arete.services.settings.athlete_today", lambda: date(2026, 10, 10)
+    )
+    with athlete_scope(first.athlete_id):
+        session_id = GarminRepository().create_planned_session(planned("first's"))
+    with athlete_scope(second.athlete_id):
+        assert missed_sessions.candidates() is False
+        assert missed_sessions.replan() == []
+    with athlete_scope(first.athlete_id):
+        (proposal,) = missed_sessions.replan()
+        assert proposal.planned_session_id == session_id
+
+
+def test_a_run_stamp_racing_another_write_of_the_athlete_frees_the_lease(
+    athletes, monkeypatch, frozen_dispatch
+):
+    """ARE-150: another write of the athlete's row commits inside the stamp's snapshot."""
+    from write_race import race
+
+    from arete import scheduler
+
+    first = athletes[0]
+    seen: list[int] = []
+    _stub_scheduled_work(monkeypatch, seen)
+
+    def other_writer():
+        con = connect()
+        con.execute(
+            "UPDATE app.athletes SET deleted_at=deleted_at WHERE id=? RETURNING id",
+            [first.athlete_id],
+        ).fetchall()
+        con.close()
+
+    with race(monkeypatch, r"SET last_sync_at=\?,sync_lease_until=CASE", other_writer):
+        result = scheduler.run_scheduled_batch()
+    assert result["athletes"][str(first.athlete_id)] == {
+        "sync": "ok",
+        "briefing": "rules",
+        "review": "rules",
+    }
+    con = connect()
+    assert con.execute(
+        "SELECT sync_lease_until IS NULL AND last_sync_at = ? FROM app.athletes WHERE id=?",
+        [_naive(NOON), first.athlete_id],
+    ).fetchone() == (True,)
+    con.close()

@@ -1,15 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { characterAsset, gameApi, useGamePreference } from '@/lib/gamification';
+import { characterAsset, useGamePreference, useGameSnapshot } from '@/lib/gamification';
+import { readableError } from '@/lib/utils';
 
 export function PlayerSummary() {
   const pref = useGamePreference();
-  const player = useQuery({
-    queryKey: ['game'],
-    queryFn: gameApi.sync,
-    enabled: pref.data?.enabled === true,
-    retry: false,
-  });
+  const player = useGameSnapshot({ enabled: pref.data?.enabled === true });
   if (!pref.data?.enabled) return null;
   if (player.error)
     return (
@@ -30,7 +25,7 @@ export function PlayerSummary() {
   return (
     <Link
       to="/profile"
-      className="flex min-w-0 items-center gap-3 border-b border-text-muted/20 py-3 font-mono"
+      className="flex min-w-0 items-center gap-3 border-b border-text-muted/20 py-3 font-sans"
     >
       <img
         src={characterAsset(p.athlete_class, p.equipped, p.level)}
@@ -48,6 +43,11 @@ export function PlayerSummary() {
         {p.history[0] && (
           <p className="text-[10px] text-text-muted truncate">
             Dernier reçu : {p.history[0].label}
+          </p>
+        )}
+        {player.syncError && (
+          <p role="alert" className="text-[10px] text-warning-orange truncate">
+            Progression non actualisée : {readableError(player.syncError)}
           </p>
         )}
       </div>

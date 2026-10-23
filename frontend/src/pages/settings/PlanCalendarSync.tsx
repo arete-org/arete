@@ -6,6 +6,7 @@ import {
   type GoogleCalendarInfo,
 } from "@/lib/googleCalendar";
 import { Button, Select } from "@/components/ui";
+import { readableError } from '@/lib/utils';
 
 const formatWhen = (iso: string) =>
   new Date(iso).toLocaleString("fr-FR", {
@@ -53,7 +54,7 @@ export function PlanCalendarSync({
       aria-label="Plan d’entraînement dans Google Calendar"
       className="space-y-2 border-t border-text-muted/10 pt-3 text-xs"
     >
-      <div className="font-mono text-sm text-text-primary">
+      <div className="font-sans text-sm text-text-primary">
         Plan d’entraînement
       </div>
       <p className="text-text-muted">
@@ -107,7 +108,7 @@ export function PlanCalendarSync({
       </label>
       {(error || plan.error) && (
         <p role="alert" className="break-words text-danger-red">
-          {error ? error.message : plan.error}
+          {error ? readableError(error) : plan.error}
         </p>
       )}
       <p className="text-text-secondary">

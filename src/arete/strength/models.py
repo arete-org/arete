@@ -216,6 +216,29 @@ class SessionExercise:
         }
 
 
+@dataclass(frozen=True)
+class StrengthSessionSummary:
+    """A session's list row: the totals of ``StrengthSession``, computed in SQL.
+
+    Working sets are those not marked warm-up; muscles are the exercises'
+    primary ones (secondary muscles do not count), sorted.
+    """
+
+    id: int
+    date: date
+    name: str | None
+    program: str | None
+    duration_min: int | None
+    overall_rpe: float | None
+    exercises_count: int
+    total_sets: int
+    total_volume: float
+    muscles_worked: list[str]
+    #: Catalog names in session order.
+    exercise_names: list[str] = field(default_factory=list)
+    actual_session_id: int | None = None
+
+
 @dataclass
 class StrengthSession:
     """A complete strength training session."""
@@ -292,3 +315,54 @@ class StrengthSession:
             "overall_rpe": self.overall_rpe,
             "muscles_worked": [m.value for m in self.muscles_worked],
         }
+
+
+@dataclass(frozen=True)
+class GarminExerciseSummary:
+    """One line of Garmin's summary of a strength activity: no load, ever.
+
+    Garmin's own keys: ``category`` (``BENCH_PRESS``) and, when the watch knew
+    better, ``sub_category`` (``BARBELL_BENCH_PRESS``). ``reps`` is the total
+    over the ``sets``; either count is missing when the watch did not count.
+    """
+
+    category: str
+    sub_category: str | None = None
+    sets: int | None = None
+    reps: int | None = None
+
+
+@dataclass(frozen=True)
+class DraftExercise:
+    """An exercise a draft starts from: catalog-matched, or free text to confirm."""
+
+    name: str
+    exercise_id: str | None = None  # catalog id when the name was recognised
+    sets: int | None = None
+    reps: int | None = None  # per set, rounded from Garmin's total
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "exercise_id": self.exercise_id,
+            "sets": self.sets,
+            "reps": self.reps,
+        }
+
+
+@dataclass(frozen=True)
+class StrengthDraft:
+    """A Garmin strength activity awaiting its loads (``app.strength_drafts``).
+
+    Not a session: nothing reads it but the Journal. Completing it saves a
+    Muscu log linked to the activity, and the pair is the one session.
+    """
+
+    id: int
+    actual_session_id: int
+    date: date
+    activity_name: str | None
+    duration_sec: int | None
+    exercises: list[DraftExercise]
+    origin: str  # 'import' (Garmin sync) or 'journal' (opened by the athlete)
+    created_at: datetime | None = None

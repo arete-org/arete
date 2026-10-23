@@ -5,9 +5,9 @@ import type { ProjectionPoint } from '@/types';
 import { AXIS, ChartGrid, ChartTooltip, TICK } from '../analytics/chartParts';
 
 const SERIES_NAME: Record<string, string> = {
-  ctl: 'Forme (CTL)',
-  atl: 'Fatigue (ATL)',
-  tsb: 'Fraîcheur (TSB)',
+  ctl: 'Forme de fond',
+  atl: 'Fatigue',
+  tsb: 'Fraîcheur',
   plannedTss: 'Charge prévue',
 };
 
@@ -15,13 +15,14 @@ const shortDate = (iso: string) =>
   parseLocalDate(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 
 const LEGEND = [
-  { label: 'Forme', className: 'bg-neon-cyan' },
+  { label: 'Forme de fond', className: 'bg-neon-cyan' },
   { label: 'Fatigue', className: 'bg-chart-red' },
   { label: 'Fraîcheur', className: 'bg-neon-gold' },
   { label: 'Jour prévu', className: 'bg-chart-grey opacity-50' },
 ];
 
-/** CTL / ATL / TSB until race day; bars mark the days whose load comes from the plan. */
+/** Forme de fond, fatigue and fraîcheur until race day, in the dashboard's words; bars
+ * mark the days whose load comes from the plan. */
 export function ProjectionChart({ series, today }: { series: ProjectionPoint[]; today: string }) {
   const data = series.map((p) => ({
     date: p.date,
@@ -47,8 +48,8 @@ export function ProjectionChart({ series, today }: { series: ProjectionPoint[]; 
             formatter={(value: number, name: string) => [Math.round(value), SERIES_NAME[name] ?? name]}
           />
           <ReferenceLine yAxisId="load" y={0} stroke={CHART.grid} />
-          <Bar yAxisId="tss" dataKey="plannedTss" fill={CHART.grey} opacity={0.3} />
-          <Area
+          <Bar isAnimationActive={false} yAxisId="tss" dataKey="plannedTss" fill={CHART.grey} opacity={0.3} />
+          <Area isAnimationActive={false}
             yAxisId="load"
             type="monotone"
             dataKey="tsb"
@@ -57,8 +58,8 @@ export function ProjectionChart({ series, today }: { series: ProjectionPoint[]; 
             fillOpacity={0.12}
             strokeWidth={1.5}
           />
-          <Line yAxisId="load" type="monotone" dataKey="ctl" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
-          <Line yAxisId="load" type="monotone" dataKey="atl" stroke={CHART.red} strokeWidth={1.5} dot={false} />
+          <Line isAnimationActive={false} yAxisId="load" type="monotone" dataKey="ctl" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
+          <Line isAnimationActive={false} yAxisId="load" type="monotone" dataKey="atl" stroke={CHART.red} strokeWidth={1.5} dot={false} />
           <ReferenceLine
             yAxisId="load"
             x={today}
@@ -68,7 +69,7 @@ export function ProjectionChart({ series, today }: { series: ProjectionPoint[]; 
           />
         </ComposedChart>
       </ResponsiveContainer>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] font-mono text-text-muted">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] font-sans text-text-muted">
         {LEGEND.map((item) => (
           <span key={item.label} className="inline-flex items-center gap-1.5">
             <span className={`inline-block w-3 h-1.5 rounded-sm ${item.className}`} />

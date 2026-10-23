@@ -2,9 +2,13 @@
 
 The coach accepts XLSX, XLS, CSV, Markdown, UTF-8 text, PDF, PNG, JPEG and WebP.
 Drop up to five files into the coach or use **Joindre des fichiers**. After upload,
-ask the coach to prepare sessions. **Vérifier … avant ajout au Planning** opens the
-editable preview. Review the original, dates, units, steps and possible duplicates;
-only the explicit confirmation inserts the selected sessions into Planning.
+ask the coach to create sessions, and to send them to Garmin if desired. The coach
+reads the requested dates, checks existing sessions, then creates each session
+directly with typed steps and source references. There is no import draft or approval
+card. A request to read a document alone creates nothing. Source quotes are verified
+against the current thread; they do not prove the model assigned the correct date.
+The document skill keeps each spreadsheet date and its workout in the same column.
+
 
 The Planning page's **Séances structurées et Garmin Connect** panel is a separate
 human action. Select sessions, optionally select a documented compatible device,
@@ -13,9 +17,9 @@ session leaves an explicit removal task. No background job exports these workout
 
 ## Ownership and persistence
 
-Migration 13 adds document/chunk/quota, draft and Garmin operation tables, plus
+Migration 13 added document/chunk/quota, legacy draft and Garmin operation tables, plus
 `prescription`, `provenance` and `revision` on existing planned sessions. Originals,
-extractions and drafts use the configured DuckDB/MotherDuck database, not the
+extractions use the configured DuckDB/MotherDuck database, not the
 server filesystem. Upload reservations count towards quota even when interrupted;
 delete incomplete files to release their reservation. Individual 3 MiB chunks are
 idempotent, finalized bytes are checked with SHA-256, and finalization is atomic.
@@ -23,38 +27,52 @@ Downloads also use chunks to remain below Vercel's response-body limit.
 
 Conversation history stays in browser storage. Before any model call, each invocation
 reconstructs the thread's selected, fully extracted documents in a Deep Agents
-StateBackend mounted at `/attachments/`. References from sent messages survive the
+default StateBackend under `/attachments/`. References from sent messages survive the
 30-message request window and browser reloads; unsent draft files are excluded.
 Missing or unfinished selected files fail explicitly before the agent starts.
 Legacy callers that omit the selection require every document in the thread to be ready.
-The context builder includes paths and source previews from that same state snapshot:
-8,000 source characters total, at most 4,000 per file, with an explicit partial flag.
-Full extractions remain in state; read-only `ls`, `glob`, `grep` and bounded
-`read_file` load the rest. Previews count towards the complete request budget and
-require no extra model call. No binary prompt injection, shell, filesystem
-write tool or auxiliary model call is introduced. An unvalidated document import
-blocks the coach's ordinary planning/workout writes. Human confirmation or explicit
-abandonment resolves the draft; abandonment keeps its documents. Deleting a thread
-removes its documents/drafts but preserves confirmed prescriptions and source quotes.
+The context builder includes a manifest of paths and sizes from that same state snapshot.
+Document bodies and source locators enter through `read_file`/`grep` results after
+consulting the document skill, not through a second preview or memory-search injection.
+The UI's OCR/source preview remains available to the athlete.
+
 
 This follows the [Deep Agents backend contract](https://docs.langchain.com/oss/python/deepagents/backends):
-`CompositeBackend` routes `/attachments/` to `StateBackend`, whose keys are relative
-to that mount (`/<document-id>.md`). Database hydration supplies those keys for each
+`CompositeBackend` keeps attachments in its default `StateBackend`, using their
+full public paths (`/attachments/<document-id>.md`). Database hydration supplies those keys for each
 invocation; no checkpointer or server-owned conversation history is introduced.
 
-`services/documents.py` owns storage/extraction; `services/imports.py` owns validation
-and transactional confirmation. A confirmation key plus draft version makes a lost
-response safe to retry. Source quotes must match extracted locators exactly. OCR
-sources stay marked. Strength uses the existing Lark grammar and exercise matching;
-the preview must agree with its recognized sets. Possible duplicates are shown both
-against existing sessions and within the draft; they are never silently removed.
+`services/documents.py` owns storage/extraction; `services/planning.py` owns direct
+creation and source validation. `create_planned_session` accepts a typed prescription
+object rather than JSON text, plus optional `{document_id, locator, quote}` sources.
+Quotes must match extracted locators in the current thread. Strength uses the Lark
+grammar and exercise matching; supplied steps must agree with recognized sets.
+Existing sessions are reused by id. Writes are never automatically retried.
 
-PDF.js and one Tesseract worker perform browser extraction with app-hosted English
-and French resources. Image-containing PDF pages use OCR so a textual header does
-not hide an embedded scan. The document preview shows the original image/PDF beside its transcription, with
-image zoom, page/sheet navigation, source references and a filter for OCR confidence
-below 80% (or missing confidence). Mobile uses Original/Text tabs. This indicator is
-not a guarantee of correctness: high-confidence numbers also require review.
+
+PDF extraction runs on the server with pinned pypdfium2 (PDFium) for native text and
+rendering, and pinned tesserocr, whose wheel bundles Tesseract, for OCR; both carry
+permissive licenses. Native text is extracted without OCR; pages with images (including
+a native header above a scan), unreadable characters, or no text are rendered at 200 dpi
+and read by French/English Tesseract. Partial OCR preserves readable native lines and
+keeps only the recognized lines that do not overlap them. Each line retains its page,
+bounding box in PDF points from the top left, and `text`/`ocr` method. OCR confidence
+stays null and appears in the preview's uncertain-text filter. An OCR warning asks
+the athlete to verify dates, numbers and units.
+
+One disposable subprocess per API process isolates PDFium and Tesseract from concurrent request
+threads. Another extraction fails explicitly while it is occupied; there is no
+queue or automatic retry. A 240-second timeout kills and reaps the subprocess.
+The browser waits up to 270 seconds for finalization. Closing or cancelling the
+browser request does not cancel server work; it can still finalize within that
+budget. Failed extraction leaves the upload incomplete, with no partial text saved.
+
+Standalone images still use a browser Tesseract worker with app-hosted French and
+English resources. PDF.js remains responsible for PDF previews only. The preview
+shows the original beside its transcription, with image zoom, page/sheet navigation,
+source references and a filter for OCR confidence below 80% (or missing confidence).
+Mobile uses Original/Text tabs. This indicator is not a guarantee of correctness:
+high-confidence numbers also require review.
 Originals remain downloadable. Preview bytes are SHA-256 checked, requests cancel on
 close, and blob URLs are revoked when their views unmount.
 XLSX retains formulas and available cached values, dates, coordinates and merged-cell
@@ -75,10 +93,11 @@ the athlete must still compare the prescription to the original.
 | Global originals | 1 GiB reserved and finalized bytes |
 | Extraction | 2 MiB per document; 100 PDF pages; 25 MP image/page raster |
 | Workbook | 20 sheets / 100,000 cells; 64 MiB expanded XLSX / 1,000 ZIP entries |
-| OCR | One worker; 60 seconds per page / 10 minutes per document |
-| Draft | 50 sessions, proposed in batches of at most 5; 50 drafts per thread |
+| PDF extraction | One subprocess per API process; 240 seconds per document; 5,000 lines per page |
+| Image OCR | One browser worker; 60 seconds per image / 10 minutes per document |
+| Creation | One session per tool call; at most 20 source references |
 | Prescription | 100 steps, 2 nested repeat levels, 1,000 expanded steps |
-| Coach | Existing 8 model calls / 32 tools / 300 seconds |
+| Coach | 24 model turns / 96 tool calls / 300 seconds |
 | Garmin | Sequential; 120-second operation budget / 12 HTTP requests / 10 seconds per request |
 
 Exceeding a bound fails explicitly. There is no silent truncation or automatic replay
@@ -117,9 +136,16 @@ Neither means **reçu sur la montre**. Sync Connect with the watch and inspect i
 
 ## Local verification and acceptance
 
-`make dev` prepares the local OCR assets. Production builds do this in `prebuild`,
-including Docker and Vercel. Generated OCR assets are ignored by Git and Vercel upload;
-the pinned npm dependencies recreate them during build.
+`make dev` prepares both OCR engines. `make backend` and `make test` also prepare
+server language data with `scripts/bundle_ocr_data.py`. Docker, Vercel backend builds
+and backend CI run this same script. It downloads only French and English from
+`tesseract-ocr/tessdata_fast` 4.1.0, verifies pinned SHA-256 digests, and reuses verified
+files. No OCR download happens during an upload. The language data is Apache-2.0
+licensed; pypdfium2 is Apache-2.0/BSD-3-Clause, tesserocr MIT and Tesseract Apache-2.0.
+Do not add a copyleft (GPL/AGPL) PDF library: Arete is proprietary.
+
+Browser image OCR resources still come from pinned npm packages during `predev` and
+`prebuild`. Both sets of generated OCR assets are ignored by Git and Vercel upload.
 
 ```sh
 make check
@@ -129,13 +155,15 @@ npm run test:browser
 ```
 
 Tests use isolated databases and mocked Garmin transport. Browser tests run actual
-PDF.js/Tesseract extraction on a tilted printed image and textual/scanned/mixed PDFs,
-and exercise drop → preview → confirmation → reload with scripted coach responses.
+Tesseract extraction on a tilted printed image and PDF delegation to the server,
+and exercise drop → direct creation → reload with scripted coach responses.
 They also cover separate Garmin confirmation and the document preview on desktop and
 mobile (original rendering, OCR confidence filtering, zoom/source controls and Escape
 focus restoration). Browser checks run in the frontend CI job.
-Backend tests cover actual workbook bytes, formulas, merged sheets, French units,
-quotas, isolation, interrupted uploads, source validation, double confirmation,
+Backend tests exercise actual PDFium/Tesseract extraction on textual/scanned/mixed
+PDFs, encrypted/malformed files, missing languages, limits, timeouts and concurrent
+requests. They also cover actual workbook bytes, formulas, merged sheets, French units,
+quotas, isolation, interrupted uploads, typed source validation, direct creation/export,
 export reservation, lost create/schedule/delete responses and remote conflicts.
 Live LLM interpretation, Garmin authentication/network behavior, MotherDuck/Vercel
 persistence and watch reception are **not validated by these mocks**.
@@ -144,8 +172,8 @@ Before production acceptance:
 
 1. Review a real training document locally, including ambiguous dates and OCR digits.
 2. Update the local Vercel CLI before preview testing (`npm i -g vercel@latest`;
-   the detected 59.1.3 predates 63.1.0). Test a Vercel preview backed by an isolated persistent database: upload, reload,
-   restart/cold-start and delete a conversation, retaining confirmed sessions.
+   use the current release). Test a Vercel preview backed by an isolated persistent database: upload, reload,
+   restart/cold-start and delete a conversation, retaining saved sessions.
 3. Explicitly send one dated workout per sport compatible with the selected watch.
    Compare every step and date in Connect, sync the watch, then inspect it there.
 4. Edit locally and explicitly resync; change the remote workout to verify conflict
@@ -155,9 +183,9 @@ No live Garmin writes, Vercel deployment, commit or push is part of the automate
 
 ## Coexistence with daily planning
 
-Reviewed document prescriptions are excluded from automatic daily adaptation and
-watch push. Their editor and export service remain their only owners; daily
-sessions keep the existing structure/push flow. Moving an imported session via
+Explicit prescriptions are excluded from automatic daily adaptation. Their
+editor and export service remain their owners; the daily push sends them, like
+every exportable session, through that export service. Moving a structured session via
 the coach increments its revision and marks its Garmin copy stale. Summary-only
 changes to its duration, targets or sport are rejected to preserve its steps.
 The prescription editor cannot convert a daily session while its separate export

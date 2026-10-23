@@ -11,6 +11,9 @@ import re
 
 import duckdb
 
+from arete.dataio.automation_schema import TABLES as AUTOMATION_TABLES
+from arete.dataio.coaching_coordination_schema import TABLES as COORDINATION_TABLES
+
 ATHLETE_SQL = "getvariable('arete_athlete_id')"
 LEGACY_OWNERS = frozenset(
     {
@@ -28,7 +31,11 @@ LEGACY_OWNERS = frozenset(
         "weekly_reviews",
     }
 )
+
 PRIVATE_TABLES = (
+    "coach_conversations",
+    *AUTOMATION_TABLES,
+    *COORDINATION_TABLES,
     *sorted(LEGACY_OWNERS),
     "exercises",
     "session_exercises",
@@ -55,6 +62,16 @@ PRIVATE_TABLES = (
     "calendar_actions",
     "files",
     "garmin_login_challenges",
+    "garmin_sync_state",
+    "coach_memory_files",
+    "coach_memory_imports",
+    "coach_followups",
+    "daily_checkins",
+    "coach_evening_messages",
+    "strength_drafts",
+    "best_efforts",
+    "pain_entries",
+    "weight_entries",
 )
 # Natural keys must be unique within an athlete, not across the deployment.
 SCOPED_KEYS = {
@@ -81,6 +98,7 @@ PARENTS = {
     "athlete_fact_revisions": ("fact_id", "athlete_facts", "id"),
     "garmin_exports": ("session_id", "planned_sessions", "id"),
     "calendar_actions": ("connection_key", "calendar_connections", "connection_key"),
+    "strength_drafts": ("actual_session_id", "actual_sessions", "id"),
 }
 
 
@@ -91,11 +109,19 @@ def owner_column(table: str) -> str:
 
 def migrate(con: duckdb.DuckDBPyConnection) -> None:
     """Rebuild atomically: DuckDB cannot add NOT NULL after updating indexed rows."""
+    from arete.dataio.automation_schema import DDL as automation_ddl
+    from arete.dataio.coaching_coordination_schema import DDL as coordination_ddl
+    from arete.dataio.coaching_schema import DDL as coaching_ddl
+    from arete.dataio.conversation_schema import DDL as conversation_ddl
     from arete.dataio.mirror import DDL as files_ddl
     from arete.garmin.auth_state import DDL as challenges_ddl
 
     con.execute("BEGIN TRANSACTION")
     try:
+        con.execute(automation_ddl)
+        con.execute(conversation_ddl)
+        con.execute(coaching_ddl)
+        con.execute(coordination_ddl)
         con.execute(files_ddl)
         con.execute(challenges_ddl)
         for table in PRIVATE_TABLES:

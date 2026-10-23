@@ -9,7 +9,7 @@ export function SuggestionNote({ suggestion, label = 'Proposé' }: { suggestion:
   return (
     <div
       className={cn(
-        'mt-2 rounded border px-2 py-1.5 text-xs font-mono',
+        'mt-2 rounded border px-2 py-1.5 text-xs font-sans',
         suggestion.deload
           ? 'border-warning-orange/40 bg-warning-orange/5 text-warning-orange'
           : 'border-neon-cyan/30 bg-neon-cyan/5 text-neon-cyan'
@@ -40,11 +40,11 @@ export function RecordsCelebration({ records }: { records: SessionRecord[] }) {
     >
       <h5 className="flex items-center gap-2 font-sans text-neon-gold">
         <Trophy className="w-5 h-5" aria-hidden />
-        {records.length > 1 ? `${records.length} NOUVEAUX RECORDS !` : 'NOUVEAU RECORD !'}
+        {records.length > 1 ? `${records.length} nouveaux records !` : 'Nouveau record !'}
       </h5>
       <ul className="mt-2 space-y-2">
         {[...byExercise].map(([exercise, items]) => (
-          <li key={exercise} className="text-sm font-mono">
+          <li key={exercise} className="text-sm font-sans">
             <span className="text-text-primary">{exercise}</span>
             <ul className="text-xs text-text-secondary">
               {items.map((record) => (

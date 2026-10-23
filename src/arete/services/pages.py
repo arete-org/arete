@@ -1,8 +1,17 @@
 """Read the same domain data used by each UI page."""
 
 import re
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
+
+from arete.services.settings import athlete_today
+
+#: What the coach is told on the glossary page (frontend/src/lib/glossaryEntries.ts).
+GLOSSARY_PAGE = (
+    "Lexique : définitions statiques des termes et mesures d'Arete (ACWR, TSS, "
+    "forme de fond, fatigue, fraîcheur, zones, VFC, préparation…) avec leurs "
+    "seuils. Aucune donnée de l'athlète sur cette page."
+)
 
 
 def _strength_sessions(**filters: Any) -> list[dict[str, Any]]:
@@ -25,6 +34,16 @@ def _strength_sessions(**filters: Any) -> list[dict[str, Any]]:
     ]
 
 
+def _player_stats() -> dict[str, Any]:
+    """The bars as the coach reads them: the streak is not named a level, since
+    with the RPG on the athlete's only "Niveau" is the RPG's."""
+    from arete.services.metrics import get_player_stats
+
+    stats: dict[str, Any] = get_player_stats().model_dump(mode="json")
+    stats["weeks_at_goal_streak"] = stats.pop("level")
+    return stats
+
+
 def _dashboard() -> dict[str, Any]:
     """What the Dashboard shows: the bars, today's plan and sessions, the briefing.
 
@@ -34,17 +53,16 @@ def _dashboard() -> dict[str, Any]:
     from arete.garmin.repository import GarminRepository
     from arete.services.analytics import list_sessions
     from arete.services.coaching_repository import BriefingRepository
-    from arete.services.metrics import get_player_stats
     from arete.services.plan_repository import PlanDecisionRepository
     from arete.services.planning import _session_to_dict
 
-    today = date.today()
+    today = athlete_today()
     planned = GarminRepository().list_planned_sessions(
         start_date=today, end_date=today, status=None, limit=10
     )
     briefing = BriefingRepository().get_for_day(today)
     return {
-        "player_stats": get_player_stats().model_dump(mode="json"),
+        "player_stats": _player_stats(),
         "planned_today": [_without_nulls(_session_to_dict(s)) for s in planned],
         "done_today": [
             s
@@ -58,16 +76,25 @@ def _dashboard() -> dict[str, Any]:
         "plan_decisions_today": [
             {
                 "planned_session_id": d.planned_session_id,
+                "id": d.id,
+                "revision": d.revision,
+                "state": d.state,
+                "applied_at": d.applied_at.isoformat() if d.applied_at else None,
+                "readiness_measured_on": str(d.readiness_measured_on)
+                if d.readiness_measured_on
+                else None,
                 "decision": d.decision,
                 "reason": d.reason,
                 "reverted": d.reverted_at is not None,
+                # The morning's suggestion an athlete's choice replaced.
+                "replaced": (d.original or {}).get("replaced"),
             }
             for d in PlanDecisionRepository().list_for_day(today)
         ],
     }
 
 
-def _analytics() -> dict[str, Any]:
+def _analytics(params: dict[str, Any] | None = None) -> dict[str, Any]:
     """The Analytics page as the coach needs it: what each card says.
 
     Every card carried a 30-point daily series for its chart, and the series
@@ -76,15 +103,72 @@ def _analytics() -> dict[str, Any]:
     previous period and the card's own French insight; a trend over a chosen
     window is what the analytics toolkit is for.
     """
+    from arete.features.periods import DEFAULT_PERIOD, PERIOD_DAYS
     from arete.services.analytics import get_overview
 
-    overview = get_overview(period="30d")
+    if (params or {}).get("path") == "/analytics/lexique":
+        # Static definitions the browser already holds: no athlete data to
+        # read, where the overview below costs ~11.6k tokens.
+        return {"glossary": GLOSSARY_PAGE}
+    if (params or {}).get("path") == "/analytics/bilan":
+        from arete.services.settings import athlete_today
+        from arete.services.year_review import FIRST_YEAR, year_review
+
+        current = athlete_today().year
+        raw = (params or {}).get("param_year")
+        year = (
+            int(raw)
+            if isinstance(raw, str)
+            and re.fullmatch(r"[0-9]{4}", raw)
+            and FIRST_YEAR <= int(raw) <= current
+            else current
+        )
+        data = year_review(year)
+        # Aggregates match the open year. Session names stay on the browser
+        # page, just as on the ordinary Analytics page.
+        return {
+            "year_review": {
+                **{
+                    key: value
+                    for key, value in data.items()
+                    if key not in {"highlights", "fitness"}
+                },
+                "records": {
+                    kind: [
+                        {k: v for k, v in record.items() if k != "session_name"}
+                        for record in rows
+                    ]
+                    for kind, rows in data["records"].items()
+                },
+            },
+            "fitness": {
+                key: value for key, value in data["fitness"].items() if key != "series"
+            },
+        }
+    selected = (params or {}).get("param_period")
+    period = (
+        selected
+        if isinstance(selected, str) and selected in PERIOD_DAYS
+        else DEFAULT_PERIOD
+    )
+    overview = get_overview(period=period)
     cards = {
         name: {k: v for k, v in card.items() if k != "series"}
         for name, card in overview.get("cards", {}).items()
     }
+    read = {**overview, "cards": cards}
+    if "records" in overview:
+        # Session names stay on the browser page, as for the year review.
+        records = overview["records"]
+        read["records"] = {
+            **records,
+            "runs": [
+                {k: v for k, v in run.items() if k != "session_name"}
+                for run in records["runs"]
+            ],
+        }
     return {
-        "overview": {**overview, "cards": cards},
+        "overview": read,
         "trends": "analytics toolkit: get_workload(days), get_fitness(days)",
     }
 
@@ -104,11 +188,22 @@ def _without_nulls(row: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in row.items() if v is not None and v != ""}
 
 
+#: Completed sessions a Planning read lists, newest first, from the window's start.
+#: The plan alone already fills ~20k of the 32k-character bound on real data.
+PLANNING_DONE_LIMIT = 15
+
+
 def _planning() -> dict[str, Any]:
+    """The plan of the window, and what was actually done in its past days.
+
+    The plan alone hid the athlete's sessions: asked to keep today's run and
+    clear the rest, the coach saw no run and deleted every planned session.
+    """
     from arete.garmin.repository import GarminRepository
+    from arete.services.analytics import list_sessions
     from arete.services.planning import _session_to_dict
 
-    today = date.today()
+    today = athlete_today()
     start = today - timedelta(days=PLANNING_PAST_DAYS)
     end = today + timedelta(days=PLANNING_AHEAD_DAYS)
     # API default params are FastAPI Query objects; call with plain values.
@@ -122,7 +217,15 @@ def _planning() -> dict[str, Any]:
     return {
         "window": {"from": start.isoformat(), "to": end.isoformat()},
         "planned_sessions": rows,
-        "beyond_the_window": "planning toolkit: list_planned(start_date, end_date)",
+        "done_sessions": [
+            _without_nulls(s)
+            for s in list_sessions(limit=PLANNING_DONE_LIMIT, for_model=True)[
+                "sessions"
+            ]
+            if s["date"] >= start.isoformat()
+        ],
+        "beyond_the_window": "planning toolkit: list_planned(start_date, end_date); "
+        "done sessions: list_recent_sessions",
     }
 
 
@@ -170,13 +273,56 @@ def _profile() -> dict[str, Any]:
     }
 
 
+#: Entries of each kind a Santé page read lists (pain newest first).
+HEALTH_PAGE_ENTRIES = 60
+
+
+def _health() -> dict[str, Any]:
+    """The Santé page and its report: eight weeks of pain and weight, by area.
+
+    Entry timestamps stay out: the dates say when; the report's training
+    tables are the analytics and planning toolkits' to read. The newest
+    ``HEALTH_PAGE_ENTRIES`` pain and weight entries are listed, the areas
+    summarise them all.
+    """
+    from arete.services.body_log import trend
+
+    data = trend(56)
+    latest = data["weight"]["latest"]
+    return {
+        "body_log": {
+            **data,
+            "weight": {
+                **data["weight"],
+                "latest": latest
+                and {"date": latest["date"], "weight_kg": latest["weight_kg"]},
+            },
+            "pain": [
+                {k: v for k, v in p.items() if k not in {"created_at", "updated_at"}}
+                for p in data["pain"][:HEALTH_PAGE_ENTRIES]
+            ],
+            "weights": [
+                {"date": w["date"], "weight_kg": w["weight_kg"]}
+                for w in data["weights"][-HEALTH_PAGE_ENTRIES:]
+            ],
+        }
+    }
+
+
+def _follow_up() -> dict[str, Any]:
+    from arete.services import automations, inbox
+
+    return {"automations": automations.listing(), "inbox": inbox.listing()}
+
+
 _PAGE_FETCHERS = {
+    "follow_up": _follow_up,
     "profile": _profile,
     "dashboard": _dashboard,
-    "analytics": _analytics,
     "planning": _planning,
     "log": _log,
     "settings": _settings,
+    "health": _health,
 }
 
 
@@ -208,7 +354,7 @@ def _log_selection(params: dict[str, Any]) -> dict[str, Any]:
 def get_page_data(page: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
     from arete.services.gamification import preference
 
-    result = _PAGE_FETCHERS[page]()
+    result = _analytics(params) if page == "analytics" else _PAGE_FETCHERS[page]()
     if page == "log":
         result.update(_log_selection(params or {}))
     if preference()["enabled"]:

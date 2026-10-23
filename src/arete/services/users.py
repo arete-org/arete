@@ -7,13 +7,15 @@ reactivate or unblock one. Every other account is an athlete.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from arete.config import config
 from arete.dataio.db import connect
+from arete.services import consent
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,11 @@ ROLES = ("athlete", "admin")
 _COLUMNS = (
     "id, clerk_user_id, email, name, athlete_id, email_verified_at, "
     "profile_synced_at, deleted_at, coalesce(role, 'athlete')"
+)
+#: The same columns, qualified for a query that joins ``app.athletes``.
+_JOINED_COLUMNS = (
+    "u.id, u.clerk_user_id, u.email, u.name, u.athlete_id, u.email_verified_at, "
+    "u.profile_synced_at, u.deleted_at, coalesce(u.role, 'athlete')"
 )
 
 
@@ -89,6 +96,24 @@ def _from_row(row: tuple) -> AppUser:
     return AppUser(*row)
 
 
+def account_hash(clerk_user_id: str) -> str:
+    """The erasure log's only identifier: Clerk ids are random, not guessable."""
+    return hashlib.sha256(clerk_user_id.encode()).hexdigest()
+
+
+def was_deleted(clerk_user_id: str) -> bool:
+    """Whether this login erased its account: it gets no fresh athlete."""
+    con = connect()
+    try:
+        row = con.execute(
+            "SELECT 1 FROM app.account_deletions WHERE account_hash=?",
+            [account_hash(clerk_user_id)],
+        ).fetchone()
+    finally:
+        con.close()
+    return row is not None
+
+
 def get_user(clerk_user_id: str) -> AppUser | None:
     con = connect()
     try:
@@ -98,6 +123,29 @@ def get_user(clerk_user_id: str) -> AppUser | None:
     finally:
         con.close()
     return _from_row(row) if row else None
+
+
+def get_account(clerk_user_id: str) -> tuple[AppUser, bool, bool] | None:
+    """The login, whether its athlete is live and whether the athlete's
+    consent is in force (``services/consent.py``), in one query; None if unknown.
+
+    The live flag is False for a deactivated or missing athlete, and True for a
+    login with no athlete yet (nothing to deactivate).
+    """
+    consented, params = consent.in_force_sql("u.athlete_id")
+    con = connect()
+    try:
+        row = con.execute(
+            f"SELECT {_JOINED_COLUMNS}, u.athlete_id IS NULL OR "
+            "(a.id IS NOT NULL AND a.deleted_at IS NULL), "
+            f"{consented} "
+            "FROM app.users u LEFT JOIN app.athletes a ON a.id = u.athlete_id "
+            "WHERE u.clerk_user_id = ?",
+            [*params, clerk_user_id],
+        ).fetchone()
+    finally:
+        con.close()
+    return (_from_row(row[:-2]), bool(row[-2]), bool(row[-1])) if row else None
 
 
 def upsert_user(
@@ -115,7 +163,7 @@ def upsert_user(
             "VALUES (?,?,?,?,?) ON CONFLICT (clerk_user_id) DO UPDATE SET "
             "email=EXCLUDED.email,name=coalesce(EXCLUDED.name,app.users.name), "
             "email_verified_at=EXCLUDED.email_verified_at,profile_synced_at=EXCLUDED.profile_synced_at, "
-            "last_seen_at=EXCLUDED.profile_synced_at",
+            "last_seen_at=EXCLUDED.profile_synced_at RETURNING id",
             [clerk_user_id, email, name, now if verified else None, now],
         )
         row = con.execute(
@@ -141,13 +189,15 @@ def upsert_user(
                 assert created is not None
                 athlete_id = int(created[0])
             con.execute(
-                "UPDATE app.users SET athlete_id=? WHERE clerk_user_id=?",
+                "UPDATE app.users SET athlete_id=? WHERE clerk_user_id=? RETURNING id",
                 [athlete_id, clerk_user_id],
             )
             # Fresh accounts start empty; only defaults are shared with the
             # original athlete, never their preferences, files or credentials.
+            # Explicit theme: databases created before ARE-134 default to 'dark'.
             con.execute(
-                "INSERT INTO app.user_settings(user_id,display_name,email) VALUES(?,?,?) ON CONFLICT DO NOTHING",
+                "INSERT INTO app.user_settings(user_id,display_name,email,theme)"
+                " VALUES(?,?,?,'system') ON CONFLICT DO NOTHING",
                 [athlete_id, name or "Athlète", email],
             )
             for statement in (
@@ -221,9 +271,13 @@ class AthleteAccount:
         return self.athlete_id == OWNER_ATHLETE_ID
 
     def to_dict(self) -> dict:
-        # Stored timestamps are the server's local time: say which one.
+        # Stored timestamps are the server's local time: say which one. The
+        # scheduler stores its daily marker and lease in UTC.
         def aware(value: datetime | None) -> datetime | None:
             return value.astimezone() if value is not None else None
+
+        def utc(value: datetime | None) -> datetime | None:
+            return value.replace(tzinfo=UTC) if value is not None else None
 
         return {
             "athlete_id": self.athlete_id,
@@ -233,8 +287,8 @@ class AthleteAccount:
             "role": self.role,
             "is_owner": self.is_owner,
             "last_seen_at": aware(self.last_seen_at),
-            "last_sync_at": aware(self.last_sync_at),
-            "sync_lease_until": aware(self.sync_lease_until),
+            "last_sync_at": utc(self.last_sync_at),
+            "sync_lease_until": utc(self.sync_lease_until),
             "lease_stuck": self.lease_stuck,
             "deactivated_at": aware(self.deactivated_at),
         }
@@ -251,7 +305,8 @@ def list_accounts() -> list[AthleteAccount]:
         rows = con.execute(
             "SELECT a.id, u.id, u.email, u.name, coalesce(u.role, 'athlete'), "
             "u.last_seen_at, a.last_sync_at, a.sync_lease_until, "
-            "coalesce(a.sync_lease_until < current_timestamp, false), a.deleted_at "
+            "coalesce(a.sync_lease_until < (current_timestamp AT TIME ZONE 'UTC'), false), "
+            "a.deleted_at "
             "FROM app.athletes a LEFT JOIN app.users u ON u.athlete_id = a.id "
             "ORDER BY a.id, u.id"
         ).fetchall()
@@ -288,11 +343,11 @@ def deactivate_athlete(athlete_id: int, *, actor: AppUser) -> None:
                 "Seul le propriétaire peut désactiver un administrateur.", 403
             )
         con.execute(
-            "UPDATE app.athletes SET deleted_at=current_timestamp WHERE id=? AND deleted_at IS NULL",
+            "UPDATE app.athletes SET deleted_at=current_timestamp WHERE id=? AND deleted_at IS NULL RETURNING id",
             [athlete_id],
         )
         con.execute(
-            "UPDATE app.users SET deleted_at=current_timestamp WHERE athlete_id=? AND deleted_at IS NULL",
+            "UPDATE app.users SET deleted_at=current_timestamp WHERE athlete_id=? AND deleted_at IS NULL RETURNING id",
             [athlete_id],
         )
         con.execute("COMMIT")
@@ -315,7 +370,8 @@ def reactivate_athlete(athlete_id: int) -> None:
         if row is None:
             raise AccountError("Athlète inconnu.", 404)
         con.execute(
-            "UPDATE app.users SET deleted_at=NULL WHERE athlete_id=?", [athlete_id]
+            "UPDATE app.users SET deleted_at=NULL WHERE athlete_id=? RETURNING id",
+            [athlete_id],
         )
         con.execute("COMMIT")
     except BaseException:

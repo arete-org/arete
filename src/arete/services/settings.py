@@ -1,16 +1,155 @@
 """Athlete settings and shared validation, independent of HTTP."""
 
-from datetime import date
-from typing import Literal
+import json
+import logging
+from datetime import UTC, date, datetime, time
+from typing import Literal, get_args
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from arete.dataio import settings as repo
 from arete.services.athlete_scope import resolve_athlete_id
 
+logger = logging.getLogger(__name__)
+
+DEFAULT_TIMEZONE = "Europe/Paris"
+
+
+# ---------- The athlete's day ----------
+def utc_now() -> datetime:
+    """The current instant, timezone-aware. Tests freeze time here."""
+    return datetime.now(UTC)
+
+
+def zone_of(name: str | None) -> ZoneInfo:
+    """A stored timezone name; the default for an empty or unknown one."""
+    try:
+        return ZoneInfo(name or DEFAULT_TIMEZONE)
+    except (ZoneInfoNotFoundError, ValueError):
+        # The settings form validates the zone; only a hand-edited row lands here.
+        logger.warning("Unknown timezone %r, using %s", name, DEFAULT_TIMEZONE)
+        return ZoneInfo(DEFAULT_TIMEZONE)
+
+
+def athlete_now() -> datetime:
+    """Now on the scoped athlete's clock (their configured timezone).
+
+    The server runs on UTC (Vercel): its own date is the athlete's yesterday
+    for a few hours after their midnight. Whatever means "the athlete's day"
+    (plan, briefing, review week, metric windows) reads this instead.
+    """
+    return utc_now().astimezone(
+        zone_of((repo.get_user_settings() or {}).get("timezone"))
+    )
+
+
+def athlete_today() -> date:
+    """The scoped athlete's calendar date."""
+    return athlete_now().date()
+
+
+def today_in(zone: str | None) -> date:
+    """The calendar date in a timezone already read with the settings."""
+    return utc_now().astimezone(zone_of(zone)).date()
+
+
+# ---------- Notification preferences ----------
+#: Every push the server sends names one of these. ``eve_reminder`` is planned
+#: (UX 2). ``adapted_session`` is the evening's replanning of a missed session
+#: (``missed_sessions``, ARE-61); ``checkin`` is the morning check-in's push
+#: (``checkins.prompt``); ``evening`` is the coach's evening message and its
+#: question (``evening_message``, ARE-64).
+NotificationKind = Literal[
+    "briefing",
+    "post_session",
+    "weekly_review",
+    "adapted_session",
+    "imports",
+    "checkin",
+    "evening",
+    "eve_reminder",
+    "automation",
+]
+NOTIFICATION_KINDS: tuple[NotificationKind, ...] = get_args(NotificationKind)
+_CLOCK = r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
+
+
+class QuietHours(BaseModel):
+    """Local hours without pushes; may span midnight. Equal bounds mean none."""
+
+    start: str = Field(default="21:30", pattern=_CLOCK)
+    end: str = Field(default="07:00", pattern=_CLOCK)
+
+    def covers(self, moment: time) -> bool:
+        start, end = time.fromisoformat(self.start), time.fromisoformat(self.end)
+        if start == end:
+            return False
+        if start < end:
+            return start <= moment < end
+        return moment >= start or moment < end
+
+
+class NotificationPreferences(BaseModel):
+    """Which pushes the athlete gets. A kind absent from ``kinds`` is on."""
+
+    kinds: dict[NotificationKind, bool] = {}
+    quiet_hours: QuietHours | None = Field(default_factory=QuietHours)
+    coordinated_coaching: bool = False
+    daily_limit: int = Field(default=2, ge=0, le=3, strict=True)
+
+    def allows(self, kind: NotificationKind) -> bool:
+        return self.kinds.get(kind, True)
+
+    def complete(self) -> "NotificationPreferences":
+        """Every kind spelled out, for the settings form."""
+        kinds = {kind: self.allows(kind) for kind in NOTIFICATION_KINDS}
+        return self.model_copy(update={"kinds": kinds})
+
+
+def stored_preferences(raw: dict | None) -> NotificationPreferences:
+    """The stored JSON, defaults when absent; a kind no longer known is ignored."""
+    if not raw:
+        return NotificationPreferences()
+    stored = raw.get("kinds")
+    kinds: dict = stored if isinstance(stored, dict) else {}
+    cleaned = {
+        **raw,
+        "kinds": {k: v for k, v in kinds.items() if k in NOTIFICATION_KINDS},
+    }
+    try:
+        return NotificationPreferences.model_validate(cleaned)
+    except ValidationError:
+        logger.warning("Unreadable notification preferences, using the defaults")
+        return NotificationPreferences()
+
 
 # ---------- User Settings ----------
+#: The hours the evening message may start from, on the athlete's clock
+#: (``scheduler.run_evening_messages``), and the default one.
+EVENING_FIRST_HOUR = 18
+EVENING_LAST_HOUR = 21
+EVENING_DEFAULT_HOUR = 20
+
+# The browser's palettes (frontend/src/lib/theme.ts); "system" follows the device.
+ThemePreference = Literal["system", "pierre", "prune", "odyssey", "encre"]
+DEFAULT_THEME: ThemePreference = "system"
+# Retired themes (ARE-134): stored rows keep them until the next save, so they
+# are read, and still accepted from an older tab, as the closest kept palette.
+LEGACY_THEMES: dict[str, ThemePreference] = {
+    "light": "pierre",
+    "performance": "pierre",
+    "dark": "encre",
+    "darker": "encre",
+    "abyss": "encre",
+}
+
+
+def migrate_theme(value: object) -> object:
+    """A retired theme as its replacement; anything else is left to validation."""
+    return LEGACY_THEMES.get(value, value) if isinstance(value, str) else value
+
+
 class UserSettingsUpdate(BaseModel):
     display_name: str = "HUNTER"
     email: str | None = None
@@ -21,11 +160,9 @@ class UserSettingsUpdate(BaseModel):
     fitness_goal: Literal["maintenance", "build", "peak", "recovery"] = "build"
     notifications_enabled: bool = True
     coach_briefing_enabled: bool = True
-    auto_adapt_enabled: bool = True
+    auto_adapt_enabled: bool = False
     push_to_garmin_enabled: bool = False
-    theme: Literal[
-        "light", "dark", "darker", "abyss", "performance", "odyssey", "pierre", "prune"
-    ] = "dark"
+    theme: ThemePreference = DEFAULT_THEME
     exercise_abbreviations: dict[str, str] = {}
     weekly_volume_target_kg: int = Field(ge=1000, le=200000, default=20000)
     lthr: int | None = Field(ge=100, le=220, default=None)
@@ -33,6 +170,13 @@ class UserSettingsUpdate(BaseModel):
     threshold_pace_sec_km: int | None = Field(ge=120, le=900, default=None)
     # Set by the Garmin sync; sent back untouched by the settings form.
     lthr_measured_on: date | None = None
+    # None keeps the stored choice: a client that predates it cannot reset it.
+    notification_preferences: NotificationPreferences | None = None
+    # The coach's evening message (ARE-64): opt-in, from this local hour.
+    coach_evening_enabled: bool | None = None
+    coach_evening_hour: int | None = Field(
+        default=None, ge=EVENING_FIRST_HOUR, le=EVENING_LAST_HOUR
+    )
 
     @field_validator("timezone")
     @classmethod
@@ -41,8 +185,13 @@ class UserSettingsUpdate(BaseModel):
         try:
             ZoneInfo(value)
         except (ZoneInfoNotFoundError, ValueError) as exc:
-            raise ValueError("Fuseau horaire inconnu.") from exc
+            raise ValueError("Fuseau horaire inconnu du serveur.") from exc
         return value
+
+    @field_validator("theme", mode="before")
+    @classmethod
+    def migrate_legacy_theme(cls, value: object) -> object:
+        return migrate_theme(value)
 
 
 class UserSettingsOut(BaseModel):
@@ -56,15 +205,32 @@ class UserSettingsOut(BaseModel):
     fitness_goal: str
     notifications_enabled: bool
     coach_briefing_enabled: bool
-    auto_adapt_enabled: bool = True
+    auto_adapt_enabled: bool = False
     push_to_garmin_enabled: bool = False
-    theme: str
+    theme: ThemePreference
     exercise_abbreviations: dict[str, str]
     weekly_volume_target_kg: int
     lthr: int | None
     max_hr: int | None
     threshold_pace_sec_km: int | None
     lthr_measured_on: date | None
+    notification_preferences: NotificationPreferences = Field(
+        default_factory=lambda: NotificationPreferences().complete()
+    )
+    coach_evening_enabled: bool = False
+    coach_evening_hour: int = EVENING_DEFAULT_HOUR
+
+    @field_validator("theme", mode="before")
+    @classmethod
+    def read_theme(cls, value: object) -> object:
+        # A stored row is never rejected: an unknown or empty theme follows the device.
+        value = migrate_theme(value)
+        return value if value in get_args(ThemePreference) else DEFAULT_THEME
+
+
+def _settings_out(settings: dict) -> UserSettingsOut:
+    prefs = stored_preferences(settings.get("notification_preferences"))
+    return UserSettingsOut(**{**settings, "notification_preferences": prefs.complete()})
 
 
 def get_settings():
@@ -83,7 +249,7 @@ def get_settings():
             fitness_goal="build",
             notifications_enabled=True,
             coach_briefing_enabled=True,
-            theme="dark",
+            theme=DEFAULT_THEME,
             exercise_abbreviations={},
             weekly_volume_target_kg=20000,
             lthr=None,
@@ -91,7 +257,7 @@ def get_settings():
             threshold_pace_sec_km=None,
             lthr_measured_on=None,
         )
-    return UserSettingsOut(**settings)
+    return _settings_out(settings)
 
 
 def update_settings(payload: UserSettingsUpdate):
@@ -116,5 +282,19 @@ def update_settings(payload: UserSettingsUpdate):
         max_hr=payload.max_hr,
         threshold_pace_sec_km=payload.threshold_pace_sec_km,
         lthr_measured_on=payload.lthr_measured_on,
+        notification_preferences=(
+            json.dumps(
+                {
+                    **stored_preferences(
+                        (repo.get_user_settings() or {}).get("notification_preferences")
+                    ).model_dump(),
+                    **payload.notification_preferences.model_dump(exclude_unset=True),
+                }
+            )
+            if payload.notification_preferences is not None
+            else None
+        ),
+        coach_evening_enabled=payload.coach_evening_enabled,
+        coach_evening_hour=payload.coach_evening_hour,
     )
-    return UserSettingsOut(**settings)
+    return _settings_out(settings)

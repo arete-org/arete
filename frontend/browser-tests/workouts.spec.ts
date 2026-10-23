@@ -19,18 +19,22 @@ async function mockApi(page: Page, getView: () => WorkoutView, streamUrl?: strin
       return route.fulfill({ status: 307, headers: { location: streamUrl! } });
     }
     if (url.pathname.endsWith('/workout')) return route.fulfill({ json: getView() });
+    if (url.pathname.endsWith('/garmin/workouts')) {
+      expect(url.searchParams.getAll('ids')).toEqual(['42']);
+      return route.fulfill({ json: { workouts: [getView()], errors: {} } });
+    }
     if (url.pathname.endsWith('/exports/batch')) {
       counts.exports++;
       expect(route.request().postDataJSON().session_ids).toEqual([42]);
       getView().export = state('scheduled');
       return route.fulfill({ json: { results: [getView().export], not_attempted: [] } });
     }
-    if (url.pathname.endsWith('/prescription') && method === 'PUT') {
+    if ((url.pathname.endsWith('/prescription') || url.pathname.endsWith('/planned/42')) && method === 'PUT') {
       counts.edits++;
       const data = route.request().postDataJSON();
       Object.assign(getView().session, { date: data.date, description: data.description, revision: 2, prescription: data.prescription });
       getView().export = state('dirty');
-      return route.fulfill({ json: { updated: true } });
+      return route.fulfill({ json: url.pathname.endsWith('/prescription') ? { updated: true } : getView().session });
     }
     if (url.pathname.endsWith('/workout-devices')) { counts.devices++; return route.fulfill({ json: [] }); }
     if (url.pathname.endsWith('/exports')) return route.fulfill({ json: getView().export ? [getView().export] : [] });
@@ -119,19 +123,107 @@ test('Planning selection, direct export and editing work on mobile without model
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/planning?date=2027-01-12');
-  await page.evaluate(() => document.documentElement.dataset.theme = 'light');
+  await page.evaluate(() => document.documentElement.dataset.theme = 'pierre');
+  await page.getByRole('button', { name: 'Options du planning', exact: true }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
   await page.getByLabel('Sélectionner Fractionné · 6 × 400 m').check();
   const send = page.getByRole('button', { name: 'Envoyer vers Garmin', exact: true });
   await expect(send).toBeEnabled();
   await send.click();
   await expect(page.getByTestId('workout-42').getByText('Programmée dans Garmin Connect', { exact: true })).toBeVisible();
   expect(counts.exports).toBe(1); expect(counts.model).toBe(0); expect(counts.devices).toBe(0);
-  await page.getByTestId('workout-42').getByRole('button', { name: 'Modifier', exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir la séance Fractionné · 6 × 400 m', exact: true }).click();
+  await page.getByRole('button', { name: 'Modifier', exact: true }).click();
   await page.getByRole('dialog').getByLabel('Date', { exact: true }).fill('2027-01-13');
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
-  await expect(page.getByText('À resynchroniser', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('workout-42').getByText('À resynchroniser', { exact: true })).toBeVisible();
   expect(counts.edits).toBe(1); expect(counts.exports).toBe(1); expect(counts.model).toBe(0);
   await page.screenshot({ path: '../.context/garmin-planning-mobile.png', fullPage: true });
+});
+
+test('Planning edits a description-read session starting from the steps read', async ({ page }) => {
+  const description = "Échauffement 20-25', 12×400 @3'33 r1', retour 15'";
+  const steps = [
+    { kind: 'warmup' as const, duration_kind: 'seconds' as const, value: 1200, notes: "20-25'", steps: [] },
+    { kind: 'repeat' as const, duration_kind: 'lap' as const, repeat: 12, steps: [
+      { kind: 'effort' as const, duration_kind: 'meters' as const, value: 400, target: { kind: 'pace_sec_km' as const, low: 210, high: 216 }, steps: [] },
+      { kind: 'recovery' as const, duration_kind: 'seconds' as const, value: 60, steps: [] },
+    ] },
+    { kind: 'cooldown' as const, duration_kind: 'seconds' as const, value: 900, steps: [] },
+  ];
+  const view: WorkoutView = { session: { ...structuredClone(session), description, derived: false, parsed: true, prescription: { version: 1, steps } }, export: null };
+  const counts = await mockApi(page, () => view);
+  let saved: unknown = null;
+  // Stored without a prescription: the steps exist only as read by the server.
+  await page.route(url => url.pathname.endsWith('/api/garmin/planned'), route =>
+    route.fulfill({ json: [{ ...view.session, prescription: null }] }));
+  await page.route(url => url.pathname.endsWith('/api/garmin/planned/42'), async route => {
+    if (route.request().method() === 'PUT') saved = route.request().postDataJSON().prescription;
+    await route.fallback();
+  });
+  await page.goto('/planning?date=2027-01-12');
+  await page.getByRole('button', { name: 'Ouvrir la séance', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Étapes lues dans la description.', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Modifier', exact: true }).click();
+  await expect(page.getByRole('dialog').getByLabel('Type de l’étape 1', { exact: true }).first()).toHaveValue('warmup');
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect.poll(() => counts.edits).toBe(1);
+  expect(saved).toEqual({ version: 1, steps });
+  expect(counts.model).toBe(0);
+});
+
+test('step durations and paces are typed as digits that format themselves on a phone', async ({ page }) => {
+  const steps = [
+    { kind: 'warmup' as const, duration_kind: 'seconds' as const, value: 1200, steps: [] },
+    { kind: 'repeat' as const, duration_kind: 'lap' as const, repeat: 6, steps: [
+      { kind: 'effort' as const, duration_kind: 'meters' as const, value: 400, target: { kind: 'pace_sec_km' as const, low: 210, high: 216 }, steps: [] },
+    ] },
+  ];
+  const view: WorkoutView = { session: { ...structuredClone(session), prescription: { version: 1, steps } }, export: null };
+  const counts = await mockApi(page, () => view);
+  let saved: { steps: typeof steps } | null = null;
+  await page.route(url => url.pathname.endsWith('/api/garmin/planned/42'), async route => {
+    if (route.request().method() === 'PUT') saved = route.request().postDataJSON().prescription;
+    await route.fallback();
+  });
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto('/planning?date=2027-01-12');
+  await page.getByRole('button', { name: 'Ouvrir la séance Fractionné · 6 × 400 m', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Modifier', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('summary', { hasText: '1. Échauffement' }).click();
+  const duration = dialog.getByLabel('Durée (h:mm:ss)', { exact: true }).first();
+  await expect(duration).toHaveValue('20:00');
+  await expect(duration).toHaveAttribute('inputmode', 'numeric');
+  await expect(dialog.getByText('Tape 2000 pour 20:00', { exact: true }).first()).toBeVisible();
+  // A tap selects the value: the first digit restarts it, like a timer.
+  await duration.click();
+  await duration.pressSequentially('90');
+  await expect(duration).toHaveValue('0:90');
+  await duration.blur();
+  await expect(duration).toHaveValue('1:30');
+  await duration.click();
+  await duration.pressSequentially('130000');
+  await expect(duration).toHaveValue('13:00:00');
+  // The caret stays at the end: Backspace removes the last digit wherever the athlete moved it.
+  await duration.press('Home');
+  await duration.press('Backspace');
+  await expect(duration).toHaveValue('1:30:00');
+  await dialog.locator('summary', { hasText: '2. Répéter un bloc' }).click();
+  await dialog.locator('summary', { hasText: '1. Effort' }).click();
+  const pace = dialog.getByLabel("Allure maximum (min'ss par km)", { exact: true });
+  await expect(pace).toHaveValue("3'36");
+  await expect(pace).toHaveAttribute('inputmode', 'numeric');
+  await pace.click();
+  await pace.pressSequentially('375');
+  await expect(pace).toHaveValue("3'75");
+  await pace.blur();
+  await expect(pace).toHaveValue("4'15");
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect.poll(() => counts.edits).toBe(1);
+  expect(saved!.steps[0].value).toBe(5400);
+  expect(saved!.steps[1].steps[0].target).toEqual({ kind: 'pace_sec_km', low: 210, high: 255 });
 });
 
 test('uncertain export survives reload and is verified without replaying the write', async ({ page }) => {
@@ -150,6 +242,8 @@ test('uncertain export survives reload and is verified without replaying the wri
     await route.fulfill({ json: view.export });
   });
   await page.goto('/planning?date=2027-01-12');
+  await page.getByRole('button', { name: 'Options du planning', exact: true }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
   await page.getByLabel('Sélectionner Fractionné · 6 × 400 m').check();
   await page.getByRole('button', { name: 'Envoyer vers Garmin', exact: true }).click();
   const card = page.getByTestId('workout-42');
@@ -157,8 +251,12 @@ test('uncertain export survives reload and is verified without replaying the wri
   await expect(page.getByRole('button', { name: 'Envoyer vers Garmin', exact: true })).toBeDisabled();
   await page.reload();
   await expect(card.getByText('Résultat indéterminé · vérifier Garmin', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Options du planning', exact: true }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
   await expect(page.getByLabel('Sélectionner Fractionné · 6 × 400 m')).toBeDisabled();
-  await card.getByRole('button', { name: 'Vérifier Garmin', exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir la séance', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Vérifier Garmin', exact: true }).click();
+  await page.keyboard.press('Escape');
   await expect(card.getByText('Vérifiée · prête à envoyer', { exact: true })).toBeVisible();
   expect(attempts).toBe(1); expect(checks).toBe(1); expect(counts.model).toBe(0);
 });
@@ -170,13 +268,57 @@ test('a run interrupted by closing the tab can be reconciled from its durable wo
   let checks = 0;
   await page.route('**/api/garmin/exports/42/reconcile', async route => {
     checks++;
-    view.export = state('ready');
+    // The reconciled snapshot must follow the interrupted operation regardless
+    // of the runner's date: the cache correctly rejects older export states.
+    view.export = { ...state('ready'), updated_at: '2027-01-01T00:03:00' };
     await route.fulfill({ json: view.export });
   });
   await page.goto('/planning?date=2027-01-12');
   const card = page.getByTestId('workout-42');
+  await page.getByRole('button', { name: 'Options du planning', exact: true }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
   await expect(page.getByLabel('Sélectionner Fractionné · 6 × 400 m')).toBeDisabled();
-  await card.getByRole('button', { name: 'Vérifier Garmin', exact: true }).click();
+  await page.getByRole('button', { name: 'Ouvrir la séance', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Vérifier Garmin', exact: true }).click();
+  await expect(page.getByRole('dialog').getByText('Vérifiée · prête à envoyer', { exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(card.getByText('Vérifiée · prête à envoyer', { exact: true })).toBeVisible();
   expect(checks).toBe(1); expect(counts.exports).toBe(0);
+});
+
+test('deletion commits once when Garmin removal fails and cleanup survives reload', async ({ page }) => {
+  const view: WorkoutView = { session: structuredClone(session), export: state('scheduled') };
+  await mockApi(page, () => view);
+  let deleted = false;
+  let deletions = 0;
+  let removals = 0;
+  await page.route(/\/api\/garmin\/planned(?:\?.*)?$/, route => route.fulfill({ json: deleted ? [] : [view.session] }));
+  await page.route(/\/api\/garmin\/planned\/42\?revision=1$/, route => {
+    deletions++;
+    deleted = true;
+    view.export = { ...state('pending_removal'), deleted: true };
+    return route.fulfill({ json: { message: 'Session deleted' } });
+  });
+  await page.route('**/api/garmin/exports/42/remove', route => {
+    removals++;
+    if (removals === 1) return route.fulfill({ status: 502, json: { detail: 'Garmin indisponible' } });
+    view.export = { ...state('removed'), deleted: true };
+    return route.fulfill({ json: view.export });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/planning?date=2027-01-12');
+  await page.getByRole('button', { name: 'Ouvrir la séance Fractionné · 6 × 400 m', exact: true }).click();
+  await page.getByRole('button', { name: 'Supprimer la séance', exact: true }).click();
+  await page.getByRole('button', { name: 'Supprimer', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Retrait Garmin à terminer' })).toBeVisible();
+  expect(deletions).toBe(1);
+  expect(removals).toBe(1);
+  await page.reload();
+  await expect(page.getByText('supprimée', { exact: false })).toBeVisible();
+  await page.locator('summary').filter({ hasText: 'Gérer le retrait' }).click();
+  await page.getByRole('button', { name: 'Retirer de Garmin Connect', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retirer de Garmin Connect', exact: true })).toHaveCount(0);
+  expect(deletions).toBe(1);
+  expect(removals).toBe(2);
 });

@@ -1,47 +1,71 @@
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useLayoutEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Check, Database, Dumbbell, Palette, Save, Target, Terminal, User, Users, Watch, X } from 'lucide-react';
+import { Check, Database, Dumbbell, Info, Palette, Save, Target, Terminal, User, Users, Watch, X } from 'lucide-react';
 import { AreteMark } from '@/components/AreteBrand';
-import { cn } from '@/lib/utils';
+import { cn, readableError } from '@/lib/utils';
 import { ErrorState, LoadingState } from '@/components';
 import { useAuthState } from '@/components/auth/authState';
 import { Button, Spinner } from '@/components/ui';
 import { settingsApi, type UserSettings } from '@/lib/api';
-import { DataTab } from './settings/DataTab';
-import { GamificationTab } from './settings/GamificationTab';
 import { qk } from '@/lib/queryKeys';
 import { applyTheme } from '@/lib/theme';
-import {
-  AdminTab,
-  AppearanceTab,
-  CoachTab,
-  ConnectionsTab,
-  DEFAULT_SETTINGS,
-  GoalsTab,
-  ProfileTab,
-  SystemTab,
-  WorkoutTab,
-  type LocalSettings,
-} from './settings/index';
+import { importChunk } from '@/lib/chunkReload';
+import { DEFAULT_SETTINGS, type LocalSettings } from './settings/types';
+
+// One tab shows at a time: each loads on first view, not with the dashboard.
+const ProfileTab = lazy(importChunk(() => import('./settings/ProfileTab').then((m) => ({ default: m.ProfileTab }))));
+const GoalsTab = lazy(importChunk(() => import('./settings/GoalsTab').then((m) => ({ default: m.GoalsTab }))));
+const WorkoutTab = lazy(importChunk(() => import('./settings/WorkoutTab').then((m) => ({ default: m.WorkoutTab }))));
+const ConnectionsTab = lazy(importChunk(() => import('./settings/ConnectionsTab').then((m) => ({ default: m.ConnectionsTab }))));
+const CoachTab = lazy(importChunk(() => import('./settings/CoachTab').then((m) => ({ default: m.CoachTab }))));
+const GamificationTab = lazy(importChunk(() => import('./settings/GamificationTab').then((m) => ({ default: m.GamificationTab }))));
+const AppearanceTab = lazy(importChunk(() => import('./settings/AppearanceTab').then((m) => ({ default: m.AppearanceTab }))));
+const DataTab = lazy(importChunk(() => import('./settings/DataTab').then((m) => ({ default: m.DataTab }))));
+const SystemTab = lazy(importChunk(() => import('./settings/SystemTab').then((m) => ({ default: m.SystemTab }))));
+const AdminTab = lazy(importChunk(() => import('./settings/AdminTab').then((m) => ({ default: m.AdminTab }))));
+const AboutTab = lazy(importChunk(() => import('./settings/AboutTab').then((m) => ({ default: m.AboutTab }))));
 
 const TABS = [
-  { id: 'profile', label: 'PROFIL', icon: User },
-  { id: 'goals', label: 'OBJECTIFS', icon: Target },
-  { id: 'workout', label: 'NOTATION', icon: Dumbbell },
-  { id: 'connections', label: 'CONNEXIONS', icon: Watch },
-  { id: 'coach', label: 'COACH', icon: AreteMark },
-  { id: 'gamification', label: 'GAMIFICATION', icon: Target },
-  { id: 'appearance', label: 'APPARENCE', icon: Palette },
-  { id: 'data', label: 'DONNÉES', icon: Database },
-  { id: 'system', label: 'SYSTÈME', icon: Terminal },
+  { id: 'profile', label: 'Profil', icon: User },
+  { id: 'goals', label: 'Objectifs', icon: Target },
+  { id: 'workout', label: 'Notation', icon: Dumbbell },
+  { id: 'connections', label: 'Connexions', icon: Watch },
+  { id: 'coach', label: 'Coach', icon: AreteMark },
+  { id: 'gamification', label: 'Gamification', icon: Target },
+  { id: 'appearance', label: 'Apparence', icon: Palette },
+  { id: 'data', label: 'Données', icon: Database },
+  { id: 'system', label: 'Système', icon: Terminal },
+  { id: 'about', label: 'À propos', icon: Info },
 ] as const;
 /** Listed for the owner and admins only. */
-const ADMIN_TAB = { id: 'admin', label: 'ADMINISTRATION', icon: Users } as const;
+const ADMIN_TAB = { id: 'admin', label: 'Administration', icon: Users } as const;
 
 type Tab = (typeof TABS)[number] | typeof ADMIN_TAB;
 type TabId = Tab['id'];
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * The server's value, except where the form differs from the copy it was filled
+ * from. Plain objects merge key by key, at any depth: editing the quiet hours
+ * keeps a notification kind another tab turned on, and the reverse.
+ */
+function mergeEdits(form: unknown, previous: unknown, server: unknown): unknown {
+  if (isPlainObject(form) && isPlainObject(previous) && isPlainObject(server)) {
+    const merged: Record<string, unknown> = { ...server };
+    for (const key of Object.keys(form)) merged[key] = mergeEdits(form[key], previous[key], server[key]);
+    return merged;
+  }
+  return JSON.stringify(form) !== JSON.stringify(previous) ? form : server;
+}
+
+function keepEdits(form: LocalSettings, previous: UserSettings, server: LocalSettings): LocalSettings {
+  const { user_id, ...was } = previous;
+  return mergeEdits(form, was, server) as LocalSettings;
+}
 
 const isTabId = (tabs: readonly Tab[], value: string | null): value is TabId =>
   tabs.some((tab) => tab.id === value);
@@ -63,12 +87,14 @@ export function SettingsPage() {
 
   const [settings, setSettings] = useState<LocalSettings>(DEFAULT_SETTINGS);
 
-  // Adopt fetched settings into local form state whenever the server copy changes
+  // Adopt fetched settings into local form state whenever the server copy changes,
+  // field by field: a value edited here and not saved yet stays as typed (another
+  // tab's save, broadcast on `arete-preferences`, must not wipe it).
   const [syncedFrom, setSyncedFrom] = useState<UserSettings | null>(null);
   if (savedSettings && savedSettings !== syncedFrom) {
     setSyncedFrom(savedSettings);
     const { user_id, ...rest } = savedSettings;
-    setSettings(rest);
+    setSettings(syncedFrom ? keepEdits(settings, syncedFrom, rest) : rest);
   }
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -93,6 +119,11 @@ export function SettingsPage() {
     mutationFn: settingsApi.update,
     onMutate: () => setSaveStatus('saving'),
     onSuccess: (saved) => {
+      // The saved copy is the new reference: a value the server normalized
+      // must not count as an edit (and keep « Enregistrer » on screen).
+      const { user_id, ...rest } = saved;
+      setSyncedFrom(saved);
+      setSettings(rest);
       queryClient.setQueryData(['settings'], saved);
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       // The threshold pace feeds the VDOT when Garmin has no race prediction.
@@ -113,13 +144,13 @@ export function SettingsPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-void p-6 flex items-center justify-center">
-        <LoadingState message="CHARGEMENT DES RÉGLAGES…" />
+        <LoadingState message="Chargement des réglages…" />
       </div>
     );
   }
 
   if (isError) {
-    return <ErrorState message="RÉGLAGES INDISPONIBLES" onRetry={() => refetch()} />;
+    return <ErrorState message="Réglages indisponibles" onRetry={() => refetch()} />;
   }
 
   const tabProps = { settings, updateSetting };
@@ -128,7 +159,7 @@ export function SettingsPage() {
     <div className="page-shell bg-void">
       <div className="page-content">
         <header className="flex justify-between items-center mb-4 sm:mb-8 animate-fade-down">
-          <h1 className="page-title text-lg sm:text-2xl font-sans font-bold text-text-primary tracking-wider">RÉGLAGES</h1>
+          <h1 className="page-title">Réglages</h1>
           {hasChanges && (
             <Button
               variant="green"
@@ -141,19 +172,25 @@ export function SettingsPage() {
             </Button>
           )}
         </header>
+        {saveStatus === 'error' && saveMutation.error && (
+          <p role="alert" className="-mt-2 mb-4 text-sm font-sans text-danger-red sm:-mt-6">
+            Réglages non enregistrés : {readableError(saveMutation.error)}
+          </p>
+        )}
 
         {/* Below md the tabs become one scrolling row above the panel. */}
         <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-          <nav className="md:w-48 md:shrink-0 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto animate-fade-left">
+          <nav aria-label="Sections des réglages" className="settings-nav md:w-48 md:shrink-0 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto animate-fade-left">
             <div className="flex md:flex-col gap-1">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
+                  aria-current={activeTab === tab.id ? 'page' : undefined}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
                     'shrink-0 md:w-full flex items-center gap-2 md:gap-3 px-3 py-2 md:px-4 md:py-3 rounded',
-                    'text-sm font-mono transition-all text-left whitespace-nowrap',
+                    'text-sm font-sans transition-all text-left whitespace-nowrap',
                     activeTab === tab.id
                       ? 'bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30'
                       : 'text-text-muted hover:text-text-secondary hover:bg-abyss'
@@ -167,16 +204,19 @@ export function SettingsPage() {
           </nav>
 
           <div key={activeTab} className="flex-1 min-w-0 glass-panel p-4 sm:p-6 animate-fade-up">
-            {activeTab === 'profile' && <ProfileTab {...tabProps} />}
-            {activeTab === 'goals' && <GoalsTab {...tabProps} />}
-            {activeTab === 'workout' && <WorkoutTab {...tabProps} />}
-            {activeTab === 'connections' && <ConnectionsTab />}
-            {activeTab === 'coach' && <CoachTab {...tabProps} />}
-            {activeTab === 'gamification' && <GamificationTab />}
-            {activeTab === 'appearance' && <AppearanceTab {...tabProps} />}
-            {activeTab === 'data' && <DataTab />}
-            {activeTab === 'system' && <SystemTab />}
-            {activeTab === 'admin' && <AdminTab />}
+            <Suspense fallback={<LoadingState />}>
+              {activeTab === 'profile' && <ProfileTab {...tabProps} />}
+              {activeTab === 'goals' && <GoalsTab {...tabProps} />}
+              {activeTab === 'workout' && <WorkoutTab {...tabProps} />}
+              {activeTab === 'connections' && <ConnectionsTab />}
+              {activeTab === 'coach' && <CoachTab {...tabProps} />}
+              {activeTab === 'gamification' && <GamificationTab />}
+              {activeTab === 'appearance' && <AppearanceTab {...tabProps} />}
+              {activeTab === 'data' && <DataTab />}
+              {activeTab === 'system' && <SystemTab />}
+              {activeTab === 'about' && <AboutTab />}
+              {activeTab === 'admin' && <AdminTab />}
+            </Suspense>
           </div>
         </div>
       </div>
@@ -190,28 +230,28 @@ function SaveStatusContent({ status }: { status: SaveStatus }) {
       return (
         <>
           <Spinner />
-          ENREGISTREMENT…
+          Enregistrement…
         </>
       );
     case 'saved':
       return (
         <>
           <Check className="w-4 h-4" />
-          ENREGISTRÉ
+          Enregistré
         </>
       );
     case 'error':
       return (
         <>
           <X className="w-4 h-4 text-danger-red" />
-          ÉCHEC
+          Échec
         </>
       );
     default:
       return (
         <>
           <Save className="w-4 h-4" />
-          ENREGISTRER
+          Enregistrer
         </>
       );
   }

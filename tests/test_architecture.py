@@ -63,6 +63,19 @@ def test_factory_is_only_imported_by_composition_root():
     assert not violations
 
 
+def test_no_module_imports_the_retired_strava_integration():
+    # Strava's API agreement forbids its data in an AI application (ARE-126):
+    # its rows stay readable, but nothing may fetch from Strava again.
+    violations = [
+        f"{p.relative_to(ROOT)}: {name}"
+        for p in ROOT.rglob("*.py")
+        for name in imports(p)
+        if name == "arete.strava"
+        or name.startswith(("arete.strava.", "arete.api.strava"))
+    ]
+    assert not violations, "\n".join(violations)
+
+
 def test_profile_capabilities_are_registered_and_preloads_authorized():
     from arete.agent.capabilities.registry import CAPABILITIES, validate_registry
     from arete.agent.profiles.catalog import PROFILES
@@ -70,5 +83,40 @@ def test_profile_capabilities_are_registered_and_preloads_authorized():
     validate_registry()
     for profile in PROFILES.values():
         assert set(profile.capabilities) <= CAPABILITIES.keys()
-        assert set(profile.preloaded) <= set(profile.capabilities)
-        assert profile.id == "chat" or not profile.training_writes
+        assert (
+            profile.id in {"chat", "slack", "automation"} or not profile.training_writes
+        )
+
+
+def test_memory_and_journal_have_independent_tool_owners_and_policy():
+    from dataclasses import replace
+
+    from arete.agent.capabilities.discovery import tool_available
+    from arete.agent.capabilities.registry import (
+        FACT_MEMORY_TOOL_NAMES,
+        FILESYSTEM_TOOL_NAMES,
+        JOURNAL_TOOL_NAMES,
+    )
+    from arete.agent.middlewares.fact_memory import FactMemoryMiddleware
+    from arete.agent.middlewares.journal import JournalMiddleware
+    from arete.agent.profiles.catalog import get_profile
+
+    facts = FactMemoryMiddleware(model=None)
+    journal = JournalMiddleware()
+    assert {t.name for t in facts.tools} == FACT_MEMORY_TOOL_NAMES
+    assert {t.name for t in journal.tools} == JOURNAL_TOOL_NAMES
+    assert not FACT_MEMORY_TOOL_NAMES & JOURNAL_TOOL_NAMES
+    assert not FILESYSTEM_TOOL_NAMES & (FACT_MEMORY_TOOL_NAMES | JOURNAL_TOOL_NAMES)
+    profile = replace(get_profile("chat"), filesystem_tools=False)
+    assert all(
+        tool_available(profile, name)
+        for name in FACT_MEMORY_TOOL_NAMES | JOURNAL_TOOL_NAMES
+    )
+    assert not any(tool_available(profile, name) for name in FILESYSTEM_TOOL_NAMES)
+    profile = replace(get_profile("chat"), journal_tools=False)
+    assert all(tool_available(profile, name) for name in FILESYSTEM_TOOL_NAMES)
+    assert all(tool_available(profile, name) for name in FACT_MEMORY_TOOL_NAMES)
+    assert not any(tool_available(profile, name) for name in JOURNAL_TOOL_NAMES)
+    profile = replace(get_profile("chat"), fact_memory_tools=False)
+    assert all(tool_available(profile, name) for name in JOURNAL_TOOL_NAMES)
+    assert not any(tool_available(profile, name) for name in FACT_MEMORY_TOOL_NAMES)

@@ -34,6 +34,12 @@ class Config:
         """Calendar rides on Clerk: the signed-in Google account holds the grant."""
         return self.auth_provider == "clerk" and bool(self.clerk_secret_key)
 
+    @property
+    def serverless(self) -> bool:
+        """On Vercel Functions (its system variable ``VERCEL=1``): a function
+        stops at ``maxDuration``, so scheduled model runs stop before it."""
+        return _env("VERCEL", "") == "1"
+
     # --- storage -----------------------------------------------------------
     @property
     def db_target(self) -> str:
@@ -122,6 +128,13 @@ class Config:
         return _env("OPENROUTER_API_KEY", "") or ""
 
     @property
+    def memory_jev_enabled(self) -> bool:
+        raw = (_env("MEMORY_JEV_ENABLED", "true") or "true").lower().strip()
+        if raw not in ("true", "false"):
+            raise ValueError("MEMORY_JEV_ENABLED must be true or false")
+        return raw == "true"
+
+    @property
     def github_token(self) -> str:
         return _env("GITHUB_TOKEN", "") or ""
 
@@ -179,32 +192,24 @@ class Config:
     def stt_max_audio_mb(self) -> int:
         return int(_env("STT_MAX_AUDIO_MB", "10") or 10)
 
-    # --- Strava ------------------------------------------------------------
-    @property
-    def strava_client_id(self) -> str:
-        return _env("STRAVA_CLIENT_ID", "") or ""
-
-    @property
-    def strava_client_secret(self) -> str:
-        return _env("STRAVA_CLIENT_SECRET", "") or ""
-
-    @property
-    def strava_redirect_uri(self) -> str:
-        return (
-            _env("STRAVA_REDIRECT_URI", "http://localhost:8000/strava/callback") or ""
-        )
-
     @property
     def frontend_url(self) -> str:
         return _env("FRONTEND_URL", "http://localhost:3080") or ""
 
     # --- background jobs / logging -----------------------------------------
     @property
-    def auto_sync_hour(self) -> int | None:
-        """Local hour (0-23) of the daily Garmin/Strava sync; None disables it.
+    def automation_worker(self) -> bool:
+        """Docker polls the shared queue even when Vercel owns daily sync."""
+        return (_env("ARETE_AUTOMATION_WORKER", "false") or "").lower() == "true"
 
-        Garmin publishes the night's HRV and sleep score at wake-up, so an hour
-        before the athlete is up leaves the day without recovery data.
+    @property
+    def auto_sync_hour(self) -> int | None:
+        """Hour (0-23) on each athlete's clock from which the daily sync runs.
+
+        None disables the in-process loop (Vercel Cron dispatches instead, from
+        ``scheduler.DEFAULT_SYNC_HOUR``). Garmin publishes the night's HRV and
+        sleep score at wake-up, so an hour before the athlete is up leaves the
+        day without recovery data.
         """
         raw = _env("ARETE_AUTO_SYNC_HOUR")
         if raw is None:
@@ -257,6 +262,12 @@ class Config:
     @property
     def clerk_secret_key(self) -> str:
         return _env("CLERK_SECRET_KEY", "") or ""
+
+    @property
+    def clerk_jwt_key(self) -> str:
+        """The Clerk instance's PEM public key: session tokens are then verified
+        offline instead of fetching Clerk's JWKS. Empty = fetch (5 min cache)."""
+        return _env("CLERK_JWT_KEY", "") or ""
 
     @property
     def clerk_publishable_key(self) -> str:

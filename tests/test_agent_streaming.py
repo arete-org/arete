@@ -14,7 +14,7 @@ from arete.agent.runtime.events import (
     preview,
     tool_result_event,
 )
-from arete.api.agent_streaming import StreamProjection
+from arete.agent.runtime.streaming import StreamProjection
 
 
 def token(text, message_id, **metadata):
@@ -65,10 +65,27 @@ def test_empty_and_oversized_stream_fail_explicitly():
     with pytest.raises(ValueError, match="aucune réponse"):
         stream.done()
     with (
-        patch("arete.api.agent_streaming.MAX_STREAM_TEXT_CHARS", 5),
+        patch("arete.agent.runtime.streaming.MAX_STREAM_TEXT_CHARS", 5),
         pytest.raises(ValueError, match="taille"),
     ):
         stream.events(token("Too long", "m"))
+
+
+def test_native_summary_tokens_never_replace_the_user_answer():
+    from arete.agent.runtime.execution import _is_answer_text
+
+    stream = StreamProjection()
+    stream.events(token("Réponse du coach", "answer"))
+    assert (
+        stream.events(token("Résumé interne", "summary", lc_source="summarization"))
+        == []
+    )
+    assert stream.done()["message"]["content"] == "Réponse du coach"
+    assert "summary" not in stream.texts
+    assert not _is_answer_text(
+        token("Résumé interne", "summary", lc_source="summarization")
+    )
+    assert _is_answer_text(token("Réponse", "answer"))
 
 
 @pytest.mark.parametrize("text", [None, "", " ", "x" * 301, "🏃" * 301])
@@ -80,13 +97,13 @@ def test_invalid_optional_suggestion_preserves_the_answer(text, caplog):
         == []
     )
     assert stream.done()["message"]["content"] == "Réponse"
-    assert "draft omitted" in caplog.text
+    assert "draft omitted" not in caplog.text
 
 
 def test_suggestion_limit_counts_unicode_code_points():
     stream = StreamProjection()
     event = {"type": "suggestion", "text": "🏃" * 300}
-    assert stream.events({"type": "custom", "data": event}) == [event]
+    assert stream.events({"type": "custom", "data": event}) == []
 
 
 @pytest.mark.parametrize(
@@ -142,7 +159,6 @@ def test_tool_exception_emits_failure_and_propagates(async_mode):
     assert events[-1]["id"] == "t"
 
 
-@pytest.mark.usefixtures("progressive_chat")
 @pytest.mark.parametrize("async_mode", [False, True])
 def test_system_skill_catalog_and_loaded_instructions_reach_every_model_call(
     monkeypatch, tmp_path, async_mode
@@ -179,8 +195,8 @@ def test_system_skill_catalog_and_loaded_instructions_reach_every_model_call(
                     tool_calls=[
                         {
                             "id": "load",
-                            "name": "load_toolkit",
-                            "args": {"toolkit_id": "analytics"},
+                            "name": "list_planned",
+                            "args": {},
                             "type": "tool_call",
                         }
                     ],
@@ -207,19 +223,14 @@ def test_system_skill_catalog_and_loaded_instructions_reach_every_model_call(
     assert len(seen) == 2
     for prompt in seen:
         assert SYSTEM_SKILL in prompt
-        assert prompt.count("Skills disponibles") == 1
         assert prompt.count("Skills système disponibles") == 1
         assert "/skills/system/document-planning/SKILL.md" in prompt
-    # The catalog lists what is left to load, never what already is.
     for capability in get_profile("chat").capabilities:
-        assert CAPABILITIES[capability].description in seen[0]
-    # Optional integrations must not be advertised before server configuration.
-    assert CAPABILITIES["calendar"].description not in seen[0]
-    assert CAPABILITIES["analytics"].description not in seen[1]
-    assert CAPABILITIES["planning"].description in seen[1]
-    assert all("read_file" in tools for tools in bound_tools)
-    assert CAPABILITIES["analytics"].instructions not in seen[0]
-    assert CAPABILITIES["analytics"].instructions in seen[1]
+        assert all(CAPABILITIES[capability].instructions in prompt for prompt in seen)
+    assert CAPABILITIES["calendar"].instructions not in seen[0]
+    assert all(
+        "read_file" in tools and "list_planned" in tools for tools in bound_tools
+    )
 
 
 def test_real_graph_sse_delivers_correlated_tools_and_final_snapshot(client):
@@ -228,6 +239,7 @@ def test_real_graph_sse_delivers_correlated_tools_and_final_snapshot(client):
     from langchain.agents import create_agent
     from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
+    from arete.agent.capabilities.discovery import authorized_tools
     from arete.agent.middlewares.capabilities import ToolkitMiddleware
 
     class Model(GenericFakeChatModel):
@@ -246,8 +258,8 @@ def test_real_graph_sse_delivers_correlated_tools_and_final_snapshot(client):
                         tool_calls=[
                             {
                                 "id": "t1",
-                                "name": "load_toolkit",
-                                "args": {"toolkit_id": "analytics"},
+                                "name": "list_planned",
+                                "args": {},
                                 "type": "tool_call",
                             }
                         ],
@@ -256,6 +268,7 @@ def test_real_graph_sse_delivers_correlated_tools_and_final_snapshot(client):
                 ]
             ),
         ),
+        tools=authorized_tools("chat"),
         middleware=[ToolEventMiddleware(), ToolkitMiddleware()],
     )
     with patch("arete.api.agent.get_agent", return_value=graph):
@@ -277,3 +290,46 @@ def test_real_graph_sse_delivers_correlated_tools_and_final_snapshot(client):
     assert len(snapshots) == 2
     assert snapshots[0]["id"] != snapshots[1]["id"]
     assert events[-1]["message"]["content"] == "## Prêt\n\n- **Analyser** ta forme."
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_answer_uses_no_auxiliary_model_even_for_old_clients(
+    monkeypatch, tmp_path, router_client, streaming
+):
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+
+    from arete.api.agent import router
+    from arete.coaching import get_agent
+
+    calls = []
+
+    class Model(GenericFakeChatModel):
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, *args, **kwargs):
+            calls.append(True)
+            return super()._generate(*args, **kwargs)
+
+    monkeypatch.setattr("arete.services.memory.memory_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "arete.coaching.build_chat_model",
+        lambda **kwargs: Model(
+            messages=iter([AIMessage(content="Bonjour.")]), disable_streaming=True
+        ),
+    )
+    get_agent.cache_clear()
+    try:
+        response = router_client(router).post(
+            "/agent/chat/stream" if streaming else "/agent/chat",
+            json={
+                "messages": [{"role": "user", "content": "Bonjour"}],
+                "supports_suggestions": True,
+            },
+        )
+        assert response.status_code == 200
+        assert "Bonjour." in response.text
+        assert "suggestion" not in response.text
+        assert calls == [True]
+    finally:
+        get_agent.cache_clear()

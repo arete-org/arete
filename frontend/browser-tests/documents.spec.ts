@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { toLocalISODate } from '../src/lib/dates';
 
 test('real OCR uses local resources and preserves numeric training instructions', async ({ page }) => {
   await page.route('**/api/**', route => route.fulfill({ json: {} }));
@@ -25,26 +26,27 @@ test('real OCR uses local resources and preserves numeric training instructions'
   expect(extraction.blocks.every((block: { method: string }) => block.method === 'ocr')).toBe(true);
 });
 
-test('file drop produces a preview and requires human confirmation before planning', async ({ page }) => {
+test('file drop creates sessions directly and preserves attachments on reload', async ({ page }) => {
   const docId = '11111111-1111-4111-8111-111111111111';
-  const draftId = '22222222-2222-4222-8222-222222222222';
   let documentReady = false;
-  let draftReady = false;
-  let confirmations = 0;
+  const importRequests: string[] = [];
   const doc = { id: docId, name: 'plan.md', size: 18, sha256: '0'.repeat(64), status: 'ready' };
-  const draft = { id: draftId, version: 1, status: 'draft', session_ids: [] as number[], sessions: [{ session: { date: '2027-01-12', sport: 'running', session_type: 'endurance', description: 'Footing 30 minutes', prescription: { version: 1, steps: [{ kind: 'effort', duration_kind: 'seconds', value: 1800, steps: [] }] }, provenance: [{ document_id: docId, locator: 'lignes 1-1', quote: 'Footing 30 minutes' }], strength_text: '', uncertainties: [] }, problems: [], sources: [{ document_id: docId, file_name: 'plan.md', locator: 'lignes 1-1', quote: 'Footing 30 minutes', ocr: false }], ocr: false, duplicates: [] }] };
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
     const method = route.request().method();
+    if (url.pathname.includes('/imports')) { importRequests.push(url.pathname); return route.fulfill({ status: 404 }); }
     if (url.pathname.endsWith('/documents') && method === 'POST') return route.fulfill({ json: doc });
     if (url.pathname.includes('/chunks/')) return route.fulfill({ json: { uploaded: true } });
     if (url.pathname.endsWith('/finalize')) { documentReady = true; return route.fulfill({ json: doc }); }
     if (url.pathname.endsWith('/documents')) return route.fulfill({ json: documentReady ? [doc] : [] });
-    if (url.pathname.endsWith('/imports')) return route.fulfill({ json: draftReady ? [draft] : [] });
-    if (url.pathname.endsWith('/confirm')) { confirmations++; draft.status = 'confirmed'; draft.session_ids = [1]; return route.fulfill({ json: { session_ids: [1] } }); }
     if (url.pathname.endsWith('/chat/stream')) {
-      draftReady = true;
-      const events = [{ type: 'import_preview', id: draftId, version: 1 }, { type: 'done', message: { role: 'assistant', content: 'Vérifie les séances dans l’aperçu.' } }];
+      expect(route.request().postDataJSON().messages.at(-1).content).toBe('Crée cette séance');
+      const events = [
+        { type: 'tool_start', id: 'create-1', name: 'create_planned_session', args: { text: '2027-01-12, endurance', truncated: false } },
+        { type: 'tool_end', id: 'create-1', name: 'create_planned_session', status: 'done', output: { text: 'Séance 42 créée', truncated: false }, elapsed_ms: 20 },
+        { type: 'message', id: 'answer', text: 'Séance créée dans le planning.' },
+        { type: 'done', message: { role: 'assistant', content: 'Séance créée dans le planning.' } },
+      ];
       return route.fulfill({ contentType: 'text/event-stream', body: events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') });
     }
     if (url.pathname.includes('/settings')) return route.fulfill({ json: {} });
@@ -57,59 +59,50 @@ test('file drop produces a preview and requires human confirmation before planni
     data.items.add(new File(['Footing 30 minutes'], 'plan.md', { type: 'text/markdown' }));
     return data;
   });
-  await page.locator('aside').filter({ has: page.getByLabel('Documents du coach') }).dispatchEvent('drop', { dataTransfer: transfer });
-  await expect(page.getByText('Prêt', { exact: true })).toBeVisible();
-  await page.getByLabel('Message au coach').fill('Prépare ces séances');
+  await page.getByRole('complementary', { name: 'Coach IA' }).dispatchEvent('drop', { dataTransfer: transfer });
+  await expect(page.getByRole('button', { name: 'Fichiers du fil (1)' })).toHaveText('1');
+  await page.getByLabel('Message au coach').fill('Crée cette séance');
   await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
-  await page.getByRole('button', { name: /Vérifier 1 séance/ }).click();
-  const confirm = page.getByRole('button', { name: 'Ajouter 1 séance(s) au Planning' });
-  await expect(confirm).toBeDisabled();
-  await expect(page.getByText('12 janvier 2027', { exact: true })).toBeVisible();
-  expect(confirmations).toBe(0);
-  await page.getByLabel('J’ai vérifié les sources, les dates, les unités et les doublons possibles.').check();
-  await page.getByText('Étapes et objectifs (1)', { exact: true }).click();
-  await page.screenshot({ path: '../.context/import-preview.png', fullPage: true });
-  await confirm.click();
-  await expect.poll(() => confirmations).toBe(1);
+  await expect(page.getByText('Séance créée dans le planning.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Vérifier.*séance/ })).toHaveCount(0);
   await page.reload();
   await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
   await expect(page.getByText('plan.md', { exact: true })).toBeVisible();
-  await expect(page.getByText('1 séance(s) ajoutée(s) — voir le Planning')).toBeVisible();
+  await expect(page.getByText('Séance créée dans le planning.')).toBeVisible();
+  expect(importRequests).toEqual([]);
 });
 
 
-test('textual, scanned and mixed PDF pages retain all source pages', async ({ page, context }) => {
-  const source = await context.newPage();
-  const scan = await source.evaluate(() => {
-    const canvas = document.createElement('canvas'); canvas.width = 1000; canvas.height = 240;
-    const ctx = canvas.getContext('2d')!; ctx.fillStyle = 'white'; ctx.fillRect(0,0,1000,240);
-    ctx.fillStyle = 'black'; ctx.font = '40px Arial'; ctx.fillText('Natation 8 x 100 m repos 30 secondes', 20,100);
-    return canvas.toDataURL();
+test('PDF upload delegates extraction to the server without a browser OCR worker', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', request => requests.push(request.url()));
+  await page.route('**/api/**', route => {
+    if (route.request().url().endsWith('/finalize')) expect(route.request().postDataJSON()).toBeNull();
+    return route.fulfill({ json: { id: 'pdf', status: 'ready' } });
   });
-  await source.setContent(`<style>section{break-after:page;font:28px Arial}img{width:600px}</style><section>Course 12 janvier 2027 : 45 minutes</section><section><img src="${scan}" /></section><section>Vélo 13 janvier 2027 : 60 minutes<img src="${scan}" /></section>`);
-  const pdf = await source.pdf();
-  await source.close();
-  await page.route('**/api/**', route => route.fulfill({ json: {} }));
   await page.goto('/');
-  const result = await page.evaluate(async bytes => {
-    const modulePath = '/src/lib/documentExtraction.ts';
-    const { extractDocument } = await import(/* @vite-ignore */ modulePath);
-    return extractDocument(new File([new Uint8Array(bytes)], 'reference.pdf', { type: 'application/pdf' }), new AbortController().signal, () => {});
-  }, Array.from(pdf));
-  const pages = (n: number) => result.blocks.filter((b: { locator: string }) => b.locator.startsWith(`page ${n},`));
-  expect(pages(1).some((b: { text: string; method: string }) => b.text.includes('45 minutes') && b.method === 'text')).toBe(true);
-  expect(pages(2).some((b: { text: string; method: string }) => b.text.includes('100') && b.method === 'ocr')).toBe(true);
-  expect(pages(3).map((b: { text: string }) => b.text).join(' ')).toContain('60 minutes');
-  expect(pages(3).map((b: { text: string }) => b.text).join(' ')).toContain('100');
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/lib/documents.ts';
+    const { uploadDocument } = await import(/* @vite-ignore */ modulePath);
+    return uploadDocument('thread', new File(['%PDF-server-validation'], 'scan.pdf'), new AbortController().signal, () => {});
+  });
+  expect(result.status).toBe('ready');
+  expect(requests.some(url => url.includes('/finalize'))).toBe(true);
+  expect(requests.some(url => url.includes('/ocr/') || url.includes('documentExtraction'))).toBe(false);
 });
 
 test('Garmin export is an explicit selected action and never claims watch delivery', async ({ page }) => {
-  const day = new Date().toISOString().slice(0, 10);
+  // The planning shows the browser's local week. Half past midnight, when the UTC day
+  // is still yesterday east of Greenwich: a UTC date would show the session missed.
+  const now = new Date(2026, 9, 20, 0, 30);
+  await page.clock.install({ time: now });
+  const day = toLocalISODate(now);
   const session = { id: 42, date: day, sport: 'running', session_type: 'endurance', description: 'Footing de référence', source: 'coach', status: 'pending', revision: 1, prescription: { version: 1, steps: [{ kind: 'effort', duration_kind: 'seconds', value: 1800, steps: [] }] } };
   let sent = 0;
   let statuses: object[] = [];
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/garmin/planned')) return route.fulfill({ json: [session] });
     if (path.endsWith('/42/workout')) return route.fulfill({ json: { session: { ...session, exportable: true, summary: '30 min' }, export: statuses[0] ?? null } });
     if (path.endsWith('/workout-devices')) return route.fulfill({ json: [{ id: 10, name: 'fēnix 8', sports: ['running'], compatibility: 'documented' }, { id: 11, name: 'Modèle inconnu', sports: [], compatibility: 'unknown' }] });
@@ -123,7 +116,9 @@ test('Garmin export is an explicit selected action and never claims watch delive
     return route.fulfill({ json: [] });
   });
   await page.goto('/planning');
-  const panel = page.getByRole('region', { name: 'Envoi des séances vers Garmin' });
+  await page.getByRole('button', { name: 'Options du planning' }).click();
+  await page.getByRole('button', { name: 'Sélectionner', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Planning hebdomadaire' });
   await panel.getByLabel('Sélectionner Footing de référence').check();
   await panel.getByLabel('Demander aussi le transfert vers une montre').check();
   await panel.getByLabel('Montre Garmin').selectOption('10');
@@ -161,6 +156,7 @@ test('OCR preview compares the original, filters uncertain passages and works on
   let downloads = 0;
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
     if (path.endsWith('/documents')) return route.fulfill({ json: [doc] });
     if (path.endsWith('/extraction')) return route.fulfill({ json: { warnings: ['Texte reconnu automatiquement : vérifie les dates, chiffres et unités dans l’original.'], blocks: lines.map((text, i) => ({ locator: `page 1, ligne ${i+1}`, text, method: 'ocr', confidence: i === 4 ? 61 : 96 })) } });
     if (path.endsWith('/chunks/0')) { downloads++; return route.fulfill({ body: raw, contentType: 'application/octet-stream' }); }
@@ -168,6 +164,7 @@ test('OCR preview compares the original, filters uncertain passages and works on
   });
   await page.goto('/planning');
   await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
+  await page.getByRole('button', { name: 'Fichiers du fil (1)' }).click();
   await page.getByRole('button', { name: `Consulter ${doc.name}` }).click();
   const preview = page.getByRole('dialog', { name: `Aperçu de ${doc.name}` });
   await expect(preview.getByRole('img', { name: `Original : ${doc.name}` })).toBeVisible();
@@ -195,4 +192,30 @@ test('OCR preview compares the original, filters uncertain passages and works on
   await page.keyboard.press('Escape');
   await expect(preview).toHaveCount(0);
   await expect(page.getByRole('button', { name: `Consulter ${doc.name}` })).toBeFocused();
+});
+
+test('the sheet select stays a compact toolbar control on a desktop pointer, with the shared chevron', async ({ page }) => {
+  const { createHash } = await import('node:crypto');
+  const original = Buffer.from('plan');
+  const doc = { id: '11111111-1111-4111-8111-111111111111', name: 'Plan.xlsx', size: original.length, sha256: createHash('sha256').update(original).digest('hex'), status: 'ready' };
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/notifications') return route.fulfill({ json: { items: [], unread: 0, next_offset: null } });
+    if (path.endsWith('/documents')) return route.fulfill({ json: [doc] });
+    if (path.endsWith('/extraction')) return route.fulfill({ json: { warnings: [], blocks: [{ locator: 'Semaine 1!A1', text: 'Footing 30 min', method: 'text', confidence: null }, { locator: 'Semaine 2!A1', text: 'Fractionné 6 × 400 m', method: 'text', confidence: null }] } });
+    if (path.endsWith('/chunks/0')) return route.fulfill({ body: original, contentType: 'application/octet-stream' });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/planning');
+  await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
+  await page.getByRole('button', { name: 'Fichiers du fil (1)' }).click();
+  await page.getByRole('button', { name: `Consulter ${doc.name}` }).click();
+  const sheet = page.getByRole('dialog', { name: `Aperçu de ${doc.name}` }).getByRole('combobox', { name: 'Page ou feuille du document' });
+  await expect(sheet).toBeVisible();
+  // A mouse is precise: the toolbar keeps its 12 px text and short row; touch raises it to 44 px (mobile-ux).
+  expect((await sheet.boundingBox())!.height).toBeLessThan(40);
+  expect(await sheet.evaluate(element => getComputedStyle(element).backgroundImage)).toContain('linear-gradient');
+  await expect(sheet).toHaveCSS('font-size', '12px');
+  await sheet.selectOption('Semaine 2');
+  await expect(page.getByText('Fractionné 6 × 400 m', { exact: true })).toBeVisible();
 });

@@ -8,7 +8,6 @@ export type ButtonVariant =
   | 'gold'
   | 'green'
   | 'danger'
-  | 'strava'
   | 'outline'
   | 'ghost';
 
@@ -21,19 +20,17 @@ const TINT: Record<ButtonVariant, string> = {
   gold: 'bg-neon-gold/10 border border-neon-gold/30 text-neon-gold hover:bg-neon-gold/20',
   green: 'bg-success-green/10 border border-success-green/30 text-success-green hover:bg-success-green/20',
   danger: 'bg-danger-red/10 border border-danger-red/30 text-danger-red hover:bg-danger-red/20',
-  strava: 'bg-strava/10 border border-strava/30 text-strava hover:bg-strava/20',
   outline: 'bg-abyss border border-text-muted/30 text-text-muted hover:border-text-muted/50',
   ghost: 'text-text-muted hover:text-text-primary',
 };
 
-/** Strong button: bg/20 border/50, hover bg/30 (primary actions in modals). */
+/** Variant classes supply fallbacks; index.css owns the solid primary treatment. */
 const STRONG: Record<ButtonVariant, string> = {
   cyan: 'bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30',
   purple: 'bg-neon-purple/20 border border-neon-purple/50 text-neon-purple hover:bg-neon-purple/30',
   gold: 'bg-neon-gold/20 border border-neon-gold/50 text-neon-gold hover:bg-neon-gold/30',
   green: 'bg-success-green/20 border border-success-green/30 text-success-green hover:bg-success-green/30',
   danger: 'bg-danger-red/20 border border-danger-red/50 text-danger-red hover:bg-danger-red/30',
-  strava: 'bg-strava/20 border border-strava/50 text-strava hover:bg-strava/30',
   outline: 'bg-abyss border border-text-muted/30 text-text-primary hover:border-neon-cyan/50',
   ghost: 'text-text-secondary hover:text-text-primary',
 };
@@ -71,7 +68,7 @@ export function Button({
       data-strong={strong}
       disabled={disabled || loading}
       className={cn(
-        'ui-button inline-flex items-center justify-center gap-2 rounded font-mono transition-colors duration-150 motion-reduce:transition-none',
+        'ui-button inline-flex items-center justify-center gap-2 rounded font-sans transition-colors duration-150 motion-reduce:transition-none',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         SIZES[size],
         strong ? STRONG[variant] : TINT[variant],

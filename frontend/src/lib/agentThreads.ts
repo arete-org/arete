@@ -2,15 +2,19 @@ import {
   restoreConversation,
   STORAGE_KEY as LEGACY_KEY,
 } from './agentConversation';
-import type { ChatMessage } from './agentStream';
+import { isContextWindowUsage, type ChatMessage, type ContextWindowUsage } from './agentStream';
+import { isCoachReference, type CoachReference } from './coachToday';
 
 export const THREADS_KEY = 'arete.coach.threads.v1';
-export const MAX_THREADS = 30;
+export const MAX_THREADS = 100;
 const MAX_STORAGE_CHARS = 4_000_000;
 const TITLE_CHARS = 64;
 export const NEW_THREAD_TITLE = 'Nouvelle conversation';
 
 export interface CoachThread {
+  titleManual?: boolean;
+  archiveRevision?: number;
+  archiveDigest?: string;
   id: string;
   title: string;
   createdAt: number;
@@ -18,6 +22,8 @@ export interface CoachThread {
   messages: ChatMessage[];
   draft: string;
   attachmentIds?: string[];
+  contextWindowUsage?: ContextWindowUsage;
+  reference?: CoachReference;
 }
 export interface ThreadStore {
   version: 1;
@@ -68,12 +74,14 @@ export function addThread(
   thread = createThread()
 ): ThreadStore {
   const empty = store.threads.find(
-    (t) => !t.messages.length && !t.draft.trim() && !t.attachmentIds?.length
+    (t) => !t.reference && !t.messages.length && !t.draft.trim() && !t.attachmentIds?.length
   );
+  // A briefing owns a fresh identity; replacing a truly blank placeholder loses no work.
+  if (empty && thread.reference) return { ...store, activeId: thread.id, threads: store.threads.map(t => t.id === empty.id ? thread : t) };
   if (empty) return { ...store, activeId: empty.id };
   if (store.threads.length >= MAX_THREADS)
     throw new Error(
-      `Limite de ${MAX_THREADS} conversations atteinte. Supprime un ancien fil pour en créer un autre.`
+      `Limite de ${MAX_THREADS} fils locaux atteinte. Attends leur sauvegarde avant de créer un autre fil.`
     );
   return { ...store, activeId: thread.id, threads: [thread, ...store.threads] };
 }
@@ -130,7 +138,12 @@ export function restoreThreads(
     )
       throw new Error('Conversation sauvegardée invalide.');
     ids.add(t.id);
+    if (t.reference !== undefined && !isCoachReference(t.reference))
+      throw new Error('Contexte de conversation sauvegardé invalide.');
     return {
+      titleManual: t.titleManual === true,
+      archiveRevision: Number.isSafeInteger(t.archiveRevision) ? t.archiveRevision : undefined,
+      archiveDigest: typeof t.archiveDigest === "string" ? t.archiveDigest : undefined,
       id: t.id,
       title: t.title,
       draft: t.draft,
@@ -138,6 +151,8 @@ export function restoreThreads(
       updatedAt: t.updatedAt,
       attachmentIds: Array.isArray(t.attachmentIds) && t.attachmentIds.length <= 20 && t.attachmentIds.every(id => typeof id === 'string') ? t.attachmentIds : [],
       messages: restoreConversation(JSON.stringify(t.messages)),
+      contextWindowUsage: isContextWindowUsage(t.contextWindowUsage) ? t.contextWindowUsage : undefined,
+      reference: t.reference,
     };
   });
   if (!ids.has(data.activeId))
@@ -147,6 +162,19 @@ export function restoreThreads(
 function storageKey(athleteId: number): string {
   if (!Number.isSafeInteger(athleteId) || athleteId < 1) throw new Error('Athlète absent.');
   return athleteId === 1 ? THREADS_KEY : `${THREADS_KEY}.athlete.${athleteId}`;
+}
+
+/** Athletes erased in this tab: the coach panel, still mounted until the page
+ *  reloads, must not write their conversations back on unmount or page exit. */
+const forgotten = new Set<number>();
+
+/** Drops the athlete's conversations kept in this browser (its account was erased). */
+export function forgetThreads(athleteId: number): void {
+  forgotten.add(athleteId);
+  localStorage.removeItem(storageKey(athleteId));
+  if (athleteId === 1) localStorage.removeItem(LEGACY_KEY);
+  const conflicts = `arete.coach.conflict.${athleteId}.`;
+  for (const key of Object.keys(localStorage)) if (key.startsWith(conflicts)) localStorage.removeItem(key);
 }
 
 export function loadThreads(athleteId = 1): LoadedThreads {
@@ -168,6 +196,7 @@ export function loadThreads(athleteId = 1): LoadedThreads {
   }
 }
 export function saveThreads(store: ThreadStore, athleteId = 1): string | null {
+  if (forgotten.has(athleteId)) return null;
   try {
     const raw = JSON.stringify(store);
     if (raw.length > MAX_STORAGE_CHARS)

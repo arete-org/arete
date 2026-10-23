@@ -11,6 +11,15 @@ import {
   updateThread,
 } from './agentThreads';
 
+it('restores valid context counters, ignoring corrupt optional telemetry', () => {
+  const store = emptyStore();
+  const usage = { used_tokens: 1200, window_tokens: 1000 };
+  store.threads[0].contextWindowUsage = usage;
+  expect(restoreThreads(JSON.stringify(store), null).threads[0].contextWindowUsage).toEqual(usage);
+  store.threads[0].contextWindowUsage = { used_tokens: 12, window_tokens: 0 };
+  expect(restoreThreads(JSON.stringify(store), null).threads[0].contextWindowUsage).toBeUndefined();
+});
+
 it('migrates the existing conversation without dropping text or tool history', () => {
   const legacy = JSON.stringify([
     { role: 'user', content: 'Ma semaine' },
@@ -134,4 +143,18 @@ it('keeps conversations private when two athletes use the same browser', () => {
   expect(saveThreads(second, 2)).toBeNull();
   expect(loadThreads(1).store.threads[0].draft).toBe('Private first athlete');
   expect(loadThreads(2).store.threads[0].draft).toBe('Private second athlete');
+});
+
+it('restores thread-owned references and never reuses a contextual thread as a blank one', () => {
+  let store = emptyStore();
+  store.threads[0].reference = { kind: 'briefing', id: 41 };
+  const briefingId = store.activeId;
+  store = addThread(store);
+  expect(store.activeId).not.toBe(briefingId);
+  const restored = restoreThreads(JSON.stringify(store), null);
+  expect(restored.threads.find(t => t.id === briefingId)?.reference).toEqual({ kind: 'briefing', id: 41 });
+  expect(restored.threads.find(t => t.id === restored.activeId)?.reference).toBeUndefined();
+  const malformed = JSON.parse(JSON.stringify(store));
+  malformed.threads[1].reference = { kind: 'briefing', id: -1 };
+  expect(() => restoreThreads(JSON.stringify(malformed), null)).toThrow('Contexte');
 });

@@ -8,13 +8,19 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
+from threading import Lock
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
+    from arete.agent.models.jev import JevClient
     from arete.agent.profiles.models import AgentProfile
+    from arete.agent.runtime.surface import SurfaceDecision
     from arete.services.calendar import CalendarService
+    from arete.services.charts import ChartCard
+    from arete.services.personal_context import SearchResult
+    from arete.services.slack_product import SlackProduct
 
 from arete.agent.runtime.budget import MAX_TOOL_CONCURRENCY
 
@@ -22,6 +28,7 @@ from arete.agent.runtime.budget import MAX_TOOL_CONCURRENCY
 #: dict. ``agent/context/sections.py`` is the reader; ``api/agent.py`` is the
 #: only writer.
 PANEL_CONTEXT_KEY = "panel_context"
+MESSAGE_SENT_AT_KEY = "arete_sent_at"
 
 #: Budget for one serialized panel-context payload. Over it the injection is
 #: SKIPPED, never truncated — half a JSON payload parses as a different page.
@@ -30,7 +37,16 @@ MAX_PANEL_CONTEXT_CHARS = 64_000
 #: Route names the frontend can send. Anything else is rejected at the API
 #: boundary before any server-side page read.
 PANEL_PAGES = frozenset(
-    {"dashboard", "planning", "analytics", "log", "settings", "profile"}
+    {
+        "dashboard",
+        "follow_up",
+        "planning",
+        "analytics",
+        "log",
+        "settings",
+        "profile",
+        "health",
+    }
 )
 
 
@@ -39,14 +55,45 @@ class RunStats:
     """What one run cost: model requests are the scarce resource on a free tier."""
 
     model_calls: int = 0
-    suggestion_calls: int = 0
+    skill_reads: int = 0
+    skill_read_ms: int = 0
+    skill_read_tokens_approx: int = 0
+    memory_decision_calls: int = 0
+    memory_decision_ms: int = 0
     memory_searches: int = 0
     memory_ms: int = 0
     memory_tokens: int = 0
     tool_calls: int = 0
     model_ms: int = 0
     first_token_ms: int | None = None
+    first_result_ms: int | None = None
     served_models: list[str] = field(default_factory=list)
+
+
+def _athlete_now() -> datetime:
+    from arete.services.settings import athlete_now
+
+    # A settings read (a database round trip on MotherDuck): never on the loop.
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return athlete_now()
+    raise RuntimeError(
+        "AgentContext built on the event loop: pass "
+        "current_datetime=await read_athlete_clock()"
+    )
+
+
+async def read_athlete_clock() -> datetime:
+    """The athlete's now for a context built in async code.
+
+    It reads the athlete's settings (a database round trip on MotherDuck), so
+    it runs in an AnyIO worker: the default factory below would block the event
+    loop. Sync callers (workers, tests) keep the default.
+    """
+    from anyio import to_thread
+
+    return await to_thread.run_sync(_athlete_now)
 
 
 @dataclass
@@ -60,37 +107,69 @@ class AgentContext:
 
     source: dict[str, Any] = field(default_factory=dict)
     # Selected by the server entrypoint, never from panel_context or messages.
-    profile: Literal["chat", "briefing", "feedback", "review"] = "chat"
+    profile: Literal[
+        "chat", "briefing", "feedback", "review", "evening", "slack", "automation"
+    ] = "chat"
     resolved_profile: AgentProfile | None = field(default=None, init=False, repr=False)
     calendar: CalendarService | None = field(default=None, init=False, repr=False)
     thread_id: str | None = None
-    # One root run per turn; message/model IDs identify children, not the answer.
+    # One graph run per turn; browser feedback uses this as its trace root.
+    # Slack has an outer trace covering classification and delivery as well.
     run_id: UUID = field(default_factory=uuid4, init=False)
     # Clerk user id from the verified request identity, never from the body.
     account_id: str = ""
     document_ids: tuple[str, ...] | None = None
-    # Only interactive HTTP chat requests need a next-message draft.
-    suggest_reply: bool = False
     # Slack only: who reads the answer. None for the browser and missions.
     slack_visibility: Literal["private", "public"] | None = None
+    slack_product: SlackProduct | None = field(default=None, repr=False)
+    slack_decision: SurfaceDecision | None = field(default=None, repr=False)
+    memory_model: JevClient | None = field(default=None, init=False, repr=False)
+    memory_source_message: str = field(default="", init=False, repr=False)
+    memory_calls: int = field(default=0, init=False)
+    memory_charged_calls: int = field(default=0, init=False)
+    title_task: asyncio.Task | None = field(default=None, init=False, repr=False)
+    classifier_calls: int = 0
+    run_logged: bool = False
     attachment_paths: tuple[str, ...] = ()
-    document_import_pending: bool = False
-    current_date: date = field(default_factory=date.today)
+    # Read the clock once so dates agree across midnight and tool calls keep a
+    # stable prompt prefix. Never share this timestamp through the cached graph.
+    current_datetime: datetime = field(default_factory=_athlete_now)
     deadline: float | None = field(default=None, init=False)
+    started_at: float | None = field(default=None, init=False)
     stats: RunStats = field(default_factory=RunStats, init=False, repr=False)
     # The open page's data, cached per run and invalidated after domain actions.
     page_section: str | None = field(default=None, init=False, repr=False)
-    # Selected once by native skills discovery, stable for all model boundaries.
-    preloaded_skills: dict[str, str] = field(
+    # Facts, journal, follow-ups and retrieval by query: read once per run,
+    # cleared after any write tool. Writes from elsewhere show at the next message.
+    ledger_sections: dict[str, str] = field(
         default_factory=dict, init=False, repr=False
     )
-    skills_preload_limited: bool = field(default=False, init=False)
+    memory_results: dict[str, SearchResult] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    garmin_freshness: dict | None = field(default=None, init=False, repr=False)
+    # Paths only: skill bodies enter messages through read_file results.
+    requested_skills: tuple[str, ...] = field(default=(), init=False)
+    # Presentation receipts are invocation-local, never conversation state.
+    chart_cards: dict[str, ChartCard] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    chart_lock: Any = field(default_factory=Lock, init=False, repr=False)
     # Async ToolNode uses gather(), ignoring RunnableConfig concurrency.
     tool_slots: asyncio.Semaphore = field(
         default_factory=lambda: asyncio.Semaphore(MAX_TOOL_CONCURRENCY),
         init=False,
         repr=False,
     )
+
+    def __post_init__(self) -> None:
+        assert self.current_datetime.utcoffset() is not None, (
+            "An aware datetime is required"
+        )
+
+    @property
+    def current_date(self) -> date:
+        return self.current_datetime.date()
 
     @property
     def panel_context(self) -> dict[str, Any] | None:

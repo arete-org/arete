@@ -15,11 +15,14 @@ References:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
 from typing import NamedTuple
+
+logger = logging.getLogger(__name__)
 
 
 class FormZone(Enum):
@@ -474,6 +477,7 @@ def compute_performance_model(
     hrv_score: float | None = None,
     sleep_quality: float | None = None,
     subjective_feeling: float | None = None,
+    con=None,
 ) -> PerformanceModel:
     """Compute complete performance model state.
 
@@ -483,6 +487,7 @@ def compute_performance_model(
         hrv_score: Optional HRV readiness score
         sleep_quality: Optional sleep quality score
         subjective_feeling: Optional subjective feeling (1-10)
+        con: Open connection the Banister coefficients are read on, if any
 
     Returns:
         PerformanceModel with all metrics
@@ -503,8 +508,9 @@ def compute_performance_model(
     try:
         from arete.features.banister import load_coefficients
 
-        coeffs = load_coefficients()
+        coeffs = load_coefficients(con=con)
     except Exception:
+        logger.exception("Could not load Banister coefficients; using default model")
         coeffs = None
 
     if coeffs:

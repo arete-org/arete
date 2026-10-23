@@ -253,8 +253,7 @@ def test_http_receipt_identifies_the_graph_root_per_turn(
             }
 
     monkeypatch.setattr("arete.api.agent.get_agent", Graph)
-    monkeypatch.setattr("arete.api.agent._document_state", lambda _: ({}, {}))
-    monkeypatch.setattr("arete.api.agent._changed_imports", lambda *_: [])
+    monkeypatch.setattr("arete.api.agent._document_state", lambda _: {})
     monkeypatch.setattr("arete.agent.runtime.execution.agent_tracing", nullcontext)
     api = router_client(router)
     thread = uuid4()

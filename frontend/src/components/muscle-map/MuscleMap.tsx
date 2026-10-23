@@ -59,8 +59,9 @@ export interface MuscleMapProps {
  */
 export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapProps) {
   const [hovered, setHovered] = useState<string | null>(null);
+  const [touched, setTouched] = useState<string | null>(null);
   const byId = new Map(muscles.map((m) => [m.muscle, m]));
-  const active = hovered ?? selected ?? null;
+  const active = hovered ?? selected ?? touched;
   const detail = active ? byId.get(active) : undefined;
 
   const shapeClass = (muscle: string) =>
@@ -71,11 +72,11 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
     );
 
   const renderView = (view: View) => (
-    <figure className="flex flex-col items-center gap-2 m-0">
-      <figcaption className="text-[10px] font-mono text-text-muted uppercase tracking-wider">
+    <figure className="flex min-w-0 max-w-[150px] flex-1 flex-col items-center gap-2 m-0">
+      <figcaption className="text-[10px] font-sans text-text-muted">
         {VIEW_LABEL[view]}
       </figcaption>
-      <svg viewBox="0 0 200 400" className="w-[150px] h-[300px]" role="img" aria-label={`Silhouette ${VIEW_LABEL[view]}`}>
+      <svg viewBox="0 0 200 400" className="w-full h-auto aspect-[1/2]" role="img" aria-label={`Silhouette ${VIEW_LABEL[view]}`}>
         <g className="fill-shadow stroke-outline-dim stroke-[0.8]">
           <ellipse cx="100" cy="30" rx="18" ry="22" />
           <rect x="92" y="48" width="16" height="20" rx="5" />
@@ -89,7 +90,7 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
             className: shapeClass(shape.muscle),
             onMouseEnter: () => setHovered(shape.muscle),
             onMouseLeave: () => setHovered(null),
-            onClick: () => onSelect?.(shape.muscle),
+            onClick: () => { setTouched(shape.muscle); onSelect?.(shape.muscle); },
           };
           return (
             <g key={`${shape.view}-${shape.muscle}-${shape.d}`}>
@@ -112,22 +113,33 @@ export function MuscleMap({ muscles, className, onSelect, selected }: MuscleMapP
         {renderView('back')}
       </div>
 
-      <div className="min-h-[3.25rem] text-center">
+      <label className="text-xs text-text-muted">
+        Zone musculaire
+        <select
+          className="ui-input mt-2 min-h-11 w-full"
+          value={selected ?? touched ?? ''}
+          onChange={event => { const muscle = event.target.value; setTouched(muscle || null); if (muscle) onSelect?.(muscle); }}
+        >
+          <option value="">Choisir une zone</option>
+          {muscles.map(muscle => <option key={muscle.muscle} value={muscle.muscle}>{muscle.label}</option>)}
+        </select>
+      </label>
+      <div className="min-h-[3.25rem] text-center" aria-live="polite">
         {detail ? (
           <div className="animate-fade-up">
-            <p className="text-sm font-mono text-text-primary uppercase tracking-wider">{detail.label}</p>
-            <p className="text-xs font-mono text-text-secondary">
+            <p className="text-sm font-sans text-text-primary">{detail.label}</p>
+            <p className="text-xs font-sans text-text-secondary">
               {volumeLabel(detail.volume)}
               {detail.sets > 0 && ` · ${detail.sets} série${detail.sets > 1 ? 's' : ''}`}
             </p>
             <p className="text-xs text-text-muted">{freshnessLabel(detail.last_trained)}</p>
           </div>
         ) : (
-          <p className="text-xs text-text-muted">Survole une zone pour le détail.</p>
+          <p className="text-xs text-text-muted">Touche ou survole une zone pour le détail.</p>
         )}
       </div>
 
-      <div className="flex justify-center items-center gap-3 text-[10px] font-mono">
+      <div className="flex justify-center items-center gap-3 text-[10px] font-sans">
         <span className="text-text-muted">Moins</span>
         {HEAT_BG.map((bg, level) => (
           <span key={bg} className={cn('w-5 h-3 rounded-sm', bg)} aria-label={`Niveau ${level}`} />

@@ -11,9 +11,10 @@ from datetime import date
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from arete.garmin.repository import GarminRepository
+from arete.services.settings import athlete_today
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,18 @@ class SyncStatusResponse(BaseModel):
     user_email: str | None = None
     last_sync: str | None = None
     activities_synced: int = 0
+    freshness: dict = Field(default_factory=dict)
+
+
+PERIOD_ERROR = "La date de fin doit suivre ou égaler la date de début."
+
+
+def _check_open_period(request: SyncRequest) -> None:
+    """Without an end date the sync ends on the athlete's day, which only the
+    scoped request can read: the server's date is behind theirs after midnight."""
+    start, end = request.start_date, request.end_date
+    if start and end is None and start > athlete_today():
+        raise HTTPException(status_code=422, detail=PERIOD_ERROR)
 
 
 class SyncRequest(BaseModel):
@@ -37,6 +50,27 @@ class SyncRequest(BaseModel):
     end_date: date | None = None
     download_fit: bool = True
     max_activities: int = Field(50, ge=1, le=200)
+    history_offset: int | None = Field(None, ge=0, le=20_000)
+    history_anchor: int | None = Field(None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_period(self) -> SyncRequest:
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError(PERIOD_ERROR)
+        if self.history_offset is not None:
+            if self.start_date or self.end_date or self.max_activities != 20:
+                raise ValueError(
+                    "L’historique complet utilise des lots de 20 sans dates."
+                )
+            if (self.history_offset > 0) != (self.history_anchor is not None):
+                raise ValueError(
+                    "Le lot suivant requiert la dernière activité du précédent."
+                )
+        elif self.history_anchor is not None:
+            raise ValueError(
+                "Une activité de reprise requiert un import de l’historique."
+            )
+        return self
 
 
 class SyncResponse(BaseModel):
@@ -49,6 +83,10 @@ class SyncResponse(BaseModel):
     activities_skipped: int
     errors: list[str]
     last_activity_date: str | None = None
+    next_history_offset: int | None = None
+    history_anchor: int | None = None
+    #: Only the activity cap stopped this import; the next refresh continues.
+    more_pending: bool = False
 
 
 class GarminLoginRequest(BaseModel):
@@ -69,22 +107,22 @@ class GarminLoginResponse(BaseModel):
 
 @router.get("/status", response_model=SyncStatusResponse)
 def get_sync_status():
-    """Get current sync status and authentication state."""
-    from arete.garmin.client import GarminClient
+    """Sync status from local state: no Garmin login, no ``garminconnect``.
 
-    client = GarminClient()
-    authenticated = client.is_authenticated()
-    user_email = None
-    if authenticated:
-        with contextlib.suppress(Exception):
-            user_email = client.profile().get("user_email")
+    ``garmin_authenticated`` means session tokens are stored; tokens Garmin
+    has since expired or revoked are reported by the next real sync.
+    """
+    from arete.garmin import token_store
+    from arete.services.garmin_sync import status
 
+    authenticated, user_email = token_store.session_status()
     _, imported_at = _repo.last_garmin_import()
     return SyncStatusResponse(
         garmin_authenticated=authenticated,
         user_email=user_email,
         last_sync=imported_at.isoformat() if imported_at else None,
         activities_synced=_repo.count_actual_sessions(),
+        freshness=status(),
     )
 
 
@@ -157,25 +195,25 @@ def sync_activities(request: SyncRequest):
 
     Requires this athlete to connect Garmin through /sync/login.
     """
-    from arete.garmin.sync import GarminSyncClient
+    from arete.garmin import token_store
 
-    client = GarminSyncClient(repository=_repo)
+    _check_open_period(request)
 
-    if not client.is_authenticated():
+    if not token_store.session_status()[0]:
         raise HTTPException(
             status_code=409,
             detail="Connecte Garmin dans Réglages → Connexions avant de synchroniser.",
         )
 
-    result = client.sync_activities(
-        start_date=request.start_date,
-        end_date=request.end_date,
-        download_fit=request.download_fit,
-        max_activities=request.max_activities,
-    )
-    from arete.services.session_conditions import enrich_sessions
+    from arete.garmin.sync import SyncResult
+    from arete.services.garmin_sync import iter_manual
 
-    enrich_sessions(result.session_ids)  # bounded, never raises
+    result = None
+    with contextlib.closing(iter_manual(**request.model_dump())) as work:
+        for event in work:
+            if isinstance(event, SyncResult):
+                result = event
+    assert result is not None
 
     return SyncResponse(
         success=result.success,
@@ -187,17 +225,21 @@ def sync_activities(request: SyncRequest):
         last_activity_date=str(result.last_activity_date)
         if result.last_activity_date
         else None,
+        next_history_offset=result.next_history_offset,
+        history_anchor=result.history_anchor,
+        more_pending=result.more_pending,
     )
 
 
 @router.post("/activities/stream")
 def stream_activities(request: SyncRequest) -> StreamingResponse:
     """Stream the existing sync workflow; no retries or detached worker."""
-    from arete.garmin.sync import GarminSyncClient, SyncProgress, SyncResult
-    from arete.services.session_conditions import enrich_sessions
+    from arete.garmin import token_store
+    from arete.garmin.sync import SyncProgress, SyncResult
+    from arete.services.garmin_sync import iter_manual
 
-    client = GarminSyncClient(repository=_repo)
-    if not client.is_authenticated():
+    _check_open_period(request)
+    if not token_store.session_status()[0]:
         raise HTTPException(
             status_code=409,
             detail="Connecte Garmin dans Réglages → Connexions avant de synchroniser.",
@@ -213,14 +255,11 @@ def stream_activities(request: SyncRequest) -> StreamingResponse:
     def events() -> Iterator[str]:
         try:
             # Starlette advances this iterator in its AnyIO worker pool.
-            with contextlib.closing(
-                client.iter_sync_activities(**request.model_dump())
-            ) as work:
+            with contextlib.closing(iter_manual(**request.model_dump())) as work:
                 for event in work:
                     if isinstance(event, SyncResult):
                         if event.success:
                             yield frame("progress", asdict(SyncProgress("finalizing")))
-                            enrich_sessions(event.session_ids)
                         payload = asdict(event)
                         payload["last_activity_date"] = (
                             str(event.last_activity_date)
@@ -245,6 +284,14 @@ def stream_activities(request: SyncRequest) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/ensure")
+def ensure_sync() -> dict:
+    """Idempotent on-use refresh; ordinary GETs never start provider work."""
+    from arete.services.garmin_sync import ensure_fresh
+
+    return ensure_fresh()
 
 
 @router.post("/threshold")

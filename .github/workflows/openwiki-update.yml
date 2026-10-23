@@ -4,7 +4,10 @@ on:
   workflow_dispatch:
   schedule:
     # Batch changes daily to conserve the free router's request quota (UTC).
-    - cron: "23 5 * * *"
+    # The quota (1,000 free requests a day, 20 a minute) is the whole OpenRouter
+    # account's, shared with the app: run at night in Europe, away from the
+    # chat, the morning briefings and the evening messages.
+    - cron: "37 1 * * *"
 
 permissions:
   contents: write
@@ -18,7 +21,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 70
     steps:
       - name: Check provider credentials
         env:
@@ -65,7 +68,9 @@ jobs:
 
       - name: Update the wiki
         id: generate
-        timeout-minutes: 25
+        # Exceeds the transport's 55-minute HTTP budget so the transport, not
+        # the runner, stops the run and names the cause.
+        timeout-minutes: 58
         # --update also bootstraps a missing wiki. Failed runs must not publish
         # partial pages or advance the successful-update metadata.
         run: openwiki code --update --print
@@ -110,8 +115,10 @@ jobs:
           OpenWiki did not complete; no documentation PR was published by this run.
 
           Provider requests are paced and transient failures have bounded retries.
-          Check the `OpenWiki HTTP` lines for attempt counts and the terminal error
-          for exhausted quota, persistent provider failures or an exceeded budget.
+          Check the `OpenWiki HTTP` lines for attempt counts and the `OpenWiki
+          transport stopped` line for exhausted quota, persistent provider
+          failures or an exceeded budget. Without that line, OpenWiki itself
+          stopped (for example a worker that never submitted its plan or page).
           Available wiki checkpoints are cached for the same source commit so a
           later scheduled/manual run can resume completed pages. Cache retention
           is best-effort; an empty or evicted cache starts a fresh generation.

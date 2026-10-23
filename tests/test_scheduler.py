@@ -60,17 +60,22 @@ class TestRunForever:
     @pytest.mark.anyio
     async def test_dispatches_then_waits(self):
         with (
+            patch.object(scheduler, "run_checkin_prompts", return_value={}) as ask,
             patch.object(scheduler, "run_scheduled_batch", return_value={}) as dispatch,
             patch("asyncio.sleep", side_effect=StopAsyncIteration) as sleep,
             pytest.raises(StopAsyncIteration),
         ):
             await scheduler.run_forever(0, tick_seconds=1)
+        ask.assert_called_once()
         dispatch.assert_called_once()
         sleep.assert_awaited_once_with(1)
 
     @pytest.mark.anyio
     async def test_a_dispatch_failure_does_not_stop_the_clock(self):
         with (
+            patch.object(
+                scheduler, "run_checkin_prompts", side_effect=RuntimeError("db down")
+            ),
             patch.object(
                 scheduler, "run_scheduled_batch", side_effect=RuntimeError("db down")
             ),
@@ -94,7 +99,7 @@ class TestWriteDailyBriefing:
                 return_value=None,
             ),
             patch(
-                "arete.coaching.generate_briefing",
+                "arete.coaching.get_or_create_briefing",
                 side_effect=RuntimeError("boom"),
             ),
         ):
@@ -122,7 +127,7 @@ class TestWriteDailyBriefing:
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=self._existing("scheduler"),
             ),
-            patch("arete.coaching.generate_briefing") as generate,
+            patch("arete.coaching.get_or_create_briefing") as generate,
         ):
             assert scheduler.write_daily_briefing() == "agent"
         generate.assert_not_called()
@@ -136,24 +141,115 @@ class TestWriteDailyBriefing:
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=None,
             ),
-            patch("arete.coaching.generate_briefing", return_value=fresh),
+            patch("arete.coaching.get_or_create_briefing", return_value=fresh),
             patch("arete.services.notifications.notify") as notify,
         ):
             scheduler.write_daily_briefing()
-        notify.assert_called_once_with("Briefing du coach", "Footing 45'.", "/")
+        notify.assert_called_once_with(
+            "Briefing du coach",
+            "Footing 45'.",
+            "/",
+            kind="briefing",
+            reference={"kind": "briefing", "id": fresh.id},
+        )
 
-    def test_a_briefing_written_before_the_sync_is_rewritten(self):
-        fresh = self._existing("scheduler")
+    def test_a_briefing_written_from_other_facts_is_rewritten(self):
+        fresh, stale = self._existing("scheduler"), self._existing("api")
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=stale,
+            ),
+            patch("arete.services.briefing.facts_changed", return_value=True),
+            patch(
+                "arete.coaching.get_or_create_briefing", return_value=fresh
+            ) as generate,
+        ):
+            scheduler.write_daily_briefing()
+        generate.assert_called_once_with(
+            trigger="scheduler", replacing=stale, deadline=None
+        )
+
+    def test_a_briefing_written_from_the_same_data_is_kept(self):
         with (
             patch("arete.services.briefing.briefing_enabled", return_value=True),
             patch(
                 "arete.services.coaching_repository.BriefingRepository.get_for_day",
                 return_value=self._existing("api"),
             ),
-            patch("arete.coaching.generate_briefing", return_value=fresh) as generate,
+            patch("arete.services.briefing.facts_changed", return_value=False),
+            patch("arete.coaching.get_or_create_briefing") as generate,
         ):
-            scheduler.write_daily_briefing()
-        generate.assert_called_once_with(trigger="scheduler")
+            assert scheduler.write_daily_briefing() == "agent"
+        generate.assert_not_called()
+
+    def test_a_run_in_progress_is_awaited_then_compared(self):
+        # The dashboard's request was writing it: once stored, its facts decide.
+        dashboard = self._existing("api")
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                side_effect=[None, dashboard],
+            ),
+            patch("arete.services.briefing.facts_changed", return_value=False),
+            patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch.object(scheduler, "sleep") as sleep,
+            patch("arete.services.notifications.notify") as notify,
+        ):
+            assert scheduler.write_daily_briefing() == "agent"
+        sleep.assert_called_once_with(scheduler.BRIEFING_POLL_SECONDS)
+        notify.assert_not_called()
+
+    def test_a_run_still_in_progress_after_the_wait_is_left_to_finish(self):
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=None,
+            ),
+            patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch.object(scheduler, "BRIEFING_WAIT_SECONDS", 0),
+            patch.object(scheduler, "sleep") as sleep,
+            patch("arete.services.notifications.notify") as notify,
+        ):
+            assert scheduler.write_daily_briefing() == "in progress"
+        sleep.assert_not_called()
+        notify.assert_not_called()
+
+    def test_the_wait_stops_at_the_dispatch_s_model_deadline(self):
+        # A rewrite started past SCHEDULE_MODEL_SECONDS would outlive the function.
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=None,
+            ),
+            patch("arete.coaching.get_or_create_briefing", return_value=None),
+            patch.object(scheduler, "sleep") as sleep,
+        ):
+            token = scheduler._model_deadline.set(scheduler.monotonic() - 1)
+            try:
+                assert scheduler.write_daily_briefing() == "in progress"
+            finally:
+                scheduler._model_deadline.reset(token)
+        sleep.assert_not_called()
+
+    def test_a_failed_rewrite_keeps_the_briefing_without_a_notification(self):
+        stale = self._existing("api")
+        with (
+            patch("arete.services.briefing.briefing_enabled", return_value=True),
+            patch(
+                "arete.services.coaching_repository.BriefingRepository.get_for_day",
+                return_value=stale,
+            ),
+            patch("arete.services.briefing.facts_changed", return_value=True),
+            patch("arete.coaching.get_or_create_briefing", return_value=stale),
+            patch("arete.services.notifications.notify") as notify,
+        ):
+            assert scheduler.write_daily_briefing() == "rewrite failed; kept"
+        notify.assert_not_called()
 
 
 class TestStart:
@@ -163,63 +259,67 @@ class TestStart:
 
 
 class TestDailySync:
+    @pytest.fixture(autouse=True)
+    def no_feedback_backlog(self):
+        # These orchestration tests must not turn fixtures from another test
+        # into a live model request. Repository catch-up has scoped DB tests.
+        with patch(
+            "arete.services.coaching_repository.SessionFeedbackRepository.pending_garmin",
+            return_value=([], 0),
+        ):
+            yield
+
     def test_reports_missing_connectors(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(tmp_path / "none"))
-        with (
-            patch("arete.api.strava._get_strava_tokens", return_value=None),
-            patch("arete.services.plan_adaptation.adapt_today", return_value=[]),
-        ):
+        with patch("arete.services.plan_adaptation.adapt_today", return_value=[]):
             status = scheduler.daily_sync()
         assert status == {
+            "feedback_pending": "0",
             "garmin": "no tokens",
             "plan": "0 decisions (none)",
-            "strava": "not connected",
             "google_calendar": "disabled",
         }
 
-    def test_adaptation_runs_before_strava_and_failures_are_reported(
-        self, tmp_path, monkeypatch
-    ):
+    def test_adaptation_failures_are_reported(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(tmp_path / "none"))
-        calls: list[str] = []
-
-        def adapt(**_kwargs):
-            calls.append("adapt")
-            raise RuntimeError("db down")
-
-        def tokens():
-            calls.append("strava")
-            return None
-
-        with (
-            patch("arete.services.plan_adaptation.adapt_today", side_effect=adapt),
-            patch("arete.api.strava._get_strava_tokens", side_effect=tokens),
+        with patch(
+            "arete.services.plan_adaptation.adapt_today",
+            side_effect=RuntimeError("db down"),
         ):
             status = scheduler.daily_sync()
-        assert calls == ["adapt", "strava"]
         assert status["plan"] == "failed: db down"
 
     def test_status_is_kept_not_discarded(self, tmp_path, monkeypatch):
         # run_forever ignores the return value; the coach needs to know what
         # the last sync actually did before briefing on the day's data.
         monkeypatch.setenv("ARETE_GARMIN_TOKENS_DIR", str(tmp_path / "none"))
-        with patch("arete.api.strava._get_strava_tokens", return_value=None):
-            status = scheduler.daily_sync()
+        status = scheduler.daily_sync()
         assert scheduler.last_status() == status
 
     def test_with_garmin_the_push_follows_the_decisions(self):
         from unittest.mock import MagicMock
 
-        garmin = MagicMock()
-        garmin.has_tokens.return_value = True
+        from arete.garmin.client import GarminClient
+
         calls: list[str] = []
         sync_client = MagicMock()
         sync_client.sync_activities.return_value = MagicMock(
             activities_synced=0, errors=[]
         )
         with (
-            patch("arete.garmin.client.GarminClient", return_value=garmin),
-            patch("arete.garmin.sync.GarminSyncClient", return_value=sync_client),
+            # Only the method: replacing the class would leave its mock bound in
+            # any module first imported under this patch (arete.garmin.health_sync).
+            patch.object(GarminClient, "has_tokens", return_value=True),
+            patch(
+                "arete.services.garmin_sync.ensure_fresh",
+                return_value={
+                    "imported": 0,
+                    "session_ids": [],
+                    "errors": [],
+                    "state": "complete",
+                    "health_checked_at": "2026-10-13",
+                },
+            ),
             patch("arete.garmin.health_sync.sync_range", return_value=[]),
             patch("arete.garmin.readiness.update_readiness_range"),
             patch(
@@ -230,22 +330,39 @@ class TestDailySync:
                 "arete.services.plan_adaptation.push_today",
                 side_effect=lambda client: calls.append("push") or "1 sent",
             ),
-            patch("arete.api.strava._get_strava_tokens", return_value=None),
         ):
             status = scheduler.daily_sync()
         assert calls == ["adapt", "push"]
         assert status["garmin_push"] == "1 sent"
 
     def test_new_sessions_are_announced_once(self):
+        # Without the coach's feedback, the import count announces them.
+        from unittest.mock import MagicMock
+
+        garmin = MagicMock()
+        garmin.has_tokens.return_value = True
         with (
+            patch("arete.garmin.client.GarminClient", return_value=garmin),
+            patch(
+                "arete.services.garmin_sync.ensure_fresh",
+                return_value={
+                    "imported": 2,
+                    "session_ids": [4, 5],
+                    "errors": [],
+                    "state": "complete",
+                    "health_checked_at": "2026-10-13",
+                },
+            ),
             patch("arete.services.plan_adaptation.adapt_today", return_value=[]),
-            patch("arete.api.strava._get_strava_tokens", return_value={"x": 1}),
-            patch("arete.api.strava.sync", return_value={"imported": 2}),
+            patch("arete.services.plan_adaptation.push_today", return_value="0"),
+            patch(
+                "arete.coaching.write_sync_feedback", side_effect=RuntimeError("down")
+            ),
             patch("arete.services.notifications.notify") as notify,
         ):
             scheduler.daily_sync()
         notify.assert_called_once_with(
-            "Arete", "2 séance(s) importée(s)", "/log?tab=cardio"
+            "Arete", "2 séance(s) importée(s)", "/log?tab=cardio", kind="imports"
         )
 
     def test_last_status_is_a_copy(self):
@@ -270,3 +387,18 @@ class TestSyncStatusEndpoint:
             body = client.get("/sync/status").json()
         assert body["scheduled_hour"] is None
         assert body["last_run"] is None
+
+
+@pytest.mark.anyio
+async def test_standalone_automation_worker_does_not_start_daily_sync():
+    with (
+        patch.object(scheduler, "run_checkin_prompts") as checkins,
+        patch.object(scheduler, "run_scheduled_batch") as daily,
+        patch.object(scheduler, "run_automations", return_value={}) as automations,
+        patch("asyncio.sleep", side_effect=StopAsyncIteration),
+        pytest.raises(StopAsyncIteration),
+    ):
+        await scheduler.run_forever(None)
+    automations.assert_called_once()
+    checkins.assert_not_called()
+    daily.assert_not_called()

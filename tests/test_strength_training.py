@@ -438,3 +438,91 @@ def test_parse_endpoint_reports_unparsed_lines_and_suggestions(client):
         "/strength/sessions/parse", json={"text": "hello world", "save": False}
     )
     assert resp.status_code == 422
+
+
+def _seed_summary_fixture(repo) -> None:
+    """Sessions covering what the list totals must get right."""
+
+    def exercise(name, muscle, unilateral=False):
+        return repo.create_exercise(
+            Exercise(
+                name=f"Summary {name}",
+                primary_muscle=muscle,
+                secondary_muscles=[MuscleGroup.HAMSTRINGS],
+                is_unilateral=unilateral,
+            )
+        )
+
+    squat = exercise("squat", MuscleGroup.QUADS)
+    lunge = exercise("lunge", MuscleGroup.GLUTES, unilateral=True)
+    press = exercise("press", MuscleGroup.QUADS)
+
+    def sets(*rows):
+        return [
+            ExerciseSet(set_number=i, reps=reps, weight_kg=kg, is_warmup=warmup)
+            for i, (reps, kg, warmup) in enumerate(rows, 1)
+        ]
+
+    full = StrengthSession(date=date(2031, 3, 3), name="Full")
+    full.exercises = [
+        SessionExercise(
+            exercise_id=squat,
+            order=1,
+            sets=sets((5, 40.0, True), (5, 102.5, False), (3, 107.5, False)),
+        ),
+        SessionExercise(
+            exercise_id=lunge, order=2, sets=sets((8, 22.5, False), (8, None, False))
+        ),
+        SessionExercise(exercise_id=press, order=3, sets=sets((10, 0.1, False))),
+    ]
+    no_sets = StrengthSession(date=date(2031, 3, 3), name="Same day, no sets")
+    no_sets.exercises = [SessionExercise(exercise_id=press, order=1)]
+    warmups = StrengthSession(date=date(2031, 3, 2), name="Warm-ups only")
+    warmups.exercises = [
+        SessionExercise(exercise_id=squat, order=1, sets=sets((5, 60.0, True)))
+    ]
+    for session in (full, no_sets, warmups, StrengthSession(date=date(2031, 3, 1))):
+        repo.create_session(session)
+
+
+def test_list_summaries_match_the_detailed_totals(strength_repo):
+    _seed_summary_fixture(strength_repo)
+    detailed = strength_repo.list_sessions(
+        start_date=date(2031, 1, 1), include_details=True
+    )
+    expected = {
+        s.id: (
+            s.date,
+            s.name,
+            len(s.exercises),
+            s.total_sets,
+            round(s.total_volume, 1),
+            sorted(m.value for m in s.muscles_worked),
+        )
+        for s in detailed
+    }
+    summaries = strength_repo.list_session_summaries(start_date=date(2031, 1, 1))
+    assert {
+        s.id: (
+            s.date,
+            s.name,
+            s.exercises_count,
+            s.total_sets,
+            round(s.total_volume, 1),
+            s.muscles_worked,
+        )
+        for s in summaries
+    } == expected
+    assert len(expected) == 4
+    assert [s.date for s in summaries] == sorted(
+        (s.date for s in summaries), reverse=True
+    )
+    assert expected[summaries[-1].id][2:] == (0, 0, 0, [])  # empty session
+
+
+def test_list_summaries_cost_one_statement(strength_repo, statement_log):
+    _seed_summary_fixture(strength_repo)
+    connect = strength_repo._get_connection
+    strength_repo._get_connection = lambda: statement_log.wrap(connect())
+    assert len(strength_repo.list_session_summaries(limit=200)) == 4
+    assert len(statement_log) == 1

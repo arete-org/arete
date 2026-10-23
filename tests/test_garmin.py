@@ -215,6 +215,52 @@ class TestSessionMatcher:
         assert result.is_matched
         assert result.planned_session.id == 2  # Should pick the better match
 
+    # A 50 min Z2 for a 176 bpm threshold: Z2 is 150-157, read against 154 bpm.
+    @pytest.mark.parametrize(
+        ("minutes", "avg_hr", "zone", "target_min", "expected"),
+        [
+            (50, 154, "Z2", 50, "on_plan"),
+            # The full-points bands are inclusive: 10 % over is still on plan.
+            (55, 154, "Z2", 50, "on_plan"),
+            (50, 167, "Z2", 50, "on_plan"),
+            (40, 154, "Z2", 50, "shorter"),
+            (60, 154, "Z2", 50, "longer"),
+            (50, 175, "Z2", 50, "harder"),
+            (50, 135, "Z2", 50, "easier"),
+            (48, 185, "Z2", 50, "harder"),
+            # Both outside their band: the furthest one names the difference.
+            (40, 175, "Z2", 50, "shorter"),
+            (44, 185, "Z2", 50, "harder"),
+            # What cannot be measured is not held against the session.
+            (50, None, "Z2", 50, "on_plan"),
+            (40, None, None, 50, "shorter"),
+            (50, 175, "Z2", None, "harder"),
+            (50, None, "Z2", None, None),
+            (50, 154, None, None, None),
+        ],
+    )
+    def test_the_verdict_reads_the_score_s_full_points_bands(
+        self, minutes, avg_hr, zone, target_min, expected
+    ):
+        from arete.features.hr_zones import ZoneModel
+
+        actual = ActualSession(
+            date=date(2024, 6, 15),
+            sport="running",
+            duration_sec=minutes * 60,
+            avg_hr=avg_hr,
+        )
+        planned = PlannedSession(
+            id=1,
+            date=date(2024, 6, 15),
+            session_type=SessionType.ENDURANCE,
+            target_duration_min=target_min,
+            target_hr_zone=zone,
+        )
+        matcher = SessionMatcher(zones=ZoneModel.from_reference(lthr=176))
+        assert matcher.target_hr(planned) == (154 if zone else None)
+        assert matcher.verdict(actual, planned) == expected
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # Repository Tests
@@ -229,6 +275,40 @@ def repo():
 
 class TestGarminRepository:
     """Tests for GarminRepository."""
+
+    def test_garmin_deduplication_covers_old_history_and_respects_ownership(self, repo):
+        from arete.garmin.sync import GarminSyncClient
+        from arete.services.athlete_scope import athlete_scope
+
+        conn = repo._get_connection()
+        try:
+            conn.execute(
+                "INSERT INTO app.athletes (id) VALUES (9876), (9877) ON CONFLICT DO NOTHING"
+            )
+            conn.execute(
+                "INSERT INTO app.actual_sessions (user_id, date, duration_sec, source, garmin_activity_id) "
+                "SELECT 9876, DATE '2010-01-01' + CAST(i AS INTEGER), 600, 'garmin_connect', CAST(900000 + i AS VARCHAR) "
+                "FROM range(1001) AS t(i)"
+            )
+            conn.execute(
+                "INSERT INTO app.actual_sessions (user_id, date, duration_sec, source, garmin_activity_id) "
+                "VALUES (9876, '2009-01-01', 600, 'strava', '1')"
+            )
+            with athlete_scope(9876):
+                assert repo.has_garmin_activity(900000)
+                assert GarminSyncClient(repository=repo)._is_already_synced(900000)
+                assert not repo.has_garmin_activity(1)
+            with athlete_scope(9877):
+                assert not repo.has_garmin_activity(900000)
+            conn.execute(
+                "UPDATE app.actual_sessions SET deleted_at = now() WHERE user_id = 9876"
+            )
+            with athlete_scope(9876):
+                assert not repo.has_garmin_activity(900000)
+        finally:
+            conn.execute("DELETE FROM app.actual_sessions WHERE user_id = 9876")
+            conn.execute("DELETE FROM app.athletes WHERE id IN (9876, 9877)")
+            conn.close()
 
     def test_create_and_get_planned_session(self, repo):
         """Test creating and retrieving a planned session."""
@@ -406,10 +486,11 @@ class TestGarminRepository:
 
     def test_summary_counts_only_due_sessions(self, repo):
         """Future planned sessions do not lower the adherence rate; past pending ones are skipped."""
-        from datetime import date as _date
         from datetime import timedelta
 
-        today = _date.today()
+        from arete.services.settings import athlete_today
+
+        today = athlete_today()
         ids = [
             repo.create_planned_session(
                 PlannedSession(
@@ -551,7 +632,9 @@ def test_fit_upload_parses_off_the_event_loop(router_client):
             asyncio.get_running_loop()  # a worker thread has none
         raise ValueError("not a FIT file")
 
-    with patch("arete.api.garmin.FITParser.parse_stream", side_effect=no_running_loop):
+    with patch(
+        "arete.garmin.fit_parser.FITParser.parse_stream", side_effect=no_running_loop
+    ):
         resp = router_client(router).post(
             "/garmin/upload-fit",
             files={"file": ("a.fit", b"x", "application/octet-stream")},
@@ -575,6 +658,8 @@ def test_canonical_sport():
         ("hike", "hiking"),
         ("indoor_rowing", "rowing"),
         ("  Walking ", "walking"),
+        ("casual_walking", "walking"),
+        ("speed_walking", "walking"),
         ("paragliding", "other"),
         ("", "other"),
         (None, "other"),

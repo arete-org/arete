@@ -19,3 +19,6 @@
 
 # Generated from pinned npm packages during prebuild.
 /frontend/public/ocr
+
+# Rebuilt and verified by the backend build.
+/src/arete/tessdata

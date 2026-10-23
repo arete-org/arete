@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,7 @@ from arete.features.recommendations import (
 )
 from arete.features.workload import (
     ACWRZone,
+    DailyLoad,
     compute_workload_metrics,
 )
 from arete.garmin.readiness import (
@@ -35,9 +36,12 @@ from arete.garmin.readiness import (
     training_readiness_from_rows,
 )
 from arete.services.athlete_scope import resolve_athlete_id
+from arete.services.settings import athlete_today, today_in
 
 logger = logging.getLogger(__name__)
 TSS_PER_SESSION = 50.0
+#: The regularity window: one missed week lowers it by one, never to zero.
+RECENT_WEEKS = 12
 
 #: garmin_training: the watch's morning Training Readiness; garmin: Arete's
 #: score from Garmin's HRV, sleep and body battery; model: the CTL/ATL model.
@@ -97,13 +101,20 @@ class PlayerStats(BaseModel):
     """RPG-style bars over real training data."""
 
     hp: StatBar = Field(
-        description="Récupération: Garmin readiness (today or yesterday), else the CTL/ATL model"
+        description="Préparation: Garmin readiness (today or yesterday), else the CTL/ATL model"
     )
-    mp: StatBar = Field(description="Forme: TSB mapped to 0-100")
+    mp: StatBar = Field(description="Fraîcheur: TSB mapped to 0-100")
     xp: StatBar = Field(description="Charge de la semaine: TSS vs the weekly goal")
     level: int = Field(description="Consecutive finished weeks at or above the goal")
     weeks_at_goal: int = Field(default=0, description="All-time count of weeks at goal")
     weekly_goal_tss: float = Field(default=0.0, description="Weekly TSS goal in use")
+    recent_weeks_at_goal: int = Field(
+        default=0, description="Weeks at goal among the last `recent_weeks` finished"
+    )
+    recent_weeks: int = Field(
+        default=0,
+        description=f"Finished weeks counted, at most {RECENT_WEEKS} (fewer at first)",
+    )
 
 
 class RecommendationOut(BaseModel):
@@ -132,12 +143,21 @@ def _weekly_goal_tss(settings: dict) -> float:
     return sessions * TSS_PER_SESSION
 
 
+class WeekHistory(NamedTuple):
+    """The finished weeks against the goal, from the same weekly totals."""
+
+    streak: int  # consecutive, most recent first
+    total: int  # all time
+    recent: int  # among the last ``window``
+    window: int  # finished weeks counted, at most RECENT_WEEKS
+
+
 def _week_history(
     goal_tss: float, by_date: dict[date, float], today: date
-) -> tuple[int, int]:
-    """(consecutive finished weeks at goal, all-time count of such weeks)."""
+) -> WeekHistory:
+    """The finished weeks at goal: the streak, all time and over the last 12."""
     if not by_date:
-        return 0, 0
+        return WeekHistory(0, 0, 0, 0)
     weekly: dict[date, float] = {}
     for day, tss in by_date.items():
         monday = day - timedelta(days=day.weekday())
@@ -150,13 +170,18 @@ def _week_history(
     while week_start < current_monday:
         reached.append(weekly.get(week_start, 0.0) >= goal_tss)
         week_start += timedelta(days=7)
+    # A first week joined midway is not a missed week: the regularity starts
+    # at the first full one (the streak and the all-time count are unchanged).
+    first_partial = earliest.weekday() > 0 and bool(reached) and not reached[0]
+    counted = reached[1:] if first_partial else reached
 
     streak = 0
     for ok in reversed(reached):  # most recent finished week first
         if not ok:
             break
         streak += 1
-    return streak, sum(reached)
+    recent = counted[-RECENT_WEEKS:]
+    return WeekHistory(streak, sum(reached), sum(recent), len(recent))
 
 
 # --------------------------------------------------------------------------- #
@@ -184,7 +209,7 @@ def fitness_series(
 
 
 def fitness_model(
-    by_date: Mapping[date, float], today: date
+    by_date: Mapping[date, float], today: date, con=None
 ) -> PerformanceModel | None:
     """CTL/ATL/TSB for ``today`` over the whole history; None without any load.
 
@@ -197,7 +222,7 @@ def fitness_model(
     history = [
         DailyTSS(date=d, tss=t) for d, t in sorted(by_date.items()) if d <= today
     ]
-    return compute_performance_model(history, today)
+    return compute_performance_model(history, today, con=con)
 
 
 @dataclass(frozen=True)
@@ -235,19 +260,38 @@ def current_readiness(
     )
 
 
+@dataclass(frozen=True)
+class Form:
+    """The daily load history, the model over it and the readiness: one read."""
+
+    by_date: dict[date, float]
+    model: PerformanceModel | None
+    readiness: Readiness | None
+
+
+def read_form(con, today: date) -> Form:
+    """Up to three statements on ``con``: readiness window, load history and,
+    when there is a load, the Banister coefficients."""
+    window = fetch_window(con, today)
+    by_date = daily_tss_by_date(con)
+    model = fitness_model(by_date, today, con=con)
+    return Form(by_date, model, current_readiness(today, window, model))
+
+
+def _read_form(today: date) -> Form:
+    con = connect()
+    try:
+        return read_form(con, today)
+    finally:
+        con.close()
+
+
 def load_form(
     today: date | None = None,
 ) -> tuple[PerformanceModel | None, Readiness | None]:
     """The fitness model and the readiness for ``today``, on one connection."""
-    today = today or date.today()
-    con = connect()
-    try:
-        window = fetch_window(con, today)
-        by_date = daily_tss_by_date(con)
-    finally:
-        con.close()
-    model = fitness_model(by_date, today)
-    return model, current_readiness(today, window, model)
+    form = _read_form(today or athlete_today())
+    return form.model, form.readiness
 
 
 def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
@@ -256,7 +300,7 @@ def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
         return StatBar(
             current=50.0,
             max=100,
-            label="Récupération",
+            label="Préparation",
             detail="Aucune donnée de charge ni mesure Garmin",
             source="model",
         )
@@ -264,7 +308,7 @@ def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
         return StatBar(
             current=readiness.score,
             max=100,
-            label="Récupération",
+            label="Préparation",
             detail="Préparation à l'entraînement Garmin (ce matin)",
             source="garmin_training",
         )
@@ -273,7 +317,7 @@ def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
         return StatBar(
             current=readiness.score,
             max=100,
-            label="Récupération",
+            label="Préparation",
             detail=(
                 "Garmin (VFC, sommeil, body battery)"
                 if same_day
@@ -284,7 +328,7 @@ def _recovery_bar(readiness: Readiness | None, today: date) -> StatBar:
     return StatBar(
         current=readiness.score,
         max=100,
-        label="Récupération",
+        label="Préparation",
         detail="Estimée depuis la charge (aucune mesure Garmin récente)",
         source="model",
     )
@@ -297,35 +341,34 @@ def get_player_stats():
       night is not published yet, model-based only as a last resort
     - MP = form: TSB mapped from -30..+30 onto 0..100
     - XP = this week's TSS against the goal derived from Settings
-    - Level = consecutive finished weeks at or above that goal
+    - Level = consecutive finished weeks at or above that goal (kept for
+      older readers; the dashboard shows the weeks at goal among the last 12)
 
     Four statements: settings, the readiness window, the daily TSS series
     (whole history, ~one row per training day) and the Banister coefficients.
     """
-    today = date.today()
     settings = get_user_settings(user_id=resolve_athlete_id()) or {}
+    today = today_in(settings.get("timezone"))
+    return player_stats(settings, today, _read_form(today))
+
+
+def player_stats(settings: dict, today: date, form: Form) -> PlayerStats:
+    """The bars of ``get_player_stats`` from settings and a form already read."""
     goal_tss = _weekly_goal_tss(settings)
-
-    con = connect()
-    try:
-        window = fetch_window(con, today)
-        by_date = daily_tss_by_date(con)
-    finally:
-        con.close()
-
-    model = fitness_model(by_date, today)
+    by_date, model = form.by_date, form.model
 
     # --- HP: recovery ---
-    hp = _recovery_bar(current_readiness(today, window, model), today)
+    hp = _recovery_bar(form.readiness, today)
 
     # --- MP: form (TSB) ---
     tsb = model.tsb if model else 0.0
+    shown = round(tsb, 1) + 0.0  # never "-0,0": the dashboard's card shows "0,0"
     mp_current = round(max(0.0, min(100.0, (tsb + 30) * (100 / 60))), 1)
     mp = StatBar(
         current=mp_current,
         max=100,
-        label="Forme",
-        detail=f"TSB {tsb:+.1f}",
+        label="Fraîcheur",
+        detail=f"TSB {shown:+.1f}".replace(".", ",") if shown else "TSB 0,0",
         source="model",
     )
 
@@ -337,18 +380,21 @@ def get_player_stats():
         current=xp_current,
         max=goal_tss,
         label="Charge de la semaine",
-        detail=f"Objectif {goal_sessions} séances",
+        # The weeks at goal count this load goal, not the number of sessions.
+        detail=f"Objectif {goal_tss:.0f} TSS · {goal_sessions} séances",
         source="model",
     )
 
-    streak, total_weeks = _week_history(goal_tss, by_date, today)
+    weeks = _week_history(goal_tss, by_date, today)
     return PlayerStats(
         hp=hp,
         mp=mp,
         xp=xp,
-        level=streak,
-        weeks_at_goal=total_weeks,
+        level=weeks.streak,
+        weeks_at_goal=weeks.total,
         weekly_goal_tss=goal_tss,
+        recent_weeks_at_goal=weeks.recent,
+        recent_weeks=weeks.window,
     )
 
 
@@ -362,9 +408,12 @@ def get_workload_metrics(
     - Monotony: Training load variability
     - Strain: Accumulated fatigue
     """
-    loads = training_loads(days=days)
-    target_date = date.today()
+    target_date = athlete_today()
+    return workload_metrics(training_loads(days=days, end=target_date), target_date)
 
+
+def workload_metrics(loads: list[DailyLoad], target_date: date) -> WorkloadMetricsOut:
+    """``get_workload_metrics`` over loads already read up to ``target_date``."""
     # Check if there's any training data
     has_data = any(load.duration_min > 0 for load in loads)
     if not has_data:
@@ -411,16 +460,13 @@ def get_fitness_metrics(
     ``days`` only bounds ``days_analyzed``: the averages always walk the whole
     history, so this endpoint and every other surface read the same numbers.
     """
-    target_date = date.today()
-    con = connect()
-    try:
-        window = fetch_window(con, target_date)
-        by_date = daily_tss_by_date(con)
-    finally:
-        con.close()
+    target_date = athlete_today()
+    return fitness_metrics(target_date, _read_form(target_date), days)
 
-    model = fitness_model(by_date, target_date)
-    readiness = current_readiness(target_date, window, model)
+
+def fitness_metrics(target_date: date, form: Form, days: int = 42) -> FitnessMetricsOut:
+    """``get_fitness_metrics`` from a form already read for ``target_date``."""
+    by_date, model, readiness = form.by_date, form.model, form.readiness
     if model is None:
         return FitnessMetricsOut(
             ctl=0.0,
@@ -460,13 +506,13 @@ def get_recommendations(
 
     Analyzes workload and fitness metrics to provide actionable advice.
     """
-    target_date = date.today()
+    target_date = athlete_today()
 
     # Get current metrics
     workload = None
     loads = None
     try:
-        loads = training_loads(days=28)
+        loads = training_loads(days=28, end=target_date)
         if any(load.duration_min > 0 for load in loads):
             workload = compute_workload_metrics(loads, target_date)
     except Exception:
@@ -554,14 +600,14 @@ def current_vdot(con=None) -> tuple[float, str] | None:
         row = con.execute(
             "SELECT race_10k_sec FROM app.visible_daily_metrics WHERE user_id = getvariable('arete_athlete_id') AND race_10k_sec IS NOT NULL ORDER BY date DESC LIMIT 1"
         ).fetchone()
+        if row and row[0]:
+            return vdot_from_race(10_000, row[0]), "garmin_prediction"
+        pace = (get_user_settings(user_id=resolve_athlete_id(), con=con) or {}).get(
+            "threshold_pace_sec_km"
+        )
     finally:
         if own:
             con.close()
-    if row and row[0]:
-        return vdot_from_race(10_000, row[0]), "garmin_prediction"
-    pace = (get_user_settings(user_id=resolve_athlete_id()) or {}).get(
-        "threshold_pace_sec_km"
-    )
     if pace:
         return vdot_from_threshold_pace(int(pace)), "threshold_pace"
     return None

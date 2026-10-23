@@ -456,3 +456,40 @@ def test_a_request_that_changed_the_plan_syncs_after_its_response(monkeypatch):
     assert client.post("/stream").text == "ab"
     assert synced == [1, 1]
     plan_changes.touch()  # outside a request: nothing to follow
+
+
+def test_a_request_landing_in_the_release_s_window_gets_its_own_pass(plan, monkeypatch):
+    """ARE-150: another request commits inside the lease release's snapshot."""
+    from write_race import race
+
+    session(plan, 1)
+    plan.repo.configure_plan(enabled=True, calendar_id=CAL, clerk_user_id="u")
+    late = []
+
+    def concurrent_request():
+        late.append(session(plan, 2))
+        assert plan.repo.claim_plan_sync(60) is False
+
+    with race(monkeypatch, r"SET plan_lease = NULL", concurrent_request):
+        assert plan.sync.run(DAILY) == "synced"
+    assert plan.prefix + str(late[0]) in plan.google.live()
+    assert plan.repo.plan_state()["error"] is None
+
+
+def test_a_request_racing_another_write_of_the_connection_still_syncs(
+    plan, monkeypatch
+):
+    """ARE-150: the connection's settings commit inside the request's snapshot."""
+    from write_race import race
+
+    session(plan, 1)
+    plan.repo.configure_plan(enabled=True, calendar_id=CAL, clerk_user_id="u")
+    with race(
+        monkeypatch,
+        r"SET plan_requested = TRUE",
+        lambda: plan.repo.configure_plan(
+            enabled=True, calendar_id=CAL, clerk_user_id="u"
+        ),
+    ):
+        assert plan.sync.run(DAILY) == "synced"
+    assert len(plan.google.live()) == 1

@@ -29,6 +29,10 @@ def _user_id(subject: str) -> int:
     return user.id
 
 
+#: The scheduler stores its lease in UTC, whatever the session's TimeZone.
+UTC_NOW = "(current_timestamp AT TIME ZONE 'UTC')"
+
+
 def _set_lease(athlete_id: int, expression: str) -> None:
     con = connect()
     con.execute(
@@ -42,15 +46,17 @@ def _set_lease(athlete_id: int, expression: str) -> None:
 def _clean_users():
     con = connect()
     con.execute("DELETE FROM app.users")
+    con.execute("DELETE FROM app.feature_flags")
     con.close()
     yield
     con = connect()
     con.execute("DELETE FROM app.users")
+    con.execute("DELETE FROM app.feature_flags")
     con.close()
 
 
 @pytest.fixture
-def athletes(client, monkeypatch) -> dict[str, int]:
+def athletes(client, monkeypatch, consented) -> dict[str, int]:
     """Clerk mode with fake tokens: three accounts, ADMIN named by the owner.
 
     Returns each token's athlete id.
@@ -128,10 +134,84 @@ def test_without_sign_in_the_instance_owner_administers(client, monkeypatch):
     assert client.get("/admin/accounts").status_code == 200
 
 
+def test_product_indicators_are_admin_only_bounded_and_anonymous(client, athletes):
+    path = "/admin/kpis"
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=_bearer("ana-token")).status_code == 403
+    for weeks in (0, 53):
+        refused = client.get(f"{path}?weeks={weeks}", headers=_bearer("owner-token"))
+        assert refused.status_code == 422
+    answer = client.get(f"{path}?weeks=3", headers=_bearer("admin-token"))
+    assert answer.status_code == 200
+    weeks = answer.json()
+    assert [w["current"] for w in weeks] == [True, False, False]
+    assert set(weeks[0]["indicators"]) == {
+        "active_accounts",
+        "push_subscribers",
+        "strength_logged",
+        "checkins_answered",
+        "briefings_reacted",
+        "weekly_reviews_accepted",
+        "first_action_hours",
+        "retention_30d",
+    }
+    assert set(weeks[0]["indicators"]["active_accounts"]) == {
+        "numerator",
+        "denominator",
+        "value",
+    }
+    assert "athlete" not in answer.text and "@" not in answer.text
+    assert len(client.get(path, headers=_bearer("owner-token")).json()) == 12
+
+
+def test_feature_flags_are_admin_only_and_persist_across_admins(
+    client, athletes, monkeypatch
+):
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    path = "/admin/feature-flags"
+    for headers, status in (({}, 401), (_bearer("ana-token"), 403)):
+        assert client.get(path, headers=headers).status_code == status
+        assert (
+            client.put(path, headers=headers, json={"glm_flash": True}).status_code
+            == status
+        )
+    admin = _bearer("admin-token")
+    owner = _bearer("owner-token")
+    assert client.get(path, headers=admin).json() == {
+        "glm_flash": False,
+        "coaching_attention": False,
+        "glm_flash_available": True,
+    }
+    assert client.put(path, headers=admin, json={"glm_flash": True}).status_code == 200
+    assert client.get(path, headers=owner).json()["glm_flash"] is True
+    for body in ({}, {"glm_flash": "false"}, {"glm_flash": 1}, {"model": "arbitrary"}):
+        assert client.put(path, headers=owner, json=body).status_code == 422
+    assert client.get(path, headers=admin).json()["glm_flash"] is True
+    assert client.put(path, headers=owner, json={"glm_flash": False}).status_code == 200
+    assert client.get(path, headers=admin).json()["glm_flash"] is False
+
+
+def test_feature_flag_needs_openrouter_but_can_always_be_disabled(client, monkeypatch):
+    monkeypatch.setenv("ARETE_AUTH", "off")
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    path = "/admin/feature-flags"
+    assert client.get(path).json()["glm_flash_available"] is False
+    assert client.put(path, json={"glm_flash": True}).status_code == 409
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    assert client.put(path, json={"glm_flash": True}).status_code == 409
+    assert client.get(path).json()["glm_flash"] is False
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    assert client.put(path, json={"glm_flash": True}).status_code == 200
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    assert client.put(path, json={"glm_flash": False}).status_code == 200
+
+
 def test_the_list_shows_each_athlete_with_its_login_and_daily_sync(client, athletes):
     ana, admin = athletes["ana-token"], athletes["admin-token"]
-    _set_lease(ana, "current_timestamp - INTERVAL 1 HOUR")
-    _set_lease(admin, "current_timestamp + INTERVAL 10 MINUTE")
+    _set_lease(ana, f"{UTC_NOW} - INTERVAL 1 HOUR")
+    _set_lease(admin, f"{UTC_NOW} + INTERVAL 10 MINUTE")
     rows = {
         row["athlete_id"]: row
         for row in client.get("/admin/accounts", headers=_bearer("admin-token")).json()
@@ -230,8 +310,8 @@ def test_only_a_lease_past_its_run_is_released(client, athletes):
     admin = _bearer("admin-token")
     # A lease still ahead belongs to a run in progress: releasing it would let
     # a second dispatch run the same athlete at the same time.
-    _set_lease(ana, "current_timestamp + INTERVAL 10 MINUTE")
+    _set_lease(ana, f"{UTC_NOW} + INTERVAL 10 MINUTE")
     assert client.post(path, headers=admin).json() == {"released": False}
-    _set_lease(ana, "current_timestamp - INTERVAL 1 MINUTE")
+    _set_lease(ana, f"{UTC_NOW} - INTERVAL 1 MINUTE")
     assert client.post(path, headers=admin).json() == {"released": True}
     assert client.post(path, headers=admin).json() == {"released": False}

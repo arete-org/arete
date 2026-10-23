@@ -1,4 +1,8 @@
-"""Garmin/Strava merge rules and the overlap lookup on a real temp DB."""
+"""Garmin taking over a legacy Strava row, and the overlap lookup that finds it.
+
+Strava was retired as a data source (ARE-126); the rows it created stay, and
+Garmin importing the same workout turns such a row into a Garmin row.
+"""
 
 from __future__ import annotations
 
@@ -6,44 +10,17 @@ from datetime import datetime
 
 from arete.garmin.models import ActivitySource, ActualSession
 from arete.garmin.repository import GarminRepository
-from arete.strava.merge import garmin_takeover, strava_extras
+from arete.garmin.sync import STRAVA_ONLY_FIELDS, garmin_takeover
 
 
 def _session(source: ActivitySource, start: datetime, **kw) -> ActualSession:
+    kw.setdefault("duration_sec", 3600)
     return ActualSession(
-        date=start.date(),
-        sport="running",
-        duration_sec=3600,
-        start_time=start,
-        source=source,
-        **kw,
+        date=start.date(), sport="running", start_time=start, source=source, **kw
     )
 
 
-class TestMergeRules:
-    def test_strava_extras_fill_gaps_and_best_efforts(self):
-        garmin = _session(
-            ActivitySource.GARMIN_CONNECT,
-            datetime(2026, 6, 1, 8),
-            name="Course",
-            hr_zones_json="{}",
-        )
-        strava = _session(
-            ActivitySource.STRAVA,
-            datetime(2026, 6, 1, 8, 1),
-            garmin_activity_id="s1",
-            name="Morning Run",
-            suffer_score=80,
-            best_efforts_json="[...]",
-            hr_zones_json='{"z1": 1}',
-        )
-        fields = strava_extras(garmin, strava)
-        assert fields["strava_activity_id"] == "s1"
-        assert fields["suffer_score"] == 80
-        assert fields["best_efforts_json"] == "[...]"
-        assert "name" not in fields  # Garmin name wins
-        assert "hr_zones_json" not in fields  # Garmin zones win
-
+class TestTakeoverRules:
     def test_garmin_takeover_changes_provenance(self):
         garmin = _session(
             ActivitySource.GARMIN_CONNECT,
@@ -75,75 +52,62 @@ class TestOverlapLookup:
         finally:
             repo.delete_actual_session(sid)
 
-    def test_known_strava_ids_include_merged(self):
-        repo = GarminRepository()
-        start = datetime(2031, 4, 4, 7, 0)
-        sid = repo.create_actual_session(
-            _session(ActivitySource.GARMIN_CONNECT, start, garmin_activity_id="g9")
-        )
-        sid2 = repo.create_actual_session(
-            _session(
-                ActivitySource.STRAVA, datetime(2031, 4, 5, 7), garmin_activity_id="s5"
-            )
-        )
-        try:
-            repo.update_actual_session_fields(sid, strava_activity_id="s9")
-            ids = repo.known_strava_ids()
-            assert {"s9", "s5"} <= ids and "g9" not in ids
-        finally:
-            repo.delete_actual_session(sid)
-            repo.delete_actual_session(sid2)
 
+class TestGarminWinsOnTakeover:
+    """End to end on the real repository: the legacy row becomes Garmin's."""
 
-class TestGarminStravaDoNotDuplicate:
-    """End to end on the real repository: the same run must stay one row.
-
-    Regression guard for the 2026-09-21 duplicate — a Garmin row at 07:17 and
-    a Strava row at 09:17 for one 13.2 km run, two hours apart because the
-    Strava copy was parsed as UTC. The merge matches within 120 seconds, so it
-    never saw them as the same workout and the load was counted twice.
-    """
-
-    def test_the_strava_copy_merges_into_the_garmin_row(self, tmp_path, monkeypatch):
-        from datetime import date, datetime
-
-        monkeypatch.setenv("ARETE_DB", str(tmp_path / "merge.duckdb"))
+    def test_the_strava_row_keeps_only_garmin_values(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ARETE_DB", str(tmp_path / "takeover.duckdb"))
         from arete.dataio.init_duckdb import main as init_db
 
         init_db()
-
-        from arete.garmin.models import ActivitySource, ActualSession
-        from arete.garmin.repository import GarminRepository
-        from arete.strava.models import strava_activity_to_actual_session
-
         repo = GarminRepository()
-        repo.create_actual_session(
-            ActualSession(
-                date=date(2026, 9, 21),
-                sport="run",
-                name="Paris Running",
-                start_time=datetime(2026, 9, 21, 7, 17, 22),
-                duration_sec=4197,
-                distance_m=13237.36,
-                avg_hr=155,
-                source=ActivitySource.GARMIN_CONNECT,
-                garmin_activity_id="24439724659",
+        start = datetime(2026, 9, 21, 7, 17, 22)
+        strava_id = repo.create_actual_session(
+            _session(
+                ActivitySource.STRAVA,
+                start,
+                garmin_activity_id="20263557277",
+                name="Morning Run",
+                notes="Description Strava",
+                duration_sec=4332,
+                distance_m=13300.0,
+                avg_hr=150,
+                max_hr=181,
+                calories=900,
+                suffer_score=80,
+                best_efforts_json="[]",
+                splits_json="[]",
+                avg_watts=250,
+                device_name="Strava app",
+                rpe=6,
             )
         )
-
-        strava = strava_activity_to_actual_session(
-            {
-                "id": 20263557277,
-                "type": "Run",
-                "name": "Morning Run",
-                "elapsed_time": 4332,
-                "distance": 13237.4,
-                # Strava's local time, with the trailing Z it really sends.
-                "start_date_local": "2026-09-21T07:17:22Z",
-                "start_date": "2026-09-21T05:17:22Z",
-            }
+        garmin = _session(
+            ActivitySource.GARMIN_CONNECT,
+            datetime(2026, 9, 21, 7, 17, 30),
+            garmin_activity_id="24439724659",
+            name="Paris Running",
+            duration_sec=4197,
+            distance_m=13237.36,
+            avg_hr=155,
         )
-        twin = repo.find_overlapping_session(strava.start_time, strava.duration_sec)
 
-        assert twin is not None, "the Strava copy must find its Garmin twin"
-        assert twin.name == "Paris Running"
+        twin = repo.find_overlapping_session(garmin.start_time, garmin.duration_sec)
+        assert twin is not None and twin.id == strava_id
+        repo.update_actual_session_fields(strava_id, **garmin_takeover(garmin))
+        row = repo.get_actual_session(strava_id)
+
+        assert row is not None
+        assert row.source == ActivitySource.GARMIN_CONNECT
+        assert row.garmin_activity_id == "24439724659"
+        assert (row.name, row.duration_sec, row.distance_m, row.avg_hr) == (
+            "Paris Running",
+            4197,
+            13237.36,
+            155,
+        )
+        # Garmin measured no max HR or calories: Strava's do not stay.
+        assert row.max_hr is None and row.calories is None
+        assert all(getattr(row, column) is None for column in STRAVA_ONLY_FIELDS)
+        assert row.rpe == 6  # the athlete's own

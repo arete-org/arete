@@ -5,23 +5,30 @@ CRUD operations for exercises, sets, and strength sessions.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+from collections.abc import Collection
 from datetime import date, datetime
 
 import duckdb
 
 from arete.data.exercises_catalog import EXERCISES_CATALOG
+from arete.dataio import best_efforts
 from arete.dataio.db import configure_athlete, connect, get_db_path
+from arete.dataio.game_events import KEPT_AT_LINK
 from arete.dataio.ownership import require_owned
 from arete.services.athlete_scope import resolve_athlete_id
 from arete.strength.models import (
+    DraftExercise,
     Exercise,
     ExerciseCategory,
     ExerciseSet,
     MuscleGroup,
     SessionExercise,
+    StrengthDraft,
     StrengthSession,
+    StrengthSessionSummary,
 )
 from arete.strength.progression import ExerciseSession, WorkSet
 
@@ -323,48 +330,10 @@ class StrengthRepository:
 
     def create_session(self, session: StrengthSession) -> int:
         """Create a new strength session."""
-        from arete.dataio.game_events import capture
-
         conn = self._get_connection()
         conn.execute("BEGIN TRANSACTION")
         try:
-            result = conn.execute(
-                """
-                INSERT INTO app.strength_sessions (
-                    user_id, date, name, program, duration_min,
-                    overall_rpe, fatigue_level, sleep_quality, notes, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                RETURNING id
-                """,
-                [
-                    resolve_athlete_id(session.user_id),
-                    session.date,
-                    session.name,
-                    session.program,
-                    session.duration_min,
-                    session.overall_rpe,
-                    session.fatigue_level,
-                    session.sleep_quality,
-                    session.notes,
-                    datetime.now(),
-                ],
-            ).fetchone()
-            if result is None:
-                raise RuntimeError("Failed to insert session")
-            session_id: int = result[0]
-
-            # Create exercises and sets
-            for ex in session.exercises:
-                ex.session_id = session_id
-                self._create_session_exercise(conn, ex)
-
-            capture(
-                conn,
-                f"strength:{session_id}",
-                session.date,
-                session.name or "Force",
-                any(s.reps > 0 for e in session.exercises for s in e.sets),
-            )
+            session_id = self._insert_session(conn, session)
             conn.execute("COMMIT")
             return session_id
         except BaseException:
@@ -372,6 +341,55 @@ class StrengthRepository:
             raise
         finally:
             conn.close()
+
+    def _insert_session(
+        self, conn: duckdb.DuckDBPyConnection, session: StrengthSession
+    ) -> int:
+        """The session, its exercises, sets and game evidence, in the caller's transaction."""
+        from arete.dataio.game_events import capture
+
+        require_owned(conn, "actual_sessions", session.actual_session_id)
+        result = conn.execute(
+            """
+            INSERT INTO app.strength_sessions (
+                user_id, date, name, program, duration_min,
+                overall_rpe, fatigue_level, sleep_quality, notes, created_at,
+                actual_session_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+            """,
+            [
+                resolve_athlete_id(session.user_id),
+                session.date,
+                session.name,
+                session.program,
+                session.duration_min,
+                session.overall_rpe,
+                session.fatigue_level,
+                session.sleep_quality,
+                session.notes,
+                datetime.now(),
+                session.actual_session_id,
+            ],
+        ).fetchone()
+        if result is None:
+            raise RuntimeError("Failed to insert session")
+        session_id: int = result[0]
+
+        # Create exercises and sets
+        for ex in session.exercises:
+            ex.session_id = session_id
+            self._create_session_exercise(conn, ex)
+
+        capture(
+            conn,
+            f"strength:{session_id}",
+            session.date,
+            session.name or "Force",
+            any(s.reps > 0 for e in session.exercises for s in e.sets),
+        )
+        best_efforts.refresh_lifts(conn, [session_id])
+        return session_id
 
     def _create_session_exercise(
         self, conn: duckdb.DuckDBPyConnection, exercise: SessionExercise
@@ -497,6 +515,88 @@ class StrengthRepository:
             conn.close()
         return sessions
 
+    def list_session_summaries(
+        self,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        program: str | None = None,
+        limit: int = 50,
+        connection: duckdb.DuckDBPyConnection | None = None,
+    ) -> list[StrengthSessionSummary]:
+        """The sessions' list rows and totals in one statement, no set loaded."""
+        filters = ""
+        params: list = []
+        if start_date:
+            filters += " AND date >= ?"
+            params.append(start_date)
+        if end_date:
+            filters += " AND date <= ?"
+            params.append(end_date)
+        if program:
+            filters += " AND LOWER(program) = LOWER(?)"
+            params.append(program)
+        conn = connection or self._get_connection()
+        try:
+            rows = conn.execute(
+                f"""
+                WITH s AS (
+                    SELECT id, date, name, program, duration_min, overall_rpe,
+                           actual_session_id
+                    FROM app.visible_strength_sessions WHERE 1=1{filters}
+                    ORDER BY date DESC, id DESC LIMIT ?
+                ), ex AS (
+                    SELECT se.session_id, count(*) AS exercises,
+                           list_sort(list_distinct(list(CASE WHEN e.id IS NOT NULL
+                               THEN coalesce(nullif(e.primary_muscle, ''), 'full_body')
+                           END))) AS muscles,
+                           list(e.name ORDER BY se.exercise_order, se.id)
+                               FILTER (WHERE e.id IS NOT NULL) AS names
+                    FROM app.visible_session_exercises se
+                    LEFT JOIN app.visible_exercises e ON se.exercise_id = e.id
+                    WHERE se.session_id IN (SELECT id FROM s)
+                    GROUP BY se.session_id
+                ), st AS (
+                    SELECT se.session_id, count(*) AS sets,
+                           sum(es.reps * coalesce(es.weight_kg, 0)) AS volume
+                    FROM app.visible_exercise_sets es
+                    JOIN app.visible_session_exercises se
+                      ON es.session_exercise_id = se.id
+                    WHERE se.session_id IN (SELECT id FROM s)
+                      AND es.is_warmup IS NOT TRUE
+                    GROUP BY se.session_id
+                )
+                SELECT s.id, s.date, s.name, s.program, s.duration_min, s.overall_rpe,
+                       coalesce(ex.exercises, 0), coalesce(st.sets, 0),
+                       coalesce(st.volume, 0), coalesce(ex.muscles, []),
+                       coalesce(ex.names, []), s.actual_session_id
+                FROM s
+                LEFT JOIN ex ON ex.session_id = s.id
+                LEFT JOIN st ON st.session_id = s.id
+                ORDER BY s.date DESC, s.id DESC
+                """,
+                [*params, limit],
+            ).fetchall()
+        finally:
+            if connection is None:
+                conn.close()
+        return [
+            StrengthSessionSummary(
+                id=row[0],
+                date=row[1],
+                name=row[2],
+                program=row[3],
+                duration_min=row[4],
+                overall_rpe=row[5],
+                exercises_count=int(row[6]),
+                total_sets=int(row[7]),
+                total_volume=float(row[8]),
+                muscles_worked=list(row[9]),
+                exercise_names=list(row[10]),
+                actual_session_id=row[11],
+            )
+            for row in rows
+        ]
+
     def _load_exercises(
         self, conn: duckdb.DuckDBPyConnection, sessions: list[StrengthSession]
     ) -> None:
@@ -551,11 +651,51 @@ class StrengthRepository:
             ).fetchone()
 
             conn.execute(
-                "UPDATE app.game_events SET eligible=false,reason='removed',processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) ",
+                "UPDATE app.game_events SET eligible=false,reason='removed',processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) RETURNING source_key",
                 [f"strength:{session_id}"],
             )
+            best_efforts.forget(conn, best_efforts.LIFT, [session_id])
             conn.execute("COMMIT")
             return result is not None
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+
+    def update_session(self, session_id: int, exercises: list[SessionExercise]) -> bool:
+        """Replace a live session's exercises and sets; False if it is not live.
+
+        A correction, not a new session: the id, date, Garmin link and game
+        event (or its absence) stay. Replaced rows are retained for recovery,
+        like a deletion's.
+        """
+        conn = self._get_connection()
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            row = conn.execute(
+                "SELECT id FROM app.visible_strength_sessions WHERE id = ?",
+                [session_id],
+            ).fetchone()
+            if row is None:
+                conn.execute("ROLLBACK")
+                return False
+            conn.execute(
+                "UPDATE app.exercise_sets SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_exercise_id IN (SELECT id FROM app.visible_session_exercises WHERE session_id = ?)) RETURNING id",
+                [session_id],
+            )
+            conn.execute(
+                "UPDATE app.session_exercises SET deleted_at = current_timestamp WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (session_id = ?) RETURNING id",
+                [session_id],
+            )
+            for ex in exercises:
+                ex.session_id = session_id
+                self._create_session_exercise(conn, ex)
+            # No capture: a correction never grants or revokes game credit, even
+            # for a legacy session without an event or one whose sets are now empty.
+            best_efforts.refresh_lifts(conn, [session_id])
+            conn.execute("COMMIT")
+            return True
         except BaseException:
             conn.execute("ROLLBACK")
             raise
@@ -852,12 +992,13 @@ class StrengthRepository:
                 conn.execute("ROLLBACK")
                 return False
             conn.execute(
-                "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) ",
+                "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ?) RETURNING id",
                 (garmin_id, session_id),
             )
+            # A manual link merges the rewards, even ones an automatic link kept.
             conn.execute(
-                "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) ",
-                [f"strength:{session_id}", f"actual:{garmin_id}"],
+                "UPDATE app.game_events SET processed=false, reason=replace(reason, ?, '') WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) RETURNING source_key",
+                [KEPT_AT_LINK, f"strength:{session_id}", f"actual:{garmin_id}"],
             )
             conn.execute("COMMIT")
             return True
@@ -866,6 +1007,439 @@ class StrengthRepository:
             raise
         finally:
             conn.close()
+
+    def link_lone_garmin_pairs(
+        self, days: Collection[date] | None = None
+    ) -> list[tuple[int, int, date]]:
+        """Link each day's lone unlinked log to its lone unlinked strength activity.
+
+        A day with two unlinked logs or two unlinked strength activities stays
+        as it is: the manual link decides those. ``None`` covers every day (the
+        backfill). Idempotent: a linked pair is no longer a candidate. Unlike a
+        manual link, it never takes back XP or shards already granted. Returns
+        the (strength session, actual session, day) pairs it linked.
+        """
+        if days is not None and not days:
+            return []
+        day_filter = ""
+        params: list[date] = []
+        if days is not None:
+            params = sorted(set(days))
+            day_filter = f"AND date IN ({', '.join('?' for _ in params)})"
+        conn = self._get_connection()
+        # Pairs, links and their rewards are one commit, like a manual link.
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            pairs = conn.execute(
+                f"""
+                WITH logs AS (
+                    SELECT date, min(id) AS id, count(*) AS n
+                    FROM app.visible_strength_sessions
+                    WHERE actual_session_id IS NULL {day_filter}
+                    GROUP BY date
+                ), activities AS (
+                    SELECT date, min(id) AS id, count(*) AS n
+                    FROM app.visible_actual_sessions a
+                    WHERE sport = 'strength' {day_filter}
+                      AND NOT EXISTS (
+                          SELECT 1 FROM app.visible_strength_sessions s
+                          WHERE s.actual_session_id = a.id
+                      )
+                    GROUP BY date
+                )
+                SELECT logs.id, activities.id, logs.date
+                FROM logs JOIN activities USING (date)
+                WHERE logs.n = 1 AND activities.n = 1
+                ORDER BY logs.date
+                """,
+                params + params,
+            ).fetchall()
+            for session_id, actual_id, _day in pairs:
+                conn.execute(
+                    "UPDATE app.strength_sessions SET actual_session_id = ? WHERE user_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=user_id AND scope_owner.deleted_at IS NULL) AND (id = ? AND actual_session_id IS NULL) RETURNING id",
+                    (actual_id, session_id),
+                )
+                _keep_settled_rewards(conn, session_id, actual_id)
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+        return [(int(s), int(a), d) for s, a, d in pairs]
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Drafts: Garmin strength activities awaiting their loads (ARE-132)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def open_draft(
+        self,
+        actual_session_id: int,
+        exercises: list[DraftExercise],
+        origin: str,
+        *,
+        reopen: bool = False,
+    ) -> int | None:
+        """The activity's draft id, created at most once; None when it needs none.
+
+        None when the activity is not this athlete's live strength activity or
+        a Muscu log already completes it. An existing draft keeps its content;
+        ``reopen`` (the athlete asking from the Journal) makes a dismissed or
+        orphaned completed one pending again, never an import.
+        """
+        assert origin in ("import", "journal")
+        conn = self._get_connection()
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            row = conn.execute(
+                f"SELECT 1 FROM app.visible_actual_sessions a WHERE a.id = ? "
+                f"AND a.sport = 'strength' AND {_UNLINKED_ACTIVITY.format(activity='a.id')}",
+                [actual_session_id],
+            ).fetchone()
+            if row is None:
+                conn.execute("ROLLBACK")
+                return None
+            conn.execute(
+                "INSERT INTO app.strength_drafts"
+                " (actual_session_id, exercises_json, origin, created_at)"
+                " VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+                [
+                    actual_session_id,
+                    json.dumps([e.as_dict() for e in exercises], ensure_ascii=False),
+                    origin,
+                    datetime.now(),
+                ],
+            )
+            if exercises:
+                # A draft opened empty (from the Journal, or before Garmin took
+                # over a Strava copy) gets Garmin's names when they arrive.
+                conn.execute(
+                    f"UPDATE app.strength_drafts SET exercises_json = ? WHERE {_DRAFT_SCOPE}"
+                    " AND actual_session_id = ? AND exercises_json = '[]'"
+                    " AND status = 'pending' RETURNING id",
+                    [
+                        json.dumps(
+                            [e.as_dict() for e in exercises], ensure_ascii=False
+                        ),
+                        actual_session_id,
+                    ],
+                )
+            if reopen:
+                conn.execute(
+                    f"UPDATE app.strength_drafts SET status = 'pending', settled_at = NULL,"
+                    f" strength_session_id = NULL WHERE {_DRAFT_SCOPE}"
+                    " AND actual_session_id = ? AND status <> 'pending' RETURNING id",
+                    [actual_session_id],
+                )
+            found = conn.execute(
+                "SELECT id FROM app.visible_strength_drafts WHERE actual_session_id = ?",
+                [actual_session_id],
+            ).fetchone()
+            conn.execute("COMMIT")
+        except duckdb.TransactionException:
+            # Opened concurrently (a double tap, two tabs): the other one won.
+            _rollback(conn)
+            found = self._draft_of(actual_session_id)
+        except BaseException:
+            _rollback(conn)
+            raise
+        finally:
+            conn.close()
+        return int(found[0]) if found else None
+
+    def _draft_of(self, actual_session_id: int) -> tuple | None:
+        conn = self._get_connection()
+        try:
+            return conn.execute(
+                "SELECT id FROM app.visible_strength_drafts WHERE actual_session_id = ?",
+                [actual_session_id],
+            ).fetchone()
+        finally:
+            conn.close()
+
+    def pending_drafts(
+        self, draft_id: int | None = None, limit: int = 20
+    ) -> list[StrengthDraft]:
+        """Pending drafts whose activity no Muscu log completes yet, newest first.
+
+        The list (no ``draft_id``) leaves out a day that already has a log not
+        linked to any activity: that log is probably this session, to link
+        rather than log twice. A draft asked for by id is returned regardless.
+        """
+        where, params = _pending_drafts_where(draft_id)
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                f"""SELECT d.id, d.actual_session_id, a.date, a.name, a.duration_sec,
+                       d.exercises_json, d.origin, d.created_at
+                {where} ORDER BY a.date DESC, d.id DESC LIMIT ?""",
+                [*params, limit],
+            ).fetchall()
+        finally:
+            conn.close()
+        return [
+            StrengthDraft(
+                id=row[0],
+                actual_session_id=row[1],
+                date=row[2],
+                activity_name=row[3],
+                duration_sec=row[4],
+                exercises=[DraftExercise(**e) for e in json.loads(row[5] or "[]")],
+                origin=row[6],
+                created_at=row[7],
+            )
+            for row in rows
+        ]
+
+    def pending_draft_count(self) -> int:
+        """How many drafts the list holds in all, beyond its first page."""
+        where, params = _pending_drafts_where(None)
+        conn = self._get_connection()
+        try:
+            row = conn.execute(f"SELECT count(*) {where}", params).fetchone()
+        finally:
+            conn.close()
+        return int(row[0]) if row else 0
+
+    def dismiss_pending_drafts(self, limit: int = 500) -> int | None:
+        """Dismiss the listed drafts, at most ``limit`` per call; how many.
+
+        None when a concurrent write (a completion) interrupted it: nothing
+        was dismissed.
+        """
+        where, params = _pending_drafts_where(None)
+        conn = self._get_connection()
+        try:
+            rows = conn.execute(
+                "UPDATE app.strength_drafts SET status = 'dismissed', settled_at = ?"
+                f" WHERE {_DRAFT_SCOPE} AND status = 'pending'"
+                f" AND id IN (SELECT d.id {where} LIMIT ?) RETURNING id",
+                [datetime.now(), *params, limit],
+            ).fetchall()
+        except duckdb.TransactionException:
+            return None
+        finally:
+            conn.close()
+        return len(rows)
+
+    def complete_draft(self, draft_id: int, session: StrengthSession) -> int | None:
+        """Save ``session`` as the draft's Muscu log, linked to its activity; once.
+
+        The session takes the activity's date. One transaction for the log, its
+        link, its game evidence and the draft's status: None (nothing written)
+        when the draft is no longer pending, its activity got a log meanwhile,
+        or another tab completes it concurrently. The draft row is deleted and
+        written back completed: the delete conflicts with any other write of
+        the row, since they all return (docs/architecture.md, Concurrent writes).
+        """
+        conn = self._get_connection()
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            row = conn.execute(
+                f"""SELECT d.actual_session_id, a.date, d.exercises_json, d.origin,
+                       d.created_at
+                FROM app.visible_strength_drafts d
+                JOIN app.visible_actual_sessions a ON a.id = d.actual_session_id
+                WHERE d.id = ? AND d.status = 'pending'
+                  AND {_UNLINKED_ACTIVITY.format(activity="d.actual_session_id")}""",
+                [draft_id],
+            ).fetchone()
+            if row is None:
+                conn.execute("ROLLBACK")
+                return None
+            actual_id, day, exercises_json, origin, created_at = row
+            session.actual_session_id, session.date = int(actual_id), day
+            session_id = self._insert_session(conn, session)
+            _keep_settled_rewards(conn, session_id, int(actual_id))
+            claimed = conn.execute(
+                f"DELETE FROM app.strength_drafts WHERE {_DRAFT_SCOPE}"
+                " AND id = ? AND status = 'pending' RETURNING id",
+                [draft_id],
+            ).fetchone()
+            if claimed is None:
+                conn.execute("ROLLBACK")
+                return None
+            conn.execute(
+                "INSERT INTO app.strength_drafts (id, actual_session_id, exercises_json,"
+                " origin, status, strength_session_id, created_at, settled_at)"
+                " VALUES (?, ?, ?, ?, 'completed', ?, ?, ?)",
+                [
+                    draft_id,
+                    actual_id,
+                    exercises_json,
+                    origin,
+                    session_id,
+                    created_at,
+                    datetime.now(),
+                ],
+            )
+            conn.execute("COMMIT")
+            return session_id
+        except duckdb.TransactionException:
+            # Another tab completed it first: nothing of ours was written.
+            _rollback(conn)
+            return None
+        except BaseException:
+            _rollback(conn)
+            raise
+        finally:
+            conn.close()
+
+    def log_for_activity(self, actual_session_id: int) -> int | None:
+        """The live Muscu log linked to this activity, if any."""
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT min(id) FROM app.visible_strength_sessions"
+                " WHERE actual_session_id = ?",
+                [actual_session_id],
+            ).fetchone()
+        finally:
+            conn.close()
+        return int(row[0]) if row and row[0] is not None else None
+
+    def unlinked_log_on(self, day: date) -> int | None:
+        """A live Muscu log of ``day`` linked to no activity, if any."""
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT min(id) FROM app.visible_strength_sessions"
+                " WHERE date = ? AND actual_session_id IS NULL",
+                [day],
+            ).fetchone()
+        finally:
+            conn.close()
+        return int(row[0]) if row and row[0] is not None else None
+
+    def draft_exists(self, draft_id: int) -> bool:
+        """Whether this athlete has a draft with this id, whatever its status."""
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM app.visible_strength_drafts WHERE id = ?", [draft_id]
+            ).fetchone()
+        finally:
+            conn.close()
+        return row is not None
+
+    def dismiss_draft(self, draft_id: int) -> bool:
+        """Leave a pending draft without loads; False when it is not pending,
+        or when a concurrent write (a completion) interrupted it."""
+        unlinked = _UNLINKED_ACTIVITY.format(
+            activity="app.strength_drafts.actual_session_id"
+        )
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "UPDATE app.strength_drafts SET status = 'dismissed', settled_at = ?"
+                f" WHERE {_DRAFT_SCOPE} AND id = ? AND status = 'pending'"
+                f" AND {unlinked} RETURNING id",
+                [datetime.now(), draft_id],
+            ).fetchone()
+        except duckdb.TransactionException:
+            return False
+        finally:
+            conn.close()
+        return row is not None
+
+
+def _pending_drafts_where(draft_id: int | None) -> tuple[str, list]:
+    """FROM and WHERE of pending drafts: one by id, or the Journal's list."""
+    where = f"""FROM app.visible_strength_drafts d
+        JOIN app.visible_actual_sessions a ON a.id = d.actual_session_id
+        WHERE d.status = 'pending'
+          AND {_UNLINKED_ACTIVITY.format(activity="d.actual_session_id")}"""
+    if draft_id is not None:
+        return where + " AND d.id = ?", [draft_id]
+    return (
+        where + " AND NOT EXISTS (SELECT 1 FROM app.visible_strength_sessions l"
+        " WHERE l.date = a.date AND l.actual_session_id IS NULL)",
+        [],
+    )
+
+
+#: A strength activity no live Muscu log is linked to; ``activity`` names its id.
+_UNLINKED_ACTIVITY = (
+    "NOT EXISTS (SELECT 1 FROM app.visible_strength_sessions s"
+    " WHERE s.actual_session_id = {activity})"
+)
+#: The athlete's live draft rows, as every private write is scoped.
+_DRAFT_SCOPE = (
+    "athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL"
+    " AND EXISTS (SELECT 1 FROM app.athletes scope_owner"
+    " WHERE scope_owner.id = athlete_id AND scope_owner.deleted_at IS NULL)"
+)
+
+
+def _rollback(conn: duckdb.DuckDBPyConnection) -> None:
+    """Roll back, tolerating a transaction DuckDB already aborted."""
+    with contextlib.suppress(duckdb.Error):
+        conn.execute("ROLLBACK")
+
+
+def _keep_settled_rewards(conn, session_id: int, actual_id: int) -> None:
+    """Count an automatically linked pair once without debiting a past reward.
+
+    The projection merges a linked log into its activity's canonical key and
+    reverses the reward of the key that disappears. A key belongs to the past
+    when it holds a net credit or an eligible event the projection already
+    counted toward its week (a capped one included: merging it would lower
+    the week's count and could take back the weekly bonus). Only a past-free
+    pair is left to the projection; a pair with one past side in a single week
+    re-keys the other side into it. Any other pair keeps both keys
+    (``KEPT_AT_LINK``): it goes on counting as before, toward the cap and the
+    weekly goal included. Reads go through the athlete-scoped visible views.
+    """
+    keys = [f"strength:{session_id}", f"actual:{actual_id}"]
+    canonical = dict(
+        conn.execute(
+            "SELECT source_key, canonical_key FROM app.visible_game_events"
+            " WHERE source_key IN (?, ?)",
+            keys,
+        ).fetchall()
+    )
+    if len(canonical) < 2:
+        return  # One side was never captured: the projection has nothing to merge.
+    log, activity = canonical[keys[0]], canonical[keys[1]]
+    if log == activity:
+        return
+    past = {
+        key
+        for key in (log, activity)
+        if conn.execute(
+            """SELECT coalesce(bool_or(eligible AND processed), false) OR coalesce(
+                bool_or(eligible) AND (SELECT sum(xp) > 0 OR sum(shards) > 0
+                    FROM app.visible_game_ledger WHERE cause = ?), false)
+            FROM app.visible_game_events WHERE canonical_key = ?""",
+            ["activity:" + key, key],
+        ).fetchone()[0]
+    }
+    weeks = conn.execute(
+        "SELECT count(DISTINCT week_start) FROM app.visible_game_events"
+        " WHERE canonical_key IN (?, ?)",
+        [log, activity],
+    ).fetchone()[0]
+    if not past:
+        # Nothing counted yet: the next projection merges them, as after a manual link.
+        conn.execute(
+            "UPDATE app.game_events SET processed=false WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? OR source_key=?) RETURNING source_key",
+            keys,
+        )
+    elif len(past) == 1 and weeks == 1:
+        kept = past.pop()
+        conn.execute(
+            "UPDATE app.game_events SET canonical_key=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (canonical_key=?) RETURNING source_key",
+            [kept, activity if kept == log else log],
+        )
+    else:
+        # A merged group settles in its home week (gamification._HOMES): a later
+        # week's credit would move there, changing both weeks' counts and
+        # possibly their weekly bonus. Both sides counted, or weeks apart:
+        # keep both keys.
+        conn.execute(
+            "UPDATE app.game_events SET reason=reason || ? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=? AND NOT ends_with(reason, ?)) RETURNING source_key",
+            [KEPT_AT_LINK, keys[0], KEPT_AT_LINK],
+        )
 
 
 _SESSION_COLUMNS = """id, user_id, date, name, program, duration_min,

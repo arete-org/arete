@@ -66,6 +66,48 @@ def test_a_current_database_skips_the_ddl(tmp_path, monkeypatch):
     init_duckdb.main()  # would raise if the DDL ran
 
 
+@pytest.mark.parametrize("failure_stage", ["bootstrap", "backup", "migration"])
+def test_failed_upgrade_preserves_its_stage_and_does_not_record_success(
+    tmp_path, monkeypatch, failure_stage
+):
+    path = tmp_path / "failed-upgrade.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    version = init_duckdb.MIGRATIONS[-1][0]
+    with migration_connection(str(path)) as con:
+        con.execute("DELETE FROM app.schema_version WHERE version = ?", [version])
+
+    def fail(con):
+        # A real SQL error, with its original exception retained for debugging.
+        con.execute("SELECT * FROM missing_upgrade_relation")
+
+    if failure_stage == "bootstrap":
+        monkeypatch.setattr(
+            init_duckdb, "DDL", "SELECT * FROM missing_upgrade_relation"
+        )
+        expected_stage = "bootstrap:1"
+    elif failure_stage == "backup":
+        monkeypatch.setattr(
+            type(init_duckdb.config), "is_remote_db", property(lambda s: True)
+        )
+        monkeypatch.setattr(
+            init_duckdb, "connect", lambda ro: migration_connection(str(path))
+        )
+        monkeypatch.setattr(init_duckdb, "_backup_remote", fail)
+        expected_stage = "backup"
+    else:
+        monkeypatch.setattr(init_duckdb, "MIGRATIONS", [(version, fail)])
+        expected_stage = f"migration:{version}"
+
+    with pytest.raises(init_duckdb.SchemaInitializationError) as exc:
+        init_duckdb.main()
+    assert exc.value.stage == expected_stage
+    assert exc.value.error_type == "CatalogException"
+    assert isinstance(exc.value.__cause__, duckdb.CatalogException)
+    with migration_connection(str(path)) as con:
+        assert version in init_duckdb.pending_migrations(con)
+
+
 def test_pending_migrations_lists_the_missing_versions(tmp_path, monkeypatch):
     path = tmp_path / "pending.duckdb"
     monkeypatch.setenv("ARETE_DB", str(path))
@@ -402,6 +444,34 @@ def test_m38_creates_system_skills_even_below_a_recorded_future_version(
         con.close()
 
 
+def test_feature_flag_upgrade_is_idempotent_and_preserves_enabled_state(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "feature-flags.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    con = migration_connection(str(path))
+    con.execute("DROP TABLE app.feature_flags")
+    con.execute("DELETE FROM app.schema_version WHERE version=41")
+    con.close()
+    init_duckdb.main()
+    con = migration_connection(str(path))
+    assert con.execute("SELECT * FROM app.feature_flags").fetchall() == []
+    con.execute("INSERT INTO app.feature_flags VALUES ('glm_flash', true)")
+    con.close()
+    init_duckdb.main()
+    con = migration_connection(str(path))
+    try:
+        assert con.execute("SELECT enabled FROM app.feature_flags").fetchone() == (
+            True,
+        )
+        assert con.execute(
+            "SELECT count(*) FROM app.schema_version WHERE version=41"
+        ).fetchone() == (1,)
+    finally:
+        con.close()
+
+
 def test_m31_creates_the_stream_and_feedback_tables_once(tmp_path, monkeypatch):
     path = tmp_path / "streams.duckdb"
     monkeypatch.setenv("ARETE_DB", str(path))
@@ -581,3 +651,238 @@ def test_shared_schema_preserves_legacy_owners_children_and_next_identity(
         )
         con.close()
     assert upsert_user("new-identity", "new@example.com").athlete_id > 42
+
+
+def test_m54_creates_the_strength_drafts_once_and_atomically(tmp_path, monkeypatch):
+    from arete.dataio import tenant_schema
+
+    path = tmp_path / "drafts.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+
+    def to_schema_53() -> None:
+        with migration_connection(str(path)) as con:
+            con.execute("DROP VIEW app.visible_strength_drafts")
+            con.execute("DROP TABLE app.strength_drafts")
+            con.execute("DROP SEQUENCE app.strength_drafts_seq")
+            con.execute("DELETE FROM app.schema_version WHERE version = 54")
+
+    to_schema_53()
+    with migration_connection(str(path)) as con:
+        assert init_duckdb.pending_migrations(con) == [54]
+        # The previous release (without 54) finds the database current; later
+        # versions may follow 54 in the list.
+        with monkeypatch.context() as previous:
+            previous.setattr(
+                init_duckdb,
+                "MIGRATIONS",
+                [m for m in init_duckdb.MIGRATIONS if m[0] != 54],
+            )
+            assert init_duckdb.pending_migrations(con) == []
+
+        def broken_view(*_args):
+            raise RuntimeError("view refresh failed")
+
+        with monkeypatch.context() as broken:
+            broken.setattr(tenant_schema, "_view", broken_view)
+            with pytest.raises(RuntimeError):
+                init_duckdb._m54_strength_drafts(con)
+        # Rolled back together: never a table without its private view.
+        assert con.execute(
+            "SELECT count(*) FROM information_schema.tables"
+            " WHERE table_schema = 'app' AND table_name = 'strength_drafts'"
+        ).fetchone() == (0,)
+
+    init_duckdb.main()
+    init_duckdb.main()  # recorded once, then skipped
+    with migration_connection(str(path), read_only=True) as con:
+        assert con.execute(
+            "SELECT count(*) FROM app.visible_strength_drafts"
+        ).fetchone() == (0,)
+        assert con.execute(
+            "SELECT count(*) FROM app.schema_version WHERE version = 54"
+        ).fetchone() == (1,)
+
+
+def test_m64_adds_the_goal_types_once_and_atomically(tmp_path, monkeypatch):
+    from arete.dataio import tenant_schema
+
+    path = tmp_path / "goal-types.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    with migration_connection(str(path)) as con:
+        # Schema 63: no goal type or session kind yet, a race goal stored.
+        con.execute("ALTER TABLE app.goals DROP COLUMN goal_type")
+        con.execute("ALTER TABLE app.goals DROP COLUMN details_json")
+        con.execute("ALTER TABLE app.planned_sessions DROP COLUMN plan_kind")
+        tenant_schema._view(con, "goals")
+        tenant_schema._view(con, "planned_sessions")
+        con.execute(
+            "INSERT INTO app.goals (name, race_date, distance_km) "
+            "VALUES ('Marathon', '2027-04-11', 42.195)"
+        )
+        con.execute("DELETE FROM app.schema_version WHERE version = 64")
+        assert init_duckdb.pending_migrations(con) == [64]
+        with monkeypatch.context() as previous:
+            previous.setattr(
+                init_duckdb,
+                "MIGRATIONS",
+                [m for m in init_duckdb.MIGRATIONS if m[0] != 64],
+            )
+            assert init_duckdb.pending_migrations(con) == []
+
+        real_view = tenant_schema._view
+
+        def broken_view(connection, table):
+            # The goals view is rebuilt, then the sessions' fails.
+            if table == "planned_sessions":
+                raise RuntimeError("view refresh failed")
+            real_view(connection, table)
+
+        with monkeypatch.context() as broken:
+            broken.setattr(tenant_schema, "_view", broken_view)
+            with pytest.raises(RuntimeError):
+                init_duckdb._m64_goal_types(con)
+        # Rolled back together: never a column the private view does not show.
+        columns = {r[0] for r in con.execute("DESCRIBE app.goals").fetchall()}
+        assert not {"goal_type", "details_json"} & columns
+        shown = {r[0] for r in con.execute("DESCRIBE app.visible_goals").fetchall()}
+        assert "goal_type" not in shown
+        planned = {
+            r[0] for r in con.execute("DESCRIBE app.planned_sessions").fetchall()
+        }
+        assert "plan_kind" not in planned
+
+    init_duckdb.main()
+    init_duckdb.main()  # recorded once, then skipped
+    with migration_connection(str(path)) as con:
+        assert con.execute(
+            "SELECT name, goal_type, details_json FROM app.visible_goals"
+        ).fetchall() == [("Marathon", "race", None)]
+        # The previous release names its columns: its writes and reads still work.
+        con.execute(
+            "INSERT INTO app.goals (name, race_date, distance_km, target_time_sec, priority)"
+            " VALUES ('10 km', '2027-05-01', 10, NULL, 'B')"
+        )
+        assert con.execute(
+            "SELECT name, distance_km, priority, status FROM app.visible_goals"
+            " WHERE name = '10 km'"
+        ).fetchone() == ("10 km", 10.0, "B", "active")
+        assert con.execute(
+            "SELECT goal_type FROM app.visible_goals WHERE name = '10 km'"
+        ).fetchone() == ("race",)
+        # Its planned sessions too: written without a kind, read as before.
+        con.execute(
+            "INSERT INTO app.planned_sessions (date, sport, session_type, goal_id)"
+            " VALUES ('2027-04-01', 'running', 'tempo', NULL)"
+        )
+        assert con.execute(
+            "SELECT session_type, revision, goal_id, plan_kind"
+            " FROM app.visible_planned_sessions"
+        ).fetchall() == [("tempo", 1, None, None)]
+        assert con.execute(
+            "SELECT count(*) FROM app.schema_version WHERE version = 64"
+        ).fetchone() == (1,)
+
+
+def test_m65_backfills_every_athlete_s_best_efforts_once_and_atomically(
+    tmp_path, monkeypatch
+):
+    from arete.dataio import tenant_schema
+
+    path = tmp_path / "best-efforts.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    with migration_connection(str(path)) as con:
+        # Schema 64, with history the previous release stored: two athletes'
+        # runs with streams, a deleted run, a Strava run and a strength log.
+        con.execute("DROP VIEW app.visible_best_efforts")
+        con.execute("DROP TABLE app.best_efforts")
+        con.execute("DELETE FROM app.schema_version WHERE version = 65")
+        con.execute("INSERT INTO app.athletes(id) VALUES (2) ON CONFLICT DO NOTHING")
+        runs = {}
+        for name, athlete, source, deleted in (
+            ("owner", 1, "garmin_connect", None),
+            ("second", 2, "fit_file", None),
+            ("deleted", 1, "garmin_connect", "2026-01-01"),
+            ("strava", 1, "strava", None),
+        ):
+            runs[name] = con.execute(
+                "INSERT INTO app.actual_sessions (user_id, date, sport, name,"
+                " duration_sec, distance_m, source, deleted_at)"
+                " VALUES (?, '2020-05-01', 'running', ?, 1900, 5700, ?, ?) RETURNING id",
+                [athlete, name, source, deleted],
+            ).fetchone()[0]
+            con.execute(
+                "INSERT INTO app.activity_streams (actual_session_id, sample_count,"
+                " t_sec, distance_m, athlete_id) VALUES (?, 1900, ?, ?, ?)",
+                [
+                    runs[name],
+                    list(range(1900)),
+                    [i * 3.0 for i in range(1900)],
+                    athlete,
+                ],
+            )
+        log = con.execute(
+            "INSERT INTO app.strength_sessions (user_id, date, name)"
+            " VALUES (1, '2020-05-02', 'Force') RETURNING id"
+        ).fetchone()[0]
+        exercise = con.execute(
+            "INSERT INTO app.exercises (name, category, primary_muscle)"
+            " VALUES ('Squat', 'squat', 'quads') RETURNING id"
+        ).fetchone()[0]
+        entry = con.execute(
+            "INSERT INTO app.session_exercises (session_id, exercise_id)"
+            " VALUES (?, ?) RETURNING id",
+            [log, exercise],
+        ).fetchone()[0]
+        con.execute(
+            "INSERT INTO app.exercise_sets (session_exercise_id, set_number, reps,"
+            " weight_kg, is_warmup) VALUES (?, 1, 5, 100, FALSE), (?, 2, 3, 100, FALSE)",
+            [entry, entry],
+        )
+        assert init_duckdb.pending_migrations(con) == [65]
+
+        def broken_view(*_args):
+            raise RuntimeError("view refresh failed")
+
+        with monkeypatch.context() as broken:
+            broken.setattr(tenant_schema, "_view", broken_view)
+            with pytest.raises(RuntimeError):
+                init_duckdb._m65_best_efforts(con)
+        # Rolled back together: never a table without its private view.
+        assert con.execute(
+            "SELECT count(*) FROM information_schema.tables"
+            " WHERE table_schema = 'app' AND table_name = 'best_efforts'"
+        ).fetchone() == (0,)
+
+    init_duckdb.main()
+    init_duckdb.main()  # recorded once, then skipped
+    query = (
+        "SELECT athlete_id, kind, session_id, effort_key, round(value, 1)"
+        " FROM app.best_efforts ORDER BY ALL"
+    )
+    with migration_connection(str(path)) as con:
+        stored = con.execute(query).fetchall()
+        assert stored == sorted(
+            [
+                (1, "lift", log, str(exercise), 116.7),
+                (1, "run", runs["owner"], "1000", 334.0),
+                (1, "run", runs["owner"], "5000", 1667.0),
+                (2, "run", runs["second"], "1000", 334.0),
+                (2, "run", runs["second"], "5000", 1667.0),
+            ]
+        )
+        assert con.execute(
+            "SELECT count(*) FROM app.schema_version WHERE version = 65"
+        ).fetchone() == (1,)
+        # A rerun (a record interrupted after the commit) recomputes the same rows.
+        init_duckdb._m65_best_efforts(con)
+        assert con.execute(query).fetchall() == stored
+        # The private view shows the athlete its own rows only.
+        assert {
+            row[0]
+            for row in con.execute(
+                "SELECT athlete_id FROM app.visible_best_efforts"
+            ).fetchall()
+        } == {1}

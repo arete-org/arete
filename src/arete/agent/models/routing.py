@@ -6,6 +6,7 @@ from arete.agent.models.registry import (
     DEFAULT_GITHUB_MODEL,
     DEFAULT_OPENROUTER_FALLBACKS,
     DEFAULT_OPENROUTER_MODEL,
+    GLM_FLASH_MODEL,
     MAX_OPENROUTER_MODELS,
     ModelRoute,
 )
@@ -21,7 +22,7 @@ def configured_model_name() -> str:
     return config.llm_model or defaults.get(config.llm_provider, "unknown")
 
 
-def resolve_route() -> ModelRoute:
+def resolve_route(*, glm_flash: bool = False) -> ModelRoute:
     provider = config.llm_provider
     if provider == "ollama":
         url, key = config.ollama_base_url, "ollama"
@@ -44,6 +45,14 @@ def resolve_route() -> ModelRoute:
     else:
         raise ValueError(
             f"Unknown LLM_PROVIDER '{provider}' for the agent. Supported: ollama, openrouter, github"
+        )
+    if glm_flash and provider == "openrouter":
+        return ModelRoute(
+            GLM_FLASH_MODEL,
+            url,
+            SecretStr(key),
+            config.llm_context_tokens,
+            openrouter_policy="glm_flash",
         )
     return ModelRoute(
         configured_model_name(),

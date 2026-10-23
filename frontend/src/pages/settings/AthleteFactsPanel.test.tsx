@@ -43,9 +43,9 @@ it('lists active facts first and dims resolved ones', () => {
   expect(rows.map((r) => r.dataset.status)).toEqual(['active', 'resolved']);
   expect(rows[0].className).not.toContain('opacity-50');
   expect(rows[1].className).toContain('opacity-50');
-  expect(within(rows[0]).getByText('contrainte')).toBeTruthy();
+  expect(within(rows[0]).getByText('Contrainte')).toBeTruthy();
   expect(within(rows[0]).getByText('coach')).toBeTruthy();
-  expect(within(rows[1]).getByText('préférence')).toBeTruthy();
+  expect(within(rows[1]).getByText('Préférence')).toBeTruthy();
   expect(within(rows[1]).getByText('toi')).toBeTruthy();
 });
 
@@ -62,10 +62,10 @@ it('resolves an active fact and reactivates a resolved one', () => {
 it('edits a fact in place and only saves a changed text', () => {
   const { onSave } = renderList();
   const row = screen.getAllByRole('listitem')[0];
-  fireEvent.click(within(row).getByRole('button', { name: /Modifier/ }));
+  fireEvent.click(within(row).getByRole('button', { name: /Corriger/ }));
   fireEvent.click(within(row).getByRole('button', { name: 'Enregistrer le fait' }));
   expect(onSave).not.toHaveBeenCalled();
-  fireEvent.click(within(row).getByRole('button', { name: /Modifier/ }));
+  fireEvent.click(within(row).getByRole('button', { name: /Corriger/ }));
   fireEvent.change(within(row).getByLabelText('Texte du fait'), { target: { value: '  Pas de côtes  ' } });
   fireEvent.click(within(row).getByRole('button', { name: 'Enregistrer le fait' }));
   expect(onSave).toHaveBeenCalledWith(facts[1], 'Pas de côtes');
@@ -136,7 +136,7 @@ it('keeps the original edit revision when a background refresh changes the row',
   const original = fact(9, { revision: 1 });
   const actions = { onSave: vi.fn(), onToggle: vi.fn(), onDelete: vi.fn(), onConfirm: vi.fn() };
   const view = render(<FactList facts={[original]} busyId={null} {...actions} />);
-  fireEvent.click(screen.getByRole('button', { name: /Modifier/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Corriger/ }));
   fireEvent.change(screen.getByLabelText('Texte du fait'), { target: { value: 'Mon brouillon ancien' } });
   view.rerender(<FactList facts={[{ ...original, revision: 2, text: 'Correction dans un autre onglet' }]} busyId={null} {...actions} />);
   fireEvent.click(screen.getByRole('button', { name: 'Enregistrer le fait' }));

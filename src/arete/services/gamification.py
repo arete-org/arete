@@ -12,9 +12,14 @@ from pydantic import BaseModel, Field
 
 from arete.config import config
 from arete.dataio.db import db_connection, transaction
+from arete.dataio.game_events import KEPT_AT_LINK
+from arete.services.plan_repository import ATHLETE_CHOICE
 
 MAX_EVENTS = 100
 MAX_WEEK_ACTIVITIES = 1000
+#: Weeks one projection settles together, linked weeks included (a year):
+#: each round of the closure scans the athlete's events inside the lock.
+MAX_SETTLED_WEEKS = 53
 RANKS = (
     (1, "Novice"),
     (3, "Initié"),
@@ -105,7 +110,7 @@ def _require(con):
 def _lock(con) -> None:
     # DuckDB rejects overlapping writers on this row. Never retry a failed write.
     con.execute(
-        "UPDATE app.game_profile SET version=version WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+        "UPDATE app.game_profile SET version=version WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
     )
 
 
@@ -128,7 +133,7 @@ def set_preference(command: Preference) -> dict:
         if p[0] != command.enabled:
             now = datetime.now(UTC)
             con.execute(
-                "UPDATE app.game_profile SET enabled=?,version=version+1,activated_at=coalesce(activated_at,?) WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+                "UPDATE app.game_profile SET enabled=?,version=version+1,activated_at=coalesce(activated_at,?) WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
                 [command.enabled, now],
             )
             if command.enabled:
@@ -142,7 +147,7 @@ def set_preference(command: Preference) -> dict:
                 )
             else:
                 con.execute(
-                    "UPDATE app.game_periods SET ended_at=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (ended_at IS NULL) ",
+                    "UPDATE app.game_periods SET ended_at=? WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (ended_at IS NULL) RETURNING started_at",
                     [now],
                 )
     return preference()
@@ -156,81 +161,144 @@ def _balance(con) -> tuple[int, int]:
     return int(row[0]), int(row[1])
 
 
-def _settle(con, cause: str, week: date, xp: int, shards: int, label: str) -> None:
-    old = con.execute(
-        "SELECT coalesce(sum(xp),0),coalesce(sum(shards),0) FROM app.visible_game_ledger WHERE cause=?",
-        [cause],
-    ).fetchone()
-    assert old is not None
-    dx, ds = xp - old[0], shards - old[1]
-    if dx or ds:
-        con.execute(
-            "INSERT INTO app.game_ledger (id,cause,week_start,xp,shards,label) VALUES (?,?,?,?,?,?)",
-            [
-                str(uuid4()),
-                cause,
-                week,
-                dx,
-                ds,
-                label if dx >= 0 and ds >= 0 else "Correction de doublon · " + label,
-            ],
-        )
+#: A strength session linked to an actual one whose evidence still has its own
+#: canonical identity: the projection must resolve it before counting. A pair an
+#: automatic link kept apart (both sides already rewarded) is resolved as it is.
+_UNRESOLVED_LINK = f"""SELECT 1 FROM app.visible_game_events e, app.visible_strength_sessions s,
+    app.visible_game_events a WHERE e.source_key='strength:'||s.id
+    AND a.source_key='actual:'||s.actual_session_id AND e.canonical_key<>a.canonical_key
+    AND NOT ends_with(e.reason, '{KEPT_AT_LINK}') LIMIT 1"""
 
 
-def _week(con, week: date, today: date) -> dict:
+#: Each activity's home week, where it is credited: its earliest eligible
+#: evidence, else its earliest one. Eligibility is fixed at capture, so the
+#: home never moves with later, unrelated activity: an ineligible duplicate
+#: cannot take the credit away from the week holding it (ARE-93).
+_HOMES = """SELECT canonical_key, coalesce(min(week_start) FILTER (WHERE eligible),
+    min(week_start)) AS home, bool_or(eligible) AS eligible, min(name) AS name,
+    min(created_at) AS created_at
+    FROM app.visible_game_events GROUP BY canonical_key"""
+
+#: The weeks sharing an activity with the given ones: its home week and every
+#: week holding its receipts.
+_LINKED_WEEKS = f"""WITH links AS (
+    SELECT 'activity:'||canonical_key AS cause, home AS week FROM ({_HOMES})
+    UNION SELECT cause, week_start FROM app.visible_game_ledger
+    WHERE starts_with(cause, 'activity:') AND week_start IS NOT NULL)
+    SELECT DISTINCT week FROM links WHERE cause IN
+    (SELECT cause FROM links WHERE week IN (SELECT unnest(?)))"""
+
+
+def _linked_weeks(con, weeks: set[date]) -> set[date]:
+    """``weeks`` and every week linked to them, transitively. Reads only.
+
+    An activity's credit and its reversal must settle in one projection:
+    settling only one side would lose the credit or pay it twice, ledgers
+    written before ARE-93 (credited where the activity no longer lives)
+    included. The closure grows until stable, bounded by ``MAX_SETTLED_WEEKS``.
+    """
+    linked = set(weeks)
+    while True:
+        found = {w for (w,) in con.execute(_LINKED_WEEKS, [list(linked)]).fetchall()}
+        if found <= linked:
+            return linked
+        linked |= found
+        if len(linked) > MAX_SETTLED_WEEKS:
+            raise GameError("Trop de semaines liées : projection suspendue.")
+
+
+def _receipts(con, week: date, targets: list[tuple[str, int, int, str]]) -> list[list]:
+    """Ledger rows that bring each cause's total in this week to its target.
+
+    One query for the week's causes; a cause appears at most once per week.
+    Summed per week, not across weeks: an activity a duplicate moves to an
+    earlier week is credited there and reversed where it was (ARE-93).
+    """
+    sums = {
+        cause: (xp, shards)
+        for cause, xp, shards in con.execute(
+            "SELECT cause,coalesce(sum(xp),0),coalesce(sum(shards),0) FROM app.visible_game_ledger WHERE week_start=? AND cause IN (SELECT unnest(?)) GROUP BY cause",
+            [week, [cause for cause, *_ in targets]],
+        ).fetchall()
+    }
+    rows = []
+    for cause, xp, shards, label in targets:
+        old_xp, old_shards = sums.get(cause, (0, 0))
+        dx, ds = xp - old_xp, shards - old_shards
+        if dx or ds:
+            rows.append(
+                [
+                    str(uuid4()),
+                    cause,
+                    week,
+                    dx,
+                    ds,
+                    label
+                    if dx >= 0 and ds >= 0
+                    else "Correction de doublon · " + label,
+                ]
+            )
+    return rows
+
+
+def _week(con, week: date, today: date) -> tuple[dict, list[list]]:
+    """The week's summary and the receipts it is missing. Reads only."""
     goal, zone = con.execute(
         "SELECT goal,timezone FROM app.visible_game_weeks WHERE week_start=?", [week]
     ).fetchone()
     rows = con.execute(
-        "SELECT canonical_key,bool_or(eligible),min(name),epoch(min(created_at)) FROM app.visible_game_events GROUP BY canonical_key HAVING min(week_start)=? ORDER BY min(created_at),canonical_key LIMIT ?",
+        f"SELECT canonical_key,eligible,name,epoch(created_at) FROM ({_HOMES}) WHERE home=? ORDER BY created_at,canonical_key LIMIT ?",
         [week, MAX_WEEK_ACTIVITIES + 1],
     ).fetchall()
     if len(rows) > MAX_WEEK_ACTIVITIES:
         raise GameError("Trop d’activités dans cette semaine : projection suspendue.")
     # Canonical aliases are durable. A late link reverses the duplicate, even after purchase.
     count = 0
-    live = set()
+    targets = []
     for key, eligible, name, _ in rows:
-        live.add("activity:" + key)
         rewarded = eligible and count < 6
-        _settle(
-            con,
-            "activity:" + key,
-            week,
-            50 if rewarded else 0,
-            10 if rewarded else 0,
-            name,
+        targets.append(
+            ("activity:" + key, 50 if rewarded else 0, 10 if rewarded else 0, name)
         )
         count += int(eligible)
+    live = {cause for cause, *_ in targets}
     old = con.execute(
         "SELECT DISTINCT cause FROM app.visible_game_ledger WHERE week_start=? AND starts_with(cause,'activity:') LIMIT ?",
         [week, MAX_WEEK_ACTIVITIES + 1],
     ).fetchall()
-    if len(old) > MAX_WEEK_ACTIVITIES:
-        raise GameError("Trop de reçus dans cette semaine.")
-    for (cause,) in old:
-        if cause not in live:
-            _settle(con, cause, week, 0, 0, "Séance rapprochée")
+    targets += [
+        (cause, 0, 0, "Séance rapprochée") for (cause,) in old if cause not in live
+    ]
     # A prescribed rest counts once per planned session and only after its day.
+    # A rest the athlete chose (« Modifier ») is not prescribed: it never fills
+    # the week's goal.
     rest = con.execute(
-        """SELECT count(DISTINCT d.planned_session_id) FROM app.visible_plan_decisions d
+        f"""SELECT count(DISTINCT d.planned_session_id) FROM app.visible_plan_decisions d
         WHERE d.date>=? AND d.date<? AND d.date<=? AND d.decision='rest'
         AND d.applied_at IS NOT NULL AND d.reverted_at IS NULL
+        AND d.readiness_source IS DISTINCT FROM '{ATHLETE_CHOICE}'
         AND EXISTS (SELECT 1 FROM app.visible_game_periods p WHERE d.applied_at>=p.started_at AND (p.ended_at IS NULL OR d.applied_at<p.ended_at))
         AND NOT EXISTS (SELECT 1 FROM app.visible_actual_sessions a WHERE a.planned_session_id=d.planned_session_id)
         """,
         [week, week + timedelta(days=7), today],
     ).fetchone()[0]
     complete = count + rest >= goal
-    _settle(
-        con,
-        "week:" + week.isoformat(),
-        week,
-        200 if complete else 0,
-        40 if complete else 0,
-        "Objectif hebdomadaire respecté",
+    targets.append(
+        (
+            "week:" + week.isoformat(),
+            200 if complete else 0,
+            40 if complete else 0,
+            "Objectif hebdomadaire respecté",
+        )
     )
-    return {
+    receipts = _receipts(con, week, targets)
+    # The receipts this week will hold once written: the live ones it adds too.
+    held = {cause for (cause,) in old} | {
+        r[1] for r in receipts if r[1].startswith("activity:")
+    }
+    if len(held) > MAX_WEEK_ACTIVITIES:
+        raise GameError("Trop de reçus dans cette semaine.")
+    summary = {
         "start": str(week),
         "goal": goal,
         "sessions": count,
@@ -240,12 +308,59 @@ def _week(con, week: date, today: date) -> dict:
         "complete": complete,
         "timezone": zone,
     }
+    return summary, receipts
+
+
+def _current_week(con, day: date) -> date | None:
+    """This week, when an opted-in athlete has its row (frozen goal)."""
+    current = day - timedelta(days=day.weekday())
+    if (
+        _profile(con)[0]
+        and con.execute(
+            "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?", [current]
+        ).fetchone()
+    ):
+        return current
+    return None
+
+
+def _owns_cape(con) -> bool:
+    return bool(
+        con.execute("SELECT 1 FROM app.visible_game_owned WHERE skin='cape'").fetchone()
+    )
+
+
+def _due(con) -> bool:
+    """Whether a projection would write anything. Reads only, takes no lock.
+
+    Pending evidence, an unresolved strength link, a current week whose
+    receipts differ from its rules (a rest decision applied since) or a cape
+    earned but not owned.
+    """
+    if con.execute(
+        "SELECT 1 FROM app.visible_game_events WHERE NOT processed LIMIT 1"
+    ).fetchone():
+        return True
+    if con.execute(_UNRESOLVED_LINK).fetchone():
+        return True
+    day, _, _ = _today(con)
+    current = _current_week(con, day)
+    if current is not None and _week(con, current, day)[1]:
+        return True
+    return level_for(_balance(con)[0]) >= 6 and not _owns_cape(con)
 
 
 def sync() -> dict:
-    """Explicit bounded projection. Reads never quietly credit a receipt."""
+    """Explicit bounded projection. Reads never quietly credit a receipt.
+
+    With nothing to settle it writes nothing and takes no lock: a page that
+    asks twice, or two tabs at once, read the same snapshot.
+    """
     if not config.gamification_available:
         raise GameError("Gamification indisponible sur ce déploiement.")
+    with db_connection() as con:
+        if not _due(con):
+            return _snapshot(con)
     with transaction() as con:
         _lock(con)
         # An opted-out athlete may settle evidence captured before opting out.
@@ -256,83 +371,90 @@ def sync() -> dict:
             [MAX_EVENTS],
         ).fetchall()
         weeks = {w for _, w in pending}
-        current = day - timedelta(days=day.weekday())
-        if (
-            _profile(con)[0]
-            and con.execute(
-                "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?", [current]
-            ).fetchone()
-        ):
+        current = _current_week(con, day)
+        if current is not None:
             weeks.add(current)
-        # Resolve existing strength ↔ actual links before counting or debiting.
-        con.execute(
-            """UPDATE app.game_events e SET canonical_key=a.canonical_key
-            FROM app.visible_strength_sessions s, app.visible_game_events a
-            WHERE e.athlete_id = getvariable('arete_athlete_id') AND e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=e.athlete_id AND scope_owner.deleted_at IS NULL) AND (e.source_key='strength:'||s.id AND a.source_key='actual:'||s.actual_session_id
-            AND e.canonical_key<>a.canonical_key) """
-        )
-        # A duplicate imported with another date must settle its original week too.
+        # Resolve existing strength ↔ actual links before counting or debiting,
+        # except pairs an automatic link found already counted on both sides.
+        if con.execute(_UNRESOLVED_LINK).fetchone():
+            con.execute(
+                """UPDATE app.game_events e SET canonical_key=a.canonical_key
+                FROM app.visible_strength_sessions s, app.visible_game_events a
+                WHERE e.athlete_id = getvariable('arete_athlete_id') AND e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=e.athlete_id AND scope_owner.deleted_at IS NULL) AND (e.source_key='strength:'||s.id AND a.source_key='actual:'||s.actual_session_id
+                AND e.canonical_key<>a.canonical_key AND NOT ends_with(e.reason, ?)) RETURNING e.source_key""",
+                [KEPT_AT_LINK],
+            )
+        # A duplicate imported with another date settles its activity's home
+        # week too, and every week linked to them: one dated earlier moves the
+        # activity, whose old week must then reverse its credit.
         if pending:
-            keys = [key for key, _ in pending]
-            original_weeks = con.execute(
-                "SELECT min(week_start) FROM app.visible_game_events WHERE canonical_key IN (SELECT canonical_key FROM app.visible_game_events WHERE source_key IN (SELECT unnest(?))) GROUP BY canonical_key",
-                [keys],
+            homes = con.execute(
+                f"""SELECT home FROM ({_HOMES}) WHERE canonical_key IN (SELECT canonical_key
+                FROM app.visible_game_events WHERE source_key IN (SELECT unnest(?)))""",
+                [[key for key, _ in pending]],
             ).fetchall()
-            weeks.update(w for (w,) in original_weeks)
-        for week in sorted(weeks):
+            weeks.update(w for (w,) in homes)
+        for week in sorted(_linked_weeks(con, weeks)):
             if con.execute(
                 "SELECT 1 FROM app.visible_game_weeks WHERE week_start=?", [week]
             ).fetchone():
-                _week(con, week, day)
-        for key, _ in pending:
+                for receipt in _week(con, week, day)[1]:
+                    con.execute(
+                        "INSERT INTO app.game_ledger (id,cause,week_start,xp,shards,label) VALUES (?,?,?,?,?,?)",
+                        receipt,
+                    )
+        if pending:
             con.execute(
-                "UPDATE app.game_events SET processed=true WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key=?) ",
-                [key],
+                "UPDATE app.game_events SET processed=true WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (source_key IN (SELECT unnest(?))) RETURNING source_key",
+                [[key for key, _ in pending]],
             )
         xp, _ = _balance(con)
-        if level_for(xp) >= 6:
+        if level_for(xp) >= 6 and not _owns_cape(con):
             con.execute(
                 "INSERT INTO app.game_owned (skin) VALUES ('cape') ON CONFLICT DO NOTHING"
             )
         if pending or _balance(con) != balance_before:
             con.execute(
-                "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+                "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
             )
     return snapshot()
 
 
 def snapshot(offset: int = 0) -> dict:
     with db_connection() as con:
-        p = _profile(con)
-        xp, shards = _balance(con)
-        day, zone, goal = _today(con)
-        week = day - timedelta(days=day.weekday())
-        frozen = con.execute(
-            "SELECT goal FROM app.visible_game_weeks WHERE week_start=?", [week]
-        ).fetchone()
-        counts = con.execute(
-            "SELECT count(*),count(*) FILTER(WHERE week_start=?) FROM (SELECT canonical_key,min(week_start) AS week_start FROM app.visible_game_events GROUP BY canonical_key HAVING bool_or(eligible))",
-            [week],
-        ).fetchone()
-        owned = {
-            r[0]
-            for r in con.execute("SELECT skin FROM app.visible_game_owned").fetchall()
-        }
-        rows = con.execute(
-            "SELECT id,cause,week_start,xp,shards,label,CAST(created_at AS VARCHAR) FROM app.visible_game_ledger ORDER BY created_at DESC,id DESC LIMIT 51 OFFSET ?",
-            [offset],
-        ).fetchall()
-        pending_row = con.execute(
-            "SELECT count(*) FROM app.visible_game_events WHERE NOT processed"
-        ).fetchone()
-        assert pending_row is not None
-        pending = pending_row[0]
-        bonus_row = con.execute(
-            "SELECT coalesce(sum(xp),0) FROM app.visible_game_ledger WHERE cause=?",
-            ["week:" + str(week)],
-        ).fetchone()
-        assert bonus_row is not None and counts is not None
-        bonus = bonus_row[0]
+        return _snapshot(con, offset)
+
+
+def _snapshot(con, offset: int = 0) -> dict:
+    p = _profile(con)
+    xp, shards = _balance(con)
+    day, zone, goal = _today(con)
+    week = day - timedelta(days=day.weekday())
+    frozen = con.execute(
+        "SELECT goal FROM app.visible_game_weeks WHERE week_start=?", [week]
+    ).fetchone()
+    counts = con.execute(
+        f"SELECT count(*),count(*) FILTER(WHERE home=?) FROM ({_HOMES}) WHERE eligible",
+        [week],
+    ).fetchone()
+    owned = {
+        r[0] for r in con.execute("SELECT skin FROM app.visible_game_owned").fetchall()
+    }
+    rows = con.execute(
+        "SELECT id,cause,week_start,xp,shards,label,CAST(created_at AS VARCHAR) FROM app.visible_game_ledger ORDER BY created_at DESC,id DESC LIMIT 51 OFFSET ?",
+        [offset],
+    ).fetchall()
+    pending_row = con.execute(
+        "SELECT count(*) FROM app.visible_game_events WHERE NOT processed"
+    ).fetchone()
+    assert pending_row is not None
+    pending = pending_row[0]
+    bonus_row = con.execute(
+        "SELECT coalesce(sum(xp),0) FROM app.visible_game_ledger WHERE cause=?",
+        ["week:" + str(week)],
+    ).fetchone()
+    assert bonus_row is not None and counts is not None
+    bonus = bonus_row[0]
     level = level_for(xp)
     rank = next(name for n, name in reversed(RANKS) if level >= n)
     return {
@@ -421,7 +543,7 @@ def purchase(command: Purchase) -> dict:
             [command.key, fingerprint, json.dumps(result)],
         )
         con.execute(
-            "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) "
+            "UPDATE app.game_profile SET version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id"
         )
     return result
 
@@ -437,7 +559,7 @@ def equip(command: Equip) -> dict:
         ).fetchone():
             raise GameError("Cette tenue n’est pas possédée.")
         con.execute(
-            "UPDATE app.game_profile SET equipped=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+            "UPDATE app.game_profile SET equipped=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
             [command.skin],
         )
     return snapshot()
@@ -450,7 +572,7 @@ def appearance(command: Appearance) -> dict:
         if p[1] != command.version:
             raise GameError("Le profil a changé. Actualise-le.")
         con.execute(
-            "UPDATE app.game_profile SET athlete_class=?,silhouette=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) ",
+            "UPDATE app.game_profile SET athlete_class=?,silhouette=?,version=version+1 WHERE athlete_id = getvariable('arete_athlete_id') AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM app.athletes scope_owner WHERE scope_owner.id=athlete_id AND scope_owner.deleted_at IS NULL) AND (id=1) RETURNING id",
             [command.athlete_class, command.silhouette],
         )
     return snapshot()

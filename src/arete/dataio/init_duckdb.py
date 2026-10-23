@@ -6,12 +6,36 @@ from typing import Any
 import duckdb
 
 from arete.config import config
+from arete.dataio.automation_schema import DDL as AUTOMATION_DDL
+from arete.dataio.automation_schema import migrate as migrate_automations
+from arete.dataio.coaching_coordination_schema import DDL as COORDINATION_DDL
+from arete.dataio.conversation_schema import DDL as CONVERSATION_DDL
+from arete.dataio.conversation_schema import migrate as migrate_conversations
 from arete.dataio.db import connect
 
 logger = logging.getLogger(__name__)
 
+
+class SchemaInitializationError(RuntimeError):
+    """Keep the failing operation without exposing SQL in public health checks."""
+
+    def __init__(self, stage: str, cause: Exception) -> None:
+        self.stage = stage
+        self.error_type = type(cause).__name__
+        super().__init__(f"{stage}: {cause}")
+
+
 DDL = """
 CREATE SCHEMA IF NOT EXISTS app;
+
+CREATE TABLE IF NOT EXISTS app.garmin_sync_state (
+    athlete_id BIGINT PRIMARY KEY DEFAULT getvariable('arete_athlete_id'),
+    owner VARCHAR,
+    lease_until TIMESTAMP,
+    revision BIGINT NOT NULL DEFAULT 0,
+    payload JSON NOT NULL DEFAULT '{}',
+    deleted_at TIMESTAMP
+);
 
 CREATE TABLE IF NOT EXISTS app.schema_version (
     version     INTEGER PRIMARY KEY,
@@ -45,7 +69,8 @@ CREATE TABLE IF NOT EXISTS app.planned_sessions (
     garmin_workout_id  VARCHAR,                -- copy scheduled on Garmin's calendar
     garmin_schedule_id VARCHAR,
     garmin_pushed_at   TIMESTAMP,
-    goal_id         INTEGER                    -- set on sessions a goal's plan generated
+    goal_id         INTEGER,                   -- set on sessions a goal's plan generated
+    plan_kind       VARCHAR                    -- Hyrox/hybrid plans: the session's kind
 );
 
 -- Actual training sessions (imported from Garmin/FIT files)
@@ -184,6 +209,24 @@ CREATE TABLE IF NOT EXISTS app.exercise_sets (
     notes               VARCHAR
 );
 
+-- A Garmin strength activity awaiting its loads (ARE-132): at most one per
+-- activity. Not a session: only the Journal reads it, so nothing counts it.
+-- Completing it saves a Muscu log linked to the activity, in one transaction.
+CREATE SEQUENCE IF NOT EXISTS app.strength_drafts_seq START 1;
+CREATE TABLE IF NOT EXISTS app.strength_drafts (
+    id                  INTEGER PRIMARY KEY DEFAULT nextval('app.strength_drafts_seq'),
+    athlete_id          INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    actual_session_id   INTEGER NOT NULL,        -- the Garmin strength activity
+    exercises_json      VARCHAR NOT NULL DEFAULT '[]',  -- what Garmin recognised
+    origin              VARCHAR NOT NULL,        -- 'import' or 'journal'
+    status              VARCHAR NOT NULL DEFAULT 'pending',  -- 'pending', 'completed', 'dismissed'
+    strength_session_id INTEGER,                 -- the log that completed it
+    created_at          TIMESTAMP NOT NULL,
+    settled_at          TIMESTAMP,               -- completed or dismissed
+    deleted_at          TIMESTAMP,
+    UNIQUE (athlete_id, actual_session_id)
+);
+
 -- ============================================================
 -- User Settings
 -- ============================================================
@@ -201,13 +244,16 @@ CREATE TABLE IF NOT EXISTS app.user_settings (
     coach_briefing_enabled  BOOLEAN DEFAULT TRUE,  -- the coach writes a daily briefing
     auto_adapt_enabled      BOOLEAN DEFAULT TRUE,  -- readiness adapts today's session
     push_to_garmin_enabled  BOOLEAN DEFAULT FALSE, -- schedule it on Garmin's calendar
-    theme                   VARCHAR DEFAULT 'dark',    -- 'light', 'dark', 'darker', 'abyss'
+    theme                   VARCHAR DEFAULT 'system',  -- 'system', 'pierre', 'prune', 'odyssey', 'encre'
     exercise_abbreviations  VARCHAR DEFAULT '{}',      -- JSON: {"bp": "bench press", "ng": "neutral grip", ...}
     weekly_volume_target_kg INTEGER DEFAULT 20000,     -- strength tonnage goal per week
     lthr                    INTEGER,                   -- threshold heart rate, drives HR zones
     max_hr                  INTEGER,                   -- fallback reference when no threshold
     threshold_pace_sec_km   INTEGER,                   -- pace held at threshold, seconds per km
     lthr_measured_on        DATE,                      -- when Garmin measured that threshold
+    notification_preferences VARCHAR,                  -- JSON kinds + quiet hours, NULL = all on, 21:30-07:00
+    coach_evening_enabled   BOOLEAN DEFAULT FALSE,     -- the coach's evening message (ARE-64), opt-in
+    coach_evening_hour      INTEGER DEFAULT 20,        -- from this hour on the athlete's clock
     updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -304,7 +350,80 @@ CREATE TABLE IF NOT EXISTS app.coach_briefings (
     status       VARCHAR NOT NULL DEFAULT 'ok',     -- 'ok', 'failed'
     error        VARCHAR,                    -- why the agent run failed, when it did
     trigger      VARCHAR NOT NULL DEFAULT 'api',    -- 'scheduler', 'api'
-    created_at   TIMESTAMP DEFAULT now()
+    created_at   TIMESTAMP DEFAULT now(),
+    facts_digest VARCHAR,                    -- SHA-256 of the facts it was written from
+    reaction     VARCHAR,                    -- the athlete's 'up' or 'down', once per briefing
+    reaction_comment VARCHAR,                -- their optional word with it
+    reacted_at   TIMESTAMP
+);
+
+-- The morning check-in (ARE-59): one row per athlete and day, the answers 1-5
+-- (1 is the worst) and the day's one push. A row with no answer only records
+-- that push: readers keep the answered rows. Times are naive UTC.
+CREATE TABLE IF NOT EXISTS app.daily_checkins (
+    athlete_id  INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    date        DATE NOT NULL,
+    sleep       INTEGER,                     -- Sommeil
+    legs        INTEGER,                     -- Jambes
+    mood        INTEGER,                     -- Motivation / stress, optional
+    note        VARCHAR,
+    answered_at TIMESTAMP,
+    updated_at  TIMESTAMP,
+    prompted_at TIMESTAMP,                   -- the day's push, sent at most once
+    deleted_at  TIMESTAMP,
+    PRIMARY KEY (athlete_id, date)
+);
+
+-- Pain and body weight (ARE-62): health data (GDPR art. 9), private per
+-- athlete. Deleting an entry erases its row (services/body_log.py): the
+-- deleted_at column only serves the private views. Times are naive UTC.
+CREATE SEQUENCE IF NOT EXISTS app.pain_entries_seq START 1;
+CREATE TABLE IF NOT EXISTS app.pain_entries (
+    id          INTEGER PRIMARY KEY DEFAULT nextval('app.pain_entries_seq'),
+    athlete_id  INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    date        DATE NOT NULL,
+    area        VARCHAR NOT NULL,            -- body_log.PAIN_AREAS
+    side        VARCHAR,                     -- 'left', 'right', 'both', or NULL
+    intensity   INTEGER NOT NULL,            -- 0 (none) to 10 (worst imaginable)
+    note        VARCHAR,
+    created_at  TIMESTAMP NOT NULL,
+    updated_at  TIMESTAMP NOT NULL,
+    deleted_at  TIMESTAMP
+);
+-- One weight a day: entering it again corrects it.
+CREATE TABLE IF NOT EXISTS app.weight_entries (
+    athlete_id  INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    date        DATE NOT NULL,
+    weight_kg   DOUBLE NOT NULL,
+    source      VARCHAR NOT NULL DEFAULT 'manual',  -- only 'manual' so far
+    created_at  TIMESTAMP NOT NULL,
+    updated_at  TIMESTAMP NOT NULL,
+    deleted_at  TIMESTAMP,
+    PRIMARY KEY (athlete_id, date)
+);
+
+-- The evening message (ARE-64): at most one per athlete and evening, written
+-- by the coach about tomorrow and ending with one question. The row is
+-- claimed ('pending') before the model request, so overlapping dispatches pay
+-- for one, and a failed or stopped run keeps it: never replayed. The answer
+-- is kept once, as is its journal entry. Times are naive UTC.
+CREATE SEQUENCE IF NOT EXISTS app.coach_evening_messages_seq START 1;
+CREATE TABLE IF NOT EXISTS app.coach_evening_messages (
+    id           INTEGER PRIMARY KEY DEFAULT nextval('app.coach_evening_messages_seq'),
+    athlete_id   INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    date         DATE NOT NULL,              -- the evening, on the athlete's clock
+    status       VARCHAR NOT NULL DEFAULT 'pending',  -- 'pending', 'ok', 'failed'
+    reasons      VARCHAR NOT NULL DEFAULT '',  -- why tonight: session, race, readiness, replanned
+    text         VARCHAR,                    -- the message, its question included
+    question     VARCHAR,                    -- the closing question alone
+    error        VARCHAR,                    -- why the run failed, when it did
+    created_at   TIMESTAMP NOT NULL,         -- the claim
+    written_at   TIMESTAMP,
+    answer       VARCHAR,                    -- the athlete's answer, once
+    answered_at  TIMESTAMP,
+    journaled_at TIMESTAMP,                  -- its journal entry, filed once
+    deleted_at   TIMESTAMP,
+    UNIQUE (athlete_id, date)
 );
 
 -- ============================================================
@@ -320,10 +439,14 @@ CREATE TABLE IF NOT EXISTS app.plan_decisions (
     user_id            INTEGER NOT NULL DEFAULT 1,
     date               DATE NOT NULL,
     planned_session_id INTEGER NOT NULL,
-    decision           VARCHAR NOT NULL,   -- 'keep', 'ease', 'replace_easy', 'rest'
+    decision           VARCHAR NOT NULL,   -- 'keep', 'ease', 'replace_easy', 'rest', 'move'
     reason             VARCHAR NOT NULL,
     readiness_score    DOUBLE,
-    readiness_source   VARCHAR,            -- 'garmin_training', 'garmin', 'model'
+    -- 'garmin_training', 'garmin', 'model', 'athlete' or 'missed': also the
+    -- origin, for a choice the athlete made with « Modifier » (ARE-61) or the
+    -- evening replanning of a missed session, both with no readiness. A
+    -- dedicated origin column would need a migration (a later one).
+    readiness_source   VARCHAR,
     acwr               DOUBLE,
     original_json      VARCHAR,
     adapted_json       VARCHAR,
@@ -348,7 +471,9 @@ CREATE TABLE IF NOT EXISTS app.goals (
     target_time_sec  INTEGER,                 -- optional finishing time
     priority         VARCHAR NOT NULL DEFAULT 'A',      -- 'A', 'B', 'C'
     status           VARCHAR NOT NULL DEFAULT 'active', -- 'active', 'done', 'cancelled'
-    created_at       TIMESTAMP DEFAULT now()
+    created_at       TIMESTAMP DEFAULT now(),
+    goal_type        VARCHAR DEFAULT 'race',  -- 'race', 'hyrox', 'hybrid'
+    details_json     VARCHAR                  -- hyrox/hybrid: division, format, category, equipment, weeks
 );
 
 CREATE SEQUENCE IF NOT EXISTS app.athlete_facts_seq START 1;
@@ -459,10 +584,26 @@ CREATE TABLE IF NOT EXISTS app.activity_weather (
     created_at         TIMESTAMP DEFAULT now()
 );
 
+-- Each session's best efforts, the records' source (dataio/best_efforts.py)
+CREATE TABLE IF NOT EXISTS app.best_efforts (
+    athlete_id   INTEGER NOT NULL DEFAULT(getvariable('arete_athlete_id')),
+    kind         VARCHAR NOT NULL,   -- 'run' or 'lift'
+    session_id   INTEGER NOT NULL,   -- run: app.actual_sessions.id, lift: app.strength_sessions.id
+    effort_key   VARCHAR NOT NULL,   -- run: the distance in metres ('1000' … '42195'), lift: the exercise id
+    value        DOUBLE NOT NULL,    -- run: seconds, lift: estimated 1RM in kg
+    weight_kg    DOUBLE,             -- lift: the set that reached it
+    reps         INTEGER,
+    date         DATE NOT NULL,      -- the session's day
+    computed_at  TIMESTAMP NOT NULL DEFAULT now(),
+    deleted_at   TIMESTAMP,
+    PRIMARY KEY (kind, session_id, effort_key)
+);
+
 -- Slack owns conversation text. These rows prevent write replay.
 CREATE TABLE IF NOT EXISTS app.slack_deliveries (
     event_key VARCHAR PRIMARY KEY,
     status VARCHAR NOT NULL,
+    thread_id VARCHAR,
     updated_at TIMESTAMP DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS app.slack_execution (
@@ -470,6 +611,11 @@ CREATE TABLE IF NOT EXISTS app.slack_execution (
     event_key VARCHAR
 );
 INSERT INTO app.slack_execution (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS app.feature_flags (
+    name VARCHAR PRIMARY KEY,
+    enabled BOOLEAN NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS app.system_skills (
     bundle VARCHAR NOT NULL,
@@ -483,6 +629,29 @@ CREATE TABLE IF NOT EXISTS app.slack_athletes (
     athlete_id     INTEGER PRIMARY KEY,
     public_replies BOOLEAN NOT NULL DEFAULT FALSE,  -- off: channel answers go to DM
     run_event_key  VARCHAR                          -- the Slack event being answered
+);
+
+-- One row per erased login (ARE-128): the day and a one-way hash of its Clerk
+-- account id, nothing else. It also refuses that login a fresh athlete.
+CREATE TABLE IF NOT EXISTS app.account_deletions (
+    account_hash VARCHAR PRIMARY KEY,               -- sha256 of the Clerk user id
+    deleted_on   DATE NOT NULL
+);
+
+-- Consent to the terms, the privacy policy and health data (GDPR art. 9), per
+-- athlete and given by a login: append-only proof, a withdrawal stamps the
+-- rows in force (services/consent.py). Timestamps are naive UTC.
+CREATE SEQUENCE IF NOT EXISTS app.athlete_consents_seq START 1;
+CREATE TABLE IF NOT EXISTS app.athlete_consents (
+    id               INTEGER PRIMARY KEY DEFAULT nextval('app.athlete_consents_seq'),
+    athlete_id       INTEGER NOT NULL,
+    user_id          INTEGER,               -- the login, NULL without sign-in
+    terms_version    VARCHAR NOT NULL,
+    privacy_version  VARCHAR NOT NULL,
+    health_data      BOOLEAN NOT NULL,      -- explicit consent to health data
+    consented_at     TIMESTAMP NOT NULL,
+    withdrawn_at     TIMESTAMP,             -- NULL while in force
+    withdrawn_by     INTEGER                -- the login that withdrew it
 );
 """
 
@@ -771,6 +940,363 @@ def _m40_slack_athletes(con) -> None:
     con.execute(DDL[start : DDL.index(");", start) + 2])
 
 
+def _m41_feature_flags(con) -> None:
+    # Global rollout state contains neither credentials nor athlete data.
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.feature_flags (")
+    con.execute(DDL[start : DDL.index(");", start) + 2])
+
+
+def _m42_slack_delivery_threads(con) -> None:
+    # Track interrupted output without rendering a technical marker in Slack.
+    # Nullable preserves existing deliveries and compatibility with older releases.
+    con.execute(
+        "ALTER TABLE app.slack_deliveries ADD COLUMN IF NOT EXISTS thread_id VARCHAR"
+    )
+
+
+def _m43_proactive_coaching(con) -> None:
+    from arete.dataio.coaching_schema import migrate
+
+    migrate(con)
+    _m36_private_relations(con)
+
+
+def _m44_slack_product(con) -> None:
+    from arete.dataio.slack_schema import migrate
+
+    migrate(con)
+
+
+def _m45_notification_preferences(con) -> None:
+    """Per-kind notification choices and quiet hours (ARE-57).
+
+    Nullable: NULL reads as every kind on with the default quiet hours, so
+    existing athletes keep receiving what they received.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute(
+        "ALTER TABLE app.user_settings "
+        "ADD COLUMN IF NOT EXISTS notification_preferences VARCHAR"
+    )
+    # DuckDB binds a view's columns at creation: refresh the private projection.
+    _view(con, "user_settings")
+
+
+def _m46_briefing_facts_digest(con) -> None:
+    """Which facts a briefing was written from (ARE-39).
+
+    The daily sync rewrites a briefing only when its facts changed since.
+    Nullable: an older briefing has none and counts as changed.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute(
+        "ALTER TABLE app.coach_briefings ADD COLUMN IF NOT EXISTS facts_digest VARCHAR"
+    )
+    # DuckDB binds a view's columns at creation: refresh the private projection.
+    _view(con, "coach_briefings")
+
+
+def _m47_garmin_freshness(con) -> None:
+    # Separate provider coverage from the scheduler's once-per-day claim.
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.garmin_sync_state")
+    con.execute(DDL[start : DDL.index(";", start) + 1])
+    _view(con, "garmin_sync_state")
+
+
+def _m48_briefing_reactions(con) -> None:
+    """The athlete's reaction to a briefing (ARE-55): 👍/👎 and a short word.
+
+    On the briefing's own row, so a reaction is one per briefing by
+    construction and follows its owner. Nullable: no briefing has one yet.
+
+    One transaction: DuckDB fails reads through a ``t.*`` view whose table
+    gained a column until the view is recreated, so a booting or previous
+    release must never see the columns without the refreshed view.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for column, kind in (
+            ("reaction", "VARCHAR"),
+            ("reaction_comment", "VARCHAR"),
+            ("reacted_at", "TIMESTAMP"),
+        ):
+            con.execute(
+                f"ALTER TABLE app.coach_briefings ADD COLUMN IF NOT EXISTS {column} {kind}"
+            )
+        _view(con, "coach_briefings")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
+def _m49_daily_checkins(con) -> None:
+    """The morning check-in (ARE-59): a new table and its private view.
+
+    A new relation only, so the previous release runs unchanged on it. On a
+    boot, the DDL (``CREATE TABLE IF NOT EXISTS``) has already created the
+    table outside any transaction, so this creates the view; called on its
+    own (or after a boot stopped in between), table and view are created in
+    one transaction, rolled back together. A table without its view is only
+    unreachable to the domain code, which reads through the view.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.daily_checkins")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        con.execute(DDL[start : DDL.index(");", start) + 2])
+        _view(con, "daily_checkins")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
+def _m52_evening_messages(con) -> None:
+    """The evening message (ARE-64): a new table, its view and two settings.
+
+    One transaction, rolled back together (see migrations 48 and 49): the
+    previous release reads neither the table nor the columns, and a booting
+    one never sees ``user_settings`` changed without its refreshed view. The
+    settings default to off and 20:00, so nobody receives it before opting in.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE SEQUENCE IF NOT EXISTS app.coach_evening_messages_seq")
+    table = DDL.index("CREATE TABLE IF NOT EXISTS app.coach_evening_messages")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for statement in DDL[start : DDL.index(");", table) + 2].split(";"):
+            if statement.strip():
+                con.execute(statement)
+        _view(con, "coach_evening_messages")
+        for column in (
+            "coach_evening_enabled BOOLEAN DEFAULT FALSE",
+            "coach_evening_hour INTEGER DEFAULT 20",
+        ):
+            con.execute(
+                f"ALTER TABLE app.user_settings ADD COLUMN IF NOT EXISTS {column}"
+            )
+        _view(con, "user_settings")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
+def _m53_coaching_coordination(con) -> None:
+    from arete.dataio.coaching_coordination_schema import migrate
+
+    migrate(con)
+
+
+def _m54_strength_drafts(con) -> None:
+    """Garmin strength activities awaiting their loads (ARE-132).
+
+    A new relation only, so the previous release runs unchanged on it. Table
+    and view in one transaction, rolled back together (see migration 49).
+    """
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE SEQUENCE IF NOT EXISTS app.strength_drafts_seq")
+    table = DDL.index("CREATE TABLE IF NOT EXISTS app.strength_drafts")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for statement in DDL[start : DDL.index(");", table) + 2].split(";"):
+            if statement.strip():
+                con.execute(statement)
+        _view(con, "strength_drafts")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
+def _m61_account_deletions(con) -> None:
+    """The erasure log (ARE-128): a new global table, no athlete data in it."""
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.account_deletions (")
+    con.execute(DDL[start : DDL.index(");", start) + 2])
+
+
+def _m63_athlete_consents(con) -> None:
+    """Consent records (ARE-127): a new sequence and account-level table.
+
+    No private view: like ``app.users``, it is read by authentication and the
+    scheduler before any scope exists, always filtered by athlete. One
+    transaction; the previous release never reads it. Nobody has consented
+    yet, so with sign-in on every athlete's processing pauses until they do.
+    """
+    start = DDL.index("CREATE SEQUENCE IF NOT EXISTS app.athlete_consents_seq")
+    table = DDL.index("CREATE TABLE IF NOT EXISTS app.athlete_consents")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for statement in DDL[start : DDL.index(");", table) + 2].split(";"):
+            if statement.strip():
+                con.execute(statement)
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
+def _m64_goal_types(con) -> None:
+    """Hyrox and hybrid goals (ARE-138): a type and its details on ``app.goals``,
+    and the kind of each session such a plan generates on ``planned_sessions``
+    (what a regeneration keeps reads it instead of guessing).
+
+    Nullable columns; every existing goal reads as a race through the default
+    and every existing session has no kind. The previous release names the
+    columns it reads and writes, so it runs unchanged on them. The private
+    views froze ``t.*`` when they were made: rebuilt in the same transaction,
+    rolled back together (see migration 52).
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for column in ("goal_type VARCHAR DEFAULT 'race'", "details_json VARCHAR"):
+            con.execute(f"ALTER TABLE app.goals ADD COLUMN IF NOT EXISTS {column}")
+        con.execute(
+            "ALTER TABLE app.planned_sessions ADD COLUMN IF NOT EXISTS plan_kind VARCHAR"
+        )
+        _view(con, "goals")
+        _view(con, "planned_sessions")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
+#: Sessions one backfill statement of migration 65 reads: a run's streams
+#: unnest to thousands of samples, a log to a few sets.
+BACKFILL_RUNS = 100
+BACKFILL_LOGS = 1000
+
+
+def _m65_best_efforts(con) -> None:
+    """Each session's best efforts, the records' source (ARE-178), backfilled.
+
+    A new relation and its private view, then every athlete's rows computed
+    from the kept streams and logs with the statements the app writes them
+    with, on the base tables (the boot has no athlete scope), in bounded
+    chunks. One transaction: a failure leaves no view and no row (the boot's
+    DDL may already have created the empty table), and a rerun after an
+    interrupted record starts from an empty table. The previous release never
+    reads it; a session it imports meanwhile has no row until its streams are
+    saved again or its log is corrected, or until this migration reruns.
+    A legacy schema without the columns read holds nothing to backfill.
+    """
+    from arete.dataio import best_efforts as be
+    from arete.dataio.queries import EXCLUDED_SOURCES_SQL, RUNNING_SPORTS, sql_in
+    from arete.dataio.tenant_schema import _view
+
+    live = {
+        name: f"(SELECT * FROM app.{name} WHERE deleted_at IS NULL)"
+        for name in be.SCOPED
+    }
+    runs = f"""
+        SELECT s.id FROM app.actual_sessions s
+        JOIN app.activity_streams st ON st.actual_session_id = s.id
+        WHERE s.deleted_at IS NULL AND st.deleted_at IS NULL
+          AND s.sport IN ({sql_in(RUNNING_SPORTS)})
+          AND COALESCE(s.source, '') NOT IN ({EXCLUDED_SOURCES_SQL})
+          AND st.distance_m IS NOT NULL
+        ORDER BY s.id
+    """
+    logs = "SELECT id FROM app.strength_sessions WHERE deleted_at IS NULL ORDER BY id"
+    start = DDL.index("CREATE TABLE IF NOT EXISTS app.best_efforts (")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        con.execute(DDL[start : DDL.index(");", start) + 2])
+        _view(con, "best_efforts")
+        con.execute("DELETE FROM app.best_efforts")
+        for kind, ids_sql, chunk, table, read in (
+            (be.RUN, runs, BACKFILL_RUNS, "actual_sessions", {"sport", "source"}),
+            (be.LIFT, logs, BACKFILL_LOGS, "strength_sessions", {"date"}),
+        ):
+            if not {"user_id", "deleted_at", *read} <= _columns(con, table):
+                continue
+            ids = [int(row[0]) for row in con.execute(ids_sql).fetchall()]
+            insert = be.insert_sql(kind, live)
+            for first in range(0, len(ids), chunk):
+                con.execute(insert, [ids[first : first + chunk]])
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
+def _m66_body_log(con) -> None:
+    """Pain and body weight (ARE-62): a sequence, two tables, their views.
+
+    New relations only, so the previous release runs unchanged on them. On a
+    boot the DDL (``IF NOT EXISTS``) has already created the sequence and the
+    tables outside any transaction, so the transaction protects the views:
+    both or neither (see migration 49). Called on its own, the tables and
+    views are created and rolled back together.
+    """
+    from arete.dataio.tenant_schema import _view
+
+    start = DDL.index("CREATE SEQUENCE IF NOT EXISTS app.pain_entries_seq")
+    table = DDL.index("CREATE TABLE IF NOT EXISTS app.weight_entries")
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for statement in DDL[start : DDL.index(");", table) + 2].split(";"):
+            if statement.strip():
+                con.execute(statement)
+        _view(con, "pain_entries")
+        _view(con, "weight_entries")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
+DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
+
+
+def _m62_strava_values_off_garmin_rows(con) -> None:
+    """Clear the Strava values copied onto Garmin rows (ARE-126).
+
+    Strava's API agreement (1 June 2026) forbids its data in an AI application,
+    and a Garmin row reaches the coach. In production these columns were set
+    only on the 33 rows linked to Strava, never on another Garmin row: the
+    merge filled them from Strava (laps included, which a FIT reprocess can
+    rebuild). Idempotent; the boot's backup clone precedes it.
+    """
+    # Frozen here, not imported: a migration keeps the columns of its day.
+    columns = (
+        "suffer_score",
+        "best_efforts_json",
+        "splits_json",
+        "avg_watts",
+        "weighted_avg_watts",
+        "workout_type",
+        "laps_json",
+        "device_name",
+        "notes",
+    )
+    if not {"source", "strava_activity_id", *columns} <= _columns(
+        con, "actual_sessions"
+    ):
+        return  # a schema older than the Strava merge holds no Strava value
+    cleared = ", ".join(f"{column} = NULL" for column in columns)
+    con.execute(
+        f"UPDATE app.actual_sessions SET {cleared} "
+        "WHERE strava_activity_id IS NOT NULL AND source IS DISTINCT FROM 'strava'"
+    )
+    # Strava is retired: no route reads or revokes its tokens any more, so
+    # stored credentials go (production holds none).
+    con.execute("DELETE FROM app.strava_tokens")
+
+
 MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (1, _m1_exercise_abbreviations),
     (2, _m2_analytics_columns),
@@ -801,6 +1327,26 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (38, _m38_system_skills),
     (39, _m39_user_roles),
     (40, _m40_slack_athletes),
+    (41, _m41_feature_flags),
+    (42, _m42_slack_delivery_threads),
+    (43, _m43_proactive_coaching),
+    (44, _m44_slack_product),
+    (45, _m45_notification_preferences),
+    (46, _m46_briefing_facts_digest),
+    (47, _m47_garmin_freshness),
+    (48, _m48_briefing_reactions),
+    (49, _m49_daily_checkins),
+    (50, migrate_automations),
+    (51, migrate_conversations),
+    (52, _m52_evening_messages),
+    (53, _m53_coaching_coordination),
+    (54, _m54_strength_drafts),
+    (61, _m61_account_deletions),
+    (62, _m62_strava_values_off_garmin_rows),
+    (63, _m63_athlete_consents),
+    (64, _m64_goal_types),
+    (65, _m65_best_efforts),
+    (66, _m66_body_log),
 ]
 
 
@@ -866,23 +1412,30 @@ def _run_migrations(con) -> None:
     """Apply every missing migration, in list order, and record it."""
     applied = _applied(con)
     pending = [v for v, _ in MIGRATIONS if v not in applied]
-    if pending and config.is_remote_db:
-        _backup_remote(con)
-    for version, migrate in MIGRATIONS:
-        if version in applied:
-            continue
-        migrate(con)
-        # Two cold instances can race on the same version: each migration is
-        # idempotent, and the second record must not fail the boot.
-        con.execute(
-            "INSERT INTO app.schema_version (version) VALUES (?) ON CONFLICT DO NOTHING",
-            [version],
-        )
-        logger.info("Schema migration %d applied", version)
-    if 36 in applied and pending:
-        # A late historical migration can recreate a relation. Reapply the
-        # idempotent ownership projection so it cannot reintroduce shared data.
-        _m36_private_relations(con)
+    stage = "backup"
+    try:
+        if pending and config.is_remote_db:
+            _backup_remote(con)
+        for version, migrate in MIGRATIONS:
+            if version in applied:
+                continue
+            stage = f"migration:{version}"
+            migrate(con)
+            # Two cold instances can race on the same version: each migration is
+            # idempotent, and the second record must not fail the boot.
+            stage = f"record:{version}"
+            con.execute(
+                "INSERT INTO app.schema_version (version) VALUES (?) ON CONFLICT DO NOTHING",
+                [version],
+            )
+            logger.info("Schema migration %d applied", version)
+        if 36 in applied and pending:
+            # A late historical migration can recreate a relation. Reapply the
+            # idempotent ownership projection so it cannot reintroduce shared data.
+            stage = "ownership"
+            _m36_private_relations(con)
+    except Exception as e:
+        raise SchemaInitializationError(stage, e) from e
 
 
 def _is_current(con) -> bool:
@@ -893,28 +1446,36 @@ def _is_current(con) -> bool:
 def main():
     """Initialize the DuckDB database with the required schema."""
     con = None
+    stage = "connect"
     try:
         con = connect(False)
+        stage = "schema_check"
         if _is_current(con):
             logger.info("Database schema is current (%d migrations)", len(MIGRATIONS))
             return
         # Bootstrap writes belong to the original athlete, even before any
         # HTTP identity exists. This private connection is closed after migration.
+        stage = "bootstrap_identity"
         con.execute("SET VARIABLE arete_athlete_id = 1")
-        for stmt in DDL.strip().split(";"):
+        for index, stmt in enumerate(DDL.strip().split(";"), start=1):
             s = stmt.strip()
             if s:
+                stage = f"bootstrap:{index}"
                 con.execute(s + ";")
 
+        stage = "migration_check"
         _run_migrations(con)
 
+        stage = "schema_summary"
         tables = con.execute(
             "SELECT table_name FROM information_schema.tables WHERE table_schema='app'"
         ).fetchall()
         logger.info(f"Tables created: {tables}")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
-        raise
+        if isinstance(e, SchemaInitializationError):
+            raise
+        raise SchemaInitializationError(stage, e) from e
     finally:
         if con:
             con.close()

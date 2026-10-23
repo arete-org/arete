@@ -11,9 +11,9 @@ const FOCUS: Record<Accent, string> = {
 /** Shared classes for text-like form controls. */
 export function inputClasses(accent: Accent = 'cyan', className?: string) {
   return cn(
-    'w-full bg-abyss border border-text-muted/30 rounded px-4 py-2',
-    'text-text-primary font-mono',
-    'outline-none transition-colors placeholder:text-text-muted/50',
+    'ui-input w-full bg-abyss border border-border rounded px-4 py-2',
+    'text-text-primary font-sans',
+    'transition-colors placeholder:text-text-muted/70',
     FOCUS[accent],
     className
   );
@@ -54,24 +54,27 @@ interface FieldProps {
   children: ReactNode;
   hint?: ReactNode;
   className?: string;
+  /** The id of the control the label names. */
+  htmlFor?: string;
   /** Vertical gap between label and control (default mb-2). */
   gap?: 'sm' | 'md';
 }
 
 /** Label + control wrapper used across every form in the app. */
-export function Field({ label, children, hint, className, gap = 'md' }: FieldProps) {
+export function Field({ label, children, hint, className, htmlFor, gap = 'md' }: FieldProps) {
   return (
     <div className={className}>
       <label
+        htmlFor={htmlFor}
         className={cn(
-          'text-xs font-mono text-text-muted uppercase block',
+          'text-xs font-sans text-text-muted block',
           gap === 'md' ? 'mb-2' : 'mb-1'
         )}
       >
         {label}
       </label>
       {children}
-      {hint && <p className="text-xs text-text-muted mt-1 font-mono">{hint}</p>}
+      {hint && <p className="text-xs text-text-muted mt-1 font-sans">{hint}</p>}
     </div>
   );
 }

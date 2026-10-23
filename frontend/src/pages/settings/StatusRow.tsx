@@ -10,9 +10,9 @@ const DOT: Record<Status, string> = {
 };
 
 const STATUS_LABEL: Record<Status, string> = {
-  online: 'EN LIGNE',
-  offline: 'HORS LIGNE',
-  loading: 'VÉRIFICATION',
+  online: 'En ligne',
+  offline: 'Hors ligne',
+  loading: 'Vérification',
 };
 
 const TEXT: Record<Status, string> = {
@@ -25,10 +25,10 @@ export function StatusRow({ icon, label, status }: { icon: ReactNode; label: str
   return (
     <div className="flex items-center gap-3">
       <span className="text-text-muted">{icon}</span>
-      <span className="text-text-secondary font-mono flex-1">{label}</span>
+      <span className="text-text-secondary font-sans flex-1">{label}</span>
       <div className="flex items-center gap-2">
         <div className={cn('w-3 h-3 rounded-full', DOT[status])} />
-        <span className={cn('text-xs font-mono uppercase', TEXT[status])}>
+        <span className={cn('text-xs font-sans', TEXT[status])}>
           {STATUS_LABEL[status]}
         </span>
       </div>

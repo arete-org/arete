@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -174,6 +175,12 @@ def test_page_reads_show_what_the_athlete_sees():
         dashboard
     )
     assert "briefing_today" in dashboard
+    # The streak is not called a level: with the RPG on, the only level is the RPG's.
+    stats = dashboard["player_stats"]
+    assert "level" not in stats
+    assert {"weeks_at_goal_streak", "recent_weeks_at_goal", "recent_weeks"} <= set(
+        stats
+    )
     assert "recent_strength_sessions" in get_page_data("log")
 
 
@@ -247,8 +254,25 @@ def test_skill_catalog_uses_native_discovery_without_building_a_model(client):
         response = client.get("/agent/skills")
     assert response.status_code == 200
     skills = response.json()
+    assert len(skills) == 10
+    assert {skill["name"] for skill in skills} >= {
+        "training-trends",
+        "race-preparation",
+        "return-to-training",
+        "strength-progression",
+    }
+    assert all(0 < len(skill["display_name"]) <= 80 for skill in skills)
+    assert (
+        next(skill for skill in skills if skill["name"] == "training-trends")[
+            "display_name"
+        ]
+        == "Comprendre tes tendances"
+    )
     assert any(skill["name"] == "document-planning" for skill in skills)
-    assert all(set(skill) == {"name", "description", "path"} for skill in skills)
+    assert all(
+        set(skill) == {"name", "display_name", "description", "path"}
+        for skill in skills
+    )
 
 
 def test_invalid_skill_is_a_client_error_in_http_and_stream(client):
@@ -360,8 +384,8 @@ def test_chat_stream_endpoint_sse(client):
         if line.startswith("data: ")
     ]
     types = [e["type"] for e in events]
-    assert types == ["tool_start", "token", "done"]
-    assert events[1]["text"] == "Salut"
+    assert types == ["sync_status", "sync_status", "tool_start", "token", "done"]
+    assert events[3]["text"] == "Salut"
 
 
 def test_chat_stream_endpoint_error_event(client):
@@ -386,7 +410,8 @@ def test_chat_stream_endpoint_error_event(client):
         if line.startswith("data: ")
     ]
     assert events[-1]["type"] == "error"
-    assert "boom" in events[-1]["detail"]
+    # The exception's text stays in the server logs, out of the response.
+    assert events[-1]["detail"] == "Agent run failed"
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +453,7 @@ class TestBuildChatModel:
                 monkeypatch.setenv(name, value)
 
     @pytest.mark.parametrize("configured_model", [None, ""])
-    def test_openrouter_default_sends_its_fallback_list(
+    def test_openrouter_default_sends_its_model_chain(
         self, monkeypatch, configured_model
     ):
         from arete.agent.models.providers import build_chat_model
@@ -444,30 +469,37 @@ class TestBuildChatModel:
         payload = self._payload(model)
         assert payload["model"] == DEFAULT_OPENROUTER_MODEL
         assert payload["tools"][0]["function"]["name"] == "list_planned"
-        assert payload["extra_body"]["models"] == [
-            DEFAULT_OPENROUTER_MODEL,
-            *DEFAULT_OPENROUTER_FALLBACKS,
-        ]
+        # A single default model sends no `models` list.
+        chain = [DEFAULT_OPENROUTER_MODEL, *DEFAULT_OPENROUTER_FALLBACKS]
+        assert payload["extra_body"].get("models") == (
+            chain if DEFAULT_OPENROUTER_FALLBACKS else None
+        )
         # The free router once answered a briefing with a safety classifier.
-        assert "openrouter/free" not in payload["extra_body"]["models"]
+        assert "openrouter/free" not in chain
+
+    def test_free_only_routing_requires_the_openrouter_host(self, monkeypatch):
+        from dataclasses import replace
+
+        from arete.agent.models.providers import build_chat_model
+        from arete.agent.models.routing import resolve_route
+
+        self._openrouter(monkeypatch)
+        lookalike = replace(
+            resolve_route(), base_url="https://openrouter.ai.example.com/api/v1"
+        )
+        payload = self._payload(build_chat_model(route=lookalike))
+        assert "provider" not in (payload.get("extra_body") or {})
 
     def test_only_auxiliary_openrouter_calls_disable_reasoning(self, monkeypatch):
         from arete import coaching
 
-        self._openrouter(monkeypatch)
+        self._openrouter(monkeypatch, "a/one:free", "b/two:free,c/three:free")
         with patch.object(coaching, "build_agent") as assemble:
             coaching._assemble("chat")
         models = assemble.call_args.kwargs
         coach_payload = self._payload(models["model"])
-        draft_payload = self._payload(models["suggestion_model"])
+        assert "suggestion_model" not in models
         assert "reasoning" not in coach_payload["extra_body"]
-        assert draft_payload["extra_body"]["reasoning"] == {"enabled": False}
-        assert draft_payload["max_completion_tokens"] == 512
-        assert (
-            draft_payload["extra_body"]["provider"]
-            == coach_payload["extra_body"]["provider"]
-        )
-        assert models["suggestion_model"].max_retries == 0
         # Main graph fallback owns candidate selection, with one attempt each.
         candidates = [models["model"], *models["fallback_models"]]
         assert len(candidates) == 3
@@ -487,6 +519,44 @@ class TestBuildChatModel:
         assert models["model"].max_retries == 2
         assert models["fallback_models"] == ()
         assert "models" not in self._payload(models["model"])["extra_body"]
+
+    @pytest.mark.parametrize(
+        "profile", ["chat", "briefing", "feedback", "review", "evening"]
+    )
+    def test_glm_flag_overrides_pinned_route_with_bounded_paid_requests(
+        self, monkeypatch, profile
+    ):
+        from arete import coaching
+
+        self._openrouter(monkeypatch, "custom:free", "fallback:free")
+        with patch.object(coaching, "build_agent") as assemble:
+            coaching._assemble(profile, glm_flash=True)
+        models = assemble.call_args.kwargs
+        model = models["model"]
+        payload = self._payload(model)
+        assert payload["model"] == "z-ai/glm-5.3-flash"
+        assert payload["extra_body"] == {
+            "provider": {
+                "sort": "latency",
+                "allow_fallbacks": True,
+                "require_parameters": True,
+                "data_collection": "deny",
+                "max_price": {"prompt": 0.15, "completion": 0.5},
+            },
+            "reasoning": {"effort": "low"},
+        }
+        assert model.max_retries == 0
+        assert model.max_tokens == 4096
+        assert model.request_timeout == 60
+        assert models["fallback_models"] == ()
+        with patch.object(coaching, "build_agent") as reverted:
+            coaching._assemble(profile, glm_flash=False)
+        restored = self._payload(reverted.call_args.kwargs["model"])
+        assert restored["model"] == "custom:free"
+        assert restored["extra_body"]["provider"]["max_price"] == {
+            "prompt": 0,
+            "completion": 0,
+        }
 
     @pytest.mark.parametrize("provider", ["ollama", "github"])
     def test_openrouter_reasoning_controls_do_not_reach_other_providers(
@@ -514,8 +584,37 @@ class TestBuildChatModel:
         self._openrouter(monkeypatch, pinned)
         payload = self._payload(build_chat_model())
         assert payload["extra_body"]["provider"] == {
-            "max_price": {"prompt": 0, "completion": 0}
+            "sort": "latency",
+            "data_collection": "deny",
+            "max_price": {"prompt": 0, "completion": 0},
         }
+
+    @pytest.mark.parametrize("glm_flash", [False, True])
+    def test_every_athlete_request_denies_data_collection(self, monkeypatch, glm_flash):
+        # Each profile's requests carry athlete data: coach, fallbacks, titles
+        # and summaries alike must skip providers that train on prompts.
+        from arete import coaching
+        from arete.agent.profiles.catalog import PROFILES
+
+        self._openrouter(monkeypatch, "a/one:free", "b/two:free,c/three:free")
+        built = []
+        original = coaching.build_chat_model
+
+        def record(**kwargs):
+            built.append(original(**kwargs))
+            return built[-1]
+
+        with (
+            patch.object(coaching, "build_chat_model", side_effect=record),
+            patch.object(coaching, "build_agent"),
+        ):
+            for profile in PROFILES:
+                coaching._assemble(profile, glm_flash=glm_flash)
+        # At least one coach model per profile, plus chat's title and summary.
+        assert len(built) >= len(PROFILES) + 2
+        for model in built:
+            provider = self._payload(model)["extra_body"]["provider"]
+            assert provider["data_collection"] == "deny"
 
     def test_a_pinned_model_takes_explicit_fallbacks_in_order(self, monkeypatch):
         from arete.agent.models.providers import build_chat_model
@@ -555,7 +654,9 @@ class TestBuildChatModel:
         monkeypatch.delenv("LLM_MODEL", raising=False)
         model = build_chat_model()
         assert model.model_name == DEFAULT_GITHUB_MODEL
-        assert "models.inference.ai.azure.com" in model.openai_api_base
+        assert urlsplit(model.openai_api_base).hostname == (
+            "models.inference.ai.azure.com"
+        )
 
     def test_github_without_a_token_is_actionable(self, monkeypatch):
         import pytest
@@ -663,6 +764,63 @@ def test_chat_routes_preserve_thread_id(client, endpoint):
 
 
 @pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_chat_clock_roundtrips_history_and_returns_server_timestamp(client, endpoint):
+    from langchain_core.messages import AIMessage
+
+    from arete.agent.runtime.context import MESSAGE_SENT_AT_KEY
+
+    sent_at = "2026-10-15T23:59:59+02:00"
+    observed = []
+
+    class Graph:
+        async def ainvoke(self, state, *, context, config):
+            assert (
+                state["messages"][0].additional_kwargs[MESSAGE_SENT_AT_KEY] == sent_at
+            )
+            observed.append(context.current_datetime.isoformat(timespec="seconds"))
+            return {"messages": [AIMessage("ok")]}
+
+        async def astream(self, state, *, context, config, **kwargs):
+            result = await self.ainvoke(state, context=context, config=config)
+            yield {"type": "updates", "data": {"model": result}}
+
+    with patch("arete.api.agent.get_agent", return_value=Graph()):
+        response = client.post(
+            endpoint,
+            json={
+                "messages": [
+                    {"role": "user", "content": "Ancien", "sent_at": sent_at},
+                    {"role": "assistant", "content": "Réponse"},
+                    {"role": "user", "content": "Aujourd’hui ?"},
+                ]
+            },
+        )
+    assert response.status_code == 200
+    assert observed == [
+        response.headers["X-Arete-Sent-At"]
+        if endpoint.endswith("stream")
+        else response.json()["sent_at"]
+    ]
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_chat_rejects_timestamp_without_timezone(client, endpoint):
+    response = client.post(
+        endpoint,
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Question",
+                    "sent_at": "2026-10-15T14:32:00",
+                },
+            ]
+        },
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
 def test_chat_routes_reject_invalid_thread_id(client, endpoint):
     response = client.post(
         endpoint,
@@ -729,6 +887,33 @@ class TestPlanningPageRead:
         assert dates == sorted(dates)
         assert all(value is not None for row in rows for value in row.values())
 
+    def test_the_read_shows_what_was_done_in_the_window(self):
+        """A run synced today must be visible next to the plan it replaces."""
+        from datetime import date, timedelta
+
+        from arete.garmin.models import ActualSession
+        from arete.garmin.repository import GarminRepository
+        from arete.services.pages import PLANNING_PAST_DAYS
+
+        repo = GarminRepository()
+        today = date.today()
+        ids = [
+            repo.create_actual_session(
+                ActualSession(date=day, sport="running", name=name, duration_sec=2400)
+            )
+            for day, name in (
+                (today, "Run 8 km"),
+                (today - timedelta(days=PLANNING_PAST_DAYS + 5), "Old run"),
+            )
+        ]
+        try:
+            done = get_page_data("planning")["done_sessions"]
+        finally:
+            for i in ids:
+                repo.delete_actual_session(i)
+        names = {row["name"] for row in done}
+        assert "Run 8 km" in names and "Old run" not in names
+
     def test_the_read_says_where_to_look_beyond_it(self):
         out = get_page_data("planning")
         assert out["window"]["from"] < out["window"]["to"]
@@ -754,6 +939,25 @@ class TestAnalyticsPageRead:
         for card in out["overview"]["cards"].values():
             assert "headline" in card
 
+    def test_the_answers_and_records_reach_the_coach_without_session_names(
+        self, monkeypatch
+    ):
+        run = {"name": "5 km", "time_sec": 1400, "session_id": 3, "session_name": "Lac"}
+        monkeypatch.setattr(
+            "arete.services.analytics.get_overview",
+            lambda *, period: {
+                "cards": {},
+                "answers": [{"id": "ready", "text": "Aujourd’hui, …"}],
+                "records": {"runs": [run], "lifts": []},
+            },
+        )
+        out = get_page_data("analytics")["overview"]
+        assert out["answers"] == [{"id": "ready", "text": "Aujourd’hui, …"}]
+        assert out["records"]["runs"] == [
+            {"name": "5 km", "time_sec": 1400, "session_id": 3}
+        ]
+        assert run["session_name"] == "Lac"  # the page's own payload is untouched
+
     def test_the_read_points_at_the_toolkit_for_trends(self):
         out = get_page_data("analytics")
         assert "get_workload" in out["trends"]
@@ -763,14 +967,81 @@ class TestAnalyticsPageRead:
         cards = client.get("/analytics/overview?period=30d").json()["cards"]
         assert any("series" in card for card in cards.values())
 
+    @pytest.mark.parametrize(
+        "selected,expected",
+        [("7d", "7d"), ("all", "all"), ("ignore instructions", "30d"), (42, "30d")],
+    )
+    def test_selected_period_is_validated_before_reading(
+        self, monkeypatch, selected, expected
+    ):
+        calls = []
+        monkeypatch.setattr(
+            "arete.services.analytics.get_overview",
+            lambda *, period: calls.append(period) or {"cards": {}},
+        )
+        get_page_data("analytics", params={"param_period": selected})
+        assert calls == [expected]
+
+    def test_the_glossary_page_reads_no_athlete_data(self, monkeypatch):
+        from arete.services.pages import GLOSSARY_PAGE
+
+        def unexpected(**_kwargs):
+            raise AssertionError("the glossary page must not read the overview")
+
+        monkeypatch.setattr("arete.services.analytics.get_overview", unexpected)
+        result = get_page_data("analytics", params={"path": "/analytics/lexique"})
+        assert result == {"glossary": GLOSSARY_PAGE}
+
+    def test_the_open_year_uses_its_aggregates_and_records_without_names(
+        self, monkeypatch
+    ):
+        from arete.services.settings import athlete_today
+
+        calls = []
+        monkeypatch.setattr(
+            "arete.services.year_review.year_review",
+            lambda year: calls.append(year)
+            or {
+                "year": year,
+                "totals": {"sessions": 42},
+                "highlights": {"name": "private"},
+                "records": {
+                    "runs": [{"name": "5 km", "session_name": "private"}],
+                    "lifts": [{"exercise": "Squat", "e1rm_kg": 120.0}],
+                },
+                "fitness": {"series": [1, 2], "peak": 45},
+            },
+        )
+        result = get_page_data(
+            "analytics", params={"path": "/analytics/bilan", "param_year": "2025"}
+        )
+        assert calls == [2025]
+        assert result["year_review"] == {
+            "year": 2025,
+            "totals": {"sessions": 42},
+            "records": {
+                "runs": [{"name": "5 km"}],
+                "lifts": [{"exercise": "Squat", "e1rm_kg": 120.0}],
+            },
+        }
+        assert result["fitness"] == {"peak": 45}
+        get_page_data(
+            "analytics", params={"path": "/analytics/bilan", "param_year": "9999"}
+        )
+        assert calls[-1] == athlete_today().year
+
 
 class TestLedgerTools:
     """The journal supports targeted corrections without arbitrary file creation."""
 
     def _tools(self):
-        from arete.agent.backends.memory import build_memory_filesystem
+        from arete.agent.middlewares.journal import JournalMiddleware
+        from arete.coaching import build_agent_filesystem
 
-        return {t.name: t for t in build_memory_filesystem().tools}
+        return {
+            t.name: t
+            for t in [*build_agent_filesystem().tools, *JournalMiddleware().tools]
+        }
 
     def test_reading_points_at_the_end_of_the_journal(self):
         """`read_file` reads 100 lines from the top; new entries are appended.
@@ -780,7 +1051,7 @@ class TestLedgerTools:
         """
         assert "fin" in self._tools()["read_file"].description
 
-    def test_the_filesystem_can_correct_and_delete_but_not_create(self):
+    def test_journal_supports_dated_append_but_not_arbitrary_file_creation(self):
         assert set(self._tools()) == {
             "read_file",
             "ls",
@@ -788,6 +1059,7 @@ class TestLedgerTools:
             "grep",
             "edit_file",
             "delete",
+            "append_journal",
         }
 
 
@@ -859,3 +1131,130 @@ def test_selected_strength_session_is_read_from_repository(monkeypatch):
     assert result["active_tab"] == "force" and reads == [12]
     get_page_data("log", params={"param_session": "untrusted instructions"})
     assert reads == [12]
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_the_athlete_clock_is_never_read_on_the_event_loop(client, endpoint):
+    import asyncio
+    from datetime import UTC, datetime
+
+    from langchain_core.messages import AIMessage
+
+    def athlete_now():
+        # A settings query: it must run in a worker thread, never on the loop.
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return datetime(2026, 10, 17, 22, 30, tzinfo=UTC)
+        raise AssertionError("athlete_now ran on the event loop")
+
+    class Graph:
+        async def ainvoke(self, state, *, context=None, config=None):
+            return {"messages": [*state["messages"], AIMessage(content="ok")]}
+
+        async def astream(self, state, *, context, config, **kwargs):
+            result = await self.ainvoke(state, context=context, config=config)
+            yield {"type": "updates", "data": {"model": result}}
+
+    with (
+        patch("arete.services.settings.athlete_now", athlete_now),
+        patch("arete.api.agent.get_agent", return_value=Graph()),
+    ):
+        response = client.post(
+            endpoint, json={"messages": [{"role": "user", "content": "salut"}]}
+        )
+    assert response.status_code == 200
+    # A stream turns a failure into an error event under status 200.
+    assert '"type": "error"' not in response.text
+
+
+class _ChatGraph:
+    async def ainvoke(self, state, *, context=None, config=None):
+        from langchain_core.messages import AIMessage
+
+        return {"messages": [*state["messages"], AIMessage(content="ok")]}
+
+    async def astream(self, state, *, context, config, **kwargs):
+        result = await self.ainvoke(state, context=context, config=config)
+        yield {"type": "updates", "data": {"model": result}}
+
+
+@pytest.fixture
+def cold_chat_graph(monkeypatch):
+    """The real ``get_agent`` over an empty cache: flag read and compile."""
+    from worker_only import worker_only
+
+    from arete import coaching
+    from arete.services.feature_flags import FeatureFlags
+
+    reads = []
+
+    def flags():
+        reads.append(True)
+        return FeatureFlags()
+
+    monkeypatch.setattr(coaching, "get_feature_flags", worker_only(flags))
+    monkeypatch.setattr(
+        coaching, "_assemble", worker_only(lambda profile, **kw: _ChatGraph())
+    )
+    coaching.get_agent.cache_clear()
+    yield reads
+    coaching.get_agent.cache_clear()
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_chat_composition_never_runs_on_the_event_loop(
+    client, cold_chat_graph, endpoint
+):
+    response = client.post(
+        endpoint, json={"messages": [{"role": "user", "content": "salut"}]}
+    )
+    assert response.status_code == 200
+    assert '"type": "error"' not in response.text
+    assert cold_chat_graph == [True]
+
+
+@pytest.mark.parametrize("endpoint", ["/agent/chat", "/agent/chat/stream"])
+def test_a_slow_graph_compile_leaves_the_event_loop_serving(
+    client, cold_chat_graph, monkeypatch, endpoint
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from arete import coaching
+    from arete.services.feature_flags import FeatureFlags
+
+    compiling, release = Event(), Event()
+
+    def slow_compile(profile, **kw):
+        compiling.set()
+        assert release.wait(10), "the compile was never released"
+        return _ChatGraph()
+
+    # Unguarded here: the probe below, not a patched read, detects the stall.
+    monkeypatch.setattr(coaching, "get_feature_flags", FeatureFlags)
+    monkeypatch.setattr(coaching, "_assemble", slow_compile)
+    body = {"messages": [{"role": "user", "content": "salut"}]}
+    with ThreadPoolExecutor(2) as pool:
+        try:
+            pending = pool.submit(client.post, endpoint, json=body)
+            assert compiling.wait(5)
+            # The compile holds the graph lock in a worker; the loop still
+            # validates and answers another request meanwhile.
+            probe = pool.submit(client.post, "/agent/chat", json={"messages": []})
+            assert probe.result(timeout=5).status_code == 422
+        finally:
+            release.set()
+        response = pending.result(timeout=10)
+    assert response.status_code == 200
+    assert '"type": "error"' not in response.text
+
+
+def test_a_context_built_on_the_event_loop_without_its_clock_is_refused():
+    import asyncio
+
+    async def build():
+        return AgentContext()
+
+    with pytest.raises(RuntimeError, match="read_athlete_clock"):
+        asyncio.run(build())

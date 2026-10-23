@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Bar, BarChart, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
@@ -24,15 +24,103 @@ const monthLabel = (m: number) => new Date(2000, m - 1, 1).toLocaleDateString('f
 
 /** "1h05" or "42 min" for a single session. */
 function duration(sec: number): string {
-  const h = Math.floor(sec / 3600);
-  const m = Math.round((sec % 3600) / 60);
+  const minutes = Math.round(sec / 60);
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
   return h ? `${h}h${String(m).padStart(2, '0')}` : `${m} min`;
 }
 
 /** "−12 s" / "−1:05" improvement on the previous best. */
 function gain(previous: number, now: number): string {
-  const s = previous - now;
+  const s = Math.round(previous - now);
   return s >= 60 ? `−${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `−${s} s`;
+}
+
+function PrBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-sans text-neon-gold">
+      <Award className="w-3 h-3" aria-hidden />
+      {label}
+    </span>
+  );
+}
+
+function RecordRow({ name, detail, to, value, badge }: { name: string; detail: string; to: string; value: string; badge: string | null }) {
+  return (
+    <li className="py-2 flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-sm font-sans text-text-primary">{name}</div>
+        <Link to={to} className="inline-flex min-h-11 items-center text-xs text-text-muted underline underline-offset-4 hover:text-neon-cyan truncate max-w-full">
+          {detail}
+        </Link>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="text-sm font-sans text-text-primary tabular-nums">{value}</div>
+        {badge && <PrBadge label={badge} />}
+      </div>
+    </li>
+  );
+}
+
+/** The year's best run per distance and lift per exercise, from Garmin streams and the strength log. */
+function YearRecords({ records, count }: { records: YearReview['records']; count: number }) {
+  if (!records.runs.length && !records.lifts.length) {
+    return (
+      <p className="text-sm text-text-muted">
+        Aucun record cette année : il faut une course d’au moins 1 km enregistrée avec la montre, ou une séance de force
+        avec ses séries.
+      </p>
+    );
+  }
+  return (
+    <>
+      <p className="text-xs text-text-muted">
+        {count === 0
+          ? 'Aucun nouveau record cette année.'
+          : `${count} nouveau${count > 1 ? 'x' : ''} record${count > 1 ? 's' : ''} cette année, premiers chronos et premières charges compris.`}
+      </p>
+      {records.runs.length > 0 && (
+        <div className="space-y-1">
+          <h3 className="analysis-records-title">Course</h3>
+          <ul className="divide-y divide-text-muted/10">
+            {records.runs.map((r) => (
+              <RecordRow
+                key={r.name}
+                name={r.name}
+                detail={`${r.session_name || 'Course'} · ${longDate(r.date)}`}
+                to={`/log/sessions/${r.session_id}`}
+                value={r.time_display}
+                badge={r.is_pr ? (r.previous_best === null ? 'Premier chrono' : `Record ${gain(r.previous_best, r.time_sec)}`) : null}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+      {records.lifts.length > 0 && (
+        <div className="space-y-1">
+          <h3 className="analysis-records-title">Force</h3>
+          <ul className="divide-y divide-text-muted/10">
+            {records.lifts.map((l) => (
+              <RecordRow
+                key={l.exercise_id}
+                name={l.exercise}
+                detail={`${l.reps} × ${DECIMAL.format(l.weight_kg)} kg · ${longDate(l.date)}`}
+                to={`/log?session=${l.session_id}`}
+                value={`${DECIMAL.format(l.e1rm_kg)} kg`}
+                badge={
+                  l.is_pr
+                    ? l.previous_best === null
+                      ? 'Première charge'
+                      : `Record +${DECIMAL.format(l.e1rm_kg - l.previous_best)} kg`
+                    : null
+                }
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  );
 }
 
 const METRICS = [
@@ -46,8 +134,8 @@ type MetricId = (typeof METRICS)[number]['id'];
 
 function Block({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section className={cn('bg-abyss rounded-lg border border-text-muted/20 p-4 space-y-3 min-w-0', className)}>
-      <h2 className="text-sm font-mono text-neon-cyan uppercase tracking-wider">{title}</h2>
+    <section className={cn('analysis-card space-y-4 min-w-0', className)}>
+      <h2 className="text-[15px] font-medium text-text-primary">{title}</h2>
       {children}
     </section>
   );
@@ -55,15 +143,21 @@ function Block({ title, children, className }: { title: string; children: ReactN
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-abyss rounded-lg border border-text-muted/20 p-3 min-w-0">
-      <div className="text-[10px] uppercase tracking-wider text-text-muted font-mono">{label}</div>
-      <div className="text-xl sm:text-2xl font-bold font-mono text-text-primary tabular-nums truncate">{value}</div>
+    <div className="analysis-card min-w-0">
+      <div className="text-xs text-text-muted">{label}</div>
+      <div className="text-2xl sm:text-[32px] font-semibold text-text-primary tabular-nums break-words">{value}</div>
     </div>
   );
 }
 
 function MonthsChart({ months }: { months: YearMonth[] }) {
-  const [metricId, setMetricId] = useState<MetricId>('duration');
+  const [params, setParams] = useSearchParams();
+  const metricId: MetricId = METRICS.find(item => item.id === params.get('metric'))?.id ?? 'duration';
+  const setMetricId = (id: MetricId) => setParams(previous => {
+    const next = new URLSearchParams(previous);
+    next.set('metric', id);
+    return next;
+  });
   const metric = METRICS.find((m) => m.id === metricId) ?? METRICS[0];
   const data = months.map((m) => ({ month: monthLabel(m.month), value: Number(metric.value(m).toFixed(1)) }));
   return (
@@ -75,22 +169,19 @@ function MonthsChart({ months }: { months: YearMonth[] }) {
             type="button"
             aria-pressed={m.id === metricId}
             onClick={() => setMetricId(m.id)}
-            className={cn(
-              'px-3 py-1 text-xs font-mono uppercase rounded transition-colors',
-              m.id === metricId ? 'bg-neon-cyan/15 text-neon-cyan' : 'text-text-secondary hover:text-text-primary'
-            )}
+            className="analysis-tab"
           >
             {m.label}
           </button>
         ))}
       </div>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={256}>
         <BarChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: -16 }}>
           <ChartGrid />
           <XAxis dataKey="month" {...AXIS} tick={TICK} interval={0} tickFormatter={(v: string) => v.slice(0, 3)} />
           <YAxis {...AXIS} tick={TICK} width={44} />
           <ChartTooltip formatter={(value: number) => [`${DECIMAL.format(value)} ${metric.unit}`.trim(), metric.label]} />
-          <Bar dataKey="value" name={metric.label} fill={COLORS.neonCyan} radius={[2, 2, 0, 0]} />
+          <Bar isAnimationActive={false} dataKey="value" name={metric.label} fill={COLORS.neonCyan} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </Block>
@@ -104,7 +195,7 @@ function FitnessChart({ fitness }: { fitness: YearReview['fitness'] }) {
       <p className="text-sm text-text-secondary">
         {fitness.peak && (
           <>
-            Pic de forme à <strong className="text-text-primary">{DECIMAL.format(fitness.peak.ctl)}</strong> le{' '}
+            Pic de forme de fond à <strong className="text-text-primary">{DECIMAL.format(fitness.peak.ctl)}</strong> le{' '}
             {longDate(fitness.peak.date)}.{' '}
           </>
         )}
@@ -121,8 +212,8 @@ function FitnessChart({ fitness }: { fitness: YearReview['fitness'] }) {
             tickFormatter={(iso: string) => monthLabel(Number(iso.slice(5, 7)))}
           />
           <YAxis {...AXIS} tick={TICK} width={44} />
-          <ChartTooltip labelFormatter={(iso: string) => longDate(iso)} formatter={(v: number) => [DECIMAL.format(v), 'Forme (CTL)']} />
-          <Line type="monotone" dataKey="ctl" name="Forme" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
+          <ChartTooltip labelFormatter={(iso: string) => longDate(iso)} formatter={(v: number) => [DECIMAL.format(v), 'Forme de fond (CTL)']} />
+          <Line isAnimationActive={false} type="monotone" dataKey="ctl" name="Forme de fond" stroke={COLORS.neonCyan} strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </>
@@ -134,12 +225,12 @@ function Highlight({ icon, label, session, value }: { icon: ReactNode; label: st
     <div className="flex items-start gap-3 p-3 rounded border border-text-muted/20 min-w-0">
       <span className="text-neon-gold mt-0.5">{icon}</span>
       <div className="min-w-0">
-        <div className="text-[10px] uppercase tracking-wider text-text-muted font-mono">{label}</div>
+        <div className="text-xs text-text-muted">{label}</div>
         {session ? (
           <>
-            <div className="text-base font-mono text-text-primary tabular-nums">{value(session)}</div>
-            <div className="text-xs text-text-muted truncate">
-              {session.name || sportLabel(session.sport)} · {longDate(session.date)}
+            <div className="text-base font-sans text-text-primary tabular-nums">{value(session)}</div>
+            <div className="text-xs text-text-muted">
+              {session.id !== null ? <Link className="inline-flex min-h-11 items-center underline" to={session.id! < 0 ? `/log?session=${-session.id!}` : `/log/sessions/${session.id}`}>{session.name || sportLabel(session.sport)} · {longDate(session.date)}</Link> : <>{session.name || sportLabel(session.sport)} · {longDate(session.date)}</>}
             </div>
           </>
         ) : (
@@ -154,7 +245,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 text-sm">
       <span className="text-text-secondary">{label}</span>
-      <span className="font-mono text-text-primary tabular-nums">{value}</span>
+      <span className="font-sans text-text-primary tabular-nums">{value}</span>
     </div>
   );
 }
@@ -162,7 +253,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Review({ data }: { data: YearReview }) {
   const { totals, consistency, highlights, strength } = data;
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <Tile label="Séances" value={NUMBER.format(totals.sessions)} />
         <Tile label="Temps" value={hours(totals.duration_sec)} />
@@ -173,12 +264,12 @@ function Review({ data }: { data: YearReview }) {
 
       <MonthsChart months={data.months} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="analysis-grid">
         <Block title="Sports">
           <ul className="space-y-2">
             {data.sports.map((s) => (
               <li key={s.sport} className="space-y-1">
-                <div className="flex justify-between gap-3 text-xs font-mono">
+                <div className="flex justify-between gap-3 text-xs font-sans">
                   <span className="text-text-secondary truncate">{sportLabel(s.sport)}</span>
                   <span className="text-text-primary tabular-nums shrink-0">
                     {hours(s.duration_sec)} · {s.sessions} séance{s.sessions > 1 ? 's' : ''}
@@ -201,7 +292,7 @@ function Review({ data }: { data: YearReview }) {
         </Block>
       </div>
 
-      <Block title="Forme (CTL)">
+      <Block title="Forme de fond (CTL)">
         <FitnessChart fitness={data.fitness} />
       </Block>
 
@@ -214,33 +305,9 @@ function Review({ data }: { data: YearReview }) {
         </div>
       </Block>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Block title={`Meilleurs efforts · ${data.pr_count} record${data.pr_count > 1 ? 's' : ''}`}>
-          {data.best_efforts.length === 0 ? (
-            <p className="text-sm text-text-muted">Aucun effort chronométré en course.</p>
-          ) : (
-            <ul className="divide-y divide-text-muted/10">
-              {data.best_efforts.map((e) => (
-                <li key={e.name} className="py-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-mono text-text-primary">{e.name}</div>
-                    <div className="text-xs text-text-muted truncate">
-                      {e.activity_name || 'Course'} · {longDate(e.date)}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-sm font-mono text-text-primary tabular-nums">{e.time_display}</div>
-                    {e.is_pr && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase text-neon-gold">
-                        <Award className="w-3 h-3" aria-hidden />
-                        {e.previous_best_sec === null ? 'Premier chrono' : `Record ${gain(e.previous_best_sec, e.time_sec)}`}
-                      </span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+      <div className="analysis-grid">
+        <Block title="Records">
+          <YearRecords records={data.records} count={data.pr_count} />
         </Block>
 
         <Block title="Force">
@@ -254,7 +321,7 @@ function Review({ data }: { data: YearReview }) {
               {strength.top_exercises.length > 0 && (
                 <ul className="pt-2 space-y-1">
                   {strength.top_exercises.map((x) => (
-                    <li key={x.name} className="flex justify-between gap-3 text-xs font-mono">
+                    <li key={x.name} className="flex justify-between gap-3 text-xs font-sans">
                       <span className="text-text-secondary truncate">{x.name}</span>
                       <span className="text-text-primary tabular-nums shrink-0">
                         {DECIMAL.format(x.volume_kg / 1000)} t{x.max_weight_kg ? ` · max ${DECIMAL.format(x.max_weight_kg)} kg` : ''}
@@ -285,16 +352,17 @@ export function YearReviewPage() {
   });
 
   return (
-    <div className="page-shell space-y-4">
+    <div className="page-shell analytics-page">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <Link to="/analytics" className="inline-flex items-center gap-1 text-xs font-mono text-text-muted hover:text-neon-cyan">
+          <Link to="/analytics" className="inline-flex min-h-11 items-center gap-1 text-sm text-text-muted hover:text-neon-cyan">
             <ArrowLeft className="w-3 h-3" aria-hidden />
             Analyses
           </Link>
-          <h1 className="page-title text-xl font-bold font-mono text-neon-cyan tracking-wider uppercase">Bilan {year}</h1>
+          <p className="page-eyebrow">Ton année en mouvement</p>
+          <h1 className="page-title">Bilan {year}</h1>
           {data && (
-            <p className="text-xs text-text-muted font-mono mt-1">
+            <p className="text-xs text-text-muted font-sans mt-1">
               Du {longDate(data.start)} au {longDate(data.end)}
               {!data.complete && ' · année en cours'}
             </p>
@@ -304,7 +372,7 @@ export function YearReviewPage() {
           aria-label="Année"
           className="w-28"
           value={year}
-          onChange={(e) => setParams(Number(e.target.value) === current ? {} : { year: e.target.value }, { replace: true })}
+          onChange={(e) => setParams(previous => { const next = new URLSearchParams(previous); next.set('year', e.target.value); return next; })}
         >
           {(data?.years ?? [year]).map((y) => (
             <option key={y} value={y}>
@@ -315,11 +383,11 @@ export function YearReviewPage() {
       </header>
 
       {isLoading ? (
-        <LoadingState message="CALCUL DU BILAN…" />
+        <LoadingState message="Calcul du bilan…" />
       ) : isError || !data ? (
-        <ErrorState message="BILAN INDISPONIBLE" onRetry={() => refetch()} />
+        <ErrorState message="Bilan indisponible" onRetry={() => refetch()} />
       ) : data.totals.sessions === 0 ? (
-        <EmptyState message={`AUCUNE SÉANCE EN ${year}`} action="Synchronise Garmin ou Strava, ou choisis une autre année." />
+        <EmptyState message={`Aucune séance en ${year}`} action="Synchronise Garmin ou importe un fichier FIT, ou choisis une autre année." />
       ) : (
         <Review data={data} />
       )}

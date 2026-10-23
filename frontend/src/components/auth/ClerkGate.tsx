@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { ClerkProvider, SignIn, UserButton, useAuth, useUser } from '@clerk/react';
 import { frFR } from '@clerk/localizations/fr-FR';
 import { ErrorState } from '@/components/States';
-import { ApiError, authApi, type AuthMe } from '@/lib/api';
-import { clearApiCache, endSession, onUnauthorized, setTokenGetter } from '@/lib/auth';
+import { AreteWordmark } from '@/components/AreteBrand';
+import { ApiError, authApi, type AuthMe, type ConsentState } from '@/lib/api';
+import { clearApiCache, clearSignedOutCaches, endSession, onConsentRequired, onUnauthorized, setTokenGetter } from '@/lib/auth';
 import { AuthStateContext, type AuthState } from './authState';
+import { ConsentScreen } from './ConsentScreen';
 import { GateScreen, GateSpinner } from './GateScreen';
 import { SignOutButton } from './SignOutButton';
 import { claimPushDevice } from '@/lib/pushSession';
@@ -13,7 +15,7 @@ import { claimPushDevice } from '@/lib/pushSession';
 const appearance = {
   variables: {
     colorPrimary: 'var(--color-neon-cyan)',
-    colorPrimaryForeground: 'var(--color-void)',
+    colorPrimaryForeground: 'var(--color-on-accent)',
     colorBackground: 'var(--color-abyss)',
     colorForeground: 'var(--color-text-primary)',
     colorMutedForeground: 'var(--color-text-secondary)',
@@ -21,12 +23,12 @@ const appearance = {
     colorNeutral: 'var(--color-text-primary)',
     colorInput: 'var(--color-void)',
     colorInputForeground: 'var(--color-text-primary)',
-    colorBorder: 'color-mix(in srgb, var(--color-text-muted) 30%, transparent)',
+    colorBorder: 'var(--color-border)',
     colorDanger: 'var(--color-danger-red)',
     colorSuccess: 'var(--color-success-green)',
     colorWarning: 'var(--color-warning-orange)',
     fontFamily: 'var(--font-sans)',
-    borderRadius: '4px',
+    borderRadius: 'var(--radius-control)',
   },
 };
 
@@ -34,6 +36,12 @@ interface ClerkGateProps {
   publishableKey: string;
   /** Runs when a session ends, before the page reloads. */
   onSessionEnd?: () => void;
+  /**
+   * With a build-time key only: resolves false when the server expects another
+   * Clerk instance, so its 401 shows a misconfiguration instead of signing out
+   * into the same refusal again.
+   */
+  keyMatchesServer?: () => Promise<boolean>;
   children: ReactNode;
 }
 
@@ -42,10 +50,12 @@ interface ClerkGateProps {
  * account check and the account menu. AuthGate loads this module lazily, only
  * when the server requires sign-in, so the SDK stays out of the main bundle.
  */
-export default function ClerkGate({ publishableKey, onSessionEnd, children }: ClerkGateProps) {
+export default function ClerkGate({ publishableKey, onSessionEnd, keyMatchesServer, children }: ClerkGateProps) {
   return (
     <ClerkProvider publishableKey={publishableKey} localization={frFR} appearance={appearance}>
-      <SessionGate onSessionEnd={onSessionEnd}>{children}</SessionGate>
+      <SessionGate onSessionEnd={onSessionEnd} keyMatchesServer={keyMatchesServer}>
+        {children}
+      </SessionGate>
     </ClerkProvider>
   );
 }
@@ -61,14 +71,14 @@ type Account =
   | { status: 'refused'; detail: string | null }
   | { status: 'ready'; me: AuthMe };
 
-function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishableKey'>) {
+function SessionGate({ onSessionEnd, keyMatchesServer, children }: Omit<ClerkGateProps, 'publishableKey'>) {
   const { isLoaded, isSignedIn, sessionId, getToken, signOut } = useAuth();
   const { user } = useUser();
   const [attempt, setAttempt] = useState(0);
   // The account answer belongs to the session and attempt it was asked for; any other is still loading.
   const key = `${sessionId ?? ''}#${attempt}`;
   const [account, setAccount] = useState<{ key: string; value: Account } | null>(null);
-  const [leaving, setLeaving] = useState<'no' | 'yes' | 'failed'>('no');
+  const [leaving, setLeaving] = useState<'no' | 'yes' | 'failed' | 'misconfigured'>('no');
   const leavingRef = useRef(false);
 
   // Clerk's getToken may change identity; the registry gets one function that reads the latest.
@@ -82,10 +92,10 @@ function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishab
     [signOut, onSessionEnd]
   );
 
-  // Signed out: nothing of a previous account may survive in the API cache.
+  // Signed out: nothing of a previous account may survive in the API or query caches.
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
-      void clearApiCache();
+      void clearSignedOutCaches();
       void claimPushDevice(null).catch((error: unknown) => console.error(error));
     }
   }, [isLoaded, isSignedIn]);
@@ -132,9 +142,11 @@ function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishab
         if (leavingRef.current) return;
         leavingRef.current = true;
         setLeaving('yes');
-        leave().catch(() => setLeaving('failed'));
+        (keyMatchesServer?.() ?? Promise.resolve(true))
+          .then((matches) => (matches ? leave() : setLeaving('misconfigured')))
+          .catch(() => setLeaving('failed'));
       }),
-    [leave]
+    [leave, keyMatchesServer]
   );
 
   const grantGoogleScopes = useCallback(
@@ -156,8 +168,47 @@ function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishab
     [user]
   );
 
+  // A consent or a withdrawal answers with the new state: the gate follows it without asking again.
+  const setConsent = useCallback(
+    (consent: ConsentState) =>
+      setAccount((previous) =>
+        previous?.value.status === 'ready'
+          ? { key: previous.key, value: { status: 'ready', me: { ...previous.value.me, consent } } }
+          : previous
+      ),
+    []
+  );
+
   const current = account?.key === key ? account.value : null;
   const me = current?.status === 'ready' ? current.me : null;
+  const consentMissing = me !== null && me.consent.required && !me.consent.current;
+
+  // Mid-session, the server refused a request for missing consent (a new text version, a withdrawal
+  // on another device): ask the account again, once at a time, and let the gate follow its answer.
+  const refreshing = useRef(false);
+  useEffect(
+    () =>
+      onConsentRequired(() => {
+        if (refreshing.current) return;
+        refreshing.current = true;
+        authApi
+          .me()
+          .then((fresh) => setConsent(fresh.consent))
+          .catch((error: unknown) => console.error(error))
+          .finally(() => {
+            refreshing.current = false;
+          });
+      }),
+    [setConsent]
+  );
+
+  // Without consent no health data stays in the browser: drop the caches as a sign-out does,
+  // once the consent screen has replaced the app.
+  useEffect(() => {
+    if (!consentMissing) return;
+    onSessionEnd?.();
+    void clearSignedOutCaches();
+  }, [consentMissing, onSessionEnd]);
   const value = useMemo<AuthState>(
     () => ({
       enabled: true,
@@ -167,17 +218,30 @@ function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishab
       isAdmin: me?.is_admin ?? false,
       signOut: leave,
       grantGoogleScopes,
+      consent: me?.consent ?? null,
+      setConsent,
     }),
-    [me, leave, grantGoogleScopes]
+    [me, leave, grantGoogleScopes, setConsent]
   );
 
   if (!isLoaded) return <GateSpinner />;
   if (!isSignedIn) return <SignInPage />;
+  if (leaving === 'misconfigured') {
+    return (
+      <GateScreen>
+        <ErrorState
+          message="Authentification mal configurée"
+          // Signing out would only lead back here: a reload picks up a fixed deployment.
+          onRetry={() => window.location.reload()}
+        />
+      </GateScreen>
+    );
+  }
   if (leaving === 'failed') {
     return (
       <GateScreen>
         <ErrorState
-          message="SESSION EXPIRÉE"
+          message="Session expirée"
           onRetry={() => {
             setLeaving('yes');
             leave().catch(() => setLeaving('failed'));
@@ -190,7 +254,7 @@ function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishab
   if (current.status === 'error') {
     return (
       <GateScreen>
-        <ErrorState message="COMPTE INJOIGNABLE" onRetry={() => setAttempt((n) => n + 1)} />
+        <ErrorState message="Compte injoignable" onRetry={() => setAttempt((n) => n + 1)} />
       </GateScreen>
     );
   }
@@ -206,6 +270,14 @@ function SessionGate({ onSessionEnd, children }: Omit<ClerkGateProps, 'publishab
       />
     );
   }
+  if (consentMissing) {
+    // The account is known: its deletion stays offered without consent (AccountDeletionPanel reads it).
+    return (
+      <AuthStateContext.Provider value={value}>
+        <ConsentScreen consent={current.me.consent} email={current.me.email} onConsent={setConsent} signOut={leave} />
+      </AuthStateContext.Provider>
+    );
+  }
   return <AuthStateContext.Provider key={key} value={value}>{children}</AuthStateContext.Provider>;
 }
 
@@ -216,8 +288,8 @@ function SignInPage() {
     <GateScreen>
       <div className="flex flex-col items-center gap-6 animate-fade-up">
         <div className="text-center">
-          <h1 className="text-3xl font-bold font-mono tracking-wider text-neon-cyan">[ARETE]</h1>
-          <p className="mt-2 text-sm font-mono text-text-secondary">
+          <h1 className="text-text-primary"><AreteWordmark /></h1>
+          <p className="mt-2 text-sm font-sans text-text-secondary">
             Connecte-toi pour retrouver ton entraînement.
           </p>
         </div>
@@ -240,10 +312,10 @@ function AccountNotice({
   return (
     <GateScreen>
       <div className="glass-panel w-full max-w-md p-6 space-y-4 animate-fade-up">
-        <h1 className="text-xl font-bold font-mono tracking-wider text-neon-cyan">[ARETE]</h1>
+        <h1 className="text-text-primary"><AreteWordmark /></h1>
         <p className="text-sm text-text-primary">{message}</p>
         {email && (
-          <p className="text-xs font-mono text-text-muted">
+          <p className="text-xs font-sans text-text-muted">
             Connecté en tant que <span className="text-text-secondary">{email}</span>
           </p>
         )}

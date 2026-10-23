@@ -2,20 +2,54 @@
 import { clientsClaim } from 'workbox-core';
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { NetworkOnly } from 'workbox-strategies';
+import { ExpirationPlugin } from 'workbox-expiration';
+import { CacheFirst, NetworkOnly } from 'workbox-strategies';
 
 declare let self: ServiceWorkerGlobalScope;
 
-// Same behaviour as the former generated worker (registerType: 'autoUpdate').
-self.skipWaiting();
+// A new version waits until a page lets it take over (one loading, « Recharger »,
+// or the stale-chunk recovery): open tabs keep the build they started with meanwhile
+// (src/lib/serviceWorker.ts). The very first install has nothing to wait for.
+self.addEventListener('message', (event) => {
+  if ((event.data as { type?: unknown } | null)?.type === 'SKIP_WAITING') void self.skipWaiting();
+});
+// Workers from before announced versions swapped at once, and their pages can
+// neither show the notice nor hand over on load: replace such a worker the old
+// way, once. The marker says a worker that waits really took over here; it is
+// written on activation, so a failed install (precache error) retries the old way.
+const WAITS_MARKER = 'arete-sw-waits';
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.has(WAITS_MARKER).then(async (waits) => {
+      if (!waits) await self.skipWaiting();
+    })
+  );
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(caches.open(WAITS_MARKER).then(() => undefined));
+});
 clientsClaim();
 
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
-// SPA navigation falls back to the app shell. API calls and the Strava OAuth
-// callback must reach the server, never the cached shell.
+// SPA navigation falls back to the app shell. API calls must reach the
+// server, never the cached shell.
 registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/api\//] }));
+
+// Only the shell is precached. Lazy chunks, fonts and images have content-hashed
+// names: the first use caches them for good. The SPA fallback answers a missing
+// file with index.html, which must never be kept as an asset.
+registerRoute(
+  ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/assets/'),
+  new CacheFirst({
+    cacheName: 'assets',
+    plugins: [
+      { cacheWillUpdate: async ({ response }) => (response.ok && !response.headers.get('content-type')?.includes('text/html') ? response : null) },
+      new ExpirationPlugin({ maxEntries: 120, purgeOnQuotaError: true }),
+    ],
+  })
+);
 
 // Private API responses must never fall back to another account's cached data.
 registerRoute(({ url }) => url.pathname.startsWith('/api/'), new NetworkOnly());
@@ -59,7 +93,9 @@ self.addEventListener('notificationclick', (event) => {
       const open = windows.find((w) => new URL(w.url).origin === target.origin);
       if (open) {
         await open.focus();
-        if (new URL(open.url).pathname !== target.pathname) await open.navigate(target.href);
+        // Compare the query too: ?rpe=1 on the page already open must still apply.
+        const current = new URL(open.url);
+        if (current.pathname + current.search !== target.pathname + target.search) await open.navigate(target.href);
         return;
       }
       await self.clients.openWindow(target.href);

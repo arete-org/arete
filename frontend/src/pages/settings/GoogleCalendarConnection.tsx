@@ -9,6 +9,7 @@ import {
 import { useAuthState } from "@/components/auth/authState";
 import { Button } from "@/components/ui";
 import { PlanCalendarSync } from "./PlanCalendarSync";
+import { readableError } from '@/lib/utils';
 
 /** Query flag Google's consent screen comes back with (through Clerk). */
 const RETURN_FLAG = "google_calendar";
@@ -123,10 +124,10 @@ export function GoogleCalendarConnection() {
       aria-label="Connexion Google Calendar"
       className="space-y-3 rounded border border-text-muted/20 bg-abyss/50 p-4"
     >
-      <div className="font-mono text-sm text-text-primary">Google Calendar</div>
+      <div className="font-sans text-sm text-text-primary">Google Calendar</div>
       {error && (
         <p role="alert" className="break-words text-xs text-danger-red">
-          {error.message}
+          {readableError(error)}
         </p>
       )}
       {notice && (

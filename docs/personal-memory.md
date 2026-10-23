@@ -17,8 +17,10 @@ memory migration 19 receive both features without resetting existing game state.
 `evidence` is independent of `source` (the original writer):
 
 - `explicit`: a declaration by the athlete. New Settings entries and text
-  corrections are explicit. The coach must supply a source reference when
-  recording an explicit declaration.
+  corrections are explicit. The coach supplies an exact quotation from the latest human message when
+  recording an explicit declaration. The runtime checks that quotation and adds
+  hashed thread/message references; this establishes where the text appeared, not
+  whether the proposed fact is entailed by it. Browser history remains client-owned.
 - `hypothesis`: a coach inference. Repetition does not confirm it. Settings has an
   explicit confirmation action. This is the tool's conservative default.
 - `legacy`: existing evidence whose origin cannot be established retrospectively.
@@ -50,11 +52,78 @@ and coach tool send the displayed revision. PATCH with `valid_until: null` clear
 an expiry. Dates are inclusive, so an exception valid through October 10 is still
 applicable on October 10.
 
-`remember_fact` retains its name and adds evidence, source reference, revision and
-validity dates. A temporary exception is a separate fact, not a rewrite of a
+`remember_fact` retains its name, evidence, revision and validity dates. For an
+explicit declaration, `source_ref` is now the exact quotation to validate. A temporary exception is a separate fact, not a rewrite of a
 standing preference. Unresolved contradictions call for clarification when they
 affect a decision. These prompt rules guide advice; only domain validation can
 make a constraint an enforced prohibition on writes.
+
+## Jev-assisted writes
+
+`services/fact_memory.py` owns new-fact reconciliation. `remember_fact` still
+writes one typed fact per call; updates with a fact ID use the existing revision
+contract. First facts, exact duplicates and writes without comparable candidates
+need no classifier request. Journals, Settings writes and tool-free missions do
+not call Jev.
+
+For a new fact with comparable existing evidence:
+
+1. Load the athlete's bounded fact collection (10,000 maximum). Exclude resolved
+   facts, other evidence classifications and non-overlapping validity periods.
+   Temporary exceptions remain separate from standing facts.
+2. Rank with BM25Plus using the existing tokenizer, with same-kind/recent facts
+   breaking ties. Send up to seven **complete** facts, with opaque numeric IDs.
+   Source quotations, conversation history and credentials are not classifier data.
+3. Ask pinned `typesafe/jev-1.13` for one Choice: create, duplicate of a specific
+   candidate, or contradiction with a specific candidate. Python controls which
+   duplicate options are eligible by kind, evidence and validity.
+4. Reuse a named duplicate only at probability ≥0.9. A contradiction at ≥0.7
+   returns `needs_clarification` without writing; the agent must resolve it before
+   updating the existing fact by ID/revision. Otherwise create the new fact.
+   These thresholds are initial policy choices, not measured calibration.
+5. At commit, check the complete fact ID/revision snapshot under the same athlete
+   mutation lock used by creation, correction and deletion. A concurrent change
+   raises a conflict with no automatic replay. An old decision cannot recreate a
+   deleted fact or silently suppress a correction.
+
+Receipts distinguish `created`, `updated`, `already_present` and
+`needs_clarification`. Only actual writes set `saved=true` and produce a memory
+update card. Duplicate receipts return the real unchanged fact and source.
+
+`FactMemoryMiddleware` registers the fact tools; `JournalMiddleware` registers
+only `append_journal`. Native `FilesystemMiddleware` operates over the injected
+`CompositeBackend` for journal files, attachments and skills. Its configuration
+accepts any `BackendProtocol`, while the composition root owns mounts and permissions.
+`fact_memory_tools`, `journal_tools` and `filesystem_tools` select these independently.
+The central context builder remains the sole owner of memory injection and token
+accounting.
+
+The composition root injects `agent/models/jev.py`; runtime owns provenance,
+deadlines, request accounting and the optional `classify_memory` LangSmith span.
+The [OpenRouter Decisions API](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request)
+uses `/api/alpha/decisions`, not chat completions. It exposes neither temperature
+nor a generative output-token limit. Arete caps the complete request and response
+at 16 KiB each, one request per classification, four per run, 10 seconds per request
+within the run deadline, and zero retries/fallbacks. Each attempt consumes the
+shared 24-call turn budget, reserving the final answer. `Agent run:` includes
+`memory_decision_calls`/`memory_decision_ms`, and decision logs retain usage/cost
+when returned. This does not add a model call to recall.
+
+`MEMORY_JEV_ENABLED=true` is the deployment default and requires
+`OPENROUTER_API_KEY` when classification is needed. Jev is a **paid route separate
+from the chat GLM flag**, capped at $0.05/M input and $0/M output. Disabling it
+explicitly selects deterministic-only memory; provider errors never silently
+select that path. Restart the service after changing deployment configuration.
+No async HTTP connection pool is shared across event loops.
+
+The shortlist can miss paraphrases or contradictions outside its seven candidates.
+All fact text in that shortlist is sent to TypeSafe via OpenRouter. Probability
+thresholds do not prove semantic equivalence; full recall and temporal behavior
+remain governed by the typed fact store and context builder.
+
+Normal tests mock HTTP and cover complete payloads, thresholds, malformed replies,
+timeouts, cancellation, shared budgets, provenance, concurrency and the
+remember/use/correct/expire/forget lifecycle.
 
 ## Retrieval
 
@@ -88,12 +157,11 @@ Graph traversal follows explicit references: fact → previous revision,
 actual → planned session, strength → actual session, prescription → authorized
 source block, and journal → typed session reference. Server feedback now records
 `actual:N` or `strength:N`. Dates/names alone never establish an edge.
-**Graph expansion is disabled in production.** `SearchLimits(graph=True)` is
-available for evaluation; enablement requires behavior-level evidence, not just
-better source recall.
+**Graph expansion is disabled in production.** Enablement requires behavior-level
+evidence, not just better source recall.
 
-The context builder runs synchronous reads in an AnyIO worker. Each model
-boundary rebuilds a disposable corpus, including after memory writes; there is
+The context builder runs synchronous reads in an AnyIO worker. Each question
+builds a disposable corpus once per invocation, rebuilt after any write tool; there is
 no process-global index to become stale after correction or deletion. The database
 corpus uses one read transaction. Existing filesystem journal synchronization is
 unchanged. No automatic reload/replay of an agent run is introduced.
@@ -103,48 +171,10 @@ journal. Chat retrieval adds zero model calls. `Agent run:` logs include
 `memory_searches`, `memory_ms` and the last contribution's `memory_tokens`.
 Detailed search logs contain counts/timing, not source text.
 
-## Evaluation
+## Verification
 
-`tests/data/personal_memory_cases.jsonl` has 60 synthetic French cases, with a
-fixed 40/20 development/validation split and human-readable behavior rubrics.
 Source isolation, concurrency, expiry, deletion, schema migration, runtime
 integration and failures have separate service/API/browser tests.
-
-Run the offline selection comparison without accessing athlete data:
-
-```sh
-uv run python scripts/eval_personal_memory.py --split development
-uv run python scripts/eval_personal_memory.py --split validation
-```
-
-It compares the frozen selection baseline (30 facts/five recent entries), BM25
-and BM25 plus graph expansion on the same synthetic evidence. The baseline is a
-selection ablation, not a replay of the complete former agent. Some cases
-intentionally put evidence outside the recent excerpt. Source recall on these
-fixtures is not an estimate of production answer quality.
-
-Opt-in answer generation uses one pinned configured-provider model across all
-three variants, no tools, no fallback, no retries, temperature 0, 4,096 output
-tokens, a 16,384-token envelope and a 60-second timeout. It never opens a database:
-
-```sh
-ARETE_EVAL=1 uv run python scripts/eval_personal_memory.py \
-  --live --model EXACT_MODEL_ID --split development --limit 5
-```
-
-The hard maximum is 180 model calls; the example makes 15. Outputs include usage,
-served model, latency and a rubric for human review. Preference compliance,
-temporal errors and unsupported claims remain **unknown** until rated. Offline
-retrieval success must not populate these metrics. `--ratings` accepts a JSON
-list with `id`, `variant`, and boolean `preference_followed`, `temporal_error`,
-`unsupported_claim` fields.
-
-Local measurement on a synthetic DuckDB corpus (20 warm reads): 1,000 passages
-had warm p95 around 19 ms; 10,000 around 113 ms. First reads were around 43 ms and
-112 ms respectively (the latter reused imported libraries). These numbers exclude
-MotherDuck networking and serverless startup. The deployment target remains
-p95 below 500 ms, to be verified in that environment. Graph remains off until
-live answers demonstrate relational gains without constraint regressions.
 
 Migration is additive and runs through normal initialization; no production data
 or deployment is touched by the offline tests. Run `make check` before shipping.
