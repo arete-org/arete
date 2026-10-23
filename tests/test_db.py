@@ -69,6 +69,16 @@ def test_a_dead_remote_connection_is_reopened(opened):
     assert cursor._con is opened[1].cursor.return_value
 
 
+def test_a_run_reuses_cursors_of_the_current_remote_connection_only(opened):
+    with db.reuse_connections():
+        db.connect().close()
+        db.connect().close()
+        assert opened[0].cursor.call_count == 1
+        db.reset_remote()  # lost and reopened by another caller
+        db.connect().close()
+    assert len(opened) == 2 and opened[1].cursor.call_count == 1
+
+
 def test_a_remote_that_stays_down_raises(opened):
     db.connect()
     opened[0].cursor.side_effect = duckdb.ConnectionException("gone")

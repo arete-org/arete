@@ -18,6 +18,7 @@ from uuid import uuid4
 import duckdb
 
 from arete.dataio.db import db_connection, transaction
+from arete.observability.steps import step_done
 from arete.services.athlete_scope import current_athlete_id
 from arete.services.settings import athlete_today
 
@@ -342,8 +343,10 @@ def _iter_refresh(
                 remaining = max_activities - len(result.session_ids)
                 batch = []
                 importer.presence.clear()
+                # One query for the page rather than one per activity.
+                known = importer.already_synced([a.activity_id for a in relevant])
                 for activity in relevant:
-                    present = importer._is_already_synced(activity.activity_id)
+                    present = str(activity.activity_id) in known
                     if not present:
                         if remaining == 0:
                             reached_end = False
@@ -392,6 +395,7 @@ def _iter_refresh(
                 result.errors.append(
                     "Limite de pages atteinte ; couverture incomplète."
                 )
+        step_done("garmin_activities")
         if health:
             yield SyncProgress("finalizing")
             state["stage"] = "health"
@@ -436,6 +440,7 @@ def _iter_refresh(
             else:
                 state["health_checked_at"] = _now().isoformat()
                 state["health_complete"] = True
+            step_done("garmin_health")
         yield SyncProgress("finalizing")
         checkpoint()
         state["stage"] = "enrichment"
@@ -445,6 +450,7 @@ def _iter_refresh(
             deadline=stop,
         )
         state["conditions"] = conditions
+        step_done("conditions")
         if conditions.get("incomplete"):
             result.errors.append("Enrichissement incomplet faute de temps.")
     except Exception as exc:
