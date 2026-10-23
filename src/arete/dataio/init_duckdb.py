@@ -254,6 +254,8 @@ CREATE TABLE IF NOT EXISTS app.user_settings (
     notification_preferences VARCHAR,                  -- JSON kinds + quiet hours, NULL = all on, 21:30-07:00
     coach_evening_enabled   BOOLEAN DEFAULT FALSE,     -- the coach's evening message (ARE-64), opt-in
     coach_evening_hour      INTEGER DEFAULT 20,        -- from this hour on the athlete's clock
+    ftp_w                   INTEGER,                   -- cycling functional threshold power, watts
+    css_sec_100m            INTEGER,                   -- swimming critical speed, seconds per 100 m
     updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -1262,6 +1264,30 @@ def _m66_body_log(con) -> None:
 DDL += AUTOMATION_DDL + CONVERSATION_DDL + COORDINATION_DDL
 
 
+def _m67_tri_thresholds(con) -> None:
+    """Cycling FTP and swimming CSS (ARE-208), what a triathlon plan targets.
+
+    Two nullable columns: nobody has entered them yet, and a plan without
+    them targets heart rate or effort instead. The previous release names
+    the columns it reads and writes, so it runs unchanged on them. The
+    private view froze ``t.*`` when it was made: rebuilt in the same
+    transaction, rolled back together (see migration 52).
+    """
+    from arete.dataio.tenant_schema import _view
+
+    con.execute("BEGIN TRANSACTION")
+    try:
+        for column in ("ftp_w INTEGER", "css_sec_100m INTEGER"):
+            con.execute(
+                f"ALTER TABLE app.user_settings ADD COLUMN IF NOT EXISTS {column}"
+            )
+        _view(con, "user_settings")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+
+
 def _m62_strava_values_off_garmin_rows(con) -> None:
     """Clear the Strava values copied onto Garmin rows (ARE-126).
 
@@ -1347,6 +1373,7 @@ MIGRATIONS: list[tuple[int, Callable[[Any], None]]] = [
     (64, _m64_goal_types),
     (65, _m65_best_efforts),
     (66, _m66_body_log),
+    (67, _m67_tri_thresholds),
 ]
 
 

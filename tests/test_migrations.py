@@ -785,6 +785,50 @@ def test_m64_adds_the_goal_types_once_and_atomically(tmp_path, monkeypatch):
         ).fetchone() == (1,)
 
 
+def test_m67_adds_ftp_and_css_once_and_atomically(tmp_path, monkeypatch):
+    from arete.dataio import tenant_schema
+
+    path = tmp_path / "tri-thresholds.duckdb"
+    monkeypatch.setenv("ARETE_DB", str(path))
+    init_duckdb.main()
+    with migration_connection(str(path)) as con:
+        # Schema 66: neither column, a threshold heart rate stored.
+        con.execute("ALTER TABLE app.user_settings DROP COLUMN ftp_w")
+        con.execute("ALTER TABLE app.user_settings DROP COLUMN css_sec_100m")
+        tenant_schema._view(con, "user_settings")
+        con.execute("UPDATE app.user_settings SET lthr = 172")
+        con.execute("DELETE FROM app.schema_version WHERE version = 67")
+        assert init_duckdb.pending_migrations(con) == [67]
+        with monkeypatch.context() as previous:
+            previous.setattr(
+                init_duckdb,
+                "MIGRATIONS",
+                [m for m in init_duckdb.MIGRATIONS if m[0] != 67],
+            )
+            assert init_duckdb.pending_migrations(con) == []
+
+        def broken_view(*_args):
+            raise RuntimeError("view refresh failed")
+
+        with monkeypatch.context() as broken:
+            broken.setattr(tenant_schema, "_view", broken_view)
+            with pytest.raises(RuntimeError):
+                init_duckdb._m67_tri_thresholds(con)
+        # Rolled back together: never a column the private view does not show.
+        columns = {r[0] for r in con.execute("DESCRIBE app.user_settings").fetchall()}
+        assert not {"ftp_w", "css_sec_100m"} & columns
+
+    init_duckdb.main()
+    init_duckdb.main()  # recorded once, then skipped
+    with migration_connection(str(path)) as con:
+        assert con.execute(
+            "SELECT lthr, ftp_w, css_sec_100m FROM app.visible_user_settings"
+        ).fetchall() == [(172, None, None)]
+        assert con.execute(
+            "SELECT count(*) FROM app.schema_version WHERE version = 67"
+        ).fetchone() == (1,)
+
+
 def test_m65_backfills_every_athlete_s_best_efforts_once_and_atomically(
     tmp_path, monkeypatch
 ):

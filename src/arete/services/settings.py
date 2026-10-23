@@ -131,6 +131,10 @@ EVENING_FIRST_HOUR = 18
 EVENING_LAST_HOUR = 21
 EVENING_DEFAULT_HOUR = 20
 
+#: Bounds of the cycling FTP (watts) and the swimming CSS (seconds per 100 m).
+FTP_MIN_W, FTP_MAX_W = 50, 600
+CSS_MIN_SEC, CSS_MAX_SEC = 60, 300
+
 # The browser's palettes (frontend/src/lib/theme.ts); "system" follows the device.
 ThemePreference = Literal["system", "pierre", "prune", "odyssey", "encre"]
 DEFAULT_THEME: ThemePreference = "system"
@@ -177,6 +181,10 @@ class UserSettingsUpdate(BaseModel):
     coach_evening_hour: int | None = Field(
         default=None, ge=EVENING_FIRST_HOUR, le=EVENING_LAST_HOUR
     )
+    # What a triathlon plan targets (ARE-208). Omitted, the stored value
+    # stays (a tab opened before they existed); an explicit null clears it.
+    ftp_w: int | None = Field(default=None, ge=FTP_MIN_W, le=FTP_MAX_W)
+    css_sec_100m: int | None = Field(default=None, ge=CSS_MIN_SEC, le=CSS_MAX_SEC)
 
     @field_validator("timezone")
     @classmethod
@@ -219,6 +227,8 @@ class UserSettingsOut(BaseModel):
     )
     coach_evening_enabled: bool = False
     coach_evening_hour: int = EVENING_DEFAULT_HOUR
+    ftp_w: int | None = None
+    css_sec_100m: int | None = None
 
     @field_validator("theme", mode="before")
     @classmethod
@@ -260,8 +270,22 @@ def get_settings():
     return _settings_out(settings)
 
 
+#: Settings an older client may omit: absent from its payload, they stay.
+_KEPT_WHEN_OMITTED = ("ftp_w", "css_sec_100m")
+
+
 def update_settings(payload: UserSettingsUpdate):
     """Update user settings."""
+    omitted = [f for f in _KEPT_WHEN_OMITTED if f not in payload.model_fields_set]
+    stored = (
+        repo.get_user_settings() or {}
+        if omitted or payload.notification_preferences is not None
+        else {}
+    )
+    kept = {
+        f: stored.get(f) if f in omitted else getattr(payload, f)
+        for f in _KEPT_WHEN_OMITTED
+    }
     settings = repo.upsert_user_settings(
         user_id=resolve_athlete_id(),
         display_name=payload.display_name,
@@ -286,7 +310,7 @@ def update_settings(payload: UserSettingsUpdate):
             json.dumps(
                 {
                     **stored_preferences(
-                        (repo.get_user_settings() or {}).get("notification_preferences")
+                        stored.get("notification_preferences")
                     ).model_dump(),
                     **payload.notification_preferences.model_dump(exclude_unset=True),
                 }
@@ -296,5 +320,6 @@ def update_settings(payload: UserSettingsUpdate):
         ),
         coach_evening_enabled=payload.coach_evening_enabled,
         coach_evening_hour=payload.coach_evening_hour,
+        **kept,
     )
     return _settings_out(settings)
