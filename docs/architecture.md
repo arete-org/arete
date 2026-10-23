@@ -788,6 +788,42 @@ coordinator and returns exact imported IDs. Neither path writes daily feedback.
 See [Garmin freshness and recovery](garmin-freshness.md) for the API, bounds and
 operator recovery procedure.
 
+## Goal plans
+
+A goal's plan is generated, previewed and written by `services/plan_builder.py`,
+which reads the athlete (recent volume by sport, strength days, rest days, VDOT,
+FTP and CSS, the readiness rules' ACWR and TSB, the sessions they edited) and
+owns the write rules: generated sessions are `source='plan'`, linked to the
+goal, stored with their kind (`plan_kind`); regeneration takes back only the
+goal's untouched future sessions and plans around the edited ones. The
+generators are pure (`features/`): `plan_generator` for a road race,
+`hybrid_plan` for a Hyrox race or a hybrid block, `tri_plan` for a triathlon.
+
+Hyrox, hybrid and triathlon plans share `features/week_placement.py`: the
+interference rules as data (`Spacing`, `Grouping`, `Deload`, `Taper`, read by
+`violations`) and a deterministic, bounded search placing each week's slots
+(at most eight, each at most `MAX_PER_DAY` sessions a day). Each generator
+declares a `Catalog`: its kinds' preferred days, ranks, French labels, taper
+drops, which sessions may share a day, and a last touch on the placed week. A
+week that cannot hold every slot gives up the fewest, least important ones its
+drop list allows, and the preview says why.
+
+A triathlon goal (`goal_type='triathlon'`) names its format (S, M, 70.3, the
+Ironman distance), the hours a week the athlete can train and their pool; its
+stored distance follows the format. Its plan runs base, build, specific, taper
+and race week, with lengths, taper days and the last hard day set by the
+format; volume grows 8 % a week in 3:1 blocks towards a peak set by format and
+level (`tri_level`, from 28 days of swimming, cycling and running), never past
+the declared hours, and splits between the sports by format. Keys follow the
+phase: CSS-based swim repeats (whole pool lengths, pace in step notes, since
+Garmin refuses swim targets), bike intervals in % of FTP (heart-rate zones 2 to
+4 without one, effort without either), runs at VDOT paces in the running
+grammar's notation. From the build phase a brick (a run straight off the bike)
+is two sessions on one day, the bike written first; a kept half gets its partner
+alone that day. Race week keeps one activation per sport. Swim and bike keys
+carry prescriptions that export to Garmin; the race is `sport='other'`, and
+without a target time its projected load is 80 to 780 minutes by format.
+
 ## Optional athlete RPG
 
 `services/gamification.py` owns deterministic XP, cosmetic currency and purchases.
