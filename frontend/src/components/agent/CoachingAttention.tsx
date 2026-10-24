@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { AreteMark } from '@/components/AreteBrand';
 import { Button, Panel } from '@/components/ui';
 import { attentionKey, useCoachingAttention } from '@/hooks/useCoachingAttention';
 import { coachApi, coachTodayKey } from '@/lib/coachToday';
@@ -12,10 +13,13 @@ import { useCoachWords } from '@/lib/coachName';
 export function CoachingAttention({
   enabled = true,
   compact = false,
+  hero = false,
 }: {
   enabled?: boolean;
   compact?: boolean;
+  hero?: boolean;
 }) {
+  const navigate = useNavigate();
   const client = useQueryClient();
   const query = useCoachingAttention(enabled);
   const coach = useCoachWords();
@@ -45,11 +49,19 @@ export function CoachingAttention({
       </>
     );
   }
+  if (hero && query.data.items.length === 0) return unavailable;
+  const [primary, ...following] = query.data.items;
   return (
-    <Panel title={`À suivre avec ${coach.the}`}>
+    <Panel title={hero ? undefined : `À suivre avec ${coach.the}`} className={hero ? 'bg-surface-raised' : undefined}>
       <div className="space-y-3">
         {unavailable}
-        {query.data.items.map((item, index) => (
+        {hero && primary && <section aria-label="Ta priorité avec le coach" className="space-y-3">
+          <p className="flex items-center gap-2 text-xs text-ink-secondary"><AreteMark size={20} />Avec {coach.the} aujourd’hui</p>
+          <h2 className="font-display text-3xl font-semibold text-ink-primary">{primary.title}</h2>
+          <p className="text-sm text-ink-secondary">{primary.kind === 'approval' ? 'Une proposition attend ton accord avant de modifier le planning.' : primary.kind === 'question' ? 'Ton retour permet de préparer la suite de ton entraînement.' : 'Prends un moment pour relire ta progression et préparer la suite.'}</p>
+          <Button strong onClick={() => navigate(primary.url)}>{primary.kind === 'approval' ? 'Examiner la proposition' : primary.kind === 'question' ? 'Répondre au coach' : 'Lire le bilan'}</Button>
+        </section>}
+        {(hero ? following : query.data.items).map((item, index) => (
           <Link
             key={item.subject_key}
             to={item.url}

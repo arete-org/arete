@@ -238,8 +238,27 @@ def test_the_evening_is_written_and_pushed_once_whatever_the_windows(evening):
     }
     (row,) = _rows()
     message_id = evening_message.get_for_day(athlete_today()).id
-    assert (title, body) == ("Chiron, pour demain", "Comment sont tes jambes ?")
+    assert (title, body) == ("Le coach, pour demain", "Comment sont tes jambes ?")
     assert url == f"/follow-up?evening={message_id}" and row[0] == "ok"
+
+
+@pytest.mark.parametrize(
+    "opted_in,available,name",
+    [(False, True, "Le coach"), (True, True, "Chiron"), (True, False, "Le coach")],
+)
+def test_server_coach_name_respects_the_athletes_preference(
+    db, monkeypatch, opted_in, available, name
+):
+    from arete.dataio.db import db_connection
+    from arete.services.coach_identity import subject
+
+    monkeypatch.setenv("GAMIFICATION_ENABLED", str(available).lower())
+    with db_connection() as con:
+        con.execute(
+            "UPDATE app.game_profile SET enabled=? WHERE athlete_id=getvariable('arete_athlete_id')",
+            [opted_in],
+        )
+    assert subject() == name
 
 
 def test_off_by_default_and_before_the_chosen_hour_nothing_is_read(evening):

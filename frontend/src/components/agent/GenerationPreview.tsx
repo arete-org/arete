@@ -33,9 +33,16 @@ function GenerationObservation({ kind, sourceId = 'current', activeOnly = false 
     }, controller.signal).catch(err => { if (!controller.signal.aborted) { queryClient.removeQueries({ queryKey: ['coaching-activity', kind, sourceId], exact: true }); setError(readableError(err)); } });
     return () => controller.abort();
   }, [kind, sourceId, queryClient, attempt]);
+  return <GenerationPreviewView message={message} error={error} activeOnly={activeOnly} onRetry={() => { setError(''); setAttempt(n => n + 1); }} />;
+}
+
+/** Shared presentation also used by the local gallery without opening a subscription. */
+export function GenerationPreviewView({ message, error = '', activeOnly = false, onRetry }: {
+  message: ChatMessage | null; error?: string; activeOnly?: boolean; onRetry: () => void;
+}) {
   if ((!message && !error) || (activeOnly && message && message.runState !== 'running')) return null;
   return <section aria-label="Génération en cours" className="space-y-2 rounded-xl border border-border p-3">
     {message && <><RunActivity message={message} /><p className="whitespace-pre-wrap text-sm leading-relaxed text-text-secondary">{message.content}</p>{message.pending && <p className="text-xs text-text-muted">Texte provisoire · pas encore enregistré</p>}</>}
-    {error && <p role="alert" className="text-xs text-danger-red">Suivi indisponible : {error} <Button variant="ghost" onClick={() => { setError(''); setAttempt(n => n + 1); }}>Actualiser le suivi</Button></p>}
+    {error && <p role="alert" className="text-xs text-danger-red">Suivi indisponible : {error} <Button variant="ghost" onClick={onRetry}>Actualiser le suivi</Button></p>}
   </section>;
 }

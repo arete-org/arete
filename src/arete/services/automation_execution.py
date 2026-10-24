@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from arete.dataio.db import db_connection, transaction
 from arete.services.automation_schedule import (
+    MAX_EVENING_SESSIONS,
     MAX_MODEL_REQUESTS,
     MAX_MODEL_TURNS,
     MAX_TOOL_CALLS,
@@ -203,7 +204,53 @@ def end_effect(identifier, call_id, result):
         assert changed, "Missing started receipt"
 
 
-def finish(identifier, *, seconds, result=None, interrupts=(), error=None):
+def record_evening_decision(identifier: str, decision: dict) -> dict:
+    with transaction() as con:
+        guard(con, identifier)
+        run = _get(con, "automation_runs", identifier)
+        definition: dict = json.loads(run["definition_json"])
+        assert definition["source"]["kind"] == "evening"
+        assert "decision" not in definition
+        definition["decision"] = decision
+        con.execute(
+            f"UPDATE app.automation_runs SET definition_json=? WHERE {OWNER} AND id=? RETURNING id",
+            [json.dumps(definition, ensure_ascii=False), identifier],
+        )
+        return definition
+
+
+def validate_evening_source(identifier: str) -> None:
+    from arete.services import coaching_attention
+
+    if not coaching_attention.enabled():
+        raise ValueError("Le suivi coordonné est désactivé.")
+    with db_connection() as con:
+        guard(con, identifier)
+        run = _get(con, "automation_runs", identifier)
+        source = json.loads(run["definition_json"])["source"]
+        answer = con.execute(
+            "SELECT answer FROM app.visible_coach_evening_messages WHERE id=?",
+            [source["id"]],
+        ).fetchone()
+        if answer is None or answer[0] != source["answer"]:
+            raise ValueError("La réponse du soir n’est plus disponible.")
+        assert len(source["sessions"]) <= MAX_EVENING_SESSIONS
+        for session in source["sessions"]:
+            current = con.execute(
+                "SELECT revision,status FROM app.visible_planned_sessions WHERE id=?",
+                [session["id"]],
+            ).fetchone()
+            if (
+                current is None
+                or current[0] != session["revision"]
+                or current[1] not in {"pending", "modified"}
+            ):
+                raise ValueError(
+                    "Le planning a changé depuis la réponse ; ouvre le coach pour refaire le point."
+                )
+
+
+def finish(identifier, *, seconds, result=None, interrupts=(), error=None, notify=True):
     now = utc_now()
     with transaction() as con:
         run = _get(con, "automation_runs", identifier)
@@ -233,7 +280,9 @@ def finish(identifier, *, seconds, result=None, interrupts=(), error=None):
                     json.dumps(item["value"], ensure_ascii=False),
                     json.dumps(item["schema"]),
                     now,
-                    now + timedelta(hours=WAIT_HOURS),
+                    min(now + timedelta(hours=WAIT_HOURS), run["expires_at"])
+                    if run["expires_at"]
+                    else now + timedelta(hours=WAIT_HOURS),
                 ],
             )
         expiry = (
@@ -262,10 +311,14 @@ def finish(identifier, *, seconds, result=None, interrupts=(), error=None):
         )
     from arete.services import inbox
 
+    if not notify and state == "completed":
+        return
+    from arete.services.coach_identity import subject
+
     inbox.publish(
         f"run:{identifier}:{run['revision']}",
         "automation",
-        "Chiron attend ta réponse"
+        f"{subject()} attend ta réponse"
         if state == "waiting"
         else "Suivi terminé"
         if state == "completed"

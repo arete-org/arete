@@ -28,7 +28,7 @@ export function GoalCard({ goal, day, ready }: { goal: Goal | null; day: string 
           <Flag className="w-4 h-4 text-neon-gold shrink-0" aria-hidden />
           {goal ? 'Ta course est passée.' : 'Pas encore d’objectif de course.'}
         </span>
-        <Link to="/settings?tab=goals" className="text-neon-cyan hover:underline">
+        <Link to="/planning/objectifs" className="text-neon-cyan hover:underline">
           {goal ? 'Fixer le prochain objectif' : 'Fixer un objectif'} <span aria-hidden>→</span>
         </Link>
       </div>

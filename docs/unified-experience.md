@@ -28,7 +28,7 @@ prototype inventory counts, not claims of 105 separate application pages.
 | Cycling detail | `376:11677` / `376:12008` | Same owner and source data, speed/cadence/power units; no duplicate sport page |
 | Strength | `338:340` / `375:11525` | `Log`, 20 muscle regions, weekly tonnage, exercise e1RM/records/suggestion; touch and native keyboard selector |
 | Chiron | `376:17529` / `376:17709` | Existing mounted conversation owner, floating/docked/expanded modes; draft, file, live SSE and thread preservation |
-| Prune appearance | `378:15685` / `378:16333` | Shared semantic colors; all eight palettes retained and exercised in browser tests |
+| Prune appearance | `378:15685` / `378:16333` | Shared semantic colors; the four retained palettes are exercised in browser tests |
 
 Analytics sections cover volume and CTL/ATL/TSB; heart-rate zones and sport mix;
 cardiac decoupling, pace and records; elevation, cadence, VAM and descending;
@@ -61,6 +61,16 @@ reference card and messages can use two columns on desktop. Direct proposal and
 follow-up references reuse `ProposalCard`/`FollowupCard`; a decision's remote
 receipt remains visible after the source list refreshes. No model call is made
 merely to open a reference, change a display mode or select a method.
+
+The coordinated home now puts its first priority immediately after the greeting,
+before goals, today's session and metrics. Its title, reason and action come from
+the existing deterministic attention projection. An empty projection adds no task.
+Goals live at `/planning/objectifs`; old Settings goal links redirect there.
+Planning shows the cached connection status and last successful check, including
+partial failures. Routine presets expose their schedule and approval contract
+before the athlete activates them. The development-only `/design-system` route
+previews the real components in all four palettes; see the
+[component inventory](component-inventory.md).
 
 ## Coordinated coaching and rollout
 
@@ -102,6 +112,45 @@ and inbox outcomes, then enable the admin flag and athlete preference. Revert th
 flag to stop coordination without changing model routing, deleting pending work
 or replaying a failed send. Production scheduling behavior and live delivery
 volume have not been measured by fixture tests.
+
+## Evening reply continuation
+
+The athlete can explicitly activate **Donner suite à mes réponses du soir** in
+Suivi → Routines. It also requires both coordination switches. There is at most
+one active evening routine per athlete. Saving an evening reply keeps the existing
+once-only answer and journal operations, then queues an occurrence keyed by the
+message ID. The dispatcher can recover a missing occurrence; neither path replays
+an already recorded run. Replies before routine activation or current consent,
+and replies about days already past, do not create catch-up work.
+
+The run snapshots the question, answer and at most seven upcoming session
+revisions in its existing definition JSON. It expires at the end of the relevant
+athlete-local day. No schema migration or additional scheduler is needed. The
+evening-message generation profile remains tool-free.
+
+At the first automation segment, `agent/runtime/evening.py` asks Jev two typed
+questions in one request: propose / clarify / record only, and whether an explicit
+availability was declared. `coaching.py` composes the existing Jev service; the
+agent owns this decision policy. The request has a 10-second deadline, a 4,096-token
+envelope including 512 output tokens, zero retries, the existing explicit provider
+price cap, and one durable automation model-request charge. Resumes use the saved
+decision and native checkpoint. Record-only replies finish silently; the other
+routes use the existing agent, domain previews and human approval. A timeout or
+invalid decision fails visibly, with no fallback guess or automatic replay.
+
+Availability is reusable only for the exact single planned session and revision
+captured in the reply. Existing RPE ownership remains authoritative; unrelated
+free text and ambiguous multi-session replies stay separate. Questions cannot
+grant write permission or become permanent preferences. Source references connect
+the evening reply, native approval, before/after preview and effect receipt. The
+browser retains the originating evening identity while reviewing its continuation,
+so returning through the original link preserves the thread and draft. Settled
+runs refresh cached training facts and stop polling.
+
+The existing post-session RPE and opted-in after-session routine provide the next
+check-in after the adjusted session is imported. This continuation does not
+implicitly activate another routine. See the [pilot checklist and measurements](coaching-pilot.md)
+before enabling live delivery.
 
 ## Grouped planning decisions
 

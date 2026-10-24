@@ -29,6 +29,12 @@ executes that exact file list; the main preview workflow consumes that same
 run's deployment decision and verifies its SHA. No changed-file API pagination
 or model judgment is involved.
 
+PR runs share a concurrency group. Only a `synchronize` event (a new head commit)
+cancels the run in progress. `opened`, `reopened` and `labeled` events queue
+instead: GitHub may deliver `labeled` before `opened` when a PR starts with the
+`preview` label, and cancelling that first run leaves cancelled checks on the
+same commit. Main, merge-queue and manually dispatched runs also finish.
+
 ## Selection policy
 
 | Changed surface | Checks | Preview |
@@ -74,6 +80,21 @@ when every shard passed. The full suite took 14 min 46 s in one job; three
 shards bring it to about a third. When the shards' logged durations drift apart,
 refresh the table: `uv run pytest tests -n 2 --dist loadfile --junitxml=report.xml`,
 then `python3 scripts/ci/shard_tests.py report.xml`.
+
+## Browser environment
+
+The frontend job runs in the official Playwright Noble image. The lint job reads
+the exact `@playwright/test` version from `frontend/package-lock.json` and supplies
+the matching image tag; a dependency bump changes the image automatically. No
+second version constant or browser cache key needs updating. Chromium, WebKit and
+their system libraries are already installed, so this job makes no apt downloads.
+
+`npm ci` has a five-minute step limit. A one-minute check confirms the installed
+Playwright can find both bundled browser executables before running tests. The
+same job still installs Python 3.12 through uv and runs the planning browser
+journey against its disposable DuckDB-backed API. The job limit remains 25 minutes.
+Record container initialization and total frontend job durations on the PR before
+reducing that limit; a local browser run does not measure GitHub's image pull.
 
 ## Deployment review
 

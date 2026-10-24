@@ -90,13 +90,21 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
         const current = storeRef.current;
         // One thread per evening message: opening its push again returns to it.
         const evening = reference.kind === 'evening'
-          ? current.threads.find(t => t.reference?.kind === 'evening' && t.reference.id === reference.id)
+          ? current.threads.find(t => (t.reference?.kind === 'evening' && t.reference.id === reference.id) || (t.reference?.kind === 'automation_run' && t.reference.eveningId === reference.id))
           : undefined;
         const titles = { briefing: 'Discussion du briefing', onboarding: 'Mon point de départ', evening: 'Question du soir' } as const;
-        const next = evening ? { ...current, activeId: evening.id }
+        const next = evening ? updateThread({ ...current, activeId: evening.id }, evening.id, thread => ({ ...thread, reference }))
           : reference.kind === 'briefing' || reference.kind === 'onboarding' || reference.kind === 'evening'
           ? addThread(current, { ...createThread(), title: titles[reference.kind], reference })
-          : updateThread(current, current.activeId, thread => ({ ...thread, reference }));
+          : updateThread(current, current.activeId, thread => {
+            // Switching review/discussion keeps the originating evening link.
+            const previous = thread.reference;
+            let nextReference = reference;
+            if (reference.kind === 'automation_run' && previous?.kind === 'automation_run' && previous.id === reference.id) {
+              nextReference = { ...reference, eveningId: reference.eveningId ?? previous.eveningId };
+            }
+            return { ...thread, reference: nextReference };
+          });
         setStore(next);
         setError('');
       } catch (err) {
@@ -243,6 +251,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       .then(saved => {
         queryClient.setQueryData(eveningKey(id), saved);
         keepAnswer(threadId, content);
+        if (saved.continuation_error) setError(saved.continuation_error);
       })
       .catch(async (err: unknown) => {
         const close = () => {

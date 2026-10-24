@@ -33,15 +33,32 @@ async function record(page: Page) {
 }
 const workoutReads = (requests: string[]) => requests.filter(r => r.includes('/workout'));
 
+test('Planning exposes incomplete sources and connection failures without synchronizing again', async ({ page }) => {
+  const requests = await record(page);
+  let failed = false;
+  await page.route('**/api/garmin/sync/status', route => failed
+    ? route.fulfill({ status: 503, json: { detail: 'Indisponible' } })
+    : route.fulfill({ json: { garmin_authenticated: true, freshness: { complete: false, errors: ['Connexion interrompue'] } } }));
+  await page.goto('/planning?date=2027-01-12');
+  const source = page.getByRole('complementary', { name: 'Sources de mes données' });
+  await expect(source).toContainText('synchronisation incomplète');
+  await expect(source.getByRole('link', { name: 'Gérer les connexions' })).toHaveAttribute('href', '/settings?tab=connections');
+  failed = true;
+  await page.reload();
+  await expect(source).toContainText('État des sources indisponible');
+  expect(requests.filter(path => path === '/api/garmin/sync/ensure')).toHaveLength(2);
+  expect(requests.filter(path => path.includes('/agent/chat'))).toEqual([]);
+});
+
 test('a Planning week with 10 sessions loads with a constant number of requests', async ({ page }) => {
   const requests = await record(page);
   await page.goto('/planning?date=2027-01-12');
   await expect(page.getByTestId('workout-109')).toBeVisible();
   await page.waitForLoadState('networkidle');
   expect(workoutReads(requests)).toEqual([]);
-  // Settings, game preference, shared inbox, planned, actual, strength, Garmin states, one freshness check.
+  // Settings, game preference, shared inbox, planned, actual, strength, Garmin states, one freshness check and one cached source-status read.
   expect(requests.filter(r => r === '/api/garmin/sync/ensure')).toHaveLength(1);
-  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(8);
+  expect(requests.length, requests.join('\n')).toBeLessThanOrEqual(9);
   // The collapsed review and goal projection load when opened.
   await page.getByText('Bilan et objectifs', { exact: true }).click();
   await expect.poll(() => requests.some(r => r.endsWith('/plan/review'))).toBe(true);

@@ -9,7 +9,7 @@ a private table is one of the ``TRUSTED_READS`` fragments, which
 
 Weeks are ISO weeks (Monday to Sunday). The current week is partial. A ratio's
 numerator only counts athletes of its denominator: those created before the
-week's end. The eight queries read one snapshot.
+week's end. The indicator queries read one snapshot.
 
 Known limits. Stored times are compared as they are: naive UTC on Vercel,
 where every writer runs in UTC, but a Docker host writes some columns in its
@@ -116,7 +116,19 @@ _REVIEWED = (
     "applied_at IS NOT NULL AS done FROM app.weekly_reviews "
     "WHERE deleted_at IS NULL AND source <> 'pending')"
 )
-TRUSTED_READS = (_ACTIONS, _SUBSCRIPTIONS, _IMPORTED, _PROMPTED, _BRIEFED, _REVIEWED)
+_EVENINGS = (
+    "evenings AS (SELECT athlete_id, date, answered_at IS NOT NULL AS done "
+    "FROM app.coach_evening_messages WHERE deleted_at IS NULL AND status='ok')"
+)
+TRUSTED_READS = (
+    _ACTIONS,
+    _SUBSCRIPTIONS,
+    _IMPORTED,
+    _PROMPTED,
+    _BRIEFED,
+    _REVIEWED,
+    _EVENINGS,
+)
 
 # Every query returns (week_start, numerator, denominator[, value]) per week.
 
@@ -204,6 +216,7 @@ QUERIES = (
     ("weekly_reviews_accepted", REVIEWS, False),
     ("first_action_hours", FIRST_ACTION, False),
     ("retention_30d", RETENTION, True),
+    ("evening_replies", _per_day(_EVENINGS, "evenings"), False),
 )
 
 

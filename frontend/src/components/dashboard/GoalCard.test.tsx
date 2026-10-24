@@ -65,7 +65,7 @@ it('offers to set a goal when there is none, without reading the curve', () => {
   const read = vi.spyOn(formCurveApi, 'get');
   mount({ goal: null, day: '2026-10-14', ready: true });
   const link = screen.getByRole('link', { name: 'Fixer un objectif' });
-  expect(link.getAttribute('href')).toBe('/settings?tab=goals');
+  expect(link.getAttribute('href')).toBe('/planning/objectifs');
   expect(screen.queryByRole('region', { name: 'Objectif de course' })).toBeNull();
   expect(read).not.toHaveBeenCalled();
 });

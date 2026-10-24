@@ -18,8 +18,8 @@ export default defineConfig({
         short_name: "Arete",
         description:
           "Assistant d’entraînement intelligent, nourri par l’IA et tes données personnelles",
-        theme_color: "#0A0A0F",
-        background_color: "#0A0A0F",
+        theme_color: "#F6F3ED",
+        background_color: "#F6F3ED",
         display: "standalone",
         // Any orientation: a phone on a stand or a tablet in landscape keeps the app (WCAG 1.3.4).
         orientation: "any",

@@ -14,15 +14,19 @@ const message = {
   written_at: '2026-10-16T18:05:00+00:00', answer: null as string | null, answered_at: null as string | null,
 };
 const notice = {
-  id: 'evening', title: 'Chiron, pour demain', body: message.question, url: '/follow-up?evening=7',
+  id: 'evening', title: 'Le coach, pour demain', body: message.question, url: '/follow-up?evening=7',
   created_at: '2026-10-16T18:05:00Z', read_at: null, archived_at: null,
 };
 
 /** The athlete's evening: every request but the auth configuration is recorded. */
-async function evening(page: Page, settings: Record<string, unknown> = {}) {
+async function evening(page: Page, settings: Record<string, unknown> = {}, continuation = false) {
   const requests: string[] = [];
   const answers: unknown[] = [];
   const saved: unknown[] = [];
+  const decisions: unknown[] = [];
+  let approved = false;
+  const runId = '33333333-3333-4333-8333-333333333333';
+  const followup = () => continuation && answer ? { id: runId, state: approved ? 'completed' : 'waiting', result: approved ? 'Ta séance dure maintenant 25 minutes.' : null, error: null } : null;
   let answer: string | null = null;
   await page.clock.setFixedTime(NOW);
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -44,16 +48,61 @@ async function evening(page: Page, settings: Record<string, unknown> = {}) {
     if (path === '/api/garmin/sync/ensure') return route.fulfill({ json: { state: 'fresh' } });
     if (path === '/api/notifications') return route.fulfill({ json: { items: [notice], unread: 1, next_offset: null } });
     if (path === '/api/coach/today') return route.fulfill({ json: { date: message.date, items: [], remaining: 0, briefing: null } });
-    if (path === '/api/coach/evening/7') return route.fulfill({ json: { ...message, answer, answered_at: answer ? '2026-10-16T18:22:00+00:00' : null, answerable: !answer, journaled: Boolean(answer) } });
+    if (path === '/api/coach/evening/7') return route.fulfill({ json: { ...message, answer, answered_at: answer ? '2026-10-16T18:22:00+00:00' : null, answerable: !answer, journaled: Boolean(answer), continuation: followup() } });
     if (path === '/api/coach/evening/7/answer') {
       answers.push(request.postDataJSON());
       answer = (request.postDataJSON() as { text: string }).text;
-      return route.fulfill({ json: { ...message, answer, answered_at: '2026-10-16T18:22:00+00:00', answerable: false, journaled: true, journal: 'written' } });
+      return route.fulfill({ json: { ...message, answer, answered_at: '2026-10-16T18:22:00+00:00', answerable: false, journaled: true, journal: 'written', continuation: followup() } });
+    }
+    if (path === `/api/automation-runs/${runId}/interrupts/approval`) {
+      decisions.push(request.postDataJSON()); approved = true;
+      return route.fulfill({ json: {} });
+    }
+    if (path === `/api/automation-runs/${runId}`) return route.fulfill({ json: {
+      ...followup(), definition: { title: 'Adapter demain' }, due_at: '2026-10-16T18:22:00Z',
+      interrupts: [{ id: 'approval', revision: 1, expires_at: '2026-10-18T00:00:00Z', schema: { oneOf: [{ type: 'object', properties: { type: { const: 'approve' } }, required: ['type'] }, { type: 'object', properties: { type: { const: 'reject' }, message: { type: 'string' } }, required: ['type', 'message'] }] }, decision: approved ? { type: 'approve' } : null, payload: { name: 'apply_plan_changes', args: { preview_id: 'preview' } } }],
+      effects: approved ? [{ tool_call_id: 'apply', state: 'completed', arguments: { call: { name: 'apply_plan_changes', args: {} } } }] : [],
+    } });
+    if (path === '/api/coach/plan-changes/preview') {
+      const session = { id: 42, date: message.for_date, sport: 'running', session_type: 'endurance', status: 'pending', description: 'Endurance facile', target_duration_min: 45 };
+      return route.fulfill({ json: { id: 'preview', revision: 1, state: 'pending', expires_at: '2026-10-18T00:00:00Z', before: [session], after: [{ ...session, target_duration_min: 25 }], receipt: null } });
     }
     if (path === '/api/agent/memory') return route.fulfill({ json: { files: [] } });
     return route.fulfill({ json: [] });
   });
-  return { requests, answers, saved };
+  return { requests, answers, saved, decisions };
+}
+
+for (const width of [390, 1440]) {
+  test(`evening reply opens its proposal and confirmed receipt, preserving drafts · ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { requests, answers, decisions } = await evening(page, {}, true);
+    await page.goto('/follow-up?evening=7');
+    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const composer = panel.getByLabel('Message au coach');
+    await composer.fill('Demain, seulement 25 minutes.');
+    await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'Voir le suivi' })).toBeVisible();
+    await composer.fill('Mon brouillon pour plus tard.');
+    await panel.getByRole('button', { name: 'Voir le suivi' }).click();
+    const proposal = panel.getByRole('region', { name: 'Ajustement du planning' });
+    await expect(proposal).toContainText('45 min');
+    await expect(proposal).toContainText('25 min');
+    expect(decisions).toEqual([]);
+    await panel.getByRole('button', { name: 'Approuver', exact: true }).click();
+    await expect(panel.getByText('Ta séance dure maintenant 25 minutes.', { exact: true })).toBeVisible();
+    await panel.getByText('Actions effectuées', { exact: true }).click();
+    await expect(panel.getByText('Ajuster le planning ensemble · effectuée')).toBeVisible();
+    await page.screenshot({ path: `../.context/arete-evening-receipt-${width}.png` });
+    await panel.getByRole('button', { name: 'En parler au coach ↗' }).click();
+    await expect(composer).toHaveValue('Mon brouillon pour plus tard.');
+    await page.reload();
+    await expect(composer).toHaveValue('Mon brouillon pour plus tard.');
+    expect(answers).toEqual([{ text: 'Demain, seulement 25 minutes.' }]);
+    expect(decisions).toEqual([{ revision: 1, decision: { type: 'approve' } }]);
+    expect(requests.filter(path => path.includes('/agent/chat'))).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
 }
 
 for (const width of [375, 1440]) {
@@ -83,7 +132,7 @@ for (const width of [375, 1440]) {
 
     // The inbox item leads back to the same conversation, answered once.
     await page.getByRole('button', { name: 'Masquer le coach', exact: true }).filter({ visible: true }).first().click();
-    const item = page.getByRole('link', { name: /Chiron, pour demain/ });
+    const item = page.getByRole('link', { name: /Le coach, pour demain/ });
     await expect(item).toContainText(message.question);
     await page.screenshot({ path: `${SCREENS}/inbox-${width}.png`, fullPage: true, animations: 'disabled' });
     await item.click();
