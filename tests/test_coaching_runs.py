@@ -39,6 +39,28 @@ class Model(FakeMessagesListChatModel):
         return self
 
 
+def test_interactive_chat_graph_marks_middleware_tools_reviewable():
+    # The production chat graph: a checkpointer makes build_agent interactive.
+    # Tool-less middlewares must compile, and middleware-provided tools
+    # (the filesystem's delete) carry the review flag like bound tools.
+    from arete.agent.factory import build_agent
+    from arete.agent.profiles.catalog import get_profile
+    from arete.coaching import build_agent_filesystem
+
+    graph = build_agent(
+        get_profile("chat"),
+        model=Model(responses=[]),
+        context_tokens=65536,
+        output_tokens=4096,
+        filesystem=build_agent_filesystem(),
+        checkpointer=AutomationSaver(family="chat"),
+    )
+
+    tools = graph.nodes["tools"].bound.tools_by_name
+    for name in ("delete", "delete_planned_session"):
+        assert "requires_review" in tools[name].get_input_schema().model_fields
+
+
 def test_question_types_are_validated():
     model = response_model(
         [
