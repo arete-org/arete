@@ -10,7 +10,9 @@ export function ContextWindowGauge({ usage, compacting }: {
   usage?: ContextWindowUsage;
   compacting: boolean;
 }) {
-  const { search } = useLocation();
+  const location = useLocation();
+  const search = location.pathname === '/coach' && typeof location.state?.coachFrom?.search === 'string'
+    ? location.state.coachFrom.search : location.search;
   const id = useId();
   const [open, setOpen] = useState(false);
   if (!usage) return null;

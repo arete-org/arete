@@ -29,13 +29,23 @@ export function BriefingDiscussion({ id }: { id: number }) {
     <button type="button" className="min-h-11 underline" onClick={() => void query.refetch()}>Réessayer</button>
   </div>;
   const briefing = query.data;
-  return <section aria-label="Briefing dans cette conversation" className="mb-5 space-y-3">
+  return <section aria-label="Briefing dans cette conversation" className="briefing-discussion mb-6 space-y-5">
     <div>
-      <h3 className="text-sm font-medium text-text-primary">Briefing du {parseLocalDate(briefing.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</h3>
+      <h3 className="font-display text-[2rem] leading-tight text-text-primary">Briefing du {parseLocalDate(briefing.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</h3>
       <p className="mt-1 text-xs text-text-muted">{briefing.source === 'rules' ? 'Calculé à partir de tes métriques' : `Par ${coach.the}`}{briefing.generated_at ? ` · ${frenchClock(briefing.generated_at)}` : ''}</p>
     </div>
-    <AgentMarkdown text={briefing.tip} />
-    <div role="group" aria-label="Ton avis sur ce briefing" className="flex items-center gap-0.5">
+    <div className="briefing-copy"><AgentMarkdown text={briefing.tip} /></div>
+    <div className="rounded-[var(--radius-control)] border border-border bg-shadow/30 p-4">
+      <h4 className="mb-3 text-sm font-medium">Repères au moment du briefing</h4>
+      {briefing.evidence?.length ? <dl className="space-y-3">
+        {briefing.evidence.map(fact => <div key={fact.label} className="flex items-start justify-between gap-4">
+          <dt className="min-w-0"><span className="block text-sm text-text-secondary">{fact.label}</span><span className="mt-0.5 block text-xs text-text-muted">{fact.source} · {parseLocalDate(fact.measured_on).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</span></dt>
+          <dd className="shrink-0 text-sm font-medium tabular-nums">{fact.value}</dd>
+        </div>)}
+      </dl> : <p className="text-xs leading-relaxed text-text-muted">Aucune mesure source conservée pour ce briefing.</p>}
+    </div>
+    <div role="group" aria-label="Ton avis sur ce briefing" className="flex flex-wrap items-center gap-1 border-t border-border pt-3">
+      <span className="mr-auto text-sm text-text-secondary">Ce conseil t’aide ?</span>
       <FeedbackRating value={briefing.reaction === 'up' ? 1 : briefing.reaction === 'down' ? 0 : null}
         labels={['Briefing utile', 'Briefing peu utile']} disabled={save.isPending || save.isError}
         onChange={score => save.mutate(score === null ? null : score === 1 ? 'up' : 'down')} />

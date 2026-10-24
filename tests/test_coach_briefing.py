@@ -876,3 +876,27 @@ class TestFeedbackFiling:
         assert (text, source) == ("20 km.", "rules")
         ledger = read_memory_file("sessions.md").content
         assert "20 km." in ledger and "Retour du coach" not in ledger
+
+
+def test_generation_stores_the_already_read_facts_without_an_extra_model_call(
+    repo, clean_day, enabled
+):
+    from dataclasses import replace
+
+    facts = replace(
+        TRAINED,
+        readiness_score=18,
+        readiness_source="garmin_training",
+        readiness_measured_on=clean_day - timedelta(days=1),
+    )
+    produce = Mock(return_value="Repos aujourd’hui.")
+    with patch(
+        "arete.services.briefing._rule_floor", return_value=("Repos.", "warning", facts)
+    ):
+        result = briefing_service.generate_briefing(
+            produce=produce, target_date=clean_day
+        )
+    produce.assert_called_once()
+    assert result.evidence[0].value == "18 / 100"
+    assert result.evidence[0].measured_on == (clean_day - timedelta(days=1)).isoformat()
+    assert repo.get(result.id).evidence == result.evidence

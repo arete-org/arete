@@ -89,7 +89,7 @@ export function ProposalCard({
   const applyLabel = missed && group.length === 1
     ? proposal.decision === 'move' ? 'Déplacer' : 'Laisser de côté'
     : 'Appliquer';
-  return <article className="space-y-3 rounded-xl border border-neon-cyan/25 bg-neon-cyan/5 p-4">
+  return <article className="space-y-3 rounded-[var(--radius-control)] border border-border bg-abyss p-4">
     <p className="text-xs text-neon-cyan">{stale ? 'Proposition périmée' : missed ? 'Séance manquée' : 'Proposition'} · {proposal.date}</p>
     {group.length > 1 ? <>
       <p className="font-semibold">{discussion ? 'Examiner les étapes ensemble' : 'Proposé pour la journée'}</p>
@@ -152,13 +152,33 @@ export function FollowupCard({ followup }: { followup: Followup }) {
  * `enabled: false` waits for another request to seed the card (the dashboard's);
  * `refetchOnFocus: false` leaves a focus refresh to that request.
  */
-export function CoachTodayPanel({ enabled = true, refetchOnFocus = true }: { enabled?: boolean; refetchOnFocus?: boolean }) {
+export function CoachTodayPanel({ enabled = true, refetchOnFocus = true, home = false }: { enabled?: boolean; refetchOnFocus?: boolean; home?: boolean }) {
   const client = useQueryClient();
   const query = useQuery({ queryKey: coachTodayKey, queryFn: coachApi.today, enabled, refetchOnWindowFocus: refetchOnFocus });
   const prepare = useMutation({ mutationFn: coachApi.prepare, onSuccess: data => client.setQueryData(coachTodayKey, data) });
   const coach = useCoachWords();
   // The last answer, which takes the focus as its card leaves.
   const [outcome, setOutcome] = useState<DayOutcome | null>(null);
+  if (home) {
+    const first = query.data?.items[0];
+    const remaining = query.data ? query.data.items.length + query.data.remaining - (first ? 1 : 0) : 0;
+    return <section aria-label="À suivre avec le coach" className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-t border-border py-4">
+      {outcome && <RenegotiationOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />}
+      {query.isPending ? <p role="status" className="text-sm text-text-muted">Chargement du suivi…</p>
+        : query.isError ? <p role="alert" className="text-sm text-danger-red">Suivi indisponible. <Button variant="ghost" onClick={() => void query.refetch()}>Réessayer</Button></p>
+        : first ? <details className="col-span-2 space-y-3">
+          <summary className="min-h-11 cursor-pointer text-sm font-medium">
+            {first.kind === 'proposal' ? 'Une proposition à examiner' : 'Ton retour est attendu'}
+            <span className="mt-1 block text-sm font-normal text-text-secondary">{first.kind === 'proposal' ? first.record.reason : first.record.question}</span>
+          </summary>
+          {first.kind === 'proposal' ? <ProposalCard proposal={first.record} group={first.group} members={first.members} onAnswered={setOutcome} /> : <FollowupCard followup={first.record} />}
+        </details> : <div><p className="text-sm font-medium">Tes bilans et échanges</p><p className="mt-1 text-sm text-text-secondary">Retrouve tes bilans et les points précédents dans le suivi.</p></div>}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {remaining > 0 && <p className="text-xs text-text-muted">{remaining} autre(s) point(s) dans le suivi.</p>}
+        <Link to="/follow-up" data-variant="outline" className="ui-button inline-flex min-h-11 items-center rounded border border-text-muted/30 px-3 py-2 text-sm">Voir le suivi</Link>
+      </div>
+    </section>;
+  }
   return <Panel title={coach.today}>
     <div className="space-y-3">
       {outcome && <RenegotiationOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />}

@@ -886,3 +886,34 @@ def test_m65_backfills_every_athlete_s_best_efforts_once_and_atomically(
                 "SELECT athlete_id FROM app.visible_best_efforts"
             ).fetchall()
         } == {1}
+
+
+def test_briefing_evidence_upgrade_keeps_old_rows_and_old_inserts(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("ARETE_DB", str(tmp_path / "briefing-evidence.duckdb"))
+    init_duckdb.main()
+    con = init_duckdb.connect(False)
+    try:
+        con.execute(
+            "INSERT INTO app.coach_briefings(date, text) VALUES ('2026-10-01', 'Avant migration')"
+        )
+        con.execute("ALTER TABLE app.coach_briefings DROP COLUMN evidence_json")
+        con.execute("DELETE FROM app.schema_version WHERE version = 67")
+    finally:
+        con.close()
+    init_duckdb.main()
+    init_duckdb.main()
+    con = init_duckdb.connect(False)
+    try:
+        assert con.execute(
+            "SELECT text, evidence_json FROM app.coach_briefings"
+        ).fetchall() == [("Avant migration", None)]
+        con.execute(
+            "INSERT INTO app.coach_briefings(date, text) VALUES ('2026-10-02', 'Ancien client')"
+        )
+        assert (
+            con.execute("SELECT count(*) FROM app.coach_briefings").fetchone()[0] == 2
+        )
+    finally:
+        con.close()

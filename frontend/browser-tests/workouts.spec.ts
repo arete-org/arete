@@ -80,7 +80,7 @@ for (const delay of [1_000, 10_000, 30_000]) {
       const counts = await mockApi(page, () => view, `http://127.0.0.1:${address.port}/stream`);
       await page.goto('/planning?date=2027-01-12');
       await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
-      const panel = page.getByRole('complementary', { name: 'Coach IA' });
+      const panel = page.getByRole('region', { name: 'Coach IA' });
       await panel.getByLabel('Message au coach').fill('Crée mon fractionné et envoie-le sur Garmin');
       const started = Date.now();
       await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
@@ -91,7 +91,7 @@ for (const delay of [1_000, 10_000, 30_000]) {
       await expect(panel.getByLabel('Message au coach')).toBeVisible();
       await panel.getByLabel('Message au coach').focus();
       if (delay >= 10_000) {
-        await panel.getByRole('button', { name: 'Masquer le coach' }).click();
+        await panel.getByRole('button', { name: 'Retour à la page' }).click();
         await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
         await expect(panel.getByTestId('workout-42')).toBeVisible();
       }
@@ -106,7 +106,7 @@ for (const delay of [1_000, 10_000, 30_000]) {
       if (delay === 10_000) {
         await page.screenshot({ path: '../.context/garmin-chat-desktop.png', fullPage: true });
         await page.reload();
-        await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
+        await expect(page).toHaveURL(/\/coach$/);
         await expect(panel.getByTestId('workout-42').getByText('Programmée dans Garmin Connect', { exact: true })).toBeVisible();
       }
     } finally {

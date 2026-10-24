@@ -40,7 +40,7 @@ for (const rpg of [false, true]) {
     await page.reload();
     const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     await open();
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
     await expect(panel).toHaveCSS('opacity', '1');
     await expect(panel.getByRole('button', { name: 'Réponse utile', exact: true })).toHaveCount(1);
     await panel.getByRole('button', { name: 'Réponse utile', exact: true }).click();
@@ -62,7 +62,7 @@ for (const rpg of [false, true]) {
     await expect(panel.getByRole('button', { name: 'Choisir une réaction' })).toBeFocused();
     await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
     await page.reload();
-    await open();
+    await expect(page).toHaveURL(/\/coach$/);
     await expect(panel.getByRole('button', { name: 'Réponse utile', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(panel.getByRole('button', { name: 'Retirer la réaction 👩🏽‍💻' })).toBeVisible();
     expect(writes).toHaveLength(2);

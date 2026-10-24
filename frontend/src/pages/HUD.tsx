@@ -2,13 +2,14 @@ import { CoachingAttention } from '@/components/agent/CoachingAttention';
 import { useCoachingAttention } from '@/hooks/useCoachingAttention';
 import { BriefingCard } from '@/components/BriefingCard';
 import { PlayerSummary } from '@/components/PlayerSummary';
-import { RpePicker } from '@/components/RpePicker';
 import { useGamePreference } from '@/lib/gamification';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Calendar, Dumbbell, HeartPulse, TrendingUp, Zap } from 'lucide-react';
-import { MetricCard, OffPlanRow, SessionCard, withStrengthLogs } from '@/components';
+import { Dumbbell, HeartPulse, TrendingUp, Zap } from 'lucide-react';
+import { MetricCard, SessionCard, withStrengthLogs } from '@/components';
+import { CompletedSession } from '@/components/dashboard/CompletedSession';
+import { DailyMarkers } from '@/components/dashboard/DailyMarkers';
 import { CheckinCard } from '@/components/dashboard/CheckinCard';
 import { BodyLogEntry } from '@/components/body/BodyLogEntry';
 import { PushOffer } from '@/components/PushOffer';
@@ -254,8 +255,6 @@ function TodaySession({
       onRevert={decision ? () => revert.mutate(decision.id) : undefined}
       push={watch}
     >
-      {/* Cardio only: strength rows carry negative ids and their own RPE. */}
-      {realised && realised.id > 0 && realised.rpe == null && <RpePicker sessionId={realised.id} className="mt-2" />}
       {revert.error && (
         <p role="alert" className="mt-1 text-[11px] font-sans text-danger-red">
           {readableError(revert.error)}
@@ -284,6 +283,7 @@ export function DashboardPage() {
   // The app shell already reads the settings: the same key, no second request.
   const { data: userSettings } = useQuery({ queryKey: qk.settings, queryFn: settingsApi.get });
   const { data: nextGoal } = useDashboard((d) => d.next_goal);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const fatigueThreshold = userSettings?.fatigue_threshold ?? 85;
 
   // The server's day: today's rows are the ones it read for that date.
@@ -351,11 +351,12 @@ export function DashboardPage() {
   const { data: healthData, isPending: healthPending } = useDashboard((d) => d.health);
   // No row for the board's day yet, while yesterday's Garmin night drives the recovery.
   const fromGarmin = fitness != null && fitness.readiness_source !== 'model';
-  const morningScore = healthData?.readiness_score ?? healthData?.training_readiness_score ?? null;
+  const morningScore = fitness?.readiness_score ?? null;
   // A sync before the watch uploads the night still writes the day's row, empty.
   const morningIn =
     healthData != null &&
-    (morningScore != null ||
+    (healthData.training_readiness_score != null ||
+      healthData.readiness_score != null ||
       healthData.hrv_last_night != null ||
       healthData.sleep_score != null ||
       healthData.stress_avg != null);
@@ -379,6 +380,9 @@ export function DashboardPage() {
     [setParams],
   );
 
+  const completed = [...todayLink.planned.flatMap(row => row.realised ? [row.realised] : []), ...todayLink.offPlan];
+  const completedSeconds = completed.reduce((sum, session) => sum + session.duration_sec, 0);
+
   const { tip, writing: tipWriting, generating: tipGenerating, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
     day: boardDay,
@@ -386,14 +390,16 @@ export function DashboardPage() {
 
   return (
     <div className="page-shell bg-void">
-      <div className="page-content dashboard-content space-y-6">
+      <div className="page-content dashboard-content dashboard-home space-y-4">
         <header className="flex justify-between items-center gap-3 animate-fade-down">
           <div className="min-w-0">
+            <p className="mb-2 text-xs font-sans text-text-muted first-letter:uppercase">{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
             <h1 className="page-title">
               Bonjour, <span className="text-neon-cyan">{userSettings?.display_name || 'Athlète'}</span>
             </h1>
-            <p className="text-xs font-sans text-text-muted mt-0.5">
-              {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            <p className="mt-2 text-sm text-text-secondary">
+              {nextGoal ? <Link className="inline-flex min-h-11 items-center hover:text-neon-cyan" to="/planning/objectifs">{nextGoal.name} · {nextGoal.days_left > 0 ? `J-${nextGoal.days_left}` : 'Jour J'}</Link>
+                : nextGoal === null ? <Link className="inline-flex min-h-11 items-center hover:text-neon-cyan" to="/planning/objectifs">Fixer un objectif</Link> : null}
             </p>
             <UpdatedAgo at={plannedAt} />
           </div>
@@ -402,7 +408,7 @@ export function DashboardPage() {
             <div className="shrink-0 text-right">
               <div
                 aria-hidden
-                className="w-12 h-12 ml-auto flex items-center justify-center rounded-full bg-abyss border-2 border-neon-gold font-sans text-neon-gold text-sm font-bold tabular-nums shadow-[0_0_12px_color-mix(in_srgb,var(--color-neon-gold)_30%,transparent)]"
+                className="ml-auto text-sm font-medium tabular-nums text-text-secondary"
               >
                 {playerStats.recent_weeks_at_goal}/{playerStats.recent_weeks}
               </div>
@@ -418,91 +424,85 @@ export function DashboardPage() {
 
         {coordinated && <CoachingAttention enabled={boardSettled} hero />}
 
-        {/* The goal supports the coach's current priority. */}
-        {nextGoal !== undefined && (
-          <Suspense fallback={<Skeleton label="Chargement de l’objectif" lines={1} className="glass-panel px-4 py-3" />}>
-            <GoalCard goal={nextGoal} day={boardDay} ready={boardSettled} />
-          </Suspense>
+        {/* Ten seconds before the briefing: the answer feeds the day's decision. */}
+        {checkin === null && boardDay && (
+          <CheckinCard
+            key={boardDay}
+            day={boardDay}
+            focus={params.get('checkin') === '1'}
+            onFocused={checkinFocused}
+          />
         )}
 
-        <div className="dashboard-grid">
-          <div className="dashboard-primary">
-            {/* Ten seconds before the briefing: the answer feeds the day's decision. */}
-            {checkin === null && boardDay && (
-              <CheckinCard
-                key={boardDay}
-                day={boardDay}
-                focus={params.get('checkin') === '1'}
-                onFocused={checkinFocused}
-              />
+        {weekReview && <WeekReviewEntry open={weekReview.open} />}
+
+        <Panel className="dashboard-panel">
+          <BriefingCard tip={tip} writing={tipWriting} generating={tipGenerating} stalled={tipStalled} refresh={refreshTip} />
+        </Panel>
+
+        <div className="dashboard-overview">
+          <Panel className="dashboard-panel">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-base font-medium">Tes séances</h2>
+              <Link to="/planning" className="inline-flex min-h-11 items-center text-sm text-neon-cyan">Planning</Link>
+            </div>
+            {plannedPending ? (
+              <Skeleton label="Chargement de la séance du jour" />
+            ) : boardFailed ? (
+              <Unavailable what="Séance du jour" retry={() => void retryBoard()} />
+            ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 || moved.length > 0 ? (
+              <div className="space-y-2">
+                {outcome && <RenegotiationOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />}
+                {todayLink.planned.map((row) => (
+                  row.realised ? <CompletedSession key={row.session.id} session={row.realised} /> : <TodaySession
+                    key={row.session.id}
+                    row={row}
+                    decision={decisionFor(row.session.id)}
+                    view={viewFor(row.session.id)}
+                    onRenegotiated={(done) => setOutcome(renegotiationOutcome(done))}
+                    onReverted={setOutcome}
+                  />
+                ))}
+                {moved.map((decision) => (
+                  <MovedSession
+                    key={decision.id}
+                    decision={decision}
+                    onReverted={(garmin) => setOutcome(revertOutcome(garmin))}
+                  />
+                ))}
+                {todayLink.offPlan.map((a) => (
+                  <CompletedSession key={a.id} session={a} offPlan />
+                ))}
+                {completed.length > 0 && <p className="pt-2 text-xs text-text-muted">{completed.length} séance{completed.length > 1 ? 's' : ''} terminée{completed.length > 1 ? 's' : ''}{completedSeconds > 0 ? ` · ${formatHoursMinutes(completedSeconds)} au total` : ''}</p>}
+                {/* A session just arrived: the moment the coach's feedback by push makes sense. */}
+                {(todayLink.offPlan.length > 0 || todayLink.planned.some((row) => row.realised)) && (
+                  <PushOffer moment="session" />
+                )}
+                <div className="flex justify-end items-center gap-4 pt-1 text-xs font-sans">
+                  <LogSessionLink />
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-shadow/30 p-4">
+                <p className="text-sm font-sans text-text-muted">Repos — aucune séance prévue</p>
+                <div className="flex items-center gap-4 text-xs font-sans">
+                  <Link to="/planning?new=1" className="text-neon-cyan hover:underline">
+                    + Planifier une séance
+                  </Link>
+                  <LogSessionLink />
+                </div>
+              </div>
             )}
+          </Panel>
 
-            {weekReview && <WeekReviewEntry open={weekReview.open} />}
-
-            {/* The coach's briefing leads (on a phone, right after the greeting); the first
-                visit of the day may wait for the coach. */}
-            <Panel className="p-4">
-              <BriefingCard tip={tip} writing={tipWriting} generating={tipGenerating} stalled={tipStalled} refresh={refreshTip} />
-            </Panel>
-
-            {/* Today's plan, right below the briefing */}
-            <Panel className="p-4">
-              <SectionHeader icon={<Calendar className="w-4 h-4 text-neon-purple" />} title="Séance du jour" />
-              {plannedPending ? (
-                <Skeleton label="Chargement de la séance du jour" />
-              ) : boardFailed ? (
-                <Unavailable what="Séance du jour" retry={() => void retryBoard()} />
-              ) : todayLink.planned.length > 0 || todayLink.offPlan.length > 0 || moved.length > 0 ? (
-                <div className="space-y-2">
-                  {outcome && <RenegotiationOutcome outcome={outcome} onDismiss={() => setOutcome(null)} />}
-                  {todayLink.planned.map((row) => (
-                    <TodaySession
-                      key={row.session.id}
-                      row={row}
-                      decision={decisionFor(row.session.id)}
-                      view={viewFor(row.session.id)}
-                      onRenegotiated={(done) => setOutcome(renegotiationOutcome(done))}
-                      onReverted={setOutcome}
-                    />
-                  ))}
-                  {moved.map((decision) => (
-                    <MovedSession
-                      key={decision.id}
-                      decision={decision}
-                      onReverted={(garmin) => setOutcome(revertOutcome(garmin))}
-                    />
-                  ))}
-                  {todayLink.offPlan.map((a) => (
-                    <OffPlanRow key={a.id} session={a} />
-                  ))}
-                  {/* A session just arrived: the moment the coach's feedback by push makes sense. */}
-                  {(todayLink.offPlan.length > 0 || todayLink.planned.some((row) => row.realised)) && (
-                    <PushOffer moment="session" />
-                  )}
-                  <div className="flex justify-end items-center gap-4 pt-1 text-xs font-sans">
-                    <Link to="/planning" className="text-neon-cyan hover:underline">
-                      Semaine <span aria-hidden>→</span>
-                    </Link>
-                    <LogSessionLink />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-shadow/30 p-4">
-                  <p className="text-sm font-sans text-text-muted">Repos — aucune séance prévue</p>
-                  <div className="flex items-center gap-4 text-xs font-sans">
-                    <Link to="/planning?new=1" className="text-neon-cyan hover:underline">
-                      + Planifier une séance
-                    </Link>
-                    <LogSessionLink />
-                  </div>
-                </div>
-              )}
-            </Panel>
-
-            {/* Keep the existing source cards in place while the pilot is off. */}
-            {!coordinated && <CoachingAttention enabled={boardSettled} />}
-          </div>
-          <div className="dashboard-secondary">
+          <DailyMarkers fitness={fitness} checkin={checkin} stats={playerStats} day={boardDay} expanded={detailsOpen} onDetails={() => setDetailsOpen(open => !open)} />
+        </div>
+        {!coordinated && <CoachingAttention enabled={boardSettled} home />}
+        <div id="dashboard-details">
+        {detailsOpen && <div className="dashboard-overview">
+            {nextGoal && <Suspense fallback={<Skeleton label="Chargement de l’objectif" lines={1} />}>
+              <GoalCard goal={nextGoal} day={boardDay} ready={boardSettled} />
+            </Suspense>}
             {/* Block 2: Player Status */}
             <Panel className="p-4">
               <SectionHeader
@@ -679,7 +679,7 @@ export function DashboardPage() {
               <BodyLogEntry />
             </Panel>
 
-          </div>
+        </div>}
         </div>
       </div>
     </div>

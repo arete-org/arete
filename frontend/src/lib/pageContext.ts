@@ -40,12 +40,19 @@ export function pageFromPath(pathname: string): string {
 
 export function usePanelContext(): PanelPageContext {
   const location = useLocation();
-  const params = new URLSearchParams(location.search);
+  // The dedicated conversation keeps the page it was opened from, also on reload.
+  // This is browser context, never authorization or a source of training facts.
+  const from = location.pathname === '/coach' ? location.state?.coachFrom : null;
+  const pathname = location.pathname === '/coach'
+    ? (typeof from?.pathname === 'string' && from.pathname.startsWith('/') && from.pathname !== '/coach' ? from.pathname : '/')
+    : location.pathname;
+  const search = location.pathname === '/coach' ? (typeof from?.search === 'string' ? from.search : '') : location.search;
+  const params = new URLSearchParams(search);
   // Gauge visibility cannot change the model request or its context count.
   params.delete('contextGaugeAlways');
   return {
-    page: pageFromPath(location.pathname),
-    path: location.pathname,
+    page: pageFromPath(pathname),
+    path: pathname,
     params: Object.fromEntries(params),
   };
 }

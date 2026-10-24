@@ -78,7 +78,7 @@ for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     const { requests, answers, decisions } = await evening(page, {}, true);
     await page.goto('/follow-up?evening=7');
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
     const composer = panel.getByLabel('Message au coach');
     await composer.fill('Demain, seulement 25 minutes.');
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
@@ -111,7 +111,7 @@ for (const width of [375, 1440]) {
     const { requests, answers } = await evening(page);
     // The service worker opens the push's link.
     await page.goto('/follow-up?evening=7');
-    const panel = page.getByRole('complementary', { name: 'Coach IA' });
+    const panel = page.getByRole('region', { name: 'Coach IA' });
     const card = panel.getByRole('region', { name: 'Message du soir dans cette conversation' });
     await expect(card.getByRole('heading')).toHaveText('Pour demain, samedi 17 octobre');
     await expect(card.getByText(message.question, { exact: true })).toBeVisible();
@@ -131,7 +131,7 @@ for (const width of [375, 1440]) {
     await page.screenshot({ path: `${SCREENS}/answered-${width}.png`, animations: 'disabled' });
 
     // The inbox item leads back to the same conversation, answered once.
-    await page.getByRole('button', { name: 'Masquer le coach', exact: true }).filter({ visible: true }).first().click();
+    await page.getByRole('button', { name: 'Retour à la page', exact: true }).filter({ visible: true }).first().click();
     const item = page.getByRole('link', { name: /Le coach, pour demain/ });
     await expect(item).toContainText(message.question);
     await page.screenshot({ path: `${SCREENS}/inbox-${width}.png`, fullPage: true, animations: 'disabled' });

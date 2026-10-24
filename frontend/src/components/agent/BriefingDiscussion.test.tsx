@@ -47,3 +47,20 @@ it('reports a missing briefing and leaves retry explicit', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
   await screen.findByText(briefing.tip);
 });
+
+it('renders only the evidence stored with the selected briefing and dates its source', async () => {
+  vi.spyOn(tipsApi, 'briefing').mockResolvedValue({ ...briefing, evidence: [
+    { label: 'Préparation', value: '18 / 100', source: 'Préparation Garmin', measured_on: '2026-10-14' },
+  ] });
+  mount();
+  await screen.findByText('18 / 100');
+  expect(screen.getByText('Préparation Garmin · 14 octobre')).toBeTruthy();
+  expect(screen.queryByText(/Aucune mesure source conservée/)).toBeNull();
+});
+
+it('does not replace missing historical evidence with today’s metrics', async () => {
+  vi.spyOn(tipsApi, 'briefing').mockResolvedValue(briefing);
+  mount();
+  await screen.findByText(/Aucune mesure source conservée/);
+  expect(screen.queryByRole('definition')).toBeNull();
+});

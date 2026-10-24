@@ -38,9 +38,11 @@ type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChan
   inputRef: RefObject<HTMLTextAreaElement | null>;
   /** The coach's words for the athlete's mode (coachWords). */
   coach?: CoachWords;
+  methodsOpen?: boolean;
+  onMethodsClose?: () => void;
 };
 
-export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect, coach = coachWords(false), ...props }: Props) {
+export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect, coach = coachWords(false), methodsOpen = false, onMethodsClose, ...props }: Props) {
   const listId = useId();
   const [caret, setCaret] = useState(value.length);
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect
   }, [value, inputRef]);
   const command = commandAt(value, caret);
   const key = `${value}:${caret}`;
-  const open = command !== null && dismissed !== key;
+  const open = methodsOpen || (command !== null && dismissed !== key);
   const catalog = useQuery({
     queryKey: ['coach-system-skills'],
     queryFn: ({ signal }) => loadSkills(signal),
@@ -64,7 +66,7 @@ export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect
     retry: false,
     staleTime: CATALOG_STALE_MS,
   });
-  const query = normalize(command?.query ?? '');
+  const query = normalize(methodsOpen ? '' : command?.query ?? '');
   const matches = (catalog.data ?? []).filter(skill =>
     normalize(`${skill.name} ${skill.display_name ?? ''} ${skill.description}`).includes(query)
   );
@@ -74,13 +76,14 @@ export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect
   }, [open, listId, index]);
 
   const choose = (skill: SystemSkill) => {
-    if (!command) return;
-    const prefix = `${value.slice(0, command.start)}/${skill.name} `;
-    const updated = prefix + value.slice(command.end).trimStart();
+    if (!command && !methodsOpen) return;
+    const prefix = `${command ? value.slice(0, command.start) : ''}/${skill.name} `;
+    const updated = prefix + value.slice(command?.end ?? 0).trimStart();
     selection.current = { value: updated, caret: prefix.length };
     onValueChange(updated);
     setCaret(prefix.length);
     setDismissed(null);
+    onMethodsClose?.();
   };
 
   return <>
@@ -131,6 +134,7 @@ export function SkillInput({ value, onValueChange, inputRef, onKeyDown, onSelect
             event.preventDefault();
             event.stopPropagation();
             setDismissed(key);
+            onMethodsClose?.();
             return;
           }
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {

@@ -78,9 +78,12 @@ const noOverflow = async (page: Page) =>
 
 for (const { width, height } of [{ width: 390, height: 844 }, { width: 1440, height: 1100 }]) {
   test(`${width} px: a pain is noted from the dashboard in three choices, without a read`, async ({ page }) => {
+    // It is already tomorrow for this athlete in Paris, regardless of the runner's zone.
+    await page.clock.setFixedTime(new Date('2026-10-23T22:30:00Z'));
     await page.setViewportSize({ width, height });
     const { requests, bodies } = await serve(page);
     await page.goto('/');
+    await page.getByRole('button', { name: 'Détails de ma forme' }).click();
     const card = page.getByRole('heading', { name: 'Douleur ou poids' }).locator('xpath=ancestor::div[contains(@class,"glass-panel")][1]');
     await card.getByRole('button', { name: 'Signaler une douleur' }).click();
     const form = card.getByRole('form', { name: 'Signaler une douleur' });
@@ -95,7 +98,7 @@ for (const { width, height } of [{ width: 390, height: 844 }, { width: 1440, hei
     await form.getByRole('button', { name: 'Enregistrer' }).click();
     await expect(card.getByRole('status')).toHaveText('Douleur enregistrée : genou, côté gauche, 5/10.');
     await expect(form).toBeHidden();
-    expect(bodies).toEqual([{ date: localDay(), area: 'knee', side: 'left', intensity: 5, note: null }]);
+    expect(bodies).toEqual([{ date: '2026-10-24', area: 'knee', side: 'left', intensity: 5, note: null }]);
     // The card reads nothing: the dashboard's requests are unchanged by it.
     expect(requests.filter((r) => r.startsWith('GET /api/body'))).toEqual([]);
   });
