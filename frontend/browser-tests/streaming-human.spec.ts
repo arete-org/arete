@@ -53,7 +53,8 @@ for (const theme of ['pierre', 'prune', 'odyssey', 'encre']) for (const width of
       await expect(panel.getByLabel('Minutes disponibles')).toBeVisible();
       await panel.getByLabel('Message au coach').fill('Mon prochain message reste ici.');
       await page.reload();
-      if (!(await panel.isVisible())) await open.click();
+      // Reload keeps /coach; wait for React to mount instead of probing too early.
+      await expect(panel).toBeVisible();
       await expect(panel.getByLabel('Minutes disponibles')).toBeVisible();
       expect(stream.requests()).toBe(1);
       expect(resumes).toBe(0);
