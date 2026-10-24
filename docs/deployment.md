@@ -132,6 +132,29 @@ one `arete_coach` root with nested model/tool calls and `task`, `provider` and
 suggestion adds a `coach_autosuggestion` child. Full inputs, outputs, tool results,
 page context and journal content read by the agent are exported when enabled.
 
+**Production exports nothing by default.** Those traces carry athletes'
+journal, health and Garmin-derived data, which the Garmin agreement forbids
+sharing with third parties, so a process holding production data (Vercel
+`VERCEL_ENV=production`, or any MotherDuck `ARETE_DB` whose name lacks
+`preview`, such as a Docker stack pointed at `md:arete_v2`) ignores
+`LANGSMITH_TRACING=true` and logs `LangSmith tracing off` at startup. Previews,
+`make dev` and `make docker` on the preview database trace as above. To debug
+production, open a bounded window, ISO 8601 instants with offsets, at most
+7 days apart:
+
+```dotenv
+LANGSMITH_TRACING=true
+LANGSMITH_PRODUCTION_WINDOW=2026-10-23T08:00:00Z/2026-10-24T08:00:00Z
+```
+
+Set it in the Vercel Production environment and redeploy. Each instance logs
+`LangSmith exports production runs until <end>` when it starts exporting. No
+run starts tracing after the end, without a redeploy; a run already in flight
+finishes its trace, within its own deadline. Remove the variable afterwards.
+Answers outside a window carry no feedback controls. With tracing requested on
+production data, a malformed or longer window fails startup, like a malformed
+`LANGSMITH_TRACING`; elsewhere the window is not read.
+
 If no trace appears, check the environment on the running deployment and look
 for `LangSmith trace export failed` in its backend logs. A missing key fails
 startup when tracing is enabled; exporter failures are logged without failing

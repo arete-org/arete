@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from threading import Barrier, Lock
 from unittest.mock import AsyncMock, Mock
 
@@ -373,6 +374,154 @@ def test_disabled_tracing_overrides_legacy_environment(monkeypatch):
     install_model(monkeypatch, [AIMessage(content="offline")])
     assert invoke(state(), context=AgentContext())["messages"][-1].content == "offline"
     client_factory.assert_not_called()
+
+
+HEALTH_FACTS = {
+    "journal": "Gêne au genou gauche ARE190-JOURNAL",
+    "page": "VFC 38 ms ARE190-PAGE",
+    "garmin": "Sommeil 5 h 12, FC repos 52 ARE190-GARMIN",
+    "message": "Body Battery 14 ARE190-MESSAGE",
+}
+
+
+def health_run(monkeypatch):
+    """A chat run whose journal, page, Garmin tool result and message all carry
+    health facts; returns everything the model received."""
+    import json
+
+    from arete.agent.tools.analytics import get_workload
+    from arete.services import memory
+
+    memory.append_entry("notes.md", "Genou", HEALTH_FACTS["journal"])
+    model, _ = install_model(
+        monkeypatch,
+        [
+            tool_call("get_workload", {"days": 7}, "garmin"),
+            AIMessage(content="Repos conseillé."),
+        ],
+    )
+    monkeypatch.setattr(get_workload, "func", lambda days=28: HEALTH_FACTS["garmin"])
+    page = json.dumps({"page": "dashboard", "recovery": HEALTH_FACTS["page"]})
+    invoke(
+        state(HEALTH_FACTS["message"]),
+        context=AgentContext(current_datetime=CLOCK, source={"panel_context": page}),
+    )
+    seen = str(model._seen)
+    # Each fact reached the run, so an export would have carried it.
+    assert all(fact in seen for fact in HEALTH_FACTS.values())
+
+
+def window(start: timedelta, end: timedelta) -> str:
+    now = datetime.now(UTC)
+    return f"{(now + start).isoformat()}/{(now + end).isoformat()}"
+
+
+@pytest.fixture
+def exports(monkeypatch):
+    """Every run write by any LangSmith client, including the SDK's own
+    env-configured default, not only the recorder."""
+    writes = []
+    for method in ("create_run", "update_run"):
+        monkeypatch.setattr(
+            Client, method, lambda self, *a, **kw: writes.append((a, kw))
+        )
+    return writes
+
+
+@pytest.mark.parametrize(
+    "production_window", [None, window(-timedelta(days=2), -timedelta(days=1))]
+)
+def test_production_runs_export_no_health_data_without_an_open_window(
+    monkeypatch, recorder, exports, production_window
+):
+    from uuid import uuid4
+
+    from arete.api.agent_feedback import chat_trace
+
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
+    if production_window:
+        monkeypatch.setenv("LANGSMITH_PRODUCTION_WINDOW", production_window)
+    else:
+        monkeypatch.delenv("LANGSMITH_PRODUCTION_WINDOW", raising=False)
+    health_run(monkeypatch)
+    assert recorder.recorded_runs == {}
+    assert exports == []
+    # Untraced answers get no feedback receipt either.
+    assert chat_trace(uuid4(), None, "account") is None
+
+
+def test_open_production_window_exports_and_is_logged(monkeypatch, recorder, caplog):
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.setenv(
+        "LANGSMITH_PRODUCTION_WINDOW", window(-timedelta(hours=1), timedelta(hours=1))
+    )
+    from uuid import uuid4
+
+    from arete.api.agent_feedback import chat_trace
+
+    health_run(monkeypatch)
+    # The control for the test above: the same run is exported when allowed.
+    assert all(fact in str(recorder.recorded_runs) for fact in HEALTH_FACTS.values())
+    assert chat_trace(uuid4(), None, "account") is not None
+    from queue import PriorityQueue
+
+    from arete.config import config
+
+    monkeypatch.setattr(tracing, "_client", None)
+    client = Mock(tracing_queue=PriorityQueue())
+    monkeypatch.setattr(tracing, "Client", Mock(return_value=client))
+    assert tracing.get_tracing_client() is client
+    window_end = config.langsmith_production_window[1].isoformat()
+    assert f"LangSmith exports production runs until {window_end}" in caplog.text
+    tracing.close_tracing()
+
+
+@pytest.mark.parametrize(
+    ("vercel", "database", "production"),
+    [
+        ("production", "data/arete.duckdb", True),
+        (None, "md:arete_v2", True),
+        (None, "md:", True),
+        ("preview", "md:arete_preview_v2", False),
+        (None, "md:Arete_Preview_v2?motherduck_token=x", False),
+        (None, "data/arete.duckdb", False),
+    ],
+)
+def test_production_data_is_vercel_production_or_a_non_preview_database(
+    monkeypatch, vercel, database, production
+):
+    from arete.config import config
+
+    if vercel:
+        monkeypatch.setenv("VERCEL_ENV", vercel)
+    else:
+        monkeypatch.delenv("VERCEL_ENV", raising=False)
+    monkeypatch.setenv("ARETE_DB", database)
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.delenv("LANGSMITH_PRODUCTION_WINDOW", raising=False)
+    assert config.production_data is production
+    assert config.langsmith_tracing is not production
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-10-23T10:00:00+00:00",
+        "2026-10-23T10:00:00/2026-10-24T10:00:00",
+        "2026-10-23T10:00:00Z/2026-10-31T10:00:01Z",
+        "2026-10-24T10:00:00Z/2026-10-23T10:00:00Z",
+        "demain/après-demain",
+    ],
+)
+def test_production_window_must_be_a_bounded_interval(monkeypatch, value):
+    from arete.config import config
+
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_PRODUCTION_WINDOW", value)
+    with pytest.raises(ValueError, match="LANGSMITH_PRODUCTION_WINDOW"):
+        assert config.langsmith_tracing
 
 
 def test_enabled_tracing_requires_key_before_inference(monkeypatch):
