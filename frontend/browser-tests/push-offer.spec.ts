@@ -112,12 +112,10 @@ test('opening the briefing brings its offer; enabling subscribes this device onc
   expect(requests).not.toContain('GET /api/notifications/vapid-public-key');
   await entry.click();
   const offer = page.getByRole('region', BRIEFING_OFFER);
-  await expect(page).toHaveURL(/\/coach$/);
-  await expect(offer).toHaveCount(0);
-  // Back from the briefing's conversation, the offer waits under the card.
-  await page.locator('#coach-panel').getByRole('button', { name: 'Retour à la page' }).click();
   await expect(offer).toBeVisible();
   await expect(offer).toHaveCount(1);
+  // Back from the briefing's conversation, the offer waits under the card.
+  await page.locator('#coach-panel').getByRole('button', { name: 'Masquer le coach' }).click();
   await offer.getByRole('button', { name: 'Activer les notifications' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Notifications activées sur cet appareil.' })).toBeFocused();
   expect(requests.filter(r => r === 'POST /api/notifications/subscription')).toHaveLength(1);

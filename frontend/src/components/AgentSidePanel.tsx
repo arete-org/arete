@@ -61,7 +61,6 @@ const PAGE_LABELS: Record<string, string> = {
   profile: 'Mon profil',
 };
 const MAX_COMPOSER_HEIGHT_PX = 144;
-const MAX_RECENT_THREADS = 5;
 /** On a phone, Enter inserts a new line: the keyboard has no Shift to hold. */
 const touchKeyboard = () =>
   typeof window !== 'undefined' &&
@@ -130,9 +129,7 @@ export function AgentSidePanel({
   display = 'sidebar',
   onDisplayChange,
   displayError,
-  embedded = false,
 }: {
-  embedded?: boolean;
   display?: CoachDisplay;
   onDisplayChange?: (mode: CoachDisplay) => void;
   displayError?: string | null;
@@ -140,14 +137,13 @@ export function AgentSidePanel({
   onClose: () => void;
   onBusyChange?: (busy: boolean) => void;
 }) {
-  const floating = !embedded && display === 'floating';
+  const floating = display === 'floating';
   const panelContext = usePanelContext();
   const [showMemory, setShowMemory] = useState(false);
-  const [methodsOpen, setMethodsOpen] = useState(false);
   const { data: preference } = useGamePreference();
   const rpg = preference?.enabled === true;
   const coachLabel = coachWords(rpg);
-  const expanded = !embedded && display === 'expanded';
+  const expanded = display === 'expanded';
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const coach = useCoachThreads(panelContext, true);
@@ -233,7 +229,7 @@ export function AgentSidePanel({
   }, [open, onClose, showHistory, showMemory, deleteId]);
 
   useEffect(() => {
-    const reveal = () => { setShowHistory(false); setShowMemory(false); setMethodsOpen(false); followRef.current = true; setFollowing(true); };
+    const reveal = () => { setShowHistory(false); setShowMemory(false); followRef.current = true; setFollowing(true); };
     window.addEventListener('arete:coach-discuss', reveal);
     window.addEventListener('arete:conversation-open', reveal);
     return () => { window.removeEventListener('arete:coach-discuss', reveal); window.removeEventListener('arete:conversation-open', reveal); };
@@ -246,62 +242,36 @@ export function AgentSidePanel({
   const selectThread = (id: string) => {
     void coach.openArchived(id);
     setShowHistory(false);
-    setShowMemory(false);
-    setMethodsOpen(false);
     followLatest();
   };
   const newThread = () => {
     coach.create();
     setShowHistory(false);
-    setShowMemory(false);
-    setMethodsOpen(false);
     followLatest();
   };
   const send = (prompt?: string) => {
     if (!busy && coach.send(prompt)) followLatest();
   };
-  const showMethods = () => { setShowMemory(false); setShowHistory(false); setMethodsOpen(true); inputRef.current?.focus(); };
 
   if (!open) return null;
-  const Container = embedded ? 'section' : 'aside';
   const page = reference?.kind === 'briefing' ? 'Briefing' : reference?.kind === 'evening' ? 'Message du soir' : PAGE_LABELS[panelContext.page] ?? panelContext.page;
   return (
-    <Container
+    <aside
       onDragEnter={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); dragDepth.current += 1; setDragging(true); } }}
       onDragLeave={event => { if (event.dataTransfer.types.includes('Files')) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
       onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
       onDrop={event => { if (!event.dataTransfer.types.includes('Files')) return; event.preventDefault(); dragDepth.current = 0; setDragging(false); if (!busy) attachmentsRef.current?.upload(Array.from(event.dataTransfer.files)); }}
       id="coach-panel"
-      data-display={embedded ? 'embedded' : display}
+      data-display={display}
       data-context={reference?.kind === 'briefing' || reference?.kind === 'onboarding' || reference?.kind === 'evening' || reference?.kind === 'followup' || reference?.kind === 'proposal' ? 'attached' : 'page'}
       data-view={showMemory || showHistory ? 'auxiliary' : 'conversation'}
-      className={cn('coach-panel flex w-full flex-col', embedded ? 'relative' : 'fixed right-0 z-40 border-l border-text-muted/20 shadow-2xl', rpg ? 'bg-void' : 'bg-abyss', !embedded && !expanded && 'max-w-[520px]')}
-      role={embedded ? 'region' : 'complementary'}
+      className={cn("coach-panel fixed right-0 z-40 flex w-full flex-col border-l border-text-muted/20 shadow-2xl", rpg ? 'bg-void' : 'bg-abyss', expanded ? "max-w-none" : "max-w-[520px]")}
+      role="complementary"
       aria-label="Coach IA"
     >
-      {embedded && <header className="coach-page-heading">
-        <p className="text-[11px] font-medium uppercase tracking-[1.25px] text-text-secondary">{coachLabel.name} / Conversation</p>
-        <h1 className="font-display text-5xl font-semibold leading-[54px]">Comprendre. Décider. Continuer.</h1>
-        <p className="text-sm text-text-secondary">Ton contexte, tes données et un échange qui garde le fil.</p>
-      </header>}
-      <div className={embedded ? 'coach-workspace' : 'contents'}>
-      {embedded && <aside className="coach-recent glass-panel" aria-label="Conversations récentes">
-        <button className="ui-button min-h-11 w-full bg-shadow px-4 text-left text-sm text-neon-cyan" aria-label="Créer une conversation" onClick={newThread}>+ Nouvelle conversation</button>
-        <h2 className="mt-4 text-[11px] font-medium uppercase tracking-[1.25px] text-text-secondary">Récemment</h2>
-        <ul className="mt-2 divide-y divide-border">{[...store.threads].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_RECENT_THREADS).map(thread => <li key={thread.id}>
-          <button onClick={() => selectThread(thread.id)} aria-label={`Reprendre ${thread.title}`} aria-current={thread.id === active.id ? 'true' : undefined} className="min-h-11 w-full rounded py-3 text-left text-sm hover:text-neon-cyan">
-            <span className="block font-medium">{thread.title}</span>
-            <span className="mt-1 block text-xs text-text-secondary">{thread.id === runningId ? 'Réponse en cours' : thread.draft ? 'Brouillon' : new Date(thread.updatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
-          </button>
-        </li>)}</ul>
-        <button onClick={() => { setShowHistory(true); setShowMemory(false); }} className="ui-button mt-4 min-h-11 text-left text-sm text-neon-cyan">Toutes les conversations</button>
-      </aside>}
-      <div className={embedded ? 'coach-conversation' : 'contents'}>
       {dragging && <div className="absolute inset-3 z-50 pointer-events-none flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-neon-cyan bg-abyss/95 p-6 text-center"><p className="text-xl font-bold">Dépose tes fichiers ici</p><p className="mt-3 text-sm text-text-secondary">Ils seront joints au brouillon, sans envoyer le message.</p><p className="mt-2 text-xs text-text-muted">5 fichiers maximum · 20 Mio par fichier</p></div>}
       <header className="coach-header flex shrink-0 items-center gap-2 border-b border-text-muted/15 px-4 py-3">
-        {embedded ? <>
-          <AreteMark size={24} /><h2 className="coach-title min-w-0 flex-1">{coachLabel.name}</h2><span className="coach-context-label text-[11px] uppercase tracking-wide text-text-secondary">{page}</span>
-        </> : floating ? <>
+        {floating ? <>
           <AreteMark size={18} />
           <h2 className="coach-title">{coachLabel.name}</h2>
           <span className="min-w-0 flex-1 truncate text-[11px] text-text-muted">{page}</span>
@@ -325,17 +295,17 @@ export function AgentSidePanel({
           <Ellipsis className="size-4" />
         </button>
         </>}
-        {(embedded || onDisplayChange) && <CoachDisplayOptions embedded={embedded} mode={display} onChange={onDisplayChange ?? (() => {})}
+        {onDisplayChange && <CoachDisplayOptions mode={display} onChange={onDisplayChange}
           onHistory={() => { setShowHistory(value => !value); setShowMemory(false); }}
           onMemory={() => { setShowMemory(value => !value); setShowHistory(false); }}
           onCreate={() => { newThread(); setShowMemory(false); }} />}
         <button
           onClick={onClose}
           className="rounded-lg p-2 text-text-muted hover:bg-text-muted/10"
-          aria-label={embedded ? 'Retour à la page' : 'Masquer le coach'}
-          title={embedded ? 'Retour à la page' : 'Masquer le coach'}
+          aria-label="Masquer le coach"
+          title="Masquer le coach"
         >
-          {embedded ? <X className="size-5" /> : floating ? <Minus className="size-4" /> : <X className="size-5" />}
+          {floating ? <Minus className="size-4" /> : <X className="size-5" />}
         </button>
       </header>
       {displayError && <p role="alert" className="px-4 py-2 text-xs text-warning-orange">{displayError}</p>}
@@ -398,7 +368,7 @@ export function AgentSidePanel({
         />
       ) : (
         <>
-          {!embedded && !rpg && !floating && <button
+          {!rpg && !floating && <button
             onClick={() => setShowHistory(true)}
             className="flex shrink-0 items-center gap-2 border-b border-text-muted/10 px-5 py-2.5 text-left text-xs text-text-secondary hover:bg-shadow/40"
             aria-label="Changer de conversation"
@@ -485,7 +455,7 @@ export function AgentSidePanel({
                   )}
                 >
                   {message.role === 'user' ? (
-                    <div className={cn("whitespace-pre-wrap break-words px-4 py-3 text-sm leading-relaxed", embedded ? "w-full rounded-[var(--radius-panel)] border border-border bg-void" : "max-w-[90%] rounded-2xl rounded-tr-sm bg-neon-purple/15")}>
+                    <div className="max-w-[90%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-neon-purple/15 px-4 py-3 text-sm leading-relaxed">
                       {message.content}
                       {!!message.attachmentIds?.length && <MessageAttachments ids={message.attachmentIds} threadId={active.id} />}
                     </div>
@@ -553,8 +523,6 @@ export function AgentSidePanel({
                 ><Plus className="size-4" aria-hidden="true" /></button>
                 <SkillInput
                   coach={coachLabel}
-                  methodsOpen={methodsOpen}
-                  onMethodsClose={() => setMethodsOpen(false)}
                   key={active.id}
                   inputRef={inputRef}
                   aria-label="Message au coach"
@@ -575,7 +543,7 @@ export function AgentSidePanel({
                       send();
                     }
                   }}
-                  placeholder={floating || embedded ? `Demander ${coachLabel.to}…` : 'Ton message…'}
+                  placeholder={floating ? `Demander ${coachLabel.to}…` : 'Ton message…'}
                   className={cn('coach-composer-input block min-h-11 max-h-36 min-w-0 flex-1 resize-none appearance-none overflow-x-hidden overflow-y-auto bg-transparent py-1.5 text-sm leading-relaxed outline-none', 'col-start-2 row-start-1 w-full px-1')}
                 />
                 {streaming ? (
@@ -593,14 +561,13 @@ export function AgentSidePanel({
                     className={cn('flex shrink-0 items-center justify-center rounded-lg bg-neon-cyan/15 text-neon-cyan hover:bg-neon-cyan/25 disabled:opacity-30', 'col-start-4 row-start-1 size-11')}
                     aria-label="Envoyer"
                   >
-                    {floating || embedded ? <ArrowUp className="size-4" /> : <Send className="size-4" />}
+                    {floating ? <ArrowUp className="size-4" /> : <Send className="size-4" />}
                   </button>
                 )}
               </div>
             </div>
             <ContextWindowGauge key={active.id} usage={active.contextWindowUsage} compacting={coach.compacting} />
-            {embedded && <button onClick={showMethods} className="coach-methods-entry min-h-11 text-left text-xs text-neon-cyan">/ Méthodes de coaching</button>}
-            {!embedded && !floating && (!rpg || streaming) && <p className="mt-2 text-center text-[10px] text-text-muted">
+            {!floating && (!rpg || streaming) && <p className="mt-2 text-center text-[10px] text-text-muted">
               {rpg && streaming ? 'Tu peux préparer ton prochain message.' : touchKeyboard()
                 ? 'Touche Envoyer pour envoyer'
                 : 'Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne'}
@@ -608,19 +575,6 @@ export function AgentSidePanel({
           </footer>
         </>
       )}
-      </div>
-      {embedded && <aside className="coach-methods glass-panel" aria-label="Méthodes utiles">
-        <p className="text-[11px] font-medium uppercase tracking-[1.25px] text-text-secondary">Selon ton besoin</p>
-        <h2 className="font-display text-[28px] font-semibold leading-[31px]">{coachLabel.The} sait par où commencer.</h2>
-        <p className="text-sm leading-relaxed text-text-secondary">Une méthode guide la lecture et le raisonnement. Tu peux en choisir une, ou simplement poser ta question.</p>
-        <dl className="space-y-4 text-sm">
-          <div><dt className="font-medium">Préparer ma semaine</dt><dd className="mt-2 text-xs text-text-secondary">Prévu, réalisé et contraintes.</dd></div>
-          <div><dt className="font-medium">Débriefer une séance</dt><dd className="mt-2 text-xs text-text-secondary">Intention, mesures et ressenti.</dd></div>
-          <div><dt className="font-medium">Progresser en force</dt><dd className="mt-2 text-xs text-text-secondary">Séries, charges et tendance.</dd></div>
-        </dl>
-        <button onClick={showMethods} className="ui-button min-h-11 self-start px-4 text-sm text-neon-cyan">Voir les méthodes</button>
-      </aside>}
-      </div>
-    </Container>
+    </aside>
   );
 }

@@ -29,7 +29,7 @@ for (const width of [390, 1440]) test(`saved conversations, search and draft iso
   });
   await page.goto('/follow-up?tab=conversations');
   await page.getByRole('button', { name: /Footing et Hyrox Sauvegardée/ }).click();
-  const panel = page.getByRole('region', { name: 'Coach IA' });
+  const panel = page.getByRole('complementary', { name: 'Coach IA' });
   await expect(panel.getByText('Renfo léger après le footing.', { exact: true })).toBeVisible();
   expect(chatCalls).toBe(0);
   await expect(panel.getByLabel('Message au coach')).toHaveValue('');
@@ -42,7 +42,7 @@ for (const width of [390, 1440]) test(`saved conversations, search and draft iso
   await panel.getByRole('button', { name: /Mon brouillon Brouillon/ }).click();
   await expect(panel.getByLabel('Message au coach')).toHaveValue('Garder mes sensations');
   expect(chatCalls).toBe(1);
-  await panel.getByRole('button', { name: 'Retour à la page' }).click();
+  await panel.getByRole('button', { name: 'Masquer le coach' }).click();
   await page.getByLabel('Rechercher dans les conversations').fill('introuvable');
   await page.getByRole('button', { name: 'Rechercher', exact: true }).click();
   await expect(page.getByText('Aucune conversation trouvée.')).toBeVisible();

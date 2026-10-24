@@ -45,7 +45,7 @@ for (const theme of ['pierre', 'prune', 'odyssey', 'encre']) for (const width of
       await page.goto('/planning');
       const open = page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first();
       await open.click();
-      const panel = page.getByRole('region', { name: 'Coach IA' });
+      const panel = page.getByRole('complementary', { name: 'Coach IA' });
       await panel.getByLabel('Message au coach').fill('Adapte ma séance de demain.');
       await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
       await expect.poll(() => stream.requests()).toBe(1);
@@ -53,8 +53,7 @@ for (const theme of ['pierre', 'prune', 'odyssey', 'encre']) for (const width of
       await expect(panel.getByLabel('Minutes disponibles')).toBeVisible();
       await panel.getByLabel('Message au coach').fill('Mon prochain message reste ici.');
       await page.reload();
-      // Reload keeps /coach; wait for React to mount instead of probing too early.
-      await expect(panel).toBeVisible();
+      await open.click();
       await expect(panel.getByLabel('Minutes disponibles')).toBeVisible();
       expect(stream.requests()).toBe(1);
       expect(resumes).toBe(0);

@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { coachStream } from './coachStream';
 import { THEMES } from '../src/lib/theme';
 
@@ -28,7 +28,7 @@ const bars = {
 async function openCoach(page: Page) {
   await page.goto('/analytics');
   await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
-  return page.getByRole('region', { name: 'Coach IA' });
+  return page.getByRole('complementary', { name: 'Coach IA' });
 }
 
 async function chartStream(page: Page, display: 'sidebar' | 'floating' = 'floating') {
@@ -48,7 +48,15 @@ async function chartStream(page: Page, display: 'sidebar' | 'floating' = 'floati
   });
   return { ...stream, archives };
 }
-test('charts render in all themes in the embedded coach, stay offline and survive reload', async ({ page }) => {
+async function display(panel: Locator, name: string) {
+  const mode = name === 'Chat flottant' ? 'floating' : 'sidebar';
+  if (await panel.getAttribute('data-display') === mode) return;
+  await panel.getByRole('button', { name: 'Options du coach' }).click();
+  await panel.getByRole('radio', { name, exact: true }).click();
+  await expect(panel).toHaveAttribute('data-display', mode);
+}
+
+test('charts render in all themes and both chat modes, stay offline and survive reload', async ({ page }) => {
   const stream = await chartStream(page);
   const frameRequests: string[] = [];
   page.on('request', request => { if (request.frame().parentFrame()) frameRequests.push(request.url()); });
@@ -69,8 +77,8 @@ test('charts render in all themes in the embedded coach, stay offline and surviv
     await panel.getByLabel('Message au coach').fill('Mon brouillon reste ici.');
     for (const width of [390, 1440]) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
-      for (const mode of ['embedded']) {
-        await expect(panel).toHaveAttribute('data-display', mode);
+      for (const mode of ['Chat flottant', 'Panneau latéral classique']) {
+        await display(panel, mode);
         for (const { value: theme } of THEMES) {
           await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
           for (const title of [line.title, bars.title]) {
@@ -88,7 +96,7 @@ test('charts render in all themes in the embedded coach, stay offline and surviv
           }
           expect(await card.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
           await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon reste ici.');
-          if (theme === 'pierre') {
+          if (theme === 'pierre' && mode === (width === 390 ? 'Chat flottant' : 'Panneau latéral classique')) {
             await card.scrollIntoViewIfNeeded();
             await card.screenshot({ path: `../.context/chiron-chart-${width === 390 ? 'mobile' : 'desktop'}.png` });
           }
@@ -100,7 +108,8 @@ test('charts render in all themes in the embedded coach, stay offline and surviv
     await expect.poll(() => stream.archives.size).toBe(1);
     const beforeReload = [...stream.archives.values()][0];
     await page.reload();
-    await expect(page).toHaveURL(/\/coach$/);
+    // Sidebar stays mounted after reload; reopen only if the restored mode is collapsed.
+    if (!await panel.isVisible()) await page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     await expect(panel.locator('iframe')).toHaveCount(2);
     await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon reste ici.');
     // Restoring settles transient message flags; wait for that snapshot's ack
@@ -128,7 +137,7 @@ test('charts render in all themes in the embedded coach, stay offline and surviv
   } finally { await stream.close(); }
 });
 
-test('late charts remain with their original thread through page navigation and thread changes', async ({ page }) => {
+test('late charts remain with their original thread while draft and display mode change', async ({ page }) => {
   const stream = await chartStream(page);
   try {
     const panel = await openCoach(page);
@@ -137,9 +146,8 @@ test('late charts remain with their original thread through page navigation and 
     await expect.poll(() => stream.requests()).toBe(1);
     stream.send(line);
     await expect(panel.locator('iframe')).toHaveCount(1);
-    await panel.getByRole('button', { name: 'Retour à la page' }).click();
-    await page.getByRole('button', { name: 'Ouvrir le coach' }).click();
-    await expect(panel).toHaveAttribute('data-display', 'embedded');
+    await display(panel, 'Panneau latéral classique');
+    await display(panel, 'Chat flottant');
     await expect(panel.locator('iframe')).toHaveCount(1);
     await panel.getByRole('button', { name: 'Options du coach' }).click();
     await panel.getByRole('button', { name: 'Nouvelle conversation', exact: true }).click();
