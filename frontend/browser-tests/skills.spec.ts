@@ -25,14 +25,9 @@ for (const rpg of [false, true]) {
     await page.goto('/planning?date=2026-10-10');
     const open = () => page.getByRole('button', { name: /^(Ouvrir le coach|Demander (?:au coach|à Chiron))$/ }).filter({ visible: true }).first().click();
     await open();
-    const panel = page.getByRole('region', { name: 'Coach IA' });
+    const panel = page.getByRole('complementary', { name: 'Coach IA' });
     const input = panel.getByLabel('Message au coach');
     expect(catalogs).toBe(0);
-    await input.fill('Mon brouillon');
-    await panel.getByRole('button', { name: '/ Méthodes de coaching', exact: true }).click();
-    await expect(input).toHaveValue('Mon brouillon');
-    await expect(panel.getByRole('option')).toBeVisible();
-    await input.press('Escape');
     await input.fill('/');
     await expect(panel.getByRole('option')).toBeVisible();
     expect(sent).toHaveLength(0);
@@ -47,7 +42,7 @@ for (const rpg of [false, true]) {
     // The selected command lives in the normal draft: switching and reload keep it.
     await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
     await page.reload();
-    await expect(page).toHaveURL(/\/coach$/);
+    await open();
     await expect(input).toHaveValue('/document-planning ');
     await page.setViewportSize({ width: 390, height: 844 });
     await input.fill('/doc');

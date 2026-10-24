@@ -5,7 +5,7 @@ import { dashboardAnswer, localDay } from './dashboardAnswer';
 const ANSWERED = { date: localDay(), sleep: 4, legs: 4, mood: null, note: null, answered_at: `${localDay()}T05:12:00+00:00`, updated_at: `${localDay()}T05:12:00+00:00` };
 
 // Local fixtures keep layout checks independent of training data or model calls.
-test('desktop home and embedded coach share centered page gutters', async ({ page }) => {
+test('desktop home uses centered page gutters and reflows beside the docked coach', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('arete.coach-display.v2', 'sidebar'));
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
@@ -46,31 +46,22 @@ test('desktop home and embedded coach share centered page gutters', async ({ pag
     await expect(page.getByRole('heading', { name: 'Tes repères', exact: true })).toBeInViewport();
   }
 
-  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('button', { name: 'Ouvrir le coach' }).filter({ visible: true }).click();
-  const panel = page.getByRole('region', { name: 'Coach IA' });
+  const panel = page.getByRole('complementary', { name: 'Coach IA' });
   await panel.getByLabel('Message au coach').fill('Mon brouillon reste ici.');
-  await expect(page).toHaveURL(/\/coach$/);
-  await expect(panel).toHaveCSS('position', 'relative');
-  await expect(page.getByRole('main').getByRole('region', { name: 'Coach IA' })).toBeVisible();
-  await expect(heading).toHaveCount(0);
-  for (const width of [1280, 1920]) {
+  // The docked panel sits beside the page, never over it.
+  for (const width of [1440, 1920]) {
     await page.setViewportSize({ width, height: 1000 });
+    const content = (await page.locator('.dashboard-overview').first().boundingBox())!;
     const coach = (await panel.boundingBox())!;
-    const expected = Math.min(width * .9, 1296);
-    expect(coach.width).toBe(expected);
-    expect(coach.x).toBe((width - expected) / 2);
-    const recent = (await panel.getByRole('complementary', { name: 'Conversations récentes' }).boundingBox())!;
-    const conversation = (await panel.locator('.coach-conversation').boundingBox())!;
-    const methods = (await panel.getByRole('complementary', { name: 'Méthodes utiles' }).boundingBox())!;
-    expect(Math.abs(recent.y - conversation.y)).toBeLessThan(1);
-    expect(Math.abs(methods.y - conversation.y)).toBeLessThan(1);
-    await expect(panel.getByLabel('Message au coach')).toBeInViewport();
+    expect(content.x + content.width).toBeLessThanOrEqual(coach.x);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(panel.getByLabel('Message au coach')).toHaveValue('Mon brouillon reste ici.');
-  await panel.getByRole('button', { name: 'Retour à la page' }).click();
+  await panel.getByRole('button', { name: 'Masquer le coach' }).click();
   await expect(heading).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole('link', { name: 'Saisir une séance', exact: true })).toBeVisible();

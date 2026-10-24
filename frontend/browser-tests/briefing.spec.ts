@@ -99,18 +99,14 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
     await page.getByRole('button', { name: 'Briefings précédents' }).click();
 
     await page.getByRole('button', { name: 'Demander au coach' }).click();
-    const panel = page.getByRole('region', { name: 'Coach IA' });
+    const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await panel.getByLabel('Message au coach').fill('Mon brouillon reste ici.');
     await panel.getByLabel('Joindre des documents', { exact: true }).setInputFiles({ name: 'semaine.txt', mimeType: 'text/plain', buffer: Buffer.from('Séance de récupération.') });
     await expect(panel.getByRole('button', { name: 'Fichiers du fil (1)' })).toBeVisible();
     await expect(panel.getByRole('button', { name: 'Envoyer', exact: true })).toBeEnabled();
-    await panel.getByRole('button', { name: 'Retour à la page' }).click();
+    await panel.getByRole('button', { name: 'Masquer le coach' }).click();
     await entry.focus();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/coach$/);
-    await expect(page.getByRole('main').getByRole('region', { name: 'Coach IA' })).toBeVisible();
-    await expect(panel).toHaveCSS('position', 'relative');
-    await expect(panel).toHaveAttribute('data-display', 'embedded');
     await expect(panel.getByRole('region', { name: 'Briefing dans cette conversation' })).toContainText(text);
     await expect(panel.getByLabel('Message au coach')).toHaveValue('');
     await expect(panel.getByRole('button', { name: /Fichiers du fil/ })).toHaveCount(0);
@@ -142,7 +138,7 @@ for (const theme of ['pierre', 'prune']) for (const width of [390, 1440]) {
     expect(chats[0].thread_id).toBe(briefingThread);
     if (theme === 'pierre' && width === 390) await page.screenshot({ path: '../.context/briefing-03-discussion.png' });
     await page.reload();
-    await expect(page).toHaveURL(/\/coach$/);
+    await page.getByRole('button', { name: 'Demander au coach' }).click();
     await expect(panel.getByRole('region', { name: 'Briefing dans cette conversation' })).toContainText(text);
     await expect(panel.getByRole('button', { name: 'Briefing utile', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await panel.getByRole('button', { name: 'Options du coach' }).click();
@@ -174,14 +170,14 @@ for (const width of [390, 1440]) test(`opening a briefing preserves the original
   try {
     await page.goto('/');
     await page.getByRole('button', { name: 'Demander au coach' }).click();
-    const panel = page.getByRole('region', { name: 'Coach IA' });
+    const panel = page.getByRole('complementary', { name: 'Coach IA' });
     await panel.getByLabel('Message au coach').fill('Comment organiser ma semaine ?');
     await panel.getByRole('button', { name: 'Envoyer', exact: true }).click();
     await expect.poll(stream.requests).toBe(1);
     stream.send({ type: 'token', id: 'answer', text: 'Réponse dans le fil initial.' });
     await expect(panel.getByText('Réponse dans le fil initial.')).toBeVisible();
     await panel.getByLabel('Message au coach').fill('Brouillon pendant la réponse.');
-    await panel.getByRole('button', { name: 'Retour à la page' }).click();
+    await panel.getByRole('button', { name: 'Masquer le coach' }).click();
     await page.getByRole('button', { name: 'En parler au coach', exact: true }).click();
     await expect(panel.getByRole('region', { name: 'Briefing dans cette conversation' })).toBeVisible();
     stream.send({ type: 'token', id: 'answer', text: ' Terminée.' });

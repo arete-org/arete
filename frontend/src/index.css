@@ -456,12 +456,12 @@ select.ui-input:not([multiple], [size]) {
 .app-shell { min-height: 100dvh; padding-top: var(--safe-top); }
 /* The sign-in and account screens replace the shell: they keep clear of the notch too. */
 .gate-screen { padding: max(24px, var(--safe-top)) max(24px, var(--safe-right)) max(24px, var(--safe-bottom)) max(24px, var(--safe-left)); }
-.app-main { padding-bottom: var(--mobile-nav-space); }
+.app-main { padding-bottom: calc(var(--mobile-nav-space) + var(--launcher-space)); }
 .mobile-navigation { padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left); }
 .journal-actions { position: sticky; top: var(--safe-top); z-index: 20; padding-block: 8px; margin-bottom: 16px; background: var(--color-void); }
 .journal-actions > button { width: 100%; }
 @media (min-width: 768px) {
-  .app-main { padding-bottom: 0; }
+  .app-main { padding-bottom: var(--launcher-space); }
   .journal-actions { position: static; }
   .journal-actions > button { width: auto; }
 }
@@ -639,51 +639,3 @@ body:has(.coach-panel) .install-invitation, body:has([aria-modal='true']) .insta
   .dashboard-panel { padding: 24px; }
 }
 
-/* Unified Figma 334:81 / 338:434: history, shared conversation, methods. */
-.coach-entry { width: calc(100% - 2 * var(--page-gutter)); max-width: 960px; margin: 0 auto; padding-bottom: 24px; }
-body:has([aria-modal='true']) .coach-entry { visibility: hidden; }
-.app-shell:has(.coach-panel[data-display='embedded']) { display: flex; flex-direction: column; height: var(--visible-height, 100dvh); min-height: 0; }
-.app-shell:has(.coach-panel[data-display='embedded']) > :not(main) { flex-shrink: 0; }
-.app-main-coach { flex: 1; min-height: 0; padding: max(20px, var(--visible-top, 0px)) max(20px, var(--safe-right)) var(--safe-bottom) max(20px, var(--safe-left)); }
-.coach-panel[data-display='embedded'] {
-  position: relative; inset: auto; width: 100%; max-width: 1296px; margin-inline: auto;
-  height: 100%;
-  max-height: none; border: 0; background: transparent; box-shadow: none; animation: none;
-}
-.coach-page-heading { display: none; }
-.coach-workspace { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-height: 0; gap: 28px; }
-.coach-recent, .coach-methods { display: none; }
-.coach-conversation { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.coach-panel[data-display='embedded'] .coach-header { padding: 0 0 16px; border: 0; }
-.coach-panel[data-display='embedded'] .coach-thread { padding: 0 0 20px; }
-.coach-panel[data-display='embedded'] .coach-conversation > footer { padding: 12px 0 0; background: var(--color-abyss); border-color: var(--color-border); }
-.coach-panel[data-display='embedded'] .coach-title { font-size: 28px; line-height: 31px; }
-.coach-panel[data-display='embedded'] .coach-composer { border: 0; border-radius: 0; background: transparent; }
-.coach-panel[data-display='embedded'] .coach-composer:focus-within { box-shadow: inset 0 2px var(--color-neon-cyan); }
-.coach-panel[data-display='embedded'] button[aria-label='Envoyer'] { border-radius: 50%; background: var(--color-shadow); color: var(--color-text-secondary); }
-.coach-panel[data-display='embedded'] .coach-context-label { display: none; }
-@media (min-width: 768px) {
-  .app-main-coach { padding-block: 24px; }
-  .coach-conversation { padding: 24px; border: 1px solid var(--color-border); border-radius: var(--radius-panel); background: var(--color-abyss); }
-}
-@media (min-width: 1024px) {
-  .app-main-coach { padding-inline: 5vw; padding-top: 48px; }
-  .coach-page-heading { display: grid; gap: 8px; margin-bottom: 28px; }
-  .coach-workspace { grid-template-columns: 240px minmax(0, 1fr); }
-  .coach-recent { display: block; align-self: start; padding: 20px; }
-}
-@media (min-width: 1280px) {
-  .coach-workspace { grid-template-columns: minmax(200px, .75fr) minmax(0, 1.4fr) minmax(240px, .95fr); }
-  .coach-methods { display: flex; flex-direction: column; align-self: start; gap: 16px; padding: 24px; background: var(--color-shadow); }
-}
-@media (max-height: 500px) {
-  .app-main-coach { padding-block: 8px; }
-  .coach-conversation { padding: 12px; }
-  .coach-panel[data-display='embedded'] .coach-header { padding-bottom: 4px; }
-  .coach-panel[data-display='embedded'] .coach-thread { padding-bottom: 8px; }
-  .coach-page-heading { display: none; }
-  .coach-methods-entry { min-height: 32px; }
-}
-@media (max-width: 767px) {
-  .app-shell:has(.coach-panel[data-display='embedded']) { --mobile-nav-space: 0px; }
-}

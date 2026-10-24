@@ -59,14 +59,14 @@ test('file drop creates sessions directly and preserves attachments on reload', 
     data.items.add(new File(['Footing 30 minutes'], 'plan.md', { type: 'text/markdown' }));
     return data;
   });
-  await page.getByRole('region', { name: 'Coach IA' }).dispatchEvent('drop', { dataTransfer: transfer });
+  await page.getByRole('complementary', { name: 'Coach IA' }).dispatchEvent('drop', { dataTransfer: transfer });
   await expect(page.getByRole('button', { name: 'Fichiers du fil (1)' })).toHaveText('1');
   await page.getByLabel('Message au coach').fill('Crée cette séance');
   await page.getByRole('button', { name: 'Envoyer', exact: true }).click();
   await expect(page.getByText('Séance créée dans le planning.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Vérifier.*séance/ })).toHaveCount(0);
   await page.reload();
-  await expect(page).toHaveURL(/\/coach$/);
+  await page.getByRole('button', { name: 'Ouvrir le coach' }).first().click();
   await expect(page.getByText('plan.md', { exact: true })).toBeVisible();
   await expect(page.getByText('Séance créée dans le planning.')).toBeVisible();
   expect(importRequests).toEqual([]);

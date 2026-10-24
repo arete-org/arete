@@ -27,7 +27,7 @@ for (const rpg of [false, true]) {
       const launcher = page.getByRole('button', { name: words.ask, exact: true });
       await expect(launcher).toBeVisible();
       await launcher.click();
-      const panel = page.getByRole('region', { name: 'Coach IA' });
+      const panel = page.getByRole('complementary', { name: 'Coach IA' });
       await expect(panel.getByRole('heading', { name: words.title, exact: true })).toBeVisible();
       await expect(panel.getByLabel('Message au coach')).toHaveAttribute('placeholder', `${words.ask}…`);
       if (!rpg) await expectClassicWords(page);
