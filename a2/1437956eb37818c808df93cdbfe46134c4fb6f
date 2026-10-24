@@ -1,0 +1,21 @@
+pyproject.toml
+  s_5ed3b392cc71d8::t_dd6bd0f951d301 12
+uv.lock
+  s_5ed3b392cc71d8::t_2d1d34504bfba4 169,396,407,409
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a21437956eb37818c808df93cdbfe46134c4fb6f",
+  "prompts": {},
+  "sessions": {
+    "s_5ed3b392cc71d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5fd06cf5-67a2-4a89-beaa-d26593d3419d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nicolas Edmond <nicolas@mac-1.home>"
+    }
+  }
+}
