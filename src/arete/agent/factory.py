@@ -186,7 +186,9 @@ def build_agent(
 
     if interactive:
         for adapter in middleware:
-            if adapter.tools:
+            # `AgentMiddleware.tools` is an annotation without a default:
+            # read it the way create_agent does, or tool-less adapters crash.
+            if getattr(adapter, "tools", None):
                 adapter.tools = [reviewable(tool) for tool in adapter.tools]
     return create_agent(
         model,
