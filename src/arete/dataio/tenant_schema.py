@@ -13,6 +13,7 @@ import duckdb
 
 from arete.dataio.automation_schema import TABLES as AUTOMATION_TABLES
 from arete.dataio.coaching_coordination_schema import TABLES as COORDINATION_TABLES
+from arete.dataio.run_schema import TABLES as RUN_TABLES
 
 ATHLETE_SQL = "getvariable('arete_athlete_id')"
 LEGACY_OWNERS = frozenset(
@@ -35,6 +36,7 @@ LEGACY_OWNERS = frozenset(
 PRIVATE_TABLES = (
     "coach_conversations",
     *AUTOMATION_TABLES,
+    *RUN_TABLES,
     *COORDINATION_TABLES,
     *sorted(LEGACY_OWNERS),
     "exercises",
@@ -119,6 +121,9 @@ def migrate(con: duckdb.DuckDBPyConnection) -> None:
     con.execute("BEGIN TRANSACTION")
     try:
         con.execute(automation_ddl)
+        from arete.dataio.run_schema import DDL as run_ddl
+
+        con.execute(run_ddl)
         con.execute(conversation_ddl)
         con.execute(coaching_ddl)
         con.execute(coordination_ddl)

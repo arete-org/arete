@@ -132,19 +132,24 @@ def test_large_error_still_emits_workout_card_and_error_status(monkeypatch):
     )
 
     async def collect():
-        return [
-            part
-            async for part in graph.astream(
-                {"messages": [HumanMessage("Vérifie.")]},
-                context=AgentContext(current_datetime=CLOCK),
-                config={"recursion_limit": 20},
-                stream_mode=["custom", "values"],
-            )
-        ]
+        from langgraph.stream.transformers import CustomTransformer
 
-    parts = asyncio.run(collect())
-    events = [data for mode, data in parts if mode == "custom"]
-    result = [data for mode, data in parts if mode == "values"][-1]
+        from arete.agent.runtime.streaming import StreamProjection
+
+        projection = StreamProjection()
+        events = []
+        async with await graph.astream_events(
+            {"messages": [HumanMessage("Vérifie.")]},
+            context=AgentContext(current_datetime=CLOCK),
+            config={"recursion_limit": 20},
+            version="v3",
+            transformers=[CustomTransformer],
+        ) as stream:
+            async for part in stream:
+                events.extend(projection.events(part))
+            return events, await stream.output()
+
+    events, result = asyncio.run(collect())
     message = next(m for m in result["messages"] if isinstance(m, ToolMessage))
     assert message.status == "error" and "/large_tool_results/result" in message.content
     assert next(e for e in events if e["type"] == "tool_end")["status"] == "error"

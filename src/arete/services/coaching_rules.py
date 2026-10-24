@@ -497,6 +497,7 @@ def sync_feedback(
     session_ids: list[int],
     *,
     produce: Callable[[str, int], str],
+    progress: Callable[[str, int, str, str], None] | None = None,
 ) -> dict[str, Any]:
     """The coach's word on the sessions a sync imported: one model request.
 
@@ -524,6 +525,9 @@ def sync_feedback(
         candidates.append(
             (session_id, SessionFacts(result.feedback, result.highlights, evidence))
         )
+    if progress:
+        for session_id, _ in candidates:
+            progress("running", session_id, "", "")
     answers = batch_session_feedback(
         [facts for _, facts in candidates], produce=produce
     )
@@ -533,10 +537,14 @@ def sync_feedback(
             feedback_repo.save(session_id, text=text, source=source, trigger="sync")
         except Exception:
             logger.warning("Could not store feedback of %s", session_id, exc_info=True)
+            if progress:
+                progress("failed", session_id, "", source)
             continue
         written.append(
             {"session_id": session_id, "date": facts.evidence.date, "text": text}
         )
+        if progress:
+            progress("completed", session_id, text, source)
     return {
         "sessions": len(candidates),
         "agent": sum(1 for _, source in answers if source == "agent"),

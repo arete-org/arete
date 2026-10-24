@@ -249,7 +249,8 @@ def test_native_graph_emits_title_custom_event_before_answer_and_closes_task(
         ):
             events.append(part)
         assert any(
-            part["type"] == "custom" and part["data"].get("type") == "thread_title"
+            part.get("method") == "custom"
+            and part["params"]["data"].get("type") == "thread_title"
             for part in events
         )
         assert context.title_task.done()

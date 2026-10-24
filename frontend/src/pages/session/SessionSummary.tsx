@@ -1,3 +1,4 @@
+import { GenerationPreview } from '@/components/agent/GenerationPreview';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
@@ -28,6 +29,7 @@ export function SessionSummary({ detail, focusRpe }: { detail: ActivityDetail; f
       <h2 id="session-summary-title" className="font-sans font-medium text-[15px] text-ink-primary">
         L’essentiel de la séance
       </h2>
+      {!detail.feedback && <GenerationPreview kind="feedback" sourceId={`actual:${session.id}`} />}
       {numbers.length > 0 && (
         <dl className="grid grid-cols-3 gap-2 sm:gap-3">
           {numbers.map((number) => (

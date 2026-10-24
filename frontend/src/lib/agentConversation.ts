@@ -1,3 +1,4 @@
+import { isInterrupt } from './humanInput';
 import { isWorkoutUpdate } from './workouts';
 import { CHART_CONTRACT, chartPart, isChartCard } from './chartCards';
 import { isTraceReceipt, isFeedbackState } from './agentFeedback';
@@ -83,6 +84,11 @@ export function restoreConversation(raw: string | null): ChatMessage[] {
     if (m.workouts !== undefined && (!Array.isArray(m.workouts) || m.workouts.length > 50 || !m.workouts.every(isWorkoutUpdate))) throw new Error('Séances sauvegardées invalides.');
     return settleMessage(
       {
+        runId: typeof m.runId === 'string' ? m.runId : undefined,
+        runState: typeof m.runState === 'string' ? m.runState : undefined,
+        sequence: Number.isSafeInteger(m.sequence) ? m.sequence : undefined,
+        activity: Array.isArray(m.activity) && m.activity.length <= 12000 && m.activity.every((v: {id?:unknown;label?:unknown;state?:unknown}) => typeof v.id === 'string' && typeof v.label === 'string' && ['running','done','error'].includes(String(v.state))) ? m.activity : undefined,
+        interrupts: Array.isArray(m.interrupts) && m.interrupts.length <= 96 && m.interrupts.every(isInterrupt) ? m.interrupts : undefined,
         trace: m.role === 'assistant' && isTraceReceipt(m.trace) ? m.trace : undefined,
         feedback: isTraceReceipt(m.trace) && isFeedbackState(m.feedback) ? {
           ...m.feedback,
@@ -96,7 +102,7 @@ export function restoreConversation(raw: string | null): ChatMessage[] {
         parts,
       },
       typeof m.error === 'string' ? m.error : undefined,
-      m.interrupted === true || m.pending === true
+      m.interrupted === true || (m.pending === true && !m.runId)
     );
   });
 }

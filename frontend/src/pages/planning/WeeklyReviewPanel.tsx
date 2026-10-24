@@ -1,3 +1,4 @@
+import { GenerationPreview } from '@/components/agent/GenerationPreview';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -163,6 +164,7 @@ export function WeeklyReviewPanel() {
     >
       {review.isLoading && <p className="text-sm text-text-muted">Chargement du bilan…</p>}
       {review.isError && <p className="text-sm text-danger-red">Bilan indisponible.</p>}
+      {write.isPending && <GenerationPreview kind="review" />}
       {write.isPending && (
         <p role="status" className="mb-3 flex items-center gap-2 text-sm text-text-muted">
           <Loader2 className="size-4 animate-spin text-neon-purple" />

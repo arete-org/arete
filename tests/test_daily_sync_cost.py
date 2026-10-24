@@ -329,7 +329,16 @@ _VOLATILE = {"id", "revision", "payload", "event_key", "source_key", "canonical_
 def _unkeyed(row: tuple) -> tuple:
     """Without the keys quoted in text: a session's in a link, a Garmin ID in a
     file name, a briefing's in a notification's reference."""
-    return tuple(re.sub(r"\d+", "#", v) if isinstance(v, str) else v for v in row)
+    return tuple(
+        re.sub(
+            r"\d+",
+            "#",
+            re.sub(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", "UUID", v),
+        )
+        if isinstance(v, str)
+        else v
+        for v in row
+    )
 
 
 def _written(athlete_id) -> dict[str, list[tuple]]:

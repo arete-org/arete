@@ -39,8 +39,10 @@ def _compaction_progress():
     writer({"type": "context_compaction", "phase": "start"})
     try:
         yield
-    finally:
-        # Errors and cancellation must not leave the composer in progress.
+    except BaseException:
+        writer({"type": "context_compaction", "phase": "error"})
+        raise
+    else:
         writer({"type": "context_compaction", "phase": "done"})
 
 
@@ -78,7 +80,9 @@ class ContextSummarizationMiddleware(SummarizationMiddleware):
         if window is None:
             return total
         assert isinstance(window, int) and window > 0
-        _usage.set({"used_tokens": total, "window_tokens": window})
+        # Keep the first complete request measurement, before native compaction.
+        if _usage.get() is None:
+            _usage.set({"used_tokens": total, "window_tokens": window})
         return total
 
     def _create_summary(self, messages_to_summarize):

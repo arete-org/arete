@@ -14,7 +14,6 @@ from arete.services.coaching_repository import (
     BriefingFact,
     BriefingRepository,
     Reaction,
-    SessionFeedbackRepository,
 )
 from arete.services.coaching_rules import PostSessionResponse
 from arete.services.settings import athlete_today
@@ -208,14 +207,6 @@ def post_session_feedback(body: PostSessionRequest) -> PostSessionResponse:
     feedback, source = coaching.enrich_session_feedback(
         result.feedback, result.highlights, evidence
     )
-    if body.session_type == "cardio":
-        # Kept for the session page; the card under the upload shows it now.
-        try:
-            SessionFeedbackRepository().save(
-                body.session_id, text=feedback, source=source, trigger="api"
-            )
-        except Exception:
-            logger.warning("Could not store the session feedback", exc_info=True)
     return PostSessionResponse(
         feedback=feedback, highlights=result.highlights, source=source
     )

@@ -33,6 +33,11 @@ test('the component gallery previews four themes without changing saved preferen
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `../.context/arete-components-${theme.value}.png`, fullPage: true });
   }
+  await page.getByLabel('Ressenti', { exact: true }).fill('7');
+  await page.getByRole('button', { name: 'Envoyer la réponse', exact: true }).click();
+  await expect(page.getByText('Réponse enregistrée.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Approuver', exact: true }).click();
+  await expect(page.getByText('Décision enregistrée.', { exact: true })).toBeVisible();
   await page.getByRole('navigation', { name: 'Navigation principale', exact: true }).getByRole('link', { name: 'Réglages', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'pierre');
   await page.emulateMedia({ colorScheme: 'dark' });

@@ -23,7 +23,9 @@ it('validates context counters and compaction phases without adding message part
   ]) {
     const parsed = parseEvent(JSON.stringify(event));
     expect(parsed).toEqual(event);
-    expect(applyEvent(empty, parsed!)).toBe(empty);
+    const applied = applyEvent(empty, parsed!);
+    expect(applied.parts).toEqual(empty.parts);
+    if (event.type === 'context_compaction') expect(applied.activity?.[0].id).toBe('context-compaction');
   }
   for (const used of [-1, 1.5, '12', null]) {
     expect(() => parseEvent(JSON.stringify({ type: 'values', context_window_usage: { used_tokens: used, window_tokens: 100 } }))).toThrow();
@@ -82,6 +84,7 @@ describe('SSE transport', () => {
         panel_context: { page: 'planning', path: '/planning' },
         thread_id: 'dfe771b8-661a-46af-9cee-dce80e6bc304',
         supports_chart_cards: true,
+        stream_version: 2,
       });
     } finally {
       vi.unstubAllGlobals();

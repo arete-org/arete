@@ -488,7 +488,7 @@ it('opens each briefing in a fresh thread, keeps drafts and binds context only t
   expect(runs[0].signal.aborted).toBe(false);
   await act(async () => { runs[0].emit({ type: 'token', id: 'a', text: 'today.' }); runs[0].resolve(); });
   expect(result.current.active.messages).toEqual([]);
-  expect(result.current.store.threads.find(t => t.id === briefing)?.messages[1].content).toBe('Rest today.');
+  await waitFor(() => expect(result.current.store.threads.find(t => t.id === briefing)?.messages[1].content).toBe('Rest today.'));
   act(() => result.current.select(original));
   act(() => result.current.send());
   expect(runs[1].context.params).toEqual({});

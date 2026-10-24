@@ -23,7 +23,22 @@ class FactMemoryMiddleware(AgentMiddleware):
 
     def before_model(self, state, runtime):
         assert isinstance(runtime.context, AgentContext)
+        prepare_fact_memory(state.get("messages", []), runtime.context, self.model)
         return charge_memory_calls(state, runtime.context)
 
     async def abefore_model(self, state, runtime):
         return self.before_model(state, runtime)
+
+    # Checkpoints persist provenance messages, never a provider client. ToolNode
+    # may be the first resumed node, so reconstruct both before invoking a tool.
+    def wrap_tool_call(self, request, handler):
+        prepare_fact_memory(
+            request.state.get("messages", []), request.runtime.context, self.model
+        )
+        return handler(request)
+
+    async def awrap_tool_call(self, request, handler):
+        prepare_fact_memory(
+            request.state.get("messages", []), request.runtime.context, self.model
+        )
+        return await handler(request)

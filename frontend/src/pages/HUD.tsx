@@ -383,7 +383,7 @@ export function DashboardPage() {
   const completed = [...todayLink.planned.flatMap(row => row.realised ? [row.realised] : []), ...todayLink.offPlan];
   const completedSeconds = completed.reduce((sum, session) => sum + session.duration_sec, 0);
 
-  const { tip, writing: tipWriting, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
+  const { tip, writing: tipWriting, generating: tipGenerating, stalled: tipStalled, refresh: refreshTip } = useDailyTip({
     enabled: boardSettled,
     day: boardDay,
   });
@@ -437,7 +437,7 @@ export function DashboardPage() {
         {weekReview && <WeekReviewEntry open={weekReview.open} />}
 
         <Panel className="dashboard-panel">
-          <BriefingCard tip={tip} writing={tipWriting} stalled={tipStalled} refresh={refreshTip} />
+          <BriefingCard tip={tip} writing={tipWriting} generating={tipGenerating} stalled={tipStalled} refresh={refreshTip} />
         </Panel>
 
         <div className="dashboard-overview">

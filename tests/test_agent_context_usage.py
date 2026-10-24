@@ -108,7 +108,7 @@ def test_compaction_always_finishes_progress_on_failure(async_mode, error):
             asyncio.run(middleware._acreate_summary([HumanMessage("q")]))
         else:
             middleware._create_summary([HumanMessage("q")])
-    assert [event["phase"] for event in events] == ["start", "done"]
+    assert [event["phase"] for event in events] == ["start", "error"]
 
 
 def test_cached_graph_keeps_concurrent_measurements_local():

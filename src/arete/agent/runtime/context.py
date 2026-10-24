@@ -110,9 +110,12 @@ class AgentContext:
     profile: Literal[
         "chat", "briefing", "feedback", "review", "evening", "slack", "automation"
     ] = "chat"
+    policy_prepared: bool = field(default=False, init=False, repr=False)
     resolved_profile: AgentProfile | None = field(default=None, init=False, repr=False)
     calendar: CalendarService | None = field(default=None, init=False, repr=False)
     thread_id: str | None = None
+    execution_id: str | None = None
+    interruptions: list[dict] = field(default_factory=list)
     # One graph run per turn; browser feedback uses this as its trace root.
     # Slack has an outer trace covering classification and delivery as well.
     run_id: UUID = field(default_factory=uuid4, init=False)

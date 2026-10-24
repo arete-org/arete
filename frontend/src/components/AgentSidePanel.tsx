@@ -1,3 +1,4 @@
+import { ChatHumanInput } from './agent/ChatHumanInput';
 import { AutomationReview } from './agent/AutomationReview';
 import type { CoachDisplay } from '@/hooks/useCoachDisplay';
 import { CoachDisplayOptions } from './agent/CoachDisplayOptions';
@@ -497,6 +498,7 @@ export function AgentSidePanel({
                         </div>
                       )}
                       <CoachActivity message={message} coach={coachLabel} />
+                      <ChatHumanInput message={message} busy={busy} onDecision={(item, decision) => coach.decide(i, item, decision)} onResume={() => coach.resume(i)} onCancel={() => coach.cancel(i)} />
                       <MessageSurfaces message={message} chiron locked={busy} onAction={text => coach.recordAction(active.id, text)} />
                       <div className="mt-1 flex flex-wrap items-center gap-x-0.5">
                         {message.trace && !message.pending && !message.error && !message.interrupted && <MessageFeedback

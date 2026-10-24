@@ -568,8 +568,11 @@ def test_composition_selects_route_and_keeps_classifier_budget(
     async def stream(graph, state, *, context):
         captured.update(state=state, context=context)
         yield {
-            "type": "updates",
-            "data": {"model": {"messages": [AIMessage(content="Fait.")]}},
+            "method": "updates",
+            "params": {
+                "namespace": [],
+                "data": {"model": {"messages": [AIMessage(content="Fait.")]}},
+            },
         }
 
     monkeypatch.setattr(execution, "stream_agent", stream)
@@ -615,8 +618,11 @@ def test_admin_composition_never_runs_on_the_event_loop(setup, monkeypatch, jev_
 
     async def stream(graph, state, *, context):
         yield {
-            "type": "updates",
-            "data": {"model": {"messages": [AIMessage(content="Fait.")]}},
+            "method": "updates",
+            "params": {
+                "namespace": [],
+                "data": {"model": {"messages": [AIMessage(content="Fait.")]}},
+            },
         }
 
     monkeypatch.setattr(execution, "stream_agent", stream)

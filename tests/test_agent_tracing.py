@@ -269,12 +269,15 @@ def test_native_dynamic_and_filesystem_tools_stay_in_one_trace(
             ]
 
         parts = asyncio.run(consume())
-        events = [p["data"] for p in parts if p["type"] == "custom"]
+        from arete.agent.runtime.streaming import StreamProjection
+
+        projection = StreamProjection()
+        events = [event for part in parts for event in projection.events(part)]
         assert {e["name"] for e in events if e["type"] == "tool_start"} >= {
             "get_workload",
             "read_file",
         }
-        assert any(p["type"] == "messages" for p in parts)
+        assert any(p.get("method") == "messages" for p in parts)
     else:
         result = invoke(state(), context=AgentContext())
         assert result["messages"][-1].content == "Finished."
@@ -452,7 +455,7 @@ def test_early_stream_close_finishes_trace_in_its_original_context(
         ) as stream:
             async with asyncio.timeout(5):
                 async for part in stream:
-                    if part["type"] == "messages":
+                    if execution._is_answer_text(part):
                         break
                 else:
                     pytest.fail("Model never streamed a token")
@@ -530,7 +533,12 @@ def test_task_limits_reach_both_execution_paths(monkeypatch, task, limit):
         seen.append(config)
         yield {"type": "custom", "data": {}}
 
-    graph.astream = stream
+    from stream_fakes import FakeEventStream
+
+    async def event_stream(*args, **kwargs):
+        return FakeEventStream(stream(*args, **kwargs))
+
+    graph.astream_events = event_stream
     monkeypatch.setattr(agent, "get_agent", lambda: graph)
     monkeypatch.setattr(agent, "build_briefing_agent", lambda: graph)
     monkeypatch.setattr(agent, "build_feedback_agent", lambda: graph)
@@ -591,7 +599,12 @@ def test_unattended_runs_do_not_emit_ui_tool_events(monkeypatch):
             )
         ]
 
-    assert not [p for p in asyncio.run(consume()) if p["type"] == "custom"]
+    assert not [
+        p
+        for p in asyncio.run(consume())
+        if p.get("method") == "custom"
+        and p["params"]["data"].get("type") in {"tool_start", "tool_end"}
+    ]
 
 
 def test_invalid_tracing_switch_is_a_configuration_error(monkeypatch):

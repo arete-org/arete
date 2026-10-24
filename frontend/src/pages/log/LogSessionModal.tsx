@@ -1,3 +1,4 @@
+import { GenerationPreview } from '@/components/agent/GenerationPreview';
 import { useId, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, AlertTriangle, Check, Loader2, Sparkles } from 'lucide-react';
@@ -356,6 +357,7 @@ squat 2x5@60 echauf, 5x5@100 RIR 2`}
             </p>
           </div>
           <RecordsCelebration records={parseResult.records ?? []} />
+          {feedback.isLoading && savedId != null && <GenerationPreview kind="feedback" sourceId={`strength:${savedId}`} />}
           {feedback.isLoading && (
             <p className="text-sm font-sans text-text-muted flex items-center justify-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-neon-cyan" />

@@ -35,7 +35,10 @@ def hitl(profile):
                 name: {"allowed_decisions": ["approve", "edit", "reject"]}
                 for name in names - read_names() - proposals
             },
-            "ask_athlete": {"allowed_decisions": ["respond", "reject"]},
+            "ask_athlete": {
+                "allowed_decisions": ["respond", "reject"],
+                "when": lambda request: not request.tool_call["args"].get("fields"),
+            },
         },
         interrupt_mode="per_call",
     )

@@ -3,7 +3,8 @@ import { fetchAPI } from './api';
 export type Trigger = { kind: 'once'; at: string } | { kind: 'daily' | 'weekly'; time: string; weekdays: number[] } | { kind: 'session'; session_key?: string | null; sport?: string | null; session_type?: string | null; delay_minutes: number } | { kind: 'evening' };
 export interface Definition { title: string; mission: string; trigger: Trigger; timezone: string }
 export interface Automation extends Definition { id: string; state: string; revision: number; next_due_at: string | null }
-export interface Interrupt { id: string; revision: number; payload: { name: string; args: Record<string, unknown>; description: string; before?: Record<string, unknown> | null }; schema: Record<string, unknown>; decision: Record<string, unknown> | null; expires_at: string }
+export type { HumanInterrupt as Interrupt } from './humanInput';
+import type { HumanInterrupt as Interrupt } from './humanInput';
 export interface Run { id: string; automation_id: string; state: string; due_at: string; result: string | null; error: string | null; model_turns: number; tool_calls: number; active_seconds: number; definition: Definition; interrupts: Interrupt[]; effects: { tool_call_id: string; state: string; arguments: { call: { name: string; args: Record<string, unknown> }; executed?: { name: string; args: Record<string, unknown> } } }[] }
 export interface Notice { id: string; kind: string; title: string; body: string; url: string; created_at: string; read_at: string | null; archived_at: string | null; reference: { kind: string; id: string } | null; push: { sent: number; skipped_reason: string | null } | null }
 export interface Page<T> { items: T[]; next_offset: number | null }

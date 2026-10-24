@@ -469,8 +469,11 @@ def test_slack_reuses_chat_graph_and_thread_metadata(monkeypatch):
     async def stream(*args, **kwargs):
         captured.update(args=args, kwargs=kwargs)
         yield {
-            "type": "updates",
-            "data": {"model": {"messages": [AIMessage(content="Repos.")]}},
+            "method": "updates",
+            "params": {
+                "namespace": [],
+                "data": {"model": {"messages": [AIMessage(content="Repos.")]}},
+            },
         }
 
     monkeypatch.setattr(coaching, "get_agent", lambda: graph)
@@ -500,8 +503,11 @@ def test_slack_chat_graph_is_composed_off_the_event_loop(monkeypatch):
     async def stream(*args, **kwargs):
         assert args[0] is graph
         yield {
-            "type": "updates",
-            "data": {"model": {"messages": [AIMessage(content="Repos.")]}},
+            "method": "updates",
+            "params": {
+                "namespace": [],
+                "data": {"model": {"messages": [AIMessage(content="Repos.")]}},
+            },
         }
 
     monkeypatch.setattr(coaching, "get_feature_flags", worker_only(FeatureFlags))

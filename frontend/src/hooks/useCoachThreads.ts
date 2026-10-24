@@ -1,3 +1,6 @@
+import { coachingRuns, observeRun, resumeRun, snapshotMessage } from '@/lib/coachingRuns';
+import type { HumanInterrupt } from '@/lib/humanInput';
+import type { StreamEvent } from '@/lib/agentStream';
 import { conversationsApi, archivePayload, digest, hasLocalCharts, restoreLocalCharts } from '@/lib/conversations';
 import { useConversationArchive } from './useConversationArchive';
 import { useAuthState } from '@/components/auth/authState';
@@ -150,7 +153,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     const local = storeRef.current.threads.find(t => t.id === id);
     if (local) setStore(prev => ({ ...prev, activeId: id }));
     try {
-      if (local && (!local.archiveDigest || local.messages.some(m => m.pending) || await digest(archivePayload(local)) !== local.archiveDigest)) return;
+      if (local && (!local.archiveDigest || local.messages.some(m => m.pending || (!!m.runId && ['running','waiting','ready'].includes(m.runState ?? ''))) || await digest(archivePayload(local)) !== local.archiveDigest)) return;
       const remote = await conversationsApi.read(id);
       if (sequence !== openSequence.current) return;
       const current = storeRef.current.threads.find(t => t.id === id);
@@ -181,7 +184,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     void (async () => {
       const removable: string[] = [];
       for (const thread of store.threads) {
-        if (thread.id === store.activeId || thread.id === runningId || thread.draft || thread.attachmentIds?.length || !thread.archiveDigest || hasLocalCharts(thread)) continue;
+        if (thread.id === store.activeId || thread.id === runningId || thread.draft || thread.attachmentIds?.length || !thread.archiveDigest || hasLocalCharts(thread) || thread.messages.some(m => !!m.runId && ['running','waiting','ready'].includes(m.runState ?? ''))) continue;
         if (await digest(archivePayload(thread)) === thread.archiveDigest) removable.push(thread.id);
       }
       if (!cancelled && removable.length) setStore(prev => ({ ...prev, threads: prev.threads.filter(t => !removable.includes(t.id) || t !== store.threads.find(old => old.id === t.id)) }));
@@ -213,7 +216,13 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       updateThread(prev, prev.activeId, (t) => ({ ...t, draft: text }))
     );
   };
-  const stop = useCallback(() => runRef.current?.controller.abort(), []);
+  const stop = useCallback(() => {
+    const run = runRef.current;
+    if (!run) return;
+    const message = storeRef.current.threads.find(t => t.id === run.threadId)?.messages.at(-1);
+    if (message?.runId) void coachingRuns.cancel(message.runId).catch(err => setError(readableError(err)));
+    run.controller.abort();
+  }, []);
 
   /** The first message of an evening message's thread answers its question:
    *  kept and filed in the journal by the server, with no model request. The
@@ -274,6 +283,136 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     return true;
   };
 
+  const patchMessage = useCallback((threadId: string, index: number, patch: (message: ChatMessage) => ChatMessage) => {
+    setStore(prev => updateThread(prev, threadId, thread => ({ ...thread, updatedAt: Date.now(), messages: thread.messages.map((m, i) => i === index ? patch(m) : m) })));
+  }, [setStore]);
+  const receive = (threadId: string, answerIndex: number, controller: AbortController) => {
+    const patchAnswer = (patch: (message: ChatMessage) => ChatMessage) => patchMessage(threadId, answerIndex, patch);
+    const accept = (event: StreamEvent) => {
+        if (controller.signal.aborted) return;
+        if (event.type === 'thread_title') {
+          if (event.thread_id !== threadId) throw new Error('Titre reçu pour un autre fil.');
+          setStore(prev => updateThread(prev, threadId, t => t.titleManual ? t : ({ ...t, title: event.title })));
+          return;
+        }
+        if (event.type === 'values') {
+          setStore(prev => updateThread(prev, threadId, thread => ({
+            ...thread, contextWindowUsage: event.context_window_usage,
+          })));
+          return;
+        }
+        if (event.type === 'context_compaction') {
+          setCompactingId(event.phase === 'start' ? threadId : null);
+          patchAnswer(m => applyEvent(m, event));
+          return;
+        }
+        if (event.type === 'sync_status' && event.state !== 'running') {
+          invalidateAfterGarminRefresh(queryClient, event.state);
+        }
+        if (event.type === 'workout_update') {
+          if (event.thread_id !== threadId) throw new Error('Événement reçu pour un autre fil.');
+          cacheWorkout(queryClient, event);
+          markWorkout('coach:workout-received');
+          if (!performance.getEntriesByName('coach:first-workout', 'mark').length) {
+            markWorkout('coach:first-workout');
+            measureWorkout('coach:time-to-useful-result', 'coach:request-start', 'coach:first-workout');
+          }
+          if (['scheduled', 'transfer_requested'].includes(event.export?.state ?? '') && !performance.getEntriesByName('coach:first-scheduled', 'mark').length) {
+            markWorkout('coach:first-scheduled');
+            measureWorkout('coach:time-to-scheduled', 'coach:request-start', 'coach:first-scheduled');
+          }
+        }
+        if (event.type === 'token') {
+          markWorkout('coach:token-received');
+          measureWorkout('coach:last-stream-gap', 'coach:last-token', 'coach:token-received');
+          markWorkout('coach:last-token');
+        }
+        if ((event.type === 'token' || event.type === 'message') && event.text.trim() && !performance.getEntriesByName('coach:first-text', 'mark').length) {
+          markWorkout('coach:first-text');
+          measureWorkout('coach:time-to-first-text', 'coach:request-start', 'coach:first-text');
+        }
+        if (event.type === 'done') {
+          markWorkout('coach:done');
+          measureWorkout('coach:total', 'coach:request-start', 'coach:done');
+
+        }
+        patchAnswer((m) => applyEvent(m, event));
+        // Refresh when the write completes, even if the final answer fails or
+        // the athlete has switched threads while this run was in flight.
+        if (event.type === 'tool_end' && event.status === 'done') {
+          if (SESSION_WRITE_TOOLS.has(event.name)) invalidateAfterSession(queryClient);
+          if (['append_journal', 'edit_file', 'delete'].includes(event.name)) {
+            void queryClient.invalidateQueries({ queryKey: ['onboarding-context'] });
+            void queryClient.invalidateQueries({ queryKey: ['onboarding'] });
+          }
+          if (FACT_WRITE_TOOLS.has(event.name))
+            void queryClient.invalidateQueries({ queryKey: qk.athleteFacts });
+        }
+      };
+    let frame: number | null = null;
+    let queued: StreamEvent[] = [];
+    const flush = () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+      const batch = queued; queued = [];
+      if (controller.signal.aborted) return;
+      // One store commit per frame; all deltas retain their ordered sequence.
+      if (batch.length) patchAnswer(message => batch.reduce(applyEvent, message));
+    };
+    controller.signal.addEventListener('abort', () => { if (frame !== null) cancelAnimationFrame(frame); queued = []; }, { once: true });
+    return (event: StreamEvent) => {
+      if (event.type !== 'token') { flush(); accept(event); return; }
+      if (!performance.getEntriesByName('coach:first-text', 'mark').length && event.text.trim()) {
+        markWorkout('coach:first-text');
+        measureWorkout('coach:time-to-first-text', 'coach:request-start', 'coach:first-text');
+      }
+      queued.push(event);
+      if (queued.length > 12000) throw new Error('Trop de fragments en attente.');
+      if (frame === null) frame = requestAnimationFrame(flush);
+    };
+  };
+  // Only the open thread is observed. Restoring a page never claims execution.
+  useEffect(() => {
+    const thread = storeRef.current.threads.find(t => t.id === storeRef.current.activeId)!;
+    const index = thread.messages.map(m => !!m.runId && ['running','waiting','ready'].includes(m.runState ?? '')).lastIndexOf(true);
+    if (index < 0 || runningId === thread.id) return;
+    const message = thread.messages[index];
+    const controller = new AbortController();
+    void coachingRuns.read(message.runId!).then(async saved => {
+      if (controller.signal.aborted) return;
+      patchMessage(thread.id, index, m => ({ ...(saved.activity ? snapshotMessage(saved.activity, m) : m), runState: saved.state, pending: false, interrupts: saved.interrupts }));
+      if (saved.state === 'running') await observeRun(saved.id, snapshot => patchMessage(thread.id, index, m => snapshotMessage(snapshot, m)), controller.signal);
+    }).catch(err => { if (!controller.signal.aborted) setError(readableError(err)); });
+    return () => controller.abort();
+  }, [store.activeId, runningId, patchMessage]);
+
+  const resume = async (index: number) => {
+    if (runRef.current) throw new Error('Une réponse est déjà en cours.');
+    const threadId = active.id;
+    const message = active.messages[index];
+    if (!message.runId) throw new Error('Exécution absente.');
+    const controller = new AbortController();
+    runRef.current = { threadId, controller };
+    setRunningId(threadId);
+    patchMessage(threadId, index, m => ({ ...m, pending: true, error: undefined, interrupted: false }));
+    try { await resumeRun(message.runId, receive(threadId, index, controller), controller.signal); }
+    catch (err) { patchMessage(threadId, index, m => settleMessage(m, readableError(err), controller.signal.aborted)); throw err; }
+    finally { runRef.current = null; setRunningId(null); setCompactingId(null); }
+  };
+  const decide = async (index: number, item: HumanInterrupt, decision: Record<string, unknown>) => {
+    const threadId = active.id;
+    const identifier = active.messages[index].runId;
+    if (!identifier) throw new Error('Exécution absente.');
+    const saved = await coachingRuns.decide(identifier, item, decision);
+    patchMessage(threadId, index, m => ({ ...m, runState: saved.state, interrupts: saved.interrupts }));
+  };
+  const cancel = async (index: number) => {
+    const message = active.messages[index];
+    if (!message.runId) return;
+    const saved = await coachingRuns.cancel(message.runId);
+    patchMessage(active.id, index, m => ({ ...settleMessage(m), runState: saved.state, interrupts: [] }));
+  };
+
   /** ``keep`` = messages kept before the new question (a retry drops the
    *  failed or unwanted answer and asks the same question again). */
   const send = (prompt = active.draft, keep = active.messages.length) => {
@@ -287,6 +426,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       if (known?.answer === content) { keepAnswer(active.id, content); return true; }
       if (!known?.answer && known?.answerable !== false) return answerEvening(evening.id, content);
     }
+    if (active.messages.some(m => ['running','waiting','ready'].includes(m.runState ?? ''))) { setError('Réponds à la demande en attente ou annule-la avant de continuer.'); return false; }
     const retrying = keep < active.messages.length;
     const attachmentIds = selectedDocuments ? (retrying ? active.messages[keep]?.attachmentIds ?? [] : active.attachmentIds ?? []) : undefined;
     const history = requestWindow([
@@ -361,66 +501,7 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
     void runAgentStream(
       history,
       { ...context, params: { ...context.params, ...(active.reference ? { coach_ref: `${active.reference.kind}:${active.reference.id}` } : {}) } },
-      (event) => {
-        if (controller.signal.aborted) return;
-        if (event.type === 'thread_title') {
-          if (event.thread_id !== threadId) throw new Error('Titre reçu pour un autre fil.');
-          setStore(prev => updateThread(prev, threadId, t => t.titleManual ? t : ({ ...t, title: event.title })));
-          return;
-        }
-        if (event.type === 'values') {
-          setStore(prev => updateThread(prev, threadId, thread => ({
-            ...thread, contextWindowUsage: event.context_window_usage,
-          })));
-          return;
-        }
-        if (event.type === 'context_compaction') {
-          setCompactingId(event.phase === 'start' ? threadId : null);
-          return;
-        }
-        if (event.type === 'sync_status' && event.state !== 'running') {
-          invalidateAfterGarminRefresh(queryClient, event.state);
-        }
-        if (event.type === 'workout_update') {
-          if (event.thread_id !== threadId) throw new Error('Événement reçu pour un autre fil.');
-          cacheWorkout(queryClient, event);
-          markWorkout('coach:workout-received');
-          if (!performance.getEntriesByName('coach:first-workout', 'mark').length) {
-            markWorkout('coach:first-workout');
-            measureWorkout('coach:time-to-useful-result', 'coach:request-start', 'coach:first-workout');
-          }
-          if (['scheduled', 'transfer_requested'].includes(event.export?.state ?? '') && !performance.getEntriesByName('coach:first-scheduled', 'mark').length) {
-            markWorkout('coach:first-scheduled');
-            measureWorkout('coach:time-to-scheduled', 'coach:request-start', 'coach:first-scheduled');
-          }
-        }
-        if (event.type === 'token') {
-          markWorkout('coach:token-received');
-          measureWorkout('coach:last-stream-gap', 'coach:last-token', 'coach:token-received');
-          markWorkout('coach:last-token');
-        }
-        if ((event.type === 'token' || event.type === 'message') && event.text.trim() && !performance.getEntriesByName('coach:first-text', 'mark').length) {
-          markWorkout('coach:first-text');
-          measureWorkout('coach:time-to-first-text', 'coach:request-start', 'coach:first-text');
-        }
-        if (event.type === 'done') {
-          markWorkout('coach:done');
-          measureWorkout('coach:total', 'coach:request-start', 'coach:done');
-
-        }
-        patchAnswer((m) => applyEvent(m, event));
-        // Refresh when the write completes, even if the final answer fails or
-        // the athlete has switched threads while this run was in flight.
-        if (event.type === 'tool_end' && event.status === 'done') {
-          if (SESSION_WRITE_TOOLS.has(event.name)) invalidateAfterSession(queryClient);
-          if (['append_journal', 'edit_file', 'delete'].includes(event.name)) {
-            void queryClient.invalidateQueries({ queryKey: ['onboarding-context'] });
-            void queryClient.invalidateQueries({ queryKey: ['onboarding'] });
-          }
-          if (FACT_WRITE_TOOLS.has(event.name))
-            void queryClient.invalidateQueries({ queryKey: qk.athleteFacts });
-        }
-      },
+      receive(threadId, answerIndex, controller),
       controller.signal,
       threadId,
       documentIds,
@@ -469,6 +550,9 @@ export function useCoachThreads(context: PanelPageContext, selectedDocuments = f
       ...t, messages: t.messages.map(m => m.trace?.trace_id === traceId ? { ...m, feedback } : m),
     }))),
     recordAction,
+    decide,
+    resume,
+    cancel,
     renameLocal: (id: string, title: string) => setStore(prev => updateThread(prev, id, t => ({ ...t, title, titleManual: true }))),
     clearReference: () => setStore(prev => updateThread(prev, prev.activeId, thread => ({ ...thread, reference: undefined }))),
     store,

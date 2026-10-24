@@ -108,18 +108,21 @@ def test_correct_remove_and_delete_current_ledger(ledger, run_tools, name):
 def test_archives_attachments_other_files_and_root_remain_protected(
     ledger, run_tools, path
 ):
-    messages, state = run_tools(
+    # Native filesystem middleware now rejects simultaneous writes to one path.
+    # Exercise each permission independently so that guard cannot hide a bypass.
+    messages, _ = run_tools(
         [
             (
                 "edit_file",
                 {"file_path": path, "old_string": "obsolete", "new_string": "bad"},
-            ),
-            ("delete", {"file_path": path}),
+            )
         ]
     )
+    deleted, state = run_tools([("delete", {"file_path": path})])
+    messages.extend(deleted)
     assert all(
         m.status == "error" and "permission denied" in m.content for m in messages
-    )
+    ), messages
     assert (ledger / "sessions-2026-09.md").read_text() == "keep\nobsolete\n"
     assert (ledger / "other.md").read_text() == "keep\nobsolete\n"
     assert state["files"]["/attachments/source.md"]["content"] == "keep\nobsolete\n"

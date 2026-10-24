@@ -60,7 +60,7 @@ async function evening(page: Page, settings: Record<string, unknown> = {}, conti
     }
     if (path === `/api/automation-runs/${runId}`) return route.fulfill({ json: {
       ...followup(), definition: { title: 'Adapter demain' }, due_at: '2026-10-16T18:22:00Z',
-      interrupts: [{ id: 'approval', revision: 1, expires_at: '2026-10-18T00:00:00Z', decision: approved ? { type: 'approve' } : null, payload: { name: 'apply_plan_changes', args: { preview_id: 'preview' } } }],
+      interrupts: [{ id: 'approval', revision: 1, expires_at: '2026-10-18T00:00:00Z', schema: { oneOf: [{ type: 'object', properties: { type: { const: 'approve' } }, required: ['type'] }, { type: 'object', properties: { type: { const: 'reject' }, message: { type: 'string' } }, required: ['type', 'message'] }] }, decision: approved ? { type: 'approve' } : null, payload: { name: 'apply_plan_changes', args: { preview_id: 'preview' } } }],
       effects: approved ? [{ tool_call_id: 'apply', state: 'completed', arguments: { call: { name: 'apply_plan_changes', args: {} } } }] : [],
     } });
     if (path === '/api/coach/plan-changes/preview') {

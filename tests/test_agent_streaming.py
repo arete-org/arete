@@ -135,7 +135,7 @@ def test_preview_marks_omitted_content():
 
 
 @pytest.mark.parametrize("async_mode", [False, True])
-def test_tool_exception_emits_failure_and_propagates(async_mode):
+def test_artifact_middleware_propagates_errors_without_duplicate_lifecycle(async_mode):
     events = []
     request = SimpleNamespace(tool_call={"id": "t", "name": "tool", "args": {}})
 
@@ -154,9 +154,7 @@ def test_tool_exception_emits_failure_and_propagates(async_mode):
             asyncio.run(middleware.awrap_tool_call(request, afail))
         else:
             middleware.wrap_tool_call(request, fail)
-    assert [e["type"] for e in events] == ["tool_start", "tool_end"]
-    assert events[-1]["status"] == "error"
-    assert events[-1]["id"] == "t"
+    assert events == []
 
 
 @pytest.mark.parametrize("async_mode", [False, True])
@@ -333,3 +331,137 @@ def test_answer_uses_no_auxiliary_model_even_for_old_clients(
         assert calls == [True]
     finally:
         get_agent.cache_clear()
+
+
+def native(method, data):
+    return {"method": method, "params": {"namespace": [], "data": data}}
+
+
+def test_v3_argument_fragments_are_preparation_only_and_fallback_replaces_text():
+    projection = StreamProjection()
+    meta = {"langgraph_node": "model", "langgraph_step": 1, "run_id": "attempt-1"}
+
+    def event(chunk, metadata=meta):
+        return projection.events(native("messages", (chunk, metadata)))
+
+    event({"event": "message-start", "id": "first"})
+    event(
+        {
+            "event": "content-block-delta",
+            "index": 0,
+            "delta": {"type": "text-delta", "text": "Brouillon faux"},
+        }
+    )
+    event(
+        {
+            "event": "content-block-start",
+            "index": 1,
+            "content": {"type": "tool-call", "id": "t", "name": "delete"},
+        }
+    )
+    for fragment in ['{"file_', 'path":"/memories/', 'notes.md"}']:
+        emitted = event(
+            {
+                "event": "content-block-delta",
+                "index": 1,
+                "delta": {"type": "tool-call-delta", "args": fragment},
+            }
+        )
+        assert not any(e["type"] == "tool_start" for e in emitted)
+    replaced = event(
+        {"event": "message-start", "id": "fallback"}, {**meta, "run_id": "attempt-2"}
+    )
+    assert {"type": "message", "id": "first", "text": ""} in replaced
+    event(
+        {
+            "event": "content-block-delta",
+            "index": 0,
+            "delta": {"type": "text-delta", "text": "Réponse fiable"},
+        },
+        {**meta, "run_id": "attempt-2"},
+    )
+    assert projection.done()["message"]["content"] == "Réponse fiable"
+    assert projection.texts["first"] == ""
+    started = projection.events(
+        native(
+            "tools",
+            {
+                "event": "tool-started",
+                "tool_call_id": "t",
+                "tool_name": "delete",
+                "input": {"file_path": "/memories/notes.md"},
+            },
+        )
+    )
+    assert sum(e["type"] == "tool_start" for e in started) == 1
+
+
+@pytest.mark.parametrize(
+    "path", ["/skills/system/planning/SKILL.md", "/conversation_history/summary.md"]
+)
+def test_internal_file_contents_never_enter_tool_previews(path):
+    projection = StreamProjection()
+    projection.events(
+        {
+            "method": "tools",
+            "params": {
+                "namespace": [],
+                "data": {
+                    "event": "tool-started",
+                    "tool_call_id": "private-read",
+                    "tool_name": "read_file",
+                    "input": {"file_path": path},
+                },
+            },
+        }
+    )
+    events = projection.events(
+        {
+            "method": "tools",
+            "params": {
+                "namespace": [],
+                "data": {
+                    "event": "tool-finished",
+                    "tool_call_id": "private-read",
+                    "output": ToolMessage(
+                        content="INTERNAL PROMPT", tool_call_id="private-read"
+                    ),
+                },
+            },
+        }
+    )
+    assert events[0]["status"] == "done"
+    assert "INTERNAL PROMPT" not in str(events)
+
+
+def test_nonstreaming_fallback_replaces_the_failed_partial_answer():
+    projection = StreamProjection()
+
+    def native(chunk, run):
+        return {
+            "method": "messages",
+            "params": {
+                "namespace": [],
+                "data": (
+                    chunk,
+                    {"langgraph_node": "model", "langgraph_step": 1, "run_id": run},
+                ),
+            },
+        }
+
+    projection.events(native({"event": "message-start", "id": "partial"}, "first"))
+    projection.events(
+        native(
+            {
+                "event": "content-block-delta",
+                "index": 0,
+                "delta": {"type": "text-delta", "text": "Speculative"},
+            },
+            "first",
+        )
+    )
+    events = projection.events(
+        native(AIMessage(content="Confirmed", id="final"), "fallback")
+    )
+    assert events[0] == {"type": "message", "id": "partial", "text": ""}
+    assert projection.done()["message"]["content"] == "Confirmed"

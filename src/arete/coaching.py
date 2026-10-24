@@ -53,6 +53,7 @@ from arete.agent.profiles.catalog import get_profile
 from arete.agent.runtime.budget import MAX_GRAPH_STEPS
 from arete.agent.runtime.context import AgentContext, read_athlete_clock
 from arete.agent.runtime.execution import invoke_agent_sync
+from arete.agent.runtime.generation import current_generation, observed
 from arete.calendar import get_calendar_service
 from arete.config import config
 from arete.observability.agent import record_stack_ready
@@ -254,9 +255,33 @@ def _assemble(
             import_ms=_IMPORT_MS,
             compile_ms=round((perf_counter() - started) * 1000),
         )
-    return graph.with_config(
-        metadata={"model": route.model, "model_policy": route.openrouter_policy}
-    )
+    metadata = {"model": route.model, "model_policy": route.openrouter_policy}
+    if profile_id == "chat" and checkpointer is not None:
+        import json
+        from dataclasses import asdict
+        from hashlib import sha256
+        from importlib.metadata import version
+
+        # Compare the execution contract at resume without exposing prompts or
+        # permissions to observers. A changed profile/SDK requires a fresh run.
+        contract = {
+            "revision": 1,
+            "profile": asdict(profile),
+            "route": asdict(route),
+            "versions": {
+                name: version(name) for name in ("langchain", "langgraph", "deepagents")
+            },
+        }
+        metadata["execution_policy"] = sha256(
+            json.dumps(
+                contract,
+                sort_keys=True,
+                default=lambda value: sorted(value)
+                if isinstance(value, (set, frozenset))
+                else str(value),
+            ).encode()
+        ).hexdigest()
+    return graph.with_config(metadata=metadata)
 
 
 def system_skill_catalog() -> list[dict]:
@@ -301,6 +326,17 @@ def get_agent(athlete_id: int, *, glm_flash: bool = False):
     return _assemble("chat", glm_flash=glm_flash)
 
 
+@_serialized
+@lru_cache(maxsize=MAX_CACHED_ATHLETES)
+def get_interactive_agent(athlete_id: int, *, glm_flash: bool = False):
+    from arete.agent.runtime.checkpoints import RunCheckpointSaver
+
+    assert athlete_id == current_athlete_id()
+    return _assemble(
+        "chat", glm_flash=glm_flash, checkpointer=RunCheckpointSaver(family="chat")
+    )
+
+
 async def run_slack_coach(
     messages: list[dict[str, str]],
     thread_id: str,
@@ -340,8 +376,10 @@ async def run_slack_coach(
                 raise ValueError("Le stream dépasse la limite d’événements.")
             # Tokens are provisional: only a completed, tool-free model update
             # can become canonical Slack history after provider fallback.
-            if part.get("type") == "updates" and not part.get("ns"):
-                for message in (part["data"].get("model") or {}).get("messages", []):
+            if part.get("method") == "updates" and not part["params"]["namespace"]:
+                for message in (part["params"]["data"].get("model") or {}).get(
+                    "messages", []
+                ):
                     if isinstance(message, AIMessage):
                         answer = message.text if not message.tool_calls else ""
             for event in projection.events(part):
@@ -396,9 +434,48 @@ def _run_mission(
     platform stops its function; None keeps the run's own envelope."""
     context = AgentContext(profile=profile)  # type: ignore[arg-type]
     context.deadline = deadline
-    result = invoke_agent_sync(
-        graph, {"messages": [{"role": "user", "content": message}]}, context=context
-    )
+    recorder = current_generation()
+    if recorder is None:
+        result = invoke_agent_sync(
+            graph, {"messages": [{"role": "user", "content": message}]}, context=context
+        )
+    else:
+        from anyio import from_thread
+        from langchain_core.messages import AIMessage
+
+        from arete.agent.runtime.execution import stream_agent
+        from arete.agent.runtime.streaming import StreamProjection
+
+        async def generate():
+            projection = StreamProjection()
+            await recorder.record(
+                {
+                    "type": "activity",
+                    "id": "generation",
+                    "state": "running",
+                    "label": "Rédaction en cours",
+                }
+            )
+            async for part in stream_agent(
+                graph,
+                {"messages": [{"role": "user", "content": message}]},
+                context=context,
+            ):
+                for event in projection.events(part):
+                    await recorder.record(event)
+            await recorder.record(
+                {
+                    "type": "activity",
+                    "id": "generation",
+                    "state": "done",
+                    "label": "Texte reçu · enregistrement en cours",
+                }
+            )
+            return {
+                "messages": [AIMessage(content=projection.done()["message"]["content"])]
+            }
+
+        result = from_thread.run(generate)
     messages = result.get("messages", [])
     if not messages:
         raise RuntimeError("Agent returned no messages")
@@ -445,9 +522,63 @@ def run_feedback_batch(facts: str, count: int) -> str:
     )
 
 
+@observed("feedback_batch")
 def write_sync_feedback(session_ids: list[int]) -> dict[str, Any]:
     """Feedback on the sessions a sync imported, in one model request."""
-    return coaching_rules.sync_feedback(session_ids, produce=run_feedback_batch)
+    from uuid import uuid4
+
+    from arete.agent.runtime.activity import RunRecorder
+
+    max_observed_sessions = 1000
+    if len(session_ids) > max_observed_sessions:
+        raise ValueError("Trop de séances pour un suivi groupé.")
+    observers: dict[int, RunRecorder] = {}
+
+    def progress(state, session_id, text, source):
+        if state == "running":
+            observer = RunRecorder(str(uuid4()), "feedback", f"actual:{session_id}")
+            observers[session_id] = observer
+            observer.record_sync(
+                {
+                    "type": "activity",
+                    "id": "batch",
+                    "state": "running",
+                    "label": "Débrief groupé en cours",
+                }
+            )
+            return
+        observer = observers[session_id]
+        if state == "completed":
+            observer.record_sync({"type": "message", "id": "result", "text": text})
+            observer.record_sync(
+                {
+                    "type": "activity",
+                    "id": "batch",
+                    "state": "done",
+                    "label": "Débrief enregistré"
+                    if source == "agent"
+                    else "Débrief enregistré · calculé à partir de la séance",
+                }
+            )
+        else:
+            observer.record_sync(
+                {"type": "error", "detail": "Le débrief n’a pas pu être enregistré."}
+            )
+        observer.record_sync({"type": "run_status", "state": state})
+
+    try:
+        return coaching_rules.sync_feedback(
+            session_ids, produce=run_feedback_batch, progress=progress
+        )
+    except BaseException:
+        # A grouped producer may fail before the per-session persistence loop.
+        # Close every still-open projection without attributing partial text.
+        for observer in observers.values():
+            if observer.status == "running":
+                observer.record_sync(
+                    {"type": "error", "detail": "Le débrief groupé a été interrompu."}
+                )
+        raise
 
 
 def run_review(facts: str, deadline: float | None = None) -> str:
@@ -466,6 +597,7 @@ def run_evening(facts: str, deadline: float | None = None) -> str:
     )
 
 
+@observed("evening")
 def write_evening_message(
     evening: evening_message.Survey, *, deadline: float | None = None
 ) -> evening_message.EveningMessage | None:
@@ -473,6 +605,7 @@ def write_evening_message(
     return evening_message.write(_bounded(run_evening, deadline), evening)
 
 
+@observed("review")
 def generate_weekly_review(
     *, refresh: bool = False, review_id: int | None = None
 ) -> weekly_review.Review:
@@ -481,6 +614,7 @@ def generate_weekly_review(
     )
 
 
+@observed("review")
 def write_scheduled_review(
     *, deadline: float | None = None
 ) -> weekly_review.Review | None:
@@ -488,6 +622,7 @@ def write_scheduled_review(
     return weekly_review.write_review(_bounded(run_review, deadline), scheduled=True)
 
 
+@observed("briefing")
 def generate_briefing(
     *, trigger: str = "api", target_date: date | None = None, user_id: int | None = None
 ) -> Briefing:
@@ -497,6 +632,7 @@ def generate_briefing(
     )
 
 
+@observed("briefing")
 def get_or_create_briefing(
     *,
     trigger: str = "api",
@@ -515,14 +651,30 @@ def get_or_create_briefing(
     )
 
 
+@observed(
+    "feedback",
+    key=lambda rule_feedback, highlights, evidence=None: evidence.session_ref
+    if evidence
+    else "current",
+)
 def enrich_session_feedback(
     rule_feedback: str,
     highlights: list[str],
     evidence: session_feedback.SessionEvidence | None = None,
 ) -> tuple[str, Literal["agent", "rules"]]:
-    return session_feedback.enrich_session_feedback(
+    result = session_feedback.enrich_session_feedback(
         rule_feedback, highlights, produce=run_feedback, evidence=evidence
     )
+    if evidence and evidence.session_ref and evidence.session_ref.startswith("actual:"):
+        from arete.services.coaching_repository import SessionFeedbackRepository
+
+        SessionFeedbackRepository().save(
+            int(evidence.session_ref.split(":")[1]),
+            text=result[0],
+            source=result[1],
+            trigger="api",
+        )
+    return result
 
 
 @lru_cache(maxsize=MAX_CACHED_ATHLETES)
@@ -722,15 +874,20 @@ async def _run_automation(run: dict) -> None:
     from anyio import to_thread
     from langgraph.types import Command
 
-    from arete.agent.runtime.execution import invoke_agent, run_config
+    from arete.agent.runtime.activity import RunRecorder
+    from arete.agent.runtime.execution import run_config, stream_agent
+    from arete.agent.runtime.streaming import StreamProjection
     from arete.services import automation_execution as execution
     from arete.services.automation_schedule import MAX_ACTIVE_SECONDS, SEGMENT_SECONDS
 
     started = monotonic()
     identifier = run["id"]
     result, interrupts, error = None, [], None
+    recorder = RunRecorder(identifier, "automation", identifier)
+    await recorder.restore()
     notify = True
     try:
+        await recorder.record({"type": "run_status", "state": "running"})
         # Inside the try: a failed settings read still finishes the run.
         context, graph = await to_thread.run_sync(_automation_setup, run)
         context.tool_slots = asyncio.Semaphore(1)
@@ -742,9 +899,7 @@ async def _run_automation(run: dict) -> None:
         state: Any
         if snapshot.values:
             decisions = await to_thread.run_sync(execution.decisions, identifier)
-            pending_ids = {
-                item.id for task in snapshot.tasks for item in task.interrupts
-            }
+            pending_ids = {item.id for item in snapshot.interrupts}
             answers = {
                 key: value for key, value in decisions.items() if key in pending_ids
             }
@@ -790,16 +945,17 @@ async def _run_automation(run: dict) -> None:
                     }
                 ]
             }
-        output = await invoke_agent(graph, state, context=context)
+        projection = StreamProjection()
+        async for part in stream_agent(graph, state, context=context):
+            for event in projection.events(part):
+                await recorder.record(event)
         snapshot = await graph.aget_state(cfg)
         interrupts = [
             {"id": item.id, "value": item.value, "schema": item.response_schema}
-            for task in snapshot.tasks
-            for item in task.interrupts
+            for item in snapshot.interrupts
         ]
         if not interrupts:
-            messages = output.get("messages", [])
-            result = messages[-1].text if messages else None
+            result = projection.done()["message"]["content"]
             if not result:
                 raise RuntimeError("La mission n’a produit aucun résultat")
     except Exception as exc:
@@ -817,4 +973,15 @@ async def _run_automation(run: dict) -> None:
                 error=error,
                 notify=notify,
             )
+        )
+
+        await recorder.record(
+            {
+                "type": "run_status",
+                "state": "failed"
+                if error
+                else "waiting"
+                if interrupts
+                else "completed",
+            }
         )
