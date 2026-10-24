@@ -9,7 +9,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "anyio>=4.14.2",
     "clerk-backend-api>=7.0",
-    "deepagents==0.7.31",
+    "deepagents==0.7.32",
     "duckdb>=1.4.2",
     "fastapi>=0.119.0",
     "fitparse>=1.2.0",
