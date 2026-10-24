@@ -166,7 +166,7 @@ mcp = [
 requires-dist = [
     { name = "anyio", specifier = ">=4.14.2" },
     { name = "clerk-backend-api", specifier = ">=7.0" },
-    { name = "deepagents", specifier = "==0.7.31" },
+    { name = "deepagents", specifier = "==0.7.32" },
     { name = "duckdb", specifier = ">=1.4.2" },
     { name = "fastapi", specifier = ">=0.119.0" },
     { name = "fitparse", specifier = ">=1.2.0" },
@@ -393,7 +393,7 @@ wheels = [
 
 [[package]]
 name = "deepagents"
-version = "0.7.31"
+version = "0.7.32"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain" },
@@ -404,9 +404,9 @@ dependencies = [
     { name = "packaging" },
     { name = "wcmatch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/91/3a/b4a7bf96c7cefc0bd2b1c0812433ad3cb68498365764ee42999d8705421a/deepagents-0.7.31.tar.gz", hash = "sha256:883d44be673db723c7e0921b394d852a4495f8b50598d99174e3946ab451461a", size = 342757, upload-time = "2026-10-23T16:27:03.713Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/89/5da9546d5e57a4f815d2cc919bd49ed2a62b25816ebd49ce6dca1919bdd8/deepagents-0.7.32.tar.gz", hash = "sha256:f4154281b04a499015e48c24edf11f59f833fbabd3d87e0898832e8db954aac4", size = 343996, upload-time = "2026-10-23T21:30:24.677Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/46/fb4649b63807656b180137b1b0a39cd96348406935a6d14ac6bca0aee66d/deepagents-0.7.31-py3-none-any.whl", hash = "sha256:6c8b7d9d0481ed0addae9bdd2ea20de5e977bd3da52fab0bd925d8598f68a2e4", size = 372769, upload-time = "2026-10-23T16:27:02.412Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/db/ca785ad20bf1c1255856575d9c31f201abd02bb4fd3a76a8b586d938d7e2/deepagents-0.7.32-py3-none-any.whl", hash = "sha256:366bd66c786a66c8d639e40f99614d9e5d37236adf4c5b158f0b2cb27956e28b", size = 374569, upload-time = "2026-10-23T21:30:23.235Z" },
 ]
 
 [[package]]
